@@ -3,7 +3,7 @@
   "passwords": [
     {
       "password": "correct horse",
-      "hash": "pbkdf2_sha256$870000$wdU9Mt7TLGvrqXIPOyJvtS$Igi9z5btldnDJMI4bwLDhGbtHTLtX6ZaOm25zud2oq0="
+      "hash": "pbkdf2_sha256$870000$vZNJKmK6E5laDIxlIKdGCQ$uLznbzcL0X0ITW0FJtsWOL6SwDctnnZ3Okp0kkFAl3I="
     },
     {
       "password": "Mật khẩu ✓",
@@ -17,11 +17,11 @@
   "fernet": [
     {
       "plain": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
-      "cipher": "gAAAAABqvyENm4uhmE7FphdKgweRMRE8PGv8iNsYjGMTKZwH1_1mqaLoA4OCJlIcIwRTfAz0KAW33gW4_FBEKE0mcjsF3jlO6ki8lCq_gvskouNGD9hshLlct1uFVRpJ4u2DTIUmKmrP"
+      "cipher": "gAAAAABqvyJJRytTU6VjJ_GPFCUxOMRCT6axnneibtP7iSSK1OSzXTszkaeGsSYTFyK2RtbIwRRWaMO_Bt5ImmR6qwtcT_yyN3tjxkt9ukyD1_Xwb0Q8Uo-jn7en83DIGAAHhdxMszHc"
     },
     {
       "plain": "[\"ABCDEFGHIJKLMNOP\"]",
-      "cipher": "gAAAAABqvyENsmtsWuOhChjCBcGZMs2qf2ZrEExdWxecEjNO7Q5LSflNVltZoYVCk0D65zyGDIGn_cjz-ZY0DBrC9r7tZC0-hxvh6aof0gpOvud9ZYdeBlM="
+      "cipher": "gAAAAABqvyJJFm8PxnB4k7ZJmg2SRiHj8zvwun5MAmljby1o3xE17Vk8ev-FgO3Hiqna3Q45_-uFc2Noc69P2bhlhc_Koaf4cHn_d_mjaaSh2kN_ogq30d4="
     }
   ],
   "webauthnHandles": [
