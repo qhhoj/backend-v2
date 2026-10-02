@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { FastifyRequest } from 'fastify';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
 import { AppError, ENV, type Env } from '@libs/common';
 import {
@@ -18,8 +18,8 @@ import {
 import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
-import { SESSION_COOKIE } from '../session/session-cookie';
-import { SessionService } from '../session/session.service';
+import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
+import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
 import { UsersRepository } from '../users/users.repository';
 import { AuthContext } from './auth-context';
@@ -37,13 +37,17 @@ const sameToken = (given: unknown, expected: string) => {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  private readonly siteOrigin: string;
+
   constructor(
     private readonly reflector: Reflector,
     private readonly sessions: SessionService,
     private readonly users: UsersRepository,
     private readonly principals: PrincipalService,
     @Inject(ENV) private readonly env: Env,
-  ) {}
+  ) {
+    this.siteOrigin = new URL(env.siteUrl).origin;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const routeFlag = <T>(key: string) =>
@@ -52,10 +56,19 @@ export class AuthGuard implements CanActivate {
         context.getClass(),
       ]);
     const request = context.switchToHttp().getRequest<FastifyRequest>();
+    const { origin } = request.headers;
+    if (
+      !SAFE_METHODS.has(request.method) &&
+      !/^bearer\b/i.test(request.headers.authorization ?? '') &&
+      origin !== undefined &&
+      origin !== this.siteOrigin
+    )
+      throw new AppError('csrf_failed', 403, 'Cross-origin request rejected');
     request.auth =
       (await this.fromBearer(request)) ??
       (await this.fromSession(request)) ??
       undefined;
+    await this.refreshCookie(context, request.auth);
     if (routeFlag<boolean>(PUBLIC_ROUTE)) return true;
 
     const { auth } = request;
@@ -93,6 +106,24 @@ export class AuthGuard implements CanActivate {
     if (permission && !hasPermission(auth.principal, permission))
       throw new AppError('forbidden', 403, 'Permission denied');
     return true;
+  }
+
+  private async refreshCookie(
+    context: ExecutionContext,
+    auth: AuthContext | undefined,
+  ) {
+    if (
+      !auth?.sessionId ||
+      !auth.session ||
+      Date.now() - auth.session.cookieIssuedAt <= COOKIE_REFRESH_MS
+    )
+      return;
+    setSessionCookie(
+      context.switchToHttp().getResponse<FastifyReply>(),
+      auth.sessionId,
+      this.env.cookieSecure,
+    );
+    await this.sessions.update(auth.sessionId, { cookieIssuedAt: Date.now() });
   }
 
   private async fromBearer(

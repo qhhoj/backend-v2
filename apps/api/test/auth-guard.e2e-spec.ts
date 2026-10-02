@@ -1,4 +1,7 @@
 import { Controller, Get, Post } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import Redis from 'ioredis';
+import { REDIS } from '@libs/common';
 import {
   AllowPartialAuth,
   AllowPwnedPassword,
@@ -22,6 +25,9 @@ import {
 @Controller('guarded')
 class GuardedController {
   @Public() @Get('public') open() {
+    return 'open';
+  }
+  @Public() @Post('public-write') openWrite() {
     return 'open';
   }
   @Get('private') read(@CurrentAuth() auth: AuthContext) {
@@ -292,5 +298,83 @@ describe('AuthGuard', () => {
       .get('/guarded/context')
       .set('Cookie', sessionCookie(id))
       .expect(200, { data: { viaToken: false, hasSession: true } });
+  });
+  it('rejects cross-origin unsafe requests, even on public routes', async () => {
+    await api
+      .http()
+      .post('/guarded/private')
+      .set('Origin', 'https://evil.example')
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+    await api
+      .http()
+      .post('/guarded/public-write')
+      .set('Origin', 'https://evil.example')
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+    await api
+      .http()
+      .post('/guarded/private')
+      .set('Origin', 'http://localhost:5173')
+      .expect(401);
+    await api.http().post('/guarded/private').expect(401);
+  });
+  it('lets bearer clients through regardless of Origin', async () => {
+    const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
+    await api.users.updateOne({ _id: userId }, { apiTokenHash: hash });
+    await api
+      .http()
+      .post('/guarded/private')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Origin', 'https://elsewhere.example')
+      .expect(201);
+  });
+  it('re-issues the session cookie once a day of activity has passed', async () => {
+    const { id } = await login();
+    await api.sessions.update(id, {
+      cookieIssuedAt: Date.now() - 25 * 60 * 60 * 1000,
+    });
+    const refreshed = await api
+      .http()
+      .get('/guarded/private')
+      .set('Cookie', sessionCookie(id))
+      .expect(200);
+    expect(String(refreshed.headers['set-cookie'])).toContain(
+      `qhhoj_session=${id}`,
+    );
+    const quiet = await api
+      .http()
+      .get('/guarded/private')
+      .set('Cookie', sessionCookie(id))
+      .expect(200);
+    expect(quiet.headers['set-cookie']).toBeUndefined();
+  });
+  it('reads sessions stored without the newer fields', async () => {
+    const { id } = await api.sessions.create({
+      userId,
+      twoFaPassed: true,
+      passwordPwned: false,
+      impersonatorId: null,
+    });
+    const legacy = {
+      userId,
+      twoFaPassed: true,
+      passwordPwned: false,
+      impersonatorId: null,
+      csrf: 'legacy',
+    };
+    await api.app
+      .get<Redis>(REDIS)
+      .set(
+        `session:${createHash('sha256').update(id).digest('hex')}`,
+        JSON.stringify(legacy),
+        'KEEPTTL',
+      );
+    expect(await api.sessions.get(id)).toEqual({
+      ...legacy,
+      cookieIssuedAt: 0,
+      pendingTotpSecret: null,
+      webauthnChallenge: null,
+    });
   });
 });

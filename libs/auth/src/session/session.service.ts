@@ -9,9 +9,18 @@ export interface SessionData {
   passwordPwned: boolean;
   impersonatorId: string | null;
   csrf: string;
+  cookieIssuedAt: number;
+  pendingTotpSecret: string | null;
+  webauthnChallenge: string | null;
 }
 
+type StoredSession = Omit<
+  SessionData,
+  'cookieIssuedAt' | 'pendingTotpSecret' | 'webauthnChallenge'
+>;
+
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
+export const COOKIE_REFRESH_MS = 24 * 60 * 60 * 1000;
 const sessionKey = (id: string) =>
   `session:${createHash('sha256').update(id).digest('hex')}`;
 const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
@@ -22,10 +31,19 @@ export class SessionService {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
   async create(
-    data: Omit<SessionData, 'csrf'>,
+    data: Omit<
+      SessionData,
+      'csrf' | 'cookieIssuedAt' | 'pendingTotpSecret' | 'webauthnChallenge'
+    >,
   ): Promise<{ id: string; session: SessionData }> {
     const id = randomToken();
-    const session: SessionData = { ...data, csrf: randomToken() };
+    const session: SessionData = {
+      ...data,
+      csrf: randomToken(),
+      cookieIssuedAt: Date.now(),
+      pendingTotpSecret: null,
+      webauthnChallenge: null,
+    };
     await execOrThrow(
       this.redis
         .multi()
@@ -41,7 +59,15 @@ export class SessionService {
       'EX',
       SESSION_TTL_SECONDS,
     );
-    return stored ? (JSON.parse(stored) as SessionData) : null;
+    // sessions stored before these fields existed lack them
+    return stored
+      ? {
+          cookieIssuedAt: 0,
+          pendingTotpSecret: null,
+          webauthnChallenge: null,
+          ...(JSON.parse(stored) as Partial<SessionData> & StoredSession),
+        }
+      : null;
   }
 
   async update(
