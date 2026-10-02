@@ -61,7 +61,7 @@ export class WebauthnService {
       authenticatorSelection: { userVerification: 'preferred' },
     });
     await this.sessions.update(auth.sessionId!, {
-      webauthnChallenge: options.challenge,
+      webauthnRegistrationChallenge: options.challenge,
     });
     return options;
   }
@@ -74,7 +74,7 @@ export class WebauthnService {
     // Atomic read+clear: a challenge authorizes exactly one verification.
     const challenge = await this.sessions.consume(
       auth.sessionId!,
-      'webauthnChallenge',
+      'webauthnRegistrationChallenge',
     );
     if (!challenge) throw failed('No pending WebAuthn challenge');
     let credentialInfo: WebAuthnCredential;
@@ -108,9 +108,10 @@ export class WebauthnService {
     return { id, name };
   }
 
+  /** Like `login`, an already completed session is a no-op (`null`, nothing stored): it must never open a challenge. */
   async loginOptions(
     auth: AuthContext,
-  ): Promise<PublicKeyCredentialRequestOptionsJSON> {
+  ): Promise<PublicKeyCredentialRequestOptionsJSON | null> {
     const credentials = [...auth.user.webauthnCredentials];
     if (!credentials.length)
       throw new AppError(
@@ -118,6 +119,7 @@ export class WebauthnService {
         400,
         'WebAuthn is not enabled',
       );
+    if (auth.session?.twoFaPassed) return null;
     const options = await generateAuthenticationOptions({
       rpID: this.rpID,
       allowCredentials: credentials.map((credential) => ({
@@ -188,7 +190,12 @@ export class WebauthnService {
     await release();
   }
 
-  async remove(auth: AuthContext, credentialId: string): Promise<void> {
+  async remove(
+    auth: AuthContext,
+    credentialId: string,
+    currentPassword: string,
+  ): Promise<void> {
+    await this.authService.confirmPassword(auth, currentPassword);
     if (
       !(await this.users.removeWebauthnCredential(auth.user._id, credentialId))
     )

@@ -119,9 +119,9 @@ export class AuthService {
     };
   }
 
-  /** Re-entry of the current password; shares the `password-change` failure budget across every caller. */
+  /** Re-entry of the current password; shares the `password-confirm` failure budget across every caller. */
   async confirmPassword(auth: AuthContext, password: string): Promise<void> {
-    const failureKey = `password-change:user:${auth.principal.userId}`;
+    const failureKey = `password-confirm:user:${auth.principal.userId}`;
     // Reserve the attempt before verifying, like login, so a stolen session cannot brute-force the current password.
     const release = await this.rateLimit.reserve(
       [failureKey],

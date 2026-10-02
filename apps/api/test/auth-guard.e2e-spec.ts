@@ -388,6 +388,7 @@ describe('AuthGuard', () => {
       cookieIssuedAt: 0,
       pendingTotpSecret: null,
       webauthnChallenge: null,
+      webauthnRegistrationChallenge: null,
     });
   });
 });

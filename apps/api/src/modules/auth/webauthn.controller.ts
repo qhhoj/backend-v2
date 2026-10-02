@@ -52,7 +52,7 @@ export class WebauthnController {
   @Post('login/options')
   loginOptions(
     @CurrentAuth() auth: AuthContext,
-  ): Promise<PublicKeyCredentialRequestOptionsJSON> {
+  ): Promise<PublicKeyCredentialRequestOptionsJSON | null> {
     return this.webauthn.loginOptions(auth);
   }
 
@@ -72,7 +72,8 @@ export class WebauthnController {
   remove(
     @CurrentAuth() auth: AuthContext,
     @Param('credentialId') credentialId: string,
+    @Body() body: CurrentPasswordDto,
   ) {
-    return this.webauthn.remove(auth, credentialId);
+    return this.webauthn.remove(auth, credentialId, body.currentPassword);
   }
 }

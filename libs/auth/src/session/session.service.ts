@@ -12,11 +12,15 @@ export interface SessionData {
   cookieIssuedAt: number;
   pendingTotpSecret: string | null;
   webauthnChallenge: string | null;
+  webauthnRegistrationChallenge: string | null;
 }
 
 type StoredSession = Omit<
   SessionData,
-  'cookieIssuedAt' | 'pendingTotpSecret' | 'webauthnChallenge'
+  | 'cookieIssuedAt'
+  | 'pendingTotpSecret'
+  | 'webauthnChallenge'
+  | 'webauthnRegistrationChallenge'
 >;
 
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
@@ -29,6 +33,7 @@ const withDefaults = (stored: string): SessionData => ({
   cookieIssuedAt: 0,
   pendingTotpSecret: null,
   webauthnChallenge: null,
+  webauthnRegistrationChallenge: null,
   ...(JSON.parse(stored) as Partial<SessionData> & StoredSession),
 });
 
@@ -76,7 +81,11 @@ export class SessionService {
   async create(
     data: Omit<
       SessionData,
-      'csrf' | 'cookieIssuedAt' | 'pendingTotpSecret' | 'webauthnChallenge'
+      | 'csrf'
+      | 'cookieIssuedAt'
+      | 'pendingTotpSecret'
+      | 'webauthnChallenge'
+      | 'webauthnRegistrationChallenge'
     >,
   ): Promise<{ id: string; session: SessionData }> {
     const id = randomToken();
@@ -86,6 +95,7 @@ export class SessionService {
       cookieIssuedAt: Date.now(),
       pendingTotpSecret: null,
       webauthnChallenge: null,
+      webauthnRegistrationChallenge: null,
     };
     await execOrThrow(
       this.redis
@@ -121,7 +131,10 @@ export class SessionService {
   /** Atomically returns a single-use field and clears it. */
   async consume(
     id: string,
-    field: 'webauthnChallenge' | 'pendingTotpSecret',
+    field:
+      | 'webauthnChallenge'
+      | 'webauthnRegistrationChallenge'
+      | 'pendingTotpSecret',
   ): Promise<string | null> {
     return await this.scripts().sessionConsume(
       sessionKey(id),

@@ -156,6 +156,7 @@ describe('webauthn endpoints', () => {
       .delete(`${WEBAUTHN}/credentials/${credential.id}`)
       .set('Cookie', pending.cookie)
       .set('X-CSRF-Token', pending.csrf)
+      .send(CURRENT_PASSWORD)
       .expect(204);
     expect((await stored())!.isWebauthnEnabled).toBe(false);
     await api
@@ -163,6 +164,7 @@ describe('webauthn endpoints', () => {
       .delete(`${WEBAUTHN}/credentials/${credential.id}`)
       .set('Cookie', pending.cookie)
       .set('X-CSRF-Token', pending.csrf)
+      .send(CURRENT_PASSWORD)
       .expect(404)
       .expect(errorCode('not_found'));
     await api
@@ -170,6 +172,7 @@ describe('webauthn endpoints', () => {
       .delete(`${WEBAUTHN}/credentials/not-a-uuid`)
       .set('Cookie', pending.cookie)
       .set('X-CSRF-Token', pending.csrf)
+      .send(CURRENT_PASSWORD)
       .expect(404);
   });
 
@@ -425,14 +428,60 @@ describe('webauthn endpoints', () => {
     await post('login/verify', session, {
       response: fake.authenticate(first.challenge),
     }).expect(204);
-    const second = await loginOptions(session);
+    // Completed: login/options is a no-op, writes no challenge.
+    await post('login/options', session)
+      .expect(201)
+      .expect(({ body }) => expect((body as Body).data).toBeNull());
     await post('login/verify', session, {
       response: fake.authenticate('not-the-challenge'),
     }).expect(204);
     const sessionId = session.cookie.split('=')[1];
-    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBe(
-      second.challenge,
-    );
+    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBeNull();
+  });
+
+  it('keeps registration and login challenges separate', async () => {
+    const fake = authenticator();
+    await register(fake);
+    const attacker = authenticator();
+    const session = await login();
+    const { challenge } = await loginOptions(session);
+    await api.sessions.update(session.cookie.split('=')[1], {
+      twoFaPassed: true,
+    });
+    await post('register/verify', session, {
+      name: 'Attacker',
+      response: attacker.register(challenge),
+    })
+      .expect(400)
+      .expect(errorCode('webauthn_failed'));
+    expect((await stored())!.webauthnCredentials).toHaveLength(1);
+    // Force the pending state to prove a registration challenge cannot answer login/verify.
+    const registering = await login();
+    const registeringId = registering.cookie.split('=')[1];
+    await api.sessions.update(registeringId, { twoFaPassed: true });
+    await post('register/options', registering, CURRENT_PASSWORD).expect(201);
+    await api.sessions.update(registeringId, { twoFaPassed: false });
+    await post('login/verify', registering, {
+      response: fake.authenticate('anything'),
+    })
+      .expect(400)
+      .expect(errorCode('webauthn_failed'));
+  });
+
+  it('requires the current password to remove a credential', async () => {
+    const { session, credential } = await register(authenticator());
+    const remove = (body?: object) =>
+      api
+        .http()
+        .delete(`${WEBAUTHN}/credentials/${credential.id}`)
+        .set('Cookie', session.cookie)
+        .set('X-CSRF-Token', session.csrf)
+        .send(body);
+    await remove({ currentPassword: 'wrong wrong wrong' })
+      .expect(400)
+      .expect(errorCode('invalid_credentials'));
+    await remove().expect(400).expect(errorCode('validation_failed'));
+    expect((await stored())!.webauthnCredentials).toHaveLength(1);
   });
 
   it("does not let another account delete or use someone's credential", async () => {
@@ -445,6 +494,7 @@ describe('webauthn endpoints', () => {
       .delete(`${WEBAUTHN}/credentials/${credential.id}`)
       .set('Cookie', bob.cookie)
       .set('X-CSRF-Token', bob.csrf)
+      .send(CURRENT_PASSWORD)
       .expect(404)
       .expect(errorCode('not_found'));
     const alice = (await stored())!;
