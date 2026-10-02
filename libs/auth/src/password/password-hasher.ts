@@ -17,7 +17,9 @@ export async function verifyPassword(
   password: string,
   encoded: string,
 ): Promise<boolean> {
-  const [algorithmName, iterationText, salt, expectedText] = encoded.split('$');
+  const parts = encoded.split('$');
+  if (parts.length !== 4) return false;
+  const [algorithmName, iterationText, salt, expectedText] = parts;
   const algorithm = ALGORITHMS.get(algorithmName);
   const iterations = Number(iterationText);
   if (

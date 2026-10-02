@@ -12,6 +12,7 @@ const MALFORMED_HASHES = [
   'md5$salt$abc',
   'pbkdf2_sha256$abc$salt$hash',
   DUMMY_PASSWORD_HASH,
+  `${fixtures.passwords[0].hash}$x`,
   'constructor$1$salt$AAAA',
   '__proto__$1$salt$AAAA',
   'toString$1$salt$AAAA',
@@ -33,6 +34,11 @@ describe('password hasher', () => {
   it('rejects unusable and malformed hashes', async () => {
     for (const encoded of MALFORMED_HASHES)
       expect(await verifyPassword('anything', encoded)).toBe(false);
+  });
+  it('rejects a valid hash with extra segments', async () => {
+    const { password, hash } = fixtures.passwords[0];
+    expect(await verifyPassword(password, hash)).toBe(true);
+    expect(await verifyPassword(password, `${hash}$x`)).toBe(false);
   });
   it('hashes in Django format and round-trips', async () => {
     const encoded = await hashPassword('s3cret-pass', 1000);
@@ -59,5 +65,14 @@ describe('password hasher', () => {
       true,
       true,
     ]);
+  });
+  it('flags a salt shorter than 22 characters for rehash', () => {
+    const digest = 'A'.repeat(43) + '=';
+    expect(
+      needsRehash(`pbkdf2_sha256$870000$${'s'.repeat(12)}$${digest}`),
+    ).toBe(true);
+    expect(
+      needsRehash(`pbkdf2_sha256$870000$${'s'.repeat(22)}$${digest}`),
+    ).toBe(false);
   });
 });
