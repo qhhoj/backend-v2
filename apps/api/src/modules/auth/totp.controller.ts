@@ -8,6 +8,7 @@ import {
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { CodeDto } from './dto/code.dto';
+import { CurrentPasswordDto } from './dto/current-password.dto';
 import { TotpService } from './totp.service';
 
 @Controller('api/internal/auth/2fa/totp')
@@ -19,8 +20,9 @@ export class TotpController {
   @Post('enroll')
   enroll(
     @CurrentAuth() auth: AuthContext,
+    @Body() body: CurrentPasswordDto,
   ): Promise<{ secret: string; otpauthUrl: string }> {
-    return this.totp.enroll(auth);
+    return this.totp.enroll(auth, body.currentPassword);
   }
 
   @SessionOnly()

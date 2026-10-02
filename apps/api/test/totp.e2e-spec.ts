@@ -11,6 +11,8 @@ import {
 
 const AUTH = '/api/internal/auth';
 const TOTP = `${AUTH}/2fa/totp`;
+const PASSWORD = 'correct horse battery';
+const ENROLL = { currentPassword: PASSWORD };
 const cookieFrom = (headers: Record<string, unknown>) =>
   String((headers['set-cookie'] as string[])[0]).split(';')[0];
 
@@ -33,7 +35,7 @@ describe('totp endpoints', () => {
     const response = await api
       .http()
       .post(`${AUTH}/login`)
-      .send({ username: 'alice', password: 'correct horse battery' })
+      .send({ username: 'alice', password: PASSWORD })
       .expect(200);
     return {
       cookie: cookieFrom(response.headers),
@@ -63,7 +65,7 @@ describe('totp endpoints', () => {
   const enable = async () => {
     const session = await login();
     const { secret } = dataOf(
-      await post(`${TOTP}/enroll`, session).expect(201),
+      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
     );
     const { scratchCodes } = dataOf(
       await post(`${TOTP}/confirm`, session, {
@@ -91,7 +93,9 @@ describe('totp endpoints', () => {
 
   it('enrolls, confirms with a first code and stores the secret encrypted', async () => {
     const session = await login();
-    const enrolled = dataOf(await post(`${TOTP}/enroll`, session).expect(201));
+    const enrolled = dataOf(
+      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
+    );
     expect(enrolled.otpauthUrl).toContain(`secret=${enrolled.secret}`);
     await post(`${TOTP}/confirm`, session, {
       code: currentCode(enrolled.secret),
@@ -107,15 +111,50 @@ describe('totp endpoints', () => {
       decrypt(user!.totpKey!, encryptionKey(TEST_ENV.ENCRYPTION_KEY)),
     ).toBe(enrolled.secret);
     expect(user!.lastTotpTimecode).toBeGreaterThan(0);
-    await post(`${TOTP}/enroll`, session)
+    await post(`${TOTP}/enroll`, session, ENROLL)
       .expect(400)
       .expect(errorCode('invalid_code'));
   });
 
+  it('refuses to enroll without the current password and stores no pending secret', async () => {
+    const session = await login();
+    await post(`${TOTP}/enroll`, session, {
+      currentPassword: 'wrong wrong wrong',
+    })
+      .expect(400)
+      .expect(errorCode('invalid_credentials'));
+    const sessionId = session.cookie.split('=')[1];
+    expect((await api.sessions.get(sessionId))!.pendingTotpSecret).toBeNull();
+    await post(`${TOTP}/enroll`, session)
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    expect((await api.sessions.get(sessionId))!.pendingTotpSecret).toBeNull();
+  });
+
+  it('shares the failure budget of enrolment with password change', async () => {
+    const session = await login();
+    for (let count = 0; count < 10; count++)
+      await post(`${TOTP}/enroll`, session, {
+        currentPassword: 'wrong wrong wrong',
+      })
+        .expect(400)
+        .expect(errorCode('invalid_credentials'));
+    await post(`${AUTH}/password/change`, session, {
+      currentPassword: PASSWORD,
+      newPassword: 'yet another passphrase',
+    })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+  });
+
   it('enrolling twice replaces the pending secret', async () => {
     const session = await login();
-    const first = dataOf(await post(`${TOTP}/enroll`, session).expect(201));
-    const second = dataOf(await post(`${TOTP}/enroll`, session).expect(201));
+    const first = dataOf(
+      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
+    );
+    const second = dataOf(
+      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
+    );
     expect(second.secret).not.toBe(first.secret);
     await post(`${TOTP}/confirm`, session, {
       code: currentCode(first.secret),
@@ -133,7 +172,7 @@ describe('totp endpoints', () => {
       .expect(400)
       .expect(errorCode('invalid_code'));
     const { secret } = dataOf(
-      await post(`${TOTP}/enroll`, session).expect(201),
+      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
     );
     const wrong = currentCode(secret) === '000000' ? '000001' : '000000';
     await post(`${TOTP}/confirm`, session, { code: wrong })
@@ -148,7 +187,7 @@ describe('totp endpoints', () => {
   it('enables TOTP once when two confirms race', async () => {
     const session = await login();
     const { secret } = dataOf(
-      await post(`${TOTP}/enroll`, session).expect(201),
+      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
     );
     const statuses = (
       await Promise.all(

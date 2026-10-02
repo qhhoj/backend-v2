@@ -18,6 +18,7 @@ import type { AuthContext } from '@libs/auth';
 import { AppError, ENV, isDuplicateKey } from '@libs/common';
 import type { Env } from '@libs/common';
 import { newId } from '@libs/database';
+import { AuthService } from './auth.service';
 import { SecondFactorService } from './second-factor.service';
 
 const RP_NAME = 'QHHOJ';
@@ -35,6 +36,7 @@ export class WebauthnService {
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
     private readonly secondFactor: SecondFactorService,
+    private readonly authService: AuthService,
     @Inject(ENV) env: Env,
   ) {
     const site = new URL(env.siteUrl);
@@ -45,7 +47,9 @@ export class WebauthnService {
   // @SessionOnly() guarantees a session, so `auth.sessionId` is set on every method here.
   async registrationOptions(
     auth: AuthContext,
+    currentPassword: string,
   ): Promise<PublicKeyCredentialCreationOptionsJSON> {
+    await this.authService.confirmPassword(auth, currentPassword);
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
       rpID: this.rpID,

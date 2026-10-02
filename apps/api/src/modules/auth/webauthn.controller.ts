@@ -18,6 +18,7 @@ import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/server';
+import { CurrentPasswordDto } from './dto/current-password.dto';
 import { WebauthnLoginDto, WebauthnRegisterDto } from './dto/webauthn.dto';
 import { WebauthnService } from './webauthn.service';
 
@@ -30,8 +31,9 @@ export class WebauthnController {
   @Post('register/options')
   registrationOptions(
     @CurrentAuth() auth: AuthContext,
+    @Body() body: CurrentPasswordDto,
   ): Promise<PublicKeyCredentialCreationOptionsJSON> {
-    return this.webauthn.registrationOptions(auth);
+    return this.webauthn.registrationOptions(auth, body.currentPassword);
   }
 
   @SessionOnly()

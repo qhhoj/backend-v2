@@ -119,20 +119,16 @@ export class AuthService {
     };
   }
 
-  async changePassword(
-    auth: AuthContext,
-    currentPassword: string,
-    newPassword: string,
-  ): Promise<void> {
-    const { userId } = auth.principal;
-    const failureKey = `password-change:user:${userId}`;
+  /** Re-entry of the current password; shares the `password-change` failure budget across every caller. */
+  async confirmPassword(auth: AuthContext, password: string): Promise<void> {
+    const failureKey = `password-change:user:${auth.principal.userId}`;
     // Reserve the attempt before verifying, like login, so a stolen session cannot brute-force the current password.
     const release = await this.rateLimit.reserve(
       [failureKey],
       FAILURE_LIMIT,
       FAILURE_WINDOW_SECONDS,
     );
-    if (!(await verifyPassword(currentPassword, auth.user.password)))
+    if (!(await verifyPassword(password, auth.user.password)))
       throw new AppError(
         'invalid_credentials',
         400,
@@ -140,6 +136,15 @@ export class AuthService {
         { currentPassword: ['Current password is incorrect.'] },
       );
     await release();
+  }
+
+  async changePassword(
+    auth: AuthContext,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    await this.confirmPassword(auth, currentPassword);
+    const { userId } = auth.principal;
 
     const problems = passwordProblems(newPassword, auth.user);
     if (newPassword === currentPassword)

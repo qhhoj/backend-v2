@@ -16,6 +16,8 @@ import {
 
 const AUTH = '/api/internal/auth';
 const WEBAUTHN = `${AUTH}/2fa/webauthn`;
+const PASSWORD = 'correct horse battery';
+const CURRENT_PASSWORD = { currentPassword: PASSWORD };
 const RP_ID = 'localhost';
 const ORIGIN = 'http://localhost:5173';
 
@@ -39,7 +41,7 @@ describe('webauthn endpoints', () => {
     const response = await api
       .http()
       .post(`${AUTH}/login`)
-      .send({ username, password: 'correct horse battery' })
+      .send({ username, password: PASSWORD })
       .expect(200);
     return {
       cookie: cookieFrom(response.headers),
@@ -66,7 +68,7 @@ describe('webauthn endpoints', () => {
   const register = async (fake: FakeAuthenticator, name = 'Key') => {
     const session = await login();
     const options = dataOf(
-      await post('register/options', session).expect(201),
+      await post('register/options', session, CURRENT_PASSWORD).expect(201),
     ) as unknown as PublicKeyCredentialCreationOptionsJSON;
     const response = await post('register/verify', session, {
       name,
@@ -121,7 +123,7 @@ describe('webauthn endpoints', () => {
       .expect(errorCode('webauthn_failed'));
 
     const pending = await login();
-    await post('register/options', pending)
+    await post('register/options', pending, CURRENT_PASSWORD)
       .expect(403)
       .expect(errorCode('two_factor_required'));
     const requestOptions = await loginOptions(pending);
@@ -171,6 +173,21 @@ describe('webauthn endpoints', () => {
       .expect(404);
   });
 
+  it('refuses to start registration without the current password and stores no challenge', async () => {
+    const session = await login();
+    const sessionId = session.cookie.split('=')[1];
+    await post('register/options', session, {
+      currentPassword: 'wrong wrong wrong',
+    })
+      .expect(400)
+      .expect(errorCode('invalid_credentials'));
+    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBeNull();
+    await post('register/options', session)
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBeNull();
+  });
+
   it('keeps the user handle stable and excludes existing credentials', async () => {
     const first = authenticator();
     await register(first);
@@ -181,7 +198,7 @@ describe('webauthn endpoints', () => {
     );
     const fresh = await login();
     const options2 = dataOf(
-      await post('register/options', fresh).expect(201),
+      await post('register/options', fresh, CURRENT_PASSWORD).expect(201),
     ) as unknown as PublicKeyCredentialCreationOptionsJSON;
     expect(options2.excludeCredentials).toEqual([
       { id: first.id, type: 'public-key' },
@@ -315,7 +332,7 @@ describe('webauthn endpoints', () => {
     );
     const registering = await login();
     for (const response of garbage) {
-      await post('register/options', registering).expect(201);
+      await post('register/options', registering, CURRENT_PASSWORD).expect(201);
       await post('register/verify', registering, { name: 'x', response })
         .expect(400)
         .expect(errorCode('webauthn_failed'));
@@ -373,14 +390,14 @@ describe('webauthn endpoints', () => {
     const response = await api
       .http()
       .post(`${AUTH}/login`)
-      .send({ username: 'bob', password: 'correct horse battery' })
+      .send({ username: 'bob', password: PASSWORD })
       .expect(200);
     const session = {
       cookie: cookieFrom(response.headers),
       csrf: dataOf(response).csrfToken,
     };
     const options = dataOf(
-      await post('register/options', session).expect(201),
+      await post('register/options', session, CURRENT_PASSWORD).expect(201),
     ) as unknown as PublicKeyCredentialCreationOptionsJSON;
     await post('register/verify', session, {
       name: 'Clone',

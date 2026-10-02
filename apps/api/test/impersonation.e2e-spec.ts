@@ -243,6 +243,8 @@ describe('impersonation', () => {
         .send({})
         .expect(403)
         .expect(errorCode('forbidden'));
-    await post(`${AUTH}/2fa/totp/enroll`, await login('bob')).expect(201);
+    await post(`${AUTH}/2fa/totp/enroll`, await login('bob'), {
+      currentPassword: 'correct horse battery',
+    }).expect(201);
   });
 });

@@ -14,6 +14,7 @@ import {
 import type { AuthContext, UserDocument } from '@libs/auth';
 import { AppError, ENV } from '@libs/common';
 import type { Env } from '@libs/common';
+import { AuthService } from './auth.service';
 import { SecondFactorService } from './second-factor.service';
 
 const invalidCode = () =>
@@ -38,6 +39,7 @@ export class TotpService {
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
     private readonly secondFactor: SecondFactorService,
+    private readonly authService: AuthService,
     @Inject(ENV) env: Env,
   ) {
     this.key = encryptionKey(env.encryptionKey);
@@ -46,7 +48,9 @@ export class TotpService {
   // @SessionOnly() guarantees a session, so `auth.sessionId` is set on enroll/confirm.
   async enroll(
     auth: AuthContext,
+    currentPassword: string,
   ): Promise<{ secret: string; otpauthUrl: string }> {
+    await this.authService.confirmPassword(auth, currentPassword);
     if (auth.user.isTotpEnabled) throw alreadyEnabled();
     const secret = generateTotpSecret();
     await this.sessions.update(auth.sessionId!, {
