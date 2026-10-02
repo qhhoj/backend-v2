@@ -3,12 +3,23 @@ import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { PasswordResetController } from './password-reset.controller';
+import { PasswordResetService } from './password-reset.service';
 import { RegistrationController } from './registration.controller';
 import { RegistrationService } from './registration.service';
 
 @Module({
   imports: [AuthModule],
-  controllers: [AuthController, RegistrationController],
-  providers: [AuthService, RegistrationService, RateLimitService],
+  controllers: [
+    AuthController,
+    RegistrationController,
+    PasswordResetController,
+  ],
+  providers: [
+    AuthService,
+    RegistrationService,
+    PasswordResetService,
+    RateLimitService,
+  ],
 })
 export class AuthApiModule {}
