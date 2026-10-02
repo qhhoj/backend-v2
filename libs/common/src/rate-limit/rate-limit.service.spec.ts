@@ -42,4 +42,23 @@ describe('RateLimitService', () => {
     await limiter.release('giveback');
     expect(await limiter.hit('giveback', 60)).toBe(1);
   });
+  it('reserves attempts and gives them back on release', async () => {
+    const release = await limiter.reserve(['reserve:a', 'reserve:b'], 2, 60);
+    expect(await redis.mget('rate:reserve:a', 'rate:reserve:b')).toEqual([
+      '1',
+      '1',
+    ]);
+    await release();
+    expect(await redis.mget('rate:reserve:a', 'rate:reserve:b')).toEqual([
+      '0',
+      '0',
+    ]);
+  });
+  it('rejects once any key is over the limit and keeps the hit', async () => {
+    await limiter.reserve(['reserve:c'], 1, 60);
+    await expect(
+      limiter.reserve(['reserve:c', 'reserve:d'], 1, 60),
+    ).rejects.toMatchObject({ code: 'rate_limited', status: 429 });
+    expect(await redis.get('rate:reserve:c')).toBe('2');
+  });
 });

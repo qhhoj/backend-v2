@@ -38,15 +38,11 @@ export class AuthService {
         : `login:name:${username.normalize('NFKC').toLowerCase()}`,
     ];
     // Reserve the attempt before verifying so concurrent bursts cannot exceed the limit.
-    const counts = await Promise.all(
-      failureKeys.map((key) => this.rateLimit.hit(key, FAILURE_WINDOW_SECONDS)),
+    const release = await this.rateLimit.reserve(
+      failureKeys,
+      FAILURE_LIMIT,
+      FAILURE_WINDOW_SECONDS,
     );
-    if (counts.some((count) => count > FAILURE_LIMIT))
-      throw new AppError(
-        'rate_limited',
-        429,
-        'Too many failed logins; try again later',
-      );
 
     const passwordValid = await verifyPassword(
       password,
@@ -58,7 +54,7 @@ export class AuthService {
         401,
         'Invalid username or password',
       );
-    await Promise.all(failureKeys.map((key) => this.rateLimit.release(key)));
+    await release();
     if (!user.isActive)
       throw user.banReason !== null
         ? new AppError(
@@ -100,15 +96,11 @@ export class AuthService {
     const { userId } = auth.principal;
     const failureKey = `password-change:user:${userId}`;
     // Reserve the attempt before verifying, like login, so a stolen session cannot brute-force the current password.
-    if (
-      (await this.rateLimit.hit(failureKey, FAILURE_WINDOW_SECONDS)) >
-      FAILURE_LIMIT
-    )
-      throw new AppError(
-        'rate_limited',
-        429,
-        'Too many failed attempts; try again later',
-      );
+    const release = await this.rateLimit.reserve(
+      [failureKey],
+      FAILURE_LIMIT,
+      FAILURE_WINDOW_SECONDS,
+    );
     if (!(await verifyPassword(currentPassword, auth.user.password)))
       throw new AppError(
         'invalid_credentials',
@@ -116,7 +108,7 @@ export class AuthService {
         'Current password is incorrect',
         { currentPassword: ['Current password is incorrect.'] },
       );
-    await this.rateLimit.release(failureKey);
+    await release();
 
     const problems = passwordProblems(newPassword, auth.user);
     if (newPassword === currentPassword)

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
+import { AppError } from '../errors/app.error';
 import { REDIS } from '../redis/redis.module';
 import { execOrThrow } from '../redis/redis-exec';
 
@@ -17,6 +18,26 @@ export class RateLimitService {
         .expire(rateKey(key), windowSeconds, 'NX'),
     );
     return count as number;
+  }
+
+  /** Hits every key before the guarded work; over the limit throws (hits stay counted), else returns a release that gives the attempt back. */
+  async reserve(
+    keys: string[],
+    limit: number,
+    windowSeconds: number,
+  ): Promise<() => Promise<void>> {
+    const counts = await Promise.all(
+      keys.map((key) => this.hit(key, windowSeconds)),
+    );
+    if (counts.some((count) => count > limit))
+      throw new AppError(
+        'rate_limited',
+        429,
+        'Too many attempts; try again later',
+      );
+    return async () => {
+      await Promise.all(keys.map((key) => this.release(key)));
+    };
   }
 
   /** Gives back one hit (never below zero), so only counted attempts consume budget. */
