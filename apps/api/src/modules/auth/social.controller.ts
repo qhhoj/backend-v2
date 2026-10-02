@@ -16,12 +16,11 @@ import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { SessionResponse } from './dto/session.response';
 import { SocialCompleteDto } from './dto/social-complete.dto';
-import { SocialService } from './social.service';
+import { SocialService, STATE_TTL_SECONDS } from './social.service';
 
 const STATE_COOKIE = 'oauth_state';
 const STATE_COOKIE_PATH = '/api/internal/auth/social';
 const PENDING_COOKIE = 'oauth_pending';
-const COOKIE_SECONDS = 600;
 
 @Public()
 @Controller('api/internal/auth/social')
@@ -39,13 +38,7 @@ export class SocialController {
   ): Promise<void> {
     const { location, state } = await this.social.start(provider, request.ip);
     // Ties the flow to this browser, so a victim cannot be logged in via an attacker's callback link.
-    reply.setCookie(STATE_COOKIE, state, {
-      httpOnly: true,
-      secure: this.env.cookieSecure,
-      sameSite: 'lax',
-      path: STATE_COOKIE_PATH,
-      maxAge: COOKIE_SECONDS,
-    });
+    this.setFlowCookie(reply, STATE_COOKIE, state);
     reply.redirect(location, 302);
   }
 
@@ -70,14 +63,7 @@ export class SocialController {
     );
     reply.clearCookie(STATE_COOKIE, { path: STATE_COOKIE_PATH });
     // Binds the signup continuation to this browser; `complete` requires it.
-    if (pendingToken)
-      reply.setCookie(PENDING_COOKIE, pendingToken, {
-        httpOnly: true,
-        secure: this.env.cookieSecure,
-        sameSite: 'lax',
-        path: STATE_COOKIE_PATH,
-        maxAge: COOKIE_SECONDS,
-      });
+    if (pendingToken) this.setFlowCookie(reply, PENDING_COOKIE, pendingToken);
     if (sessionId) setSessionCookie(reply, sessionId, this.env.cookieSecure);
     reply.redirect(location, 302);
   }
@@ -98,5 +84,19 @@ export class SocialController {
     reply.clearCookie(PENDING_COOKIE, { path: STATE_COOKIE_PATH });
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
     return SessionResponse.from(user, principal, session);
+  }
+
+  private setFlowCookie(
+    reply: FastifyReply,
+    name: string,
+    value: string,
+  ): void {
+    reply.setCookie(name, value, {
+      httpOnly: true,
+      secure: this.env.cookieSecure,
+      sameSite: 'lax',
+      path: STATE_COOKIE_PATH,
+      maxAge: STATE_TTL_SECONDS,
+    });
   }
 }
