@@ -4,7 +4,7 @@ import {
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 
-export const fastifyAdapter = (): FastifyAdapter =>
+export const fastifyAdapter = () =>
   new FastifyAdapter({
     genReqId: () => randomUUID(),
     requestIdHeader: 'x-request-id',
