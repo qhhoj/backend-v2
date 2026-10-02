@@ -16,16 +16,17 @@ export function encryptionKey(hex = process.env.ENCRYPTION_KEY ?? ''): Buffer {
 
 export function encrypt(plain: string, key: Buffer): string {
   const iv = randomBytes(12);
-  const c = createCipheriv('aes-256-gcm', key, iv);
+  const c = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
   const ct = Buffer.concat([c.update(plain, 'utf8'), c.final()]);
   return Buffer.concat([iv, c.getAuthTag(), ct]).toString('base64');
 }
 
 export function decrypt(blob: string, key: Buffer): string {
   const b = Buffer.from(blob, 'base64');
-  const d = createDecipheriv('aes-256-gcm', key, b.subarray(0, 12)).setAuthTag(
-    b.subarray(12, 28),
-  );
+  if (b.length < 28) throw new Error('invalid ciphertext');
+  const d = createDecipheriv('aes-256-gcm', key, b.subarray(0, 12), {
+    authTagLength: 16,
+  }).setAuthTag(b.subarray(12, 28));
   return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8');
 }
 
@@ -45,7 +46,7 @@ export function legacyFernetDecrypt(token: string, secretKey: string): string {
     .update(raw.subarray(0, -32))
     .digest();
   if (
-    raw.length < 57 ||
+    raw.length < 73 ||
     raw[0] !== 0x80 ||
     !timingSafeEqual(mac, raw.subarray(-32))
   )
