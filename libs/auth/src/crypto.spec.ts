@@ -4,7 +4,10 @@ import {
   encrypt,
   encryptionKey,
   legacyFernetDecrypt,
+  constantTimeEqual,
   legacyWebauthnHandle,
+  randomToken,
+  sha256,
 } from './crypto';
 
 const key = encryptionKey(
@@ -12,6 +15,18 @@ const key = encryptionKey(
 );
 
 describe('crypto', () => {
+  it('compares strings in constant time and rejects non-strings', () => {
+    expect(constantTimeEqual('abc', 'abc')).toBe(true);
+    for (const given of ['abd', 'ab', 'abcd', '', undefined, 123, ['abc']])
+      expect(constantTimeEqual(given, 'abc')).toBe(false);
+  });
+  it('hashes sha256 as hex and issues 32-byte url-safe random tokens', () => {
+    expect(sha256('abc')).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
+    expect(Buffer.from(randomToken(), 'base64url')).toHaveLength(32);
+    expect(randomToken()).not.toBe(randomToken());
+  });
   it('round-trips AES-GCM with random IVs', () => {
     const [first, second] = [encrypt('secret', key), encrypt('secret', key)];
     expect(first).not.toBe(second);

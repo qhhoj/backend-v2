@@ -117,6 +117,57 @@ describe('password reset', () => {
       .expect(errorCode('invalid_token'));
   });
 
+  it('clears the API token hash on reset', async () => {
+    await createUser(api.users, {
+      username: 'tokened',
+      email: 'tokened@example.com',
+      apiTokenHash: 'a'.repeat(64),
+    });
+    await requestReset('tokened@example.com').expect(204);
+    await mailCountAfterSettling(1);
+    await confirm(tokenFrom(api.mailer.sent[0].text)).expect(204);
+    expect(
+      (await api.users.findOne({ username: 'tokened' }))!.apiTokenHash,
+    ).toBeNull();
+  });
+
+  it('refuses a token for a user banned after it was issued', async () => {
+    const user = await createUser(api.users, {
+      username: 'later_banned',
+      email: 'later@example.com',
+    });
+    await requestReset('later@example.com').expect(204);
+    await mailCountAfterSettling(1);
+    await api.users.updateOne(
+      { _id: user._id },
+      { isActive: false, banReason: 'spam' },
+    );
+    await confirm(tokenFrom(api.mailer.sent[0].text))
+      .expect(400)
+      .expect(errorCode('invalid_token'));
+  });
+
+  it('answers unknown emails in the same order of magnitude as known ones', async () => {
+    await createUser(api.users, {
+      username: 'timed',
+      email: 'timed@example.com',
+    });
+    const time = async (email: string) => {
+      const started = performance.now();
+      await requestReset(email).expect(204);
+      return performance.now() - started;
+    };
+    await time('warmup@example.com');
+    let known = 0;
+    let unknown = 0;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      known += await time('timed@example.com');
+      unknown += await time(`ghost${attempt}@example.com`);
+    }
+    expect(unknown).toBeLessThan(known * 5 + 20);
+    expect(known).toBeLessThan(unknown * 5 + 20);
+  });
+
   it('rejects a token after a login that followed the request', async () => {
     // Full-cost hash: a login must not rehash it, so only lastLogin can invalidate the token.
     await createUser(api.users, {

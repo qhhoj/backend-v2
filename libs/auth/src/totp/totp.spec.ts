@@ -42,7 +42,14 @@ describe('totp', () => {
     expect(
       matchTotp(secret, totpCode(secret, current), current, now),
     ).toBeNull();
-    for (const code of ['', '12345', '1234567', 'abcdef'])
+    for (const code of [
+      '',
+      '12345',
+      '1234567',
+      'abcdef',
+      '123456\n',
+      `${totpCode(secret, current)}\n`,
+    ])
       expect(matchTotp(secret, code, 0, now)).toBeNull();
   });
   it('returns null for hostile codes instead of throwing', () => {

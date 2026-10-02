@@ -67,8 +67,11 @@ describe('social login', () => {
     callback((await start()).state, { code });
   const pendingToken = (location: string) =>
     new URL(location).searchParams.get('token')!;
-  const complete = (body: Record<string, unknown>) =>
-    api.http().post(`${SOCIAL}/complete`).send(body);
+  /** `complete` as the browser that ran the callback: it sends the `oauth_pending` cookie holding the token. */
+  const complete = (
+    body: Record<string, unknown>,
+    cookie = `oauth_pending=${body.token as string}`,
+  ) => api.http().post(`${SOCIAL}/complete`).set('Cookie', cookie).send(body);
   const linkOf = (provider: string, uid: string) => ({
     socialAuth: [{ provider, uid, extraData: {} }],
   });
@@ -352,6 +355,55 @@ describe('social login', () => {
       .expect(errorCode('invalid_token'));
   });
 
+  it('binds the pending token to the browser through the oauth_pending cookie', async () => {
+    github.identities.set('code-1', {
+      uid: 'g-2',
+      email: 'new@example.com',
+      emailVerified: true,
+    });
+    const response = await login('code-1');
+    const token = pendingToken(response.headers.location);
+    expect(cookieValue(response.headers, 'oauth_pending')).toBe(token);
+    const cookie = cookiesOf(response.headers).find((header) =>
+      header.startsWith('oauth_pending='),
+    )!;
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Lax');
+    expect(cookie).toContain('Path=/api/internal/auth/social');
+    expect(cookie).toContain('Max-Age=600');
+    expect(cookie).not.toContain('Secure');
+
+    const body = { token, username: 'socialite', password: PASSWORD };
+    await api
+      .http()
+      .post(`${SOCIAL}/complete`)
+      .send(body)
+      .expect(400)
+      .expect(errorCode('invalid_token'));
+    await complete(body, 'oauth_pending=someone-else')
+      .expect(400)
+      .expect(errorCode('invalid_token'));
+    expect(await redis.exists(`oauth-pending:${token}`)).toBe(1);
+
+    const completed = await complete(body).expect(200);
+    expect(cookiesOf(completed.headers).join('\n')).toMatch(
+      /oauth_pending=;.*Path=\/api\/internal\/auth\/social/,
+    );
+  });
+
+  it('treats a provider email that is not a plain address as unverified', async () => {
+    github.identities.set('code-1', {
+      uid: 'g-2',
+      email: 'Alice <alice@example.com>',
+      emailVerified: true,
+    });
+    const response = await login('code-1');
+    expect(response.headers.location).toBe(
+      `${SITE}/login?error=email_unverified`,
+    );
+    expect(cookieValue(response.headers, 'oauth_pending')).toBeUndefined();
+  });
+
   it('keeps the token usable after a rejected username or password', async () => {
     await createUser(api.users, { username: 'taken', email: 'x@example.com' });
     github.identities.set('code-1', {
@@ -504,13 +556,10 @@ describe('social login', () => {
         emailVerified: true,
       });
       const token = pendingToken((await login('code-1')).headers.location);
-      const completed = await complete({
-        token,
-        username: 'socialite',
-        password: PASSWORD,
-      })
-        .set('Cookie', previous)
-        .expect(200);
+      const completed = await complete(
+        { token, username: 'socialite', password: PASSWORD },
+        `oauth_pending=${token}; ${previous}`,
+      ).expect(200);
       await me(previous).expect(401);
       await me(
         sessionCookie(cookieValue(completed.headers, 'qhhoj_session')!),
@@ -535,6 +584,16 @@ describe('social login', () => {
       await callback(state, { cookie: `oauth_state=${state}; ${previous}` });
       await me(previous).expect(200);
     });
+  });
+
+  it('admits the 30th start and limits the 31st', async () => {
+    await redis.set('rate:oauth-start:ip:127.0.0.1', '29', 'EX', 600);
+    await api.http().get(`${SOCIAL}/github/start`).expect(302);
+    await api
+      .http()
+      .get(`${SOCIAL}/github/start`)
+      .expect(429)
+      .expect(errorCode('rate_limited'));
   });
 
   it('limits start per IP with a 429', async () => {

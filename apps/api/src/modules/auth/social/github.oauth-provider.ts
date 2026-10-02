@@ -1,10 +1,7 @@
-import { createHash } from 'node:crypto';
 import type { OAuthClient } from '@libs/common';
 import { fetchJson, requireText } from './fetch-json';
+import { challengeOf } from './pkce';
 import type { OAuthProvider, SocialIdentity } from './oauth-provider';
-
-const challengeOf = (verifier: string) =>
-  createHash('sha256').update(verifier).digest('base64url');
 
 const API_HEADERS = {
   Accept: 'application/vnd.github+json',

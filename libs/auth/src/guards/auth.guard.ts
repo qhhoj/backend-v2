@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { timingSafeEqual } from 'node:crypto';
 import { AppError, ENV, type Env } from '@libs/common';
 import {
   NO_IMPERSONATION_ROUTE,
@@ -16,30 +15,19 @@ import {
   REQUIRED_PERMISSION,
   SESSION_ONLY_ROUTE,
 } from '../decorators/auth.decorators';
+import { constantTimeEqual } from '../crypto';
 import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
 import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
-import {
-  COOKIE_REFRESH_MS,
-  SessionData,
-  SessionService,
-} from '../session/session.service';
+import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
+import { isActiveSuperuser } from '../users/active-superuser';
 import { UsersRepository } from '../users/users.repository';
 import { AuthContext } from './auth-context';
 
 const isBearerHeader = (header: string) => /^bearer/i.test(header);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const sameToken = (given: unknown, expected: string) => {
-  if (typeof given !== 'string') return false;
-  const givenBytes = Buffer.from(given);
-  const expectedBytes = Buffer.from(expected);
-  return (
-    givenBytes.byteLength === expectedBytes.byteLength &&
-    timingSafeEqual(givenBytes, expectedBytes)
-  );
-};
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -92,7 +80,7 @@ export class AuthGuard implements CanActivate {
     if (
       session &&
       !SAFE_METHODS.has(request.method) &&
-      !sameToken(request.headers['x-csrf-token'], session.csrf)
+      !constantTimeEqual(request.headers['x-csrf-token'], session.csrf)
     )
       throw new AppError('csrf_failed', 403, 'Missing or invalid CSRF token');
     if (
@@ -134,9 +122,8 @@ export class AuthGuard implements CanActivate {
   }
 
   /** An impersonation ends as soon as the impersonator stops being an active superuser. */
-  private async impersonatorValid(session: SessionData) {
-    const impersonator = await this.users.findById(session.impersonatorId!);
-    return !!impersonator?.isActive && impersonator.isSuperuser;
+  private async impersonatorValid(impersonatorId: string) {
+    return isActiveSuperuser(await this.users.findById(impersonatorId));
   }
 
   private async fromBearer(
@@ -168,8 +155,12 @@ export class AuthGuard implements CanActivate {
     const sessionId = request.cookies[SESSION_COOKIE];
     const session = sessionId ? await this.sessions.get(sessionId) : null;
     const user = session && (await this.users.findById(session.userId));
-    if (!sessionId || !session || !user?.isActive) return null;
-    if (session.impersonatorId && !(await this.impersonatorValid(session))) {
+    if (!sessionId || !session) return null;
+    if (
+      !user?.isActive ||
+      (session.impersonatorId &&
+        !(await this.impersonatorValid(session.impersonatorId)))
+    ) {
       await this.sessions.destroy(sessionId);
       return null;
     }

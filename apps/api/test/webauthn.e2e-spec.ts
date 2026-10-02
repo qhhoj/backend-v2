@@ -35,17 +35,18 @@ const cookieFrom = (headers: Record<string, unknown>) =>
 
 describe('webauthn endpoints', () => {
   let api: ApiTest;
-  const login = async (): Promise<Session> => {
+  const loginAs = async (username: string): Promise<Session> => {
     const response = await api
       .http()
       .post(`${AUTH}/login`)
-      .send({ username: 'alice', password: 'correct horse battery' })
+      .send({ username, password: 'correct horse battery' })
       .expect(200);
     return {
       cookie: cookieFrom(response.headers),
       csrf: dataOf(response).csrfToken,
     };
   };
+  const login = () => loginAs('alice');
   const post = (path: string, session: Session, body: object = {}) =>
     api
       .http()
@@ -59,8 +60,7 @@ describe('webauthn endpoints', () => {
     const keys = await redis.keys('rate:*');
     if (keys.length) await redis.del(...keys);
   };
-  const authenticator = (origin = ORIGIN) =>
-    new FakeAuthenticator(RP_ID, origin);
+  const authenticator = () => new FakeAuthenticator(RP_ID, ORIGIN);
 
   /** Registers `fake` through the API on a fresh logged-in session. */
   const register = async (fake: FakeAuthenticator, name = 'Key') => {
@@ -391,7 +391,7 @@ describe('webauthn endpoints', () => {
   });
 
   it('enrols and logs in with a presence-only key', async () => {
-    const fake = new FakeAuthenticator(RP_ID, ORIGIN, false);
+    const fake = new FakeAuthenticator(RP_ID, ORIGIN, { userVerified: false });
     await register(fake);
     const session = await login();
     const { challenge } = await loginOptions(session);
@@ -400,17 +400,23 @@ describe('webauthn endpoints', () => {
     }).expect(204);
   });
 
-  const loginAs = async (username: string): Promise<Session> => {
-    const response = await api
-      .http()
-      .post(`${AUTH}/login`)
-      .send({ username, password: 'correct horse battery' })
-      .expect(200);
-    return {
-      cookie: cookieFrom(response.headers),
-      csrf: dataOf(response).csrfToken,
-    };
-  };
+  it('returns 204 on an already completed session without consuming the challenge', async () => {
+    const fake = authenticator();
+    await register(fake);
+    const session = await login();
+    const first = await loginOptions(session);
+    await post('login/verify', session, {
+      response: fake.authenticate(first.challenge),
+    }).expect(204);
+    const second = await loginOptions(session);
+    await post('login/verify', session, {
+      response: fake.authenticate('not-the-challenge'),
+    }).expect(204);
+    const sessionId = session.cookie.split('=')[1];
+    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBe(
+      second.challenge,
+    );
+  });
 
   it("does not let another account delete or use someone's credential", async () => {
     const fake = authenticator();

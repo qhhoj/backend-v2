@@ -10,6 +10,7 @@ export * from './token/password-reset-token';
 export * from './session/session.service';
 export * from './session/session-cookie';
 export * from './users/users.repository';
+export * from './users/active-superuser';
 export * from './principal/permissions';
 export * from './principal/principal';
 export * from './principal/principal.service';

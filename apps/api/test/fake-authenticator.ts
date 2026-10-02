@@ -19,15 +19,19 @@ const FLAG_ATTESTED_DATA = 0x40;
 export class FakeAuthenticator {
   readonly credentialId: Buffer;
   private readonly keys: KeyPairKeyObjectResult;
+  private readonly userVerified: boolean;
   private signCount = 0;
 
-  /** `userVerified: false` models a key that only proves presence (no PIN/biometric). */
+  /** `userVerified: false` models a key that only proves presence (no PIN/biometric); `shared` reuses that key and credential id. */
   constructor(
     private readonly rpId: string,
     private readonly origin: string,
-    private readonly userVerified = true,
-    shared?: FakeAuthenticator,
+    {
+      userVerified = true,
+      shared,
+    }: { userVerified?: boolean; shared?: FakeAuthenticator } = {},
   ) {
+    this.userVerified = userVerified;
     this.credentialId = shared?.credentialId ?? randomBytes(16);
     this.keys =
       shared?.keys ?? generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -35,7 +39,10 @@ export class FakeAuthenticator {
 
   /** The same key and credential id as seen from another origin. */
   withOrigin(origin: string): FakeAuthenticator {
-    return new FakeAuthenticator(this.rpId, origin, this.userVerified, this);
+    return new FakeAuthenticator(this.rpId, origin, {
+      userVerified: this.userVerified,
+      shared: this,
+    });
   }
 
   get id(): string {

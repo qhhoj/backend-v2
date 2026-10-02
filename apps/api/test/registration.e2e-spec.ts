@@ -119,6 +119,13 @@ describe('registration', () => {
     ).toBe(false);
   });
 
+  it('rejects a key whose user was reclaimed meanwhile', async () => {
+    await register('reclaimed', 'reclaimed@example.com').expect(204);
+    const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
+    await api.users.deleteOne({ username: 'reclaimed' });
+    await activate(key).expect(400).expect(errorCode('invalid_token'));
+  });
+
   it('consumes an activation key exactly once under concurrency', async () => {
     await register('racer', 'racer@example.com').expect(204);
     const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);

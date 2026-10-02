@@ -20,7 +20,8 @@ import { SocialService } from './social.service';
 
 const STATE_COOKIE = 'oauth_state';
 const STATE_COOKIE_PATH = '/api/internal/auth/social';
-const STATE_COOKIE_SECONDS = 600;
+const PENDING_COOKIE = 'oauth_pending';
+const COOKIE_SECONDS = 600;
 
 @Public()
 @Controller('api/internal/auth/social')
@@ -43,7 +44,7 @@ export class SocialController {
       secure: this.env.cookieSecure,
       sameSite: 'lax',
       path: STATE_COOKIE_PATH,
-      maxAge: STATE_COOKIE_SECONDS,
+      maxAge: COOKIE_SECONDS,
     });
     reply.redirect(location, 302);
   }
@@ -57,14 +58,26 @@ export class SocialController {
   ): Promise<void> {
     const text = (value: unknown) =>
       typeof value === 'string' ? value : undefined;
-    const { location, sessionId } = await this.social.callback(provider, {
-      code: text(query.code),
-      state: text(query.state),
-      error: text(query.error),
-      stateCookie: request.cookies[STATE_COOKIE],
-      previousSessionId: request.auth?.sessionId ?? null,
-    });
+    const { location, sessionId, pendingToken } = await this.social.callback(
+      provider,
+      {
+        code: text(query.code),
+        state: text(query.state),
+        error: text(query.error),
+        stateCookie: request.cookies[STATE_COOKIE],
+        previousSessionId: request.auth?.sessionId ?? null,
+      },
+    );
     reply.clearCookie(STATE_COOKIE, { path: STATE_COOKIE_PATH });
+    // Binds the signup continuation to this browser; `complete` requires it.
+    if (pendingToken)
+      reply.setCookie(PENDING_COOKIE, pendingToken, {
+        httpOnly: true,
+        secure: this.env.cookieSecure,
+        sameSite: 'lax',
+        path: STATE_COOKIE_PATH,
+        maxAge: COOKIE_SECONDS,
+      });
     if (sessionId) setSessionCookie(reply, sessionId, this.env.cookieSecure);
     reply.redirect(location, 302);
   }
@@ -80,7 +93,9 @@ export class SocialController {
       body,
       request.ip,
       request.auth?.sessionId ?? null,
+      request.cookies[PENDING_COOKIE],
     );
+    reply.clearCookie(PENDING_COOKIE, { path: STATE_COOKIE_PATH });
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
     return SessionResponse.from(user, principal, session);
   }

@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { createHash, randomBytes } from 'node:crypto';
 import { REDIS, execOrThrow } from '@libs/common';
 import Redis from 'ioredis';
+import { randomToken, sha256 } from '../crypto';
 
 export interface SessionData {
   userId: string;
@@ -21,10 +21,8 @@ type StoredSession = Omit<
 
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const COOKIE_REFRESH_MS = 24 * 60 * 60 * 1000;
-const sessionKey = (id: string) =>
-  `session:${createHash('sha256').update(id).digest('hex')}`;
+const sessionKey = (id: string) => `session:${sha256(id)}`;
 const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
-const randomToken = () => randomBytes(32).toString('base64url');
 
 // sessions stored before these fields existed lack them
 const withDefaults = (stored: string): SessionData => ({

@@ -1,10 +1,11 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import {
   hashPassword,
   passwordProblems,
   PwnedPasswordService,
+  sha256,
   UsersRepository,
 } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
@@ -22,16 +23,15 @@ import type { User } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import type { RegisterDto } from './dto/register.dto';
+import {
+  REGISTRATION_IP_LIMIT,
+  REGISTRATION_WINDOW_SECONDS,
+} from './rate-limits';
 
 const ACTIVATION_DAYS = 7;
-const REGISTRATION_LIMIT = 5;
-const REGISTRATION_WINDOW_SECONDS = 60 * 60;
 const EMAIL_LOCK_SECONDS = 30;
 const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
-
-const sha256 = (value: string) =>
-  createHash('sha256').update(value).digest('hex');
 
 @Injectable()
 export class RegistrationService {
@@ -63,7 +63,7 @@ export class RegistrationService {
     // Never released: every attempt, successful or not, spends budget.
     await this.rateLimit.reserve(
       [`register:ip:${ip}`],
-      REGISTRATION_LIMIT,
+      REGISTRATION_IP_LIMIT,
       REGISTRATION_WINDOW_SECONDS,
     );
     // Emails are not uniquely indexed (legacy duplicates), so serialize per email.

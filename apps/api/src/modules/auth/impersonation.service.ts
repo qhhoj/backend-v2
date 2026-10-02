@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { UsersRepository } from '@libs/auth';
-import type { AuthContext, UserDocument } from '@libs/auth';
+import { isActiveSuperuser, UsersRepository } from '@libs/auth';
+import type { AuthContext } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { AuthService } from './auth.service';
 
@@ -58,10 +58,9 @@ export class ImpersonationService {
       },
       auth.sessionId,
     );
-    this.logger.log('Impersonation stopped');
+    this.logger.log(
+      `Impersonation stopped: ${impersonator._id} as ${auth.user._id}`,
+    );
     return result;
   }
 }
-
-const isActiveSuperuser = (user: UserDocument | null): user is UserDocument =>
-  !!user?.isActive && user.isSuperuser;

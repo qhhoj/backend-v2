@@ -60,5 +60,6 @@ describe('RateLimitService', () => {
       limiter.reserve(['reserve:c', 'reserve:d'], 1, 60),
     ).rejects.toMatchObject({ code: 'rate_limited', status: 429 });
     expect(await redis.get('rate:reserve:c')).toBe('2');
+    expect(await redis.get('rate:reserve:d')).toBe('1');
   });
 });

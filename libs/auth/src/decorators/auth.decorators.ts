@@ -21,7 +21,7 @@ export const AllowPartialAuth = () => SetMetadata(PARTIAL_AUTH_ROUTE, true);
 export const AllowPwnedPassword = () => SetMetadata(PWNED_PASSWORD_ROUTE, true);
 /** Management endpoints: API tokens (Bearer) are refused, a browser session is required. */
 export const SessionOnly = () => SetMetadata(SESSION_ONLY_ROUTE, true);
-/** Refused (403 `forbidden`) while a superuser impersonates: account-security changes (2FA enrolment and removal). */
+/** Refused (403 `forbidden`) while a superuser impersonates: account-security changes (password change, API token regeneration, 2FA enrolment/removal, WebAuthn credential routes, impersonation start/stop). */
 export const NoImpersonation = () => SetMetadata(NO_IMPERSONATION_ROUTE, true);
 export const RequirePermission = (permission: Permission) =>
   SetMetadata(REQUIRED_PERMISSION, permission);

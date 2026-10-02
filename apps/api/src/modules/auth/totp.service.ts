@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { timingSafeEqual } from 'node:crypto';
 import {
+  constantTimeEqual,
   decrypt,
   encrypt,
   encryptionKey,
@@ -24,13 +24,9 @@ const alreadyEnabled = () =>
 
 /** Compares against every candidate without early exit. */
 const containsCode = (codes: string[], code: string): boolean => {
-  const given = Buffer.from(code);
   let found = false;
-  for (const candidate of codes) {
-    const stored = Buffer.from(candidate);
-    if (stored.length === given.length && timingSafeEqual(stored, given))
-      found = true;
-  }
+  for (const candidate of codes)
+    if (constantTimeEqual(candidate, code)) found = true;
   return found;
 };
 

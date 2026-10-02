@@ -1,5 +1,4 @@
 import { Controller, Get, Post } from '@nestjs/common';
-import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import {
@@ -12,6 +11,7 @@ import {
   Public,
   RequirePermission,
   SessionOnly,
+  sha256,
 } from '@libs/auth';
 import {
   ApiTest,
@@ -183,6 +183,10 @@ describe('AuthGuard', () => {
       .get('/guarded/private')
       .set('Cookie', sessionCookie(id))
       .expect(401);
+    expect(await api.sessions.get(id)).toBeNull();
+    expect(
+      await api.app.get<Redis>(REDIS).exists(`session:${sha256(id)}`),
+    ).toBe(0);
   });
   it('authenticates bearer tokens without csrf and rejects bad ones', async () => {
     const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
@@ -378,11 +382,7 @@ describe('AuthGuard', () => {
     };
     await api.app
       .get<Redis>(REDIS)
-      .set(
-        `session:${createHash('sha256').update(id).digest('hex')}`,
-        JSON.stringify(legacy),
-        'KEEPTTL',
-      );
+      .set(`session:${sha256(id)}`, JSON.stringify(legacy), 'KEEPTTL');
     expect(await api.sessions.get(id)).toEqual({
       ...legacy,
       cookieIssuedAt: 0,

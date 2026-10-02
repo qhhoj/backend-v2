@@ -12,10 +12,11 @@ import {
 import type { UserDocument } from '@libs/auth';
 import { AppError, ENV, MAILER, RateLimitService } from '@libs/common';
 import type { Env, Mailer } from '@libs/common';
-
-const IP_LIMIT = 10;
-const EMAIL_LIMIT = 3;
-const WINDOW_SECONDS = 60 * 60;
+import {
+  PASSWORD_RESET_EMAIL_LIMIT,
+  PASSWORD_RESET_IP_LIMIT,
+  PASSWORD_RESET_WINDOW_SECONDS,
+} from './rate-limits';
 
 const invalidToken = () =>
   new AppError('invalid_token', 400, 'Reset link is invalid or expired');
@@ -43,13 +44,13 @@ export class PasswordResetService {
     // Never released: every request spends budget.
     await this.rateLimit.reserve(
       [`password-reset:ip:${ip}`],
-      IP_LIMIT,
-      WINDOW_SECONDS,
+      PASSWORD_RESET_IP_LIMIT,
+      PASSWORD_RESET_WINDOW_SECONDS,
     );
     await this.rateLimit.reserve(
       [`password-reset:email:${email.toLowerCase()}`],
-      EMAIL_LIMIT,
-      WINDOW_SECONDS,
+      PASSWORD_RESET_EMAIL_LIMIT,
+      PASSWORD_RESET_WINDOW_SECONDS,
     );
     const users = await this.users.findActiveByEmail(email);
     for (const user of users)
@@ -97,6 +98,8 @@ export class PasswordResetService {
       await hashPassword(newPassword),
     );
     if (!changed) throw invalidToken();
+    // Reset is the recovery path: a leaked API token must not survive it.
+    await this.users.update(user._id, { apiTokenHash: null });
     await this.sessions.destroyAllForUser(user._id);
   }
 }

@@ -1,11 +1,11 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { UsersRepository } from '@libs/auth';
+import { constantTimeEqual, randomToken, UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import {
   AppError,
   ENV,
   isDuplicateKey,
+  MAIL_ADDRESS_PATTERN,
   RateLimitService,
   REDIS,
 } from '@libs/common';
@@ -21,7 +21,8 @@ import type { OAuthProvider, SocialIdentity } from './social/oauth-provider';
 const STATE_TTL_SECONDS = 600;
 const MAX_STATE_LENGTH = 128;
 const LOGIN_REFUSALS = ['banned', 'account_not_activated'];
-const randomToken = () => randomBytes(32).toString('base64url');
+const invalidToken = () =>
+  new AppError('invalid_token', 400, 'Token is invalid or expired');
 
 interface PendingLogin {
   provider: string;
@@ -29,10 +30,11 @@ interface PendingLogin {
   email: string;
 }
 
-/** Where to send the browser; `sessionId` is set when the login succeeded. */
+/** Where to send the browser; `sessionId` is set when the login succeeded, `pendingToken` when signup must be completed. */
 export interface CallbackResult {
   location: string;
   sessionId?: string;
+  pendingToken?: string;
 }
 
 export interface CallbackInput {
@@ -44,10 +46,6 @@ export interface CallbackInput {
   /** Session of the requesting browser, replaced on a successful login. */
   previousSessionId: string | null;
 }
-
-const sameText = (left: string, right: string) =>
-  left.length === right.length &&
-  timingSafeEqual(Buffer.from(left), Buffer.from(right));
 
 @Injectable()
 export class SocialService {
@@ -103,7 +101,7 @@ export class SocialService {
       !stored ||
       stored.slug !== slug ||
       !stateCookie ||
-      !sameText(stateCookie, state)
+      !constantTimeEqual(stateCookie, state)
     )
       return this.loginError('oauth_state');
     if (error || !code) return this.loginError('oauth_failed');
@@ -134,7 +132,10 @@ export class SocialService {
     { token, username, password }: SocialCompleteDto,
     ip: string,
     previousSessionId: string | null,
+    pendingCookie: string | undefined,
   ) {
+    // Binds the continuation to the browser that ran the callback; checked before the token is read or spent.
+    if (!constantTimeEqual(pendingCookie, token)) throw invalidToken();
     const pending = await this.readPending(token);
     const created = await this.registration.withRegistrationSlot(
       pending.email,
@@ -143,10 +144,10 @@ export class SocialService {
         const credentials = { username, email: pending.email, password };
         await this.registration.assertRegistrable(credentials);
         if (await this.users.findBySocial(pending.provider, pending.uid))
-          throw this.invalidToken();
+          throw invalidToken();
         // Single use: the token is only spent once the signup is known to succeed, and only one request can win it.
         if (!(await this.redis.getdel(`oauth-pending:${token}`)))
-          throw this.invalidToken();
+          throw invalidToken();
         return this.registration.createUser({
           ...credentials,
           isActive: true,
@@ -156,7 +157,6 @@ export class SocialService {
         });
       },
     );
-    this.auth.assertLoginAllowed(created);
     return this.auth.startSession(created, false, previousSessionId);
   }
 
@@ -167,10 +167,13 @@ export class SocialService {
   ): Promise<CallbackResult> {
     const linked = await this.users.findBySocial(provider.legacyName, uid);
     if (linked) return this.login(linked, previousSessionId);
-    if (!emailVerified || !email) return this.loginError('email_unverified');
+    const usableEmail =
+      email && MAIL_ADDRESS_PATTERN.test(email) ? email : null;
+    if (!emailVerified || !usableEmail)
+      return this.loginError('email_unverified');
 
     // Several matches are ambiguous: never guess, let registration reject the taken email.
-    const [match, ...others] = await this.users.findActiveByEmail(email);
+    const [match, ...others] = await this.users.findActiveByEmail(usableEmail);
     if (
       match &&
       !others.length &&
@@ -183,14 +186,21 @@ export class SocialService {
       return this.login(match, previousSessionId);
 
     const token = randomToken();
-    const pending: PendingLogin = { provider: provider.legacyName, uid, email };
+    const pending: PendingLogin = {
+      provider: provider.legacyName,
+      uid,
+      email: usableEmail,
+    };
     await this.redis.set(
       `oauth-pending:${token}`,
       JSON.stringify(pending),
       'EX',
       STATE_TTL_SECONDS,
     );
-    return { location: `${this.env.siteUrl}/register/social?token=${token}` };
+    return {
+      location: `${this.env.siteUrl}/register/social?token=${token}`,
+      pendingToken: token,
+    };
   }
 
   private async login(
@@ -225,10 +235,6 @@ export class SocialService {
     return { location: `${this.env.siteUrl}/login?error=${code}` };
   }
 
-  private invalidToken(): AppError {
-    return new AppError('invalid_token', 400, 'Token is invalid or expired');
-  }
-
   private async consumeState(
     state: string | undefined,
   ): Promise<{ slug: string; codeVerifier: string } | null> {
@@ -242,7 +248,7 @@ export class SocialService {
   /** Read without consuming, so a rejected username or password leaves the token usable for a retry. */
   private async readPending(token: string): Promise<PendingLogin> {
     const stored = await this.redis.get(`oauth-pending:${token}`);
-    if (!stored) throw this.invalidToken();
+    if (!stored) throw invalidToken();
     return JSON.parse(stored) as PendingLogin;
   }
 }
