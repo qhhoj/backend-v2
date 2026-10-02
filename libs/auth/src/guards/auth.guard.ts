@@ -13,6 +13,7 @@ import {
   PUBLIC_ROUTE,
   PWNED_PASSWORD_ROUTE,
   REQUIRED_PERMISSION,
+  SESSION_ONLY_ROUTE,
 } from '../decorators/auth.decorators';
 import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
@@ -59,6 +60,12 @@ export class AuthGuard implements CanActivate {
 
     const { auth } = request;
     if (!auth) throw new AppError('unauthorized', 401, 'Login required');
+    if (auth.viaToken && routeFlag<boolean>(SESSION_ONLY_ROUTE))
+      throw new AppError(
+        'forbidden',
+        403,
+        'This endpoint requires a browser session',
+      );
     const { session } = auth;
     if (
       session &&

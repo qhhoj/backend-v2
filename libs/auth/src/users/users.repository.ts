@@ -23,4 +23,19 @@ export class UsersRepository {
   async update(id: string, changes: Partial<User>): Promise<void> {
     await this.users.updateOne({ _id: id }, { $set: changes }).exec();
   }
+
+  /** Compare-and-set: false when the stored hash is no longer `expectedHash`. */
+  async updatePasswordIfUnchanged(
+    id: string,
+    expectedHash: string,
+    newHash: string,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: id, password: expectedHash },
+        { $set: { password: newHash } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
 }

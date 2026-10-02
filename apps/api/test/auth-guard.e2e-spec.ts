@@ -8,6 +8,7 @@ import {
   GroupsQuerier,
   Public,
   RequirePermission,
+  SessionOnly,
 } from '@libs/auth';
 import {
   ApiTest,
@@ -34,6 +35,9 @@ class GuardedController {
   }
   @AllowPartialAuth() @AllowPwnedPassword() @Get('partial') partial() {
     return 'partial';
+  }
+  @SessionOnly() @Post('session-only') sessionOnly() {
+    return 'managed';
   }
   @RequirePermission('judge.edit_all_problem') @Get('editor') editor() {
     return 'editor';
@@ -187,6 +191,23 @@ describe('AuthGuard', () => {
       .get('/guarded/private')
       .set('Authorization', `Bearer ${'A'.repeat(64)}`)
       .expect(401);
+  });
+  it('refuses bearer tokens on session-only routes', async () => {
+    const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
+    await api.users.updateOne({ _id: userId }, { apiTokenHash: hash });
+    await api
+      .http()
+      .post('/guarded/session-only')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    const { id, session } = await login();
+    await api
+      .http()
+      .post('/guarded/session-only')
+      .set('Cookie', sessionCookie(id))
+      .set('X-CSRF-Token', session.csrf)
+      .expect(201);
   });
   it('compares csrf tokens of equal length and equal byte length safely', async () => {
     const { id, session } = await login();

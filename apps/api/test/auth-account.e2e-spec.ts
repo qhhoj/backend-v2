@@ -1,3 +1,4 @@
+import { UsersRepository } from '@libs/auth';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
 const AUTH = '/api/internal/auth';
@@ -42,6 +43,10 @@ describe('account endpoints', () => {
     api = await setupApiTest();
     await createUser(api.users, {});
     await createUser(api.users, { username: 'bob', email: 'bob@example.com' });
+    await createUser(api.users, {
+      username: 'carol',
+      email: 'carol@example.com',
+    });
   });
   afterAll(() => api.teardown());
 
@@ -72,6 +77,7 @@ describe('account endpoints', () => {
       newPassword: 'another good one',
     })
       .expect(400)
+      .expect(errorCode('invalid_credentials'))
       .expect(({ body }) =>
         expect(bodyOf({ body }).error.fields).toHaveProperty('currentPassword'),
       );
@@ -80,6 +86,7 @@ describe('account endpoints', () => {
       newPassword: 'alice123',
     })
       .expect(400)
+      .expect(errorCode('validation_failed'))
       .expect(({ body }) =>
         expect(bodyOf({ body }).error.fields.newPassword).toEqual(
           expect.arrayContaining([
@@ -131,22 +138,67 @@ describe('account endpoints', () => {
       .expect(200);
   });
 
-  it('refuses token regeneration when authenticated via an api token', async () => {
+  it('refuses bearer tokens on every account-management route', async () => {
     const session = await login('third passphrase here');
     const token = bodyOf(await post('token/regenerate', session).expect(201))
       .data.token;
-    await api
-      .http()
-      .post(`${AUTH}/token/regenerate`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({})
-      .expect(403)
-      .expect(errorCode('forbidden'));
+    for (const path of ['password/change', 'token/regenerate', 'logout-all'])
+      await api
+        .http()
+        .post(`${AUTH}/${path}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currentPassword: 'third passphrase here', newPassword: 'x' })
+        .expect(403)
+        .expect(errorCode('forbidden'));
     await api
       .http()
       .get(`${AUTH}/me`)
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
+  });
+
+  it('rejects reusing the current password', async () => {
+    const session = await login('third passphrase here');
+    await post('password/change', session, {
+      currentPassword: 'third passphrase here',
+      newPassword: 'third passphrase here',
+    })
+      .expect(400)
+      .expect(errorCode('validation_failed'))
+      .expect(({ body }) =>
+        expect(bodyOf({ body }).error.fields.newPassword).toContain(
+          'New password must differ from the current password.',
+        ),
+      );
+  });
+
+  it('answers 409 when the password changed concurrently', async () => {
+    const session = await login('third passphrase here');
+    const spy = jest
+      .spyOn(api.app.get(UsersRepository), 'updatePasswordIfUnchanged')
+      .mockResolvedValueOnce(false);
+    await post('password/change', session, {
+      currentPassword: 'third passphrase here',
+      newPassword: 'a fresh passphrase 42',
+    })
+      .expect(409)
+      .expect(errorCode('conflict'));
+    spy.mockRestore();
+  });
+
+  it('updatePasswordIfUnchanged only writes when the hash matches', async () => {
+    const repository = api.app.get(UsersRepository);
+    const user = (await repository.findByUsername('bob'))!;
+    expect(
+      await repository.updatePasswordIfUnchanged(user._id, 'stale', 'new'),
+    ).toBe(false);
+    expect(
+      await repository.updatePasswordIfUnchanged(
+        user._id,
+        user.password,
+        user.password,
+      ),
+    ).toBe(true);
   });
 
   it('rate-limits wrong current passwords and blocks the eleventh attempt', async () => {
@@ -157,24 +209,28 @@ describe('account endpoints', () => {
         newPassword: 'yet another passphrase',
       });
     for (let count = 0; count < 10; count++)
-      await attempt('wrong wrong wrong').expect(400);
+      await attempt('wrong wrong wrong')
+        .expect(400)
+        .expect(errorCode('invalid_credentials'));
     await attempt('correct horse battery')
       .expect(429)
       .expect(errorCode('rate_limited'));
   });
 
   it('releases the reservation after a correct current password', async () => {
-    await createUser(api.users, {
-      username: 'carol',
-      email: 'carol@example.com',
-    });
     const session = await login('correct horse battery', 'carol');
     const attempt = (currentPassword: string) =>
       post('password/change', session, { currentPassword, newPassword: 'x' });
     for (let count = 0; count < 9; count++)
-      await attempt('wrong wrong wrong').expect(400);
-    await attempt('correct horse battery').expect(400);
-    await attempt('wrong wrong wrong').expect(400);
+      await attempt('wrong wrong wrong')
+        .expect(400)
+        .expect(errorCode('invalid_credentials'));
+    await attempt('correct horse battery')
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    await attempt('wrong wrong wrong')
+      .expect(400)
+      .expect(errorCode('invalid_credentials'));
     await attempt('wrong wrong wrong').expect(429);
   });
 });

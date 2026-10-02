@@ -16,8 +16,8 @@ import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
 import { User } from '@libs/database';
 
-export const LOGIN_FAILURE_LIMIT = 10;
-export const LOGIN_WINDOW_SECONDS = 15 * 60;
+export const FAILURE_LIMIT = 10;
+export const FAILURE_WINDOW_SECONDS = 15 * 60;
 
 @Injectable()
 export class AuthService {
@@ -40,9 +40,9 @@ export class AuthService {
     ];
     // Reserve the attempt before verifying so concurrent bursts cannot exceed the limit.
     const counts = await Promise.all(
-      failureKeys.map((key) => this.rateLimit.hit(key, LOGIN_WINDOW_SECONDS)),
+      failureKeys.map((key) => this.rateLimit.hit(key, FAILURE_WINDOW_SECONDS)),
     );
-    if (counts.some((count) => count > LOGIN_FAILURE_LIMIT))
+    if (counts.some((count) => count > FAILURE_LIMIT))
       throw new AppError(
         'rate_limited',
         429,
@@ -97,8 +97,8 @@ export class AuthService {
     const failureKey = `password-change:user:${userId}`;
     // Reserve the attempt before verifying, like login, so a stolen session cannot brute-force the current password.
     if (
-      (await this.rateLimit.hit(failureKey, LOGIN_WINDOW_SECONDS)) >
-      LOGIN_FAILURE_LIMIT
+      (await this.rateLimit.hit(failureKey, FAILURE_WINDOW_SECONDS)) >
+      FAILURE_LIMIT
     )
       throw new AppError(
         'rate_limited',
@@ -115,15 +115,26 @@ export class AuthService {
     await this.rateLimit.release(failureKey);
 
     const problems = passwordProblems(newPassword, auth.user);
+    if (newPassword === currentPassword)
+      problems.push('New password must differ from the current password.');
     if (await this.pwned.isPwned(newPassword))
       problems.push('This password has appeared in a data breach.');
     if (problems.length)
       throw new AppError('validation_failed', 400, 'Password rejected', {
         newPassword: problems,
       });
-    await this.users.update(userId, {
-      password: await hashPassword(newPassword),
-    });
+    // The API token intentionally stays valid across a password change.
+    const changed = await this.users.updatePasswordIfUnchanged(
+      userId,
+      auth.user.password,
+      await hashPassword(newPassword),
+    );
+    if (!changed)
+      throw new AppError(
+        'conflict',
+        409,
+        'Password was changed by another request',
+      );
     await this.sessions.destroyAllForUser(userId, auth.sessionId ?? undefined);
     if (auth.sessionId)
       await this.sessions.update(auth.sessionId, { passwordPwned: false });
