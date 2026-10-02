@@ -2,8 +2,12 @@ import { Type } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { hashPassword, SessionService } from '@libs/auth';
-import { REDIS } from '@libs/common';
-import { createTestApp, TEST_REDIS_URL } from '@libs/common/testing';
+import { MAILER, REDIS } from '@libs/common';
+import {
+  createTestApp,
+  InMemoryMailer,
+  TEST_REDIS_URL,
+} from '@libs/common/testing';
 import { Group, User } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import Redis from 'ioredis';
@@ -22,18 +26,27 @@ export const TEST_ENV = {
   PWNED_API_URL: '',
   LOG_LEVEL: 'silent',
   DISABLE_MONGODB_STREAM: 'true',
+  SMTP_URL: 'smtp://127.0.0.1:2525',
 };
 
 export async function setupApiTest({
   controllers = [],
-}: { controllers?: Type[] } = {}) {
+  overrides = [],
+}: {
+  controllers?: Type[];
+  overrides?: Array<{ provide: unknown; useValue: unknown }>;
+} = {}) {
+  const mailer = new InMemoryMailer();
   const replSet = await startMongo();
   Object.assign(process.env, TEST_ENV, { MONGO_URL: replSet.getUri('qhhoj') });
   let app: NestFastifyApplication | undefined;
   try {
     app = await createTestApp(
       { imports: [AppModule], controllers },
-      setupOpenApi,
+      {
+        beforeInit: setupOpenApi,
+        overrides: [...overrides, { provide: MAILER, useValue: mailer }],
+      },
     );
     await app.listen(0, '127.0.0.1');
     await app.get<Redis>(REDIS).flushdb();
@@ -52,6 +65,7 @@ export async function setupApiTest({
     users: readyApp.get<Model<User>>(getModelToken(User.name)),
     groups: readyApp.get<Model<Group>>(getModelToken(Group.name)),
     sessions: readyApp.get(SessionService),
+    mailer,
     teardown: async () => {
       await readyApp.close();
       await replSet.stop();

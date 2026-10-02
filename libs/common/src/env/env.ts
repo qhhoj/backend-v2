@@ -11,6 +11,8 @@ export interface Env {
   cookieSecure: boolean;
   /** null disables the Have I Been Pwned check. */
   pwnedApiUrl: string | null;
+  smtpUrl: string;
+  mailFrom: string;
 }
 
 const LOG_LEVELS = [
@@ -63,6 +65,8 @@ export function loadEnv(
       source.PWNED_API_URL === undefined
         ? 'https://api.pwnedpasswords.com'
         : source.PWNED_API_URL || null,
+    smtpUrl: required('SMTP_URL'),
+    mailFrom: source.MAIL_FROM || 'QHHOJ <no-reply@qhhoj.local>',
   };
   if (!/^[0-9a-f]{64}$/i.test(env.encryptionKey))
     problems.push('ENCRYPTION_KEY must be 64 hex chars');

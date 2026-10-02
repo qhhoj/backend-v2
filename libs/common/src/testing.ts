@@ -5,10 +5,19 @@ import { configureApp, fastifyAdapter } from './bootstrap';
 
 export async function createTestApp(
   metadata: ModuleMetadata,
-  beforeInit?: (app: NestFastifyApplication) => void,
+  {
+    beforeInit,
+    overrides = [],
+  }: {
+    beforeInit?: (app: NestFastifyApplication) => void;
+    overrides?: Array<{ provide: unknown; useValue: unknown }>;
+  } = {},
 ): Promise<NestFastifyApplication> {
+  const builder = Test.createTestingModule(metadata);
+  for (const { provide, useValue } of overrides)
+    builder.overrideProvider(provide).useValue(useValue);
   const app = (
-    await Test.createTestingModule(metadata).compile()
+    await builder.compile()
   ).createNestApplication<NestFastifyApplication>(fastifyAdapter());
   await configureApp(app);
   beforeInit?.(app);
@@ -18,3 +27,4 @@ export async function createTestApp(
 }
 export const TEST_REDIS_URL =
   process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6379/15';
+export * from './mail/in-memory.mailer';

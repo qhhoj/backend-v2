@@ -6,6 +6,7 @@ const valid = {
   ENCRYPTION_KEY: 'ab'.repeat(32),
   TOKEN_SECRET: 'x'.repeat(32),
   SITE_URL: 'http://localhost:3000',
+  SMTP_URL: 'smtp://localhost:1025',
 };
 
 describe('loadEnv', () => {
@@ -21,6 +22,8 @@ describe('loadEnv', () => {
       trustProxy: false,
       cookieSecure: true,
       pwnedApiUrl: 'https://api.pwnedpasswords.com',
+      smtpUrl: valid.SMTP_URL,
+      mailFrom: 'QHHOJ <no-reply@qhhoj.local>',
     }));
   it('parses flags, port and disabled pwned check', () =>
     expect(
@@ -41,7 +44,7 @@ describe('loadEnv', () => {
     expect(() =>
       loadEnv({ ENCRYPTION_KEY: 'zz', TOKEN_SECRET: 'short', PORT: '0' }),
     ).toThrow(
-      'Invalid environment: MONGO_URL is required; REDIS_URL is required; SITE_URL is required; ENCRYPTION_KEY must be 64 hex chars; TOKEN_SECRET must be at least 32 chars; PORT must be 1-65535',
+      'Invalid environment: MONGO_URL is required; REDIS_URL is required; SITE_URL is required; SMTP_URL is required; ENCRYPTION_KEY must be 64 hex chars; TOKEN_SECRET must be at least 32 chars; PORT must be 1-65535',
     ));
   it.each(['true', '1', ''])('rejects TRUST_PROXY=%j', (value) =>
     expect(() => loadEnv({ ...valid, TRUST_PROXY: value })).toThrow(
@@ -55,6 +58,10 @@ describe('loadEnv', () => {
       'COOKIE_SECURE must be true or false',
     ),
   );
+  it('reads MAIL_FROM', () =>
+    expect(loadEnv({ ...valid, MAIL_FROM: 'Me <me@x.test>' }).mailFrom).toBe(
+      'Me <me@x.test>',
+    ));
   it('rejects unknown LOG_LEVEL', () =>
     expect(() => loadEnv({ ...valid, LOG_LEVEL: 'verbose' })).toThrow(
       'LOG_LEVEL must be one of fatal|error|warn|info|debug|trace|silent',
