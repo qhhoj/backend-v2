@@ -12,14 +12,8 @@ import {
   UsersRepository,
 } from '@libs/auth';
 import type { AuthContext, UserDocument } from '@libs/auth';
-import { AppError, ENV, RateLimitService } from '@libs/common';
+import { AppError, ENV } from '@libs/common';
 import type { Env } from '@libs/common';
-import {
-  DAILY_FAILURE_LIMIT,
-  DAILY_WINDOW_SECONDS,
-  FAILURE_LIMIT,
-  FAILURE_WINDOW_SECONDS,
-} from './rate-limits';
 import { SecondFactorService } from './second-factor.service';
 
 const invalidCode = () =>
@@ -47,7 +41,6 @@ export class TotpService {
   constructor(
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
-    private readonly rateLimit: RateLimitService,
     private readonly secondFactor: SecondFactorService,
     @Inject(ENV) env: Env,
   ) {
@@ -122,21 +115,7 @@ export class TotpService {
   private async checkCode(user: UserDocument, code: string): Promise<void> {
     if (!user.isTotpEnabled || !user.totpKey)
       throw new AppError('totp_not_enabled', 400, 'TOTP is not enabled');
-    // Reserve before checking so concurrent guesses cannot exceed the limit.
-    const releaseWindow = await this.rateLimit.reserve(
-      [`second-factor:user:${user._id}`],
-      FAILURE_LIMIT,
-      FAILURE_WINDOW_SECONDS,
-    );
-    const releaseDay = await this.rateLimit.reserve(
-      [`second-factor:user:${user._id}:day`],
-      DAILY_FAILURE_LIMIT,
-      DAILY_WINDOW_SECONDS,
-    );
-    const release = async () => {
-      await releaseWindow();
-      await releaseDay();
-    };
+    const release = await this.secondFactor.reserveAttempt(user._id);
     const timecode = matchTotp(
       decrypt(user.totpKey, this.key),
       code,

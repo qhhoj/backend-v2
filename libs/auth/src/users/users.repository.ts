@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, User } from '@libs/database';
+import { CI, User, WebauthnCredential } from '@libs/database';
 import { HydratedDocument, Model } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
@@ -125,6 +125,77 @@ export class UsersRepository {
       .updateOne(
         { _id: userId, isTotpEnabled: { $ne: true } },
         { $set: { ...fields, isTotpEnabled: true } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** CAS: false when a handle was already stored (a racing request won). */
+  async setWebauthnUserHandle(
+    userId: string,
+    handle: Buffer,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, webauthnUserHandle: null },
+        { $set: { webauthnUserHandle: handle } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  async addWebauthnCredential(
+    userId: string,
+    credential: WebauthnCredential,
+  ): Promise<void> {
+    await this.users
+      .updateOne(
+        { _id: userId },
+        {
+          $push: { webauthnCredentials: credential },
+          $set: { isWebauthnEnabled: true },
+        },
+      )
+      .exec();
+  }
+
+  /** CAS: only moves the sign counter forward; false when the stored counter is not lower (replay or clone). */
+  async updateWebauthnCounter(
+    userId: string,
+    credId: string,
+    counter: number,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        {
+          _id: userId,
+          webauthnCredentials: {
+            $elemMatch: { credId, counter: { $lt: counter } },
+          },
+        },
+        { $set: { 'webauthnCredentials.$.counter': counter } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** False when the user has no credential with this id. */
+  async removeWebauthnCredential(
+    userId: string,
+    credentialId: string,
+  ): Promise<boolean> {
+    if (!UUID_PATTERN.test(credentialId)) return false;
+    // Match on the credential itself: timestamps make modifiedCount 1 even when nothing was pulled.
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, 'webauthnCredentials._id': credentialId },
+        { $pull: { webauthnCredentials: { _id: credentialId } } },
+      )
+      .exec();
+    await this.users
+      .updateOne(
+        { _id: userId, webauthnCredentials: { $size: 0 } },
+        { $set: { isWebauthnEnabled: false } },
       )
       .exec();
     return matchedCount === 1;

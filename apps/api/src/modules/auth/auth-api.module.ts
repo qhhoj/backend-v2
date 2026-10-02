@@ -10,6 +10,8 @@ import { RegistrationService } from './registration.service';
 import { SecondFactorService } from './second-factor.service';
 import { TotpController } from './totp.controller';
 import { TotpService } from './totp.service';
+import { WebauthnController } from './webauthn.controller';
+import { WebauthnService } from './webauthn.service';
 
 @Module({
   imports: [AuthModule],
@@ -18,6 +20,7 @@ import { TotpService } from './totp.service';
     RegistrationController,
     PasswordResetController,
     TotpController,
+    WebauthnController,
   ],
   providers: [
     AuthService,
@@ -25,6 +28,7 @@ import { TotpService } from './totp.service';
     PasswordResetService,
     SecondFactorService,
     TotpService,
+    WebauthnService,
     RateLimitService,
   ],
 })
