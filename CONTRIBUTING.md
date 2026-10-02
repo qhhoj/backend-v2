@@ -77,6 +77,19 @@ tools/legacy/   regenerates the fixtures
 - Validation: DTO classes + class-validator; global pipe is whitelist + forbid unknown + transform, failure -> `validation_failed` (400) with `fields`
 - App wiring: `configureApp(app)` + `fastifyAdapter()` from `@libs/common` (used by `main.ts` and tests)
 
+## Auth
+
+- Every route is authenticated by default (global `AuthGuard`); opt out with `@Public()`
+- Decorators: `@AllowPartialAuth()` (before 2FA), `@AllowPwnedPassword()`, `@SessionOnly()` (Bearer -> 403 `forbidden`; used on password change, token regenerate, logout-all), `@RequirePermission('judge.<codename>')`, param `@CurrentAuth()` -> `AuthContext`
+- Guard order: authenticate (Bearer, else session cookie) -> `@Public` exit -> `unauthorized` 401 -> `@SessionOnly` -> CSRF (`csrf_failed`) -> 2FA (`two_factor_required`) -> pwned password (`password_change_required`) -> permission (`forbidden`)
+- Other error codes: `validation_failed` 400, `account_not_activated` 403, `banned` 403, `conflict` 409, `not_found` 404, `rate_limited` 429
+- SPA contract: cookie `qhhoj_session`; send `X-CSRF-Token` (from `/auth/me` or login) on POST/PUT/PATCH/DELETE
+- API tokens (Bearer) skip the CSRF, 2FA and pwned-password gates but cannot reach `@SessionOnly()` routes; the token stays valid across a password change (design choice)
+- Login rate limiting is reserve-then-release, per IP and per resolved account
+- `@fastify/cookie` is pinned at 11.0.2: 11.1+ dynamically imports ESM `cookie`, which breaks Jest (CJS); do not bump
+- New permissions: add the codename to `libs/auth/src/principal/permissions.ts`
+- OpenAPI: `GET /api/internal/openapi.json` (raw JSON, no auth)
+
 ## Data conventions
 
 - `_id` is a UUIDv7: declare `@IdProp() _id!: string`

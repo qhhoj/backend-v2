@@ -10,6 +10,7 @@ import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { setupOpenApi } from '../src/openapi';
 
 export const TEST_ENV = {
   REDIS_URL: TEST_REDIS_URL,
@@ -30,7 +31,10 @@ export async function setupApiTest({
   Object.assign(process.env, TEST_ENV, { MONGO_URL: replSet.getUri('qhhoj') });
   let app: NestFastifyApplication;
   try {
-    app = await createTestApp({ imports: [AppModule], controllers });
+    app = await createTestApp(
+      { imports: [AppModule], controllers },
+      setupOpenApi,
+    );
     await app.listen(0, '127.0.0.1');
     await app.get<Redis>(REDIS).flushdb();
   } catch (error) {

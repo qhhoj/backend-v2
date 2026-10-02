@@ -5,11 +5,13 @@ import { configureApp, fastifyAdapter } from './bootstrap';
 
 export async function createTestApp(
   metadata: ModuleMetadata,
+  beforeInit?: (app: NestFastifyApplication) => void,
 ): Promise<NestFastifyApplication> {
   const app = (
     await Test.createTestingModule(metadata).compile()
   ).createNestApplication<NestFastifyApplication>(fastifyAdapter());
   await configureApp(app);
+  beforeInit?.(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;
