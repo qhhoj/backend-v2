@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SessionService, UsersRepository } from '@libs/auth';
+import { UsersRepository } from '@libs/auth';
 import type { AuthContext, UserDocument } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { AuthService } from './auth.service';
@@ -10,7 +10,6 @@ export class ImpersonationService {
 
   constructor(
     private readonly users: UsersRepository,
-    private readonly sessions: SessionService,
     private readonly auth: AuthService,
   ) {}
 
@@ -31,7 +30,6 @@ export class ImpersonationService {
         twoFaPassed: true,
         passwordPwned: false,
         impersonatorId: auth.user._id,
-        impersonatorPasswordPwned: auth.session?.passwordPwned ?? false,
       },
       auth.sessionId,
     );
@@ -39,26 +37,23 @@ export class ImpersonationService {
     return result;
   }
 
-  /** Restores the impersonator's session; `onRevoked` runs when they lost superuser rights meanwhile. */
-  async stop(auth: AuthContext, onRevoked: () => void) {
+  /** Restores the impersonator's session (the guard already ended it if they lost superuser rights). */
+  async stop(auth: AuthContext) {
     const { session } = auth;
     if (!session?.impersonatorId)
       throw new AppError('not_impersonating', 400, 'Not impersonating');
     const impersonator = await this.users.findById(session.impersonatorId);
-    if (!isActiveSuperuser(impersonator)) {
-      if (auth.sessionId) await this.sessions.destroy(auth.sessionId);
-      onRevoked();
+    if (!isActiveSuperuser(impersonator))
       throw new AppError(
         'unauthorized',
         401,
         'Impersonator is no longer authorized',
       );
-    }
     const result = await this.auth.openSession(
       impersonator,
       {
         twoFaPassed: true,
-        passwordPwned: session.impersonatorPasswordPwned,
+        passwordPwned: false,
         impersonatorId: null,
       },
       auth.sessionId,

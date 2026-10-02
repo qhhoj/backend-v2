@@ -58,7 +58,6 @@ export class AuthService {
         'Invalid username or password',
       );
     await release();
-    this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
     // Compare-and-set: if the password changed since verification, keep the newer one.
     if (needsRehash(user.password))
@@ -104,16 +103,10 @@ export class AuthService {
   /** The single session-opening path (also used by impersonation, which must not touch lastLogin). */
   async openSession(
     user: UserDocument,
-    data: Pick<
-      SessionData,
-      'twoFaPassed' | 'passwordPwned' | 'impersonatorId'
-    > &
-      Partial<Pick<SessionData, 'impersonatorPasswordPwned'>>,
+    data: Pick<SessionData, 'twoFaPassed' | 'passwordPwned' | 'impersonatorId'>,
     previousSessionId: string | null,
   ) {
-    this.assertLoginAllowed(user);
     const { id, session } = await this.sessions.create({
-      impersonatorPasswordPwned: false,
       ...data,
       userId: user._id,
     });

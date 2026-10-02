@@ -104,7 +104,6 @@ describe('password reset', () => {
       twoFaPassed: true,
       passwordPwned: false,
       impersonatorId: null,
-      impersonatorPasswordPwned: false,
     });
     await requestReset('resetme@example.com').expect(204);
     await mailCountAfterSettling(1);

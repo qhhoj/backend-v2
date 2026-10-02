@@ -472,7 +472,6 @@ describe('social login', () => {
         twoFaPassed: true,
         passwordPwned: false,
         impersonatorId: null,
-        impersonatorPasswordPwned: false,
       });
       await me(sessionCookie(id)).expect(200);
       return sessionCookie(id);

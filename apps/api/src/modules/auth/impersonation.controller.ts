@@ -1,11 +1,6 @@
 import { Controller, HttpCode, Inject, Param, Post, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
-import {
-  clearSessionCookie,
-  CurrentAuth,
-  SessionOnly,
-  setSessionCookie,
-} from '@libs/auth';
+import { CurrentAuth, SessionOnly, setSessionCookie } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
@@ -19,7 +14,7 @@ export class ImpersonationController {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  // Declared before ':userId' so "stop" is never captured as a user id.
+  // find-my-way prefers the static 'stop' segment over ':userId'; a test pins this.
   @SessionOnly()
   @Post('stop')
   @HttpCode(200)
@@ -28,9 +23,7 @@ export class ImpersonationController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SessionResponse> {
     const { sessionId, session, user, principal } =
-      await this.impersonation.stop(auth, () => {
-        clearSessionCookie(reply);
-      });
+      await this.impersonation.stop(auth);
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
     return SessionResponse.from(user, principal, session);
   }

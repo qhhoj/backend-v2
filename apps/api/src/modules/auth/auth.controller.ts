@@ -14,6 +14,7 @@ import {
   AllowPwnedPassword,
   clearSessionCookie,
   CurrentAuth,
+  NoImpersonation,
   Public,
   SessionService,
   SessionOnly,
@@ -84,6 +85,7 @@ export class AuthController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @AllowPwnedPassword()
   @Post('password/change')
   @HttpCode(204)
@@ -99,6 +101,7 @@ export class AuthController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('token/regenerate')
   regenerateToken(
     @CurrentAuth() auth: AuthContext,

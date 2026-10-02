@@ -192,14 +192,13 @@ describe('impersonation', () => {
       .expect(errorCode('not_impersonating'));
   });
 
-  it('restores the admin with the stored passwordPwned and a passed second factor', async () => {
+  it('restores the admin with a passed second factor', async () => {
     await api.users.updateOne({ _id: adminId }, { isTotpEnabled: true });
     const { id, session } = await api.sessions.create({
       userId: aliceId,
       twoFaPassed: true,
       passwordPwned: false,
       impersonatorId: adminId,
-      impersonatorPasswordPwned: true,
     });
     const stopped = await post(`${IMPERSONATE}/stop`, {
       cookie: sessionCookie(id),
@@ -208,37 +207,42 @@ describe('impersonation', () => {
     await api.users.updateOne({ _id: adminId }, { isTotpEnabled: false });
     expect(sessionOf(stopped).user!.id).toBe(adminId);
     expect(sessionOf(stopped).twoFactorRequired).toBe(false);
-    expect(sessionOf(stopped).passwordChangeRequired).toBe(true);
+    expect(sessionOf(stopped).passwordChangeRequired).toBe(false);
   });
 
-  it('ends the session on stop when the impersonator lost superuser rights', async () => {
+  it('ends the impersonation session when the impersonator is demoted', async () => {
     const alice = await impersonate(aliceId);
     await api.users.updateOne({ _id: adminId }, { isSuperuser: false });
     try {
-      const response = await post(`${IMPERSONATE}/stop`, alice)
-        .expect(401)
-        .expect(errorCode('unauthorized'));
-      expect(String(response.headers['set-cookie'])).toMatch(/qhhoj_session=;/);
-      await me(alice).expect(401);
+      await me(alice).expect(401).expect(errorCode('unauthorized'));
+      expect(await api.sessions.get(alice.cookie.split('=')[1])).toBeNull();
     } finally {
       await api.users.updateOne({ _id: adminId }, { isSuperuser: true });
     }
   });
 
-  it('refuses 2FA enrolment and credential changes while impersonating', async () => {
+  it('refuses every account-security route while impersonating', async () => {
     const alice = await impersonate(aliceId);
-    for (const path of [
-      `${AUTH}/2fa/totp/enroll`,
-      `${AUTH}/2fa/webauthn/register/options`,
-    ])
-      await post(path, alice).expect(403).expect(errorCode('forbidden'));
-    await api
-      .http()
-      .delete(`${AUTH}/2fa/webauthn/credentials/abc`)
-      .set('Cookie', alice.cookie)
-      .set('X-CSRF-Token', alice.csrf)
-      .expect(403)
-      .expect(errorCode('forbidden'));
+    const routes = [
+      ['post', `${AUTH}/2fa/totp/enroll`],
+      ['post', `${AUTH}/2fa/totp/confirm`],
+      ['post', `${AUTH}/2fa/totp/disable`],
+      ['post', `${AUTH}/2fa/totp/scratch-codes`],
+      ['post', `${AUTH}/2fa/webauthn/register/options`],
+      ['post', `${AUTH}/2fa/webauthn/register/verify`],
+      ['delete', `${AUTH}/2fa/webauthn/credentials/abc`],
+      ['post', `${AUTH}/token/regenerate`],
+      ['post', `${AUTH}/password/change`],
+    ] as const;
+    for (const [method, path] of routes)
+      await api
+        .http()
+        [method](path)
+        .set('Cookie', alice.cookie)
+        .set('X-CSRF-Token', alice.csrf)
+        .send({})
+        .expect(403)
+        .expect(errorCode('forbidden'));
     await post(`${AUTH}/2fa/totp/enroll`, await login('bob')).expect(201);
   });
 });

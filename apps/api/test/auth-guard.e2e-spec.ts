@@ -62,7 +62,6 @@ describe('AuthGuard', () => {
       twoFaPassed: true,
       passwordPwned: false,
       impersonatorId: null,
-      impersonatorPasswordPwned: false,
       ...flags,
     });
 
@@ -369,14 +368,12 @@ describe('AuthGuard', () => {
       twoFaPassed: true,
       passwordPwned: false,
       impersonatorId: null,
-      impersonatorPasswordPwned: false,
     });
     const legacy = {
       userId,
       twoFaPassed: true,
       passwordPwned: false,
       impersonatorId: null,
-      impersonatorPasswordPwned: false,
       csrf: 'legacy',
     };
     await api.app

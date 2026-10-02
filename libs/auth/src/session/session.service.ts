@@ -8,8 +8,6 @@ export interface SessionData {
   twoFaPassed: boolean;
   passwordPwned: boolean;
   impersonatorId: string | null;
-  /** The impersonator's own passwordPwned flag, restored when impersonation stops. */
-  impersonatorPasswordPwned: boolean;
   csrf: string;
   cookieIssuedAt: number;
   pendingTotpSecret: string | null;
@@ -18,10 +16,7 @@ export interface SessionData {
 
 type StoredSession = Omit<
   SessionData,
-  | 'cookieIssuedAt'
-  | 'impersonatorPasswordPwned'
-  | 'pendingTotpSecret'
-  | 'webauthnChallenge'
+  'cookieIssuedAt' | 'pendingTotpSecret' | 'webauthnChallenge'
 >;
 
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
@@ -34,7 +29,6 @@ const randomToken = () => randomBytes(32).toString('base64url');
 // sessions stored before these fields existed lack them
 const withDefaults = (stored: string): SessionData => ({
   cookieIssuedAt: 0,
-  impersonatorPasswordPwned: false,
   pendingTotpSecret: null,
   webauthnChallenge: null,
   ...(JSON.parse(stored) as Partial<SessionData> & StoredSession),
