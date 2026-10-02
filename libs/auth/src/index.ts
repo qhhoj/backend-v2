@@ -7,3 +7,7 @@ export * from './password/pwned-password.service';
 export * from './token/api-token';
 export * from './session/session.service';
 export * from './session/session-cookie';
+export * from './users/users.repository';
+export * from './principal/permissions';
+export * from './principal/principal';
+export * from './principal/principal.service';

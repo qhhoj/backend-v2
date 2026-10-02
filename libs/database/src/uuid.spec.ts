@@ -15,4 +15,11 @@ describe('uuid', () => {
     expect(uuidStr(toUuid(id))).toBe(id);
     expect(uuidStr(id)).toBe(id);
   });
+  it('stringifies mongoose buffer array elements', () => {
+    const id = newId();
+    const mongooseBuffer = Object.assign(Buffer.from(toUuid(id).buffer), {
+      toUUID: () => toUuid(id),
+    });
+    expect(uuidStr(mongooseBuffer)).toBe(id);
+  });
 });
