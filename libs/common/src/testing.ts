@@ -9,7 +9,7 @@ export async function createTestApp(
   const app = (
     await Test.createTestingModule(metadata).compile()
   ).createNestApplication<NestFastifyApplication>(fastifyAdapter());
-  configureApp(app);
+  await configureApp(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;

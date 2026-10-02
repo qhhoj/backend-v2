@@ -57,13 +57,13 @@ describe('http layer', () => {
       .get('/t/app-error')
       .expect(403, { error: { code: 'banned', message: 'Banned: spam' } }));
   it('hides internal errors', async () => {
-    const res = await http()
+    const { body } = (await http()
       .get('/t/crash')
       .set('x-request-id', 'req-1')
-      .expect(500);
-    expect(res.body).toEqual({
-      error: { code: 'internal_error', message: 'Request req-1 failed' },
-    });
+      .expect(500)) as { body: { error: { code: string; message: string } } };
+    // Client-supplied request ids are ignored unless TRUST_PROXY is on.
+    expect(body.error.code).toBe('internal_error');
+    expect(body.error.message).toMatch(/^Request [0-9a-f-]{36} failed$/);
   });
   it('maps unknown routes', () =>
     http()

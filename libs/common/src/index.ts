@@ -3,4 +3,6 @@ export * from './filters/exception.filter';
 export * from './interceptors/response.interceptor';
 export * from './pipes/validation.pipe';
 export * from './bootstrap';
+export * from './env/env';
+export * from './env/env.module';
 export * from './querier/base-mongo-stream.querier';
