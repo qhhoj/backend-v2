@@ -8,9 +8,9 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { GroupsModule } from './groups.module';
 import { GroupsQuerier } from './groups.querier';
 
-const waitFor = async (check: () => boolean, ms = 5000) => {
+const waitFor = async (check: () => boolean, timeoutMs = 5000) => {
   for (
-    const end = Date.now() + ms;
+    const end = Date.now() + timeoutMs;
     !check();
     await new Promise((resolve) => setTimeout(resolve, 50))
   )
@@ -18,31 +18,31 @@ const waitFor = async (check: () => boolean, ms = 5000) => {
 };
 
 describe('GroupsQuerier', () => {
-  let rs: MongoMemoryReplSet,
-    mod: TestingModule,
+  let replSet: MongoMemoryReplSet,
+    testingModule: TestingModule,
     groups: Model<Group>,
     querier: GroupsQuerier;
   let staffId: string;
 
   beforeAll(async () => {
-    rs = await startMongo();
-    process.env.MONGO_URL = rs.getUri('qhhoj');
-    mod = await Test.createTestingModule({
+    replSet = await startMongo();
+    process.env.MONGO_URL = replSet.getUri('qhhoj');
+    testingModule = await Test.createTestingModule({
       imports: [ScheduleModule.forRoot(), DatabaseModule, GroupsModule],
     }).compile();
-    groups = mod.get(getModelToken(Group.name));
+    groups = testingModule.get(getModelToken(Group.name));
     staffId = (
       await groups.create({
         name: 'Staff',
         permissions: ['judge.edit_all_problem'],
       })
     )._id;
-    await mod.init();
-    querier = mod.get(GroupsQuerier);
+    await testingModule.init();
+    querier = testingModule.get(GroupsQuerier);
   });
   afterAll(async () => {
-    await mod.close();
-    await rs.stop();
+    await testingModule.close();
+    await replSet.stop();
   });
 
   it('loads existing groups on init', () =>

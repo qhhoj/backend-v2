@@ -7,7 +7,7 @@
 - Mongoose 8 via `@nestjs/mongoose`; MongoDB 8 **replica set** (change streams)
 - Redis 7, MariaDB 11 (legacy source for the migrator only)
 - Jest 29 + `mongodb-memory-server`; ESLint + Prettier
-- Versions pinned in `package.json`; `fastify` is pinned to the exact version `@nestjs/platform-fastify` depends on
+- Versions pinned in `package.json`; `fastify` pinned via `overrides` to a single copy; bump when `@nestjs/platform-fastify` or an advisory requires it
 - Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
 
 ## Layout
@@ -41,10 +41,11 @@ tools/legacy/   regenerates the fixtures
 ```
 
 - Flow: `controller -> service -> querier | repository`
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|module|schema|dto|mapper|command|spec`
-- One class per file, one responsibility per file
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|module|schema|dto|mapper|command|filter|interceptor|pipe|error|spec`
+- One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
-- Tests: `<feature>.<role>.spec.ts` next to the file
+- Exception: `pipes/validation.pipe.ts` exports a configured instance, not a class
+- Tests: `<file>.spec.ts` / `<file>.e2e-spec.ts` next to the file under test
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
 
@@ -110,7 +111,7 @@ Add a job:
 
 ## Testing
 
-- Unit: `<name>.spec.ts` next to code; e2e: `*.e2e-spec.ts` (`apps/<app>/test/`, or next to the lib code)
+- Unit: `<file>.spec.ts`; e2e: `<file>.e2e-spec.ts`, both next to the file under test
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - Migrator e2e needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb` (or `docker compose`)

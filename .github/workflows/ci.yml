@@ -1,5 +1,5 @@
 name: ci
-on: [push, pull_request]
+on: { push: { branches: [main] }, pull_request: {} }
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -8,16 +8,21 @@ jobs:
         image: mariadb:11
         env: { MARIADB_ROOT_PASSWORD: root }
         ports: ["3306:3306"]
-        options: --health-cmd "healthcheck.sh --connect" --health-interval 5s
-      redis:
-        image: redis:7
-        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-retries 10 --health-start-period 30s
     env:
       TEST_MYSQL_URL: mysql://root:root@127.0.0.1:3306
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/mongodb-binaries
+            node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-8.0.4
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck

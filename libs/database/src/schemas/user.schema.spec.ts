@@ -83,6 +83,17 @@ describe('user schema', () => {
     ).resolves.toHaveLength(2);
   });
 
+  it('assigns a UUID _id to webauthn credentials', async () => {
+    const user = await Users.create({
+      username: 'carol',
+      password: 'x',
+      webauthnCredentials: [
+        { name: 'key', credId: 'cred-id', publicKey: 'pk', counter: 0 },
+      ],
+    });
+    expect(user.webauthnCredentials[0]._id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it('enforces unique webauthn credId across users', async () => {
     const webauthnCredentials = [
       { name: 'key', credId: 'cred-1', publicKey: 'pk', counter: 0 },

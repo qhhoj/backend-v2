@@ -13,16 +13,16 @@ const ThingSchema = SchemaFactory.createForClass(Thing);
 ciIndex(ThingSchema, 'name');
 
 describe('schema base', () => {
-  let rs: MongoMemoryReplSet;
+  let replSet: MongoMemoryReplSet;
   const Things = mongoose.model('Thing', ThingSchema);
   beforeAll(async () => {
-    rs = await startMongo();
-    await mongoose.connect(rs.getUri());
+    replSet = await startMongo();
+    await mongoose.connect(replSet.getUri());
     await Things.syncIndexes();
   });
   afterAll(async () => {
     await mongoose.disconnect();
-    await rs.stop();
+    await replSet.stop();
   });
 
   it('assigns UUID _id and exposes id in JSON', async () => {
