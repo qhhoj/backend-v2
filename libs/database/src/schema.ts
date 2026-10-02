@@ -6,9 +6,11 @@ import { newId, uuidStr } from './uuid';
 export const CI: CollationOptions = { locale: 'en', strength: 2 };
 
 export const baseSchemaOptions: SchemaOptions = {
+  id: false,
   timestamps: true,
   versionKey: false,
   toJSON: {
+    getters: true,
     transform: (doc, ret: Record<string, unknown>) => {
       delete ret._id;
       return { id: uuidStr(doc.get('_id')), ...ret };

@@ -57,10 +57,14 @@ export abstract class BaseMongoStreamQuerier {
     onChange: (change: QuerierChange) => Promise<void>,
   ) {
     const stream = model.watch(pipeline, { fullDocument: 'updateLookup' });
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises
-    stream.on('change', async (change: ChangeStreamDocument) => {
-      if (['insert', 'update', 'replace'].includes(change.operationType))
-        await onChange(change as QuerierChange);
+    stream.on('change', (change: ChangeStreamDocument) => {
+      if (!['insert', 'update', 'replace'].includes(change.operationType))
+        return;
+      onChange(change as QuerierChange).catch((error: Error) =>
+        this.streamLogger.warn(
+          `Querier change handler failed (${model.modelName}): ${error.message}`,
+        ),
+      );
     });
     stream.on('error', (err: Error) => {
       this.streamLogger.warn(

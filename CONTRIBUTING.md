@@ -45,7 +45,7 @@ tools/legacy/   regenerates the fixtures
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
 - Exception: `pipes/validation.pipe.ts` exports a configured instance, not a class
-- Tests: `<file>.spec.ts` / `<file>.e2e-spec.ts` next to the file under test
+- Tests: unit specs `<file>.spec.ts` next to the file under test; e2e specs in `apps/<app>/test/*.e2e-spec.ts`
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
 
@@ -111,7 +111,7 @@ Add a job:
 
 ## Testing
 
-- Unit: `<file>.spec.ts`; e2e: `<file>.e2e-spec.ts`, both next to the file under test
+- Unit: `<file>.spec.ts` next to the file under test; e2e: `apps/<app>/test/*.e2e-spec.ts`
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - Migrator e2e needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb` (or `docker compose`)

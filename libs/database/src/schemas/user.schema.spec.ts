@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { CI } from '../schema';
 import { startMongo } from '../testing';
+import { newId } from '../uuid';
 import { UserSchema } from './user.schema';
 
 describe('user schema', () => {
@@ -117,6 +118,27 @@ describe('user schema', () => {
     expect(json).toMatchObject({
       id: expect.stringMatching(/^[0-9a-f-]{36}$/) as string,
     });
+    expect(json).not.toHaveProperty('_id');
+  });
+
+  it('serializes nested UUID references as strings', async () => {
+    const groupId = newId();
+    const user = await Users.create({
+      username: 'carol',
+      password: 'x',
+      groups: [groupId],
+      webauthnCredentials: [
+        { name: 'key', credId: 'cred-9', publicKey: 'pk', counter: 0 },
+      ],
+    });
+    const json = JSON.parse(JSON.stringify(user.toJSON())) as {
+      id: string;
+      groups: string[];
+      webauthnCredentials: { _id: string }[];
+    };
+    expect(json.groups).toEqual([groupId]);
+    expect(json.webauthnCredentials[0]._id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(json.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(json).not.toHaveProperty('_id');
   });
 });
