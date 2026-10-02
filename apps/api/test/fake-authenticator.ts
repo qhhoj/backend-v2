@@ -1,3 +1,4 @@
+import type { KeyPairKeyObjectResult } from 'node:crypto';
 import {
   createHash,
   generateKeyPairSync,
@@ -16,14 +17,26 @@ const FLAG_ATTESTED_DATA = 0x40;
 
 /** Software authenticator: ES256 key, `none` attestation, counter that can be pinned for clone tests. */
 export class FakeAuthenticator {
-  readonly credentialId = randomBytes(16);
-  private readonly keys = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  readonly credentialId: Buffer;
+  private readonly keys: KeyPairKeyObjectResult;
   private signCount = 0;
 
+  /** `userVerified: false` models a key that only proves presence (no PIN/biometric). */
   constructor(
     private readonly rpId: string,
     private readonly origin: string,
-  ) {}
+    private readonly userVerified = true,
+    shared?: FakeAuthenticator,
+  ) {
+    this.credentialId = shared?.credentialId ?? randomBytes(16);
+    this.keys =
+      shared?.keys ?? generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  }
+
+  /** The same key and credential id as seen from another origin. */
+  withOrigin(origin: string): FakeAuthenticator {
+    return new FakeAuthenticator(this.rpId, origin, this.userVerified, this);
+  }
 
   get id(): string {
     return this.credentialId.toString('base64url');
@@ -50,7 +63,7 @@ export class FakeAuthenticator {
         [
           'authData',
           this.authenticatorData(
-            FLAG_USER_PRESENT | FLAG_USER_VERIFIED | FLAG_ATTESTED_DATA,
+            this.flags() | FLAG_ATTESTED_DATA,
             attestedData,
           ),
         ],
@@ -72,9 +85,7 @@ export class FakeAuthenticator {
   }
 
   authenticate(challenge: string): AuthenticationResponseJSON {
-    const authenticatorData = this.authenticatorData(
-      FLAG_USER_PRESENT | FLAG_USER_VERIFIED,
-    );
+    const authenticatorData = this.authenticatorData(this.flags());
     const clientData = this.clientData('webauthn.get', challenge);
     const signature = sign(
       'sha256',
@@ -95,6 +106,12 @@ export class FakeAuthenticator {
         signature: signature.toString('base64url'),
       },
     };
+  }
+
+  private flags(): number {
+    return this.userVerified
+      ? FLAG_USER_PRESENT | FLAG_USER_VERIFIED
+      : FLAG_USER_PRESENT;
   }
 
   private coseKey(): Buffer {

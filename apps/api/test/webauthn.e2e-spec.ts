@@ -214,9 +214,11 @@ describe('webauthn endpoints', () => {
     await failedAssertion(session, fake, `${second.challenge}x`);
     const third = await loginOptions(session);
     // The genuine key, but the browser reports another origin.
-    Object.assign(fake, { origin: 'https://evil.example' });
-    await failedAssertion(session, fake, third.challenge);
-    Object.assign(fake, { origin: ORIGIN });
+    await failedAssertion(
+      session,
+      fake.withOrigin('https://evil.example'),
+      third.challenge,
+    );
     const last = await loginOptions(session);
     await post('login/verify', session, {
       response: fake.authenticate(last.challenge),
@@ -386,5 +388,64 @@ describe('webauthn endpoints', () => {
     })
       .expect(400)
       .expect(errorCode('webauthn_failed'));
+  });
+
+  it('enrols and logs in with a presence-only key', async () => {
+    const fake = new FakeAuthenticator(RP_ID, ORIGIN, false);
+    await register(fake);
+    const session = await login();
+    const { challenge } = await loginOptions(session);
+    await post('login/verify', session, {
+      response: fake.authenticate(challenge),
+    }).expect(204);
+  });
+
+  const loginAs = async (username: string): Promise<Session> => {
+    const response = await api
+      .http()
+      .post(`${AUTH}/login`)
+      .send({ username, password: 'correct horse battery' })
+      .expect(200);
+    return {
+      cookie: cookieFrom(response.headers),
+      csrf: dataOf(response).csrfToken,
+    };
+  };
+
+  it("does not let another account delete or use someone's credential", async () => {
+    const fake = authenticator();
+    const { credential } = await register(fake);
+    await createUser(api.users, { username: 'bob', email: 'bob@example.com' });
+    const bob = await loginAs('bob');
+    await api
+      .http()
+      .delete(`${WEBAUTHN}/credentials/${credential.id}`)
+      .set('Cookie', bob.cookie)
+      .set('X-CSRF-Token', bob.csrf)
+      .expect(404)
+      .expect(errorCode('not_found'));
+    const alice = (await stored())!;
+    expect(alice.isWebauthnEnabled).toBe(true);
+    expect(alice.webauthnCredentials).toHaveLength(1);
+
+    // Bob (with his own enrolled key) cannot assert with Alice's credential.
+    await api.users.updateOne({ username: 'bob' }, { isWebauthnEnabled: true });
+    await api.users.updateOne(
+      { username: 'bob' },
+      {
+        $push: {
+          webauthnCredentials: {
+            _id: '01900000-0000-7000-8000-000000000001',
+            name: 'Bob key',
+            credId: authenticator().id,
+            publicKey: 'AA',
+            counter: 0,
+          },
+        },
+      },
+    );
+    const bobSession = await loginAs('bob');
+    const { challenge } = await loginOptions(bobSession);
+    await failedAssertion(bobSession, fake, challenge);
   });
 });

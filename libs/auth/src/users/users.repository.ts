@@ -192,12 +192,13 @@ export class UsersRepository {
         { $pull: { webauthnCredentials: { _id: credentialId } } },
       )
       .exec();
+    if (matchedCount !== 1) return false;
     await this.users
       .updateOne(
         { _id: userId, webauthnCredentials: { $size: 0 } },
         { $set: { isWebauthnEnabled: false } },
       )
       .exec();
-    return matchedCount === 1;
+    return true;
   }
 }

@@ -11,6 +11,7 @@ import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
+  WebAuthnCredential,
 } from '@simplewebauthn/server';
 import { SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -50,7 +51,7 @@ export class WebauthnService {
       rpName: RP_NAME,
       rpID: this.rpID,
       userName: auth.user.username,
-      userID: await this.userHandle(auth.user._id),
+      userID: await this.userHandle(auth.user),
       excludeCredentials: [...auth.user.webauthnCredentials].map(
         (credential) => ({ id: credential.credId }),
       ),
@@ -73,13 +74,14 @@ export class WebauthnService {
       'webauthnChallenge',
     );
     if (!challenge) throw failed('No pending WebAuthn challenge');
-    let credentialInfo;
+    let credentialInfo: WebAuthnCredential;
     try {
       const { verified, registrationInfo } = await verifyRegistrationResponse({
         response: response as unknown as RegistrationResponseJSON,
         expectedChallenge: challenge,
         expectedOrigin: this.origin,
         expectedRPID: this.rpID,
+        requireUserVerification: false,
       });
       if (!verified || !registrationInfo) throw failed();
       credentialInfo = registrationInfo.credential;
@@ -98,7 +100,7 @@ export class WebauthnService {
     } catch (error) {
       // credId is unique across users: registering an already-known authenticator.
       if ((error as { code?: number }).code === DUPLICATE_KEY_ERROR)
-        throw failed('Credential is already registered');
+        throw failed('WebAuthn registration failed');
       throw error;
     }
     return { id, name };
@@ -150,6 +152,7 @@ export class WebauthnService {
           expectedChallenge: challenge,
           expectedOrigin: this.origin,
           expectedRPID: this.rpID,
+          requireUserVerification: false,
           credential: {
             id: credential.credId,
             publicKey: new Uint8Array(
@@ -173,7 +176,11 @@ export class WebauthnService {
         ))
       )
         throw failed('Sign counter did not increase');
-    } else if (newCounter !== 0 || credential.counter !== 0)
+    } else if (
+      // Defensive: the library already rejects this; kept so the CAS rule does not depend on it.
+      newCounter !== 0 ||
+      credential.counter !== 0
+    )
       throw failed('Sign counter did not increase');
     await this.secondFactor.complete(auth);
     await release();
@@ -187,14 +194,15 @@ export class WebauthnService {
   }
 
   /** Stable per-user handle; created once with a CAS so concurrent first registrations agree. */
-  private async userHandle(userId: string): Promise<Uint8Array<ArrayBuffer>> {
-    const existing = (await this.users.findById(userId))?.webauthnUserHandle;
-    if (existing) return new Uint8Array(existing);
-    await this.users.setWebauthnUserHandle(
-      userId,
-      randomBytes(USER_HANDLE_BYTES),
-    );
-    const stored = (await this.users.findById(userId))?.webauthnUserHandle;
+  private async userHandle(
+    user: AuthContext['user'],
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    if (user.webauthnUserHandle) return new Uint8Array(user.webauthnUserHandle);
+    const handle = randomBytes(USER_HANDLE_BYTES);
+    if (await this.users.setWebauthnUserHandle(user._id, handle))
+      return new Uint8Array(handle);
+    // Lost the race: another request stored the handle first.
+    const stored = (await this.users.findById(user._id))?.webauthnUserHandle;
     if (!stored) throw new Error('WebAuthn user handle was not persisted');
     return new Uint8Array(stored);
   }
