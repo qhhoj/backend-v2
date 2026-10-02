@@ -80,4 +80,48 @@ export class UsersRepository {
       .exec();
     return matchedCount === 1;
   }
+
+  /** CAS: false when `lastTotpTimecode` is no longer `previous` (code already consumed). */
+  async advanceTotpTimecode(
+    userId: string,
+    previous: number,
+    next: number,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, lastTotpTimecode: previous },
+        { $set: { lastTotpTimecode: next } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** CAS on the stored ciphertext: false when another request changed the scratch codes first. */
+  async replaceScratchCodes(
+    userId: string,
+    expectedCiphertext: string | null,
+    nextCiphertext: string | null,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, scratchCodes: expectedCiphertext },
+        { $set: { scratchCodes: nextCiphertext } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** CAS: false when TOTP is already enabled (a racing confirm won). */
+  async enableTotp(
+    userId: string,
+    fields: Pick<User, 'totpKey' | 'scratchCodes' | 'lastTotpTimecode'>,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, isTotpEnabled: false },
+        { $set: { ...fields, isTotpEnabled: true } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
 }
