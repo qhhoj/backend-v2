@@ -9,15 +9,21 @@ export class RateLimitService {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
   async hit(key: string, windowSeconds: number): Promise<number> {
-    const [[, count]] = (await this.redis
+    const results = await this.redis
       .multi()
       .incr(rateKey(key))
       .expire(rateKey(key), windowSeconds, 'NX')
-      .exec()) as [[null, number], unknown];
+      .exec();
+    const [[incrError, count], [expireError]] = results as [
+      [Error | null, number],
+      [Error | null, number],
+    ];
+    if (incrError || expireError) throw (incrError ?? expireError) as Error;
     return count;
   }
 
   async exceeded(keys: string[], limit: number): Promise<boolean> {
+    if (!keys.length) return false;
     const counts = await this.redis.mget(keys.map(rateKey));
     return counts.some((count) => Number(count ?? 0) >= limit);
   }

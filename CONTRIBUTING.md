@@ -5,7 +5,7 @@
 - Node 22, TypeScript 5 (`tsconfig.json`, CI uses Node 22)
 - NestJS 11 on Fastify (`@nestjs/platform-fastify`)
 - Mongoose 8 via `@nestjs/mongoose`; MongoDB 8 **replica set** (change streams)
-- Redis 7, MariaDB 11 (legacy source for the migrator only)
+- Redis >= 7 (the rate limiter uses `EXPIRE ... NX`), MariaDB 11 (legacy source for the migrator only)
 - Jest 29 + `mongodb-memory-server`; ESLint + Prettier
 - Versions pinned in `package.json`; `fastify` pinned via `overrides` to a single copy; bump when `@nestjs/platform-fastify` or an advisory requires it
 - Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
@@ -114,7 +114,7 @@ Add a job:
 - Unit: `<file>.spec.ts` next to the file under test; e2e: `apps/<app>/test/*.e2e-spec.ts` for apps, next to the file for libs
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
-- Migrator e2e needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
+- The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush); migrator e2e also needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
 
 ## Commands
