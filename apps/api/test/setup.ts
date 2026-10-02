@@ -45,7 +45,7 @@ export async function setupApiTest({
       { imports: [AppModule], controllers },
       {
         beforeInit: setupOpenApi,
-        overrides: [...overrides, { provide: MAILER, useValue: mailer }],
+        overrides: [{ provide: MAILER, useValue: mailer }, ...overrides],
       },
     );
     await app.listen(0, '127.0.0.1');

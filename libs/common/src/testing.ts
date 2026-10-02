@@ -1,3 +1,4 @@
+export * from './mail/in-memory.mailer';
 import { ModuleMetadata } from '@nestjs/common';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
@@ -27,4 +28,3 @@ export async function createTestApp(
 }
 export const TEST_REDIS_URL =
   process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6379/15';
-export * from './mail/in-memory.mailer';

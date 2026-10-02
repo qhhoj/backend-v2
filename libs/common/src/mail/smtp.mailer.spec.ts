@@ -1,18 +1,12 @@
 import { createServer, Server, Socket } from 'node:net';
 import { loadEnv } from '../env/env';
+import { validEnv } from '../env/valid-env';
 import { SmtpMailer } from './smtp.mailer';
-
-const baseEnv = {
-  MONGO_URL: 'mongodb://localhost/qhhoj',
-  REDIS_URL: 'redis://localhost:6379',
-  ENCRYPTION_KEY: 'ab'.repeat(32),
-  TOKEN_SECRET: 'x'.repeat(32),
-  SITE_URL: 'http://localhost:3000',
-};
 
 /** Minimal SMTP sink: records every DATA payload it receives. */
 function startSink() {
   const received: string[] = [];
+  const commands: string[] = [];
   const sockets = new Set<Socket>();
   const server: Server = createServer((socket) => {
     sockets.add(socket);
@@ -39,6 +33,7 @@ function startSink() {
       while (!inData && (index = buffer.indexOf('\r\n')) !== -1) {
         const line = buffer.slice(0, index).toUpperCase();
         buffer = buffer.slice(index + 2);
+        commands.push(line);
         if (line.startsWith('DATA')) {
           inData = true;
           socket.write('354 go ahead\r\n');
@@ -58,12 +53,14 @@ function startSink() {
   return new Promise<{
     port: number;
     received: string[];
+    commands: string[];
     stop: () => Promise<void>;
   }>((resolve) =>
     server.listen(0, '127.0.0.1', () =>
       resolve({
         port: (server.address() as { port: number }).port,
         received,
+        commands,
         stop: () =>
           new Promise<void>((done) => {
             sockets.forEach((socket) => socket.destroy());
@@ -74,13 +71,18 @@ function startSink() {
   );
 }
 
+const mailerFor = (port: number) =>
+  new SmtpMailer(
+    loadEnv({ ...validEnv, SMTP_URL: `smtp://127.0.0.1:${port}` }),
+  );
+
 describe('SmtpMailer', () => {
   it('delivers subject, body and configured From over SMTP', async () => {
     const sink = await startSink();
     try {
       const mailer = new SmtpMailer(
         loadEnv({
-          ...baseEnv,
+          ...validEnv,
           SMTP_URL: `smtp://127.0.0.1:${sink.port}`,
           MAIL_FROM: 'QHHOJ <noreply@example.test>',
         }),
@@ -95,6 +97,41 @@ describe('SmtpMailer', () => {
       expect(sink.received[0]).toContain('Verify your account please');
       expect(sink.received[0]).toContain('From: QHHOJ <noreply@example.test>');
       expect(sink.received[0]).toContain('To: bob@example.com');
+    } finally {
+      await sink.stop();
+    }
+  });
+
+  it('sends to exactly one recipient even if `to` looks like a list', async () => {
+    const sink = await startSink();
+    try {
+      await mailerFor(sink.port).send({
+        to: 'bob@example.com, evil@attacker.test',
+        subject: 'Hello',
+        text: 'body',
+      });
+    } finally {
+      await sink.stop();
+    }
+    expect(
+      sink.commands.filter((line) => line.startsWith('RCPT TO')),
+    ).toHaveLength(1);
+    expect(sink.commands.join('\n')).not.toMatch(/evil@attacker/i);
+  });
+
+  it.each([
+    ['to', { to: 'bob@example.com\r\nBcc: evil@attacker.test', subject: 's' }],
+    [
+      'subject',
+      { to: 'bob@example.com', subject: 's\r\nBcc: evil@attacker.test' },
+    ],
+  ])('rejects CRLF in %s without connecting', async (_field, fields) => {
+    const sink = await startSink();
+    try {
+      await expect(
+        mailerFor(sink.port).send({ ...fields, text: 'body' }),
+      ).rejects.toThrow('single-line');
+      expect(sink.received).toEqual([]);
     } finally {
       await sink.stop();
     }

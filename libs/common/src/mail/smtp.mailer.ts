@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { createTransport, Transporter } from 'nodemailer';
+import { createTransport, type Transporter } from 'nodemailer';
 import { ENV, type Env } from '../env/env';
-import { MailMessage, Mailer } from './mailer';
+import type { MailMessage, Mailer } from './mailer';
 
 @Injectable()
 export class SmtpMailer implements Mailer {
@@ -12,6 +12,13 @@ export class SmtpMailer implements Mailer {
   }
 
   async send(message: MailMessage): Promise<void> {
-    await this.transport.sendMail({ from: this.env.mailFrom, ...message });
+    if (/[\r\n]/.test(message.to) || /[\r\n]/.test(message.subject))
+      throw new Error('Mail recipient and subject must be single-line');
+    await this.transport.sendMail({
+      from: this.env.mailFrom,
+      to: { name: '', address: message.to },
+      subject: message.subject,
+      text: message.text,
+    });
   }
 }

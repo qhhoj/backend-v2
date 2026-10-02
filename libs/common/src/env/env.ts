@@ -68,6 +68,8 @@ export function loadEnv(
     smtpUrl: required('SMTP_URL'),
     mailFrom: source.MAIL_FROM || 'QHHOJ <no-reply@qhhoj.local>',
   };
+  if (env.smtpUrl && !/^smtps?:\/\//.test(env.smtpUrl))
+    problems.push('SMTP_URL must start with smtp:// or smtps://');
   if (!/^[0-9a-f]{64}$/i.test(env.encryptionKey))
     problems.push('ENCRYPTION_KEY must be 64 hex chars');
   if (env.tokenSecret.length < 32)

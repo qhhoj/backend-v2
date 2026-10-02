@@ -1,13 +1,7 @@
 import { loadEnv } from './env';
+import { validEnv } from './valid-env';
 
-const valid = {
-  MONGO_URL: 'mongodb://localhost/qhhoj',
-  REDIS_URL: 'redis://localhost:6379',
-  ENCRYPTION_KEY: 'ab'.repeat(32),
-  TOKEN_SECRET: 'x'.repeat(32),
-  SITE_URL: 'http://localhost:3000',
-  SMTP_URL: 'smtp://localhost:1025',
-};
+const valid = validEnv;
 
 describe('loadEnv', () => {
   it('applies defaults', () =>
@@ -62,6 +56,11 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...valid, MAIL_FROM: 'Me <me@x.test>' }).mailFrom).toBe(
       'Me <me@x.test>',
     ));
+  it.each(['http://x', 'localhost:25'])('rejects SMTP_URL=%s', (value) =>
+    expect(() => loadEnv({ ...valid, SMTP_URL: value })).toThrow(
+      'SMTP_URL must start with smtp:// or smtps://',
+    ),
+  );
   it('rejects unknown LOG_LEVEL', () =>
     expect(() => loadEnv({ ...valid, LOG_LEVEL: 'verbose' })).toThrow(
       'LOG_LEVEL must be one of fatal|error|warn|info|debug|trace|silent',
