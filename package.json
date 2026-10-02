@@ -4,7 +4,9 @@
   "description": "",
   "author": "",
   "private": true,
-  "engines": { "node": ">=22 <23" },
+  "engines": {
+    "node": ">=22 <23"
+  },
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
@@ -27,6 +29,7 @@
     "class-validator": "^0.15.1",
     "cron": "^4.4.0",
     "fastify": "5.12.5",
+    "ioredis": "^5.11.1",
     "mongoose": "^8.24.4",
     "mysql2": "^3.24.5",
     "nest-commander": "^3.21.0",

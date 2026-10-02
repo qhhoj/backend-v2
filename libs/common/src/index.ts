@@ -6,3 +6,5 @@ export * from './bootstrap';
 export * from './env/env';
 export * from './env/env.module';
 export * from './querier/base-mongo-stream.querier';
+export * from './redis/redis.module';
+export * from './rate-limit/rate-limit.service';
