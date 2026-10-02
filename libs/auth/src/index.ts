@@ -4,3 +4,4 @@ export * from './crypto';
 export * from './password/password-hasher';
 export * from './password/password-policy';
 export * from './password/pwned-password.service';
+export * from './token/api-token';
