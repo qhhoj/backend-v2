@@ -9,6 +9,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
 import { AppError, ENV, type Env } from '@libs/common';
 import {
+  NO_IMPERSONATION_ROUTE,
   PARTIAL_AUTH_ROUTE,
   PUBLIC_ROUTE,
   PWNED_PASSWORD_ROUTE,
@@ -106,6 +107,8 @@ export class AuthGuard implements CanActivate {
         403,
         'Your password appeared in a data breach; change it to continue',
       );
+    if (session?.impersonatorId && routeFlag<boolean>(NO_IMPERSONATION_ROUTE))
+      throw new AppError('forbidden', 403, 'Not allowed while impersonating');
     const permission = routeFlag<Permission>(REQUIRED_PERMISSION);
     if (permission && !hasPermission(auth.principal, permission))
       throw new AppError('forbidden', 403, 'Permission denied');

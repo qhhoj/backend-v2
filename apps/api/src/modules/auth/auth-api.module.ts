@@ -4,6 +4,8 @@ import { ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ImpersonationController } from './impersonation.controller';
+import { ImpersonationService } from './impersonation.service';
 import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetService } from './password-reset.service';
 import { RegistrationController } from './registration.controller';
@@ -25,6 +27,7 @@ import { WebauthnService } from './webauthn.service';
   imports: [AuthModule],
   controllers: [
     AuthController,
+    ImpersonationController,
     RegistrationController,
     PasswordResetController,
     TotpController,
@@ -33,6 +36,7 @@ import { WebauthnService } from './webauthn.service';
   ],
   providers: [
     AuthService,
+    ImpersonationService,
     RegistrationService,
     PasswordResetService,
     SecondFactorService,

@@ -29,6 +29,7 @@ export class SessionResponse {
   csrfToken!: string | null;
   twoFactorRequired!: boolean;
   passwordChangeRequired!: boolean;
+  impersonatorId!: string | null;
 
   static from(
     user: UserDocument,
@@ -41,6 +42,7 @@ export class SessionResponse {
       csrfToken: session?.csrf ?? null,
       twoFactorRequired,
       passwordChangeRequired: session?.passwordPwned ?? false,
+      impersonatorId: session?.impersonatorId ?? null,
     };
   }
 }

@@ -10,6 +10,7 @@ import {
   AllowPartialAuth,
   AllowPwnedPassword,
   CurrentAuth,
+  NoImpersonation,
   SessionOnly,
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -25,6 +26,7 @@ export class WebauthnController {
   constructor(private readonly webauthn: WebauthnService) {}
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('register/options')
   registrationOptions(
     @CurrentAuth() auth: AuthContext,
@@ -33,6 +35,7 @@ export class WebauthnController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('register/verify')
   register(
     @CurrentAuth() auth: AuthContext,
@@ -61,6 +64,7 @@ export class WebauthnController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @Delete('credentials/:credentialId')
   @HttpCode(204)
   remove(

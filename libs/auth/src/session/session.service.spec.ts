@@ -9,6 +9,7 @@ const fresh = {
   twoFaPassed: true,
   passwordPwned: false,
   impersonatorId: null,
+  impersonatorPasswordPwned: false,
 };
 
 describe('SessionService', () => {
@@ -90,6 +91,7 @@ describe('SessionService', () => {
     expect(JSON.parse((await redis.get(key)) as string)).toMatchObject({
       webauthnChallenge: null,
       impersonatorId: null,
+      impersonatorPasswordPwned: false,
     });
   });
   it('keeps the sliding expiry on update', async () => {

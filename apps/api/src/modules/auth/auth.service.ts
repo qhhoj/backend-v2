@@ -11,7 +11,7 @@ import {
   UsersRepository,
   verifyPassword,
 } from '@libs/auth';
-import type { AuthContext, UserDocument } from '@libs/auth';
+import type { AuthContext, SessionData, UserDocument } from '@libs/auth';
 import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
 import { FAILURE_LIMIT, FAILURE_WINDOW_SECONDS } from './rate-limits';
@@ -94,11 +94,28 @@ export class AuthService {
     const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
     if (twoFaPassed)
       await this.users.update(user._id, { lastLogin: new Date() });
+    return this.openSession(
+      user,
+      { twoFaPassed, passwordPwned, impersonatorId: null },
+      previousSessionId,
+    );
+  }
+
+  /** The single session-opening path (also used by impersonation, which must not touch lastLogin). */
+  async openSession(
+    user: UserDocument,
+    data: Pick<
+      SessionData,
+      'twoFaPassed' | 'passwordPwned' | 'impersonatorId'
+    > &
+      Partial<Pick<SessionData, 'impersonatorPasswordPwned'>>,
+    previousSessionId: string | null,
+  ) {
+    this.assertLoginAllowed(user);
     const { id, session } = await this.sessions.create({
+      impersonatorPasswordPwned: false,
+      ...data,
       userId: user._id,
-      twoFaPassed,
-      passwordPwned,
-      impersonatorId: null,
     });
     if (previousSessionId) await this.sessions.destroy(previousSessionId);
     return {

@@ -10,6 +10,7 @@ export const PUBLIC_ROUTE = 'auth:public';
 export const PARTIAL_AUTH_ROUTE = 'auth:partial';
 export const PWNED_PASSWORD_ROUTE = 'auth:pwned';
 export const SESSION_ONLY_ROUTE = 'auth:session-only';
+export const NO_IMPERSONATION_ROUTE = 'auth:no-impersonation';
 export const REQUIRED_PERMISSION = 'auth:permission';
 
 /** No login required. */
@@ -20,6 +21,8 @@ export const AllowPartialAuth = () => SetMetadata(PARTIAL_AUTH_ROUTE, true);
 export const AllowPwnedPassword = () => SetMetadata(PWNED_PASSWORD_ROUTE, true);
 /** Management endpoints: API tokens (Bearer) are refused, a browser session is required. */
 export const SessionOnly = () => SetMetadata(SESSION_ONLY_ROUTE, true);
+/** Refused (403 `forbidden`) while a superuser impersonates: account-security changes (2FA enrolment and removal). */
+export const NoImpersonation = () => SetMetadata(NO_IMPERSONATION_ROUTE, true);
 export const RequirePermission = (permission: Permission) =>
   SetMetadata(REQUIRED_PERMISSION, permission);
 export const CurrentAuth = createParamDecorator(

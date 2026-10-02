@@ -3,6 +3,7 @@ import {
   AllowPartialAuth,
   AllowPwnedPassword,
   CurrentAuth,
+  NoImpersonation,
   SessionOnly,
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -14,6 +15,7 @@ export class TotpController {
   constructor(private readonly totp: TotpService) {}
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('enroll')
   enroll(
     @CurrentAuth() auth: AuthContext,
@@ -22,6 +24,7 @@ export class TotpController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('confirm')
   confirm(
     @CurrentAuth() auth: AuthContext,
@@ -40,6 +43,7 @@ export class TotpController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('disable')
   @HttpCode(204)
   disable(@CurrentAuth() auth: AuthContext, @Body() body: CodeDto) {
@@ -47,6 +51,7 @@ export class TotpController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('scratch-codes')
   regenerateScratchCodes(
     @CurrentAuth() auth: AuthContext,
