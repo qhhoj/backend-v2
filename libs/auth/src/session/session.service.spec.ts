@@ -55,6 +55,12 @@ describe('SessionService', () => {
     });
     expect(await sessions.update('missing', { twoFaPassed: true })).toBeNull();
   });
+  it('does not resurrect a destroyed session on update', async () => {
+    const { id } = await sessions.create(fresh);
+    await sessions.destroy(id);
+    expect(await sessions.update(id, { twoFaPassed: false })).toBeNull();
+    expect(await sessions.get(id)).toBeNull();
+  });
   it('destroys one session or all of a user except the kept one', async () => {
     const [first, second, third] = await Promise.all([
       sessions.create(fresh),
@@ -64,9 +70,12 @@ describe('SessionService', () => {
     const other = await sessions.create({ ...fresh, userId: 'user-2' });
     await sessions.destroy(first.id);
     expect(await sessions.get(first.id)).toBeNull();
+    expect(await redis.scard('user-sessions:user-1')).toBe(2);
     await sessions.destroyAllForUser('user-1', third.id);
     expect(await sessions.get(second.id)).toBeNull();
     expect(await sessions.get(third.id)).not.toBeNull();
     expect(await sessions.get(other.id)).not.toBeNull();
+    expect(await redis.scard('user-sessions:user-1')).toBe(1);
+    expect(await redis.scard('user-sessions:user-2')).toBe(1);
   });
 });

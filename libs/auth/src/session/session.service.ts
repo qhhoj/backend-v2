@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import { REDIS } from '@libs/common';
+import { REDIS, execOrThrow } from '@libs/common';
 import Redis from 'ioredis';
 
 export interface SessionData {
@@ -17,12 +17,6 @@ const sessionKey = (id: string) =>
 const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
 const randomToken = () => randomBytes(32).toString('base64url');
 
-/** ioredis resolves exec() with per-command [error, result] tuples (null when the transaction is discarded); surface any error. */
-const throwOnExecError = (results: [Error | null, unknown][] | null) => {
-  const failure = results?.find(([error]) => error);
-  if (failure?.[0]) throw failure[0];
-};
-
 @Injectable()
 export class SessionService {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
@@ -32,13 +26,11 @@ export class SessionService {
   ): Promise<{ id: string; session: SessionData }> {
     const id = randomToken();
     const session: SessionData = { ...data, csrf: randomToken() };
-    throwOnExecError(
-      await this.redis
+    await execOrThrow(
+      this.redis
         .multi()
         .set(sessionKey(id), JSON.stringify(session), 'EX', SESSION_TTL_SECONDS)
-        .sadd(userSessionsKey(data.userId), sessionKey(id))
-        .expire(userSessionsKey(data.userId), SESSION_TTL_SECONDS)
-        .exec(),
+        .sadd(userSessionsKey(data.userId), sessionKey(id)),
     );
     return { id, session };
   }
@@ -81,12 +73,11 @@ export class SessionService {
       (key) => key !== keep,
     );
     if (doomed.length)
-      throwOnExecError(
-        await this.redis
+      await execOrThrow(
+        this.redis
           .multi()
           .del(...doomed)
-          .srem(userSessionsKey(userId), ...doomed)
-          .exec(),
+          .srem(userSessionsKey(userId), ...doomed),
       );
   }
 }

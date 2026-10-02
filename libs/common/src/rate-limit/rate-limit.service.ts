@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS } from '../redis/redis.module';
+import { execOrThrow } from '../redis/redis-exec';
 
 const rateKey = (key: string) => `rate:${key}`;
 
@@ -9,17 +10,13 @@ export class RateLimitService {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
   async hit(key: string, windowSeconds: number): Promise<number> {
-    const results = await this.redis
-      .multi()
-      .incr(rateKey(key))
-      .expire(rateKey(key), windowSeconds, 'NX')
-      .exec();
-    const [[incrError, count], [expireError]] = results as [
-      [Error | null, number],
-      [Error | null, number],
-    ];
-    if (incrError || expireError) throw (incrError ?? expireError) as Error;
-    return count;
+    const [count] = await execOrThrow(
+      this.redis
+        .multi()
+        .incr(rateKey(key))
+        .expire(rateKey(key), windowSeconds, 'NX'),
+    );
+    return count as number;
   }
 
   async exceeded(keys: string[], limit: number): Promise<boolean> {

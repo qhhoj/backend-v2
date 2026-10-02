@@ -8,3 +8,4 @@ export * from './env/env.module';
 export * from './querier/base-mongo-stream.querier';
 export * from './redis/redis.module';
 export * from './rate-limit/rate-limit.service';
+export * from './redis/redis-exec';
