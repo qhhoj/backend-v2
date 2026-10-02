@@ -18,7 +18,28 @@ describe('loadEnv', () => {
       pwnedApiUrl: 'https://api.pwnedpasswords.com',
       smtpUrl: valid.SMTP_URL,
       mailFrom: 'QHHOJ <no-reply@qhhoj.local>',
+      oauth: { google: null, facebook: null, github: null },
     }));
+  it('enables an oauth provider only with both client id and secret', () =>
+    expect(
+      loadEnv({
+        ...valid,
+        GITHUB_CLIENT_ID: 'id',
+        GITHUB_CLIENT_SECRET: 'secret',
+      }).oauth,
+    ).toEqual({
+      google: null,
+      facebook: null,
+      github: { clientId: 'id', clientSecret: 'secret' },
+    }));
+  it.each([
+    ['GOOGLE', { GOOGLE_CLIENT_ID: 'id' }],
+    ['FACEBOOK', { FACEBOOK_CLIENT_SECRET: 'secret' }],
+  ])('rejects a half-configured %s provider', (name, partial) =>
+    expect(() => loadEnv({ ...valid, ...partial })).toThrow(
+      `${name} requires both CLIENT_ID and CLIENT_SECRET`,
+    ),
+  );
   it('parses flags, port and disabled pwned check', () =>
     expect(
       loadEnv({

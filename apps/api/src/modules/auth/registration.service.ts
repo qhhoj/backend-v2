@@ -11,6 +11,7 @@ import type { UserDocument } from '@libs/auth';
 import { AppError, ENV, MAILER, RateLimitService, REDIS } from '@libs/common';
 import type { Env, Mailer } from '@libs/common';
 import { ActivationKey, uuidStr } from '@libs/database';
+import type { User } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import type { RegisterDto } from './dto/register.dto';
@@ -41,10 +42,18 @@ export class RegistrationService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  async register(
-    { username, email, password }: RegisterDto,
+  register(body: RegisterDto, ip: string): Promise<void> {
+    return this.withRegistrationSlot(body.email, ip, () =>
+      this.registerLocked(body),
+    );
+  }
+
+  /** Runs a signup under the per-IP budget and the per-email lock; every signup path (password, social) goes through here. */
+  async withRegistrationSlot<Result>(
+    email: string,
     ip: string,
-  ): Promise<void> {
+    signup: () => Promise<Result>,
+  ): Promise<Result> {
     // Never released: every attempt, successful or not, spends budget.
     await this.rateLimit.reserve(
       [`register:ip:${ip}`],
@@ -68,7 +77,7 @@ export class RegistrationService {
         'Registration in progress; try again',
       );
     try {
-      await this.registerLocked({ username, email, password });
+      return await signup();
     } finally {
       try {
         await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, lockToken);
@@ -80,7 +89,8 @@ export class RegistrationService {
     }
   }
 
-  private async registerLocked({
+  /** Username/email uniqueness and password policy; throws `validation_failed` with per-field messages. Call under `withRegistrationSlot`. */
+  async assertRegistrable({
     username,
     email,
     password,
@@ -101,8 +111,20 @@ export class RegistrationService {
         'Registration rejected',
         fields,
       );
+  }
 
-    const user = await this.createInactiveUser(username, email, password);
+  private async registerLocked({
+    username,
+    email,
+    password,
+  }: RegisterDto): Promise<void> {
+    await this.assertRegistrable({ username, email, password });
+    const user = await this.createUser({
+      username,
+      email,
+      password,
+      isActive: false,
+    });
     const key = randomBytes(32).toString('hex');
     try {
       await this.activationKeys.create({
@@ -175,17 +197,18 @@ export class RegistrationService {
       );
   }
 
-  private async createInactiveUser(
-    username: string,
-    email: string,
-    password: string,
-  ): Promise<UserDocument> {
+  /** Hashes the password and inserts the user; a username that lost a race maps to the same error as the up-front check. */
+  async createUser({
+    password,
+    ...fields
+  }: Partial<User> &
+    Pick<User, 'username' | 'email'> & {
+      password: string;
+    }): Promise<UserDocument> {
     try {
       return await this.users.create({
-        username,
-        email,
+        ...fields,
         password: await hashPassword(password),
-        isActive: false,
       });
     } catch (error) {
       if ((error as { code?: number }).code === MONGO_DUPLICATE_KEY)

@@ -11,7 +11,7 @@ import {
   UsersRepository,
   verifyPassword,
 } from '@libs/auth';
-import type { AuthContext } from '@libs/auth';
+import type { AuthContext, UserDocument } from '@libs/auth';
 import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
 import { FAILURE_LIMIT, FAILURE_WINDOW_SECONDS } from './rate-limits';
@@ -53,6 +53,20 @@ export class AuthService {
         'Invalid username or password',
       );
     await release();
+    const passwordPwned = await this.pwned.isPwned(password);
+    const started = await this.startSession(user, passwordPwned);
+    // Compare-and-set: if the password changed since verification, keep the newer one.
+    if (needsRehash(user.password))
+      await this.users.updatePasswordIfUnchanged(
+        user._id,
+        user.password,
+        await hashPassword(password),
+      );
+    return started;
+  }
+
+  /** Shared by every login method: rejects banned/inactive users, then opens a session (lastLogin is recorded once no second factor is pending). */
+  async startSession(user: UserDocument, passwordPwned: boolean) {
     if (!user.isActive)
       throw user.banReason !== null
         ? new AppError(
@@ -65,17 +79,10 @@ export class AuthService {
     const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
     if (twoFaPassed)
       await this.users.update(user._id, { lastLogin: new Date() });
-    // Compare-and-set: if the password changed since verification, keep the newer one.
-    if (needsRehash(user.password))
-      await this.users.updatePasswordIfUnchanged(
-        user._id,
-        user.password,
-        await hashPassword(password),
-      );
     const { id, session } = await this.sessions.create({
       userId: user._id,
       twoFaPassed,
-      passwordPwned: await this.pwned.isPwned(password),
+      passwordPwned,
       impersonatorId: null,
     });
     return {

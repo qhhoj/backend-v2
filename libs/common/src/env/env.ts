@@ -1,3 +1,8 @@
+export interface OAuthClient {
+  clientId: string;
+  clientSecret: string;
+}
+
 export interface Env {
   mongoUrl: string;
   redisUrl: string;
@@ -13,6 +18,12 @@ export interface Env {
   pwnedApiUrl: string | null;
   smtpUrl: string;
   mailFrom: string;
+  /** A provider is null (login disabled) unless both its client id and secret are set. */
+  oauth: {
+    google: OAuthClient | null;
+    facebook: OAuthClient | null;
+    github: OAuthClient | null;
+  };
 }
 
 const LOG_LEVELS = [
@@ -51,6 +62,13 @@ export function loadEnv(
     }
     return value;
   };
+  const oauthClient = (name: string): OAuthClient | null => {
+    const clientId = source[`${name}_CLIENT_ID`];
+    const clientSecret = source[`${name}_CLIENT_SECRET`];
+    if (!clientId !== !clientSecret)
+      problems.push(`${name} requires both CLIENT_ID and CLIENT_SECRET`);
+    return clientId && clientSecret ? { clientId, clientSecret } : null;
+  };
   const env: Env = {
     mongoUrl: required('MONGO_URL'),
     redisUrl: required('REDIS_URL'),
@@ -67,6 +85,11 @@ export function loadEnv(
         : source.PWNED_API_URL || null,
     smtpUrl: required('SMTP_URL'),
     mailFrom: source.MAIL_FROM || 'QHHOJ <no-reply@qhhoj.local>',
+    oauth: {
+      google: oauthClient('GOOGLE'),
+      facebook: oauthClient('FACEBOOK'),
+      github: oauthClient('GITHUB'),
+    },
   };
   if (env.smtpUrl && !/^smtps?:\/\//.test(env.smtpUrl))
     problems.push('SMTP_URL must start with smtp:// or smtps://');

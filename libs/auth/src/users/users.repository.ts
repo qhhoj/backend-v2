@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, User, WebauthnCredential } from '@libs/database';
+import { CI, SocialAuth, User, WebauthnCredential } from '@libs/database';
 import { HydratedDocument, Model } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
@@ -22,6 +22,30 @@ export class UsersRepository {
 
   findByEmail(email: string): Promise<UserDocument | null> {
     return this.users.findOne({ email }).collation(CI).exec();
+  }
+
+  findBySocial(provider: string, uid: string): Promise<UserDocument | null> {
+    // $elemMatch alone cannot use the partial index; the dotted $exists makes it eligible.
+    return this.users
+      .findOne({
+        socialAuth: { $elemMatch: { provider, uid } },
+        'socialAuth.uid': { $exists: true },
+      })
+      .exec();
+  }
+
+  /** False when the user already has a link for this provider (one account per provider). */
+  async linkSocial(userId: string, link: SocialAuth): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        {
+          _id: userId,
+          socialAuth: { $not: { $elemMatch: { provider: link.provider } } },
+        },
+        { $push: { socialAuth: link } },
+      )
+      .exec();
+    return matchedCount === 1;
   }
 
   async findActiveByEmail(email: string): Promise<UserDocument[]> {
