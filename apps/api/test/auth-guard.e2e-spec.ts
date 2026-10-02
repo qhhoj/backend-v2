@@ -300,24 +300,37 @@ describe('AuthGuard', () => {
       .expect(200, { data: { viaToken: false, hasSession: true } });
   });
   it('rejects cross-origin unsafe requests, even on public routes', async () => {
-    await api
-      .http()
-      .post('/guarded/private')
+    const login = () => api.http().post('/api/internal/auth/login');
+    await login()
       .set('Origin', 'https://evil.example')
+      .send({ username: 'alice', password: 'x' })
       .expect(403)
       .expect(errorCode('csrf_failed'));
+    await login()
+      .set('Origin', 'http://localhost:5173')
+      .send({ username: 'alice', password: 'wrong password' })
+      .expect(401);
+    await login()
+      .send({ username: 'alice', password: 'wrong password' })
+      .expect(401);
     await api
       .http()
       .post('/guarded/public-write')
       .set('Origin', 'https://evil.example')
       .expect(403)
       .expect(errorCode('csrf_failed'));
-    await api
-      .http()
-      .post('/guarded/private')
-      .set('Origin', 'http://localhost:5173')
-      .expect(401);
-    await api.http().post('/guarded/private').expect(401);
+  });
+  it('rejects cross-site and null origins even with a valid session and csrf token', async () => {
+    const { id, session } = await login();
+    for (const origin of ['https://evil.example', 'null'])
+      await api
+        .http()
+        .post('/guarded/private')
+        .set('Cookie', sessionCookie(id))
+        .set('X-CSRF-Token', session.csrf)
+        .set('Origin', origin)
+        .expect(403)
+        .expect(errorCode('csrf_failed'));
   });
   it('lets bearer clients through regardless of Origin', async () => {
     const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);

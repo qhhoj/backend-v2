@@ -26,9 +26,54 @@ const sessionKey = (id: string) =>
 const userSessionsKey = (userId: string) => `user-sessions:${userId}`;
 const randomToken = () => randomBytes(32).toString('base64url');
 
+// sessions stored before these fields existed lack them
+const withDefaults = (stored: string): SessionData => ({
+  cookieIssuedAt: 0,
+  pendingTotpSecret: null,
+  webauthnChallenge: null,
+  ...(JSON.parse(stored) as Partial<SessionData> & StoredSession),
+});
+
+// cjson decodes JSON null to cjson.null and encodes it back as null
+const UPDATE_LUA = `
+local stored = redis.call('GET', KEYS[1])
+if not stored then return false end
+local session = cjson.decode(stored)
+for field, value in pairs(cjson.decode(ARGV[1])) do session[field] = value end
+local merged = cjson.encode(session)
+redis.call('SET', KEYS[1], merged, 'EX', ARGV[2])
+return merged`;
+const CONSUME_LUA = `
+local stored = redis.call('GET', KEYS[1])
+if not stored then return false end
+local session = cjson.decode(stored)
+local value = session[ARGV[1]]
+if value == nil or value == cjson.null then return false end
+session[ARGV[1]] = cjson.null
+redis.call('SET', KEYS[1], cjson.encode(session), 'EX', ARGV[2])
+return value`;
+interface SessionScripts {
+  sessionUpdate(
+    key: string,
+    changes: string,
+    ttlSeconds: number,
+  ): Promise<string | null>;
+  sessionConsume(
+    key: string,
+    field: string,
+    ttlSeconds: number,
+  ): Promise<string | null>;
+}
+
 @Injectable()
 export class SessionService {
-  constructor(@Inject(REDIS) private readonly redis: Redis) {}
+  constructor(@Inject(REDIS) private readonly redis: Redis) {
+    redis.defineCommand('sessionUpdate', { numberOfKeys: 1, lua: UPDATE_LUA });
+    redis.defineCommand('sessionConsume', {
+      numberOfKeys: 1,
+      lua: CONSUME_LUA,
+    });
+  }
 
   async create(
     data: Omit<
@@ -59,32 +104,36 @@ export class SessionService {
       'EX',
       SESSION_TTL_SECONDS,
     );
-    // sessions stored before these fields existed lack them
-    return stored
-      ? {
-          cookieIssuedAt: 0,
-          pendingTotpSecret: null,
-          webauthnChallenge: null,
-          ...(JSON.parse(stored) as Partial<SessionData> & StoredSession),
-        }
-      : null;
+    return stored ? withDefaults(stored) : null;
   }
 
+  /** Atomic server-side merge; the sliding expiry is refreshed like on read. */
   async update(
     id: string,
     changes: Partial<Omit<SessionData, 'csrf' | 'userId'>>,
   ): Promise<SessionData | null> {
-    const current = await this.get(id);
-    if (!current) return null;
-    const session = { ...current, ...changes };
-    const written = await this.redis.set(
+    const merged = await this.scripts().sessionUpdate(
       sessionKey(id),
-      JSON.stringify(session),
-      'EX',
+      JSON.stringify(changes),
       SESSION_TTL_SECONDS,
-      'XX',
     );
-    return written ? session : null;
+    return merged ? withDefaults(merged) : null;
+  }
+
+  /** Atomically returns a single-use field and clears it. */
+  async consume(
+    id: string,
+    field: 'webauthnChallenge' | 'pendingTotpSecret',
+  ): Promise<string | null> {
+    return await this.scripts().sessionConsume(
+      sessionKey(id),
+      field,
+      SESSION_TTL_SECONDS,
+    );
+  }
+
+  private scripts() {
+    return this.redis as Redis & SessionScripts;
   }
 
   async destroy(id: string): Promise<void> {

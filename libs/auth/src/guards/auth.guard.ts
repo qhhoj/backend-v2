@@ -24,6 +24,7 @@ import { apiTokenMatches, parseApiToken } from '../token/api-token';
 import { UsersRepository } from '../users/users.repository';
 import { AuthContext } from './auth-context';
 
+const isBearerHeader = (header: string) => /^bearer/i.test(header);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const sameToken = (given: unknown, expected: string) => {
   if (typeof given !== 'string') return false;
@@ -59,7 +60,7 @@ export class AuthGuard implements CanActivate {
     const { origin } = request.headers;
     if (
       !SAFE_METHODS.has(request.method) &&
-      !/^bearer\b/i.test(request.headers.authorization ?? '') &&
+      !isBearerHeader(request.headers.authorization ?? '') &&
       origin !== undefined &&
       origin !== this.siteOrigin
     )
@@ -68,7 +69,10 @@ export class AuthGuard implements CanActivate {
       (await this.fromBearer(request)) ??
       (await this.fromSession(request)) ??
       undefined;
-    await this.refreshCookie(context, request.auth);
+    await this.refreshCookie(
+      context.switchToHttp().getResponse<FastifyReply>(),
+      request.auth,
+    );
     if (routeFlag<boolean>(PUBLIC_ROUTE)) return true;
 
     const { auth } = request;
@@ -109,7 +113,7 @@ export class AuthGuard implements CanActivate {
   }
 
   private async refreshCookie(
-    context: ExecutionContext,
+    reply: FastifyReply,
     auth: AuthContext | undefined,
   ) {
     if (
@@ -118,11 +122,7 @@ export class AuthGuard implements CanActivate {
       Date.now() - auth.session.cookieIssuedAt <= COOKIE_REFRESH_MS
     )
       return;
-    setSessionCookie(
-      context.switchToHttp().getResponse<FastifyReply>(),
-      auth.sessionId,
-      this.env.cookieSecure,
-    );
+    setSessionCookie(reply, auth.sessionId, this.env.cookieSecure);
     await this.sessions.update(auth.sessionId, { cookieIssuedAt: Date.now() });
   }
 
@@ -130,7 +130,7 @@ export class AuthGuard implements CanActivate {
     request: FastifyRequest,
   ): Promise<AuthContext | null> {
     const header = request.headers.authorization ?? '';
-    if (!/^bearer/i.test(header)) return null;
+    if (!isBearerHeader(header)) return null;
     const token = /^bearer\s+(\S+)\s*$/i.exec(header)?.[1];
     const parsed = token ? parseApiToken(token) : null;
     const user = parsed && (await this.users.findById(parsed.userId));

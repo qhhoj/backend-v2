@@ -56,15 +56,10 @@ describe('SessionService', () => {
     });
     expect(await sessions.update('missing', { twoFaPassed: true })).toBeNull();
   });
-  it('does not resurrect a session revoked between the read and the write of update', async () => {
+  it('does not resurrect a revoked session on update', async () => {
     const { id } = await sessions.create(fresh);
     const [key] = await redis.keys('session:*');
-    const realGet = sessions.get.bind(sessions);
-    jest.spyOn(sessions, 'get').mockImplementationOnce(async (sessionId) => {
-      const current = await realGet(sessionId);
-      await redis.del(key);
-      return current;
-    });
+    await sessions.destroy(id);
     expect(await sessions.update(id, { twoFaPassed: false })).toBeNull();
     expect(await redis.exists(key)).toBe(0);
   });
@@ -84,5 +79,50 @@ describe('SessionService', () => {
     expect(await sessions.get(other.id)).not.toBeNull();
     expect(await redis.scard('user-sessions:user-1')).toBe(1);
     expect(await redis.scard('user-sessions:user-2')).toBe(1);
+  });
+  it('keeps a field set to null as null through update', async () => {
+    const { id } = await sessions.create(fresh);
+    await sessions.update(id, { webauthnChallenge: 'abc' });
+    const cleared = await sessions.update(id, { webauthnChallenge: null });
+    expect(cleared?.webauthnChallenge).toBeNull();
+    expect((await sessions.get(id))?.webauthnChallenge).toBeNull();
+    const [key] = await redis.keys('session:*');
+    expect(JSON.parse((await redis.get(key)) as string)).toMatchObject({
+      webauthnChallenge: null,
+      impersonatorId: null,
+    });
+  });
+  it('keeps the sliding expiry on update', async () => {
+    const { id } = await sessions.create(fresh);
+    const [key] = await redis.keys('session:*');
+    await redis.expire(key, 10);
+    await sessions.update(id, { twoFaPassed: false });
+    expect(await redis.ttl(key)).toBeGreaterThan(SESSION_TTL_SECONDS - 5);
+  });
+  it('consumes a single-use field exactly once, even concurrently', async () => {
+    const { id } = await sessions.create(fresh);
+    await sessions.update(id, { pendingTotpSecret: 'secret' });
+    const results = await Promise.all([
+      sessions.consume(id, 'pendingTotpSecret'),
+      sessions.consume(id, 'pendingTotpSecret'),
+      sessions.consume(id, 'pendingTotpSecret'),
+    ]);
+    expect(results.filter((value) => value === 'secret')).toHaveLength(1);
+    expect(results.filter((value) => value === null)).toHaveLength(2);
+    expect((await sessions.get(id))?.pendingTotpSecret).toBeNull();
+    expect(await sessions.consume('missing', 'webauthnChallenge')).toBeNull();
+  });
+  it('does not lose concurrent updates of different fields', async () => {
+    for (let round = 0; round < 20; round++) {
+      const { id } = await sessions.create({ ...fresh, twoFaPassed: false });
+      await Promise.all([
+        sessions.update(id, { twoFaPassed: true }),
+        sessions.update(id, { cookieIssuedAt: 42 }),
+      ]);
+      expect(await sessions.get(id)).toMatchObject({
+        twoFaPassed: true,
+        cookieIssuedAt: 42,
+      });
+    }
   });
 });
