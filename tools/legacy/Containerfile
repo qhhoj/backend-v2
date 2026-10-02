@@ -1,0 +1,8 @@
+FROM docker.io/library/python:3.12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git gcc pkg-config default-libmysqlclient-dev mariadb-client \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /legacy
+RUN git clone https://github.com/qhhoj/online-judge.git . && git checkout 87383c7
+RUN pip install --no-cache-dir -r requirements.txt pyotp "setuptools<81"
+COPY *.py /tools/
+ENV PYTHONPATH=/tools:/legacy DJANGO_SETTINGS_MODULE=legacy_settings

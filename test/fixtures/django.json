@@ -1,0 +1,58 @@
+{
+  "secretKey": "qhhoj-test-secret",
+  "passwords": [
+    {
+      "password": "correct horse",
+      "hash": "pbkdf2_sha256$870000$wdU9Mt7TLGvrqXIPOyJvtS$Igi9z5btldnDJMI4bwLDhGbtHTLtX6ZaOm25zud2oq0="
+    },
+    {
+      "password": "Mật khẩu ✓",
+      "hash": "pbkdf2_sha256$260000$salt1234salt$ZDpL1qs2fnUzH4BkJyJW+xeh6dWgjGXRtGyANxVV4mM="
+    },
+    {
+      "password": "legacy",
+      "hash": "pbkdf2_sha1$30000$saltsalt$XUQNCMGIZK9K5LV18x/6KSMfoWs="
+    }
+  ],
+  "fernet": [
+    {
+      "plain": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "cipher": "gAAAAABqvyENm4uhmE7FphdKgweRMRE8PGv8iNsYjGMTKZwH1_1mqaLoA4OCJlIcIwRTfAz0KAW33gW4_FBEKE0mcjsF3jlO6ki8lCq_gvskouNGD9hshLlct1uFVRpJ4u2DTIUmKmrP"
+    },
+    {
+      "plain": "[\"ABCDEFGHIJKLMNOP\"]",
+      "cipher": "gAAAAABqvyENsmtsWuOhChjCBcGZMs2qf2ZrEExdWxecEjNO7Q5LSflNVltZoYVCk0D65zyGDIGn_cjz-ZY0DBrC9r7tZC0-hxvh6aof0gpOvud9ZYdeBlM="
+    }
+  ],
+  "webauthnHandles": [
+    {
+      "profileId": 1,
+      "handle": "c6ca3463dc0b0e7037eea25d61f59df6b5bb1217a182e7550e0c6ca8b8a3af87"
+    },
+    {
+      "profileId": 42,
+      "handle": "c9a33faa1aeda1ad5eea57f4cd9a62f2920b8ce13c418d7df11b26bb68f392de"
+    },
+    {
+      "profileId": 123456,
+      "handle": "5c53e057db732cc1346178bbe147615dfdb2c50a493951fe05cf2d4fe1d8803c"
+    }
+  ],
+  "totp": [
+    {
+      "key": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "timecode": 0,
+      "code": "702218"
+    },
+    {
+      "key": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "timecode": 1,
+      "code": "503347"
+    },
+    {
+      "key": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "timecode": 59000000,
+      "code": "747842"
+    }
+  ]
+}
