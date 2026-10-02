@@ -1,5 +1,5 @@
 import { Document, UUID } from 'mongodb';
-import { LegacySource } from './legacy-source';
+import { LegacySourceService } from './legacy-source.service';
 
 export interface MapCtx {
   ref(table: string, id: number | null): UUID | null;
@@ -20,7 +20,7 @@ export interface Mapper<Row = any> {
   refTables: string[];
   /** Must be ordered by the legacy primary key. */
   sql: string;
-  prepare?(source: LegacySource): Promise<void>;
+  prepare?(source: LegacySourceService): Promise<void>;
   map(row: Row, ctx: MapCtx): MappedDocument;
   /** Replace non-deterministic fields (e.g. random-IV ciphertext) before verify compares. */
   normalize?(doc: MappedDocument): Document;

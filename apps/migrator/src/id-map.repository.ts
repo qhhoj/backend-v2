@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { newId } from '@libs/database';
 import { Connection } from 'mongoose';
-import { LegacySource } from './legacy-source';
+import { LegacySourceService } from './legacy-source.service';
 import { batched } from './mapper';
 
 /** Tables whose rows reuse another table's uuid: sql yields {id, target}. */
@@ -16,12 +16,12 @@ const ALIASES: Record<string, { sql: string; target: string }> = {
 type IdEntry = { table: string; legacyId: number; id: string };
 
 @Injectable()
-export class IdMap {
+export class IdMapRepository {
   private cache = new Map<string, Map<number, string>>();
 
   constructor(
     @InjectConnection() private readonly conn: Connection,
-    private readonly source: LegacySource,
+    private readonly source: LegacySourceService,
   ) {}
 
   private get collection() {

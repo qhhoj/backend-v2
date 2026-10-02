@@ -2,16 +2,16 @@ import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@libs/database';
 import { BackfillCommand } from './commands/backfill.command';
 import { VerifyCommand } from './commands/verify.command';
-import { IdMap } from './id-map';
-import { LegacySource } from './legacy-source';
+import { IdMapRepository } from './id-map.repository';
+import { LegacySourceService } from './legacy-source.service';
 import { mapperProviders } from './mappers';
 import { MigrationService } from './migration.service';
 
 @Module({
   imports: [DatabaseModule],
   providers: [
-    LegacySource,
-    IdMap,
+    LegacySourceService,
+    IdMapRepository,
     MigrationService,
     ...mapperProviders,
     BackfillCommand,

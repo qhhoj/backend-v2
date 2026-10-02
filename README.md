@@ -1,7 +1,7 @@
 # QHHOJ backend-v2
 
-Rust rewrite of the [QHHOJ online judge](https://github.com/qhhoj/online-judge) backend: Axum + SQLx on PostgreSQL, wire-compatible with `qhhoj/judge-server`.
-
-Design docs live in `docs/superpowers/specs/`.
+NestJS 11 (Fastify) + Mongoose 8 on MongoDB backend for the QHHOJ online judge.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
+
+Design docs live in `docs/superpowers/specs/`.

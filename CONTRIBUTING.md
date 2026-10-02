@@ -7,7 +7,7 @@
 - Mongoose 8 via `@nestjs/mongoose`; MongoDB 8 **replica set** (change streams)
 - Redis 7, MariaDB 11 (legacy source for the migrator only)
 - Jest 29 + `mongodb-memory-server`; ESLint + Prettier
-- Versions pinned in `package.json`; `fastify` is pinned to the `platform-fastify` version, do not bump alone
+- Versions pinned in `package.json`; `fastify` is pinned to the exact version `@nestjs/platform-fastify` depends on
 - Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
 
 ## Layout
@@ -17,7 +17,7 @@ apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
 libs/
-  common/     http layer (AppError, filter, interceptor, validation), bootstrap, BaseMongoStreamQuerier
+  common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
   auth/       auth features (groups/ querier), crypto
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
@@ -41,10 +41,11 @@ tools/legacy/   regenerates the fixtures
 ```
 
 - Flow: `controller -> service -> querier | repository`
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|module|schema|dto|job|spec`
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|module|schema|dto|mapper|command|spec`
 - One class per file, one responsibility per file
+- Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
 - Tests: `<feature>.<role>.spec.ts` next to the file
-- Schemas are shared: `libs/database/src/schemas/<feature>.schema.ts` (not per feature)
+- Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
 
 ## Querier vs repository
@@ -80,7 +81,7 @@ tools/legacy/   regenerates the fixtures
 - `_id` is a UUIDv7: declare `@IdProp() _id!: string`
 - Helpers (`@libs/database`): `newId()` new id string, `uuidStr(value)` Binary -> hex string, `toUuid(id)` string -> BSON `UUID` for raw driver queries
 - `@Schema({ ...baseSchemaOptions, collection: '<name>' })`: timestamps, no `__v`, `toJSON` returns `id` instead of `_id`
-- Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schemas/user.schema.spec.ts`)
+- Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schema.spec.ts`); `ciIndex(schema, field, unique = true)`, e.g. `ciIndex(UserSchema, 'email', false)` for non-unique
 - Register every schema in `SCHEMAS` (`libs/database/src/schemas/index.ts`) and export it there
 
 ## Backfill jobs (migrator)
@@ -89,7 +90,7 @@ Work on the migrator is paused; the framework exists.
 
 - Build first (`npx nest build migrator`), then `node dist/apps/migrator/main backfill [jobs...] [--fresh]`: idempotent upsert by `_id`; `--fresh` empties each selected collection first
 - `node dist/apps/migrator/main verify [jobs...]`: compares Mongo vs MariaDB, exit code 1 on mismatch
-- Ids are stable: legacy `table:id` -> UUIDv7 stored in `migrationIdMap` (`apps/migrator/src/id-map.ts`)
+- Ids are stable: legacy `table:id` -> UUIDv7 stored in `migrationIdMap` (`apps/migrator/src/id-map.repository.ts`)
 
 Add a job:
 
@@ -102,7 +103,7 @@ Add a job:
 ## Naming and style
 
 - Meaningful names; no single-character identifiers (variables, params, lambda args, catch vars); lint `id-length` min 2
-- Prefer full words over abbreviations (`replSet`, `timeoutMs`)
+- Prefer full words over abbreviations (`replSet`, `testingModule`)
 - YAGNI, DRY, KISS; one-liners when equally readable
 - Same shape for every instance of a pattern (every mapper looks like `groups.mapper.ts`)
 - Formatting is Prettier through ESLint: `npx eslint --fix <files>`
@@ -112,7 +113,7 @@ Add a job:
 - Unit: `<name>.spec.ts` next to code; e2e: `*.e2e-spec.ts` (`apps/<app>/test/`, or next to the lib code)
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
-- Migrator e2e needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
+- Migrator e2e needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb` (or `docker compose`)
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
 
 ## Commands
@@ -120,6 +121,7 @@ Add a job:
 | Command | Purpose |
 |---|---|
 | `npm test` | Jest, runs in band |
+| `npm run format` | Prettier write on `apps/` and `libs/` |
 | `npm run lint` | ESLint (+ Prettier) on `apps/` and `libs/` |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run build` | build `api` |

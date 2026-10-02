@@ -3,7 +3,7 @@ import type { Connection as CallbackConnection } from 'mysql2';
 import { createPool, Pool } from 'mysql2/promise';
 
 @Injectable()
-export class LegacySource implements OnModuleDestroy {
+export class LegacySourceService implements OnModuleDestroy {
   private readonly pool: Pool = createPool({
     uri: process.env.LEGACY_MYSQL_URL,
     timezone: 'Z',

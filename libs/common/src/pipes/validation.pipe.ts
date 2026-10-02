@@ -1,5 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
-import { AppError } from './errors/app.error';
+import { AppError } from '../errors/app.error';
 
 export const validationPipe = new ValidationPipe({
   whitelist: true,

@@ -3,8 +3,8 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { toUuid, uuidStr } from '@libs/database';
 import { BSON, Document } from 'mongodb';
 import { Connection } from 'mongoose';
-import { IdMap } from './id-map';
-import { LegacySource } from './legacy-source';
+import { IdMapRepository } from './id-map.repository';
+import { LegacySourceService } from './legacy-source.service';
 import { batched, MapCtx, MappedDocument, Mapper, MAPPERS } from './mapper';
 
 const sortKeys = (value: unknown): unknown =>
@@ -25,8 +25,8 @@ export class MigrationService {
   constructor(
     @Inject(MAPPERS) private readonly mappers: Mapper[],
     @InjectConnection() private readonly conn: Connection,
-    private readonly source: LegacySource,
-    private readonly ids: IdMap,
+    private readonly source: LegacySourceService,
+    private readonly ids: IdMapRepository,
   ) {}
 
   /** Re-runnable: upserts by _id, so only new or changed legacy rows are written. `fresh` empties each job's collection first. */

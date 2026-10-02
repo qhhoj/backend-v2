@@ -6,7 +6,7 @@ import {
 } from '@nestjs/platform-fastify';
 import { AppExceptionFilter } from './filters/exception.filter';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
-import { validationPipe } from './validation';
+import { validationPipe } from './pipes/validation.pipe';
 
 export const fastifyAdapter = () =>
   new FastifyAdapter({

@@ -1,6 +1,6 @@
 import { newId, toUuid, uuidStr } from '@libs/database';
 import { RowDataPacket } from 'mysql2/promise';
-import { IdMap } from '../src/id-map';
+import { IdMapRepository } from '../src/id-map.repository';
 import { MappedDocument } from '../src/mapper';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest } from './setup';
@@ -21,7 +21,7 @@ describe('migrator framework', () => {
   afterAll(() => harness.teardown());
 
   it('maps every legacy id to a uuid and aliases profiles to their user', async () => {
-    const ids = harness.testingModule.get(IdMap);
+    const ids = harness.testingModule.get(IdMapRepository);
     await ids.load(['auth_user', 'judge_profile']);
     const [rows] = await harness.mysql.query<RowDataPacket[]>(
       `SELECT id, user_id FROM ${harness.name}.judge_profile LIMIT 1`,
