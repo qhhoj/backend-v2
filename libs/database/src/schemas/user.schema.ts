@@ -4,7 +4,7 @@ import { baseSchemaOptions, ciIndex, IdProp } from '../schema';
 
 const UUID = MSchema.Types.UUID;
 
-@Schema()
+@Schema({ id: false })
 export class WebauthnCredential {
   @IdProp() _id!: string;
   @Prop({ required: true }) name!: string;

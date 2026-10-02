@@ -5,6 +5,7 @@ import { newId, uuidStr } from './uuid';
 
 export const CI: CollationOptions = { locale: 'en', strength: 2 };
 
+// Subdocument schemas with an _id need `id: false`, or getters expose an `id` virtual.
 export const baseSchemaOptions: SchemaOptions = {
   id: false,
   timestamps: true,

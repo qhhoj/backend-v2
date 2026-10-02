@@ -5,6 +5,8 @@ import { startMongo } from '../testing';
 import { newId } from '../uuid';
 import { UserSchema } from './user.schema';
 
+const UUID_PATTERN = /^[0-9a-f-]{36}$/;
+
 describe('user schema', () => {
   let replSet: MongoMemoryReplSet;
   const Users = mongoose.model('User', UserSchema);
@@ -27,7 +29,7 @@ describe('user schema', () => {
   it('applies profile defaults and assigns a UUID _id', async () => {
     const user = await Users.create({ username: 'alice', password: 'x' });
     const stored = await Users.collection.findOne({ username: 'alice' });
-    expect(stored?._id.toString()).toMatch(/^[0-9a-f-]{36}$/);
+    expect(stored?._id.toString()).toMatch(UUID_PATTERN);
     expect(user.toObject()).toMatchObject({
       timezone: 'America/Toronto',
       allowTagging: true,
@@ -92,7 +94,7 @@ describe('user schema', () => {
         { name: 'key', credId: 'cred-id', publicKey: 'pk', counter: 0 },
       ],
     });
-    expect(user.webauthnCredentials[0]._id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(user.webauthnCredentials[0]._id).toMatch(UUID_PATTERN);
   });
 
   it('enforces unique webauthn credId across users', async () => {
@@ -116,7 +118,7 @@ describe('user schema', () => {
       await Users.create({ username: 'alice', password: 'x' })
     ).toJSON();
     expect(json).toMatchObject({
-      id: expect.stringMatching(/^[0-9a-f-]{36}$/) as string,
+      id: expect.stringMatching(UUID_PATTERN) as string,
     });
     expect(json).not.toHaveProperty('_id');
   });
@@ -137,8 +139,9 @@ describe('user schema', () => {
       webauthnCredentials: { _id: string }[];
     };
     expect(json.groups).toEqual([groupId]);
-    expect(json.webauthnCredentials[0]._id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(json.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(json.webauthnCredentials[0]._id).toMatch(UUID_PATTERN);
+    expect(json.id).toMatch(UUID_PATTERN);
+    expect(json.webauthnCredentials[0]).not.toHaveProperty('id');
     expect(json).not.toHaveProperty('_id');
   });
 });
