@@ -20,6 +20,29 @@ export class UsersRepository {
     return this.users.findOne({ username }).collation(CI).exec();
   }
 
+  findByEmail(email: string): Promise<UserDocument | null> {
+    return this.users.findOne({ email }).collation(CI).exec();
+  }
+
+  create(fields: Partial<User>): Promise<UserDocument> {
+    return this.users.create(fields);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.users.deleteOne({ _id: id }).exec();
+  }
+
+  /** False when the user is missing, already active or banned. */
+  async activate(userId: string): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, isActive: false, banReason: null },
+        { $set: { isActive: true } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
   async update(id: string, changes: Partial<User>): Promise<void> {
     await this.users.updateOne({ _id: id }, { $set: changes }).exec();
   }
