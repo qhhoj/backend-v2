@@ -1,0 +1,44 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import mongoose from 'mongoose';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { baseSchemaOptions, CI, ciIndex, IdProp } from './schema';
+import { startMongo } from './testing';
+
+@Schema({ ...baseSchemaOptions, collection: 'things' })
+class Thing {
+  @IdProp() _id!: string;
+  @Prop({ required: true }) name!: string;
+}
+const ThingSchema = SchemaFactory.createForClass(Thing);
+ciIndex(ThingSchema, 'name');
+
+describe('schema base', () => {
+  let rs: MongoMemoryReplSet;
+  const Things = mongoose.model('Thing', ThingSchema);
+  beforeAll(async () => {
+    rs = await startMongo();
+    await mongoose.connect(rs.getUri());
+    await Things.syncIndexes();
+  });
+  afterAll(async () => {
+    await mongoose.disconnect();
+    await rs.stop();
+  });
+
+  it('assigns UUID _id and exposes id in JSON', async () => {
+    const t = await Things.create({ name: 'Alpha' });
+    expect(t.toJSON()).toMatchObject({
+      id: expect.stringMatching(/^[0-9a-f-]{36}$/) as string,
+      name: 'Alpha',
+    });
+    expect(t.toJSON()).not.toHaveProperty('_id');
+  });
+  it('enforces case-insensitive uniqueness and lookup', async () => {
+    await expect(Things.create({ name: 'ALPHA' })).rejects.toThrow(
+      /duplicate key/,
+    );
+    expect(
+      await Things.findOne({ name: 'alpha' }).collation(CI),
+    ).not.toBeNull();
+  });
+});
