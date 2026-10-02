@@ -29,6 +29,9 @@ class GuardedController {
   @Post('private') write() {
     return 'written';
   }
+  @Get('context') context(@CurrentAuth() auth: AuthContext) {
+    return { viaToken: auth.viaToken, hasSession: auth.sessionId !== null };
+  }
   @AllowPartialAuth() @AllowPwnedPassword() @Get('partial') partial() {
     return 'partial';
   }
@@ -184,5 +187,78 @@ describe('AuthGuard', () => {
       .get('/guarded/private')
       .set('Authorization', `Bearer ${'A'.repeat(64)}`)
       .expect(401);
+  });
+  it('compares csrf tokens of equal length and equal byte length safely', async () => {
+    const { id, session } = await login();
+    const post = () =>
+      api.http().post('/guarded/private').set('Cookie', sessionCookie(id));
+    await post()
+      .set('X-CSRF-Token', 'x'.repeat(session.csrf.length))
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+    await post()
+      .set('X-CSRF-Token', `${'x'.repeat(session.csrf.length - 1)}\u00e9`)
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+  });
+  it('does not require csrf on HEAD', async () => {
+    const { id } = await login();
+    await api
+      .http()
+      .head('/guarded/private')
+      .set('Cookie', sessionCookie(id))
+      .expect(200);
+  });
+  it('rejects an invalid bearer token even with a valid session cookie', async () => {
+    const { id } = await login();
+    await api
+      .http()
+      .get('/guarded/private')
+      .set('Cookie', sessionCookie(id))
+      .set('Authorization', `Bearer ${'A'.repeat(64)}`)
+      .expect(401);
+  });
+  it('accepts a lowercase bearer scheme', async () => {
+    const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
+    await api.users.updateOne({ _id: userId }, { apiTokenHash: hash });
+    await api
+      .http()
+      .get('/guarded/private')
+      .set('Authorization', `bearer ${token}`)
+      .expect(200);
+  });
+  it('rejects bearer tokens of inactive users', async () => {
+    const inactive = await createUser(api.users, {
+      username: 'trent',
+      email: 't@example.com',
+    });
+    const { token, hash } = generateApiToken(
+      inactive._id,
+      TEST_ENV.TOKEN_SECRET,
+    );
+    await api.users.updateOne(
+      { _id: inactive._id },
+      { apiTokenHash: hash, isActive: false },
+    );
+    await api
+      .http()
+      .get('/guarded/private')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
+  });
+  it('reports how the request was authenticated', async () => {
+    const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
+    await api.users.updateOne({ _id: userId }, { apiTokenHash: hash });
+    await api
+      .http()
+      .get('/guarded/context')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200, { data: { viaToken: true, hasSession: false } });
+    const { id } = await login();
+    await api
+      .http()
+      .get('/guarded/context')
+      .set('Cookie', sessionCookie(id))
+      .expect(200, { data: { viaToken: false, hasSession: true } });
   });
 });

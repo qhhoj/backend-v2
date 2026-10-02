@@ -16,11 +16,11 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/apps/api/main",
     "lint": "eslint \"{apps,libs}/**/*.ts\"",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test": "jest --runInBand",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.1.2",
+    "@fastify/cookie": "11.0.2",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/mongoose": "^11.0.4",

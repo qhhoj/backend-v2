@@ -28,11 +28,14 @@ export async function setupApiTest({
 }: { controllers?: Type[] } = {}) {
   const replSet = await startMongo();
   Object.assign(process.env, TEST_ENV, { MONGO_URL: replSet.getUri('qhhoj') });
-  const app: NestFastifyApplication = await createTestApp({
-    imports: [AppModule],
-    controllers,
-  });
-  await app.get<Redis>(REDIS).flushdb();
+  let app: NestFastifyApplication;
+  try {
+    app = await createTestApp({ imports: [AppModule], controllers });
+    await app.get<Redis>(REDIS).flushdb();
+  } catch (error) {
+    await replSet.stop();
+    throw error;
+  }
   return {
     app,
     http: () => request(app.getHttpServer()),

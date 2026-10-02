@@ -24,10 +24,15 @@ import { UsersRepository } from '../users/users.repository';
 import { AuthContext } from './auth-context';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const sameToken = (given: unknown, expected: string) =>
-  typeof given === 'string' &&
-  given.length === expected.length &&
-  timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+const sameToken = (given: unknown, expected: string) => {
+  if (typeof given !== 'string') return false;
+  const givenBytes = Buffer.from(given);
+  const expectedBytes = Buffer.from(expected);
+  return (
+    givenBytes.byteLength === expectedBytes.byteLength &&
+    timingSafeEqual(givenBytes, expectedBytes)
+  );
+};
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -87,7 +92,7 @@ export class AuthGuard implements CanActivate {
     request: FastifyRequest,
   ): Promise<AuthContext | null> {
     const [scheme, token] = (request.headers.authorization ?? '').split(' ');
-    if (scheme !== 'Bearer' || !token) return null;
+    if (!/^bearer$/i.test(scheme) || !token) return null;
     const parsed = parseApiToken(token);
     const user = parsed && (await this.users.findById(parsed.userId));
     if (
