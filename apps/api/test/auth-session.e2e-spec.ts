@@ -200,6 +200,27 @@ describe('auth session endpoints', () => {
       .send({ username: { $ne: null }, password: 'x' })
       .expect(400);
   });
+  it('replaces the existing session when logging in again', async () => {
+    const login = (cookie?: string) =>
+      api
+        .http()
+        .post(LOGIN)
+        .set('Cookie', cookie ?? '')
+        .send({ username: 'alice', password: 'correct horse battery' })
+        .expect(200);
+    const first = await login();
+    const second = await login(cookieFrom(first.headers));
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', cookieFrom(first.headers))
+      .expect(401);
+    await api
+      .http()
+      .get(ME)
+      .set('Cookie', cookieFrom(second.headers))
+      .expect(200);
+  });
   it('limits a concurrent burst of wrong guesses', async () => {
     const redis = api.app.get<Redis>(REDIS);
     await Promise.all(
@@ -251,5 +272,6 @@ describe('auth session endpoints', () => {
         password: 'correct horse battery',
       })
       .expect(429);
+    await api.http().post(LOGIN).send({ username: 'rita' }).expect(400);
   });
 });

@@ -27,10 +27,4 @@ export class RateLimitService {
       rateKey(key),
     );
   }
-
-  async exceeded(keys: string[], limit: number): Promise<boolean> {
-    if (!keys.length) return false;
-    const counts = await this.redis.mget(keys.map(rateKey));
-    return counts.some((count) => Number(count ?? 0) >= limit);
-  }
 }

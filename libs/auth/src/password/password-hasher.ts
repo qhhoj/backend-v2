@@ -10,8 +10,8 @@ const MAX_ITERATIONS = 2_147_483_647;
 const MIN_SALT_LENGTH = 22;
 
 export const PASSWORD_ITERATIONS = 870_000;
-/** Well-formed hash no password matches; verifying against it keeps unknown-user logins as slow as real ones. */
 const DUMMY_SALT = 'dummysaltdummysaltdumm';
+/** Well-formed hash no password matches; verifying against it keeps unknown-user logins as slow as real ones. */
 export const DUMMY_PASSWORD_HASH = `pbkdf2_sha256$${PASSWORD_ITERATIONS}$${DUMMY_SALT}$${'A'.repeat(43)}=`;
 
 export async function verifyPassword(

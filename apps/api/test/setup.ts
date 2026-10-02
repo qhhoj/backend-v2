@@ -31,6 +31,7 @@ export async function setupApiTest({
   let app: NestFastifyApplication;
   try {
     app = await createTestApp({ imports: [AppModule], controllers });
+    await app.listen(0, '127.0.0.1');
     await app.get<Redis>(REDIS).flushdb();
   } catch (error) {
     await replSet.stop();

@@ -32,14 +32,6 @@ describe('RateLimitService', () => {
     await limiter.hit('slide', 60);
     expect(await redis.ttl('rate:slide')).toBeLessThanOrEqual(5);
   });
-  it('reports when any key reached the limit', async () => {
-    for (let attempt = 0; attempt < 3; attempt++) await limiter.hit('busy', 60);
-    expect(await limiter.exceeded(['quiet', 'busy'], 3)).toBe(true);
-    expect(await limiter.exceeded(['quiet', 'busy'], 4)).toBe(false);
-  });
-  it('is not exceeded without keys', async () => {
-    expect(await limiter.exceeded([], 1)).toBe(false);
-  });
   it('rejects when redis reports an error', async () => {
     await redis.set('rate:typed', 'not-a-number');
     await expect(limiter.hit('typed', 60)).rejects.toThrow();
