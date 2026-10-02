@@ -24,7 +24,8 @@ export class UsersRepository {
     return this.users.findOne({ email }).collation(CI).exec();
   }
 
-  findActiveByEmail(email: string): Promise<UserDocument[]> {
+  async findActiveByEmail(email: string): Promise<UserDocument[]> {
+    if (!email) return [];
     return this.users.find({ email, isActive: true }).collation(CI).exec();
   }
 

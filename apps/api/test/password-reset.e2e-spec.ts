@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+import { hashPassword } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
@@ -116,14 +118,24 @@ describe('password reset', () => {
   });
 
   it('rejects a token after a login that followed the request', async () => {
+    // Full-cost hash: a login must not rehash it, so only lastLogin can invalidate the token.
     await createUser(api.users, {
       username: 'loggedin',
       email: 'loggedin@example.com',
     });
+    await api.users.updateOne(
+      { username: 'loggedin' },
+      { $set: { password: await hashPassword(OLD_PASSWORD) } },
+    );
+    const hashBefore = (await api.users.findOne({ username: 'loggedin' }))!
+      .password;
     await requestReset('loggedin@example.com').expect(204);
     await mailCountAfterSettling(1);
     const token = tokenFrom(api.mailer.sent[0].text);
     await login('loggedin', OLD_PASSWORD).expect(200);
+    const after = (await api.users.findOne({ username: 'loggedin' }))!;
+    expect(after.password).toBe(hashBefore);
+    expect(after.lastLogin).not.toBeNull();
     await confirm(token).expect(400).expect(errorCode('invalid_token'));
   });
 
@@ -135,7 +147,10 @@ describe('password reset', () => {
     await requestReset('weak@example.com').expect(204);
     await mailCountAfterSettling(1);
     const token = tokenFrom(api.mailer.sent[0].text);
-    for (const bad of ['x', 'A'.repeat(70), `${token.slice(0, -2)}AA`])
+    const raw = Buffer.from(token, 'base64url');
+    raw[raw.length - 1] ^= 0xff;
+    const forged = raw.toString('base64url');
+    for (const bad of ['x', 'A'.repeat(70), forged])
       await confirm(bad).expect(400).expect(errorCode('invalid_token'));
     const response = await confirm(token, 'weak').expect(400);
     expect(
@@ -149,6 +164,32 @@ describe('password reset', () => {
       fields: { newPassword: expect.any(Array) as unknown },
     });
     await confirm(token).expect(204);
+  });
+
+  it('logs mail failures and still answers 204', async () => {
+    await createUser(api.users, {
+      username: 'mailfail',
+      email: 'mailfail@example.com',
+    });
+    const send = jest
+      .spyOn(api.mailer, 'send')
+      .mockRejectedValue(new Error('smtp down'));
+    const logged = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      await requestReset('mailfail@example.com').expect(204);
+      for (
+        let attempt = 0;
+        attempt < 50 && !logged.mock.calls.length;
+        attempt++
+      )
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(logged).toHaveBeenCalledWith(expect.stringContaining('smtp down'));
+    } finally {
+      send.mockRestore();
+      logged.mockRestore();
+    }
   });
 
   it('limits to 3 requests per email per hour', async () => {

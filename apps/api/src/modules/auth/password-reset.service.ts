@@ -17,6 +17,14 @@ const IP_LIMIT = 10;
 const EMAIL_LIMIT = 3;
 const WINDOW_SECONDS = 60 * 60;
 
+const invalidToken = () =>
+  new AppError('invalid_token', 400, 'Reset link is invalid or expired');
+const tokenOwner = (user: UserDocument) => ({
+  id: user._id,
+  password: user.password,
+  lastLogin: user.lastLogin,
+});
+
 @Injectable()
 export class PasswordResetService {
   private readonly logger = new Logger(PasswordResetService.name);
@@ -53,12 +61,12 @@ export class PasswordResetService {
         );
   }
 
-  private sendResetMail(user: UserDocument): Promise<void> {
+  private async sendResetMail(user: UserDocument): Promise<void> {
     const token = createPasswordResetToken(
-      { id: user._id, password: user.password, lastLogin: user.lastLogin },
+      tokenOwner(user),
       this.env.tokenSecret,
     );
-    return this.mailer.send({
+    await this.mailer.send({
       to: user.email,
       subject: 'Reset your QHHOJ password',
       text: `Reset your password: ${this.env.siteUrl}/reset-password/${token}\nThe link expires in 3 days.`,
@@ -73,17 +81,9 @@ export class PasswordResetService {
       !user ||
       !user.isActive ||
       user.password.startsWith('!') ||
-      !passwordResetTokenValid(
-        parsed,
-        { id: user._id, password: user.password, lastLogin: user.lastLogin },
-        this.env.tokenSecret,
-      )
+      !passwordResetTokenValid(parsed, tokenOwner(user), this.env.tokenSecret)
     )
-      throw new AppError(
-        'invalid_token',
-        400,
-        'Reset link is invalid or expired',
-      );
+      throw invalidToken();
     const problems = passwordProblems(newPassword, user);
     if (await this.pwned.isPwned(newPassword))
       problems.push('This password has appeared in a data breach.');
@@ -96,12 +96,7 @@ export class PasswordResetService {
       user.password,
       await hashPassword(newPassword),
     );
-    if (!changed)
-      throw new AppError(
-        'invalid_token',
-        400,
-        'Reset link is invalid or expired',
-      );
+    if (!changed) throw invalidToken();
     await this.sessions.destroyAllForUser(user._id);
   }
 }
