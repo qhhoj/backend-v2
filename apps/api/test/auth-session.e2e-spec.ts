@@ -1,4 +1,4 @@
-import { hashPassword, PASSWORD_ITERATIONS } from '@libs/auth';
+import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
@@ -78,6 +78,30 @@ describe('auth session endpoints', () => {
       .expect(200);
     expect((await api.users.findOne({ username: 'bob' }))!.password).toMatch(
       new RegExp(`^pbkdf2_sha256\\$${PASSWORD_ITERATIONS}\\$`),
+    );
+  });
+  it('keeps a password changed between verify and rehash', async () => {
+    await createUser(api.users, { username: 'rex', email: 'rex@example.com' });
+    const repository = api.app.get(UsersRepository);
+    const original = repository.updatePasswordIfUnchanged.bind(repository);
+    const newer = await hashPassword('newer passphrase 42');
+    const spy = jest
+      .spyOn(repository, 'updatePasswordIfUnchanged')
+      .mockImplementationOnce(async (userId, expected, replacement) => {
+        await api.users.updateOne({ username: 'rex' }, { password: newer });
+        return original(userId, expected, replacement);
+      });
+    try {
+      await api
+        .http()
+        .post(LOGIN)
+        .send({ username: 'rex', password: 'correct horse battery' })
+        .expect(200);
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await api.users.findOne({ username: 'rex' }))!.password).toBe(
+      newer,
     );
   });
   it('rejects bad credentials uniformly', async () => {

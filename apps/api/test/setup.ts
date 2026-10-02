@@ -29,7 +29,7 @@ export async function setupApiTest({
 }: { controllers?: Type[] } = {}) {
   const replSet = await startMongo();
   Object.assign(process.env, TEST_ENV, { MONGO_URL: replSet.getUri('qhhoj') });
-  let app: NestFastifyApplication;
+  let app: NestFastifyApplication | undefined;
   try {
     app = await createTestApp(
       { imports: [AppModule], controllers },
@@ -38,17 +38,22 @@ export async function setupApiTest({
     await app.listen(0, '127.0.0.1');
     await app.get<Redis>(REDIS).flushdb();
   } catch (error) {
-    await replSet.stop();
+    try {
+      await app?.close();
+    } finally {
+      await replSet.stop();
+    }
     throw error;
   }
+  const readyApp = app;
   return {
-    app,
-    http: () => request(app.getHttpServer()),
-    users: app.get<Model<User>>(getModelToken(User.name)),
-    groups: app.get<Model<Group>>(getModelToken(Group.name)),
-    sessions: app.get(SessionService),
+    app: readyApp,
+    http: () => request(readyApp.getHttpServer()),
+    users: readyApp.get<Model<User>>(getModelToken(User.name)),
+    groups: readyApp.get<Model<Group>>(getModelToken(Group.name)),
+    sessions: readyApp.get(SessionService),
     teardown: async () => {
-      await app.close();
+      await readyApp.close();
       await replSet.stop();
     },
   };

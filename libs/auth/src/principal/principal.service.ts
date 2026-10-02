@@ -9,6 +9,7 @@ export class PrincipalService {
   constructor(private readonly groups: GroupsQuerier) {}
 
   build(user: UserDocument): Principal {
+    // UUID array `.map` yields raw MongooseBuffer, so normalise through uuidStr.
     return {
       userId: uuidStr(user._id),
       username: user.username,

@@ -177,13 +177,16 @@ describe('account endpoints', () => {
     const spy = jest
       .spyOn(api.app.get(UsersRepository), 'updatePasswordIfUnchanged')
       .mockResolvedValueOnce(false);
-    await post('password/change', session, {
-      currentPassword: 'third passphrase here',
-      newPassword: 'a fresh passphrase 42',
-    })
-      .expect(409)
-      .expect(errorCode('conflict'));
-    spy.mockRestore();
+    try {
+      await post('password/change', session, {
+        currentPassword: 'third passphrase here',
+        newPassword: 'a fresh passphrase 42',
+      })
+        .expect(409)
+        .expect(errorCode('conflict'));
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('updatePasswordIfUnchanged only writes when the hash matches', async () => {

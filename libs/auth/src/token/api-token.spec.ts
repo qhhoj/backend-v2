@@ -25,6 +25,17 @@ describe('api tokens', () => {
     ).toBe(false);
     expect(apiTokenMatches(parsed.secret, null, tokenSecret)).toBe(false);
   });
+  it('rejects the secret of one token against the hash of another', () => {
+    const first = generateApiToken(newId(), tokenSecret);
+    const second = generateApiToken(newId(), tokenSecret);
+    expect(
+      apiTokenMatches(
+        parseApiToken(first.token)!.secret,
+        second.hash,
+        tokenSecret,
+      ),
+    ).toBe(false);
+  });
   it('issues a different secret every time', () => {
     const userId = newId();
     expect(generateApiToken(userId, tokenSecret).hash).not.toBe(

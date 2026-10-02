@@ -98,9 +98,10 @@ export class AuthGuard implements CanActivate {
   private async fromBearer(
     request: FastifyRequest,
   ): Promise<AuthContext | null> {
-    const [scheme, token] = (request.headers.authorization ?? '').split(' ');
-    if (!/^bearer$/i.test(scheme) || !token) return null;
-    const parsed = parseApiToken(token);
+    const header = request.headers.authorization ?? '';
+    if (!/^bearer/i.test(header)) return null;
+    const token = /^bearer\s+(\S+)\s*$/i.exec(header)?.[1];
+    const parsed = token ? parseApiToken(token) : null;
     const user = parsed && (await this.users.findById(parsed.userId));
     if (
       !parsed ||

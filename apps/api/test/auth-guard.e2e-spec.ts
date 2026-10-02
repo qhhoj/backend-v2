@@ -229,6 +229,7 @@ describe('AuthGuard', () => {
       .head('/guarded/private')
       .set('Cookie', sessionCookie(id))
       .expect(200);
+    await api.http().head('/guarded/private').expect(401);
   });
   it('rejects an invalid bearer token even with a valid session cookie', async () => {
     const { id } = await login();
@@ -248,6 +249,16 @@ describe('AuthGuard', () => {
       .set('Authorization', `bearer ${token}`)
       .expect(200);
   });
+  it.each(['Bearer', 'Bearer ', 'Bearer  x', 'bearer a b'])(
+    'rejects malformed bearer header %j',
+    async (header) => {
+      await api
+        .http()
+        .get('/guarded/private')
+        .set('Authorization', header)
+        .expect(401);
+    },
+  );
   it('rejects bearer tokens of inactive users', async () => {
     const inactive = await createUser(api.users, {
       username: 'trent',

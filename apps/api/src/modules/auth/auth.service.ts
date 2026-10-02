@@ -14,10 +14,9 @@ import {
 import type { AuthContext } from '@libs/auth';
 import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
-import { User } from '@libs/database';
 
-export const FAILURE_LIMIT = 10;
-export const FAILURE_WINDOW_SECONDS = 15 * 60;
+const FAILURE_LIMIT = 10;
+const FAILURE_WINDOW_SECONDS = 15 * 60;
 
 @Injectable()
 export class AuthService {
@@ -70,10 +69,15 @@ export class AuthService {
         : new AppError('account_not_activated', 403, 'Account not activated');
 
     const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
-    const changes: Partial<User> = twoFaPassed ? { lastLogin: new Date() } : {};
+    if (twoFaPassed)
+      await this.users.update(user._id, { lastLogin: new Date() });
+    // Compare-and-set: if the password changed since verification, keep the newer one.
     if (needsRehash(user.password))
-      changes.password = await hashPassword(password);
-    if (Object.keys(changes).length) await this.users.update(user._id, changes);
+      await this.users.updatePasswordIfUnchanged(
+        user._id,
+        user.password,
+        await hashPassword(password),
+      );
     const { id, session } = await this.sessions.create({
       userId: user._id,
       twoFaPassed,

@@ -19,7 +19,7 @@ apps/
 libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
-  auth/       auth features (groups/ querier), crypto
+  auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
@@ -41,7 +41,7 @@ tools/legacy/   regenerates the fixtures
 ```
 
 - Flow: `controller -> service -> querier | repository`
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|module|schema|dto|mapper|command|filter|interceptor|pipe|error|spec`
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|spec`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
 - Exception: `pipes/validation.pipe.ts` exports a configured instance, not a class
@@ -86,6 +86,7 @@ tools/legacy/   regenerates the fixtures
 - SPA contract: cookie `qhhoj_session`; send `X-CSRF-Token` (from `/auth/me` or login) on POST/PUT/PATCH/DELETE
 - API tokens (Bearer) skip the CSRF, 2FA and pwned-password gates but cannot reach `@SessionOnly()` routes; the token stays valid across a password change (design choice)
 - Login rate limiting is reserve-then-release, per IP plus per resolved account; unknown usernames are limited per NFKC-lowercased name
+- Behind nginx set `TRUST_PROXY` to its address (e.g. the container network CIDR); otherwise every client shares one IP and the per-IP login limit becomes global
 - `@fastify/cookie` is pinned at 11.0.2: 11.1.1+ depends on ESM-only `cookie` 2, which breaks Jest CJS; do not bump
 - New permissions: add the codename to `libs/auth/src/principal/permissions.ts`
 - OpenAPI: `GET /api/internal/openapi.json` (raw JSON, no auth)
@@ -94,6 +95,7 @@ tools/legacy/   regenerates the fixtures
 
 - `_id` is a UUIDv7: declare `@IdProp() _id!: string`
 - Helpers (`@libs/database`): `newId()` new id string, `uuidStr(value)` Binary -> hex string, `toUuid(id)` string -> BSON `UUID` for raw driver queries
+- UUID arrays on hydrated docs (`user.groups`, ...): index access, spread and `toJSON()` give strings, but `.map/.filter/.flatMap/.slice` give raw buffers; map through `uuidStr` first
 - `@Schema({ ...baseSchemaOptions, collection: '<name>' })`: timestamps, no `__v`, `toJSON` returns `id` instead of `_id`
 - Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schema.spec.ts`); `ciIndex(schema, field, unique = true)`, e.g. `ciIndex(UserSchema, 'email', false)` for non-unique
 - Register every schema in `SCHEMAS` (`libs/database/src/schemas/index.ts`) and export it there
