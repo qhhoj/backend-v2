@@ -58,6 +58,7 @@ export class AuthService {
         'Invalid username or password',
       );
     await release();
+    this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
     // Compare-and-set: if the password changed since verification, keep the newer one.
     if (needsRehash(user.password))
@@ -81,7 +82,7 @@ export class AuthService {
   }
 
   /**
-   * Shared by every login method (password, social): re-checks the refusals, opens a session and replaces `previousSessionId`.
+   * Shared by every login method (password, social); callers run `assertLoginAllowed` first. Opens a session and replaces `previousSessionId`.
    * lastLogin is recorded once no second factor is pending.
    */
   async startSession(
@@ -89,7 +90,6 @@ export class AuthService {
     passwordPwned: boolean,
     previousSessionId: string | null,
   ) {
-    this.assertLoginAllowed(user);
     const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
     if (twoFaPassed)
       await this.users.update(user._id, { lastLogin: new Date() });

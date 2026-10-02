@@ -156,6 +156,7 @@ export class SocialService {
         });
       },
     );
+    this.auth.assertLoginAllowed(created);
     return this.auth.startSession(created, false, previousSessionId);
   }
 
@@ -196,6 +197,7 @@ export class SocialService {
     user: UserDocument,
     previousSessionId: string | null,
   ): Promise<CallbackResult> {
+    this.auth.assertLoginAllowed(user);
     const { sessionId, session } = await this.auth.startSession(
       user,
       false,

@@ -80,6 +80,18 @@ describe('auth session endpoints', () => {
       new RegExp(`^pbkdf2_sha256\\$${PASSWORD_ITERATIONS}\\$`),
     );
   });
+  it('refuses banned and inactive accounts before any rehash', async () => {
+    for (const username of ['carol', 'dave']) {
+      const before = (await api.users.findOne({ username }))!.password;
+      expect(before).toMatch(/^pbkdf2_sha256\$1000\$/);
+      await api
+        .http()
+        .post(LOGIN)
+        .send({ username, password: 'correct horse battery' })
+        .expect(403);
+      expect((await api.users.findOne({ username }))!.password).toBe(before);
+    }
+  });
   it('keeps a password changed between verify and rehash', async () => {
     await createUser(api.users, { username: 'rex', email: 'rex@example.com' });
     const repository = api.app.get(UsersRepository);
