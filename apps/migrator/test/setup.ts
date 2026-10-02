@@ -27,6 +27,7 @@ export async function setupMigratorTest() {
   const testingModule = await Test.createTestingModule({
     imports: [MigratorModule],
   }).compile();
+  testingModule.useLogger(false);
   await testingModule.init();
   const db = testingModule.get<Connection>(getConnectionToken()).db!;
   return {

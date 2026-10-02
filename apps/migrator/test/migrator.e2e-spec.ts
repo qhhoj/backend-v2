@@ -1,6 +1,7 @@
-import { uuidStr } from '@libs/database';
+import { newId, toUuid, uuidStr } from '@libs/database';
 import { RowDataPacket } from 'mysql2/promise';
 import { IdMap } from '../src/id-map';
+import { MappedDocument } from '../src/mapper';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest } from './setup';
 
@@ -82,14 +83,20 @@ describe('migrator framework', () => {
     );
   });
 
-  it('--fresh rebuilds the job collection', async () => {
-    await harness.db
-      .collection('groups')
-      .updateOne({ name: 'Staff' }, { $set: { permissions: [] } });
+  it('--fresh empties the job collection before writing', async () => {
+    const groups = harness.db.collection<MappedDocument>('groups');
+    await groups.updateOne({ name: 'Staff' }, { $set: { permissions: [] } });
+    await groups.insertOne({
+      _id: toUuid(newId()),
+      name: 'Stray',
+      permissions: [],
+    });
+    await migration.backfill(['groups']);
+    expect(await groups.findOne({ name: 'Stray' })).not.toBeNull();
+    expect(await migration.verify(['groups'])).toBe(1);
     await migration.backfill(['groups'], true);
-    expect(
-      await harness.db.collection('groups').findOne({ name: 'Staff' }),
-    ).toMatchObject({
+    expect(await groups.findOne({ name: 'Stray' })).toBeNull();
+    expect(await groups.findOne({ name: 'Staff' })).toMatchObject({
       permissions: ['judge.edit_all_problem'],
     });
     expect(await migration.verify(['groups'])).toBe(0);

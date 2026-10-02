@@ -91,5 +91,6 @@ export class IdMap {
       await this.collection.insertMany(fresh);
       for (const entry of fresh) known.set(entry.legacyId, entry.id);
     }
+    this.cache.delete(table);
   }
 }
