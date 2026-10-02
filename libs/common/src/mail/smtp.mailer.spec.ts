@@ -1,6 +1,6 @@
 import { createServer, Server, Socket } from 'node:net';
 import { loadEnv } from '../env/env';
-import { validEnv } from '../env/valid-env';
+import { validEnv } from '../env/env.fixture';
 import { SmtpMailer } from './smtp.mailer';
 
 /** Minimal SMTP sink: records every DATA payload it receives. */
@@ -102,38 +102,58 @@ describe('SmtpMailer', () => {
     }
   });
 
-  it('sends to exactly one recipient even if `to` looks like a list', async () => {
+  it('sends one RCPT TO for a valid address', async () => {
     const sink = await startSink();
     try {
       await mailerFor(sink.port).send({
-        to: 'bob@example.com, evil@attacker.test',
+        to: 'bob@example.com',
         subject: 'Hello',
         text: 'body',
       });
+      expect(sink.commands.filter((line) => line.startsWith('RCPT'))).toEqual([
+        'RCPT TO:<BOB@EXAMPLE.COM>',
+      ]);
     } finally {
       await sink.stop();
     }
-    expect(
-      sink.commands.filter((line) => line.startsWith('RCPT TO')),
-    ).toHaveLength(1);
-    expect(sink.commands.join('\n')).not.toMatch(/evil@attacker/i);
   });
 
   it.each([
-    ['to', { to: 'bob@example.com\r\nBcc: evil@attacker.test', subject: 's' }],
-    [
-      'subject',
-      { to: 'bob@example.com', subject: 's\r\nBcc: evil@attacker.test' },
-    ],
-  ])('rejects CRLF in %s without connecting', async (_field, fields) => {
+    'bob@example.com, evil@attacker.test',
+    'bob@example.com; evil@x.test',
+    'Bob <bob@example.com>',
+    'bob@example.com\tevil',
+    'bob@example.com\r\nBcc: evil@attacker.test',
+    'bob@localhost',
+    '',
+  ])('rejects recipient %j without connecting', async (to) => {
     const sink = await startSink();
     try {
       await expect(
-        mailerFor(sink.port).send({ ...fields, text: 'body' }),
-      ).rejects.toThrow('single-line');
-      expect(sink.received).toEqual([]);
+        mailerFor(sink.port).send({ to, subject: 's', text: 'body' }),
+      ).rejects.toThrow('Invalid mail recipient');
+      expect(sink.commands).toEqual([]);
     } finally {
       await sink.stop();
     }
   });
+
+  it.each(['s\r\nBcc: evil@attacker.test', 's\0x', 's\x7f'])(
+    'rejects subject %j without connecting',
+    async (subject) => {
+      const sink = await startSink();
+      try {
+        await expect(
+          mailerFor(sink.port).send({
+            to: 'bob@example.com',
+            subject,
+            text: 'body',
+          }),
+        ).rejects.toThrow('Invalid mail subject');
+        expect(sink.commands).toEqual([]);
+      } finally {
+        await sink.stop();
+      }
+    },
+  );
 });

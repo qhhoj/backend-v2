@@ -1,4 +1,5 @@
 export interface MailMessage {
+  /** a single bare email address */
   to: string;
   subject: string;
   text: string;

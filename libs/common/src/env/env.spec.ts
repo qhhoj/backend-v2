@@ -1,5 +1,5 @@
 import { loadEnv } from './env';
-import { validEnv } from './valid-env';
+import { validEnv } from './env.fixture';
 
 const valid = validEnv;
 
