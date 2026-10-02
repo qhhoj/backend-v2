@@ -27,6 +27,8 @@ describe('PwnedPasswordService', () => {
   });
   afterAll(() => new Promise((resolve) => server.close(resolve)));
 
+  afterEach(() => jest.restoreAllMocks());
+
   it('detects a breached password using only the hash prefix', async () => {
     expect(await service(baseUrl).isPwned('password123')).toBe(true);
     expect(requestedPaths.at(-1)).toBe(
@@ -45,7 +47,12 @@ describe('PwnedPasswordService', () => {
       false,
     );
     expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+  });
+  it('tolerates trailing slashes in the base URL', async () => {
+    expect(await service(`${baseUrl}//`).isPwned('password123')).toBe(true);
+    expect(requestedPaths.at(-1)).toBe(
+      `/range/${sha1('password123').slice(0, 5)}`,
+    );
   });
   it('is disabled without a URL', async () =>
     expect(await service(null).isPwned('password123')).toBe(false));

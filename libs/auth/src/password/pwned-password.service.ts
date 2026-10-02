@@ -16,7 +16,7 @@ export class PwnedPasswordService {
       .toUpperCase();
     try {
       const response = await fetch(
-        `${this.env.pwnedApiUrl}/range/${hash.slice(0, 5)}`,
+        `${this.env.pwnedApiUrl.replace(/\/+$/, '')}/range/${hash.slice(0, 5)}`,
         { signal: AbortSignal.timeout(3000) },
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

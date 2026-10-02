@@ -2,10 +2,12 @@ import { pbkdf2, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 const pbkdf2Async = promisify(pbkdf2);
-const DIGESTS: Record<string, string> = {
-  pbkdf2_sha256: 'sha256',
-  pbkdf2_sha1: 'sha1',
-};
+const ALGORITHMS = new Map([
+  ['pbkdf2_sha256', { digest: 'sha256', keyLength: 32 }],
+  ['pbkdf2_sha1', { digest: 'sha1', keyLength: 20 }],
+]);
+const MAX_ITERATIONS = 2_147_483_647;
+const MIN_SALT_LENGTH = 22;
 
 export const PASSWORD_ITERATIONS = 870_000;
 /** Well-formed hash no password matches; verifying against it keeps unknown-user logins as slow as real ones. */
@@ -15,12 +17,14 @@ export async function verifyPassword(
   password: string,
   encoded: string,
 ): Promise<boolean> {
-  const [algorithm, iterationText, salt, expectedText] = encoded.split('$');
+  const [algorithmName, iterationText, salt, expectedText] = encoded.split('$');
+  const algorithm = ALGORITHMS.get(algorithmName);
   const iterations = Number(iterationText);
   if (
-    !DIGESTS[algorithm] ||
-    !Number.isInteger(iterations) ||
+    !algorithm ||
+    !/^\d+$/.test(iterationText) ||
     iterations < 1 ||
+    iterations > MAX_ITERATIONS ||
     !salt ||
     !expectedText
   )
@@ -30,11 +34,15 @@ export async function verifyPassword(
     password,
     salt,
     iterations,
-    expected.length,
-    DIGESTS[algorithm],
+    algorithm.keyLength,
+    algorithm.digest,
   );
   const isDummy = encoded === DUMMY_PASSWORD_HASH;
-  return timingSafeEqual(actual, expected) && !isDummy;
+  return (
+    expected.length === algorithm.keyLength &&
+    timingSafeEqual(actual, expected) &&
+    !isDummy
+  );
 }
 
 export async function hashPassword(
@@ -50,8 +58,10 @@ export async function hashPassword(
 }
 
 export function needsRehash(encoded: string): boolean {
-  const [algorithm, iterations] = encoded.split('$');
+  const [algorithm, iterations, salt = ''] = encoded.split('$');
   return (
-    algorithm !== 'pbkdf2_sha256' || Number(iterations) < PASSWORD_ITERATIONS
+    algorithm !== 'pbkdf2_sha256' ||
+    Number(iterations) < PASSWORD_ITERATIONS ||
+    salt.length < MIN_SALT_LENGTH
   );
 }

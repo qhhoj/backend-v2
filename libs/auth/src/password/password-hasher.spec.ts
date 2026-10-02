@@ -6,6 +6,22 @@ import {
   verifyPassword,
 } from './password-hasher';
 
+const MALFORMED_HASHES = [
+  '!unusable',
+  '',
+  'md5$salt$abc',
+  'pbkdf2_sha256$abc$salt$hash',
+  DUMMY_PASSWORD_HASH,
+  'constructor$1$salt$AAAA',
+  '__proto__$1$salt$AAAA',
+  'toString$1$salt$AAAA',
+  'pbkdf2_sha256$1$salt$!',
+  'pbkdf2_sha256$2147483648$salt$AAAA',
+  'pbkdf2_sha256$1e3$salt$AAAA',
+  'pbkdf2_sha256$-1$salt$AAAA',
+  'pbkdf2_sha256$1$salt$AA==',
+];
+
 describe('password hasher', () => {
   it.each(fixtures.passwords)(
     'verifies Django hash for "$password"',
@@ -15,13 +31,7 @@ describe('password hasher', () => {
     },
   );
   it('rejects unusable and malformed hashes', async () => {
-    for (const encoded of [
-      '!unusable',
-      '',
-      'md5$salt$abc',
-      'pbkdf2_sha256$abc$salt$hash',
-      DUMMY_PASSWORD_HASH,
-    ])
+    for (const encoded of MALFORMED_HASHES)
       expect(await verifyPassword('anything', encoded)).toBe(false);
   });
   it('hashes in Django format and round-trips', async () => {
@@ -30,6 +40,18 @@ describe('password hasher', () => {
       /^pbkdf2_sha256\$1000\$[A-Za-z0-9]{22}\$[A-Za-z0-9+/]{43}=$/,
     );
     expect(await verifyPassword('s3cret-pass', encoded)).toBe(true);
+  });
+  it('never accepts a digest shorter than the algorithm key length', async () => {
+    const full = await hashPassword('secret-pass', 1);
+    const [algorithm, iterations, salt, digest] = full.split('$');
+    const truncated = [
+      algorithm,
+      iterations,
+      salt,
+      Buffer.from(digest, 'base64').subarray(0, 1).toString('base64'),
+    ].join('$');
+    for (let attempt = 0; attempt < 1500; attempt++)
+      expect(await verifyPassword(`random-${attempt}`, truncated)).toBe(false);
   });
   it('flags weaker hashes for rehash', () => {
     expect(fixtures.passwords.map(({ hash }) => needsRehash(hash))).toEqual([
