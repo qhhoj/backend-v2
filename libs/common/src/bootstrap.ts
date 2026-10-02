@@ -11,7 +11,7 @@ import { validationPipe } from './pipes/validation.pipe';
 export const fastifyAdapter = ({
   trustProxy = false,
   logLevel = 'silent',
-}: { trustProxy?: boolean; logLevel?: string } = {}) =>
+}: { trustProxy?: false | string; logLevel?: string } = {}) =>
   new FastifyAdapter({
     logger: { level: logLevel },
     genReqId: () => randomUUID(),

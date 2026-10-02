@@ -12,7 +12,7 @@ class ProbeController {
   }
 }
 
-const start = async (trustProxy: boolean) => {
+const start = async (trustProxy: false | string) => {
   const app = (
     await Test.createTestingModule({ controllers: [ProbeController] }).compile()
   ).createNestApplication<NestFastifyApplication>(
@@ -24,7 +24,7 @@ const start = async (trustProxy: boolean) => {
   return app;
 };
 
-describe.each([false, true])('trustProxy=%s', (trustProxy) => {
+describe.each([false, 'loopback'] as const)('trustProxy=%s', (trustProxy) => {
   let app: NestFastifyApplication;
   beforeAll(async () => {
     app = await start(trustProxy);
@@ -38,7 +38,13 @@ describe.each([false, true])('trustProxy=%s', (trustProxy) => {
       .set('x-request-id', 'client-id')) as {
       body: { data: { ip: string; requestId: string } };
     };
-    expect(body.data.ip === '203.0.113.9').toBe(trustProxy);
-    expect(body.data.requestId === 'client-id').toBe(trustProxy);
+    if (trustProxy) {
+      expect(body.data).toEqual({ ip: '203.0.113.9', requestId: 'client-id' });
+    } else {
+      expect(body.data.ip).toMatch(/127\.0\.0\.1$/);
+      expect(body.data.requestId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+    }
   });
 });
