@@ -81,12 +81,12 @@ tools/legacy/   regenerates the fixtures
 
 - Every route is authenticated by default (global `AuthGuard`); opt out with `@Public()`
 - Decorators: `@AllowPartialAuth()` (before 2FA), `@AllowPwnedPassword()`, `@SessionOnly()` (Bearer -> 403 `forbidden`; used on password change, token regenerate, logout-all), `@RequirePermission('judge.<codename>')`, param `@CurrentAuth()` -> `AuthContext`
-- Guard order: authenticate (Bearer, else session cookie) -> `@Public` exit -> `unauthorized` 401 -> `@SessionOnly` -> CSRF (`csrf_failed`) -> 2FA (`two_factor_required`) -> pwned password (`password_change_required`) -> permission (`forbidden`)
-- Other error codes: `validation_failed` 400, `account_not_activated` 403, `banned` 403, `conflict` 409, `not_found` 404, `rate_limited` 429
+- Guard order: authenticate (Bearer, else session cookie; an invalid Bearer token is rejected 401 even on `@Public` routes) -> `@Public` exit -> `unauthorized` -> `@SessionOnly` -> CSRF (`csrf_failed`) -> 2FA (`two_factor_required`) -> pwned password (`password_change_required`) -> permission (`forbidden`)
+- Error codes: `unauthorized` 401, `invalid_credentials` 401 (login) / 400 (password change), `csrf_failed` 403, `two_factor_required` 403, `password_change_required` 403, `forbidden` 403, `banned` 403, `account_not_activated` 403, `rate_limited` 429, `validation_failed` 400, `conflict` 409, `not_found` 404
 - SPA contract: cookie `qhhoj_session`; send `X-CSRF-Token` (from `/auth/me` or login) on POST/PUT/PATCH/DELETE
 - API tokens (Bearer) skip the CSRF, 2FA and pwned-password gates but cannot reach `@SessionOnly()` routes; the token stays valid across a password change (design choice)
-- Login rate limiting is reserve-then-release, per IP and per resolved account
-- `@fastify/cookie` is pinned at 11.0.2: 11.1+ dynamically imports ESM `cookie`, which breaks Jest (CJS); do not bump
+- Login rate limiting is reserve-then-release, per IP plus per resolved account; unknown usernames are limited per NFKC-lowercased name
+- `@fastify/cookie` is pinned at 11.0.2: 11.1.1+ depends on ESM-only `cookie` 2, which breaks Jest CJS; do not bump
 - New permissions: add the codename to `libs/auth/src/principal/permissions.ts`
 - OpenAPI: `GET /api/internal/openapi.json` (raw JSON, no auth)
 

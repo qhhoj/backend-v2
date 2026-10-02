@@ -8,11 +8,13 @@ describe('OpenAPI document', () => {
   afterAll(() => api.teardown());
 
   it('is served publicly and lists the auth endpoints', async () => {
-    const { body } = (await api
+    const response = await api
       .http()
       .get('/api/internal/openapi.json')
-      .expect(200)) as {
-      body: { openapi: string; paths: Record<string, unknown> };
+      .expect(200);
+    const body = response.body as {
+      openapi: string;
+      paths: Record<string, unknown>;
     };
     expect(body.openapi).toMatch(/^3\./);
     expect(Object.keys(body.paths)).toEqual(
