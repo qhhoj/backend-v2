@@ -51,20 +51,25 @@ export class SessionService {
     const current = await this.get(id);
     if (!current) return null;
     const session = { ...current, ...changes };
-    await this.redis.set(
+    const written = await this.redis.set(
       sessionKey(id),
       JSON.stringify(session),
       'EX',
       SESSION_TTL_SECONDS,
+      'XX',
     );
-    return session;
+    return written ? session : null;
   }
 
   async destroy(id: string): Promise<void> {
-    const current = await this.get(id);
-    await this.redis.del(sessionKey(id));
-    if (current)
-      await this.redis.srem(userSessionsKey(current.userId), sessionKey(id));
+    const [stored] = await execOrThrow(
+      this.redis.multi().get(sessionKey(id)).del(sessionKey(id)),
+    );
+    if (stored)
+      await this.redis.srem(
+        userSessionsKey((JSON.parse(stored as string) as SessionData).userId),
+        sessionKey(id),
+      );
   }
 
   async destroyAllForUser(userId: string, keepId?: string): Promise<void> {

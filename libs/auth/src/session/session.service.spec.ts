@@ -36,6 +36,7 @@ describe('SessionService', () => {
     expect(await redis.keys('*')).not.toContainEqual(
       expect.stringContaining(id),
     );
+    expect(await redis.ttl('user-sessions:user-1')).toBe(-1);
   });
   it('slides the expiry on read', async () => {
     const { id } = await sessions.create(fresh);
@@ -55,11 +56,17 @@ describe('SessionService', () => {
     });
     expect(await sessions.update('missing', { twoFaPassed: true })).toBeNull();
   });
-  it('does not resurrect a destroyed session on update', async () => {
+  it('does not resurrect a session revoked between the read and the write of update', async () => {
     const { id } = await sessions.create(fresh);
-    await sessions.destroy(id);
+    const [key] = await redis.keys('session:*');
+    const realGet = sessions.get.bind(sessions);
+    jest.spyOn(sessions, 'get').mockImplementationOnce(async (sessionId) => {
+      const current = await realGet(sessionId);
+      await redis.del(key);
+      return current;
+    });
     expect(await sessions.update(id, { twoFaPassed: false })).toBeNull();
-    expect(await sessions.get(id)).toBeNull();
+    expect(await redis.exists(key)).toBe(0);
   });
   it('destroys one session or all of a user except the kept one', async () => {
     const [first, second, third] = await Promise.all([
