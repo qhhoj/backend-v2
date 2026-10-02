@@ -59,14 +59,15 @@ export function legacyFernetDecrypt(token: string, secretKey: string): string {
     !timingSafeEqual(mac, raw.subarray(-32))
   )
     throw new Error('invalid fernet token');
-  const d = createDecipheriv(
+  const decipher = createDecipheriv(
     'aes-128-cbc',
     key.subarray(16),
     raw.subarray(9, 25),
   );
-  return Buffer.concat([d.update(raw.subarray(25, -32)), d.final()]).toString(
-    'utf8',
-  );
+  return Buffer.concat([
+    decipher.update(raw.subarray(25, -32)),
+    decipher.final(),
+  ]).toString('utf8');
 }
 
 export const legacyWebauthnHandle = (

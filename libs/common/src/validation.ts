@@ -11,7 +11,10 @@ export const validationPipe = new ValidationPipe({
       400,
       'Validation failed',
       Object.fromEntries(
-        errors.map((e) => [e.property, Object.values(e.constraints ?? {})]),
+        errors.map((error) => [
+          error.property,
+          Object.values(error.constraints ?? {}),
+        ]),
       ),
     ),
 });

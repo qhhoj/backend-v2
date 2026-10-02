@@ -33,10 +33,10 @@ export class ResponseInterceptor implements NestInterceptor {
     return next
       .handle()
       .pipe(
-        map((r: unknown) =>
-          r instanceof Paginated
-            ? { data: r.items, meta: r.meta }
-            : { data: r },
+        map((result: unknown) =>
+          result instanceof Paginated
+            ? { data: result.items, meta: result.meta }
+            : { data: result },
         ),
       );
   }

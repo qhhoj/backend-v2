@@ -26,12 +26,12 @@ describe('schema base', () => {
   });
 
   it('assigns UUID _id and exposes id in JSON', async () => {
-    const t = await Things.create({ name: 'Alpha' });
-    expect(t.toJSON()).toMatchObject({
+    const thing = await Things.create({ name: 'Alpha' });
+    expect(thing.toJSON()).toMatchObject({
       id: expect.stringMatching(/^[0-9a-f-]{36}$/) as string,
       name: 'Alpha',
     });
-    expect(t.toJSON()).not.toHaveProperty('_id');
+    expect(thing.toJSON()).not.toHaveProperty('_id');
   });
   it('enforces case-insensitive uniqueness and lookup', async () => {
     await expect(Things.create({ name: 'ALPHA' })).rejects.toThrow(

@@ -13,9 +13,9 @@ const key = encryptionKey(
 
 describe('crypto', () => {
   it('round-trips AES-GCM with random IVs', () => {
-    const [a, b] = [encrypt('secret', key), encrypt('secret', key)];
-    expect(a).not.toBe(b);
-    expect(decrypt(a, key)).toBe('secret');
+    const [first, second] = [encrypt('secret', key), encrypt('secret', key)];
+    expect(first).not.toBe(second);
+    expect(decrypt(first, key)).toBe('secret');
   });
   it('rejects tampered ciphertext', () => {
     const blob = Buffer.from(encrypt('secret', key), 'base64');

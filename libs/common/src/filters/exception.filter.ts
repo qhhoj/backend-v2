@@ -19,26 +19,29 @@ const CODES: Record<number, string> = {
 export class AppExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger('Exception');
 
-  catch(e: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost) {
     const http = host.switchToHttp();
     const req = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
-    if (e instanceof AppError)
-      return reply.status(e.status).send({
+    if (exception instanceof AppError)
+      return reply.status(exception.status).send({
         error: {
-          code: e.code,
-          message: e.message,
-          ...(e.fields && { fields: e.fields }),
+          code: exception.code,
+          message: exception.message,
+          ...(exception.fields && { fields: exception.fields }),
         },
       });
-    if (e instanceof HttpException && e.getStatus() < 500)
-      return reply.status(e.getStatus()).send({
+    if (exception instanceof HttpException && exception.getStatus() < 500)
+      return reply.status(exception.getStatus()).send({
         error: {
-          code: CODES[e.getStatus()] ?? 'http_error',
-          message: e.message,
+          code: CODES[exception.getStatus()] ?? 'http_error',
+          message: exception.message,
         },
       });
-    this.logger.error({ reqId: req.id, err: e instanceof Error ? e.stack : e });
+    this.logger.error({
+      reqId: req.id,
+      err: exception instanceof Error ? exception.stack : exception,
+    });
     return reply.status(500).send({
       error: { code: 'internal_error', message: `Request ${req.id} failed` },
     });

@@ -69,7 +69,9 @@ describe('http layer', () => {
     http()
       .get('/nope')
       .expect(404)
-      .expect((r) => expect((r.body as ErrBody).error.code).toBe('not_found')));
+      .expect((response) =>
+        expect((response.body as ErrBody).error.code).toBe('not_found'),
+      ));
   it('validates and strips', async () => {
     const bad = await http()
       .post('/t/echo')

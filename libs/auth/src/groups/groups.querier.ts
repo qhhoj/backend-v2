@@ -25,8 +25,8 @@ export class GroupsQuerier
       this.model,
       [],
       // eslint-disable-next-line @typescript-eslint/require-await
-      async ({ fullDocument: g }) =>
-        void (g && this.perms.set(uuidStr(g._id), g.permissions)),
+      async ({ fullDocument: group }) =>
+        void (group && this.perms.set(uuidStr(group._id), group.permissions)),
     );
     this.forceResyncQuerier(
       () => this.resync(),
@@ -36,9 +36,9 @@ export class GroupsQuerier
 
   async resync() {
     this.perms = new Map(
-      (await this.model.find().lean()).map((g) => [
-        uuidStr(g._id),
-        g.permissions,
+      (await this.model.find().lean()).map((group) => [
+        uuidStr(group._id),
+        group.permissions,
       ]),
     );
   }
