@@ -126,7 +126,7 @@ IP auth (`judge/ip_auth.py`): inactive in settings; column kept.
 - Migration: audit + verify in CI against a synthetic MariaDB fixture (zero date, invalid JSON, case-duplicate email, encrypted bytes, non-pbkdf2 hash).
 - CI: `fmt --check`, `clippy -D warnings`, `test`, sqlx offline check, `0001` applies on empty Postgres.
 
-## Open items
+## Needed before first rehearsal (not blocking)
 
 - Production MariaDB version and dump for rehearsal.
 - Production `LEGACY_SECRET_KEY` and `EXTERNAL_JUDGE_ENCRYPTION_KEY` (deploy secrets).
