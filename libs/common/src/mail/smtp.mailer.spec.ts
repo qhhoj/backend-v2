@@ -119,12 +119,33 @@ describe('SmtpMailer', () => {
   });
 
   it.each([
+    ['bob+tag@example.com', 'BOB+TAG@EXAMPLE.COM'],
+    ['first.last@sub.example.co', 'FIRST.LAST@SUB.EXAMPLE.CO'],
+  ])('sends to allowed address %s', async (to, expected) => {
+    const sink = await startSink();
+    try {
+      await mailerFor(sink.port).send({ to, subject: 's', text: 'body' });
+      expect(sink.commands.filter((line) => line.startsWith('RCPT'))).toEqual([
+        `RCPT TO:<${expected}>`,
+      ]);
+    } finally {
+      await sink.stop();
+    }
+  });
+
+  it.each([
     'bob@example.com, evil@attacker.test',
     'bob@example.com; evil@x.test',
     'Bob <bob@example.com>',
     'bob@example.com\tevil',
     'bob@example.com\r\nBcc: evil@attacker.test',
     'bob@localhost',
+    'x:bob@example.com',
+    'bob@example.com:x',
+    'b\x01ob@example.com',
+    'b\x7fob@example.com',
+    'bob@ex\uff0cample.com',
+    'bob%evil.test@example.com',
     '',
   ])('rejects recipient %j without connecting', async (to) => {
     const sink = await startSink();
