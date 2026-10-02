@@ -11,3 +11,7 @@ export * from './users/users.repository';
 export * from './principal/permissions';
 export * from './principal/principal';
 export * from './principal/principal.service';
+export * from './guards/auth-context';
+export * from './decorators/auth.decorators';
+export * from './guards/auth.guard';
+export * from './auth.module';

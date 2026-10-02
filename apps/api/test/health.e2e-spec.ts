@@ -1,17 +1,15 @@
-import { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { createTestApp } from '@libs/common/testing';
-import request from 'supertest';
-import { HealthController } from '../src/health.controller';
+import { ApiTest, setupApiTest } from './setup';
 
 describe('GET /healthz', () => {
-  let app: NestFastifyApplication;
+  let api: ApiTest;
   beforeAll(async () => {
-    app = await createTestApp({ controllers: [HealthController] });
+    api = await setupApiTest();
   });
-  afterAll(() => app.close());
+  afterAll(() => api.teardown());
 
   it('returns ok', () =>
-    request(app.getHttpServer())
+    api
+      .http()
       .get('/healthz')
       .expect(200, { data: { status: 'ok' } }));
 });

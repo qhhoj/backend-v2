@@ -1,0 +1,123 @@
+import {
+  CanActivate,
+  ExecutionContext,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { FastifyRequest } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
+import { AppError, ENV, type Env } from '@libs/common';
+import {
+  PARTIAL_AUTH_ROUTE,
+  PUBLIC_ROUTE,
+  PWNED_PASSWORD_ROUTE,
+  REQUIRED_PERMISSION,
+} from '../decorators/auth.decorators';
+import { Permission } from '../principal/permissions';
+import { hasPermission } from '../principal/principal';
+import { PrincipalService } from '../principal/principal.service';
+import { SESSION_COOKIE } from '../session/session-cookie';
+import { SessionService } from '../session/session.service';
+import { apiTokenMatches, parseApiToken } from '../token/api-token';
+import { UsersRepository } from '../users/users.repository';
+import { AuthContext } from './auth-context';
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const sameToken = (given: unknown, expected: string) =>
+  typeof given === 'string' &&
+  given.length === expected.length &&
+  timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly sessions: SessionService,
+    private readonly users: UsersRepository,
+    private readonly principals: PrincipalService,
+    @Inject(ENV) private readonly env: Env,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const routeFlag = <T>(key: string) =>
+      this.reflector.getAllAndOverride<T | undefined>(key, [
+        context.getHandler(),
+        context.getClass(),
+      ]);
+    const request = context.switchToHttp().getRequest<FastifyRequest>();
+    request.auth =
+      (await this.fromBearer(request)) ??
+      (await this.fromSession(request)) ??
+      undefined;
+    if (routeFlag<boolean>(PUBLIC_ROUTE)) return true;
+
+    const { auth } = request;
+    if (!auth) throw new AppError('unauthorized', 401, 'Login required');
+    const { session } = auth;
+    if (
+      session &&
+      !SAFE_METHODS.has(request.method) &&
+      !sameToken(request.headers['x-csrf-token'], session.csrf)
+    )
+      throw new AppError('csrf_failed', 403, 'Missing or invalid CSRF token');
+    if (
+      session &&
+      !session.twoFaPassed &&
+      !routeFlag<boolean>(PARTIAL_AUTH_ROUTE)
+    )
+      throw new AppError(
+        'two_factor_required',
+        403,
+        'Two-factor authentication required',
+      );
+    if (session?.passwordPwned && !routeFlag<boolean>(PWNED_PASSWORD_ROUTE))
+      throw new AppError(
+        'password_change_required',
+        403,
+        'Your password appeared in a data breach; change it to continue',
+      );
+    const permission = routeFlag<Permission>(REQUIRED_PERMISSION);
+    if (permission && !hasPermission(auth.principal, permission))
+      throw new AppError('forbidden', 403, 'Permission denied');
+    return true;
+  }
+
+  private async fromBearer(
+    request: FastifyRequest,
+  ): Promise<AuthContext | null> {
+    const [scheme, token] = (request.headers.authorization ?? '').split(' ');
+    if (scheme !== 'Bearer' || !token) return null;
+    const parsed = parseApiToken(token);
+    const user = parsed && (await this.users.findById(parsed.userId));
+    if (
+      !parsed ||
+      !user?.isActive ||
+      !apiTokenMatches(parsed.secret, user.apiTokenHash, this.env.tokenSecret)
+    )
+      throw new AppError('unauthorized', 401, 'Invalid API token');
+    return {
+      user,
+      principal: this.principals.build(user),
+      sessionId: null,
+      session: null,
+      viaToken: true,
+    };
+  }
+
+  private async fromSession(
+    request: FastifyRequest,
+  ): Promise<AuthContext | null> {
+    const sessionId = request.cookies[SESSION_COOKIE];
+    const session = sessionId ? await this.sessions.get(sessionId) : null;
+    const user = session && (await this.users.findById(session.userId));
+    if (!sessionId || !session || !user?.isActive) return null;
+    return {
+      user,
+      principal: this.principals.build(user),
+      sessionId,
+      session,
+      viaToken: false,
+    };
+  }
+}

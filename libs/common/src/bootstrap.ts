@@ -1,3 +1,4 @@
+import fastifyCookie from '@fastify/cookie';
 import { randomUUID } from 'node:crypto';
 import { Reflector } from '@nestjs/core';
 import {
@@ -19,9 +20,8 @@ export const fastifyAdapter = ({
     trustProxy,
   });
 
-// async on purpose: later tasks register async plugins (cookies) here.
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function configureApp(app: NestFastifyApplication): Promise<void> {
+  await app.register(fastifyCookie);
   app.enableShutdownHooks();
   app.useGlobalPipes(validationPipe);
   app.useGlobalFilters(new AppExceptionFilter());
