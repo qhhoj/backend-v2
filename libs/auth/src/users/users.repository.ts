@@ -32,6 +32,20 @@ export class UsersRepository {
     await this.users.deleteOne({ _id: id }).exec();
   }
 
+  /** Conditional delete of an abandoned signup (never activated, never logged in, not banned, older than `cutoff`); false when it does not qualify. */
+  async deleteStalePendingUser(id: string, cutoff: Date): Promise<boolean> {
+    const { deletedCount } = await this.users
+      .deleteOne({
+        _id: id,
+        isActive: false,
+        banReason: null,
+        lastLogin: null,
+        dateJoined: { $lt: cutoff },
+      })
+      .exec();
+    return deletedCount === 1;
+  }
+
   /** False when the user is missing, already active or banned. */
   async activate(userId: string): Promise<boolean> {
     const { matchedCount } = await this.users

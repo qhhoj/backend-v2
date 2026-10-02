@@ -28,12 +28,13 @@ describe('registration', () => {
     });
   });
   afterAll(() => api.teardown());
-  beforeEach(async () => {
+  const resetRateLimits = async () => {
     const redis = api.app.get<Redis>(REDIS);
     await Promise.all(
       (await redis.keys('rate:*')).map((key) => redis.del(key)),
     );
-  });
+  };
+  beforeEach(resetRateLimits);
 
   it('registers an inactive user and mails an activation link that activates once', async () => {
     await register('newbie', 'Newbie@Example.com').expect(204);
@@ -123,6 +124,42 @@ describe('registration', () => {
     );
     expect(responses.filter(({ status }) => status === 204)).toHaveLength(1);
     expect(responses.filter(({ status }) => status === 400)).toHaveLength(7);
+  });
+
+  it('serializes concurrent registrations for the same email', async () => {
+    const responses = await Promise.all([
+      register('twin_one', 'Twin@example.com'),
+      register('twin_two', 'TWIN@example.com'),
+    ]);
+    expect(responses.filter(({ status }) => status === 204)).toHaveLength(1);
+    expect(
+      responses.filter(({ status }) => status === 409 || status === 400),
+    ).toHaveLength(1);
+    expect(
+      await api.users
+        .countDocuments({ email: 'twin@example.com' })
+        .collation({ locale: 'en', strength: 2 }),
+    ).toBe(1);
+  });
+
+  it('reclaims stale pending accounts but not recent ones', async () => {
+    const day = 86_400_000;
+    await register('stale_one', 'stale@example.com').expect(204);
+    await register('fresh_one', 'fresh@example.com').expect(204);
+    const stale = (await api.users.findOne({ username: 'stale_one' }))!;
+    await api.users.updateOne(
+      { _id: stale._id },
+      { dateJoined: new Date(Date.now() - 8 * day) },
+    );
+    await register('stale_one', 'other@example.com').expect(204);
+    await register('different', 'STALE@example.com').expect(204);
+    await resetRateLimits();
+    await register('fresh_one', 'fresh2@example.com')
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    await register('fresh_two', 'fresh@example.com')
+      .expect(400)
+      .expect(errorCode('validation_failed'));
   });
 
   it('rate-limits registrations per IP', async () => {
