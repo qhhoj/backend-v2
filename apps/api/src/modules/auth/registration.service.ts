@@ -70,7 +70,13 @@ export class RegistrationService {
     try {
       await this.registerLocked({ username, email, password });
     } finally {
-      await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, lockToken);
+      try {
+        await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, lockToken);
+      } catch (error) {
+        this.logger.error(
+          `Registration lock release failed: ${(error as Error).message}`,
+        );
+      }
     }
   }
 
@@ -80,9 +86,9 @@ export class RegistrationService {
     password,
   }: RegisterDto): Promise<void> {
     const fields: Record<string, string[]> = {};
-    if (await this.isTaken(await this.users.findByUsername(username)))
+    if (await this.isTaken(() => this.users.findByUsername(username)))
       fields.username = ['Username is taken.'];
-    if (await this.isTaken(await this.users.findByEmail(email)))
+    if (await this.isTaken(() => this.users.findByEmail(email)))
       fields.email = ['Email is already registered.'];
     const problems = passwordProblems(password, { username, email });
     if (await this.pwned.isPwned(password))
@@ -124,13 +130,16 @@ export class RegistrationService {
     }
   }
 
-  /** Whether `existing` blocks registration; an abandoned signup is reclaimed instead of blocking. */
-  private async isTaken(existing: UserDocument | null): Promise<boolean> {
-    if (!existing) return false;
+  /** Whether any match blocks registration; abandoned signups are reclaimed one by one and the lookup repeated, since legacy data can hold several matches. */
+  private async isTaken(
+    find: () => Promise<UserDocument | null>,
+  ): Promise<boolean> {
     const cutoff = new Date(Date.now() - ACTIVATION_DAYS * 86_400_000);
-    if (!(await this.users.deleteStalePendingUser(existing._id, cutoff)))
-      return true;
-    await this.activationKeys.deleteMany({ userId: existing._id }).exec();
+    for (let existing = await find(); existing; existing = await find()) {
+      if (!(await this.users.deleteStalePendingUser(existing._id, cutoff)))
+        return true;
+      await this.activationKeys.deleteMany({ userId: existing._id }).exec();
+    }
     return false;
   }
 

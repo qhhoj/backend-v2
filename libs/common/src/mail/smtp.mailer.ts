@@ -11,7 +11,11 @@ export class SmtpMailer implements Mailer {
   private readonly transport: Transporter;
 
   constructor(@Inject(ENV) private readonly env: Env) {
-    this.transport = createTransport(env.smtpUrl);
+    this.transport = createTransport(env.smtpUrl, {
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+    });
   }
 
   async send(message: MailMessage): Promise<void> {

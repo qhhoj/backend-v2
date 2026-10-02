@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { MAILER, REDIS } from '@libs/common';
-import { ActivationKey } from '@libs/database';
+import { ActivationKey, CI } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
@@ -106,11 +106,14 @@ describe('registration', () => {
   it('does not activate banned users', async () => {
     await register('banned_one', 'banned@example.com').expect(204);
     const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
+    const banned = (await api.users.findOne({ username: 'banned_one' }))!;
     await api.users.updateOne(
       { username: 'banned_one' },
       { banReason: 'spam' },
     );
     await activate(key).expect(400).expect(errorCode('invalid_token'));
+    await activate(key).expect(400).expect(errorCode('invalid_token'));
+    expect(await activationKeys.countDocuments({ userId: banned._id })).toBe(0);
     expect(
       (await api.users.findOne({ username: 'banned_one' }))!.isActive,
     ).toBe(false);
@@ -138,7 +141,7 @@ describe('registration', () => {
     expect(
       await api.users
         .countDocuments({ email: 'twin@example.com' })
-        .collation({ locale: 'en', strength: 2 }),
+        .collation(CI),
     ).toBe(1);
   });
 
@@ -160,6 +163,41 @@ describe('registration', () => {
     await register('fresh_two', 'fresh@example.com')
       .expect(400)
       .expect(errorCode('validation_failed'));
+  });
+
+  it('reclaims a stale pending account that only collides on email, and deletes its keys', async () => {
+    await register('stale_mail', 'stalemail@example.com').expect(204);
+    const stale = (await api.users.findOne({ username: 'stale_mail' }))!;
+    expect(await activationKeys.countDocuments({ userId: stale._id })).toBe(1);
+    await api.users.updateOne(
+      { _id: stale._id },
+      { dateJoined: new Date(Date.now() - 8 * 86_400_000) },
+    );
+    await register('new_owner', 'StaleMail@example.com').expect(204);
+    expect(await api.users.findOne({ username: 'stale_mail' })).toBeNull();
+    expect(await activationKeys.countDocuments({ userId: stale._id })).toBe(0);
+  });
+
+  it('keeps an email taken when an active duplicate remains after reclaiming a stale one', async () => {
+    const ancient = new Date(Date.now() - 30 * 86_400_000);
+    await createUser(api.users, {
+      username: 'stale_dup',
+      email: 'DUP@example.com',
+      isActive: false,
+      dateJoined: ancient,
+    });
+    await createUser(api.users, {
+      username: 'active_dup',
+      email: 'dup@example.com',
+    });
+    const response = await register('dup_newcomer', 'dup@example.com').expect(
+      400,
+    );
+    expect(
+      (response.body as { error: { fields: unknown } }).error.fields,
+    ).toMatchObject({ email: ['Email is already registered.'] });
+    expect(await api.users.findOne({ username: 'stale_dup' })).toBeNull();
+    expect(await api.users.findOne({ username: 'dup_newcomer' })).toBeNull();
   });
 
   it('rate-limits registrations per IP', async () => {
