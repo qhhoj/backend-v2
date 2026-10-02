@@ -77,6 +77,23 @@ const mailerFor = (port: number) =>
   );
 
 describe('SmtpMailer', () => {
+  const optionsFor = (smtpUrl: string) =>
+    new SmtpMailer(loadEnv({ ...validEnv, SMTP_URL: smtpUrl }))
+      .transportOptions;
+
+  it('applies default transport timeouts', () => {
+    expect(optionsFor('smtp://localhost:1025')).toMatchObject({
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
+    });
+  });
+  it('lets SMTP_URL override a timeout', () => {
+    expect(
+      optionsFor('smtp://localhost:1025?socketTimeout=5000'),
+    ).toMatchObject({ connectionTimeout: 10000, socketTimeout: 5000 });
+  });
+
   it('delivers subject, body and configured From over SMTP', async () => {
     const sink = await startSink();
     try {
