@@ -5,3 +5,5 @@ export * from './password/password-hasher';
 export * from './password/password-policy';
 export * from './password/pwned-password.service';
 export * from './token/api-token';
+export * from './session/session.service';
+export * from './session/session-cookie';
