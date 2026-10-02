@@ -89,7 +89,12 @@ export class UsersRepository {
   ): Promise<boolean> {
     const { matchedCount } = await this.users
       .updateOne(
-        { _id: userId, lastTotpTimecode: previous },
+        {
+          _id: userId,
+          isTotpEnabled: true,
+          // legacy documents may lack the field; $in with null matches absence
+          lastTotpTimecode: previous === 0 ? { $in: [0, null] } : previous,
+        },
         { $set: { lastTotpTimecode: next } },
       )
       .exec();
@@ -118,7 +123,7 @@ export class UsersRepository {
   ): Promise<boolean> {
     const { matchedCount } = await this.users
       .updateOne(
-        { _id: userId, isTotpEnabled: false },
+        { _id: userId, isTotpEnabled: { $ne: true } },
         { $set: { ...fields, isTotpEnabled: true } },
       )
       .exec();

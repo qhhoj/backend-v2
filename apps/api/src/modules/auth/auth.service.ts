@@ -14,9 +14,7 @@ import {
 import type { AuthContext } from '@libs/auth';
 import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
-
-const FAILURE_LIMIT = 10;
-const FAILURE_WINDOW_SECONDS = 15 * 60;
+import { FAILURE_LIMIT, FAILURE_WINDOW_SECONDS } from './rate-limits';
 
 @Injectable()
 export class AuthService {

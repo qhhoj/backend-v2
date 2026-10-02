@@ -207,11 +207,10 @@ describe('totp endpoints', () => {
     const { secret } = await enable();
     await rewind();
     const sessions = [await login(), await login()];
+    const code = currentCode(secret);
     const statuses = (
       await Promise.all(
-        sessions.map((session) =>
-          post(`${TOTP}/verify`, session, { code: currentCode(secret) }),
-        ),
+        sessions.map((session) => post(`${TOTP}/verify`, session, { code })),
       )
     ).map((response) => response.status);
     expect(statuses.sort()).toEqual([204, 400]);
@@ -251,9 +250,17 @@ describe('totp endpoints', () => {
   });
 
   it('rate limits wrong codes and reports 400 when TOTP is not enabled', async () => {
+    await api.users.updateOne(
+      { username: 'alice' },
+      { isWebauthnEnabled: true },
+    );
     await post(`${TOTP}/verify`, await login(), { code: '123456' })
       .expect(400)
       .expect(errorCode('totp_not_enabled'));
+    await api.users.updateOne(
+      { username: 'alice' },
+      { isWebauthnEnabled: false },
+    );
     await enable();
     const session = await login();
     for (let attempt = 0; attempt < 10; attempt++)
@@ -306,6 +313,77 @@ describe('totp endpoints', () => {
       .expect(400)
       .expect(errorCode('invalid_code'));
     await post(`${TOTP}/disable`, session, { code: fresh[0] }).expect(204);
+  });
+
+  it('keeps every management endpoint behind the second factor and the pwned-password gate', async () => {
+    await api.users.updateOne({ username: 'alice' }, { isTotpEnabled: true });
+    const partial = await login();
+    for (const path of ['enroll', 'confirm', 'disable', 'scratch-codes'])
+      await post(`${TOTP}/${path}`, partial, { code: '123456' })
+        .expect(403)
+        .expect(errorCode('two_factor_required'));
+    await api.users.updateOne({ username: 'alice' }, { isTotpEnabled: false });
+    const session = await login();
+    await api.sessions.update(session.cookie.split('=')[1], {
+      passwordPwned: true,
+    });
+    for (const path of ['enroll', 'confirm', 'disable', 'scratch-codes'])
+      await post(`${TOTP}/${path}`, session, { code: '123456' })
+        .expect(403)
+        .expect(errorCode('password_change_required'));
+  });
+
+  it('works for migrated users lacking the totp fields', async () => {
+    await api.users.collection.updateOne(
+      { username: 'alice' },
+      { $unset: { lastTotpTimecode: '', isTotpEnabled: '' } },
+    );
+    const { secret } = await enable();
+    await api.users.collection.updateOne(
+      { username: 'alice' },
+      { $unset: { lastTotpTimecode: '' } },
+    );
+    const session = await login();
+    await post(`${TOTP}/verify`, session, { code: currentCode(secret) }).expect(
+      204,
+    );
+    expect((await stored())!.lastTotpTimecode).toBeGreaterThan(0);
+  });
+
+  it('caps failed attempts per day as well', async () => {
+    await enable();
+    const session = await login();
+    const user = await stored();
+    const redis = api.app.get<Redis>(REDIS);
+    for (let attempt = 0; attempt < 50; attempt++) {
+      if (attempt % 5 === 0)
+        await redis.del(`rate:second-factor:user:${user!._id}`);
+      await post(`${TOTP}/verify`, session, {
+        code: 'ZZZZZZZZZZZZZZZZ',
+      }).expect(400);
+    }
+    await redis.del(`rate:second-factor:user:${user!._id}`);
+    await post(`${TOTP}/verify`, session, { code: 'ZZZZZZZZZZZZZZZZ' })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+  });
+
+  it('returns 204 on an already completed session without consuming a code', async () => {
+    const { scratchCodes } = await enable();
+    const session = await login();
+    await post(`${TOTP}/verify`, session, { code: scratchCodes[0] }).expect(
+      204,
+    );
+    await post(`${TOTP}/verify`, session, { code: scratchCodes[0] }).expect(
+      204,
+    );
+    const remaining = JSON.parse(
+      decrypt(
+        (await stored())!.scratchCodes!,
+        encryptionKey(TEST_ENV.ENCRYPTION_KEY),
+      ),
+    ) as string[];
+    expect(remaining).toHaveLength(4);
   });
 
   it('needs a session', async () => {

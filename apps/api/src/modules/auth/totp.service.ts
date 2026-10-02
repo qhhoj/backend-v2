@@ -14,10 +14,13 @@ import {
 import type { AuthContext, UserDocument } from '@libs/auth';
 import { AppError, ENV, RateLimitService } from '@libs/common';
 import type { Env } from '@libs/common';
+import {
+  DAILY_FAILURE_LIMIT,
+  DAILY_WINDOW_SECONDS,
+  FAILURE_LIMIT,
+  FAILURE_WINDOW_SECONDS,
+} from './rate-limits';
 import { SecondFactorService } from './second-factor.service';
-
-const FAILURE_LIMIT = 10;
-const FAILURE_WINDOW_SECONDS = 15 * 60;
 
 const invalidCode = () =>
   new AppError('invalid_code', 400, 'Invalid authentication code');
@@ -51,12 +54,13 @@ export class TotpService {
     this.key = encryptionKey(env.encryptionKey);
   }
 
+  // @SessionOnly() guarantees a session, so `auth.sessionId` is set on enroll/confirm.
   async enroll(
     auth: AuthContext,
   ): Promise<{ secret: string; otpauthUrl: string }> {
     if (auth.user.isTotpEnabled) throw alreadyEnabled();
     const secret = generateTotpSecret();
-    await this.sessions.update(this.sessionIdOf(auth), {
+    await this.sessions.update(auth.sessionId!, {
       pendingTotpSecret: encrypt(secret, this.key),
     });
     return { secret, otpauthUrl: otpauthUrl(secret, auth.user.username) };
@@ -67,7 +71,7 @@ export class TotpService {
     code: string,
   ): Promise<{ scratchCodes: string[] }> {
     if (auth.user.isTotpEnabled) throw alreadyEnabled();
-    const sessionId = this.sessionIdOf(auth);
+    const sessionId = auth.sessionId!;
     // Atomic read+clear: concurrent confirms cannot both use one pending secret.
     const pending = await this.sessions.consume(sessionId, 'pendingTotpSecret');
     if (!pending) throw invalidCode();
@@ -88,6 +92,7 @@ export class TotpService {
   }
 
   async verify(auth: AuthContext, code: string): Promise<void> {
+    if (auth.session?.twoFaPassed) return;
     await this.checkCode(auth.user, code);
     await this.secondFactor.complete(auth);
   }
@@ -118,11 +123,20 @@ export class TotpService {
     if (!user.isTotpEnabled || !user.totpKey)
       throw new AppError('totp_not_enabled', 400, 'TOTP is not enabled');
     // Reserve before checking so concurrent guesses cannot exceed the limit.
-    const release = await this.rateLimit.reserve(
+    const releaseWindow = await this.rateLimit.reserve(
       [`second-factor:user:${user._id}`],
       FAILURE_LIMIT,
       FAILURE_WINDOW_SECONDS,
     );
+    const releaseDay = await this.rateLimit.reserve(
+      [`second-factor:user:${user._id}:day`],
+      DAILY_FAILURE_LIMIT,
+      DAILY_WINDOW_SECONDS,
+    );
+    const release = async () => {
+      await releaseWindow();
+      await releaseDay();
+    };
     const timecode = matchTotp(
       decrypt(user.totpKey, this.key),
       code,
@@ -158,15 +172,5 @@ export class TotpService {
         return release();
     }
     throw invalidCode();
-  }
-
-  private sessionIdOf(auth: AuthContext): string {
-    if (!auth.sessionId)
-      throw new AppError(
-        'forbidden',
-        403,
-        'This endpoint requires a browser session',
-      );
-    return auth.sessionId;
   }
 }
