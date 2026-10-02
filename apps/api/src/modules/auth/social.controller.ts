@@ -33,9 +33,10 @@ export class SocialController {
   @Get(':provider/start')
   async start(
     @Param('provider') provider: string,
+    @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
-    const { location, state } = await this.social.start(provider);
+    const { location, state } = await this.social.start(provider, request.ip);
     // Ties the flow to this browser, so a victim cannot be logged in via an attacker's callback link.
     reply.setCookie(STATE_COOKIE, state, {
       httpOnly: true,
@@ -61,6 +62,7 @@ export class SocialController {
       state: text(query.state),
       error: text(query.error),
       stateCookie: request.cookies[STATE_COOKIE],
+      previousSessionId: request.auth?.sessionId ?? null,
     });
     reply.clearCookie(STATE_COOKIE, { path: STATE_COOKIE_PATH });
     if (sessionId) setSessionCookie(reply, sessionId, this.env.cookieSecure);
@@ -77,6 +79,7 @@ export class SocialController {
     const { sessionId, session, user, principal } = await this.social.complete(
       body,
       request.ip,
+      request.auth?.sessionId ?? null,
     );
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
     return SessionResponse.from(user, principal, session);

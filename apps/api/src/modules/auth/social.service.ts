@@ -2,18 +2,24 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
-import { AppError, ENV, REDIS } from '@libs/common';
+import {
+  AppError,
+  ENV,
+  isDuplicateKey,
+  RateLimitService,
+  REDIS,
+} from '@libs/common';
 import type { Env } from '@libs/common';
 import Redis from 'ioredis';
 import { AuthService } from './auth.service';
 import type { SocialCompleteDto } from './dto/social-complete.dto';
+import { OAUTH_START_LIMIT, OAUTH_START_WINDOW_SECONDS } from './rate-limits';
 import { RegistrationService } from './registration.service';
 import { OAUTH_PROVIDERS } from './social/oauth-provider';
 import type { OAuthProvider, SocialIdentity } from './social/oauth-provider';
 
 const STATE_TTL_SECONDS = 600;
 const MAX_STATE_LENGTH = 128;
-const MONGO_DUPLICATE_KEY = 11000;
 const LOGIN_REFUSALS = ['banned', 'account_not_activated'];
 const randomToken = () => randomBytes(32).toString('base64url');
 
@@ -35,6 +41,8 @@ export interface CallbackInput {
   error?: string;
   /** Value of the `oauth_state` cookie set by `start`. */
   stateCookie?: string;
+  /** Session of the requesting browser, replaced on a successful login. */
+  previousSessionId: string | null;
 }
 
 const sameText = (left: string, right: string) =>
@@ -48,13 +56,23 @@ export class SocialService {
     private readonly users: UsersRepository,
     private readonly auth: AuthService,
     private readonly registration: RegistrationService,
+    private readonly rateLimit: RateLimitService,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
   /** The provider's authorization URL plus the state the browser must present again on the callback. */
-  async start(slug: string): Promise<{ location: string; state: string }> {
+  async start(
+    slug: string,
+    ip: string,
+  ): Promise<{ location: string; state: string }> {
     const provider = this.provider(slug);
+    // Never released; over the limit this throws the same 429 `rate_limited` as the other auth endpoints.
+    await this.rateLimit.reserve(
+      [`oauth-start:ip:${ip}`],
+      OAUTH_START_LIMIT,
+      OAUTH_START_WINDOW_SECONDS,
+    );
     const state = randomToken();
     const codeVerifier = randomToken();
     await this.redis.set(
@@ -75,16 +93,17 @@ export class SocialService {
 
   async callback(
     slug: string,
-    { code, state, error, stateCookie }: CallbackInput,
+    { code, state, error, stateCookie, previousSessionId }: CallbackInput,
   ): Promise<CallbackResult> {
     const provider = this.provider(slug);
     // The state is consumed before anything else so every outcome, failed or not, spends it.
     const stored = await this.consumeState(state);
     if (
+      !state ||
       !stored ||
       stored.slug !== slug ||
       !stateCookie ||
-      !sameText(stateCookie, state!)
+      !sameText(stateCookie, state)
     )
       return this.loginError('oauth_state');
     if (error || !code) return this.loginError('oauth_failed');
@@ -102,17 +121,20 @@ export class SocialService {
     if (!identity.uid) return this.loginError('oauth_failed');
 
     try {
-      return await this.resolve(provider, identity);
+      return await this.resolve(provider, identity, previousSessionId);
     } catch (caught) {
       if (caught instanceof AppError && LOGIN_REFUSALS.includes(caught.code))
         return this.loginError(caught.code);
-      if ((caught as { code?: number }).code === MONGO_DUPLICATE_KEY)
-        return this.loginError('oauth_failed');
+      if (isDuplicateKey(caught)) return this.loginError('oauth_failed');
       throw caught;
     }
   }
 
-  async complete({ token, username, password }: SocialCompleteDto, ip: string) {
+  async complete(
+    { token, username, password }: SocialCompleteDto,
+    ip: string,
+    previousSessionId: string | null,
+  ) {
     const pending = await this.readPending(token);
     const created = await this.registration.withRegistrationSlot(
       pending.email,
@@ -134,15 +156,16 @@ export class SocialService {
         });
       },
     );
-    return this.auth.startSession(created, false);
+    return this.auth.startSession(created, false, previousSessionId);
   }
 
   private async resolve(
     provider: OAuthProvider,
     { uid, email, emailVerified }: SocialIdentity,
+    previousSessionId: string | null,
   ): Promise<CallbackResult> {
     const linked = await this.users.findBySocial(provider.legacyName, uid);
-    if (linked) return this.login(linked);
+    if (linked) return this.login(linked, previousSessionId);
     if (!emailVerified || !email) return this.loginError('email_unverified');
 
     // Several matches are ambiguous: never guess, let registration reject the taken email.
@@ -156,7 +179,7 @@ export class SocialService {
         extraData: {},
       }))
     )
-      return this.login(match);
+      return this.login(match, previousSessionId);
 
     const token = randomToken();
     const pending: PendingLogin = { provider: provider.legacyName, uid, email };
@@ -169,8 +192,15 @@ export class SocialService {
     return { location: `${this.env.siteUrl}/register/social?token=${token}` };
   }
 
-  private async login(user: UserDocument): Promise<CallbackResult> {
-    const { sessionId, session } = await this.auth.startSession(user, false);
+  private async login(
+    user: UserDocument,
+    previousSessionId: string | null,
+  ): Promise<CallbackResult> {
+    const { sessionId, session } = await this.auth.startSession(
+      user,
+      false,
+      previousSessionId,
+    );
     return {
       sessionId,
       location: `${this.env.siteUrl}${session.twoFaPassed ? '/' : '/login/2fa'}`,

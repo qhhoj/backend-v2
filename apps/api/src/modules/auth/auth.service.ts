@@ -27,7 +27,12 @@ export class AuthService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  async login(username: string, password: string, ip: string) {
+  async login(
+    username: string,
+    password: string,
+    ip: string,
+    previousSessionId: string | null,
+  ) {
     const user = await this.users.findByUsername(username);
     const failureKeys = [
       `login:ip:${ip}`,
@@ -53,8 +58,8 @@ export class AuthService {
         'Invalid username or password',
       );
     await release();
+    this.assertLoginAllowed(user);
     const passwordPwned = await this.pwned.isPwned(password);
-    const started = await this.startSession(user, passwordPwned);
     // Compare-and-set: if the password changed since verification, keep the newer one.
     if (needsRehash(user.password))
       await this.users.updatePasswordIfUnchanged(
@@ -62,11 +67,10 @@ export class AuthService {
         user.password,
         await hashPassword(password),
       );
-    return started;
+    return this.startSession(user, passwordPwned, previousSessionId);
   }
 
-  /** Shared by every login method: rejects banned/inactive users, then opens a session (lastLogin is recorded once no second factor is pending). */
-  async startSession(user: UserDocument, passwordPwned: boolean) {
+  assertLoginAllowed(user: UserDocument): void {
     if (!user.isActive)
       throw user.banReason !== null
         ? new AppError(
@@ -75,7 +79,18 @@ export class AuthService {
             `This account has been banned. Reason: ${user.banReason}`,
           )
         : new AppError('account_not_activated', 403, 'Account not activated');
+  }
 
+  /**
+   * Shared by every login method (password, social): re-checks the refusals, opens a session and replaces `previousSessionId`.
+   * lastLogin is recorded once no second factor is pending.
+   */
+  async startSession(
+    user: UserDocument,
+    passwordPwned: boolean,
+    previousSessionId: string | null,
+  ) {
+    this.assertLoginAllowed(user);
     const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
     if (twoFaPassed)
       await this.users.update(user._id, { lastLogin: new Date() });
@@ -85,6 +100,7 @@ export class AuthService {
       passwordPwned,
       impersonatorId: null,
     });
+    if (previousSessionId) await this.sessions.destroy(previousSessionId);
     return {
       sessionId: id,
       session,

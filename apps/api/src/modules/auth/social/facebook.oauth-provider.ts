@@ -43,7 +43,7 @@ export class FacebookOAuthProvider implements OAuthProvider {
     });
     const profile = await fetchJson<{ id?: unknown; email?: string }>(
       'Facebook profile',
-      `https://graph.facebook.com/me?${profileQuery}`,
+      `https://graph.facebook.com/v19.0/me?${profileQuery}`,
     );
     const email = profile.email || null;
     // Facebook only returns an email it has confirmed.

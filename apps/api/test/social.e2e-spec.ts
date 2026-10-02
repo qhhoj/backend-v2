@@ -1,5 +1,6 @@
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
+import { RegistrationService } from '../src/modules/auth/registration.service';
 import {
   OAUTH_PROVIDERS,
   OAuthProvider,
@@ -456,5 +457,121 @@ describe('social login', () => {
         ).toBe(true),
       );
     expect((await api.users.findOne())!.lastLogin).toBeNull();
+  });
+
+  describe('replaces the requesting browser session', () => {
+    const me = (cookie: string) =>
+      api.http().get('/api/internal/auth/me').set('Cookie', cookie);
+    const oldSession = async () => {
+      const user = await createUser(api.users, {
+        username: 'old',
+        email: 'old@example.com',
+      });
+      const { id } = await api.sessions.create({
+        userId: user._id,
+        twoFaPassed: true,
+        passwordPwned: false,
+        impersonatorId: null,
+      });
+      await me(sessionCookie(id)).expect(200);
+      return sessionCookie(id);
+    };
+
+    it('on the callback', async () => {
+      const previous = await oldSession();
+      await createUser(api.users, linkOf('github-secure', 'g-1'));
+      github.identities.set('code-1', {
+        uid: 'g-1',
+        email: null,
+        emailVerified: false,
+      });
+      const { state } = await start();
+      const response = await callback(state, {
+        cookie: `oauth_state=${state}; ${previous}`,
+      });
+      expect(response.headers.location).toBe(`${SITE}/`);
+      await me(previous).expect(401);
+      await me(
+        sessionCookie(cookieValue(response.headers, 'qhhoj_session')!),
+      ).expect(200);
+    });
+
+    it('on complete', async () => {
+      const previous = await oldSession();
+      github.identities.set('code-1', {
+        uid: 'g-2',
+        email: 'new@example.com',
+        emailVerified: true,
+      });
+      const token = pendingToken((await login('code-1')).headers.location);
+      const completed = await complete({
+        token,
+        username: 'socialite',
+        password: PASSWORD,
+      })
+        .set('Cookie', previous)
+        .expect(200);
+      await me(previous).expect(401);
+      await me(
+        sessionCookie(cookieValue(completed.headers, 'qhhoj_session')!),
+      ).expect(200);
+    });
+
+    it('is kept when the login is refused', async () => {
+      const previous = await oldSession();
+      await createUser(api.users, {
+        ...linkOf('github-secure', 'g-1'),
+        username: 'banned',
+        email: 'b@example.com',
+        isActive: false,
+        banReason: 'spam',
+      });
+      github.identities.set('code-1', {
+        uid: 'g-1',
+        email: null,
+        emailVerified: false,
+      });
+      const { state } = await start();
+      await callback(state, { cookie: `oauth_state=${state}; ${previous}` });
+      await me(previous).expect(200);
+    });
+  });
+
+  it('limits start per IP with a 429', async () => {
+    await redis.set('rate:oauth-start:ip:127.0.0.1', '30', 'EX', 600);
+    await api
+      .http()
+      .get(`${SOCIAL}/github/start`)
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+  });
+
+  it('maps a social account linked meanwhile to a conflict, not a taken username', async () => {
+    github.identities.set('code-1', {
+      uid: 'g-2',
+      email: 'new@example.com',
+      emailVerified: true,
+    });
+    const token = pendingToken((await login('code-1')).headers.location);
+    await api.users.syncIndexes();
+    // Bypasses the up-front findBySocial check to hit the unique index directly.
+    const registration = api.app.get(RegistrationService);
+    await registration.createUser({
+      username: 'first',
+      email: 'x@example.com',
+      password: PASSWORD,
+      socialAuth: [{ provider: 'github-secure', uid: 'g-2', extraData: {} }],
+    });
+    await expect(
+      registration.createUser({
+        username: 'second',
+        email: 'y@example.com',
+        password: PASSWORD,
+        socialAuth: [{ provider: 'github-secure', uid: 'g-2', extraData: {} }],
+      }),
+    ).rejects.toMatchObject({ code: 'conflict', status: 409 });
+    await complete({ token, username: 'third', password: PASSWORD })
+      .expect(400)
+      .expect(errorCode('invalid_token'));
   });
 });

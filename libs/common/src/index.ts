@@ -1,4 +1,5 @@
 export * from './errors/app.error';
+export * from './errors/duplicate-key';
 export * from './filters/exception.filter';
 export * from './interceptors/response.interceptor';
 export * from './pipes/validation.pipe';

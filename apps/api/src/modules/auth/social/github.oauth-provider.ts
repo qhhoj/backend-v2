@@ -1,6 +1,10 @@
+import { createHash } from 'node:crypto';
 import type { OAuthClient } from '@libs/common';
 import { fetchJson, requireText } from './fetch-json';
 import type { OAuthProvider, SocialIdentity } from './oauth-provider';
+
+const challengeOf = (verifier: string) =>
+  createHash('sha256').update(verifier).digest('base64url');
 
 const API_HEADERS = {
   Accept: 'application/vnd.github+json',
@@ -15,7 +19,7 @@ export class GithubOAuthProvider implements OAuthProvider {
 
   authorizationUrl(
     state: string,
-    _codeVerifier: string,
+    codeVerifier: string,
     redirectUri: string,
   ): string {
     const query = new URLSearchParams({
@@ -23,13 +27,15 @@ export class GithubOAuthProvider implements OAuthProvider {
       redirect_uri: redirectUri,
       scope: 'user:email',
       state,
+      code_challenge: challengeOf(codeVerifier),
+      code_challenge_method: 'S256',
     });
     return `https://github.com/login/oauth/authorize?${query}`;
   }
 
   async fetchIdentity(
     code: string,
-    _codeVerifier: string,
+    codeVerifier: string,
     redirectUri: string,
   ): Promise<SocialIdentity> {
     // GitHub answers a rejected code with HTTP 200 and no access_token.
@@ -44,6 +50,7 @@ export class GithubOAuthProvider implements OAuthProvider {
           client_secret: this.client.clientSecret,
           code,
           redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
         }),
       },
     );

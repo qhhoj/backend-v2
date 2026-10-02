@@ -8,7 +8,14 @@ import {
   UsersRepository,
 } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
-import { AppError, ENV, MAILER, RateLimitService, REDIS } from '@libs/common';
+import {
+  AppError,
+  ENV,
+  isDuplicateKey,
+  MAILER,
+  RateLimitService,
+  REDIS,
+} from '@libs/common';
 import type { Env, Mailer } from '@libs/common';
 import { ActivationKey, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
@@ -19,7 +26,6 @@ import type { RegisterDto } from './dto/register.dto';
 const ACTIVATION_DAYS = 7;
 const REGISTRATION_LIMIT = 5;
 const REGISTRATION_WINDOW_SECONDS = 60 * 60;
-const MONGO_DUPLICATE_KEY = 11000;
 const EMAIL_LOCK_SECONDS = 30;
 const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
@@ -211,7 +217,13 @@ export class RegistrationService {
         password: await hashPassword(password),
       });
     } catch (error) {
-      if ((error as { code?: number }).code === MONGO_DUPLICATE_KEY)
+      if (isDuplicateKey(error, 'socialAuth.uid'))
+        throw new AppError(
+          'conflict',
+          409,
+          'This social account is already linked',
+        );
+      if (isDuplicateKey(error))
         throw new AppError('validation_failed', 400, 'Registration rejected', {
           username: ['Username is taken.'],
         });

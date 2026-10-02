@@ -15,14 +15,13 @@ import type {
 } from '@simplewebauthn/server';
 import { SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { AppError, ENV } from '@libs/common';
+import { AppError, ENV, isDuplicateKey } from '@libs/common';
 import type { Env } from '@libs/common';
 import { newId } from '@libs/database';
 import { SecondFactorService } from './second-factor.service';
 
 const RP_NAME = 'QHHOJ';
 const USER_HANDLE_BYTES = 32;
-const DUPLICATE_KEY_ERROR = 11000;
 
 const failed = (message = 'WebAuthn verification failed') =>
   new AppError('webauthn_failed', 400, message);
@@ -99,8 +98,7 @@ export class WebauthnService {
       });
     } catch (error) {
       // credId is unique across users: registering an already-known authenticator.
-      if ((error as { code?: number }).code === DUPLICATE_KEY_ERROR)
-        throw failed('WebAuthn registration failed');
+      if (isDuplicateKey(error)) throw failed('WebAuthn registration failed');
       throw error;
     }
     return { id, name };
