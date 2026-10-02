@@ -44,4 +44,10 @@ describe('RateLimitService', () => {
     await redis.set('rate:typed', 'not-a-number');
     await expect(limiter.hit('typed', 60)).rejects.toThrow();
   });
+  it('releases a hit but never below zero', async () => {
+    await limiter.hit('giveback', 60);
+    await limiter.release('giveback');
+    await limiter.release('giveback');
+    expect(await limiter.hit('giveback', 60)).toBe(1);
+  });
 });

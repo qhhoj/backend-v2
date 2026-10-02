@@ -19,6 +19,15 @@ export class RateLimitService {
     return count as number;
   }
 
+  /** Gives back one hit (never below zero), so only counted attempts consume budget. */
+  async release(key: string): Promise<void> {
+    await this.redis.eval(
+      "local count = tonumber(redis.call('GET', KEYS[1])); if count and count > 0 then redis.call('DECR', KEYS[1]) end",
+      1,
+      rateKey(key),
+    );
+  }
+
   async exceeded(keys: string[], limit: number): Promise<boolean> {
     if (!keys.length) return false;
     const counts = await this.redis.mget(keys.map(rateKey));

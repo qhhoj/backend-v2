@@ -46,6 +46,8 @@ export class AuthController {
       body.password,
       request.ip,
     );
+    if (request.auth?.sessionId)
+      await this.sessions.destroy(request.auth.sessionId);
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
     return SessionResponse.from(user, principal, session);
   }

@@ -26,32 +26,35 @@ export class AuthService {
   ) {}
 
   async login(username: string, password: string, ip: string) {
+    const user = await this.users.findByUsername(username);
     const failureKeys = [
       `login:ip:${ip}`,
-      `login:user:${username.toLowerCase()}`,
+      user
+        ? `login:user:${user._id}`
+        : `login:name:${username.normalize('NFKC').toLowerCase()}`,
     ];
-    if (await this.rateLimit.exceeded(failureKeys, LOGIN_FAILURE_LIMIT))
+    // Reserve the attempt before verifying so concurrent bursts cannot exceed the limit.
+    const counts = await Promise.all(
+      failureKeys.map((key) => this.rateLimit.hit(key, LOGIN_WINDOW_SECONDS)),
+    );
+    if (counts.some((count) => count > LOGIN_FAILURE_LIMIT))
       throw new AppError(
         'rate_limited',
         429,
         'Too many failed logins; try again later',
       );
 
-    const user = await this.users.findByUsername(username);
     const passwordValid = await verifyPassword(
       password,
       user?.password ?? DUMMY_PASSWORD_HASH,
     );
-    if (!user || !passwordValid) {
-      await Promise.all(
-        failureKeys.map((key) => this.rateLimit.hit(key, LOGIN_WINDOW_SECONDS)),
-      );
+    if (!user || !passwordValid)
       throw new AppError(
         'invalid_credentials',
         401,
         'Invalid username or password',
       );
-    }
+    await Promise.all(failureKeys.map((key) => this.rateLimit.release(key)));
     if (!user.isActive)
       throw user.banReason !== null
         ? new AppError(
@@ -61,13 +64,14 @@ export class AuthService {
           )
         : new AppError('account_not_activated', 403, 'Account not activated');
 
-    const changes: Partial<User> = { lastLogin: new Date() };
+    const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
+    const changes: Partial<User> = twoFaPassed ? { lastLogin: new Date() } : {};
     if (needsRehash(user.password))
       changes.password = await hashPassword(password);
-    await this.users.update(user._id, changes);
+    if (Object.keys(changes).length) await this.users.update(user._id, changes);
     const { id, session } = await this.sessions.create({
       userId: user._id,
-      twoFaPassed: !(user.isTotpEnabled || user.isWebauthnEnabled),
+      twoFaPassed,
       passwordPwned: await this.pwned.isPwned(password),
       impersonatorId: null,
     });

@@ -75,4 +75,14 @@ describe('password hasher', () => {
       needsRehash(`pbkdf2_sha256$870000$${'s'.repeat(22)}$${digest}`),
     ).toBe(false);
   });
+  it('spends as long on unusable hashes as on the dummy hash', async () => {
+    const time = async (encoded: string) => {
+      const started = performance.now();
+      await verifyPassword('anything', encoded);
+      return performance.now() - started;
+    };
+    await time(DUMMY_PASSWORD_HASH);
+    const dummy = await time(DUMMY_PASSWORD_HASH);
+    expect(await time('!unusable')).toBeGreaterThan(dummy * 0.5);
+  });
 });

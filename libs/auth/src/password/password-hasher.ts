@@ -11,26 +11,30 @@ const MIN_SALT_LENGTH = 22;
 
 export const PASSWORD_ITERATIONS = 870_000;
 /** Well-formed hash no password matches; verifying against it keeps unknown-user logins as slow as real ones. */
-export const DUMMY_PASSWORD_HASH = `pbkdf2_sha256$${PASSWORD_ITERATIONS}$dummysaltdummysaltdumm$${'A'.repeat(43)}=`;
+const DUMMY_SALT = 'dummysaltdummysaltdumm';
+export const DUMMY_PASSWORD_HASH = `pbkdf2_sha256$${PASSWORD_ITERATIONS}$${DUMMY_SALT}$${'A'.repeat(43)}=`;
 
 export async function verifyPassword(
   password: string,
   encoded: string,
 ): Promise<boolean> {
-  const parts = encoded.split('$');
-  if (parts.length !== 4) return false;
-  const [algorithmName, iterationText, salt, expectedText] = parts;
+  const [algorithmName, iterationText, salt, expectedText, ...extra] =
+    encoded.split('$');
   const algorithm = ALGORITHMS.get(algorithmName);
   const iterations = Number(iterationText);
   if (
+    extra.length ||
     !algorithm ||
     !/^\d+$/.test(iterationText) ||
     iterations < 1 ||
     iterations > MAX_ITERATIONS ||
     !salt ||
     !expectedText
-  )
+  ) {
+    // Unusable or malformed hash (e.g. Django "!..."): burn the same work as a real check so timing does not reveal it.
+    await pbkdf2Async(password, DUMMY_SALT, PASSWORD_ITERATIONS, 32, 'sha256');
     return false;
+  }
   const expected = Buffer.from(expectedText, 'base64');
   const actual = await pbkdf2Async(
     password,

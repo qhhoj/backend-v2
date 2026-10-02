@@ -1,4 +1,4 @@
-import { PASSWORD_ITERATIONS } from '@libs/auth';
+import { hashPassword, PASSWORD_ITERATIONS } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
@@ -101,7 +101,15 @@ describe('auth session endpoints', () => {
         .send({ username, password: 'wrong password' });
       return performance.now() - started;
     };
-    const [known, unknown] = [await time('alice'), await time('ghost')];
+    await createUser(api.users, {
+      username: 'timer',
+      email: 'timer@example.com',
+    });
+    await api.users.updateOne(
+      { username: 'timer' },
+      { password: await hashPassword('correct horse battery') },
+    );
+    const [known, unknown] = [await time('timer'), await time('ghost')];
     expect(unknown).toBeGreaterThan(known * 0.5);
   });
   it('explains banned and unactivated accounts only after a correct password', async () => {
@@ -137,6 +145,7 @@ describe('auth session endpoints', () => {
       user: null,
       twoFactorRequired: true,
     });
+    expect(sessionOf(response).csrfToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
     await api
       .http()
       .get(ME)
@@ -183,6 +192,36 @@ describe('auth session endpoints', () => {
       .set('Cookie', cookieFrom(third.headers))
       .expect(401);
   });
+  it('validates the request body', async () => {
+    await api.http().post(LOGIN).send({ username: 'alice' }).expect(400);
+    await api
+      .http()
+      .post(LOGIN)
+      .send({ username: { $ne: null }, password: 'x' })
+      .expect(400);
+  });
+  it('limits a concurrent burst of wrong guesses', async () => {
+    const redis = api.app.get<Redis>(REDIS);
+    await Promise.all(
+      (await redis.keys('rate:*')).map((key) => redis.del(key)),
+    );
+    await createUser(api.users, {
+      username: 'burst',
+      email: 'burst@example.com',
+    });
+    const statuses = (
+      await Promise.all(
+        Array.from({ length: 15 }, () =>
+          api
+            .http()
+            .post(LOGIN)
+            .send({ username: 'burst', password: 'wrong password' }),
+        ),
+      )
+    ).map((response) => response.status);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(10);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(5);
+  });
   it('rate-limits after 10 failures even with the right password', async () => {
     const redis = api.app.get<Redis>(REDIS);
     await Promise.all(
@@ -204,7 +243,13 @@ describe('auth session endpoints', () => {
       .send({ username: 'rita', password: 'correct horse battery' })
       .expect(429)
       .expect(errorCode('rate_limited'));
+    await api
+      .http()
+      .post(LOGIN)
+      .send({
+        username: '\uff52\uff49\uff54\uff41',
+        password: 'correct horse battery',
+      })
+      .expect(429);
   });
-  it('validates the request body', () =>
-    api.http().post(LOGIN).send({ username: 'alice' }).expect(400));
 });
