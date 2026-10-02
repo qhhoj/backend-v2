@@ -1,15 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   DUMMY_PASSWORD_HASH,
+  generateApiToken,
   hashPassword,
   needsRehash,
+  passwordProblems,
   PrincipalService,
   PwnedPasswordService,
   SessionService,
   UsersRepository,
   verifyPassword,
 } from '@libs/auth';
-import { AppError, RateLimitService } from '@libs/common';
+import type { AuthContext } from '@libs/auth';
+import { AppError, ENV, RateLimitService } from '@libs/common';
+import type { Env } from '@libs/common';
 import { User } from '@libs/database';
 
 export const LOGIN_FAILURE_LIMIT = 10;
@@ -23,6 +27,7 @@ export class AuthService {
     private readonly principals: PrincipalService,
     private readonly pwned: PwnedPasswordService,
     private readonly rateLimit: RateLimitService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async login(username: string, password: string, ip: string) {
@@ -81,5 +86,52 @@ export class AuthService {
       user,
       principal: this.principals.build(user),
     };
+  }
+
+  async changePassword(
+    auth: AuthContext,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const { userId } = auth.principal;
+    const failureKey = `password-change:user:${userId}`;
+    // Reserve the attempt before verifying, like login, so a stolen session cannot brute-force the current password.
+    if (
+      (await this.rateLimit.hit(failureKey, LOGIN_WINDOW_SECONDS)) >
+      LOGIN_FAILURE_LIMIT
+    )
+      throw new AppError(
+        'rate_limited',
+        429,
+        'Too many failed attempts; try again later',
+      );
+    if (!(await verifyPassword(currentPassword, auth.user.password)))
+      throw new AppError(
+        'invalid_credentials',
+        400,
+        'Current password is incorrect',
+        { currentPassword: ['Current password is incorrect.'] },
+      );
+    await this.rateLimit.release(failureKey);
+
+    const problems = passwordProblems(newPassword, auth.user);
+    if (await this.pwned.isPwned(newPassword))
+      problems.push('This password has appeared in a data breach.');
+    if (problems.length)
+      throw new AppError('validation_failed', 400, 'Password rejected', {
+        newPassword: problems,
+      });
+    await this.users.update(userId, {
+      password: await hashPassword(newPassword),
+    });
+    await this.sessions.destroyAllForUser(userId, auth.sessionId ?? undefined);
+    if (auth.sessionId)
+      await this.sessions.update(auth.sessionId, { passwordPwned: false });
+  }
+
+  async regenerateApiToken(userId: string): Promise<{ token: string }> {
+    const { token, hash } = generateApiToken(userId, this.env.tokenSecret);
+    await this.users.update(userId, { apiTokenHash: hash });
+    return { token };
   }
 }

@@ -19,9 +19,10 @@ import {
   setSessionCookie,
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ENV } from '@libs/common';
+import { AppError, ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { AuthService } from './auth.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { SessionResponse } from './dto/session.response';
 
@@ -79,5 +80,32 @@ export class AuthController {
   ): Promise<void> {
     await this.sessions.destroyAllForUser(auth.principal.userId);
     clearSessionCookie(reply);
+  }
+
+  @AllowPwnedPassword()
+  @Post('password/change')
+  @HttpCode(204)
+  changePassword(
+    @CurrentAuth() auth: AuthContext,
+    @Body() body: ChangePasswordDto,
+  ): Promise<void> {
+    return this.auth.changePassword(
+      auth,
+      body.currentPassword,
+      body.newPassword,
+    );
+  }
+
+  @Post('token/regenerate')
+  regenerateToken(
+    @CurrentAuth() auth: AuthContext,
+  ): Promise<{ token: string }> {
+    if (auth.viaToken)
+      throw new AppError(
+        'forbidden',
+        403,
+        'API tokens cannot regenerate themselves',
+      );
+    return this.auth.regenerateApiToken(auth.principal.userId);
   }
 }
