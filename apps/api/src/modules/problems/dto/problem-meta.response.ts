@@ -1,18 +1,15 @@
-import { Language, License } from '@libs/database';
+import type { Language, License } from '@libs/database';
 
 export class CatalogItemResponse {
   id!: string;
   name!: string;
   fullName!: string;
 
-  static from(
-    this: void,
-    item: {
-      _id: string;
-      name: string;
-      fullName: string;
-    },
-  ): CatalogItemResponse {
+  static from(item: {
+    _id: string;
+    name: string;
+    fullName: string;
+  }): CatalogItemResponse {
     return { id: item._id, name: item.name, fullName: item.fullName };
   }
 }
@@ -25,7 +22,7 @@ export class LicenseResponse {
   display!: string;
   icon!: string;
 
-  static from(this: void, license: License): LicenseResponse {
+  static from(license: License): LicenseResponse {
     return {
       id: license._id,
       key: license.key,
@@ -50,7 +47,7 @@ export class LanguageResponse {
   fileSizeLimit!: number;
   includeInProblem!: boolean;
 
-  static from(this: void, language: Language): LanguageResponse {
+  static from(language: Language): LanguageResponse {
     const {
       _id: id,
       key,

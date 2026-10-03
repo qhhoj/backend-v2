@@ -18,9 +18,9 @@ import type { ProblemDocument } from './problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
 import { RevisionsRepository } from './revisions.repository';
 
-export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-export const STATEMENT_MAX_BYTES = 5 * 1024 * 1024;
-export const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const STATEMENT_MAX_BYTES = 5 * 1024 * 1024;
+const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
 const FILE_NAME_MAX_LENGTH = 100;
 /** Archives, documents, test data, sources and plain images; never anything a browser would run or render as markup. */
 const MATERIAL_EXTENSIONS: ReadonlySet<string> = new Set(

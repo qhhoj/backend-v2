@@ -81,6 +81,7 @@ export class ProblemEditingController {
 
   @RequirePermission('judge.edit_own_problem')
   @Post('render-preview')
+  @HttpCode(200)
   preview(
     @CurrentAuth() auth: AuthContext,
     @Body() body: RenderPreviewDto,

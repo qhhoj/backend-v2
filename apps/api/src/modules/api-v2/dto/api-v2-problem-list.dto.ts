@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { toArray, toBoolean } from '../../problems/dto/transforms';
 
-export const API_V2_MAX_PAGE = 10000;
+const API_V2_MAX_PAGE = 10000;
 const MAX_FILTER_VALUES = 100;
 const MAX_FILTER_LENGTH = 100;
 const NO_NUL = /^[^\0]*$/;

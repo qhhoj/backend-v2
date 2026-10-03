@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ProblemAccess } from './problem-access';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
@@ -11,7 +10,9 @@ import { ProblemDetailResponse } from './dto/problem-detail.response';
 import { UserSummaryResponse } from './dto/user-summary.response';
 import { ProblemListQueryDto } from './dto/problem-list.dto';
 import { ProblemListItemResponse } from './dto/problem-list.response';
+import { ProblemAccess } from './problem-access';
 import {
+  isEditorialPublished,
   listSort,
   publicEditorialFilter,
   searchFilter,
@@ -50,19 +51,19 @@ export class ProblemsService {
       types: this.types
         .all()
         .sort(byField('fullName'))
-        .map(CatalogItemResponse.from),
+        .map((item) => CatalogItemResponse.from(item)),
       groups: this.groups
         .all()
         .sort(byField('fullName'))
-        .map(CatalogItemResponse.from),
+        .map((item) => CatalogItemResponse.from(item)),
       licenses: this.licenses
         .all()
         .sort(byField('name'))
-        .map(LicenseResponse.from),
+        .map((license) => LicenseResponse.from(license)),
       languages: this.languages
         .all()
         .sort(byField('name'))
-        .map(LanguageResponse.from),
+        .map((language) => LanguageResponse.from(language)),
     };
   }
 
@@ -134,7 +135,7 @@ export class ProblemsService {
       throw new AppError('not_found', 404, 'No such editorial');
     const authors = (
       await this.users.findByIds(solution.authors.map(uuidStr))
-    ).map(UserSummaryResponse.from);
+    ).map((user) => UserSummaryResponse.from(user));
     return EditorialResponse.from(problem, solution, lang, authors, canEdit);
   }
 
@@ -162,7 +163,7 @@ export class ProblemsService {
     const { solution } = problem;
     if (!solution) return false;
     return (
-      (solution.isPublic && solution.publishOn <= new Date()) ||
+      isEditorialPublished(solution) ||
       (principal !== null &&
         hasPermission(principal, 'judge.see_private_solution')) ||
       canEdit

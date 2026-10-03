@@ -1,6 +1,6 @@
 import { Problem, StatementLanguage } from '@libs/database';
 
-export const BASE_LANGUAGE: StatementLanguage = 'en';
+const BASE_LANGUAGE: StatementLanguage = 'en';
 
 export interface Statement {
   language: StatementLanguage;

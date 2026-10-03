@@ -97,11 +97,18 @@ export class ApiV2ProblemsService {
       group: this.groupName(problem),
       time_limit: problem.timeLimit,
       memory_limit: problem.memoryLimit,
-      language_resource_limits: problem.languageLimits.map((limit) => ({
-        language: this.languages.byId(uuidStr(limit.languageId))?.key ?? null,
-        time_limit: limit.timeLimit,
-        memory_limit: limit.memoryLimit,
-      })),
+      language_resource_limits: problem.languageLimits.flatMap((limit) => {
+        const language = this.languages.byId(uuidStr(limit.languageId));
+        return language
+          ? [
+              {
+                language: language.key,
+                time_limit: limit.timeLimit,
+                memory_limit: limit.memoryLimit,
+              },
+            ]
+          : [];
+      }),
       points: problem.points,
       partial: problem.partial,
       short_circuit: !problem.partial,

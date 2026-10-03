@@ -13,7 +13,7 @@ export const PROBLEM_SORT_OPTIONS = PROBLEM_SORT_FIELDS.flatMap((field) => [
   field,
   `-${field}`,
 ]);
-export const SHORT_QUERY_LENGTH = 3;
+const SHORT_QUERY_LENGTH = 3;
 
 const escapeRegex = (text: string) =>
   text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -27,6 +27,10 @@ export function searchFilter(search: string): FilterQuery<Problem> {
     $or: [{ code: prefix }, { name: prefix }, { 'translations.name': prefix }],
   };
 }
+
+/** In-memory twin of `publicEditorialFilter`. */
+export const isEditorialPublished = (solution: Problem['solution']): boolean =>
+  solution !== null && solution.isPublic && solution.publishOn <= new Date();
 
 export const publicEditorialFilter = (): FilterQuery<Problem> => ({
   'solution.isPublic': true,

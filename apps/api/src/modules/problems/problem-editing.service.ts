@@ -4,7 +4,7 @@ import type { AuthContext, Permission, Principal } from '@libs/auth';
 import { AppError, isDuplicateKey, RateLimitService } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
-import { renderMarkdown } from '@libs/render';
+import { renderMarkdown, RenderLimitError } from '@libs/render';
 import type { RenderStyle } from '@libs/render';
 import { CloneProblemDto } from './dto/clone.dto';
 import { PutEditorialDto } from './dto/editorial.dto';
@@ -171,9 +171,10 @@ export class ProblemEditingService {
     await this.assertReferences(dto);
     const problem = await this.createUnique({
       ...fields,
-      descriptionHtml: renderMarkdown(
+      descriptionHtml: this.render(
         fields.description ?? '',
         this.styleOf({ isFullMarkup: fields.isFullMarkup ?? false }),
+        'description',
       ),
       date: fields.date ?? new Date(),
       allowedLanguages:
@@ -217,16 +218,21 @@ export class ProblemEditingService {
       const style = this.styleOf({
         isFullMarkup: fields.isFullMarkup ?? problem.isFullMarkup,
       });
-      fields.descriptionHtml = renderMarkdown(
+      fields.descriptionHtml = this.render(
         fields.description ?? problem.description,
         style,
+        'description',
       );
       if (markupFlipped)
         fields.translations = (
           before.translations as Problem['translations']
         ).map((translation) => ({
           ...translation,
-          descriptionHtml: renderMarkdown(translation.description, style),
+          descriptionHtml: this.render(
+            translation.description,
+            style,
+            'translations',
+          ),
         }));
     }
     await this.updateUnique(problem._id, fields);
@@ -279,7 +285,11 @@ export class ProblemEditingService {
       language: lang,
       name: dto.name,
       description: dto.description,
-      descriptionHtml: renderMarkdown(dto.description, this.styleOf(problem)),
+      descriptionHtml: this.render(
+        dto.description,
+        this.styleOf(problem),
+        'description',
+      ),
     });
     await this.revisions.append({
       entity: 'problem',
@@ -324,7 +334,7 @@ export class ProblemEditingService {
     await this.repository.update(problem._id, {
       solution: {
         ...after,
-        contentHtml: renderMarkdown(dto.content, 'solution'),
+        contentHtml: this.render(dto.content, 'solution', 'content'),
       },
     });
     await this.revisions.append({
@@ -376,7 +386,7 @@ export class ProblemEditingService {
       RENDER_PREVIEW_LIMIT,
       RENDER_PREVIEW_WINDOW_SECONDS,
     );
-    return { html: renderMarkdown(dto.markdown, dto.style) };
+    return { html: this.render(dto.markdown, dto.style, 'markdown') };
   }
 
   /** 404 when invisible (never leaks), 403 when visible but not editable. */
@@ -392,6 +402,18 @@ export class ProblemEditingService {
         'You are not allowed to edit this problem',
       );
     return problem;
+  }
+
+  /** `renderMarkdown` with a render limit reported as `validation_failed` on the rendered `field`. */
+  private render(text: string, style: RenderStyle, field: string): string {
+    try {
+      return renderMarkdown(text, style);
+    } catch (error) {
+      if (!(error instanceof RenderLimitError)) throw error;
+      throw new AppError('validation_failed', 400, error.message, {
+        [field]: [error.message],
+      });
+    }
   }
 
   /** The one place that maps a problem to its statement render style. */

@@ -302,7 +302,7 @@ describe('problem create, suggest and edit', () => {
     expect(Object.keys(fieldsOf(response)).sort()).toEqual([
       'code',
       'description',
-      'languageLimits',
+      'languageLimits.0.timeLimit',
       'memoryLimit',
       'name',
       'points',

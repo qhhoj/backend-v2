@@ -4,7 +4,7 @@ export class UserSummaryResponse {
   id!: string;
   username!: string;
 
-  static from(this: void, user: UserDocument): UserSummaryResponse {
+  static from(user: UserDocument): UserSummaryResponse {
     return { id: user._id, username: user.username };
   }
 }

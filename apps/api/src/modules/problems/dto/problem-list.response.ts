@@ -2,6 +2,7 @@ import { uuidStr } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import { ProblemGroupsQuerier } from '../problem-groups.querier';
 import { ProblemTypesQuerier } from '../problem-types.querier';
+import { isEditorialPublished } from '../problem-search';
 import type { ProblemDocument } from '../problems.repository';
 import { statementFor } from '../statement';
 import { CatalogItemResponse } from './problem-meta.response';
@@ -29,7 +30,6 @@ export class ProblemListItemResponse {
     groups: ProblemGroupsQuerier,
   ): ProblemListItemResponse {
     const group = groups.byId(uuidStr(problem.groupId));
-    const { solution } = problem;
     return {
       id: problem._id,
       code: problem.code,
@@ -37,7 +37,7 @@ export class ProblemListItemResponse {
       group: group && CatalogItemResponse.from(group),
       types: types
         .byIds(problem.typeIds.map(uuidStr))
-        .map(CatalogItemResponse.from),
+        .map((item) => CatalogItemResponse.from(item)),
       points: problem.points,
       partial: problem.partial,
       userCount: problem.userCount,
@@ -45,10 +45,7 @@ export class ProblemListItemResponse {
       date: problem.date?.toISOString() ?? null,
       isPublic: problem.isPublic,
       isOrganizationPrivate: problem.isOrganizationPrivate,
-      hasPublicEditorial:
-        solution !== null &&
-        solution.isPublic &&
-        solution.publishOn <= new Date(),
+      hasPublicEditorial: isEditorialPublished(problem.solution),
       hasPdfStatement: problem.pdfStatementUrl !== null,
     };
   }

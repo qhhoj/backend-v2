@@ -23,11 +23,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MAX_MARKDOWN_LENGTH } from './limits';
 import { IsStatementText } from './statement-text';
 import { IsTimestamp } from './timestamp';
-
-/** Rendering cost is linear in the Markdown size. */
-export const MAX_MARKDOWN_LENGTH = 200_000;
 
 export class LanguageLimitDto {
   @IsUUID('7') languageId!: string;

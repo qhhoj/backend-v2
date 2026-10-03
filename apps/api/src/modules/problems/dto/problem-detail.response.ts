@@ -133,7 +133,7 @@ export class ProblemDetailResponse {
       ids
         .map(uuidStr)
         .flatMap((id) => context.people.get(id) ?? [])
-        .map(UserSummaryResponse.from);
+        .map((user) => UserSummaryResponse.from(user));
     const group = context.groups.byId(uuidStr(problem.groupId));
     const license =
       problem.licenseId === null
@@ -160,13 +160,13 @@ export class ProblemDetailResponse {
       isFullMarkup: problem.isFullMarkup,
       types: context.types
         .byIds(problem.typeIds.map(uuidStr))
-        .map(CatalogItemResponse.from),
+        .map((item) => CatalogItemResponse.from(item)),
       group: group && CatalogItemResponse.from(group),
       license: license && LicenseResponse.from(license),
       authors: summaries(problem.authors),
       allowedLanguages: context.languages
         .byIds(problem.allowedLanguages.map(uuidStr))
-        .map(LanguageResponse.from),
+        .map((language) => LanguageResponse.from(language)),
       languageLimits: problem.languageLimits.flatMap((limit) => {
         const language = context.languages.byId(uuidStr(limit.languageId));
         return language
