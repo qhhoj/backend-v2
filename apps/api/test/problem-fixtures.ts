@@ -1,4 +1,4 @@
-import type { User } from '@libs/database';
+import type { Problem, User } from '@libs/database';
 import type { Test as SupertestRequest } from 'supertest';
 import { ApiTest, createUser, sessionCookie } from './setup';
 
@@ -89,4 +89,22 @@ export const createUserWith = (
     username,
     email: `${username}@example.com`,
     ...extra,
+  });
+
+export const createProblem = (
+  api: ApiTest,
+  catalog: Catalog,
+  overrides: Partial<Problem> & { code: string },
+) =>
+  api.problems.create({
+    name: overrides.code.toUpperCase(),
+    timeLimit: 1,
+    memoryLimit: 262144,
+    points: 1000,
+    typeIds: [catalog.types.uncategorized],
+    groupId: catalog.groups.uncategorized,
+    allowedLanguages: [catalog.languages.cpp, catalog.languages.python],
+    isPublic: true,
+    date: new Date(),
+    ...overrides,
   });
