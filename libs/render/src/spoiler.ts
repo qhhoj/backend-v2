@@ -6,6 +6,8 @@ const CLOSE_TAG = /^\s*<\/blockquote>\s*$/;
 
 interface SpoilerEnv {
   spoilerDepth?: number;
+  /** `matchHtmlSpoilers` result per source string (nested parses have their own). */
+  spoilerMatches?: Map<string, Map<number, number>>;
 }
 
 /** Parses `body` as Markdown inside a `<blockquote class="spoiler">`; the depth lives in `env` because the nested parse starts a fresh block level. */
@@ -47,11 +49,34 @@ function markedSpoiler(
   return true;
 }
 
+const FENCE = /^(`{3,}|~{3,})/;
+
+/** Start line -> closing line of every `<blockquote class="spoiler">` pair in `state.src`, found in one pass; lines inside fenced code are skipped. */
+function matchHtmlSpoilers(
+  state: MarkdownIt.StateBlock,
+  lineText: (line: number) => string,
+): Map<number, number> {
+  const matches = new Map<number, number>();
+  const openLines: number[] = [];
+  let fence = '';
+  for (let line = 0; line < state.lineMax; line++) {
+    const text = lineText(line);
+    const marker = FENCE.exec(text)?.[1];
+    if (fence) {
+      if (marker?.startsWith(fence) && text.slice(marker.length).trim() === '')
+        fence = '';
+    } else if (marker) fence = marker;
+    else if (OPEN_TAG.test(text)) openLines.push(line);
+    else if (CLOSE_TAG.test(text) && openLines.length)
+      matches.set(openLines.pop() as number, line);
+  }
+  return matches;
+}
+
 /** Legacy Polygon importer output: a `<blockquote class="spoiler">` line up to its matching `</blockquote>` line; an unclosed one is left to the HTML block rule. */
 function htmlSpoiler(
   state: MarkdownIt.StateBlock,
   startLine: number,
-  endLine: number,
   lineText: (line: number) => string,
 ): boolean {
   if (
@@ -59,21 +84,22 @@ function htmlSpoiler(
     !OPEN_TAG.test(lineText(startLine))
   )
     return false;
-  let open = 1;
-  for (let line = startLine + 1; line < endLine; line++) {
-    const text = lineText(line);
-    if (OPEN_TAG.test(text)) open++;
-    else if (CLOSE_TAG.test(text) && --open === 0) {
-      pushSpoiler(
-        state,
-        startLine,
-        line + 1,
-        state.getLines(startLine + 1, line, state.blkIndent, false),
-      );
-      return true;
-    }
+  const env = state.env as SpoilerEnv;
+  env.spoilerMatches ??= new Map();
+  let matches = env.spoilerMatches.get(state.src);
+  if (!matches) {
+    matches = matchHtmlSpoilers(state, lineText);
+    env.spoilerMatches.set(state.src, matches);
   }
-  return false;
+  const closeLine = matches.get(startLine);
+  if (closeLine === undefined) return false;
+  pushSpoiler(
+    state,
+    startLine,
+    closeLine + 1,
+    state.getLines(startLine + 1, closeLine, state.blkIndent, false),
+  );
+  return true;
 }
 
 /** Legacy `spoiler` blocks: `>!` lines (markdown2 extra) and raw `<blockquote class="spoiler">` HTML; past 20 levels they stay plain text/HTML. */
@@ -98,6 +124,6 @@ export function spoilerRule(
     );
   return (
     markedSpoiler(state, startLine, endLine, lineText) ||
-    htmlSpoiler(state, startLine, endLine, lineText)
+    htmlSpoiler(state, startLine, lineText)
   );
 }

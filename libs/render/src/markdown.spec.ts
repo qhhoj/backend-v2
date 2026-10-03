@@ -3,6 +3,20 @@ import { renderMarkdown, renderMath } from './markdown';
 const full = (text: string) => renderMarkdown(text, 'problem-full');
 const KATEX_INLINE = /^<p>a <span class="katex">.*<\/span> b<\/p>\n$/s;
 
+const timeOf = (action: () => void) => {
+  const started = performance.now();
+  action();
+  return performance.now() - started;
+};
+/** Linear work grows ~5x for 5x the input and quadratic ~25x; the ratio holds on a loaded machine where a fixed bound would not. */
+const expectLinear = (render: (count: number) => string, count: number) => {
+  render(count);
+  const small = timeOf(() => render(count));
+  const large = timeOf(() => render(count * 5));
+  expect(large / Math.max(small, 1)).toBeLessThan(15);
+  expect(large).toBeLessThan(2000);
+};
+
 describe('renderMarkdown', () => {
   it('renders inline, display and tilde math with KaTeX', () => {
     expect(full('a $x^2$ b')).toMatch(KATEX_INLINE);
@@ -117,10 +131,8 @@ describe('renderMarkdown', () => {
     );
   });
   it('renders math input in linear time', () => {
-    for (const text of ['$a '.repeat(50000), '$1 '.repeat(50000)]) {
-      const started = Date.now();
-      full(text);
-      expect(Date.now() - started).toBeLessThan(500);
+    for (const unit of ['$a ', '$1 ']) {
+      expectLinear((count) => full(unit.repeat(count)), 10000);
     }
   });
   it('stops treating >! as a spoiler beyond 20 levels instead of overflowing the stack', () => {
@@ -134,6 +146,21 @@ describe('renderMarkdown', () => {
           '</blockquote>\n'.repeat(500),
       ),
     ).not.toThrow();
+  });
+  it('renders unclosed html spoiler openers in linear time', () => {
+    expectLinear(
+      (count) => full('<blockquote class="spoiler">\n\n'.repeat(count)),
+      4000,
+    );
+  });
+  it('does not close an html spoiler on a closing tag inside a code fence', () => {
+    expect(
+      full(
+        '<blockquote class="spoiler">\n\n```html\n</blockquote>\n```\n\n</blockquote>\n\nafter',
+      ),
+    ).toBe(
+      '<blockquote class="spoiler">\n<pre><code class="language-html">&lt;/blockquote&gt;\n</code></pre>\n</blockquote>\n<p>after</p>\n',
+    );
   });
   it('parses legacy html spoiler blocks as Markdown', () => {
     const source =
