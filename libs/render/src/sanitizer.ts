@@ -131,6 +131,7 @@ const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
     ...MATHML_ATTRIBUTES,
     ...KATEX_ATTRIBUTES,
     '*': [...LEGACY_ATTRIBUTES['*'], 'aria-hidden'],
+    span: [...MATHML_ATTRIBUTES.span, 'title'],
   },
   allowedStyles: {
     '*': Object.fromEntries(
