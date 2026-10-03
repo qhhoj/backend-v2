@@ -12,8 +12,10 @@ import {
   Group,
   Language,
   License,
+  Problem,
   ProblemGroup,
   ProblemType,
+  Revision,
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
@@ -81,6 +83,8 @@ export async function setupApiTest({
     problemGroups: readyApp.get<Model<ProblemGroup>>(
       getModelToken(ProblemGroup.name),
     ),
+    problems: readyApp.get<Model<Problem>>(getModelToken(Problem.name)),
+    revisions: readyApp.get<Model<Revision>>(getModelToken(Revision.name)),
     licenses: readyApp.get<Model<License>>(getModelToken(License.name)),
     languages: readyApp.get<Model<Language>>(getModelToken(Language.name)),
     /** Streams are disabled in tests; call after inserting catalog rows. */
