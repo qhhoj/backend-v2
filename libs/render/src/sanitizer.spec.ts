@@ -58,6 +58,31 @@ describe('sanitizeStatementHtml', () => {
       '<table><tr><td colspan="2">x</td></tr></table>',
     ],
     ['<p>a<br>b</p><hr>', '<p>a<br />b</p><hr />'],
+    ['<p style="background:red&#10;url(https://evil/x.png)">p</p>', '<p>p</p>'],
+    ['<p style="background:red&#13;url(https://evil/x.png)">p</p>', '<p>p</p>'],
+    ['<p style="width:red&#10;expression(alert(1))">p</p>', '<p>p</p>'],
+    [
+      '<p style="background:image-set(\'https://evil/x.png\' 1x)">p</p>',
+      '<p>p</p>',
+    ],
+    [
+      '<p style="background:-webkit-image-set(\'https://evil/x.png\' 1x)">p</p>',
+      '<p>p</p>',
+    ],
+    ['<a href="jav&#x09;ascript:alert(1)">x</a>', '<a>x</a>'],
+    [
+      '<source srcset="a.png 1x, javascript:alert(1) 2x">',
+      '<source srcset="a.png 1x"></source>',
+    ],
+    [
+      '<math altimg="javascript:x"><mi>x</mi></math>',
+      '<math><mi>x</mi></math>',
+    ],
+    ['<img data-src="javascript:x">', '<img />'],
+    [
+      '<span style="height:1.08em;margin-right:-0.25em;top:-0.5em">k</span>',
+      '<span style="height:1.08em;margin-right:-0.25em;top:-0.5em">k</span>',
+    ],
   ])('cleans %s', (input, expected) =>
     expect(sanitizeStatementHtml(input)).toBe(expected),
   );
@@ -86,6 +111,16 @@ describe('sanitizeSvg', () => {
       '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10" onload="alert(1)"><script>alert(2)</script><defs><linearGradient id="g"><stop offset="0" stop-color="red"/></linearGradient></defs><a xlink:href="javascript:alert(3)"><rect width="5" height="5" fill="url(#g)" style="x:expression(1)"/></a><use href="#g"/><use xlink:href="javascript:alert(4)"/><use xlink:href="http://evil/x.svg#y"/><foreignObject><body/></foreignObject><text x="1" y="2">Hi</text></svg>';
     expect(sanitizeSvg(svg)).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10"><defs><linearGradient id="g"><stop offset="0" stop-color="red"></stop></linearGradient></defs><rect width="5" height="5" fill="url(#g)"></rect><use href="#g"></use><use></use><use></use><text x="1" y="2">Hi</text></svg>',
+    );
+  });
+  it('keeps colors and local paint references and drops external ones', () => {
+    expect(
+      sanitizeSvg(
+        '<rect fill="url(https://evil/g.svg#x)" clip-path="url(https://evil/c.svg#c)" mask="url(//evil/m.svg#m)"/>',
+      ),
+    ).toBe('<rect></rect>');
+    expect(sanitizeSvg('<rect fill="url(#grad)" stroke="red"/>')).toBe(
+      '<rect fill="url(#grad)" stroke="red"></rect>',
     );
   });
 });

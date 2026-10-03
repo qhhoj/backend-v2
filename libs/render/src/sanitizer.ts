@@ -122,7 +122,7 @@ const KATEX_ATTRIBUTES: Record<string, string[]> = {
 };
 /** A style value must not smuggle script or an external fetch. */
 const STYLE_VALUE =
-  /^(?!.*(expression|url\s*\(|javascript|behavior|@import|\\))[^;{}]*$/i;
+  /^(?![\s\S]*(expression|url\s*\(|image-set\s*\(|src\s*\(|javascript|behavior|@import|\\))[^;{}\n\r]*$/i;
 
 const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [...LEGACY_TAGS, ...MATHML_TAGS, ...KATEX_TAGS],
@@ -145,6 +145,8 @@ const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
     'data',
     'poster',
     'srcset',
+    'altimg',
+    'data-src',
   ],
   parser: { lowerCaseAttributeNames: false },
 };
@@ -225,11 +227,24 @@ const SVG_ATTRIBUTES = [
   'xlink:href',
   'version',
 ];
+const PAINT_ATTRIBUTES = ['fill', 'stroke', 'clip-path', 'mask'];
+const EXTERNAL_URL = /url\s*\(\s*['"]?\s*[^#'"\s]/i;
+/** Paint and reference attributes may use colors, keywords and `url(#local)` only. */
+const dropExternalPaint: sanitizeHtml.Transformer = (tagName, attributes) => ({
+  tagName,
+  attribs: Object.fromEntries(
+    Object.entries(attributes).filter(
+      ([name, value]) =>
+        !PAINT_ATTRIBUTES.includes(name) || !EXTERNAL_URL.test(value),
+    ),
+  ),
+});
 const SVG_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: SVG_TAGS,
   allowedAttributes: { '*': SVG_ATTRIBUTES },
   allowedSchemes: [],
   allowProtocolRelative: false,
+  transformTags: { '*': dropExternalPaint },
   allowedSchemesAppliedToAttributes: ['href', 'xlink:href'],
   parser: {
     lowerCaseTags: false,
