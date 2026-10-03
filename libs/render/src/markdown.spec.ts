@@ -153,6 +153,39 @@ describe('renderMarkdown', () => {
       4000,
     );
   });
+  it('renders closed html spoiler pairs and unclosed openers in linear time', () => {
+    expectLinear(
+      (count) =>
+        full(
+          '<blockquote class="spoiler">\nx\n</blockquote>\n\n'.repeat(count),
+        ),
+      4000,
+    );
+  });
+  it('rewrites only column-0 spoiler tags, whatever the order', () => {
+    const top = '<blockquote class="spoiler">\nx\n</blockquote>';
+    const quoted = '> <blockquote class="spoiler">\n> y\n> </blockquote>';
+    const both = full(`${top}\n\n${quoted}`);
+    expect(both).toContain(
+      '<blockquote class="spoiler">\n<p>x</p>\n</blockquote>',
+    );
+    expect(both).not.toContain('<blockquote class="spoiler">\n<p>y');
+    const reversed = full(`${quoted}\n\n${top}`);
+    expect(reversed).toContain(
+      '<blockquote class="spoiler">\n<p>x</p>\n</blockquote>',
+    );
+    expect(reversed).not.toContain('<p>y');
+  });
+  it('does not pair a list-item opener with a closing tag outside the list', () => {
+    expect(
+      full(
+        '- item\n  <blockquote class="spoiler">\n  inner\n\n</blockquote>\n\noutside *text*',
+      ),
+    ).toContain('<p>outside <em>text</em></p>');
+    expect(
+      full('- item\n  <blockquote class="spoiler">\n\n</blockquote>\n\nout'),
+    ).not.toContain('<blockquote class="spoiler">\n<p>');
+  });
   it('does not close an html spoiler on a closing tag inside a code fence', () => {
     expect(
       full(
@@ -170,7 +203,7 @@ describe('renderMarkdown', () => {
     expect(full(source)).toBe(expected);
     expect(renderMarkdown(source, 'problem')).toBe(expected);
     expect(renderMarkdown(source, 'solution')).toBe(expected);
-    expect(full("  <blockquote  class='spoiler' >\nhi\n</blockquote>")).toBe(
+    expect(full("<blockquote  class='spoiler' >  \nhi\n</blockquote>")).toBe(
       '<blockquote class="spoiler">\n<p>hi</p>\n</blockquote>\n',
     );
   });

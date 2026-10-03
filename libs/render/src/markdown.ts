@@ -1,7 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import { mathInlineRule, mathTildeRule, renderMath } from './math';
 import { sanitizeStatementHtml } from './sanitizer';
-import { spoilerRule } from './spoiler';
+import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
 import { isSanitizedStyle, RenderStyle } from './styles';
 import { dashesRule } from './typography';
 import { renderUserReference, userReferenceRule } from './user-reference';
@@ -55,6 +55,8 @@ const markdown = createMarkdown();
 
 /** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. */
 export function renderMarkdown(text: string, style: RenderStyle): string {
-  const html = wrapTables(shiftHeaders(markdown.render(text)));
+  const html = wrapTables(
+    shiftHeaders(markdown.render(rewriteHtmlSpoilers(text))),
+  );
   return isSanitizedStyle(style) ? sanitizeStatementHtml(html) : html;
 }
