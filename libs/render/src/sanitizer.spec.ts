@@ -119,6 +119,15 @@ describe('sanitizeSvg', () => {
         '<rect fill="url(https://evil/g.svg#x)" clip-path="url(https://evil/c.svg#c)" mask="url(//evil/m.svg#m)"/>',
       ),
     ).toBe('<rect></rect>');
+    for (const fill of [
+      'u\\72l(https://evil/g.svg#x)',
+      '\\75rl(https://evil/g.svg#x)',
+      'ur\\6c (https://evil/g.svg#x)',
+    ]) {
+      expect(sanitizeSvg(`<svg><rect fill="${fill}"/></svg>`)).toBe(
+        '<svg><rect></rect></svg>',
+      );
+    }
     expect(sanitizeSvg('<rect fill="url(#grad)" stroke="red"/>')).toBe(
       '<rect fill="url(#grad)" stroke="red"></rect>',
     );

@@ -228,14 +228,14 @@ const SVG_ATTRIBUTES = [
   'version',
 ];
 const PAINT_ATTRIBUTES = ['fill', 'stroke', 'clip-path', 'mask'];
-const EXTERNAL_URL = /url\s*\(\s*['"]?\s*[^#'"\s]/i;
+const UNSAFE_PAINT_VALUE = /url\s*\(\s*['"]?\s*[^#'"\s]|\\/i;
 /** Paint and reference attributes may use colors, keywords and `url(#local)` only. */
 const dropExternalPaint: sanitizeHtml.Transformer = (tagName, attributes) => ({
   tagName,
   attribs: Object.fromEntries(
     Object.entries(attributes).filter(
       ([name, value]) =>
-        !PAINT_ATTRIBUTES.includes(name) || !EXTERNAL_URL.test(value),
+        !PAINT_ATTRIBUTES.includes(name) || !UNSAFE_PAINT_VALUE.test(value),
     ),
   ),
 });
