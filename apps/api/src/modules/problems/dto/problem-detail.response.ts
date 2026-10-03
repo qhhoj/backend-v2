@@ -37,7 +37,7 @@ export class ProblemEditorResponse {
   solution!: {
     isPublic: boolean;
     publishOn: string;
-    authors: string[];
+    authors: UserSummaryResponse[];
     content: string;
   } | null;
   curators!: UserSummaryResponse[];
@@ -63,14 +63,14 @@ export class ProblemEditorResponse {
       solution: solution && {
         isPublic: solution.isPublic,
         publishOn: solution.publishOn.toISOString(),
-        authors: solution.authors.map(uuidStr),
+        authors: summaries(solution.authors),
         content: solution.content,
       },
       curators: summaries(problem.curators),
       testers: summaries(problem.testers),
       bannedUsers: summaries(problem.bannedUsers),
       suggester:
-        problem.suggester === null
+        problem.suggester == null
           ? null
           : (summaries([problem.suggester])[0] ?? null),
       typeIds: problem.typeIds.map(uuidStr),
@@ -167,11 +167,18 @@ export class ProblemDetailResponse {
       allowedLanguages: context.languages
         .byIds(problem.allowedLanguages.map(uuidStr))
         .map(LanguageResponse.from),
-      languageLimits: problem.languageLimits.map((limit) => ({
-        language: context.languages.byId(uuidStr(limit.languageId))?.key ?? '',
-        timeLimit: limit.timeLimit,
-        memoryLimit: limit.memoryLimit,
-      })),
+      languageLimits: problem.languageLimits.flatMap((limit) => {
+        const language = context.languages.byId(uuidStr(limit.languageId));
+        return language
+          ? [
+              {
+                language: language.key,
+                timeLimit: limit.timeLimit,
+                memoryLimit: limit.memoryLimit,
+              },
+            ]
+          : [];
+      }),
       pdfStatementUrl: problem.pdfStatementUrl,
       materialUrl: problem.materialUrl,
       availableTranslations: problem.translations.map(

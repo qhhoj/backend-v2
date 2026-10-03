@@ -94,6 +94,11 @@ describe('problem detail and editorial', () => {
       solution: solutionOf(true, future),
     });
     await createProblem(api, catalog, { code: 'noeditorial' });
+    await createProblem(api, catalog, {
+      code: 'secret',
+      isPublic: false,
+      solution: solutionOf(true, past),
+    });
   });
   afterAll(() => api.teardown());
 
@@ -121,6 +126,14 @@ describe('problem detail and editorial', () => {
       canEdit: false,
       editor: null,
     });
+    expect(detail.authors).toEqual([{ id: authorId, username: 'author' }]);
+    expect(
+      detailOf(
+        await authed(api.http().get(`${PROBLEMS}/sum`), pendingAuthor).expect(
+          200,
+        ),
+      ),
+    ).toMatchObject({ canEdit: false, editor: null });
     expect(detail.allowedLanguages.map((language) => language.key)).toEqual([
       'CPP17',
       'PY3',
@@ -187,7 +200,11 @@ describe('problem detail and editorial', () => {
       translations: [
         { language: 'vi', name: 'Tổng', description: 'Cộng $a+b$.' },
       ],
-      solution: { isPublic: true, content: 'Just add.', authors: [authorId] },
+      solution: {
+        isPublic: true,
+        content: 'Just add.',
+        authors: [{ id: authorId, username: 'author' }],
+      },
       curators: [],
       testers: [],
       suggester: null,
@@ -216,6 +233,17 @@ describe('problem detail and editorial', () => {
       api.http().get(`${PROBLEMS}/later/editorial`),
       solutionReader,
     ).expect(200);
+    const unknown = await api
+      .http()
+      .get(`${PROBLEMS}/nope/editorial`)
+      .expect(404);
+    for (const viewer of [undefined, plain, solutionReader]) {
+      const request = api.http().get(`${PROBLEMS}/secret/editorial`);
+      const response = await (
+        viewer ? authed(request, viewer) : request
+      ).expect(404);
+      expect(response.body).toEqual(unknown.body);
+    }
     await api.http().get(`${PROBLEMS}/hidden/editorial`).expect(404);
     await authed(api.http().get(`${PROBLEMS}/hidden/editorial`), tester).expect(
       404,
