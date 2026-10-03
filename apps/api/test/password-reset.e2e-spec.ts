@@ -45,7 +45,7 @@ describe('password reset', () => {
     api.mailer.sent.length = 0;
   });
 
-  it('mails a reset link for a known email and ignores unknown, inactive and unusable-password accounts', async () => {
+  it('mails a reset link for a known email and ignores unknown and inactive accounts', async () => {
     await createUser(api.users, {
       username: 'known',
       email: 'known@example.com',
@@ -55,6 +55,19 @@ describe('password reset', () => {
       email: 'sleeper@example.com',
       isActive: false,
     });
+    await requestReset('KNOWN@example.com').expect(204);
+    expect(await mailCountAfterSettling(1)).toBe(1);
+    expect(api.mailer.sent[0]).toMatchObject({
+      to: 'known@example.com',
+      subject: 'Reset your QHHOJ password',
+    });
+    api.mailer.sent.length = 0;
+    for (const email of ['nobody@example.com', 'sleeper@example.com'])
+      await requestReset(email).expect(204);
+    expect(await mailCountAfterSettling(1)).toBe(0);
+  });
+
+  it('sets a first password for an unusable-hash account, once', async () => {
     await createUser(api.users, {
       username: 'social',
       email: 'social@example.com',
@@ -63,20 +76,27 @@ describe('password reset', () => {
       { username: 'social' },
       { $set: { password: '!unusable' } },
     );
-    await requestReset('KNOWN@example.com').expect(204);
+    await requestReset('social@example.com').expect(204);
     expect(await mailCountAfterSettling(1)).toBe(1);
-    expect(api.mailer.sent[0]).toMatchObject({
-      to: 'known@example.com',
-      subject: 'Reset your QHHOJ password',
-    });
-    api.mailer.sent.length = 0;
-    for (const email of [
-      'nobody@example.com',
-      'sleeper@example.com',
-      'social@example.com',
-    ])
-      await requestReset(email).expect(204);
-    expect(await mailCountAfterSettling(1)).toBe(0);
+    const token = tokenFrom(api.mailer.sent[0].text);
+    await confirm(token).expect(204);
+    await confirm(token, 'another long passphrase 1')
+      .expect(400)
+      .expect(errorCode('invalid_token'));
+    await login('social', OLD_PASSWORD).expect(401);
+    const response = await login('social', NEW_PASSWORD).expect(200);
+    const cookie = String(
+      (response.headers['set-cookie'] as unknown as string[])[0],
+    ).split(';')[0];
+    const csrf = (response.body as { data: { csrfToken: string } }).data
+      .csrfToken;
+    await api
+      .http()
+      .post(`${AUTH}/2fa/totp/enroll`)
+      .set('Cookie', cookie)
+      .set('X-CSRF-Token', csrf)
+      .send({ currentPassword: NEW_PASSWORD })
+      .expect(201);
   });
 
   it('mails every active account sharing the email', async () => {

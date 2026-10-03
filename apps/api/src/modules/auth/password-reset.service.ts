@@ -39,7 +39,7 @@ export class PasswordResetService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Always resolves the same way whether or not the email is known; mails go out in the background so timing does not reveal it. */
+  /** Also serves active accounts with an unusable (`!`) hash: the reset sets their first password. Always resolves the same way whether or not the email is known; mails go out in the background so timing does not reveal it. */
   async request(email: string, ip: string): Promise<void> {
     // Never released: every request spends budget.
     await this.rateLimit.reserve(
@@ -54,12 +54,11 @@ export class PasswordResetService {
     );
     const users = await this.users.findActiveByEmail(email);
     for (const user of users)
-      if (!user.password.startsWith('!'))
-        void this.sendResetMail(user).catch((error: unknown) =>
-          this.logger.error(
-            `Password reset mail for ${user._id} failed: ${(error as Error).message}`,
-          ),
-        );
+      void this.sendResetMail(user).catch((error: unknown) =>
+        this.logger.error(
+          `Password reset mail for ${user._id} failed: ${(error as Error).message}`,
+        ),
+      );
   }
 
   private async sendResetMail(user: UserDocument): Promise<void> {
@@ -81,7 +80,6 @@ export class PasswordResetService {
       !parsed ||
       !user ||
       !user.isActive ||
-      user.password.startsWith('!') ||
       !passwordResetTokenValid(parsed, tokenOwner(user), this.env.tokenSecret)
     )
       throw invalidToken();
