@@ -52,10 +52,7 @@ export class CreateProblemDto {
   code!: string;
   @IsStatementText() @Length(1, 100) name!: string;
   @IsOptional() @IsString() @MaxLength(200) source?: string;
-  @IsOptional()
-  @IsStatementText()
-  @MaxLength(MAX_MARKDOWN_LENGTH)
-  summary?: string;
+  @IsOptional() @IsString() @MaxLength(1000) summary?: string;
   @IsOptional()
   @IsStatementText()
   @MaxLength(MAX_MARKDOWN_LENGTH)
@@ -103,7 +100,7 @@ export class CreateProblemDto {
   @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
   @IsOptional() @IsString() @MaxLength(150) ogImage?: string;
-  @IsOptional() @IsDateString() date?: string;
+  @IsOptional() @IsDateString({ strict: true }) date?: string;
 }
 
 export class UpdateProblemDto extends PartialType(CreateProblemDto) {}

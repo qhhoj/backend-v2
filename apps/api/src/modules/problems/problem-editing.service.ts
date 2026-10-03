@@ -60,6 +60,32 @@ const CREATE_BASELINE: Partial<Record<keyof CreateProblemDto, unknown>> = {
 /** The only field a request may set to null (it clears the license). */
 const NULLABLE_FIELDS: ReadonlyArray<keyof CreateProblemDto> = ['licenseId'];
 const unique = (ids: string[]) => [...new Set(ids)];
+/** Id and limit lists are sets: order never counts as a change. */
+const comparable = (value: unknown) =>
+  Array.isArray(value)
+    ? value.map((item) => JSON.stringify(item)).sort()
+    : value;
+/** Revisions keep the editable source, never the rendered HTML. */
+const withoutRenderedHtml = (
+  problem: Record<string, unknown>,
+): Record<string, unknown> => ({
+  ...problem,
+  translations: (
+    problem.translations as Problem['translations'] | undefined
+  )?.map(({ language, name, description }) => ({
+    language,
+    name,
+    description,
+  })),
+});
+const ID_ARRAY_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
+  'typeIds',
+  'authors',
+  'curators',
+  'testers',
+  'bannedUsers',
+  'allowedLanguages',
+];
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left) === JSON.stringify(right);
 
@@ -83,9 +109,9 @@ export class ProblemEditingService {
     mode: 'create' | 'suggest',
   ): Promise<ProblemDetailResponse> {
     const { principal } = auth;
-    this.assertFieldGates(principal, dto, CREATE_BASELINE);
-    await this.assertReferences(dto);
     const fields = this.toFields(dto);
+    this.assertFieldGates(principal, dto, fields, CREATE_BASELINE);
+    await this.assertReferences(dto);
     const problem = await this.createUnique({
       ...fields,
       descriptionHtml: renderMarkdown(
@@ -107,7 +133,7 @@ export class ProblemEditingService {
       entityId: problem._id,
       action: mode,
       userId: principal.userId,
-      changes: fieldDiff({}, problem.toJSON()),
+      changes: fieldDiff({}, withoutRenderedHtml(problem.toJSON())),
       comment: 'Created on site',
     });
     return this.problems.detail(principal, problem.code, 'en');
@@ -121,28 +147,40 @@ export class ProblemEditingService {
     const { principal } = auth;
     const problem = await this.editableProblem(principal, code);
     const before = problem.toJSON() as unknown as Record<string, unknown>;
-    this.assertFieldGates(principal, dto, before);
-    await this.assertReferences(dto);
     const fields = this.toFields(dto);
-    const isFullMarkup = fields.isFullMarkup ?? problem.isFullMarkup;
-    const statementChanged =
-      fields.description !== undefined || isFullMarkup !== problem.isFullMarkup;
-    if (statementChanged) {
-      const style = this.styleOf({ isFullMarkup });
+    this.assertFieldGates(principal, dto, fields, before);
+    await this.assertReferences(dto);
+    const markupFlipped =
+      fields.isFullMarkup !== undefined &&
+      fields.isFullMarkup !== problem.isFullMarkup;
+    const descriptionChanged =
+      fields.description !== undefined &&
+      fields.description !== problem.description;
+    if (descriptionChanged || markupFlipped) {
+      const style = this.styleOf({
+        isFullMarkup: fields.isFullMarkup ?? problem.isFullMarkup,
+      });
       fields.descriptionHtml = renderMarkdown(
         fields.description ?? problem.description,
         style,
       );
-      fields.translations = (
-        before.translations as Problem['translations']
-      ).map((translation) => ({
-        ...translation,
-        descriptionHtml: renderMarkdown(translation.description, style),
-      }));
+      if (markupFlipped)
+        fields.translations = (
+          before.translations as Problem['translations']
+        ).map((translation) => ({
+          ...translation,
+          descriptionHtml: renderMarkdown(translation.description, style),
+        }));
     }
     await this.updateUnique(problem._id, fields);
-    const updated = (await this.repository.findById(problem._id))!;
-    const changes = fieldDiff(before, updated.toJSON());
+    const updated = await this.repository.findById(problem._id);
+    if (!updated) throw new AppError('not_found', 404, 'No such problem');
+    const changes = fieldDiff(
+      withoutRenderedHtml(before),
+      withoutRenderedHtml(updated.toJSON()),
+    );
+    if (!Object.keys(changes).length)
+      return this.problems.detail(principal, updated.code, 'en');
     await this.revisions.append({
       entity: 'problem',
       entityId: problem._id,
@@ -160,7 +198,8 @@ export class ProblemEditingService {
         problem._id,
         updated.suggester === null ? null : uuidStr(updated.suggester),
       );
-    if (statementChanged) this.events.emit('statementChanged', problem._id);
+    if (descriptionChanged || markupFlipped)
+      this.events.emit('statementChanged', problem._id);
     return this.problems.detail(principal, updated.code, 'en');
   }
 
@@ -188,12 +227,13 @@ export class ProblemEditingService {
   private assertFieldGates(
     principal: Principal,
     dto: UpdateProblemDto,
+    fields: Partial<Problem>,
     baseline: Record<string, unknown>,
   ): void {
-    const normalized = this.toFields(dto) as Record<string, unknown>;
+    const normalized = fields as Record<string, unknown>;
     const changes = (field: keyof CreateProblemDto) =>
       normalized[field] !== undefined &&
-      !sameJson(normalized[field], baseline[field]);
+      !sameJson(comparable(normalized[field]), comparable(baseline[field]));
     for (const [field, permission] of GATED_FIELDS)
       if (changes(field) && !hasPermission(principal, permission))
         throw new AppError(
@@ -201,6 +241,17 @@ export class ProblemEditingService {
           403,
           `Changing ${field} requires ${permission}`,
         );
+    const isFullMarkup = fields.isFullMarkup ?? baseline.isFullMarkup;
+    if (
+      isFullMarkup &&
+      changes('description') &&
+      !hasPermission(principal, 'judge.problem_full_markup')
+    )
+      throw new AppError(
+        'forbidden',
+        403,
+        'Changing the statement of a full-markup problem requires judge.problem_full_markup',
+      );
     const staffChanges = STAFF_FIELDS.filter(changes);
     if (
       staffChanges.length &&
@@ -284,6 +335,11 @@ export class ProblemEditingService {
             NULLABLE_FIELDS.includes(field as keyof CreateProblemDto)),
       ),
     ) as Partial<Problem>;
+    const record = fields as Record<string, unknown>;
+    for (const field of ID_ARRAY_FIELDS) {
+      const ids = record[field];
+      if (Array.isArray(ids)) record[field] = unique(ids as string[]);
+    }
     if (date) fields.date = new Date(date);
     return fields;
   }

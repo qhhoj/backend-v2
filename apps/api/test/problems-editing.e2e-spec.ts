@@ -82,10 +82,9 @@ describe('problem create, suggest and edit', () => {
     });
     expect(detail.descriptionHtml).toContain('<span class="katex">');
     expect(detail.descriptionHtml).toContain('<span class="math-error"');
-    expect(detail.allowedLanguages.map((language) => language.key)).toEqual([
-      'CPP17',
-      'PY3',
-    ]);
+    expect(
+      detail.allowedLanguages.map((language) => language.key).sort(),
+    ).toEqual(['CPP17', 'PY3']);
     const stored = (await api.problems.findOne({ code: 'sum' }))!;
     expect([...stored.curators]).toEqual([setterId]);
     expect(stored.date).toBeInstanceOf(Date);
@@ -245,12 +244,10 @@ describe('problem create, suggest and edit', () => {
       points: { before: 1000, after: 1200 },
     });
     expect(revision.changes).not.toHaveProperty('descriptionHtml');
-    expect(events).toEqual(
-      expect.arrayContaining([
-        ['pointsChanged', problem._id],
-        ['statementChanged', problem._id],
-      ]),
-    );
+    expect(events).toEqual([
+      ['pointsChanged', problem._id],
+      ['statementChanged', problem._id],
+    ]);
     await authed(api.http().patch(`${PROBLEMS}/edit_me`), plain).expect(404);
     await createProblem(api, catalog, { code: 'public_one' });
     await authed(api.http().patch(`${PROBLEMS}/public_one`), setter)
@@ -376,6 +373,13 @@ describe('problem create, suggest and edit', () => {
     await authed(api.http().patch(`${PROBLEMS}/flip`), admin)
       .send({ isFullMarkup: false })
       .expect(200);
+    const revisions = await api.revisions.find({
+      entityId: problem._id,
+      action: 'edit',
+    });
+    expect(
+      JSON.stringify(revisions.map((revision) => revision.changes)),
+    ).not.toContain('descriptionHtml');
     stored = (await api.problems.findOne({ code: 'flip' }))!;
     expect(stored.descriptionHtml).not.toContain('<script>');
     expect(stored.translations[0].descriptionHtml).not.toContain('<script>');
@@ -383,5 +387,86 @@ describe('problem create, suggest and edit', () => {
       .send({ isPublic: false })
       .expect(403)
       .expect(errorCode('forbidden'));
+  });
+
+  it('gates staff fields and isManuallyManaged on edit too', async () => {
+    await createProblem(api, catalog, {
+      code: 'gated',
+      authors: [setterId],
+      isPublic: false,
+    });
+    for (const body of [
+      { authors: [suggesterId] },
+      { summary: 'x' },
+      { isManuallyManaged: true },
+    ])
+      await authed(api.http().patch(`${PROBLEMS}/gated`), setter)
+        .send(body)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+    await authed(api.http().patch(`${PROBLEMS}/gated`), admin)
+      .send({ isManuallyManaged: true, summary: 'x' })
+      .expect(200);
+  });
+  it('forbids a suggester to publish or re-author their own suggestion', async () => {
+    await createProblem(api, catalog, {
+      code: 'mine',
+      isPublic: false,
+      suggester: suggesterId,
+    });
+    for (const body of [{ isPublic: true }, { authors: [suggesterId] }])
+      await authed(api.http().patch(`${PROBLEMS}/mine`), suggester)
+        .send(body)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+    await authed(api.http().patch(`${PROBLEMS}/mine`), suggester)
+      .send({ name: 'Mine' })
+      .expect(200);
+  });
+  it('needs judge.problem_full_markup to write the statement of a full-markup problem', async () => {
+    await createProblem(api, catalog, {
+      code: 'markup',
+      authors: [setterId],
+      isPublic: false,
+      isFullMarkup: true,
+      description: 'safe',
+    });
+    await authed(api.http().patch(`${PROBLEMS}/markup`), setter)
+      .send({ description: '<script>1</script>' })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    expect((await api.problems.findOne({ code: 'markup' }))!.description).toBe(
+      'safe',
+    );
+    await authed(api.http().patch(`${PROBLEMS}/markup`), admin)
+      .send({ description: '<script>1</script>' })
+      .expect(200);
+    expect(
+      (await api.problems.findOne({ code: 'markup' }))!.descriptionHtml,
+    ).toContain('<script>');
+  });
+  it('treats reordered or unchanged values as no change: no revision, no events, no gate', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: 'steady',
+      authors: [setterId],
+      curators: [setterId, suggesterId],
+      isPublic: false,
+      description: 'same',
+    });
+    const revisionCount = () =>
+      api.revisions.countDocuments({ entityId: problem._id });
+    for (const body of [
+      {},
+      { description: 'same' },
+      { curators: [setterId, suggesterId, setterId] },
+    ])
+      await authed(api.http().patch(`${PROBLEMS}/steady`), setter)
+        .send(body)
+        .expect(200);
+    expect(events).toEqual([]);
+    expect(await revisionCount()).toBe(0);
+    await authed(api.http().patch(`${PROBLEMS}/steady`), setter)
+      .send({ curators: [suggesterId, setterId] })
+      .expect(200);
   });
 });
