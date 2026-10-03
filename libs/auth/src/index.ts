@@ -14,6 +14,7 @@ export * from './users/active-superuser';
 export * from './principal/permissions';
 export * from './principal/principal';
 export * from './principal/principal.service';
+export * from './principal/optional-principal';
 export * from './guards/auth-context';
 export * from './decorators/auth.decorators';
 export * from './guards/auth.guard';

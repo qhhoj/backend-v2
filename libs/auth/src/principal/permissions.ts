@@ -1,5 +1,6 @@
 export const PERMISSIONS = [
   'judge.see_private_problem',
+  'judge.add_problem',
   'judge.edit_own_problem',
   'judge.create_organization_problem',
   'judge.edit_all_problem',
