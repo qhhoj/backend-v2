@@ -1,7 +1,10 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import type { Paginated } from '@libs/common';
+import { EditorialResponse } from './dto/editorial.response';
+import { ProblemDetailResponse } from './dto/problem-detail.response';
+import { StatementLangQueryDto } from './dto/problem-params.dto';
 import { ProblemListQueryDto } from './dto/problem-list.dto';
 import { ProblemListItemResponse } from './dto/problem-list.response';
 import { ProblemMetaResponse } from './dto/problem-meta.response';
@@ -24,5 +27,25 @@ export class ProblemsController {
     @CurrentAuth() auth: AuthContext | undefined,
   ): Promise<Paginated<ProblemListItemResponse>> {
     return this.problems.list(optionalPrincipal(auth), query);
+  }
+
+  @Public()
+  @Get(':code')
+  detail(
+    @Param('code') code: string,
+    @Query() { lang }: StatementLangQueryDto,
+    @CurrentAuth() auth: AuthContext | undefined,
+  ): Promise<ProblemDetailResponse> {
+    return this.problems.detail(optionalPrincipal(auth), code, lang);
+  }
+
+  @Public()
+  @Get(':code/editorial')
+  editorial(
+    @Param('code') code: string,
+    @Query() { lang }: StatementLangQueryDto,
+    @CurrentAuth() auth: AuthContext | undefined,
+  ): Promise<EditorialResponse> {
+    return this.problems.editorial(optionalPrincipal(auth), code, lang);
   }
 }

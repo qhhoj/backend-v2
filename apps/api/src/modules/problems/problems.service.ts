@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ProblemAccess } from './problem-access';
-import { Paginated } from '@libs/common';
+import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import type { Problem } from '@libs/database';
+import { AppError, Paginated } from '@libs/common';
+import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
+import type { Problem, StatementLanguage } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { EditorialResponse } from './dto/editorial.response';
+import { ProblemDetailResponse } from './dto/problem-detail.response';
+import { UserSummaryResponse } from './dto/user-summary.response';
 import { ProblemListQueryDto } from './dto/problem-list.dto';
 import { ProblemListItemResponse } from './dto/problem-list.response';
 import {
@@ -12,6 +17,7 @@ import {
   searchFilter,
 } from './problem-search';
 import { ProblemsRepository } from './problems.repository';
+import type { ProblemDocument } from './problems.repository';
 import {
   CatalogItemResponse,
   LanguageResponse,
@@ -36,6 +42,7 @@ export class ProblemsService {
     private readonly licenses: LicensesQuerier,
     private readonly languages: LanguagesQuerier,
     private readonly repository: ProblemsRepository,
+    private readonly users: UsersRepository,
   ) {}
 
   meta(): ProblemMetaResponse {
@@ -80,6 +87,90 @@ export class ProblemsService {
       ),
       { page: query.page, pageSize: query.pageSize, total },
     );
+  }
+
+  async detail(
+    principal: Principal | null,
+    code: string,
+    lang: StatementLanguage,
+  ): Promise<ProblemDetailResponse> {
+    const problem = await this.visibleProblem(principal, code);
+    const canEdit = this.canEdit(principal, problem);
+    const personIds = [...problem.authors];
+    if (canEdit)
+      personIds.push(
+        ...problem.curators,
+        ...problem.testers,
+        ...problem.bannedUsers,
+        ...(problem.solution?.authors ?? []),
+        ...(problem.suggester ? [problem.suggester] : []),
+      );
+    const people = new Map(
+      (await this.users.findByIds([...new Set(personIds.map(uuidStr))])).map(
+        (user) => [user._id, user],
+      ),
+    );
+    return ProblemDetailResponse.from(problem, {
+      lang,
+      canEdit,
+      hasEditorial: this.editorialVisible(principal, problem, canEdit),
+      people,
+      types: this.types,
+      groups: this.groups,
+      licenses: this.licenses,
+      languages: this.languages,
+    });
+  }
+
+  async editorial(
+    principal: Principal | null,
+    code: string,
+    lang: StatementLanguage,
+  ): Promise<EditorialResponse> {
+    const problem = await this.visibleProblem(principal, code);
+    const canEdit = this.canEdit(principal, problem);
+    const { solution } = problem;
+    if (!solution || !this.editorialVisible(principal, problem, canEdit))
+      throw new AppError('not_found', 404, 'No such editorial');
+    const authors = (
+      await this.users.findByIds(solution.authors.map(uuidStr))
+    ).map(UserSummaryResponse.from);
+    return EditorialResponse.from(problem, solution, lang, authors, canEdit);
+  }
+
+  /** 404 for malformed, unknown and invisible codes alike, so existence never leaks. */
+  async visibleProblem(
+    principal: Principal | null,
+    code: string,
+  ): Promise<ProblemDocument> {
+    const problem = PROBLEM_CODE_PATTERN.test(code)
+      ? await this.repository.findByCode(code)
+      : null;
+    if (
+      !problem ||
+      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem))
+    )
+      throw new AppError('not_found', 404, 'No such problem');
+    return problem;
+  }
+
+  editorialVisible(
+    principal: Principal | null,
+    problem: Problem,
+    canEdit: boolean,
+  ): boolean {
+    const { solution } = problem;
+    if (!solution) return false;
+    return (
+      (solution.isPublic && solution.publishOn <= new Date()) ||
+      (principal !== null &&
+        hasPermission(principal, 'judge.see_private_solution')) ||
+      canEdit
+    );
+  }
+
+  private canEdit(principal: Principal | null, problem: Problem): boolean {
+    return ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem));
   }
 
   private listFilter(

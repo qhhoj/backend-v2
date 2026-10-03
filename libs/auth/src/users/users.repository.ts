@@ -16,6 +16,12 @@ export class UsersRepository {
     return UUID_PATTERN.test(id) ? this.users.findById(id).exec() : null;
   }
 
+  findByIds(ids: string[]): Promise<UserDocument[]> {
+    return ids.length
+      ? this.users.find({ _id: { $in: ids } }).exec()
+      : Promise.resolve([]);
+  }
+
   findByUsername(username: string): Promise<UserDocument | null> {
     return this.users.findOne({ username }).collation(CI).exec();
   }

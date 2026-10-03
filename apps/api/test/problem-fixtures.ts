@@ -1,4 +1,6 @@
 import type { Problem, User } from '@libs/database';
+import type { EditorialResponse } from '../src/modules/problems/dto/editorial.response';
+import type { ProblemDetailResponse } from '../src/modules/problems/dto/problem-detail.response';
 import type { Test as SupertestRequest } from 'supertest';
 import { ApiTest, createUser, sessionCookie } from './setup';
 
@@ -108,3 +110,8 @@ export const createProblem = (
     date: new Date(),
     ...overrides,
   });
+
+export const detailOf = ({ body }: { body: unknown }) =>
+  (body as { data: ProblemDetailResponse }).data;
+export const editorialOf = ({ body }: { body: unknown }) =>
+  (body as { data: EditorialResponse }).data;
