@@ -4,6 +4,8 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { ENV, type Env } from '../env/env';
 
+const SAFE_SEGMENT = /^[\w-][\w.-]*$/;
+
 /** Files on the local media volume (statement images, PDF statements, materials); nginx serves MEDIA_ROOT at MEDIA_URL. */
 @Injectable()
 export class StorageService {
@@ -34,10 +36,23 @@ export class StorageService {
     await rm(this.resolveInside(relativePath), { force: true });
   }
 
-  /** Relative path of a url this service produced under `prefix`, else null. */
-  relativePathOf(url: string | null, prefix: string): string | null {
-    const base = this.publicUrl(prefix);
-    return url?.startsWith(base) ? url.slice(this.publicUrl('').length) : null;
+  /** Relative path of a url this service produced, only if it is exactly `pdf/<name>` or `materials/<code>/<name>` with safe single segments; else null. */
+  relativePathOf(url: string | null): string | null {
+    const prefix = this.publicUrl('');
+    if (!url?.startsWith(prefix)) return null;
+    const relativePath = url.slice(prefix.length);
+    const segments = relativePath.split('/');
+    const isLayout =
+      (segments[0] === 'pdf' && segments.length === 2) ||
+      (segments[0] === 'materials' && segments.length === 3);
+    return isLayout &&
+      segments
+        .slice(1)
+        .every(
+          (segment) => SAFE_SEGMENT.test(segment) && !segment.includes('..'),
+        )
+      ? relativePath
+      : null;
   }
 
   publicUrl(relativePath: string): string {

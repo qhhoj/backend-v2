@@ -49,8 +49,10 @@ const rejectFile = (message: string) =>
   new AppError('validation_failed', 400, message, { file: [message] });
 
 function sanitizedSvg(content: Buffer): Buffer {
+  if (content.length > SVG_MAX_BYTES)
+    throw rejectFile('The SVG is too large or too complex.');
   const svg = content.toString('utf8');
-  if (content.length > SVG_MAX_BYTES || !isSvgWithinLimits(svg))
+  if (!isSvgWithinLimits(svg))
     throw rejectFile('The SVG is too large or too complex.');
   return Buffer.from(sanitizeSvg(svg), 'utf8');
 }
@@ -186,11 +188,18 @@ export class ProblemUploadsService {
       await this.storage.delete(relativePath);
       throw error;
     }
-    const previous = this.storage.relativePathOf(
-      problem[field],
-      relativePath.slice(0, relativePath.lastIndexOf('/') + 1),
-    );
-    if (previous && previous !== relativePath)
+    const previousUrl = problem[field];
+    const previous = this.storage.relativePathOf(previousUrl);
+    if (
+      previousUrl &&
+      previous &&
+      previous !== relativePath &&
+      !(await this.repository.countOtherReferences(
+        field,
+        previousUrl,
+        problem._id,
+      ))
+    )
       await this.storage.delete(previous).catch(() => undefined);
     return url;
   }

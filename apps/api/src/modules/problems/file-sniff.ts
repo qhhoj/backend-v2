@@ -28,19 +28,18 @@ export const SVG_MAX_BYTES = 512 * 1024;
 const SVG_MAX_TAGS = 20000;
 const SVG_MAX_DEPTH = 1000;
 
-/** Linear scan that keeps the sanitizer's cost bounded: caps tag count and nesting depth. */
+/** Linear scan mirroring htmlparser2 (any `<` not followed by whitespace, `>`, `!` or `?` opens an element). The tag cap is the hard bound; depth is best-effort (`"/>"` inside attribute values can hide nesting). */
 export function isSvgWithinLimits(svg: string): boolean {
   let tags = 0;
   let depth = 0;
   let cursor = svg.indexOf('<');
   while (cursor !== -1) {
     const next = svg[cursor + 1];
-    const isClosing = next === '/';
-    if (isClosing || (next !== undefined && /[A-Za-z]/.test(next))) {
+    if (next !== undefined && !/[\s>!?]/.test(next)) {
       const end = svg.indexOf('>', cursor);
       if (end === -1) return false;
       if (++tags > SVG_MAX_TAGS) return false;
-      if (isClosing) depth--;
+      if (next === '/') depth--;
       else if (svg[end - 1] !== '/' && ++depth > SVG_MAX_DEPTH) return false;
       cursor = end;
     }

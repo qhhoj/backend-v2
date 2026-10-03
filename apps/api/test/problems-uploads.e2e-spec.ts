@@ -144,6 +144,7 @@ describe('problem uploads', () => {
     ],
     ['too many tags', `<svg>${'<g/>'.repeat(20001)}</svg>`],
     ['too deep', `<svg>${'<g>'.repeat(1001)}`],
+    ['full of odd element names', `<svg>${'<_>'.repeat(20001)}`],
   ])('refuses an svg that is %s', async (_label, svg) => {
     const response = await upload(
       `${PROBLEMS}/uploads/image`,
@@ -266,6 +267,40 @@ describe('problem uploads', () => {
       'second.zip',
     ).expect(201);
     expect(existsSync(mediaPath(firstMaterial))).toBe(false);
+  });
+  it('keeps a file that a clone still references', async () => {
+    const cloner = await createUserWith(api, 'cloner', {
+      permissions: [
+        'judge.clone_problem',
+        'judge.edit_own_problem',
+        'judge.upload_file_statement',
+      ],
+    });
+    const session = await loginAs(api, cloner._id);
+    await createProblem(api, catalog, { code: 'src2', authors: [cloner._id] });
+    const sharedUrl = urlOf(
+      await upload(`${PROBLEMS}/src2/statement`, session, PDF, 's.pdf').expect(
+        201,
+      ),
+    );
+    await authed(api.http().post(`${PROBLEMS}/src2/clone`), session)
+      .send({ code: 'copy2' })
+      .expect(201);
+    expect(
+      (await api.problems.findOne({ code: 'copy2' }))!.pdfStatementUrl,
+    ).toBe(sharedUrl);
+    const ownUrl = urlOf(
+      await upload(`${PROBLEMS}/copy2/statement`, session, PDF, 's.pdf').expect(
+        201,
+      ),
+    );
+    expect(ownUrl).not.toBe(sharedUrl);
+    expect(
+      existsSync(join(api.mediaRoot, sharedUrl.replace('/media/', ''))),
+    ).toBe(true);
+    expect(
+      (await api.problems.findOne({ code: 'src2' }))!.pdfStatementUrl,
+    ).toBe(sharedUrl);
   });
   it.each([
     ['../../../evil.zip', '/media/materials/sum/evil.zip'],

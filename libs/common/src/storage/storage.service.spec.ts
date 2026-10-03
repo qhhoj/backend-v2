@@ -52,14 +52,18 @@ describe('StorageService', () => {
       'Path escapes MEDIA_ROOT',
     );
   });
-  it('maps only its own urls under a prefix back to relative paths', () => {
-    expect(storage.relativePathOf('/media/pdf/a.pdf', 'pdf/')).toBe(
-      'pdf/a.pdf',
-    );
-    expect(storage.relativePathOf('/media/images/a.png', 'pdf/')).toBeNull();
-    expect(
-      storage.relativePathOf('https://evil/media/pdf/a.pdf', 'pdf/'),
-    ).toBeNull();
-    expect(storage.relativePathOf(null, 'pdf/')).toBeNull();
-  });
+  it.each([
+    ['/media/pdf/a.pdf', 'pdf/a.pdf'],
+    ['/media/materials/sum/data.zip', 'materials/sum/data.zip'],
+    ['/media/images/a.png', null],
+    ['/media/pdf/../x', null],
+    ['/media/pdf/a/b', null],
+    ['/media/pdf/.hidden', null],
+    ['/media/materials/sum/../../images/x.png', null],
+    ['/media/materials/sum', null],
+    ['https://evil/media/pdf/a.pdf', null],
+    [null, null],
+  ])('maps %s to %s', (url, expected) =>
+    expect(storage.relativePathOf(url)).toBe(expected),
+  );
 });

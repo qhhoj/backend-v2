@@ -58,6 +58,17 @@ export class ProblemsRepository {
     await this.problems.updateOne({ _id: id }, { $set: changes }).exec();
   }
 
+  /** Other problems still pointing at an uploaded file (clones copy the urls). */
+  countOtherReferences(
+    field: 'pdfStatementUrl' | 'materialUrl',
+    url: string,
+    excludedId: string,
+  ): Promise<number> {
+    return this.problems
+      .countDocuments({ [field]: url, _id: { $ne: excludedId } })
+      .exec();
+  }
+
   /** Appends the translation unless its language exists (atomic guard), otherwise replaces it. */
   async upsertTranslation(
     id: string,
