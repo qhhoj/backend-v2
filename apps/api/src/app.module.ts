@@ -8,6 +8,7 @@ import {
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { AuthApiModule } from './modules/auth/auth-api.module';
+import { ApiV2Module } from './modules/api-v2/api-v2.module';
 import { ProblemsApiModule } from './modules/problems/problems-api.module';
 import { HealthController } from './health.controller';
 
@@ -21,6 +22,7 @@ import { HealthController } from './health.controller';
     ScheduleModule.forRoot(),
     AuthApiModule,
     ProblemsApiModule,
+    ApiV2Module,
   ],
   controllers: [HealthController],
 })

@@ -39,6 +39,6 @@ const repositories = [ProblemsRepository, RevisionsRepository];
     ProblemEvents,
     RateLimitService,
   ],
-  exports: [...queriers, ...repositories, ProblemEvents],
+  exports: [...queriers, ...repositories, ProblemsService, ProblemEvents],
 })
 export class ProblemsApiModule {}
