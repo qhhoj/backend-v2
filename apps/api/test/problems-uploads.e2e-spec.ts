@@ -132,9 +132,30 @@ describe('problem uploads', () => {
       'utf8',
     );
     expect(url).toMatch(/\.svg$/);
-    expect(stored).not.toContain('script');
-    expect(stored).not.toContain('onload');
+    expect(stored).not.toMatch(/<script/i);
+    expect(stored).not.toMatch(/\bon\w+\s*=/i);
+    expect(stored).not.toMatch(/<foreignObject/i);
     expect(stored).toContain('<rect');
+  });
+  it.each([
+    [
+      'too large',
+      `<svg xmlns="http://www.w3.org/2000/svg">${' '.repeat(600 * 1024)}</svg>`,
+    ],
+    ['too many tags', `<svg>${'<g/>'.repeat(20001)}</svg>`],
+    ['too deep', `<svg>${'<g>'.repeat(1001)}`],
+  ])('refuses an svg that is %s', async (_label, svg) => {
+    const response = await upload(
+      `${PROBLEMS}/uploads/image`,
+      staff,
+      Buffer.from(svg),
+      'bomb.svg',
+      'image/svg+xml',
+    ).expect(400);
+    expect(
+      (response.body as { error: { fields: Record<string, string[]> } }).error
+        .fields,
+    ).toHaveProperty('file');
   });
   it('refuses oversized images with 413', async () => {
     await upload(

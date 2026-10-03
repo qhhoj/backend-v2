@@ -6,7 +6,12 @@ import { AppError, RateLimitService, StorageService } from '@libs/common';
 import { newId } from '@libs/database';
 import { sanitizeSvg } from '@libs/render';
 import { basename } from 'node:path';
-import { isPdf, sniffImage } from './file-sniff';
+import {
+  isPdf,
+  isSvgWithinLimits,
+  sniffImage,
+  SVG_MAX_BYTES,
+} from './file-sniff';
 import { ProblemEditingService } from './problem-editing.service';
 import { ProblemsRepository } from './problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
@@ -34,6 +39,13 @@ export const safeFileName = (name: string): string =>
 const rejectFile = (message: string) =>
   new AppError('validation_failed', 400, message, { file: [message] });
 
+function sanitizedSvg(content: Buffer): Buffer {
+  const svg = content.toString('utf8');
+  if (content.length > SVG_MAX_BYTES || !isSvgWithinLimits(svg))
+    throw rejectFile('The SVG is too large or too complex.');
+  return Buffer.from(sanitizeSvg(svg), 'utf8');
+}
+
 @Injectable()
 export class ProblemUploadsService {
   constructor(
@@ -58,10 +70,7 @@ export class ProblemUploadsService {
     const kind = sniffImage(content);
     if (!kind)
       throw rejectFile('Only JPG, PNG, GIF and SVG images are accepted.');
-    const stored =
-      kind === 'svg'
-        ? Buffer.from(sanitizeSvg(content.toString('utf8')), 'utf8')
-        : content;
+    const stored = kind === 'svg' ? sanitizedSvg(content) : content;
     return {
       url: await this.storage.save(`images/${newId()}.${kind}`, stored),
     };
