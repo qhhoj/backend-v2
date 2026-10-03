@@ -1,4 +1,5 @@
-import { listSort, searchFilter } from './problem-search';
+import type { Problem } from '@libs/database';
+import { isEditorialPublished, listSort, searchFilter } from './problem-search';
 
 describe('searchFilter', () => {
   it('uses the text index for queries of three or more characters', () =>
@@ -30,5 +31,18 @@ describe('listSort', () => {
   it('maps the sort key and keeps _id as tie-break', () => {
     expect(listSort('-date')).toEqual({ date: -1, _id: 1 });
     expect(listSort('name')).toEqual({ name: 1, _id: 1 });
+  });
+});
+
+describe('isEditorialPublished', () => {
+  const solution = (isPublic: boolean, publishOn: Date) =>
+    ({ isPublic, publishOn }) as Problem['solution'];
+  it('needs a public editorial whose publish time has passed', () => {
+    expect(isEditorialPublished(null)).toBe(false);
+    expect(isEditorialPublished(solution(false, new Date(0)))).toBe(false);
+    expect(
+      isEditorialPublished(solution(true, new Date(Date.now() + 1e6))),
+    ).toBe(false);
+    expect(isEditorialPublished(solution(true, new Date(0)))).toBe(true);
   });
 });

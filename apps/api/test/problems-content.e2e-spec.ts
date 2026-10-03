@@ -1,3 +1,5 @@
+import { REDIS } from '@libs/common';
+import type Redis from 'ioredis';
 import { ProblemEvents } from '../src/modules/problems/problem.events';
 import {
   authed,
@@ -82,6 +84,7 @@ describe('translations, editorial, clone and preview', () => {
       isFullMarkup: true,
       description: 'raw',
       authors: [editorId, fullUser._id],
+      curators: [clonerUser._id],
     });
     api.app
       .get(ProblemEvents)
@@ -195,6 +198,10 @@ describe('translations, editorial, clone and preview', () => {
       (await api.problems.findOne({ code: 'src' }))!.solution!.publishOn,
     ).toEqual(new Date('2026-03-01T00:00:00Z'));
     await authed(api.http().put(`${PROBLEMS}/src/editorial`), editor)
+      .send({ ...body, content: 'Quote “x”' })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    await authed(api.http().put(`${PROBLEMS}/src/editorial`), editor)
       .send({ ...body, authors: ['00000000-0000-7000-8000-000000000000'] })
       .expect(400)
       .expect(errorCode('validation_failed'));
@@ -260,18 +267,111 @@ describe('translations, editorial, clone and preview', () => {
         style,
         markdown,
       });
-    expect((await preview(editor, 'problem').expect(201)).body).toEqual({
+    expect((await preview(editor, 'problem').expect(200)).body).toEqual({
       data: { html: '<h3>T </h3>\n' },
     });
     await preview(editor, 'problem-full').expect(403);
     expect(
-      (await preview(fullMarkup, 'problem-full').expect(201)).body,
+      (await preview(fullMarkup, 'problem-full').expect(200)).body,
     ).toEqual({ data: { html: '<h3>T <script>1</script></h3>\n' } });
     await preview(plain, 'problem').expect(403);
     for (let attempt = 0; attempt < 59; attempt++)
-      await preview(editor, 'problem', 'x').expect(201);
+      await preview(editor, 'problem', 'x').expect(200);
     await preview(editor, 'problem', 'x')
       .expect(429)
       .expect(errorCode('rate_limited'));
+  });
+  it('keeps raw html out of a translation on a non-full-markup problem', async () => {
+    await authed(api.http().put(`${PROBLEMS}/src/translations/vi`), editor)
+      .send({ name: 'x', description: '<script>1</script> x' })
+      .expect(204);
+    const [translation] = (await api.problems.findOne({ code: 'src' }))!
+      .translations;
+    expect(translation.descriptionHtml).not.toContain('<script');
+    expect(translation.descriptionHtml).toContain('x');
+  });
+
+  it('keeps a clone of a full-markup problem full-markup and gated', async () => {
+    const detail = detailOf(
+      await authed(api.http().post(`${PROBLEMS}/markup/clone`), cloner)
+        .send({ code: 'markupcopy' })
+        .expect(201),
+    );
+    expect(detail.isFullMarkup).toBe(true);
+    await authed(api.http().patch(`${PROBLEMS}/markupcopy`), cloner)
+      .send({ description: '<b>raw</b>' })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    await authed(
+      api.http().put(`${PROBLEMS}/markupcopy/translations/vi`),
+      cloner,
+    )
+      .send({ name: 'x', description: '<b>raw</b>' })
+      .expect(403);
+  });
+
+  describe('render limits', () => {
+    const OVER_TWO_MIB = `${'$x$ '.repeat(1700)}\n\n${'#\n'.repeat(95000)}`;
+    const limitFieldsOf = ({ body }: { body: unknown }) =>
+      (body as { error: { fields: Record<string, string[]> } }).error.fields;
+
+    beforeAll(async () => {
+      const redis = api.app.get<Redis>(REDIS);
+      await Promise.all(
+        (await redis.keys('rate:*')).map((key) => redis.del(key)),
+      );
+      await createProblem(api, catalog, {
+        code: 'flood',
+        authors: [editorId],
+      });
+    });
+
+    it('saves a formula flood with the excess left as source text', async () => {
+      await authed(api.http().patch(`${PROBLEMS}/flood`), editor)
+        .send({ description: '$x$ '.repeat(50000) })
+        .expect(200);
+      const { descriptionHtml } = (await api.problems.findOne({
+        code: 'flood',
+      }))!;
+      expect(Buffer.byteLength(descriptionHtml)).toBeLessThan(2 * 1024 * 1024);
+      expect(descriptionHtml).toContain('Formula limit exceeded');
+    });
+
+    it('rejects markdown that renders past 2 MiB on every statement path', async () => {
+      const rejected = (response: { body: unknown }, field: string) =>
+        expect(limitFieldsOf(response)).toHaveProperty(field);
+      rejected(
+        await authed(api.http().patch(`${PROBLEMS}/flood`), editor)
+          .send({ description: OVER_TWO_MIB })
+          .expect(400)
+          .expect(errorCode('validation_failed')),
+        'description',
+      );
+      rejected(
+        await authed(
+          api.http().put(`${PROBLEMS}/flood/translations/vi`),
+          editor,
+        )
+          .send({ name: 'x', description: OVER_TWO_MIB })
+          .expect(400),
+        'description',
+      );
+      rejected(
+        await authed(api.http().put(`${PROBLEMS}/flood/editorial`), editor)
+          .send({
+            isPublic: false,
+            publishOn: '2026-01-01T00:00:00Z',
+            content: OVER_TWO_MIB,
+          })
+          .expect(400),
+        'content',
+      );
+      rejected(
+        await authed(api.http().post(`${PROBLEMS}/render-preview`), editor)
+          .send({ style: 'problem', markdown: OVER_TWO_MIB })
+          .expect(400),
+        'markdown',
+      );
+    });
   });
 });
