@@ -207,6 +207,34 @@ describe('renderMarkdown', () => {
         expect(() => full(build(50000))).toThrow(RenderLimitError);
       },
     );
+    it.each([
+      ['mtext in math', '<math><mtext>'],
+      ['stray mi closer in svg', '<svg></mi>'],
+      ['desc in svg', '<svg><desc>'],
+      ['foreignObject in svg', '<svg><foreignObject>'],
+      ['mi in math', '<math><mi>'],
+      ['annotation-xml in math', '<math><annotation-xml>'],
+      ['stray title closer in svg', '<svg></title>'],
+      ['">" inside an attribute value', '<b title="x><svg>">'],
+      ['comment', '<!--<svg>-->'],
+      ['processing instruction', '<?<svg>?>'],
+    ])('rejects a self-closing flood hidden behind %s', (_name, prefix) => {
+      const started = performance.now();
+      const html = `${prefix}${'<a/>'.repeat(49990)}`;
+      expect(() => full(html)).toThrow(RenderLimitError);
+      expect(() => renderMarkdown(html, 'problem')).toThrow(RenderLimitError);
+      expect(performance.now() - started).toBeLessThan(2000);
+    });
+    it('keeps a flood after a bogus declaration fast (markdown-it leaves a real svg open, so "/>" is legitimate)', () => {
+      const started = performance.now();
+      renderMarkdown(`<!<svg>>${'<a/>'.repeat(49990)}`, 'problem');
+      expect(performance.now() - started).toBeLessThan(2000);
+    });
+    it('renders formula-only statements without hitting the tag cap', () => {
+      const letters = 'x'.repeat(999);
+      const html = full(`$${letters}$ `.repeat(121));
+      expect(html.match(/class="katex"/g)).toHaveLength(121);
+    });
     it('keeps KaTeX svg self-closing tags out of the nesting count', () => {
       const html = full('$\\sqrt{x}$ '.repeat(600));
       expect(html.match(/class="katex"/g)).toHaveLength(600);

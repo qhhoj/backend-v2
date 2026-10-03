@@ -311,7 +311,7 @@ describe('translations, editorial, clone and preview', () => {
   });
 
   describe('render limits', () => {
-    const OVER_TWO_MIB = `${'$x$ '.repeat(1700)}\n\n${'#\n'.repeat(95000)}`;
+    const OVER_TWO_MIB = `${`$${'x'.repeat(28)}$ `.repeat(2000)}\n\n${'#\n'.repeat(68000)}`;
     const limitFieldsOf = ({ body }: { body: unknown }) =>
       (body as { error: { fields: Record<string, string[]> } }).error.fields;
 

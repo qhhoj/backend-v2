@@ -126,7 +126,7 @@ tools/legacy/   regenerates the fixtures
 - Rendering styles: `problem`, `problem-full`, `solution`; one `styleOf` picks the style per problem
 - HTML is rendered and stored at save; reads never render
 - `problem-full` HTML is unsanitized; writing statement text on a full-markup problem needs `judge.problem_full_markup`
-- Markdown is capped at 200000 chars (`MAX_MARKDOWN_LENGTH`); render budgets per render: 2000 formulas of at most 1000 chars and 1.5 MB of KaTeX output (excess stays as source text), 200000 tags, nesting depth 500, 2 MB of HTML; past the tag, depth or HTML limit `renderMarkdown` throws `RenderLimitError` -> 400 `validation_failed` on the rendered field
+- Markdown is capped at 200000 chars (`MAX_MARKDOWN_LENGTH`); render budgets per render: 2000 formulas of at most 1000 chars and 1.5 MB of KaTeX output (excess stays as source text), 200000 opening tags, nesting depth 500, 2 MB of HTML; past the tag, depth or HTML limit `renderMarkdown` throws `RenderLimitError` -> 400 `validation_failed` on the rendered field
 - Math: `$..$` (no space inside the edges, so money is safe), `~..~` (spaces allowed), `$$..$$`; use `\vert` instead of `|` in table-cell math; math inside raw HTML blocks is not rendered
 - Legacy `<blockquote class="spoiler">` works only at column 0 after a blank line
 - Golden fixtures: `libs/render/src/fixtures/*.md|html`; regenerate with `UPDATE_GOLDENS=1 npx jest libs/render/src/goldens.spec.ts`, review the diff; listed in `.prettierignore`

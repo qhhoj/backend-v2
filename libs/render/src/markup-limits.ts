@@ -1,7 +1,9 @@
+import { Parser } from 'htmlparser2';
+
 export interface MarkupLimits {
   maxTags: number;
   maxDepth: number;
-  /** `xml`: `/>` closes any tag (SVG uploads). `html`: only inside `svg`/`math` (htmlparser2 HTML mode, used for statements). */
+  /** `xml`: linear scan where `/>` closes any tag (SVG uploads). `html`: parsed by htmlparser2 itself, the copy sanitize-html uses (statements). */
   mode: 'html' | 'xml';
 }
 
@@ -21,45 +23,70 @@ const VOID_TAGS = new Set([
   'wbr',
 ]);
 const TAG_NAME = /^[^ \t\n\f\r/>]+/;
-const FOREIGN_TAGS = new Set(['svg', 'math']);
+class LimitExceeded extends Error {}
 
-/** Linear scan mirroring htmlparser2 (any `<` not followed by space, tab, LF, FF, CR, `>`, `!` or `?` opens an element). The tag cap is the hard bound; depth is best-effort (`"/>"` inside attribute values can hide nesting). */
-export function isMarkupWithinLimits(
+/** Same parser and options as the statement sanitizer, so the guard sees exactly the tree the sanitizer will walk. Counts opening tags only. */
+function isHtmlWithinLimits(
   html: string,
-  { maxTags, maxDepth, mode }: MarkupLimits,
+  { maxTags, maxDepth }: MarkupLimits,
 ): boolean {
   let tags = 0;
   let depth = 0;
-  let foreignDepth = 0;
-  let cursor = html.indexOf('<');
+  const parser = new Parser(
+    {
+      onopentag: () => {
+        if (++tags > maxTags || ++depth > maxDepth) throw new LimitExceeded();
+      },
+      onclosetag: () => {
+        depth--;
+      },
+    },
+    { lowerCaseAttributeNames: false },
+  );
+  try {
+    parser.write(html);
+    parser.end();
+    return true;
+  } catch (error) {
+    if (error instanceof LimitExceeded) return false;
+    throw error;
+  }
+}
+
+/** Linear scan mirroring htmlparser2 in XML mode (any `<` not followed by space, tab, LF, FF, CR, `>`, `!` or `?` opens an element). The tag cap is the hard bound; depth is best-effort (`"/>"` inside attribute values can hide nesting). */
+function isXmlWithinLimits(
+  xml: string,
+  { maxTags, maxDepth }: MarkupLimits,
+): boolean {
+  let tags = 0;
+  let depth = 0;
+  let cursor = xml.indexOf('<');
   while (cursor !== -1) {
-    const next = html[cursor + 1];
+    const next = xml[cursor + 1];
     if (next !== undefined && !/[ \t\n\f\r>!?]/.test(next)) {
-      const end = html.indexOf('>', cursor);
+      const end = xml.indexOf('>', cursor);
       if (end === -1) return false;
       if (++tags > maxTags) return false;
-      const closing = next === '/';
-      const name =
-        TAG_NAME.exec(
-          html.slice(cursor + (closing ? 2 : 1), end),
-        )?.[0].toLowerCase() ?? '';
-      const foreign = FOREIGN_TAGS.has(name);
-      if (closing) {
-        depth = Math.max(0, depth - 1);
-        if (foreign) foreignDepth = Math.max(0, foreignDepth - 1);
-      } else if (
-        !(
-          html[end - 1] === '/' &&
-          (mode === 'xml' || foreign || foreignDepth > 0)
+      if (next === '/') depth = Math.max(0, depth - 1);
+      else if (
+        xml[end - 1] !== '/' &&
+        !VOID_TAGS.has(
+          TAG_NAME.exec(xml.slice(cursor + 1, end))?.[0].toLowerCase() ?? '',
         ) &&
-        !VOID_TAGS.has(name)
-      ) {
-        if (foreign) foreignDepth++;
-        if (++depth > maxDepth) return false;
-      }
+        ++depth > maxDepth
+      )
+        return false;
       cursor = end;
     }
-    cursor = html.indexOf('<', cursor + 1);
+    cursor = xml.indexOf('<', cursor + 1);
   }
   return true;
 }
+
+export const isMarkupWithinLimits = (
+  markup: string,
+  limits: MarkupLimits,
+): boolean =>
+  limits.mode === 'html'
+    ? isHtmlWithinLimits(markup, limits)
+    : isXmlWithinLimits(markup, limits);

@@ -37,11 +37,8 @@ describe('isMarkupWithinLimits', () => {
       ),
     ).toBe(true);
     expect(
-      isMarkupWithinLimits('<math><mi/><mi/><mi/><mi/></math>', htmlLimits),
-    ).toBe(true);
-    expect(isMarkupWithinLimits('<svg/><a/><a/><a/><a/>', htmlLimits)).toBe(
-      false,
-    );
+      isMarkupWithinLimits('<svg></svg><a/><a/><a/><a/>', htmlLimits),
+    ).toBe(false);
   });
   it('does not treat "/>" inside an attribute value as self-closing in html mode', () => {
     expect(
@@ -50,5 +47,22 @@ describe('isMarkupWithinLimits', () => {
         htmlLimits,
       ),
     ).toBe(false);
+  });
+  it('parses shallow markup in linear time and aborts deep markup early', () => {
+    const run = (markup: string) => {
+      const started = performance.now();
+      isMarkupWithinLimits(markup, {
+        maxTags: 1e9,
+        maxDepth: 500,
+        mode: 'html',
+      });
+      return performance.now() - started;
+    };
+    run('<p>x</p>'.repeat(10000));
+    const ratio =
+      run('<p>x</p>'.repeat(250000)) /
+      Math.max(run('<p>x</p>'.repeat(50000)), 1);
+    expect(ratio).toBeLessThan(15);
+    expect(run('<a/>'.repeat(250000))).toBeLessThan(500);
   });
 });
