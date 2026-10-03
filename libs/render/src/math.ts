@@ -27,7 +27,7 @@ export type MathBudget = {
   limitReported: boolean;
 };
 export const MAX_FORMULAS = 2000;
-export const MAX_FORMULA_LENGTH = 4000;
+export const MAX_FORMULA_LENGTH = 1000;
 export const MAX_MATH_OUTPUT_BYTES = 1.5 * 1024 * 1024;
 export const createMathBudget = (): MathBudget => ({
   formulas: 0,
@@ -64,7 +64,14 @@ export function renderMath(
       trust: false,
       maxSize: MAX_SIZE,
     });
-    if (budget) budget.outputBytes += html.length;
+    if (budget) {
+      if (budget.outputBytes + html.length > MAX_MATH_OUTPUT_BYTES) {
+        budget.outputBytes = MAX_MATH_OUTPUT_BYTES + 1;
+        budget.limitReported = true;
+        return mathError(tex, displayMode, 'Formula limit exceeded');
+      }
+      budget.outputBytes += html.length;
+    }
     return html;
   } catch (error) {
     return mathError(

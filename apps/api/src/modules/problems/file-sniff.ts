@@ -31,4 +31,8 @@ const SVG_MAX_TAGS = 20000;
 const SVG_MAX_DEPTH = 1000;
 
 export const isSvgWithinLimits = (svg: string): boolean =>
-  isMarkupWithinLimits(svg, { maxTags: SVG_MAX_TAGS, maxDepth: SVG_MAX_DEPTH });
+  isMarkupWithinLimits(svg, {
+    maxTags: SVG_MAX_TAGS,
+    maxDepth: SVG_MAX_DEPTH,
+    mode: 'xml',
+  });

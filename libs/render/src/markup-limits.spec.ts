@@ -1,6 +1,7 @@
 import { isMarkupWithinLimits } from './markup-limits';
 
-const limits = { maxTags: 10, maxDepth: 3 };
+const limits = { maxTags: 10, maxDepth: 3, mode: 'xml' as const };
+const htmlLimits = { ...limits, mode: 'html' as const };
 
 describe('isMarkupWithinLimits', () => {
   it('accepts markup within both limits', () => {
@@ -22,5 +23,32 @@ describe('isMarkupWithinLimits', () => {
     expect(
       isMarkupWithinLimits('</p></p></p></p> a < b <!-- x -->', limits),
     ).toBe(true);
+  });
+  it('honours "/>" on any tag in xml mode only', () => {
+    expect(isMarkupWithinLimits('<a/>'.repeat(5), limits)).toBe(true);
+    expect(isMarkupWithinLimits('<a/>'.repeat(5), htmlLimits)).toBe(false);
+    expect(isMarkupWithinLimits('<a />'.repeat(5), htmlLimits)).toBe(false);
+  });
+  it('honours "/>" inside svg and math in html mode', () => {
+    expect(
+      isMarkupWithinLimits(
+        '<svg><path/><path/><path/><path/></svg>',
+        htmlLimits,
+      ),
+    ).toBe(true);
+    expect(
+      isMarkupWithinLimits('<math><mi/><mi/><mi/><mi/></math>', htmlLimits),
+    ).toBe(true);
+    expect(isMarkupWithinLimits('<svg/><a/><a/><a/><a/>', htmlLimits)).toBe(
+      false,
+    );
+  });
+  it('does not treat "/>" inside an attribute value as self-closing in html mode', () => {
+    expect(
+      isMarkupWithinLimits(
+        '<a title="/>"><b title="/>"><c title="/>"><d>',
+        htmlLimits,
+      ),
+    ).toBe(false);
   });
 });

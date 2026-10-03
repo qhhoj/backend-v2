@@ -81,6 +81,7 @@ export function renderMarkdown(text: string, style: RenderStyle): string {
     !isMarkupWithinLimits(rendered, {
       maxTags: MAX_MARKUP_TAGS,
       maxDepth: MAX_MARKUP_DEPTH,
+      mode: 'html',
     })
   )
     throw new RenderLimitError(

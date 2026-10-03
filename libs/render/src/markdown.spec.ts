@@ -185,20 +185,37 @@ describe('renderMarkdown', () => {
     it('throws RenderLimitError when the output exceeds 2 MB', () => {
       expect(() => full('a '.repeat(1100000))).toThrow(RenderLimitError);
     });
-    it.each([
-      ['a', '<a>'.repeat(50000)],
-      ['span', '<span>'.repeat(33333)],
-      ['div and stray p', '<div>'.repeat(20000) + '</p>'.repeat(25000)],
-      ['table', '<table><tr><td>'.repeat(10000)],
-    ])('bounds raw html nesting: %s', (_name, html) => {
-      const started = performance.now();
-      try {
-        full(html);
-        renderMarkdown(html, 'problem');
-      } catch (error) {
-        expect(error).toBeInstanceOf(RenderLimitError);
-      }
-      expect(performance.now() - started).toBeLessThan(5000);
+    const nestings: Array<[string, (count: number) => string]> = [
+      ['a', (count) => '<a>'.repeat(count)],
+      ['self-closed a', (count) => '<a/>'.repeat(count)],
+      ['spaced self-closed a', (count) => '<a />'.repeat(count)],
+      ['span', (count) => '<span>'.repeat(count)],
+      [
+        'div and stray p',
+        (count) => '<div>'.repeat(count) + '</p>'.repeat(count * 1.25),
+      ],
+      ['table', (count) => '<table><tr><td>'.repeat(count)],
+    ];
+    it.each(nestings)(
+      'bounds raw html nesting in linear time: %s',
+      (_name, build) => {
+        expectLinear(
+          (count) =>
+            full(build(count)) + renderMarkdown(build(count), 'problem'),
+          10000,
+        );
+        expect(() => full(build(50000))).toThrow(RenderLimitError);
+      },
+    );
+    it('keeps KaTeX svg self-closing tags out of the nesting count', () => {
+      const html = full('$\\sqrt{x}$ '.repeat(600));
+      expect(html.match(/class="katex"/g)).toHaveLength(600);
+    });
+    it('turns a formula at the length limit into a save-safe result', () => {
+      const cells = 'a&'.repeat(498) + 'a';
+      const html = full(`$$\\begin{matrix}${cells}\\end{matrix}$$`);
+      expect(html).toMatch(/class="katex|class="math-error/);
+      expect(full(`$${'x'.repeat(1001)}$`)).toContain('Formula limit exceeded');
     });
     it('rejects markup nested deeper than 500', () => {
       expect(() => full('<div>'.repeat(501))).toThrow(RenderLimitError);

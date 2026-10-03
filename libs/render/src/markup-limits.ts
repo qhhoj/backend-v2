@@ -1,6 +1,8 @@
 export interface MarkupLimits {
   maxTags: number;
   maxDepth: number;
+  /** `xml`: `/>` closes any tag (SVG uploads). `html`: only inside `svg`/`math` (htmlparser2 HTML mode, used for statements). */
+  mode: 'html' | 'xml';
 }
 
 const VOID_TAGS = new Set([
@@ -19,14 +21,16 @@ const VOID_TAGS = new Set([
   'wbr',
 ]);
 const TAG_NAME = /^[^ \t\n\f\r/>]+/;
+const FOREIGN_TAGS = new Set(['svg', 'math']);
 
 /** Linear scan mirroring htmlparser2 (any `<` not followed by space, tab, LF, FF, CR, `>`, `!` or `?` opens an element). The tag cap is the hard bound; depth is best-effort (`"/>"` inside attribute values can hide nesting). */
 export function isMarkupWithinLimits(
   html: string,
-  { maxTags, maxDepth }: MarkupLimits,
+  { maxTags, maxDepth, mode }: MarkupLimits,
 ): boolean {
   let tags = 0;
   let depth = 0;
+  let foreignDepth = 0;
   let cursor = html.indexOf('<');
   while (cursor !== -1) {
     const next = html[cursor + 1];
@@ -34,15 +38,25 @@ export function isMarkupWithinLimits(
       const end = html.indexOf('>', cursor);
       if (end === -1) return false;
       if (++tags > maxTags) return false;
-      if (next === '/') depth = Math.max(0, depth - 1);
-      else if (
-        html[end - 1] !== '/' &&
-        !VOID_TAGS.has(
-          TAG_NAME.exec(html.slice(cursor + 1, end))?.[0].toLowerCase() ?? '',
+      const closing = next === '/';
+      const name =
+        TAG_NAME.exec(
+          html.slice(cursor + (closing ? 2 : 1), end),
+        )?.[0].toLowerCase() ?? '';
+      const foreign = FOREIGN_TAGS.has(name);
+      if (closing) {
+        depth = Math.max(0, depth - 1);
+        if (foreign) foreignDepth = Math.max(0, foreignDepth - 1);
+      } else if (
+        !(
+          html[end - 1] === '/' &&
+          (mode === 'xml' || foreign || foreignDepth > 0)
         ) &&
-        ++depth > maxDepth
-      )
-        return false;
+        !VOID_TAGS.has(name)
+      ) {
+        if (foreign) foreignDepth++;
+        if (++depth > maxDepth) return false;
+      }
       cursor = end;
     }
     cursor = html.indexOf('<', cursor + 1);
