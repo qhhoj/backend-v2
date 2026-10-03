@@ -36,21 +36,18 @@ export class StorageService {
     await rm(this.resolveInside(relativePath), { force: true });
   }
 
-  /** Relative path of a url this service produced, only if it is exactly `pdf/<name>` or `materials/<code>/<name>` with safe single segments; else null. */
-  relativePathOf(url: string | null): string | null {
+  /** Relative path of a url this service produced, only if it is exactly `pdf/<name>` (kind `pdf`) or `materials/<code>/<name>` (kind `materials`) with safe single segments; else null. */
+  relativePathOf(url: string | null, kind: 'pdf' | 'materials'): string | null {
     const prefix = this.publicUrl('');
     if (!url?.startsWith(prefix)) return null;
     const relativePath = url.slice(prefix.length);
-    const segments = relativePath.split('/');
+    const [directory, ...names] = relativePath.split('/');
     const isLayout =
-      (segments[0] === 'pdf' && segments.length === 2) ||
-      (segments[0] === 'materials' && segments.length === 3);
+      directory === kind && names.length === (kind === 'pdf' ? 1 : 2);
     return isLayout &&
-      segments
-        .slice(1)
-        .every(
-          (segment) => SAFE_SEGMENT.test(segment) && !segment.includes('..'),
-        )
+      names.every(
+        (segment) => SAFE_SEGMENT.test(segment) && !segment.includes('..'),
+      )
       ? relativePath
       : null;
   }

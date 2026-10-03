@@ -189,7 +189,10 @@ export class ProblemUploadsService {
       throw error;
     }
     const previousUrl = problem[field];
-    const previous = this.storage.relativePathOf(previousUrl);
+    const previous = this.storage.relativePathOf(
+      previousUrl,
+      field === 'pdfStatementUrl' ? 'pdf' : 'materials',
+    );
     if (
       previousUrl &&
       previous &&

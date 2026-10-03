@@ -55,6 +55,10 @@ describe('isSvgWithinLimits', () => {
     expect(timed('<1>'.repeat(1001))).toBe(false);
     expect(timed('<é>'.repeat(1001))).toBe(false);
   });
+  it.each(['\u00A0', '\uFEFF', '\u2028', '\u000B'])(
+    'counts a tag opened by the non-parser-whitespace char %j',
+    (character) => expect(timed(`<${character}>`.repeat(20001))).toBe(false),
+  );
   it('rejects an unterminated tag', () => expect(timed('<svg><g')).toBe(false));
   it('exposes a 512 KiB byte cap', () => expect(SVG_MAX_BYTES).toBe(524288));
 });

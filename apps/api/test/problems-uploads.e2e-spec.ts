@@ -144,6 +144,7 @@ describe('problem uploads', () => {
     ],
     ['too many tags', `<svg>${'<g/>'.repeat(20001)}</svg>`],
     ['too deep', `<svg>${'<g>'.repeat(1001)}`],
+    ['full of NBSP-named elements', `<svg>${'<\u00A0>'.repeat(20001)}`],
     ['full of odd element names', `<svg>${'<_>'.repeat(20001)}`],
   ])('refuses an svg that is %s', async (_label, svg) => {
     const response = await upload(

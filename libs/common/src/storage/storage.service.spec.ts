@@ -53,17 +53,19 @@ describe('StorageService', () => {
     );
   });
   it.each([
-    ['/media/pdf/a.pdf', 'pdf/a.pdf'],
-    ['/media/materials/sum/data.zip', 'materials/sum/data.zip'],
-    ['/media/images/a.png', null],
-    ['/media/pdf/../x', null],
-    ['/media/pdf/a/b', null],
-    ['/media/pdf/.hidden', null],
-    ['/media/materials/sum/../../images/x.png', null],
-    ['/media/materials/sum', null],
-    ['https://evil/media/pdf/a.pdf', null],
-    [null, null],
-  ])('maps %s to %s', (url, expected) =>
-    expect(storage.relativePathOf(url)).toBe(expected),
+    ['/media/pdf/a.pdf', 'pdf', 'pdf/a.pdf'],
+    ['/media/materials/sum/data.zip', 'materials', 'materials/sum/data.zip'],
+    ['/media/materials/sum/data.zip', 'pdf', null],
+    ['/media/pdf/a.pdf', 'materials', null],
+    ['/media/images/a.png', 'pdf', null],
+    ['/media/pdf/../x', 'pdf', null],
+    ['/media/pdf/a/b', 'pdf', null],
+    ['/media/pdf/.hidden', 'pdf', null],
+    ['/media/materials/sum/../../images/x.png', 'materials', null],
+    ['/media/materials/sum', 'materials', null],
+    ['https://evil/media/pdf/a.pdf', 'pdf', null],
+    [null, 'pdf', null],
+  ] as const)('maps %s as %s to %s', (url, kind, expected) =>
+    expect(storage.relativePathOf(url, kind)).toBe(expected),
   );
 });
