@@ -96,4 +96,60 @@ describe('renderMarkdown', () => {
       '<div style="color:red">raw <b>html</b></div>',
     );
   });
+
+  it('does not close a math span on an escaped dollar, but does after an even run of backslashes', () => {
+    expect(full('a $x\\\\$ b')).toMatch(KATEX_INLINE);
+  });
+  it('lets tilde math keep inner spaces but not dollar math', () => {
+    expect(full('a ~x \\leq 10 ~ b')).toMatch(KATEX_INLINE);
+    expect(full('a ~ x ~ b')).toMatch(KATEX_INLINE);
+    expect(full('a $x \\leq 10 $ b')).toBe('<p>a $x \\leq 10 $ b</p>\n');
+  });
+  it('catches every KaTeX failure into a truncated math-error span', () => {
+    const nested = full(`$${'{'.repeat(20000)}${'}'.repeat(20000)}$`);
+    const frac = full(`$${'\\frac{'.repeat(3000)}$`);
+    for (const html of [nested, frac]) {
+      expect(html).toContain('<span class="math-error"');
+      expect(html.length).toBeLessThan(1000);
+    }
+    expect(renderMarkdown('$\\foo$', 'problem')).toContain(
+      'title="KaTeX parse error: Undefined control sequence: \\foo',
+    );
+  });
+  it('renders math input in linear time', () => {
+    for (const text of ['$a '.repeat(50000), '$1 '.repeat(50000)]) {
+      const started = Date.now();
+      full(text);
+      expect(Date.now() - started).toBeLessThan(500);
+    }
+  });
+  it('stops treating >! as a spoiler beyond 20 levels instead of overflowing the stack', () => {
+    const html = full('>! '.repeat(2000) + 'x');
+    expect(html.match(/<blockquote class="spoiler">/g)).toHaveLength(20);
+    expect(full('>! '.repeat(20) + 'x')).toContain('x');
+    expect(() =>
+      full(
+        '<blockquote class="spoiler">\n'.repeat(500) +
+          'x\n' +
+          '</blockquote>\n'.repeat(500),
+      ),
+    ).not.toThrow();
+  });
+  it('parses legacy html spoiler blocks as Markdown', () => {
+    const source =
+      '<blockquote class="spoiler">\n\n```cpp\n#include <bits/stdc++.h>\nvector<long long> v;\n```\n\n</blockquote>\n\nafter';
+    const expected =
+      '<blockquote class="spoiler">\n<pre><code class="language-cpp">#include &lt;bits/stdc++.h&gt;\nvector&lt;long long&gt; v;\n</code></pre>\n</blockquote>\n<p>after</p>\n';
+    expect(full(source)).toBe(expected);
+    expect(renderMarkdown(source, 'problem')).toBe(expected);
+    expect(renderMarkdown(source, 'solution')).toBe(expected);
+    expect(full("  <blockquote  class='spoiler' >\nhi\n</blockquote>")).toBe(
+      '<blockquote class="spoiler">\n<p>hi</p>\n</blockquote>\n',
+    );
+  });
+  it('leaves an unclosed html spoiler to the plain HTML block, not the rest of the document', () => {
+    expect(full('<blockquote class="spoiler">\nopen\n\nrest *here*')).toBe(
+      '<blockquote class="spoiler">\nopen\n<p>rest <em>here</em></p>\n',
+    );
+  });
 });
