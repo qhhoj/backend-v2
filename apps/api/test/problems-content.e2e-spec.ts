@@ -142,6 +142,15 @@ describe('translations, editorial, clone and preview', () => {
       (await api.problems.findOne({ code: 'markup' }))!.translations[0]
         .descriptionHtml,
     ).toContain('<b>y</b>');
+    await authed(api.http().put(`${PROBLEMS}/markup/translations/vi`), editor)
+      .send({ name: 'renamed', description: '<b>y</b>' })
+      .expect(204);
+    await authed(api.http().put(`${PROBLEMS}/markup/translations/vi`), editor)
+      .send({ name: 'renamed', description: '<b>y</b>' })
+      .expect(204);
+    expect(
+      (await api.problems.findOne({ code: 'markup' }))!.translations[0].name,
+    ).toBe('renamed');
   });
 
   it('replaces the editorial, validates authors and keeps it sanitized', async () => {
@@ -169,9 +178,22 @@ describe('translations, editorial, clone and preview', () => {
     await authed(api.http().get(`${PROBLEMS}/src/editorial`), editor).expect(
       200,
     );
+    for (const publishOn of [
+      'soon',
+      '2026-W01',
+      '2026-001',
+      '2026-02-30T00:00:00Z',
+      '2026-01-01T00:00:00',
+    ])
+      await authed(api.http().put(`${PROBLEMS}/src/editorial`), editor)
+        .send({ ...body, publishOn })
+        .expect(400);
     await authed(api.http().put(`${PROBLEMS}/src/editorial`), editor)
-      .send({ ...body, publishOn: 'soon' })
-      .expect(400);
+      .send({ ...body, publishOn: '2026-03-01T07:00:00+07:00' })
+      .expect(204);
+    expect(
+      (await api.problems.findOne({ code: 'src' }))!.solution!.publishOn,
+    ).toEqual(new Date('2026-03-01T00:00:00Z'));
     await authed(api.http().put(`${PROBLEMS}/src/editorial`), editor)
       .send({ ...body, authors: ['00000000-0000-7000-8000-000000000000'] })
       .expect(400)

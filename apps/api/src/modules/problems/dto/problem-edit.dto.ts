@@ -10,7 +10,6 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsBoolean,
-  IsDateString,
   IsIn,
   IsInt,
   IsNumber,
@@ -25,6 +24,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsStatementText } from './statement-text';
+import { IsTimestamp } from './timestamp';
 
 /** Rendering cost is linear in the Markdown size. */
 export const MAX_MARKDOWN_LENGTH = 200_000;
@@ -100,7 +100,7 @@ export class CreateProblemDto {
   @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
   @IsOptional() @IsString() @MaxLength(150) ogImage?: string;
-  @IsOptional() @IsDateString({ strict: true }) date?: string;
+  @IsOptional() @IsTimestamp() date?: string;
 }
 
 export class UpdateProblemDto extends PartialType(CreateProblemDto) {}

@@ -87,7 +87,7 @@ const withoutRenderedHtml = (
   })),
 });
 /** Never carried over by a clone: identity, timestamps, people, statement translations, editorial and mirror links. */
-const CLONE_RESET_FIELDS = new Set([
+export const CLONE_RESET_FIELDS = [
   'id',
   'createdAt',
   'updatedAt',
@@ -105,7 +105,35 @@ const CLONE_RESET_FIELDS = new Set([
   'solution',
   'mirrorOf',
   'mirrorRoot',
-]);
+];
+/** Copied by value; together with CLONE_RESET_FIELDS this must cover every schema path. */
+export const CLONE_COPIED_FIELDS = [
+  'name',
+  'source',
+  'summary',
+  'description',
+  'descriptionHtml',
+  'timeLimit',
+  'memoryLimit',
+  'points',
+  'partial',
+  'isOrganizationPrivate',
+  'organizations',
+  'isManuallyManaged',
+  'isFullMarkup',
+  'typeIds',
+  'groupId',
+  'licenseId',
+  'allowedLanguages',
+  'languageLimits',
+  'pdfStatementUrl',
+  'materialUrl',
+  'ogImage',
+  'submissionSourceVisibility',
+  'testcaseVisibility',
+  'testcaseResultVisibility',
+  'allowViewFeedback',
+];
 const ID_ARRAY_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
   'typeIds',
   'authors',
@@ -240,10 +268,11 @@ export class ProblemEditingService {
   ): Promise<void> {
     const { principal } = auth;
     const problem = await this.editableProblem(principal, code);
-    if (problem.isFullMarkup) this.assertFullMarkupWriter(principal);
     const previous = problem.translations.find(
       (translation) => translation.language === lang,
     );
+    if (problem.isFullMarkup && dto.description !== previous?.description)
+      this.assertFullMarkupWriter(principal);
     if (previous?.name === dto.name && previous.description === dto.description)
       return;
     await this.repository.upsertTranslation(problem._id, {
@@ -315,8 +344,8 @@ export class ProblemEditingService {
   ): Promise<ProblemDetailResponse> {
     const source = await this.editableProblem(auth.principal, code);
     const copied = Object.fromEntries(
-      Object.entries(source.toJSON()).filter(
-        ([field]) => !CLONE_RESET_FIELDS.has(field),
+      Object.entries(source.toJSON()).filter(([field]) =>
+        CLONE_COPIED_FIELDS.includes(field),
       ),
     ) as Partial<Problem>;
     const clone = await this.createUnique({

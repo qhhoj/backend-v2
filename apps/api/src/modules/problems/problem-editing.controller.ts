@@ -43,7 +43,7 @@ export class ProblemEditingController {
   @Patch(':code')
   edit(
     @CurrentAuth() auth: AuthContext,
-    @Param('code') code: string,
+    @Param() { code }: ProblemCodeParamDto,
     @Body() body: UpdateProblemDto,
   ): Promise<ProblemDetailResponse> {
     return this.editing.edit(auth, code, body);
