@@ -7,6 +7,8 @@ import { ProblemGroupsQuerier } from './problem-groups.querier';
 import { ProblemTypesQuerier } from './problem-types.querier';
 import { ProblemEditingController } from './problem-editing.controller';
 import { ProblemEditingService } from './problem-editing.service';
+import { ProblemUploadsController } from './problem-uploads.controller';
+import { ProblemUploadsService } from './problem-uploads.service';
 import { ProblemEvents } from './problem.events';
 import { ProblemsRepository } from './problems.repository';
 import { ProblemsController } from './problems.controller';
@@ -23,12 +25,17 @@ const repositories = [ProblemsRepository, RevisionsRepository];
 
 @Module({
   imports: [AuthModule],
-  controllers: [ProblemsController, ProblemEditingController],
+  controllers: [
+    ProblemsController,
+    ProblemEditingController,
+    ProblemUploadsController,
+  ],
   providers: [
     ...queriers,
     ...repositories,
     ProblemsService,
     ProblemEditingService,
+    ProblemUploadsService,
     ProblemEvents,
     RateLimitService,
   ],

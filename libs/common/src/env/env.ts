@@ -18,6 +18,10 @@ export interface Env {
   pwnedApiUrl: string | null;
   smtpUrl: string;
   mailFrom: string;
+  /** Directory of uploaded files (images, PDF statements, materials); nginx serves it at `mediaUrl`. */
+  mediaRoot: string;
+  /** Public URL prefix of `mediaRoot`, without a trailing slash. */
+  mediaUrl: string;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
     google: OAuthClient | null;
@@ -85,6 +89,8 @@ export function loadEnv(
         : source.PWNED_API_URL || null,
     smtpUrl: required('SMTP_URL'),
     mailFrom: source.MAIL_FROM || 'QHHOJ <no-reply@qhhoj.local>',
+    mediaRoot: required('MEDIA_ROOT'),
+    mediaUrl: (source.MEDIA_URL || '/media').replace(/\/+$/, ''),
     oauth: {
       google: oauthClient('GOOGLE'),
       facebook: oauthClient('FACEBOOK'),

@@ -18,6 +18,8 @@ describe('loadEnv', () => {
       pwnedApiUrl: 'https://api.pwnedpasswords.com',
       smtpUrl: valid.SMTP_URL,
       mailFrom: 'QHHOJ <no-reply@qhhoj.local>',
+      mediaRoot: valid.MEDIA_ROOT,
+      mediaUrl: '/media',
       oauth: { google: null, facebook: null, github: null },
     }));
   it('enables an oauth provider only with both client id and secret', () =>
@@ -55,11 +57,15 @@ describe('loadEnv', () => {
       cookieSecure: false,
       pwnedApiUrl: null,
     }));
+  it('strips the trailing slash of MEDIA_URL', () =>
+    expect(
+      loadEnv({ ...valid, MEDIA_URL: 'https://cdn.test/media/' }).mediaUrl,
+    ).toBe('https://cdn.test/media'));
   it('reports every problem at once', () =>
     expect(() =>
       loadEnv({ ENCRYPTION_KEY: 'zz', TOKEN_SECRET: 'short', PORT: '0' }),
     ).toThrow(
-      'Invalid environment: MONGO_URL is required; REDIS_URL is required; SITE_URL is required; SMTP_URL is required; ENCRYPTION_KEY must be 64 hex chars; TOKEN_SECRET must be at least 32 chars; PORT must be 1-65535',
+      'Invalid environment: MONGO_URL is required; REDIS_URL is required; SITE_URL is required; SMTP_URL is required; MEDIA_ROOT is required; ENCRYPTION_KEY must be 64 hex chars; TOKEN_SECRET must be at least 32 chars; PORT must be 1-65535',
     ));
   it.each(['true', '1', ''])('rejects TRUST_PROXY=%j', (value) =>
     expect(() => loadEnv({ ...valid, TRUST_PROXY: value })).toThrow(

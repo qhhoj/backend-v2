@@ -14,3 +14,5 @@ export * from './redis/redis-exec';
 export * from './mail/mailer';
 export * from './mail/smtp.mailer';
 export * from './mail/mail.module';
+export * from './storage/storage.service';
+export * from './storage/storage.module';

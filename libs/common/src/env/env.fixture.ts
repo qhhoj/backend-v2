@@ -5,4 +5,5 @@ export const validEnv = {
   TOKEN_SECRET: 'x'.repeat(32),
   SITE_URL: 'http://localhost:3000',
   SMTP_URL: 'smtp://localhost:1025',
+  MEDIA_ROOT: '/var/lib/qhhoj/media',
 };

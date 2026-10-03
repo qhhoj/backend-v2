@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Type } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -51,7 +54,11 @@ export async function setupApiTest({
 } = {}) {
   const mailer = new InMemoryMailer();
   const replSet = await startMongo();
-  Object.assign(process.env, TEST_ENV, { MONGO_URL: replSet.getUri('qhhoj') });
+  const mediaRoot = mkdtempSync(join(tmpdir(), 'qhhoj-media-'));
+  Object.assign(process.env, TEST_ENV, {
+    MONGO_URL: replSet.getUri('qhhoj'),
+    MEDIA_ROOT: mediaRoot,
+  });
   let app: NestFastifyApplication | undefined;
   try {
     app = await createTestApp(
@@ -68,6 +75,7 @@ export async function setupApiTest({
       await app?.close();
     } finally {
       await replSet.stop();
+      rmSync(mediaRoot, { recursive: true, force: true });
     }
     throw error;
   }
@@ -98,11 +106,13 @@ export async function setupApiTest({
         ].map((querier) => readyApp.get(querier).resync()),
       );
     },
+    mediaRoot,
     sessions: readyApp.get(SessionService),
     mailer,
     teardown: async () => {
       await readyApp.close();
       await replSet.stop();
+      rmSync(mediaRoot, { recursive: true, force: true });
     },
   };
 }

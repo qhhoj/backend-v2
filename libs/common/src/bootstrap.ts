@@ -1,4 +1,5 @@
 import fastifyCookie from '@fastify/cookie';
+import fastifyMultipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
 import { Reflector } from '@nestjs/core';
 import {
@@ -8,6 +9,8 @@ import {
 import { AppExceptionFilter } from './filters/exception.filter';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 import { validationPipe } from './pipes/validation.pipe';
+
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 export const fastifyAdapter = ({
   trustProxy = false,
@@ -22,6 +25,9 @@ export const fastifyAdapter = ({
 
 export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyCookie);
+  await app.register(fastifyMultipart, {
+    limits: { files: 1, fileSize: MAX_UPLOAD_BYTES },
+  });
   app.enableShutdownHooks();
   app.useGlobalPipes(validationPipe);
   app.useGlobalFilters(new AppExceptionFilter());
