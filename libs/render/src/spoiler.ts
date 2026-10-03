@@ -116,6 +116,7 @@ export function rewriteHtmlSpoilers(text: string): string {
       if (opener === line - 1) rewritten.push(spoilerLine('', depth));
       rewrittenTags.add(line);
       depth--;
+      rewritten.push(spoilerLine('', depth));
     } else rewritten.push(spoilerLine(text, depth));
   });
   return rewritten.join('\n');

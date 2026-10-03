@@ -238,6 +238,20 @@ describe('renderMarkdown', () => {
       '<blockquote class="spoiler"></blockquote>\n',
     );
   });
+  it('keeps adjacent html spoiler pairs as separate spoilers', () => {
+    const pair = (text: string) =>
+      `<blockquote class="spoiler">\n${text}\n</blockquote>`;
+    expect(full(`${pair('a')}\n${pair('b')}`)).toBe(
+      '<blockquote class="spoiler">\n<p>a</p>\n</blockquote>\n<blockquote class="spoiler">\n<p>b</p>\n</blockquote>\n',
+    );
+    expect(
+      full(
+        `<blockquote class="spoiler">\n${pair('a')}\n${pair('b')}\n</blockquote>`,
+      ),
+    ).toBe(
+      '<blockquote class="spoiler">\n<blockquote class="spoiler">\n<p>a</p>\n</blockquote>\n<blockquote class="spoiler">\n<p>b</p>\n</blockquote>\n</blockquote>\n',
+    );
+  });
   it('leaves an unclosed html spoiler to the plain HTML block, not the rest of the document', () => {
     expect(full('<blockquote class="spoiler">\nopen\n\nrest *here*')).toBe(
       '<blockquote class="spoiler">\nopen\n<p>rest <em>here</em></p>\n',
