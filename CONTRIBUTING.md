@@ -81,7 +81,7 @@ tools/legacy/   regenerates the fixtures
 - Validation: DTO classes + class-validator; global pipe is whitelist + forbid unknown + transform, failure -> `validation_failed` (400) with `fields`
 - Query DTOs: `@Type(() => Number)` for numbers; `dto/transforms.ts` (`toArray`, `toBoolean`) for arrays and booleans
 - Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`
-- Multipart routes read `request.file()` and never declare `@Body()`; an oversized file is `file_too_large` 413
+- Multipart routes read `request.parts({ limits: { files: 1, fields: 0, fileSize } })`, check for a single file and the expected fieldname, and never declare `@Body()`; an oversized file is `file_too_large` 413
 - App wiring: `configureApp(app)` + `fastifyAdapter()` from `@libs/common` (used by `main.ts` and tests)
 
 ## Auth
@@ -117,6 +117,7 @@ tools/legacy/   regenerates the fixtures
 ## Problems
 
 - Layout: `apps/api/src/modules/problems/` (`/api/internal/problems`), `modules/api-v2/` (`/api/v2`), rendering in `libs/render`
+- File names: reads are `problems.*`, write flows are `problem-<flow>.*` (`problem-editing`, `problem-uploads`)
 - Rules live in `ProblemAccess` (`problem-access.ts`): `canSee`, `canEdit`, `visibleFilter`
 - `visibleFilter` goes only inside `find`/`count`, never an aggregate
 - Public routes: `@Public()` + `@CurrentAuth()` + `optionalPrincipal(auth)`; invisible or unknown problem -> 404, visible but not editable -> 403
@@ -125,7 +126,7 @@ tools/legacy/   regenerates the fixtures
 - Rendering styles: `problem`, `problem-full`, `solution`; one `styleOf` picks the style per problem
 - HTML is rendered and stored at save; reads never render
 - `problem-full` HTML is unsanitized; writing statement text on a full-markup problem needs `judge.problem_full_markup`
-- Markdown is capped at 200000 chars (`MAX_MARKDOWN_LENGTH`)
+- Markdown is capped at 200000 chars (`MAX_MARKDOWN_LENGTH`); render budgets per render: 2000 formulas of at most 4000 chars and 1.5 MB of KaTeX output (excess stays as source text), 200000 tags, nesting depth 500, 2 MB of HTML; past the tag, depth or HTML limit `renderMarkdown` throws `RenderLimitError` -> 400 `validation_failed` on the rendered field
 - Math: `$..$` (no space inside the edges, so money is safe), `~..~` (spaces allowed), `$$..$$`; use `\vert` instead of `|` in table-cell math; math inside raw HTML blocks is not rendered
 - Legacy `<blockquote class="spoiler">` works only at column 0 after a blank line
 - Golden fixtures: `libs/render/src/fixtures/*.md|html`; regenerate with `UPDATE_GOLDENS=1 npx jest libs/render/src/goldens.spec.ts`, review the diff; listed in `.prettierignore`
