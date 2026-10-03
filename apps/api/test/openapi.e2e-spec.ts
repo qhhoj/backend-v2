@@ -47,4 +47,29 @@ describe('OpenAPI document', () => {
       ]),
     );
   });
+
+  it('lists the problem endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/problems',
+        '/api/internal/problems/meta',
+        '/api/internal/problems/{code}',
+        '/api/internal/problems/{code}/editorial',
+        '/api/internal/problems/suggest',
+        '/api/internal/problems/{code}/clone',
+        '/api/internal/problems/{code}/translations/{lang}',
+        '/api/internal/problems/render-preview',
+        '/api/internal/problems/uploads/image',
+        '/api/internal/problems/{code}/statement',
+        '/api/internal/problems/{code}/material',
+        '/api/v2/problems',
+        '/api/v2/problem/{code}',
+      ]),
+    );
+  });
 });

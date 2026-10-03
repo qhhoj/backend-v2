@@ -7,6 +7,7 @@
 - Mongoose 8 via `@nestjs/mongoose`; MongoDB 8 **replica set** (change streams)
 - Redis >= 7 (the rate limiter uses `EXPIRE ... NX`), MariaDB 11 (legacy source for the migrator only)
 - Jest 29 + `mongodb-memory-server`; ESLint + Prettier
+- Render stack pins: `markdown-it` 15.0.2, `katex` 0.19.0, `sanitize-html` 2.17.5 (2.17.6+ pulls ESM-only `htmlparser2@12`, breaks Jest CJS; do not bump), `@fastify/multipart` 10.1.2
 - Versions pinned in `package.json`; `fastify` pinned via `overrides` to a single copy; bump when `@nestjs/platform-fastify` or an advisory requires it
 - Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
 
@@ -20,11 +21,12 @@ libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
   auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
+  render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
 
-- Aliases: `@libs/common`, `@libs/database`, `@libs/auth` (and `@libs/<name>/*`) -> `libs/<name>/src`
+- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render` (and `@libs/<name>/*`) -> `libs/<name>/src`
 - Import from the alias root (`@libs/database`) except `/testing` entry points
 - Each lib exports through `libs/<name>/src/index.ts`; add new files there
 
@@ -41,13 +43,14 @@ tools/legacy/   regenerates the fixtures
 ```
 
 - Flow: `controller -> service -> querier | repository`
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|spec`
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|spec`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
-- Exception: `pipes/validation.pipe.ts` exports a configured instance, not a class
+- Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
+- `<feature>.events.ts`: in-process `EventEmitter` wrapper for notifying other modules (`problem.events.ts`)
 
 ## Querier vs repository
 
@@ -59,6 +62,7 @@ tools/legacy/   regenerates the fixtures
 | Base | `BaseMongoStreamQuerier` | `@InjectModel` |
 
 - Reference: `libs/common/src/querier/base-mongo-stream.querier.ts`, `libs/auth/src/groups/groups.querier.ts`
+- Whole-collection queriers extend `BaseCatalogQuerier` (reference: `apps/api/src/modules/problems/languages.querier.ts`)
 - Querier shape: `onModuleInit` -> `resync()` -> `setupMongoStream(model, pipeline, onChange)` -> `forceResyncQuerier(resync, cron)`
 - Streams need a replica set; `DISABLE_MONGODB_STREAM=true` turns them off
 - Queriers never handle deletes (stream only forwards insert/update/replace)
@@ -75,6 +79,9 @@ tools/legacy/   regenerates the fixtures
 - Wrapping/unwrapping lives in `libs/common/src/interceptors/response.interceptor.ts`; errors in `filters/exception.filter.ts`
 - Nest `HttpException` < 500 maps to codes `unauthorized|forbidden|not_found|rate_limited|http_error`; anything else is `internal_error`
 - Validation: DTO classes + class-validator; global pipe is whitelist + forbid unknown + transform, failure -> `validation_failed` (400) with `fields`
+- Query DTOs: `@Type(() => Number)` for numbers; `dto/transforms.ts` (`toArray`, `toBoolean`) for arrays and booleans
+- Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`
+- Multipart routes read `request.file()` and never declare `@Body()`; an oversized file is `file_too_large` 413
 - App wiring: `configureApp(app)` + `fastifyAdapter()` from `@libs/common` (used by `main.ts` and tests)
 
 ## Auth
@@ -107,6 +114,25 @@ tools/legacy/   regenerates the fixtures
 - Test overrides: `setupApiTest({ overrides: [{ provide, useValue }] })` (the harness already swaps `MAILER` for an `InMemoryMailer`); clear `rate:*` Redis keys in tests that need a fresh budget
 - OpenAPI: `GET /api/internal/openapi.json` (raw JSON, no auth)
 
+## Problems
+
+- Layout: `apps/api/src/modules/problems/` (`/api/internal/problems`), `modules/api-v2/` (`/api/v2`), rendering in `libs/render`
+- Rules live in `ProblemAccess` (`problem-access.ts`): `canSee`, `canEdit`, `visibleFilter`
+- `visibleFilter` goes only inside `find`/`count`, never an aggregate
+- Public routes: `@Public()` + `@CurrentAuth()` + `optionalPrincipal(auth)`; invisible or unknown problem -> 404, visible but not editable -> 403
+- Events (`ProblemEvents`): `pointsChanged`, `publicityChanged`, `codeRenamed`, `statementChanged`; listeners run synchronously after the write
+- Rate limits: `problems/rate-limits.ts`
+- Rendering styles: `problem`, `problem-full`, `solution`; one `styleOf` picks the style per problem
+- HTML is rendered and stored at save; reads never render
+- `problem-full` HTML is unsanitized; writing statement text on a full-markup problem needs `judge.problem_full_markup`
+- Markdown is capped at 200000 chars (`MAX_MARKDOWN_LENGTH`)
+- Math: `$..$` (no space inside the edges, so money is safe), `~..~` (spaces allowed), `$$..$$`; use `\vert` instead of `|` in table-cell math; math inside raw HTML blocks is not rendered
+- Legacy `<blockquote class="spoiler">` works only at column 0 after a blank line
+- Golden fixtures: `libs/render/src/fixtures/*.md|html`; regenerate with `UPDATE_GOLDENS=1 npx jest libs/render/src/goldens.spec.ts`, review the diff; listed in `.prettierignore`
+- Uploads: type is sniffed from the bytes; SVG max 512 KiB, 20000 tags, nesting depth 1000; materials use an extension allow-list
+- Text index: `await model.init()` in fixtures before `$text` queries
+- `/api/v2`: legacy Django envelope (`api_version`, `method`, `fetched`, `data`/`error`); unknown query params are ignored; an invalid Bearer token is 403 `login required`
+
 ## Data conventions
 
 - `_id` is a UUIDv7: declare `@IdProp() _id!: string`
@@ -114,6 +140,7 @@ tools/legacy/   regenerates the fixtures
 - UUID arrays on hydrated docs (`user.groups`, ...): index access, spread and `toJSON()` give strings, but `.map/.filter/.flatMap/.slice` give raw buffers; map through `uuidStr` first
 - `@Schema({ ...baseSchemaOptions, collection: '<name>' })`: timestamps, no `__v`, `toJSON` returns `id` instead of `_id`
 - Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schema.spec.ts`); `ciIndex(schema, field, unique = true)`, e.g. `ciIndex(UserSchema, 'email', false)` for non-unique
+- Catalog collections (languages, licenses, problem types and groups) are querier-backed and never deleted
 - Register every schema in `SCHEMAS` (`libs/database/src/schemas/index.ts`) and export it there
 
 ## Backfill jobs (migrator)
