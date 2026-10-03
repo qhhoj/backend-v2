@@ -184,11 +184,15 @@ describe('webauthn endpoints', () => {
     })
       .expect(400)
       .expect(errorCode('invalid_credentials'));
-    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBeNull();
+    expect(
+      (await api.sessions.get(sessionId))!.webauthnRegistrationChallenge,
+    ).toBeNull();
     await post('register/options', session)
       .expect(400)
       .expect(errorCode('validation_failed'));
-    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBeNull();
+    expect(
+      (await api.sessions.get(sessionId))!.webauthnRegistrationChallenge,
+    ).toBeNull();
   });
 
   it('keeps the user handle stable and excludes existing credentials', async () => {
