@@ -65,7 +65,7 @@ export async function seedCatalog(api: ApiTest) {
 export async function loginAs(
   api: ApiTest,
   userId: string,
-  flags: Partial<{ twoFaPassed: boolean }> = {},
+  flags: Partial<{ twoFaPassed: boolean; passwordPwned: boolean }> = {},
 ): Promise<TestSession> {
   const { id, session } = await api.sessions.create({
     userId,

@@ -22,6 +22,7 @@ const codesOf = ({ body }: { body: unknown }) =>
 describe('GET /api/internal/problems', () => {
   let api: ApiTest;
   let catalog: Catalog;
+  let authorUser: Awaited<ReturnType<typeof createUserWith>>;
   let author: TestSession, orgMember: TestSession, plain: TestSession;
   const ORG = newId();
   const day = (offset: number) => new Date(Date.UTC(2026, 0, 1 + offset));
@@ -30,7 +31,7 @@ describe('GET /api/internal/problems', () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
     await api.problems.init();
-    const authorUser = await createUserWith(api, 'author', {
+    authorUser = await createUserWith(api, 'author', {
       permissions: ['judge.edit_own_problem'],
     });
     const member = await createUserWith(api, 'member', {
@@ -132,6 +133,7 @@ describe('GET /api/internal/problems', () => {
       .expect(400)
       .expect(errorCode('validation_failed'));
     await api.http().get(`${LIST}?sort=sideways`).expect(400);
+    await api.http().get(`${LIST}?page=10001`).expect(400);
   });
   it('filters by group, types, points and editorial', async () => {
     expect(
@@ -214,6 +216,23 @@ describe('GET /api/internal/problems', () => {
       .http()
       .get(`${LIST}?search=${encodeURIComponent('C++')}`)
       .expect(200);
+  });
+  it('rejects NUL bytes in search', async () => {
+    await api
+      .http()
+      .get(`${LIST}?search=a%00`)
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+  });
+  it('treats 2FA-pending and pwned-password sessions as anonymous', async () => {
+    for (const flags of [{ twoFaPassed: false }, { passwordPwned: true }]) {
+      const session = await loginAs(api, authorUser._id, flags);
+      expect(
+        codesOf(
+          await authed(api.http().get(`${LIST}?visibility=private`), session),
+        ),
+      ).toEqual([]);
+    }
   });
   it('translates names for ?lang=vi with base fallback', async () => {
     const names = (

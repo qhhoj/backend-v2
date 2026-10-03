@@ -1,6 +1,6 @@
-import { Controller, Get, Query, Req } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
-import { optionalPrincipal, Public } from '@libs/auth';
+import { Controller, Get, Query } from '@nestjs/common';
+import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
+import type { AuthContext } from '@libs/auth';
 import type { Paginated } from '@libs/common';
 import { ProblemListQueryDto } from './dto/problem-list.dto';
 import { ProblemListItemResponse } from './dto/problem-list.response';
@@ -21,8 +21,8 @@ export class ProblemsController {
   @Get()
   list(
     @Query() query: ProblemListQueryDto,
-    @Req() request: FastifyRequest,
+    @CurrentAuth() auth: AuthContext | undefined,
   ): Promise<Paginated<ProblemListItemResponse>> {
-    return this.problems.list(optionalPrincipal(request.auth), query);
+    return this.problems.list(optionalPrincipal(auth), query);
   }
 }

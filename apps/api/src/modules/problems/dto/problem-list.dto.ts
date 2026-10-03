@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -19,9 +20,13 @@ export const PROBLEM_VISIBILITIES = ['public', 'private', 'all'] as const;
 export type ProblemVisibility = (typeof PROBLEM_VISIBILITIES)[number];
 
 export class ProblemListQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 50;
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Matches(/^[^\0]*$/)
+  search?: string;
   @IsOptional() @IsUUID('7') groupId?: string;
   @IsOptional()
   @Transform(toArray)
