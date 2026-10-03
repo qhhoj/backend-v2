@@ -14,6 +14,7 @@ import {
 } from './file-sniff';
 import { ProblemEditingService } from './problem-editing.service';
 import { ProblemsRepository } from './problems.repository';
+import type { ProblemDocument } from './problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
 import { RevisionsRepository } from './revisions.repository';
 
@@ -88,13 +89,12 @@ export class ProblemUploadsService {
       STATEMENT_MAX_BYTES,
     );
     if (!isPdf(content)) throw rejectFile('The statement must be a PDF file.');
-    const url = await this.storage.save(`pdf/${newId()}.pdf`, content);
-    await this.recordUpload(
+    const url = await this.replaceFile(
       auth,
-      problem._id,
+      problem,
       'pdfStatementUrl',
-      problem.pdfStatementUrl,
-      url,
+      `pdf/${newId()}.pdf`,
+      content,
     );
     return { url };
   }
@@ -110,16 +110,12 @@ export class ProblemUploadsService {
       request,
       MATERIAL_MAX_BYTES,
     );
-    const url = await this.storage.save(
+    const url = await this.replaceFile(
+      auth,
+      problem,
+      'materialUrl',
       `materials/${problem.code}/${safeFileName(filename)}`,
       content,
-    );
-    await this.recordUpload(
-      auth,
-      problem._id,
-      'materialUrl',
-      problem.materialUrl,
-      url,
     );
     return { url };
   }
@@ -149,6 +145,30 @@ export class ProblemUploadsService {
         );
       throw error;
     }
+  }
+
+  /** Saves the new file and records it; the previous file is removed afterwards, the new one if recording fails. */
+  private async replaceFile(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    field: 'pdfStatementUrl' | 'materialUrl',
+    relativePath: string,
+    content: Buffer,
+  ): Promise<string> {
+    const url = await this.storage.save(relativePath, content);
+    try {
+      await this.recordUpload(auth, problem._id, field, problem[field], url);
+    } catch (error) {
+      await this.storage.delete(relativePath);
+      throw error;
+    }
+    const previous = this.storage.relativePathOf(
+      problem[field],
+      relativePath.slice(0, relativePath.lastIndexOf('/') + 1),
+    );
+    if (previous && previous !== relativePath)
+      await this.storage.delete(previous).catch(() => undefined);
+    return url;
   }
 
   private async recordUpload(

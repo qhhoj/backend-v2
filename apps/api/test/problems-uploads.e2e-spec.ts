@@ -241,6 +241,32 @@ describe('problem uploads', () => {
       'x.zip',
     ).expect(403);
   });
+  it('removes the replaced PDF and material files', async () => {
+    const mediaPath = (url: string) =>
+      join(api.mediaRoot, url.replace('/media/', ''));
+    const firstPdf = (await api.problems.findOne({ code: 'sum' }))!
+      .pdfStatementUrl!;
+    const secondPdf = urlOf(
+      await upload(
+        `${PROBLEMS}/sum/statement`,
+        editor,
+        PDF,
+        's.pdf',
+        'application/pdf',
+      ).expect(201),
+    );
+    expect(existsSync(mediaPath(firstPdf))).toBe(false);
+    expect(existsSync(mediaPath(secondPdf))).toBe(true);
+    const firstMaterial = (await api.problems.findOne({ code: 'sum' }))!
+      .materialUrl!;
+    await upload(
+      `${PROBLEMS}/sum/material`,
+      editor,
+      Buffer.from('zip'),
+      'second.zip',
+    ).expect(201);
+    expect(existsSync(mediaPath(firstMaterial))).toBe(false);
+  });
   it.each([
     ['../../../evil.zip', '/media/materials/sum/evil.zip'],
     ['..%2F..%2Fevil.zip', '/media/materials/sum/2F.2Fevil.zip'],
