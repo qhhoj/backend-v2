@@ -162,6 +162,12 @@ describe('ProblemAccess.canSee', () => {
       view({ isOrganizationPrivate: true, organizations: [ORG] }),
       false,
     ],
+    [
+      'edit_public does not see an uneditable private problem',
+      'editPublic',
+      view({ isPublic: false }),
+      false,
+    ],
     ['superuser sees everything', 'superuser', view({ isPublic: false }), true],
   ])('%s', (_name, who, problem, expected) =>
     expect(ProblemAccess.canSee(PRINCIPALS[who], problem)).toBe(expected),
@@ -271,6 +277,15 @@ describe('ProblemAccess.visibleFilter', () => {
             });
           }
   });
+  it('accessView of every stored document (hydrated and lean) equals the generated view', async () => {
+    for (const { code, view: expectedView } of generated) {
+      const hydrated = await problems.findOne({ code });
+      expect(ProblemAccess.accessView(hydrated!)).toEqual(expectedView);
+      const lean = await problems.findOne({ code }).lean();
+      expect(ProblemAccess.accessView(lean!)).toEqual(expectedView);
+    }
+  });
+
   afterAll(async () => {
     await testingModule.close();
     await replSet.stop();
@@ -316,6 +331,33 @@ describe('ProblemAccess.visibleFilter', () => {
       .sort();
     expect(actual).toEqual(expected);
     expect(expected.length).toBeGreaterThan(0);
+  });
+
+  it('treats a raw document lacking suggester and arrays as having none', async () => {
+    await problems.collection.insertOne({
+      _id: newId() as never,
+      code: 'rawdoc',
+      name: 'rawdoc',
+      isPublic: false,
+      isOrganizationPrivate: false,
+    });
+    const lean = (await problems.findOne({ code: 'rawdoc' }).lean())!;
+    const problemView = ProblemAccess.accessView(lean);
+    expect(problemView).toEqual(view({ isPublic: false }));
+    for (const principal of Object.values(PRINCIPALS)) {
+      const visible =
+        (
+          await problems
+            .find({
+              $and: [
+                { code: 'rawdoc' },
+                ProblemAccess.visibleFilter(principal),
+              ],
+            })
+            .lean()
+        ).length === 1;
+      expect(visible).toBe(ProblemAccess.canSee(principal, problemView));
+    }
   });
 });
 

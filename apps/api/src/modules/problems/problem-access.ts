@@ -17,11 +17,11 @@ function accessView(problem: Problem): ProblemAccessView {
   return {
     isPublic: problem.isPublic,
     isOrganizationPrivate: problem.isOrganizationPrivate,
-    organizations: problem.organizations.map(uuidStr),
-    authors: problem.authors.map(uuidStr),
-    curators: problem.curators.map(uuidStr),
-    testers: problem.testers.map(uuidStr),
-    suggester: problem.suggester === null ? null : uuidStr(problem.suggester),
+    organizations: (problem.organizations ?? []).map(uuidStr),
+    authors: (problem.authors ?? []).map(uuidStr),
+    curators: (problem.curators ?? []).map(uuidStr),
+    testers: (problem.testers ?? []).map(uuidStr),
+    suggester: problem.suggester == null ? null : uuidStr(problem.suggester),
   };
 }
 
