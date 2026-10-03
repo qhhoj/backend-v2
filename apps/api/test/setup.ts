@@ -8,12 +8,23 @@ import {
   InMemoryMailer,
   TEST_REDIS_URL,
 } from '@libs/common/testing';
-import { Group, User } from '@libs/database';
+import {
+  Group,
+  Language,
+  License,
+  ProblemGroup,
+  ProblemType,
+  User,
+} from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { LanguagesQuerier } from '../src/modules/problems/languages.querier';
+import { LicensesQuerier } from '../src/modules/problems/licenses.querier';
+import { ProblemGroupsQuerier } from '../src/modules/problems/problem-groups.querier';
+import { ProblemTypesQuerier } from '../src/modules/problems/problem-types.querier';
 import { setupOpenApi } from '../src/openapi';
 
 export const TEST_ENV = {
@@ -64,6 +75,25 @@ export async function setupApiTest({
     http: () => request(readyApp.getHttpServer()),
     users: readyApp.get<Model<User>>(getModelToken(User.name)),
     groups: readyApp.get<Model<Group>>(getModelToken(Group.name)),
+    problemTypes: readyApp.get<Model<ProblemType>>(
+      getModelToken(ProblemType.name),
+    ),
+    problemGroups: readyApp.get<Model<ProblemGroup>>(
+      getModelToken(ProblemGroup.name),
+    ),
+    licenses: readyApp.get<Model<License>>(getModelToken(License.name)),
+    languages: readyApp.get<Model<Language>>(getModelToken(Language.name)),
+    /** Streams are disabled in tests; call after inserting catalog rows. */
+    resyncCatalog: async () => {
+      await Promise.all(
+        [
+          ProblemTypesQuerier,
+          ProblemGroupsQuerier,
+          LicensesQuerier,
+          LanguagesQuerier,
+        ].map((querier) => readyApp.get(querier).resync()),
+      );
+    },
     sessions: readyApp.get(SessionService),
     mailer,
     teardown: async () => {
