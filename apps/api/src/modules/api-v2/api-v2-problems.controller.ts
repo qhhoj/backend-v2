@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Query, UseFilters } from '@nestjs/common';
+import { Controller, Get, Param, UseFilters } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RawResponse } from '@libs/common';
 import { ProblemCodeParamDto } from '../problems/dto/problem-params.dto';
 import { ApiV2ExceptionFilter } from './api-v2-exception.filter';
+import { ApiV2Query, lenientQueryPipe } from './api-v2-query';
 import { ApiV2ProblemsService } from './api-v2-problems.service';
 import { ApiV2ProblemListDto } from './dto/api-v2-problem-list.dto';
 import { legacyEnvelope } from './legacy-envelope';
@@ -17,7 +18,7 @@ export class ApiV2ProblemsController {
 
   @Get('problems')
   async list(
-    @Query() query: ApiV2ProblemListDto,
+    @ApiV2Query(lenientQueryPipe) query: ApiV2ProblemListDto,
     @CurrentAuth() auth: AuthContext | undefined,
   ) {
     return legacyEnvelope(

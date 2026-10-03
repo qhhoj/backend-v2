@@ -38,16 +38,29 @@ export class ProblemsRepository {
     pageSize: number,
   ): Promise<{ items: ProblemDocument[]; total: number }> {
     const [items, total] = await Promise.all([
-      this.problems
-        .find(filter, LIST_PROJECTION)
-        .collation(CI)
-        .sort(sort)
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .exec(),
-      this.problems.countDocuments(filter).collation(CI).exec(),
+      this.findPage(filter, sort, page, pageSize),
+      this.count(filter),
     ]);
     return { items, total };
+  }
+
+  findPage(
+    filter: FilterQuery<Problem>,
+    sort: Record<string, 1 | -1>,
+    page: number,
+    pageSize: number,
+  ): Promise<ProblemDocument[]> {
+    return this.problems
+      .find(filter, LIST_PROJECTION)
+      .collation(CI)
+      .sort(sort)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .exec();
+  }
+
+  count(filter: FilterQuery<Problem>): Promise<number> {
+    return this.problems.countDocuments(filter).collation(CI).exec();
   }
 
   create(fields: Partial<Problem>): Promise<ProblemDocument> {

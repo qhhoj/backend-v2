@@ -5,7 +5,7 @@ describe('legacy envelope', () => {
     expect(legacyEnvelope('GET', { ok: true })).toEqual({
       api_version: '2.0',
       method: 'get',
-      fetched: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) as string,
+      fetched: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.*\+00:00$/) as string,
       data: { ok: true },
     }));
   it('formats errors like Django', () =>

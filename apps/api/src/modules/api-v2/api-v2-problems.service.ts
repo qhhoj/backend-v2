@@ -20,11 +20,16 @@ import {
 } from './legacy-envelope';
 import type { LegacyPage } from './legacy-envelope';
 
+/** Legacy matches names case-insensitively, like `code`. */
 const idsNamed = (
   items: Array<{ _id: string; fullName: string }>,
   names: string[],
-) =>
-  items.filter((item) => names.includes(item.fullName)).map((item) => item._id);
+) => {
+  const lowered = names.map((name) => name.toLowerCase());
+  return items
+    .filter((item) => lowered.includes(item.fullName.toLowerCase()))
+    .map((item) => item._id);
+};
 
 @Injectable()
 export class ApiV2ProblemsService {
@@ -58,14 +63,16 @@ export class ApiV2ProblemsService {
       clauses.push({ organizations: { $in: query.organization } });
     const search = query.search?.join(' ').trim();
     if (search) clauses.push(searchFilter(search));
-    const { items, total } = await this.repository.list(
-      { $and: clauses },
+    const filter = { $and: clauses };
+    const total = await this.repository.count(filter);
+    if (query.page > legacyTotalPages(total))
+      throw new AppError('not_found', 404, 'page/object not found');
+    const items = await this.repository.findPage(
+      filter,
       { _id: 1 },
       query.page,
       API_V2_PAGE_SIZE,
     );
-    if (query.page > legacyTotalPages(total))
-      throw new AppError('not_found', 404, 'page/object not found');
     return legacyPage(
       items.map((problem) => this.listItem(problem)),
       query.page,
@@ -77,7 +84,10 @@ export class ApiV2ProblemsService {
     principal: Principal | null,
     code: string,
   ): Promise<Record<string, unknown>> {
-    const problem = await this.problems.visibleProblem(principal, code);
+    const problem = await this.problems.visibleProblem(
+      principal,
+      code.toLowerCase(),
+    );
     const authors = await this.users.findByIds(problem.authors.map(uuidStr));
     return {
       code: problem.code,

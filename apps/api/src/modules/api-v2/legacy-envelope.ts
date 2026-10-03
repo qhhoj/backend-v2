@@ -9,7 +9,7 @@ export const LEGACY_MESSAGES: Record<number, string> = {
 const header = (method: string) => ({
   api_version: '2.0',
   method: method.toLowerCase(),
-  fetched: new Date().toISOString(),
+  fetched: new Date().toISOString().replace('Z', '+00:00'),
 });
 
 export const legacyEnvelope = (method: string, data: unknown) => ({
