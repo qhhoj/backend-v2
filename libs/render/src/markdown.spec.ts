@@ -207,6 +207,37 @@ describe('renderMarkdown', () => {
       '<blockquote class="spoiler">\n<p>hi</p>\n</blockquote>\n',
     );
   });
+  it('leaves an html spoiler raw where markdown-it would not start a new block', () => {
+    const pair = '<blockquote class="spoiler">\nhidden *x*\n</blockquote>';
+    for (const source of [
+      `<div>\n${pair}\n</div>`,
+      `<details><summary>Hint</summary>\n${pair}\n</details>`,
+      `para\n${pair}`,
+    ]) {
+      const html = full(source);
+      expect(html).toContain('<blockquote class="spoiler">\nhidden *x*\n');
+      expect(html).not.toMatch(/>!|&gt;!/);
+    }
+  });
+  it('rewrites a blank-line-separated html spoiler inside an html block', () => {
+    expect(
+      full(
+        '<div>\n\n<blockquote class="spoiler">\nhidden *x*\n</blockquote>\n\n</div>',
+      ),
+    ).toBe(
+      '<div>\n<blockquote class="spoiler">\n<p>hidden <em>x</em></p>\n</blockquote>\n</div>',
+    );
+  });
+  it('keeps whitespace-only lines outside spoilers byte-for-byte', () => {
+    expect(full('```\na\n  \nb\n```')).toBe(
+      '<pre><code>a\n  \nb\n</code></pre>\n',
+    );
+  });
+  it('renders an empty html spoiler pair as an empty spoiler', () => {
+    expect(full('<blockquote class="spoiler">\n</blockquote>')).toBe(
+      '<blockquote class="spoiler"></blockquote>\n',
+    );
+  });
   it('leaves an unclosed html spoiler to the plain HTML block, not the rest of the document', () => {
     expect(full('<blockquote class="spoiler">\nopen\n\nrest *here*')).toBe(
       '<blockquote class="spoiler">\nopen\n<p>rest <em>here</em></p>\n',

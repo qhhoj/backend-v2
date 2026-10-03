@@ -68,13 +68,9 @@ export function spoilerRule(
     : markedSpoiler(state, startLine, endLine, lineText);
 }
 
-/** Line numbers of the matched legacy spoiler open and close tags (column 0, outside code fences), paired with a stack in one pass. */
-function matchHtmlSpoilers(lines: string[]): {
-  opens: Set<number>;
-  closes: Set<number>;
-} {
-  const opens = new Set<number>();
-  const closes = new Set<number>();
+/** Closing tag line → opening tag line of each legacy spoiler pair (column 0, outside code fences, at most 20 deep), paired with a stack in one pass. */
+function matchHtmlSpoilers(lines: string[]): Map<number, number> {
+  const openerOf = new Map<number, number>();
   const openLines: number[] = [];
   let fence = '';
   lines.forEach((text, line) => {
@@ -85,30 +81,42 @@ function matchHtmlSpoilers(lines: string[]): {
     } else if (marker) fence = marker;
     else if (OPEN_TAG.test(text)) openLines.push(line);
     else if (CLOSE_TAG.test(text) && openLines.length) {
-      if (openLines.length <= MAX_SPOILER_DEPTH) {
-        opens.add(openLines[openLines.length - 1]);
-        closes.add(line);
-      }
+      if (openLines.length <= MAX_SPOILER_DEPTH)
+        openerOf.set(line, openLines[openLines.length - 1]);
       openLines.pop();
     }
   });
-  return { opens, closes };
+  return openerOf;
 }
 
 /** `line` inside `depth` nested spoilers; a blank line becomes bare `>!` markers so the spoiler continues. */
-const spoilerLine = (line: string, depth: number) =>
-  line.trim() ? '>! '.repeat(depth) + line : '>! '.repeat(depth).trimEnd();
+const spoilerLine = (line: string, depth: number) => {
+  if (!depth) return line;
+  return line.trim()
+    ? '>! '.repeat(depth) + line
+    : '>! '.repeat(depth).trimEnd();
+};
 
-/** Legacy Polygon importer output (`<blockquote class="spoiler">` … `</blockquote>` on their own column-0 lines) rewritten to `>!` lines so the content is parsed as Markdown; unmatched or indented tags stay raw HTML. */
+/** Legacy Polygon importer output (`<blockquote class="spoiler">` … `</blockquote>` on their own column-0 lines) rewritten to `>!` lines so the content is parsed as Markdown. A pair is rewritten only where markdown-it starts a new block (document start, after a blank line or a rewritten tag line); otherwise, and when unmatched or indented, the tags stay raw HTML. */
 export function rewriteHtmlSpoilers(text: string): string {
   const lines = text.split('\n');
-  const { opens, closes } = matchHtmlSpoilers(lines);
+  const openerOf = matchHtmlSpoilers(lines);
+  const pairedOpens = new Set(openerOf.values());
+  const rewrittenTags = new Set<number>();
+  const startsBlock = (line: number) =>
+    line === 0 || !lines[line - 1].trim() || rewrittenTags.has(line - 1);
   let depth = 0;
   const rewritten: string[] = [];
-  lines.forEach((line, index) => {
-    if (opens.has(index)) depth++;
-    else if (closes.has(index)) depth--;
-    else rewritten.push(spoilerLine(line, depth));
+  lines.forEach((text, line) => {
+    const opener = openerOf.get(line);
+    if (pairedOpens.has(line) && startsBlock(line)) {
+      rewrittenTags.add(line);
+      depth++;
+    } else if (opener !== undefined && rewrittenTags.has(opener)) {
+      if (opener === line - 1) rewritten.push(spoilerLine('', depth));
+      rewrittenTags.add(line);
+      depth--;
+    } else rewritten.push(spoilerLine(text, depth));
   });
   return rewritten.join('\n');
 }
