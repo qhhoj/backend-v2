@@ -5,7 +5,7 @@ import type { AuthContext } from '@libs/auth';
 import { AppError, RateLimitService, StorageService } from '@libs/common';
 import { newId } from '@libs/database';
 import { sanitizeSvg } from '@libs/render';
-import { basename } from 'node:path';
+import { basename, extname } from 'node:path';
 import {
   isPdf,
   isSvgWithinLimits,
@@ -22,6 +22,14 @@ export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const STATEMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
 const FILE_NAME_MAX_LENGTH = 100;
+/** Archives, documents, test data, sources and plain images; never anything a browser would run or render as markup. */
+const MATERIAL_EXTENSIONS: ReadonlySet<string> = new Set(
+  (
+    'zip 7z rar tar gz tgz bz2 xz pdf txt md csv in out ans ' +
+    'c cpp cc h hpp py java pas kt rs go doc docx xls xlsx ppt pptx odt ' +
+    'png jpg jpeg gif'
+  ).split(' '),
+);
 
 interface Upload {
   filename: string;
@@ -110,11 +118,14 @@ export class ProblemUploadsService {
       request,
       MATERIAL_MAX_BYTES,
     );
+    const name = safeFileName(filename);
+    if (!MATERIAL_EXTENSIONS.has(extname(name).slice(1).toLowerCase()))
+      throw rejectFile('This file type is not allowed as problem material.');
     const url = await this.replaceFile(
       auth,
       problem,
       'materialUrl',
-      `materials/${problem.code}/${safeFileName(filename)}`,
+      `materials/${problem.code}/${name}`,
       content,
     );
     return { url };
@@ -132,19 +143,32 @@ export class ProblemUploadsService {
       UPLOAD_WINDOW_SECONDS,
     );
     if (!request.isMultipart()) throw rejectFile('A file is required.');
-    const file = await request.file({ limits: { fileSize: maxBytes } });
-    if (!file) throw rejectFile('A file is required.');
+    let upload: Upload | undefined;
     try {
-      return { filename: file.filename, content: await file.toBuffer() };
+      const parts = request.parts({
+        limits: { files: 1, fields: 0, fileSize: maxBytes },
+      });
+      for await (const part of parts) {
+        if (part.type !== 'file' || part.fieldname !== 'file' || upload)
+          throw rejectFile('Send exactly one file in the "file" field.');
+        upload = {
+          filename: part.filename,
+          content: await part.toBuffer(),
+        };
+      }
     } catch (error) {
+      if (error instanceof AppError) throw error;
       if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE')
         throw new AppError(
           'file_too_large',
           413,
           `The file exceeds ${maxBytes} bytes`,
         );
-      throw error;
+      throw rejectFile('The upload is malformed.');
     }
+    if (!upload?.content.length)
+      throw rejectFile('A non-empty file is required.');
+    return upload;
   }
 
   /** Saves the new file and records it; the previous file is removed afterwards, the new one if recording fails. */

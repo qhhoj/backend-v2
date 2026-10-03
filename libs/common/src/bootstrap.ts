@@ -26,7 +26,7 @@ export const fastifyAdapter = ({
 export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyCookie);
   await app.register(fastifyMultipart, {
-    limits: { files: 1, fileSize: MAX_UPLOAD_BYTES },
+    limits: { files: 1, fields: 0, fileSize: MAX_UPLOAD_BYTES },
   });
   app.enableShutdownHooks();
   app.useGlobalPipes(validationPipe);

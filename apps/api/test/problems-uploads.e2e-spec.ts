@@ -270,8 +270,7 @@ describe('problem uploads', () => {
   it.each([
     ['../../../evil.zip', '/media/materials/sum/evil.zip'],
     ['..%2F..%2Fevil.zip', '/media/materials/sum/2F.2Fevil.zip'],
-    ['.htaccess', '/media/materials/sum/htaccess'],
-    ['..', '/media/materials/sum/material'],
+    ['.hidden.txt', '/media/materials/sum/hidden.txt'],
     ['a/b\\..\\c.zip', '/media/materials/sum/c.zip'],
   ])(
     'never lets the material name %s leave its directory',
@@ -288,6 +287,59 @@ describe('problem uploads', () => {
       ).toBe(expected);
     },
   );
+  it.each([
+    '.htaccess',
+    '..',
+    'index.html',
+    'a.htm',
+    'a.xhtml',
+    'a.svg',
+    'a.xml',
+    'a.js',
+    'a.mjs',
+    'a.shtml',
+    'a.php',
+    'a.HTML',
+    'noext',
+  ])('refuses the material name %s', async (name) => {
+    const response = await upload(
+      `${PROBLEMS}/sum/material`,
+      editor,
+      Buffer.from('x'),
+      name,
+    ).expect(400);
+    expect(
+      (response.body as { error: { fields: Record<string, string[]> } }).error
+        .fields,
+    ).toHaveProperty('file');
+  });
+  it('rejects empty files, extra fields, wrong field names and broken bodies', async () => {
+    const path = `${PROBLEMS}/uploads/image`;
+    await upload(path, staff, Buffer.alloc(0), 'e.png', 'image/png').expect(
+      400,
+    );
+    await authed(api.http().post(path), staff)
+      .field('note', 'x')
+      .attach('file', PNG, { filename: 'p.png', contentType: 'image/png' })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    await authed(api.http().post(path), staff)
+      .attach('picture', PNG, { filename: 'p.png', contentType: 'image/png' })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    const boundary = 'xBOUNDARYx';
+    const raw = (body: Buffer) =>
+      authed(api.http().post(path), staff)
+        .set('Content-Type', `multipart/form-data; boundary=${boundary}`)
+        .send(body);
+    await raw(Buffer.from('garbage, not multipart'))
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    const head = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="p.png"\r\nContent-Type: image/png\r\n\r\n`;
+    await raw(Buffer.concat([Buffer.from(head), PNG]))
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+  });
   it('rate-limits uploads per user', async () => {
     for (let attempt = 0; attempt < 29; attempt++)
       await upload(
