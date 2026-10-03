@@ -4,6 +4,9 @@ import { LanguagesQuerier } from './languages.querier';
 import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';
 import { ProblemTypesQuerier } from './problem-types.querier';
+import { ProblemEditingController } from './problem-editing.controller';
+import { ProblemEditingService } from './problem-editing.service';
+import { ProblemEvents } from './problem.events';
 import { ProblemsRepository } from './problems.repository';
 import { ProblemsController } from './problems.controller';
 import { ProblemsService } from './problems.service';
@@ -19,8 +22,14 @@ const repositories = [ProblemsRepository, RevisionsRepository];
 
 @Module({
   imports: [AuthModule],
-  controllers: [ProblemsController],
-  providers: [...queriers, ...repositories, ProblemsService],
-  exports: [...queriers, ...repositories],
+  controllers: [ProblemsController, ProblemEditingController],
+  providers: [
+    ...queriers,
+    ...repositories,
+    ProblemsService,
+    ProblemEditingService,
+    ProblemEvents,
+  ],
+  exports: [...queriers, ...repositories, ProblemEvents],
 })
 export class ProblemsApiModule {}
