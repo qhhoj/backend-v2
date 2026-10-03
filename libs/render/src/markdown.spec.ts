@@ -1,16 +1,21 @@
 import { renderMarkdown, renderMath } from './markdown';
+import { RenderLimitError } from './render-limit.error';
 
 const full = (text: string) => renderMarkdown(text, 'problem-full');
 const KATEX_INLINE = /^<p>a <span class="katex">.*<\/span> b<\/p>\n$/s;
 
 const timeOf = (action: () => void) => {
   const started = performance.now();
-  action();
+  try {
+    action();
+  } catch (error) {
+    if (!(error instanceof RenderLimitError)) throw error;
+  }
   return performance.now() - started;
 };
 /** Linear work grows ~5x for 5x the input and quadratic ~25x; the ratio holds on a loaded machine where a fixed bound would not. */
 const expectLinear = (render: (count: number) => string, count: number) => {
-  render(count);
+  timeOf(() => render(count));
   const small = timeOf(() => render(count));
   const large = timeOf(() => render(count * 5));
   expect(large / Math.max(small, 1)).toBeLessThan(15);
@@ -134,6 +139,71 @@ describe('renderMarkdown', () => {
     for (const unit of ['$a ', '$1 ']) {
       expectLinear((count) => full(unit.repeat(count)), 10000);
     }
+  });
+  describe('render budget', () => {
+    const floods: Record<string, (count: number) => string> = {
+      dollar: (count) => '$x$ '.repeat(count),
+      tilde: (count) => '~x~ '.repeat(count),
+      display: (count) => '$$x$$ '.repeat(count),
+      frac: (count) => '$\\frac{a}{b}$ '.repeat(count),
+    };
+    it.each(Object.keys(floods))(
+      'renders a %s formula flood in linear time under the output cap',
+      (name) => {
+        expectLinear((count) => full(floods[name](count)), 2000);
+        const html = full(floods[name](14000));
+        expect(Buffer.byteLength(html)).toBeLessThan(2 * 1024 * 1024);
+        expect(html).toContain('class="katex"');
+        expect(html.match(/Formula limit exceeded/g)).toHaveLength(1);
+      },
+    );
+    it('replaces formulas past the count without calling KaTeX', () => {
+      const html = full('$x$ '.repeat(2001));
+      expect(html.match(/class="katex"/g)).toHaveLength(2000);
+      expect(html).toContain('title="Formula limit exceeded">$x$</span>');
+    });
+    it('replaces a formula longer than 4000 chars', () => {
+      const cells = `$$\\begin{matrix}${'a&'.repeat(50000)}a\\end{matrix}$$`;
+      const html = full(cells);
+      expect(html).not.toContain('class="katex');
+      expect(html).toContain('Formula limit exceeded');
+      expect(html.length).toBeLessThan(1000);
+    });
+    it('stops rendering formulas past the total output size', () => {
+      const html = full(
+        '$x$ '.repeat(1900) + '$$\\begin{matrix}a\\end{matrix}$$',
+      );
+      expect(html).toContain('class="katex"');
+      expect(
+        renderMath('x', false, {
+          formulas: 0,
+          outputBytes: 2 * 1024 * 1024,
+          limitReported: false,
+        }),
+      ).toContain('Formula limit exceeded');
+    });
+    it('throws RenderLimitError when the output exceeds 2 MB', () => {
+      expect(() => full('a '.repeat(1100000))).toThrow(RenderLimitError);
+    });
+    it.each([
+      ['a', '<a>'.repeat(50000)],
+      ['span', '<span>'.repeat(33333)],
+      ['div and stray p', '<div>'.repeat(20000) + '</p>'.repeat(25000)],
+      ['table', '<table><tr><td>'.repeat(10000)],
+    ])('bounds raw html nesting: %s', (_name, html) => {
+      const started = performance.now();
+      try {
+        full(html);
+        renderMarkdown(html, 'problem');
+      } catch (error) {
+        expect(error).toBeInstanceOf(RenderLimitError);
+      }
+      expect(performance.now() - started).toBeLessThan(5000);
+    });
+    it('rejects markup nested deeper than 500', () => {
+      expect(() => full('<div>'.repeat(501))).toThrow(RenderLimitError);
+      expect(full('<div>'.repeat(50) + '</div>'.repeat(50))).toContain('<div>');
+    });
   });
   it('stops treating >! as a spoiler beyond 20 levels instead of overflowing the stack', () => {
     const html = full('>! '.repeat(2000) + 'x');

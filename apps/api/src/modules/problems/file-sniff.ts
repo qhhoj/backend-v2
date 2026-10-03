@@ -1,4 +1,6 @@
-export type ImageKind = 'jpg' | 'png' | 'gif' | 'svg';
+import { isMarkupWithinLimits } from '@libs/render';
+
+type ImageKind = 'jpg' | 'png' | 'gif' | 'svg';
 
 const SIGNATURES: ReadonlyArray<[ImageKind, number[]]> = [
   ['jpg', [0xff, 0xd8, 0xff]],
@@ -28,22 +30,5 @@ export const SVG_MAX_BYTES = 512 * 1024;
 const SVG_MAX_TAGS = 20000;
 const SVG_MAX_DEPTH = 1000;
 
-/** Linear scan mirroring htmlparser2 (any `<` not followed by space, tab, LF, FF, CR, `>`, `!` or `?` opens an element). The tag cap is the hard bound; depth is best-effort (`"/>"` inside attribute values can hide nesting). */
-export function isSvgWithinLimits(svg: string): boolean {
-  let tags = 0;
-  let depth = 0;
-  let cursor = svg.indexOf('<');
-  while (cursor !== -1) {
-    const next = svg[cursor + 1];
-    if (next !== undefined && !/[ \t\n\f\r>!?]/.test(next)) {
-      const end = svg.indexOf('>', cursor);
-      if (end === -1) return false;
-      if (++tags > SVG_MAX_TAGS) return false;
-      if (next === '/') depth--;
-      else if (svg[end - 1] !== '/' && ++depth > SVG_MAX_DEPTH) return false;
-      cursor = end;
-    }
-    cursor = svg.indexOf('<', cursor + 1);
-  }
-  return true;
-}
+export const isSvgWithinLimits = (svg: string): boolean =>
+  isMarkupWithinLimits(svg, { maxTags: SVG_MAX_TAGS, maxDepth: SVG_MAX_DEPTH });

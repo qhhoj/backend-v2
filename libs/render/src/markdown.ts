@@ -1,5 +1,13 @@
 import MarkdownIt from 'markdown-it';
-import { mathInlineRule, mathTildeRule, renderMath } from './math';
+import { isMarkupWithinLimits } from './markup-limits';
+import {
+  createMathBudget,
+  mathInlineRule,
+  mathTildeRule,
+  MathBudget,
+  renderMath,
+} from './math';
+import { RenderLimitError } from './render-limit.error';
 import { sanitizeStatementHtml } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
 import { isSanitizedStyle, RenderStyle } from './styles';
@@ -7,6 +15,9 @@ import { dashesRule } from './typography';
 import { renderUserReference, userReferenceRule } from './user-reference';
 
 export { renderMath } from './math';
+
+/** markdown-it `env` of one render. */
+type RenderEnv = { budget: MathBudget };
 
 const MAX_HEADER_LEVEL = 6;
 /** Legacy `inc_header`: bare header tags shift by two (capped at h6 instead of producing h7/h8). */
@@ -35,10 +46,10 @@ function createMarkdown(): MarkdownIt.MarkdownIt {
   markdown.block.ruler.before('blockquote', 'spoiler', spoilerRule, {
     alt: ['paragraph', 'reference', 'blockquote', 'list'],
   });
-  markdown.renderer.rules.math_inline = (tokens, index) =>
-    renderMath(tokens[index].content, false);
-  markdown.renderer.rules.math_display = (tokens, index) =>
-    renderMath(tokens[index].content, true);
+  markdown.renderer.rules.math_inline = (tokens, index, _options, env) =>
+    renderMath(tokens[index].content, false, (env as RenderEnv).budget);
+  markdown.renderer.rules.math_display = (tokens, index, _options, env) =>
+    renderMath(tokens[index].content, true, (env as RenderEnv).budget);
   markdown.renderer.rules.user_reference = renderUserReference;
   markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
     const token = tokens[index];
@@ -53,10 +64,32 @@ function createMarkdown(): MarkdownIt.MarkdownIt {
 
 const markdown = createMarkdown();
 
-/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. */
+const MAX_MARKUP_TAGS = 200000;
+const MAX_MARKUP_DEPTH = 500;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
+
+/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. Throws `RenderLimitError` when the markup is too large or too deeply nested. */
 export function renderMarkdown(text: string, style: RenderStyle): string {
-  const html = wrapTables(
-    shiftHeaders(markdown.render(rewriteHtmlSpoilers(text))),
+  const rendered = wrapTables(
+    shiftHeaders(
+      markdown.render(rewriteHtmlSpoilers(text), {
+        budget: createMathBudget(),
+      } satisfies RenderEnv),
+    ),
   );
-  return isSanitizedStyle(style) ? sanitizeStatementHtml(html) : html;
+  if (
+    !isMarkupWithinLimits(rendered, {
+      maxTags: MAX_MARKUP_TAGS,
+      maxDepth: MAX_MARKUP_DEPTH,
+    })
+  )
+    throw new RenderLimitError(
+      'Markup has too many tags or is nested too deep',
+    );
+  const html = isSanitizedStyle(style)
+    ? sanitizeStatementHtml(rendered)
+    : rendered;
+  if (Buffer.byteLength(html) > MAX_HTML_BYTES)
+    throw new RenderLimitError('Rendered HTML is too large');
+  return html;
 }

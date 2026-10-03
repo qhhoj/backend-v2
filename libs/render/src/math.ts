@@ -20,20 +20,58 @@ const escapeHtml = (text: string) =>
 const truncate = (text: string) =>
   text.length > MAX_SHOWN_LENGTH ? `${text.slice(0, MAX_SHOWN_LENGTH)}…` : text;
 
-/** KaTeX HTML+MathML for `tex`; any KaTeX failure (parse error, stack overflow on deep nesting) keeps the raw source in a `math-error` span so a bad formula never fails a save. */
-export function renderMath(tex: string, displayMode: boolean): string {
+/** Per-render limits on KaTeX work and output; one instance lives in the markdown-it `env` of each render. */
+export type MathBudget = {
+  formulas: number;
+  outputBytes: number;
+  limitReported: boolean;
+};
+export const MAX_FORMULAS = 2000;
+export const MAX_FORMULA_LENGTH = 4000;
+export const MAX_MATH_OUTPUT_BYTES = 1.5 * 1024 * 1024;
+export const createMathBudget = (): MathBudget => ({
+  formulas: 0,
+  outputBytes: 0,
+  limitReported: false,
+});
+
+const sourceOf = (tex: string, displayMode: boolean) =>
+  truncate(displayMode ? `$$${tex}$$` : `$${tex}$`);
+const mathError = (tex: string, displayMode: boolean, message: string) =>
+  `<span class="math-error" title="${escapeHtml(truncate(message))}">${escapeHtml(sourceOf(tex, displayMode))}</span>`;
+
+/** KaTeX HTML+MathML for `tex`; any KaTeX failure (parse error, stack overflow on deep nesting) or a spent `budget` keeps the raw source in a `math-error` span so a bad formula never fails a save. */
+export function renderMath(
+  tex: string,
+  displayMode: boolean,
+  budget?: MathBudget,
+): string {
+  if (
+    budget &&
+    (++budget.formulas > MAX_FORMULAS ||
+      tex.length > MAX_FORMULA_LENGTH ||
+      budget.outputBytes > MAX_MATH_OUTPUT_BYTES)
+  ) {
+    if (budget.limitReported) return escapeHtml(sourceOf(tex, displayMode));
+    budget.limitReported = true;
+    return mathError(tex, displayMode, 'Formula limit exceeded');
+  }
   try {
-    return katex.renderToString(tex, {
+    const html = katex.renderToString(tex, {
       displayMode,
       throwOnError: true,
       strict: 'ignore',
       trust: false,
       maxSize: MAX_SIZE,
     });
+    if (budget) budget.outputBytes += html.length;
+    return html;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const source = displayMode ? `$$${tex}$$` : `$${tex}$`;
-    return `<span class="math-error" title="${escapeHtml(truncate(message))}">${escapeHtml(truncate(source))}</span>`;
+    return mathError(
+      tex,
+      displayMode,
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
