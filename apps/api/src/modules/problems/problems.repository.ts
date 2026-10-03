@@ -45,7 +45,7 @@ export class ProblemsRepository {
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .exec(),
-      this.problems.countDocuments(filter).exec(),
+      this.problems.countDocuments(filter).collation(CI).exec(),
     ]);
     return { items, total };
   }
@@ -58,20 +58,23 @@ export class ProblemsRepository {
     await this.problems.updateOne({ _id: id }, { $set: changes }).exec();
   }
 
-  /** Replaces the translation for its language, or appends it. */
+  /** Appends the translation unless its language exists (atomic guard), otherwise replaces it. */
   async upsertTranslation(
     id: string,
     translation: ProblemTranslation,
   ): Promise<void> {
     const { matchedCount } = await this.problems
       .updateOne(
-        { _id: id, 'translations.language': translation.language },
-        { $set: { 'translations.$': translation } },
+        { _id: id, 'translations.language': { $ne: translation.language } },
+        { $push: { translations: translation } },
       )
       .exec();
     if (matchedCount === 0)
       await this.problems
-        .updateOne({ _id: id }, { $push: { translations: translation } })
+        .updateOne(
+          { _id: id, 'translations.language': translation.language },
+          { $set: { 'translations.$': translation } },
+        )
         .exec();
   }
 }

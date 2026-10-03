@@ -37,7 +37,7 @@ describe('ProblemsRepository', () => {
       await repository.create({
         ...base,
         code,
-        name: code === 'apple' ? 'Apple' : code,
+        name: code === 'apple' ? 'Apple' : code === 'cherry' ? 'Cherry' : code,
       });
   });
   afterAll(async () => {
@@ -83,5 +83,20 @@ describe('ProblemsRepository', () => {
       { language: 'vi', name: 'Quả táo' },
       { language: 'en', name: 'Apple' },
     ]);
+  });
+  it('keeps one translation per language under concurrent upserts', async () => {
+    const problem = (await repository.findByCode('banana'))!;
+    await Promise.all(
+      ['a', 'b', 'c'].map((suffix) =>
+        repository.upsertTranslation(problem._id, {
+          language: 'en',
+          name: `Banana ${suffix}`,
+          description: '',
+          descriptionHtml: '',
+        }),
+      ),
+    );
+    const translations = (await repository.findByCode('banana'))!.translations;
+    expect(translations.map(({ language }) => language)).toEqual(['en']);
   });
 });
