@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { AuthContext, Permission, Principal } from '@libs/auth';
-import { AppError, isDuplicateKey } from '@libs/common';
+import { AppError, isDuplicateKey, RateLimitService } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { Problem } from '@libs/database';
+import type { Problem, StatementLanguage } from '@libs/database';
 import { renderMarkdown } from '@libs/render';
 import type { RenderStyle } from '@libs/render';
+import { CloneProblemDto } from './dto/clone.dto';
+import { PutEditorialDto } from './dto/editorial.dto';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
+import { RenderPreviewDto } from './dto/render-preview.dto';
+import { PutTranslationDto } from './dto/translation.dto';
 import { ProblemDetailResponse } from './dto/problem-detail.response';
 import { fieldDiff } from './field-diff';
 import { LanguagesQuerier } from './languages.querier';
@@ -18,6 +22,10 @@ import { ProblemTypesQuerier } from './problem-types.querier';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
 import { ProblemsService } from './problems.service';
+import {
+  RENDER_PREVIEW_LIMIT,
+  RENDER_PREVIEW_WINDOW_SECONDS,
+} from './rate-limits';
 import { RevisionsRepository } from './revisions.repository';
 
 const TIME_LIMIT_WITHOUT_PERMISSION = 5;
@@ -78,6 +86,26 @@ const withoutRenderedHtml = (
     description,
   })),
 });
+/** Never carried over by a clone: identity, timestamps, people, statement translations, editorial and mirror links. */
+const CLONE_RESET_FIELDS = new Set([
+  'id',
+  'createdAt',
+  'updatedAt',
+  'code',
+  'isPublic',
+  'date',
+  'userCount',
+  'acRate',
+  'authors',
+  'curators',
+  'testers',
+  'bannedUsers',
+  'suggester',
+  'translations',
+  'solution',
+  'mirrorOf',
+  'mirrorRoot',
+]);
 const ID_ARRAY_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
   'typeIds',
   'authors',
@@ -101,6 +129,7 @@ export class ProblemEditingService {
     private readonly licenses: LicensesQuerier,
     private readonly languages: LanguagesQuerier,
     private readonly events: ProblemEvents,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   async create(
@@ -203,6 +232,124 @@ export class ProblemEditingService {
     return this.problems.detail(principal, updated.code, 'en');
   }
 
+  async putTranslation(
+    auth: AuthContext,
+    code: string,
+    lang: StatementLanguage,
+    dto: PutTranslationDto,
+  ): Promise<void> {
+    const { principal } = auth;
+    const problem = await this.editableProblem(principal, code);
+    if (problem.isFullMarkup) this.assertFullMarkupWriter(principal);
+    const previous = problem.translations.find(
+      (translation) => translation.language === lang,
+    );
+    if (previous?.name === dto.name && previous.description === dto.description)
+      return;
+    await this.repository.upsertTranslation(problem._id, {
+      language: lang,
+      name: dto.name,
+      description: dto.description,
+      descriptionHtml: renderMarkdown(dto.description, this.styleOf(problem)),
+    });
+    await this.revisions.append({
+      entity: 'problem',
+      entityId: problem._id,
+      action: 'translation',
+      userId: principal.userId,
+      changes: {
+        [`translations.${lang}`]: {
+          before: previous
+            ? { name: previous.name, description: previous.description }
+            : null,
+          after: { name: dto.name, description: dto.description },
+        },
+      },
+      comment: `Translation ${lang} edited from site`,
+    });
+    this.events.emit('statementChanged', problem._id);
+  }
+
+  /** The editorial always renders with the sanitizing `solution` style, so it needs no full-markup gate. */
+  async putEditorial(
+    auth: AuthContext,
+    code: string,
+    dto: PutEditorialDto,
+  ): Promise<void> {
+    const problem = await this.editableProblem(auth.principal, code);
+    await this.assertReferences({ authors: dto.authors });
+    const authors = unique(dto.authors);
+    const before = problem.solution && {
+      isPublic: problem.solution.isPublic,
+      publishOn: problem.solution.publishOn,
+      authors: problem.solution.authors.map(uuidStr),
+      content: problem.solution.content,
+    };
+    const after = {
+      isPublic: dto.isPublic,
+      publishOn: new Date(dto.publishOn),
+      authors,
+      content: dto.content,
+    };
+    if (before && sameJson(before, after)) return;
+    await this.repository.update(problem._id, {
+      solution: {
+        ...after,
+        contentHtml: renderMarkdown(dto.content, 'solution'),
+      },
+    });
+    await this.revisions.append({
+      entity: 'problem',
+      entityId: problem._id,
+      action: 'editorial',
+      userId: auth.principal.userId,
+      changes: { solution: { before, after } },
+      comment: 'Editorial edited from site',
+    });
+  }
+
+  async clone(
+    auth: AuthContext,
+    code: string,
+    dto: CloneProblemDto,
+  ): Promise<ProblemDetailResponse> {
+    const source = await this.editableProblem(auth.principal, code);
+    const copied = Object.fromEntries(
+      Object.entries(source.toJSON()).filter(
+        ([field]) => !CLONE_RESET_FIELDS.has(field),
+      ),
+    ) as Partial<Problem>;
+    const clone = await this.createUnique({
+      ...copied,
+      code: dto.code,
+      date: new Date(),
+      curators: [auth.principal.userId],
+    });
+    await this.revisions.append({
+      entity: 'problem',
+      entityId: clone._id,
+      action: 'clone',
+      userId: auth.principal.userId,
+      changes: fieldDiff({}, withoutRenderedHtml(clone.toJSON())),
+      comment: `Cloned problem from ${code}`,
+    });
+    return this.problems.detail(auth.principal, clone.code, 'en');
+  }
+
+  async preview(
+    auth: AuthContext,
+    dto: RenderPreviewDto,
+  ): Promise<{ html: string }> {
+    if (dto.style === 'problem-full')
+      this.assertFullMarkupWriter(auth.principal);
+    await this.rateLimit.reserve(
+      [`render-preview:user:${auth.principal.userId}`],
+      RENDER_PREVIEW_LIMIT,
+      RENDER_PREVIEW_WINDOW_SECONDS,
+    );
+    return { html: renderMarkdown(dto.markdown, dto.style) };
+  }
+
   /** 404 when invisible (never leaks), 403 when visible but not editable. */
   async editableProblem(
     principal: Principal,
@@ -242,16 +389,8 @@ export class ProblemEditingService {
           `Changing ${field} requires ${permission}`,
         );
     const isFullMarkup = fields.isFullMarkup ?? baseline.isFullMarkup;
-    if (
-      isFullMarkup &&
-      changes('description') &&
-      !hasPermission(principal, 'judge.problem_full_markup')
-    )
-      throw new AppError(
-        'forbidden',
-        403,
-        'Changing the statement of a full-markup problem requires judge.problem_full_markup',
-      );
+    if (isFullMarkup && changes('description'))
+      this.assertFullMarkupWriter(principal);
     const staffChanges = STAFF_FIELDS.filter(changes);
     if (
       staffChanges.length &&
@@ -277,6 +416,16 @@ export class ProblemEditingService {
           `You cannot set time limit higher than ${TIME_LIMIT_WITHOUT_PERMISSION} seconds`,
         ],
       });
+  }
+
+  /** Unsanitized HTML (`problem-full`) is writable only with this permission. */
+  private assertFullMarkupWriter(principal: Principal): void {
+    if (!hasPermission(principal, 'judge.problem_full_markup'))
+      throw new AppError(
+        'forbidden',
+        403,
+        'Full markup requires judge.problem_full_markup',
+      );
   }
 
   /** Every referenced catalog row and user must exist; `organizations` are unchecked until sub-project 5. */

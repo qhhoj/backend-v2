@@ -1,0 +1,4 @@
+export const RENDER_PREVIEW_LIMIT = 60;
+export const RENDER_PREVIEW_WINDOW_SECONDS = 60;
+export const UPLOAD_LIMIT = 30;
+export const UPLOAD_WINDOW_SECONDS = 60 * 60;

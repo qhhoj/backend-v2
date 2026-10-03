@@ -27,7 +27,7 @@ import {
 import { IsStatementText } from './statement-text';
 
 /** Rendering cost is linear in the Markdown size. */
-const MAX_MARKDOWN_LENGTH = 200_000;
+export const MAX_MARKDOWN_LENGTH = 200_000;
 
 export class LanguageLimitDto {
   @IsUUID('7') languageId!: string;

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
+import { RateLimitService } from '@libs/common';
 import { LanguagesQuerier } from './languages.querier';
 import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';
@@ -29,6 +30,7 @@ const repositories = [ProblemsRepository, RevisionsRepository];
     ProblemsService,
     ProblemEditingService,
     ProblemEvents,
+    RateLimitService,
   ],
   exports: [...queriers, ...repositories, ProblemEvents],
 })
