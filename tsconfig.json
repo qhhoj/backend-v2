@@ -40,6 +40,12 @@
       ],
       "@libs/database/*": [
         "libs/database/src/*"
+      ],
+      "@libs/render": [
+        "libs/render/src"
+      ],
+      "@libs/render/*": [
+        "libs/render/src/*"
       ]
     }
   }
