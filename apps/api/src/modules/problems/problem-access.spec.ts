@@ -6,7 +6,7 @@ import {
   type Permission,
   type Principal,
 } from '@libs/auth';
-import { DatabaseModule, newId, Problem } from '@libs/database';
+import { DatabaseModule, newId, Problem, toUuid } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import type { Model } from 'mongoose';
 import type { MongoMemoryReplSet } from 'mongodb-memory-server';
@@ -277,6 +277,11 @@ describe('ProblemAccess.visibleFilter', () => {
             });
           }
   });
+  afterAll(async () => {
+    await testingModule.close();
+    await replSet.stop();
+  });
+
   it('accessView of every stored document (hydrated and lean) equals the generated view', async () => {
     for (const { code, view: expectedView } of generated) {
       const hydrated = await problems.findOne({ code });
@@ -284,11 +289,6 @@ describe('ProblemAccess.visibleFilter', () => {
       const lean = await problems.findOne({ code }).lean();
       expect(ProblemAccess.accessView(lean!)).toEqual(expectedView);
     }
-  });
-
-  afterAll(async () => {
-    await testingModule.close();
-    await replSet.stop();
   });
 
   const RELEVANT_PERMISSIONS: Permission[] = [
@@ -325,7 +325,14 @@ describe('ProblemAccess.visibleFilter', () => {
       .map(({ code }) => code)
       .sort();
     const actual = (
-      await problems.find(ProblemAccess.visibleFilter(principal)).lean()
+      await problems
+        .find({
+          $and: [
+            { code: { $in: generated.map(({ code }) => code) } },
+            ProblemAccess.visibleFilter(principal),
+          ],
+        })
+        .lean()
     )
       .map((problem) => problem.code)
       .sort();
@@ -334,29 +341,41 @@ describe('ProblemAccess.visibleFilter', () => {
   });
 
   it('treats a raw document lacking suggester and arrays as having none', async () => {
-    await problems.collection.insertOne({
-      _id: newId() as never,
-      code: 'rawdoc',
-      name: 'rawdoc',
-      isPublic: false,
-      isOrganizationPrivate: false,
-    });
-    const lean = (await problems.findOne({ code: 'rawdoc' }).lean())!;
-    const problemView = ProblemAccess.accessView(lean);
-    expect(problemView).toEqual(view({ isPublic: false }));
-    for (const principal of Object.values(PRINCIPALS)) {
-      const visible =
-        (
-          await problems
-            .find({
-              $and: [
-                { code: 'rawdoc' },
-                ProblemAccess.visibleFilter(principal),
-              ],
-            })
-            .lean()
-        ).length === 1;
-      expect(visible).toBe(ProblemAccess.canSee(principal, problemView));
+    await problems.db
+      .collection<{
+        _id: ReturnType<typeof toUuid>;
+        code: string;
+        name: string;
+        isPublic: boolean;
+        isOrganizationPrivate: boolean;
+      }>('problems')
+      .insertOne({
+        _id: toUuid(newId()),
+        code: 'rawdoc',
+        name: 'rawdoc',
+        isPublic: false,
+        isOrganizationPrivate: false,
+      });
+    try {
+      const lean = (await problems.findOne({ code: 'rawdoc' }).lean())!;
+      const problemView = ProblemAccess.accessView(lean);
+      expect(problemView).toEqual(view({ isPublic: false }));
+      for (const principal of Object.values(PRINCIPALS)) {
+        const visible =
+          (
+            await problems
+              .find({
+                $and: [
+                  { code: 'rawdoc' },
+                  ProblemAccess.visibleFilter(principal),
+                ],
+              })
+              .lean()
+          ).length === 1;
+        expect(visible).toBe(ProblemAccess.canSee(principal, problemView));
+      }
+    } finally {
+      await problems.deleteOne({ code: 'rawdoc' });
     }
   });
 });
