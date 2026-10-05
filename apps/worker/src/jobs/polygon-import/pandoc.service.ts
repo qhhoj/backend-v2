@@ -282,7 +282,8 @@ export class PandocService {
         child.stderr.destroy();
         settle();
       };
-      const settle = () => reject(failure as PolygonImportError);
+      const settle = () =>
+        reject(failure ?? new PolygonImportError('pandoc failed'));
       const timer = setTimeout(() => abort('pandoc timed out'), timeoutMs);
       child.stdout.on('data', (chunk: Buffer) => {
         outputBytes += chunk.length;
