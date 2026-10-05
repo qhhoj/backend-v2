@@ -30,6 +30,7 @@ jobs:
             ~/.cache/mongodb-binaries
             node_modules/.cache/mongodb-memory-server
           key: mongodb-memory-server-8.0.4
+      - run: python3 -m pip install pyyaml==6.0.3
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck

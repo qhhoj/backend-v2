@@ -1,11 +1,7 @@
-import { stringify } from 'yaml';
-import type {
-  Checker,
-  JsonObject,
-  ProblemData,
-  ProblemTestCase,
-} from '@libs/database';
+import type { JsonObject, ProblemData, ProblemTestCase } from '@libs/database';
+import { CUSTOM_CHECKER_TYPES } from '@libs/database';
 import { ProblemDataError } from './problem-data.error';
+import { emitYaml } from './yaml-emit';
 
 type InitCase = Record<string, unknown>;
 interface Batch extends InitCase {
@@ -25,10 +21,47 @@ const CHECKER_LANGUAGE_BY_EXTENSION: Record<string, string> = {
 };
 const extensionOf = (name: string) =>
   name.split('.').pop()?.toLowerCase() ?? '';
-const withArgs = (checker: Checker, args: JsonObject | null) =>
-  args && Object.keys(args).length ? { name: checker, args } : checker;
 
-/** Legacy `make_checker` for the problem-wide checker; the custom checker always carries `files` (its uploaded source) with `lang`/`type` defaults the editor may override. */
+const MAX_ARGS_DEPTH = 8;
+const MAX_ARGS_ENTRIES = 200;
+const MAX_ARGS_NODES = 8192;
+const MAX_ARGS_JSON_LENGTH = 8192;
+const MAX_ARGS_KEY_LENGTH = 100;
+
+/** Args are arbitrary editor JSON: bound depth, width and size iteratively before anything recurses over them. */
+function assertBoundedArgs(args: JsonObject | null): void {
+  const tooLarge = new ProblemDataError('Checker arguments are too large.');
+  const pending: [unknown, number][] = [[args, 0]];
+  let nodes = 0;
+  for (let next = pending.pop(); next; next = pending.pop()) {
+    const [value, depth] = next;
+    if (++nodes > MAX_ARGS_NODES) throw tooLarge;
+    if (typeof value !== 'object' || value === null) continue;
+    const keys = Object.keys(value);
+    if (depth >= MAX_ARGS_DEPTH || keys.length > MAX_ARGS_ENTRIES)
+      throw tooLarge;
+    if (
+      !Array.isArray(value) &&
+      keys.some((key) => key.length > MAX_ARGS_KEY_LENGTH)
+    )
+      throw tooLarge;
+    for (const child of Object.values(value)) pending.push([child, depth + 1]);
+  }
+  if (JSON.stringify(args).length > MAX_ARGS_JSON_LENGTH) throw tooLarge;
+}
+
+const withArgs = (checker: string, args: JsonObject | null) => {
+  assertBoundedArgs(args);
+  return args && Object.keys(args).length ? { name: checker, args } : checker;
+};
+
+function integerOrNull(value: number | null, label: string): number | null {
+  if (value !== null && !Number.isSafeInteger(value))
+    throw new ProblemDataError(`${label} must be an integer.`);
+  return value;
+}
+
+/** Legacy `make_checker` for the problem-wide checker; the custom checker always carries `files` (its uploaded source) with a `type` the editor may choose (default testlib); `files` and `lang` always come from the uploaded source. */
 function problemChecker(
   data: ProblemData,
 ): string | { name: string; args: JsonObject } {
@@ -44,15 +77,14 @@ function problemChecker(
     throw new ProblemDataError(
       'Only C++, Pascal, or Java checkers are supported.',
     );
-  return {
-    name: 'bridged',
-    args: {
-      type: 'testlib',
-      lang: language,
-      ...data.checkerArgs,
-      files: data.customChecker,
-    },
-  };
+  const args = { type: 'testlib', ...data.checkerArgs };
+  if (!(CUSTOM_CHECKER_TYPES as readonly unknown[]).includes(args.type))
+    throw new ProblemDataError('Unknown custom checker type.');
+  return withArgs('bridged', {
+    ...args,
+    lang: language,
+    files: data.customChecker,
+  });
 }
 
 /** A case may override the checker, but a custom checker is problem-wide only (legacy read a field that does not exist and crashed). */
@@ -62,7 +94,7 @@ function caseChecker(testCase: ProblemTestCase, index: number) {
     throw new ProblemDataError(
       `Case #${index}: a custom checker can only be set for the whole problem.`,
     );
-  return withArgs(checker as Checker, testCase.checkerArgs);
+  return withArgs(checker, testCase.checkerArgs);
 }
 
 function requireSource(
@@ -77,6 +109,7 @@ function requireSource(
 
 /** Legacy `make_grader`. */
 function applyGrader(init: InitCase, data: ProblemData): void {
+  assertBoundedArgs(data.graderArgs);
   const args = data.graderArgs ?? {};
   if (data.grader === 'output_only') {
     init.output_only = true;
@@ -85,7 +118,8 @@ function applyGrader(init: InitCase, data: ProblemData): void {
   if (data.grader === 'standard') {
     if (args.io_method !== 'file') return;
     const { io_input_file: input, io_output_file: output } = args;
-    if (!input || !output)
+    const unset = (name: unknown) => name === undefined || name === '';
+    if (unset(input) || unset(output))
       throw new ProblemDataError(
         'You must specify both input and output files.',
       );
@@ -114,15 +148,33 @@ function applyGrader(init: InitCase, data: ProblemData): void {
   };
 }
 
-const splitLines = (text: string) => text.split(/\r?\n/);
-const applyCaseOptions = (target: InitCase, testCase: ProblemTestCase) => {
+/** Python `str.splitlines()` for the line endings that matter: a trailing line break does not add an empty line. */
+const splitLines = (text: string) => {
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines[lines.length - 1] === '') lines.pop();
+  return lines;
+};
+/** Options shared by plain cases and batch starts; a case without a checker drops stale checker args. */
+function applyCaseOptions(
+  target: InitCase,
+  testCase: ProblemTestCase,
+  index: number,
+): void {
   if (testCase.generatorArgs)
     target.generator_args = splitLines(testCase.generatorArgs);
-  if (testCase.outputLimit !== null)
-    target.output_limit_length = testCase.outputLimit;
-  if (testCase.outputPrefix !== null)
-    target.output_prefix_length = testCase.outputPrefix;
-};
+  const outputLimit = integerOrNull(
+    testCase.outputLimit,
+    `Case #${index}: output limit`,
+  );
+  if (outputLimit !== null) target.output_limit_length = outputLimit;
+  const outputPrefix = integerOrNull(
+    testCase.outputPrefix,
+    `Case #${index}: output prefix`,
+  );
+  if (outputPrefix !== null) target.output_prefix_length = outputPrefix;
+  if (testCase.checker) target.checker = caseChecker(testCase, index);
+  else testCase.checkerArgs = null;
+}
 
 /** Port of legacy `ProblemDataCompiler.make_init`: null yaml when there is nothing to write; `cases` are the normalised rows to store back. */
 export function compileInitYaml(
@@ -142,6 +194,7 @@ export function compileInitYaml(
   };
   cases.forEach((testCase, position) => {
     const index = position + 1;
+    integerOrNull(testCase.points, `Case #${index}: points`);
     if (testCase.type === 'C') {
       const entry: InitCase = {};
       if (batch) {
@@ -170,9 +223,7 @@ export function compileInitYaml(
         entry.points = testCase.points;
         totalPoints += testCase.points;
       }
-      applyCaseOptions(entry, testCase);
-      if (testCase.checker) entry.checker = caseChecker(testCase, index);
-      else testCase.checkerArgs = null;
+      applyCaseOptions(entry, testCase, index);
       (batch ? batch.batched : top).push(entry);
     } else if (testCase.type === 'S') {
       if (batch) endBatch(batch);
@@ -186,9 +237,7 @@ export function compileInitYaml(
         batched: [],
         is_pretest: testCase.isPretest,
       };
-      applyCaseOptions(batch, testCase);
-      if (testCase.checker) batch.checker = caseChecker(testCase, index);
-      else testCase.checkerArgs = null;
+      applyCaseOptions(batch, testCase, index);
       testCase.input = '';
       testCase.output = '';
     } else {
@@ -225,8 +274,10 @@ export function compileInitYaml(
   if (data.generator) init.generator = data.generator;
   if (pretests.length) init.pretest_test_cases = pretests;
   if (tests.length) init.test_cases = tests;
-  if (data.outputLimit !== null) init.output_limit_length = data.outputLimit;
-  if (data.outputPrefix !== null) init.output_prefix_length = data.outputPrefix;
+  const outputLimit = integerOrNull(data.outputLimit, 'Output limit');
+  if (outputLimit !== null) init.output_limit_length = outputLimit;
+  const outputPrefix = integerOrNull(data.outputPrefix, 'Output prefix');
+  if (outputPrefix !== null) init.output_prefix_length = outputPrefix;
   init.checker = problemChecker(data);
   applyGrader(init, data);
   const hints = [
@@ -234,9 +285,5 @@ export function compileInitYaml(
     ...(data.nobigmath ? ['nobigmath'] : []),
   ];
   if (hints.length) init.hints = hints;
-  // PyYAML safe_dump sorts keys; the judge does not care, diffs do.
-  return {
-    yaml: stringify(init, { sortMapEntries: true, lineWidth: 0 }),
-    cases,
-  };
+  return { yaml: emitYaml(init), cases };
 }

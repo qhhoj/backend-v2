@@ -346,6 +346,163 @@ describe('compileInitYaml', () => {
     compileInitYaml(input, files);
     expect(input.cases[0].input).toBe('junk');
   });
+  it('quotes hostile strings so PyYAML (YAML 1.1) keeps them strings', () => {
+    const hostile = [
+      'yes',
+      'a\tb',
+      '=',
+      '<<',
+      '1_000',
+      '1:30',
+      '2024-01-01',
+      'a\u0085b',
+      '0b101',
+      '1 2',
+    ];
+    expect(
+      compile({ cases: [plain(1, { generatorArgs: hostile.join('\n') })] })
+        .yaml,
+    ).toBe(
+      [
+        'archive: tests.zip',
+        'checker: standard',
+        'test_cases:',
+        '  - generator_args:',
+        '      - "yes"',
+        '      - "a\\tb"',
+        '      - "="',
+        '      - "<<"',
+        '      - "1_000"',
+        '      - "1:30"',
+        '      - "2024-01-01"',
+        '      - "a\\u0085b"',
+        '      - "0b101"',
+        '      - 1 2',
+        '    in: 1.in',
+        '    out: 1.out',
+        '    points: 1',
+        '',
+      ].join('\n'),
+    );
+  });
+  it('emits nested args sorted, with empty collections and floats', () => {
+    const checkerArgs = {
+      b: [1, [2], {}],
+      a: { z: null, y: 1.5, x: 1e21, w: true, v: [] },
+    };
+    expect(
+      compile({ checker: 'floats', checkerArgs, cases: [plain(1)] }).yaml,
+    ).toContain(
+      [
+        'checker:',
+        '  args:',
+        '    a:',
+        '      v: []',
+        '      w: true',
+        '      x: 1.0e+21',
+        '      y: 1.5',
+        '      z: null',
+        '    b:',
+        '      - 1',
+        '      - - 2',
+        '      - {}',
+        '  name: floats',
+        '',
+      ].join('\n'),
+    );
+  });
+  it('bounds checker and grader args', () => {
+    const deep = (levels: number) => {
+      const root: Record<string, unknown> = {};
+      let cursor = root;
+      for (let level = 0; level < levels; level++)
+        cursor = cursor.k = {} as Record<string, unknown>;
+      return root;
+    };
+    const wide = Object.fromEntries(
+      Array.from({ length: 50000 }, (_item, index) => [`k${index}`, index]),
+    );
+    const message = 'Checker arguments are too large.';
+    for (const args of [deep(200000), wide, deep(9)]) {
+      const started = performance.now();
+      failsWith(
+        { checker: 'floats', checkerArgs: args, cases: [plain(1)] },
+        message,
+      );
+      failsWith({ graderArgs: args, cases: [plain(1)] }, message);
+      failsWith(
+        { cases: [plain(1, { checker: 'floats', checkerArgs: args })] },
+        message,
+      );
+      expect(performance.now() - started).toBeLessThan(1000);
+    }
+    expect(() =>
+      compile({ checker: 'floats', checkerArgs: deep(7), cases: [plain(1)] }),
+    ).not.toThrow();
+    failsWith(
+      {
+        checker: 'floats',
+        checkerArgs: { text: 'x'.repeat(9000) },
+        cases: [plain(1)],
+      },
+      message,
+    );
+  });
+  it('validates the custom checker type and keeps files/lang server-derived', () => {
+    failsWith(
+      {
+        checker: 'bridged',
+        customChecker: 'chk.cpp',
+        checkerArgs: { type: 'nope' },
+        cases: [plain(1)],
+      },
+      'Unknown custom checker type.',
+    );
+    expect(
+      init({
+        checker: 'bridged',
+        customChecker: 'chk.cpp',
+        checkerArgs: {
+          files: 'evil',
+          lang: 'PY3',
+          treat_checker_points_as_percentage: true,
+        },
+        cases: [plain(1)],
+      }).checker,
+    ).toEqual({
+      name: 'bridged',
+      args: {
+        files: 'chk.cpp',
+        lang: 'CPP17',
+        type: 'testlib',
+        treat_checker_points_as_percentage: true,
+      },
+    });
+  });
+  it('requires safe integers for points and limits', () => {
+    failsWith(
+      { cases: [plain(1, { points: 1.5 })] },
+      'Case #1: points must be an integer.',
+    );
+    failsWith(
+      { cases: [plain(1, { outputLimit: 2 ** 60 })] },
+      'Case #1: output limit must be an integer.',
+    );
+    failsWith(
+      { outputPrefix: 0.5, cases: [plain(1)] },
+      'Output prefix must be an integer.',
+    );
+  });
+  it('splits generator args like Python splitlines', () => {
+    const lines = (generatorArgs: string) =>
+      (
+        init({ cases: [plain(1, { generatorArgs })] }).test_cases as {
+          generator_args: string[];
+        }[]
+      )[0].generator_args;
+    expect(lines('a\r\nb\nc\rd\n')).toEqual(['a', 'b', 'c', 'd']);
+    expect(lines('\n')).toEqual(['']);
+  });
   it('compiles 9999 cases in linear time', () => {
     const build = (count: number) => {
       const many = Array.from({ length: count }, (_item, index) =>
@@ -364,5 +521,6 @@ describe('compileInitYaml', () => {
     ).toHaveLength(9999);
     expect(large.elapsed).toBeLessThan(Math.max(small, 5) * 40);
     expect(large.elapsed).toBeLessThan(5000);
+    console.log();
   });
 });
