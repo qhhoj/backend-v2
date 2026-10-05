@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import {
   EnvModule,
   MailModule,
+  QueueModule,
   RedisModule,
   StorageModule,
 } from '@libs/common';
@@ -18,6 +19,7 @@ import { HealthController } from './health.controller';
     EnvModule,
     DatabaseModule,
     RedisModule,
+    QueueModule,
     MailModule,
     StorageModule,
     ProblemFilesModule,

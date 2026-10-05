@@ -28,3 +28,16 @@ export async function createTestApp(
 }
 export const TEST_REDIS_URL =
   process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6379/15';
+
+export const TEST_ENV = {
+  REDIS_URL: TEST_REDIS_URL,
+  ENCRYPTION_KEY:
+    '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+  TOKEN_SECRET: 'test-token-secret-test-token-secret',
+  SITE_URL: 'http://localhost:5173',
+  COOKIE_SECURE: 'false',
+  PWNED_API_URL: '',
+  LOG_LEVEL: 'silent',
+  DISABLE_MONGODB_STREAM: 'true',
+  SMTP_URL: 'smtp://127.0.0.1:2525',
+};

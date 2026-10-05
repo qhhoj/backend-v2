@@ -30,9 +30,17 @@ jobs:
             ~/.cache/mongodb-binaries
             node_modules/.cache/mongodb-memory-server
           key: mongodb-memory-server-8.0.4
-      - run: python3 -m pip install pyyaml==6.0.3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1.63.0
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pyyaml==6.0.3
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: sudo apt-get update && sudo apt-get install -y pandoc && pandoc --version
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build && npx nest build migrator
+      - run: npm run build && npx nest build migrator && npx nest build worker

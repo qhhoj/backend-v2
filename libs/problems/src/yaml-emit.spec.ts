@@ -10,7 +10,8 @@ const pythonLoad = (text: string) =>
     ],
     { input: text, encoding: 'utf8' },
   );
-const hasPyYaml = pythonLoad('a: 1').status === 0;
+/** CI must fail, not skip, when the oracle is missing. */
+const hasPyYaml = Boolean(process.env.CI) || pythonLoad('a: 1').status === 0;
 
 const HOSTILE_STRINGS = [
   'yes',
