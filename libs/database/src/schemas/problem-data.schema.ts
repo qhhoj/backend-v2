@@ -93,6 +93,20 @@ export class ProblemData {
 }
 export const ProblemDataSchema = SchemaFactory.createForClass(ProblemData);
 
+/** A plain case row; batch markers and real cases override its fields. */
+export const EMPTY_TEST_CASE: ProblemTestCase = {
+  type: 'C',
+  input: '',
+  output: '',
+  points: null,
+  isPretest: false,
+  generatorArgs: '',
+  checker: '',
+  checkerArgs: null,
+  outputPrefix: null,
+  outputLimit: null,
+};
+
 export const emptyProblemData = (): ProblemData => ({
   archive: null,
   generator: null,

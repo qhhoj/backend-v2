@@ -1,9 +1,12 @@
-import { CUSTOM_CHECKER_TYPES, emptyProblemData } from '@libs/database';
+import {
+  CUSTOM_CHECKER_TYPES,
+  EMPTY_TEST_CASE,
+  emptyProblemData,
+} from '@libs/database';
 import { compileInitYaml } from '@libs/problems';
 import { buildProblemXml } from '../../../test/polygon-fixtures';
 import { parseAssets } from './polygon-assets';
 import { PolygonImportError } from './polygon-import.error';
-import { EMPTY_TEST_CASE } from './polygon-tests';
 import { parseXml } from './polygon-xml';
 
 const assets = (fixture: Parameters<typeof buildProblemXml>[0]) =>

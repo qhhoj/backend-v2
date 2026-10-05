@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildZip } from '@libs/problems/testing';
 import type { ZipTestEntry } from '@libs/problems/testing';
-import { emptyProblemData } from '@libs/database';
+import { EMPTY_TEST_CASE, emptyProblemData } from '@libs/database';
 import type {
   Problem,
   ProblemData,
@@ -128,19 +128,7 @@ export const editorialOf = ({ body }: { body: unknown }) =>
 
 export const testCase = (
   overrides: Partial<ProblemTestCase>,
-): ProblemTestCase => ({
-  type: 'C',
-  input: '',
-  output: '',
-  points: null,
-  isPretest: false,
-  generatorArgs: '',
-  checker: '',
-  checkerArgs: null,
-  outputPrefix: null,
-  outputLimit: null,
-  ...overrides,
-});
+): ProblemTestCase => ({ ...EMPTY_TEST_CASE, ...overrides });
 export const dataFixture = (
   overrides: Partial<ProblemData> = {},
 ): ProblemData => ({ ...emptyProblemData(), ...overrides });

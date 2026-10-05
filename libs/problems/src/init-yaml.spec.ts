@@ -1,20 +1,11 @@
 import { parse } from 'yaml';
-import { emptyProblemData } from '@libs/database';
+import { EMPTY_TEST_CASE, emptyProblemData } from '@libs/database';
 import type { ProblemData, ProblemTestCase } from '@libs/database';
 import { compileInitYaml } from './init-yaml';
 import { ProblemDataError } from './problem-data.error';
 
 const testCase = (overrides: Partial<ProblemTestCase>): ProblemTestCase => ({
-  type: 'C',
-  input: '',
-  output: '',
-  points: null,
-  isPretest: false,
-  generatorArgs: '',
-  checker: '',
-  checkerArgs: null,
-  outputPrefix: null,
-  outputLimit: null,
+  ...EMPTY_TEST_CASE,
   ...overrides,
 });
 const plain = (index: number, extra: Partial<ProblemTestCase> = {}) =>

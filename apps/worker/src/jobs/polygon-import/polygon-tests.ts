@@ -1,4 +1,4 @@
-import { PROBLEM_LIMITS } from '@libs/database';
+import { EMPTY_TEST_CASE, PROBLEM_LIMITS } from '@libs/database';
 import type { JsonObject, ProblemTestCase } from '@libs/database';
 import { PolygonImportError } from './polygon-import.error';
 import { childOf, childrenOf, childText, descendant } from './polygon-xml';
@@ -38,18 +38,6 @@ const MAX_POINTS = 1_000_000;
 const MAX_PATTERN_WIDTH = 9;
 const POINT_PRECISION = 1000;
 
-export const EMPTY_TEST_CASE: ProblemTestCase = {
-  type: 'C',
-  input: '',
-  output: '',
-  points: null,
-  isPretest: false,
-  generatorArgs: '',
-  checker: '',
-  checkerArgs: null,
-  outputPrefix: null,
-  outputLimit: null,
-};
 const row = (overrides: Partial<ProblemTestCase>): ProblemTestCase => ({
   ...EMPTY_TEST_CASE,
   ...overrides,
