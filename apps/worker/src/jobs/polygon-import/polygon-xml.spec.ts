@@ -46,6 +46,15 @@ describe('parseXml', () => {
     expect(descendant(root, 'missing')).toBeNull();
   });
 
+  it('appends CDATA to the element text', () => {
+    expect(parseXml('<a>x<![CDATA[<y>]]>z</a>').text).toBe('x<y>z');
+  });
+
+  it('searches 150000 siblings without overflowing the call stack', () => {
+    const root = parseXml(`<p>${'<t/>'.repeat(150_000)}</p>`);
+    expect(descendants(root, 't')).toHaveLength(150_000);
+  });
+
   it('keeps a __proto__ attribute as plain data', () => {
     const root = parseXml('<a __proto__="x" polluted="y"/>');
     expect(Object.getPrototypeOf(root.attributes)).toBe(Object.prototype);

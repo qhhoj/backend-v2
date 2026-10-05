@@ -29,8 +29,14 @@ describe('planTests', () => {
     expect(formatPathPattern('tests/%02d', 7)).toBe('tests/07');
     expect(formatPathPattern('tests/%02d.a', 123)).toBe('tests/123.a');
     expect(formatPathPattern('tests/%d', 7)).toBe('tests/7');
-    expect(() => formatPathPattern('tests/%2147483647d', 7)).toThrow(
-      PolygonImportError,
+    for (const pattern of [
+      'tests/%2147483647d',
+      'tests/%99999999d',
+      'tests/%010d',
+    ])
+      expect(() => formatPathPattern(pattern, 7)).toThrow(PolygonImportError);
+    expect(() => formatPathPattern('tests/fixed', 7)).toThrow(
+      new PolygonImportError('path pattern has no %d'),
     );
   });
 
@@ -271,10 +277,46 @@ describe('planTests', () => {
       work();
       return Math.max(performance.now() - started, 1);
     };
+    const manyTests = (count: number) => ({
+      tests: Array.from({ length: count }, () => test(1)),
+    });
+    plan(manyTests(100));
+    // Ten times the tests: linear is ~10x, a quadratic blow-up ~100x.
+    expect(timed(() => plan(manyTests(9000)))).toBeLessThan(
+      timed(() => plan(manyTests(900))) * 40,
+    );
+    // Ten times the groups in a dependency chain: the closure is quadratic (~100x) but capped; cubic (~1000x) would break this.
     plan(chain(10));
-    const small = timed(() => plan(chain(10)));
-    // Dependency closure is quadratic in the group count; the group cap keeps that bounded.
-    expect(timed(() => plan(chain(1000)))).toBeLessThan(small * 100 * 100);
+    expect(timed(() => plan(chain(1000)))).toBeLessThan(
+      timed(() => plan(chain(100))) * 300,
+    );
+  });
+
+  it('rejects groups and dependencies without names', () => {
+    const xml = (group: string) =>
+      withTimeLimit('1000').replace(
+        '<tests>',
+        `<groups>${group}</groups><tests>`,
+      );
+    expect(() => fixtureXml(xml('<group points-policy="each-test"/>'))).toThrow(
+      'group without a name',
+    );
+    expect(() =>
+      fixtureXml(
+        xml(
+          '<group name="a" points-policy="complete-group"><dependencies><dependency/></dependencies></group>',
+        ),
+      ),
+    ).toThrow('dependency without a group');
+  });
+
+  it('survives 150000 dependencies on one group', () => {
+    const dependencies = '<dependency group="a"/>'.repeat(150_000);
+    const xml = withTimeLimit('1000').replace(
+      '<tests>',
+      `<groups><group name="a" points="1" points-policy="complete-group"><dependencies>${dependencies}</dependencies></group></groups><tests>`,
+    );
+    expect(() => fixtureXml(xml)).not.toThrow(RangeError);
   });
 
   it('feeds init.yml compilation cleanly: batches, each-test cases and fractional points', () => {

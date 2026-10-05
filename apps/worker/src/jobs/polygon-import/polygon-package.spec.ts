@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ZipArchive } from '@libs/problems';
@@ -17,14 +17,29 @@ import {
 } from './polygon-package';
 import type { PlannedTest } from './polygon-tests';
 
+const directories: string[] = [];
+afterAll(() =>
+  directories.forEach((directory) =>
+    rmSync(directory, { recursive: true, force: true }),
+  ),
+);
 const written = (content: Buffer) => {
-  const path = join(
-    mkdtempSync(join(tmpdir(), 'qhhoj-polygon-')),
-    'package.zip',
-  );
+  const directory = mkdtempSync(join(tmpdir(), 'qhhoj-polygon-'));
+  directories.push(directory);
+  const path = join(directory, 'package.zip');
   writeFileSync(path, content);
   return path;
 };
+const openDescriptors = () => readdirSync('/proc/self/fd').length;
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+const NEVER_HANGS_MS = 5000;
+const withinTimeout = <T>(work: Promise<T>) =>
+  Promise.race([
+    work,
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error('hung')), NEVER_HANGS_MS),
+    ),
+  ]);
 const opened = (content: Buffer) => PolygonPackage.open(written(content));
 const oneTest = { tests: [{ input: '1', answer: '1' }] };
 const planned = (inputPath: string, answerPath: string): PlannedTest => ({
@@ -182,6 +197,96 @@ describe('repackTests', () => {
     expect((await repacked.read('02.inp')).toString()).toBe('4 5\n');
     expect((await repacked.read('01.out')).toString()).toBe('3\n');
     repacked.close();
+    pkg.close();
+  });
+
+  it('rejects instead of hanging when a member lies about its size', async () => {
+    const bomb = Buffer.alloc(100_000, 'a');
+    const pkg = await opened(
+      buildZip([
+        { name: 'problem.xml', content: '<problem/>' },
+        {
+          name: 'tests/01',
+          content: bomb,
+          method: 'deflate',
+          declaredSize: 10,
+        },
+        { name: 'tests/01.a', content: '1' },
+      ]),
+    );
+    await expect(
+      withinTimeout(
+        drain(repackTests(pkg, [planned('tests/01', 'tests/01.a')])),
+      ),
+    ).rejects.toThrow(PolygonImportError);
+    pkg.close();
+  });
+
+  it('rejects, without an unhandled error, on a closed package', async () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    process.on('uncaughtException', unhandled);
+    const pkg = await opened(buildPolygonPackage(oneTest));
+    pkg.close();
+    await expect(
+      withinTimeout(
+        drain(repackTests(pkg, [planned('tests/01', 'tests/01.a')])),
+      ),
+    ).rejects.toThrow();
+    await settle();
+    process.off('unhandledRejection', unhandled);
+    process.off('uncaughtException', unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+
+  it('releases the package file when the consumer abandons the output mid-stream', async () => {
+    const baseline = openDescriptors();
+    const pkg = await opened(
+      buildZip([
+        { name: 'problem.xml', content: '<problem/>' },
+        { name: 'tests/01', content: Buffer.alloc(8 * 1024 * 1024, 'a') },
+        { name: 'tests/01.a', content: '1' },
+      ]),
+    );
+    const output = repackTests(pkg, [planned('tests/01', 'tests/01.a')]);
+    await output[Symbol.asyncIterator]().next();
+    output.destroy();
+    await settle();
+    pkg.close();
+    await settle();
+    expect(openDescriptors()).toBe(baseline);
+  });
+
+  it('releases the package file when planning fails after a member was already planned', async () => {
+    const baseline = openDescriptors();
+    const pkg = await opened(
+      buildPolygonPackage({
+        tests: [
+          { input: '1', answer: '1' },
+          { input: '2', answer: '2' },
+        ],
+      }),
+    );
+    await expect(
+      withinTimeout(
+        drain(
+          repackTests(pkg, [
+            planned('tests/01', 'tests/01.a'),
+            planned('tests/09', 'tests/09.a'),
+          ]),
+        ),
+      ),
+    ).rejects.toThrow(PolygonImportError);
+    await settle();
+    pkg.close();
+    await settle();
+    expect(openDescriptors()).toBe(baseline);
+  });
+
+  it('truncates member names echoed in errors', async () => {
+    const pkg = await opened(buildPolygonPackage(oneTest));
+    const long = `${'a/'.repeat(500)}x`;
+    await expect(pkg.read(long, 10)).rejects.toThrow(/^.{0,200}$/);
     pkg.close();
   });
 

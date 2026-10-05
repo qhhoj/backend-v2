@@ -15,6 +15,7 @@ export const SOURCE_MAX_BYTES = 1024 * 1024;
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const PROBLEM_XML = 'problem.xml';
 const MAX_SHOWN_PATH = 100;
+const shown = (name: string) => name.slice(0, MAX_SHOWN_PATH);
 
 const asImportError = (error: unknown): unknown =>
   error instanceof ZipError || error instanceof XmlError
@@ -32,9 +33,7 @@ export function resolveMemberPath(path: string, folder?: string): string {
     path.split('/').includes('..') ||
     resolved === '.'
   )
-    throw new PolygonImportError(
-      `invalid path in the package: ${JSON.stringify(path.slice(0, MAX_SHOWN_PATH))}`,
-    );
+    throw new PolygonImportError(`invalid path in the package: ${shown(path)}`);
   return resolved;
 }
 
@@ -71,7 +70,9 @@ export class PolygonPackage {
   async read(name: string, maxBytes: number): Promise<Buffer> {
     const member = this.member(name);
     if (this.zip.sizeOf(member) > maxBytes)
-      throw new PolygonImportError(`${name} is larger than ${maxBytes} bytes`);
+      throw new PolygonImportError(
+        `${shown(name)} is larger than ${maxBytes} bytes`,
+      );
     try {
       return await this.zip.read(member);
     } catch (error) {
@@ -107,12 +108,12 @@ export class PolygonPackage {
   private member(name: string): string {
     const member = resolveMemberPath(name);
     if (!this.zip.has(member))
-      throw new PolygonImportError(`${name} not found in the package`);
+      throw new PolygonImportError(`${shown(name)} not found in the package`);
     return member;
   }
 }
 
-/** Legacy repackaging: `tests/01` and `tests/01.a` become `01.inp` and `01.out`; members are opened only when yazl reaches them, so memory stays at one entry. */
+/** Legacy repackaging: `tests/01` and `tests/01.a` become `01.inp` and `01.out`; members are opened only when yazl reaches them, so memory stays at one entry. Every failure (missing member, lying size, corrupt data, closed package) destroys the output with a `PolygonImportError`; abandoning the output closes the member in flight. */
 export function repackTests(
   pkg: PolygonPackage,
   tests: PlannedTest[],
@@ -120,28 +121,42 @@ export function repackTests(
   const zip = new ZipFile();
   /** yazl's typings say `NodeJS.ReadableStream`; at runtime it is a PassThrough. */
   const output = zip.outputStream as Readable;
-  for (const test of tests)
-    for (const [from, to] of [
-      [test.inputPath, test.inputName],
-      [test.answerPath, test.outputName],
-    ] as const) {
-      if (!pkg.has(from)) {
-        output.destroy(
-          new PolygonImportError(`not full package: ${from} is missing`),
+  const fail = (error: unknown) => {
+    output.destroy(asImportError(error) as Error);
+  };
+  zip.on('error', fail);
+  let inFlight: Readable | null = null;
+  output.on('close', () => inFlight?.destroy());
+  const members = tests.flatMap((test) => [
+    { from: test.inputPath, to: test.inputName },
+    { from: test.answerPath, to: test.outputName },
+  ]);
+  const missing = members.find(({ from }) => !pkg.has(from));
+  if (missing) {
+    fail(
+      new PolygonImportError(
+        `not full package: ${missing.from.slice(0, MAX_SHOWN_PATH)} is missing`,
+      ),
+    );
+    return output;
+  }
+  for (const { from, to } of members)
+    zip.addReadStreamLazy(
+      to,
+      { size: pkg.sizeOf(from), compress: true },
+      (callback) => {
+        pkg.stream(from).then(
+          (stream) => {
+            if (output.destroyed) return void stream.destroy();
+            inFlight = stream;
+            stream.on('error', fail);
+            callback(null, stream);
+          },
+          // yazl would emit an error on its own; failing the output directly keeps a single path.
+          fail,
         );
-        return output;
-      }
-      zip.addReadStreamLazy(
-        to,
-        { size: pkg.sizeOf(from), compress: true },
-        (callback) => {
-          pkg.stream(from).then(
-            (stream) => callback(null, stream),
-            (error: Error) => callback(error, undefined as never),
-          );
-        },
-      );
-    }
+      },
+    );
   zip.end();
   return output;
 }

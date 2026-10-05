@@ -43,13 +43,20 @@ const row = (overrides: Partial<ProblemTestCase>): ProblemTestCase => ({
   ...overrides,
 });
 
+const PATH_PATTERN = /%(0?)(\d*)d/;
 /** Polygon's `%02d` path patterns. */
-export const formatPathPattern = (pattern: string, index: number): string =>
-  pattern.replace(/%(0?)(\d*)d/, (_match, zero: string, width: string) => {
-    if (width.length > MAX_PATTERN_WIDTH)
-      throw new PolygonImportError('path pattern is too wide');
-    return String(index).padStart(Number(width || 0), zero ? '0' : ' ');
-  });
+export const formatPathPattern = (pattern: string, index: number): string => {
+  if (!PATH_PATTERN.test(pattern))
+    throw new PolygonImportError('path pattern has no %d');
+  return pattern.replace(
+    PATH_PATTERN,
+    (_match, zero: string, width: string) => {
+      if (Number(width) > MAX_PATTERN_WIDTH)
+        throw new PolygonImportError('path pattern is too wide');
+      return String(index).padStart(Number(width || 0), zero ? '0' : ' ');
+    },
+  );
+};
 const clamp = (value: number, { min, max }: { min: number; max: number }) =>
   Math.min(max, Math.max(min, value));
 const gcd = (left: number, right: number): number => {
@@ -101,13 +108,19 @@ export function planTests(
   const groups = new Map<string, Group>();
   for (const group of groupNodes) {
     const name = group.attributes.name;
+    if (!name) throw new PolygonImportError('group without a name');
     const policy = group.attributes['points-policy'];
     if (policy !== 'complete-group' && policy !== 'each-test')
       throw new PolygonImportError(`unknown points policy for group ${name}`);
     const dependencies = childrenOf(
       childOf(group, 'dependencies') ?? group,
       'dependency',
-    ).map((dependency) => dependency.attributes.group);
+    ).map((dependency) => {
+      const dependsOn = dependency.attributes.group;
+      if (!dependsOn)
+        throw new PolygonImportError('dependency without a group');
+      return dependsOn;
+    });
     if (policy === 'each-test' && dependencies.length)
       throw new PolygonImportError(
         'dependencies are only supported for batches with complete-group point policy',
@@ -156,7 +169,7 @@ export function planTests(
       if (!dependency)
         throw new PolygonImportError(`unknown dependency group ${name}`);
       dependency.cases.forEach((index) => cases.add(index));
-      pending.push(...dependency.dependencies);
+      for (const name of dependency.dependencies) pending.push(name);
     }
     return [...cases].sort((left, right) => left - right);
   };

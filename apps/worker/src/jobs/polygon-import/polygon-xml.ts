@@ -58,10 +58,12 @@ export function parseXml(xml: string): XmlElement {
   parser.on('closetag', () => {
     stack.pop();
   });
-  parser.on('text', (text) => {
+  const appendText = (text: string) => {
     const current = stack.at(-1);
     if (current) current.text += text;
-  });
+  };
+  parser.on('text', appendText);
+  parser.on('cdata', appendText);
   for (let offset = 0; offset < xml.length && !failure; offset += CHUNK_SIZE)
     parser.write(xml.slice(offset, offset + CHUNK_SIZE));
   if (!failure) parser.close();
@@ -88,7 +90,7 @@ export function descendants(
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const current = queue[cursor];
     if (current.name === name && matches(current)) found.push(current);
-    queue.push(...current.children);
+    for (const child of current.children) queue.push(child);
   }
   return found;
 }
