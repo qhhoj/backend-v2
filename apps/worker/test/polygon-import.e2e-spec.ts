@@ -11,7 +11,7 @@ import type { Job } from 'bullmq';
 import type { Model } from 'mongoose';
 import { parse } from 'yaml';
 import { Group, newId, Problem, Revision } from '@libs/database';
-import { listZipEntries } from '@libs/problems';
+import { listZipEntries, POLYGON_ERROR_PREFIX } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { PNG } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
@@ -466,7 +466,7 @@ describe('PolygonImportProcessor', () => {
           }),
         ),
       ),
-    ).rejects.toThrow('not full package');
+    ).rejects.toThrow(`${POLYGON_ERROR_PREFIX}not full package`);
     await expect(
       processor.process(
         job(
@@ -488,6 +488,18 @@ describe('PolygonImportProcessor', () => {
     expect(readdirSync(join(worker.problemDataRoot, '.imports'))).toEqual([]);
   });
 
+  it('stores only import errors with the prefix the api shows', async () => {
+    jest
+      .spyOn(fakePandoc, 'assertAvailable')
+      .mockRejectedValueOnce(
+        new Error('EACCES: /data/problems/.imports/a.zip'),
+      );
+    const failure = await processor
+      .process(job({ code: 'denied' }))
+      .catch((error: Error) => error);
+    expect((failure as Error).message).toContain('EACCES');
+    expect((failure as Error).message).not.toContain(POLYGON_ERROR_PREFIX);
+  });
   it('rejects an editorial whose appended source breaks the statement limits', async () => {
     const imagesBefore = imageCount();
     await expect(

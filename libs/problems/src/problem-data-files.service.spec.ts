@@ -192,4 +192,15 @@ describe('ProblemDataFilesService', () => {
       'Unsafe data file name',
     );
   });
+  it('sweeps Polygon packages of lost jobs but keeps recent ones', async () => {
+    const stale = join(root, '.imports', 'lost.zip');
+    const recent = join(root, '.imports', 'recent.zip');
+    writeFileSync(stale, 'x');
+    writeFileSync(recent, 'x');
+    const longAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    utimesSync(stale, longAgo, longAgo);
+    await files.importPackagePath('0192b0e0-0000-7000-8000-000000000002');
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(recent)).toBe(true);
+  });
 });

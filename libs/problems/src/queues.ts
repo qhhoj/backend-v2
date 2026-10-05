@@ -2,6 +2,8 @@ import type { StatementLanguage } from '@libs/database';
 
 export const PDF_QUEUE = 'pdf-render';
 export const POLYGON_QUEUE = 'polygon-import';
+/** Marks a job failure reason as written for the requester; any other reason (I/O errors with absolute paths, driver messages) stays in the logs and is never shown. */
+export const POLYGON_ERROR_PREFIX = 'polygon-import: ';
 
 /** One render per problem and language at a time: BullMQ ignores an `add` whose jobId is still queued or active. */
 export const pdfJobId = (code: string, lang: StatementLanguage): string =>

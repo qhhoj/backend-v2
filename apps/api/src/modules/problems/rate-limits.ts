@@ -2,6 +2,9 @@ export const RENDER_PREVIEW_LIMIT = 60;
 export const RENDER_PREVIEW_WINDOW_SECONDS = 60;
 export const UPLOAD_LIMIT = 30;
 export const UPLOAD_WINDOW_SECONDS = 60 * 60;
+/** Per user; a Polygon import holds the single import worker for minutes. */
+export const IMPORT_LIMIT = 10;
+export const IMPORT_WINDOW_SECONDS = 60 * 60;
 /** Per client IP; only enqueue attempts count, cached hits are free. */
 export const PDF_RENDER_LIMIT = 30;
 export const PDF_RENDER_WINDOW_SECONDS = 60;

@@ -26,6 +26,8 @@ const IMPORTS_DIRECTORY = '.imports';
 /** Dot-prefixed: `safeName` refuses leading dots, so no client file can ever be named like a staged upload. */
 const UPLOAD_PREFIX = '.upload-';
 const STALE_UPLOAD_MS = 60 * 60 * 1000;
+/** The worker removes a package when its job ends; one left past a failed job's retention (a day) belongs to a lost job. */
+const STALE_IMPORT_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** `<PROBLEM_DATA_ROOT>/<code>/` is the judge contract: init.yml, the archive and the checker/grader sources, all flat single segments. */
 @Injectable()
@@ -163,14 +165,25 @@ export class ProblemDataFilesService {
     await rename(stagedPath, target);
   }
 
-  /** Uploaded Polygon packages wait here for the worker; the api streams straight into this path. */
+  /** Uploaded Polygon packages wait here for the worker; the api streams straight into this path. Packages of lost jobs are swept on the way. */
   async importPackagePath(jobId: string): Promise<string> {
     const path = this.resolveInside(
       `${IMPORTS_DIRECTORY}/${this.safeName(jobId)}.zip`,
     );
     await mkdir(dirname(path), { recursive: true });
     await assertRealPathInside(this.root, path);
+    await this.sweepStaleImports(dirname(path));
     return path;
+  }
+
+  private async sweepStaleImports(directory: string): Promise<void> {
+    const oldest = Date.now() - STALE_IMPORT_MS;
+    for (const entry of await readdir(directory)) {
+      const path = resolve(directory, entry);
+      const stats = await lstat(path).catch(() => null);
+      if (stats?.isFile() && stats.mtimeMs < oldest)
+        await rm(path, { force: true });
+    }
   }
 
   private codeOf(code: string): string {

@@ -2,7 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
-import { PDF_QUEUE } from '@libs/problems';
+import { PDF_QUEUE, POLYGON_QUEUE } from '@libs/problems';
 import { LanguagesQuerier } from './languages.querier';
 import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';
@@ -11,6 +11,8 @@ import { ProblemDataController } from './problem-data.controller';
 import { ProblemDataService } from './problem-data.service';
 import { ProblemEditingController } from './problem-editing.controller';
 import { ProblemEditingService } from './problem-editing.service';
+import { ProblemImportsController } from './problem-imports.controller';
+import { ProblemImportsService } from './problem-imports.service';
 import { ProblemPdfController } from './problem-pdf.controller';
 import { ProblemPdfService } from './problem-pdf.service';
 import { ProblemUploadsController } from './problem-uploads.controller';
@@ -30,8 +32,12 @@ const queriers = [
 const repositories = [ProblemsRepository, RevisionsRepository];
 
 @Module({
-  imports: [AuthModule, BullModule.registerQueue({ name: PDF_QUEUE })],
+  imports: [
+    AuthModule,
+    BullModule.registerQueue({ name: PDF_QUEUE }, { name: POLYGON_QUEUE }),
+  ],
   controllers: [
+    ProblemImportsController,
     ProblemsController,
     ProblemEditingController,
     ProblemUploadsController,
@@ -45,6 +51,7 @@ const repositories = [ProblemsRepository, RevisionsRepository];
     ProblemEditingService,
     ProblemUploadsService,
     ProblemDataService,
+    ProblemImportsService,
     ProblemPdfService,
     ProblemEvents,
     RateLimitService,

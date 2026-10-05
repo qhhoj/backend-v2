@@ -501,7 +501,7 @@ export class ProblemEditingService {
   }
 
   /** Every referenced catalog row and user must exist; `organizations` are unchecked until sub-project 5. */
-  private async assertReferences(dto: UpdateProblemDto): Promise<void> {
+  async assertReferences(dto: UpdateProblemDto): Promise<void> {
     const fields: Record<string, string[]> = {};
     const missing = (
       ids: string[] | undefined,
