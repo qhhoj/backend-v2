@@ -5,6 +5,8 @@ import { LanguagesQuerier } from './languages.querier';
 import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';
 import { ProblemTypesQuerier } from './problem-types.querier';
+import { ProblemDataController } from './problem-data.controller';
+import { ProblemDataService } from './problem-data.service';
 import { ProblemEditingController } from './problem-editing.controller';
 import { ProblemEditingService } from './problem-editing.service';
 import { ProblemUploadsController } from './problem-uploads.controller';
@@ -29,6 +31,7 @@ const repositories = [ProblemsRepository, RevisionsRepository];
     ProblemsController,
     ProblemEditingController,
     ProblemUploadsController,
+    ProblemDataController,
   ],
   providers: [
     ...queriers,
@@ -36,6 +39,7 @@ const repositories = [ProblemsRepository, RevisionsRepository];
     ProblemsService,
     ProblemEditingService,
     ProblemUploadsService,
+    ProblemDataService,
     ProblemEvents,
     RateLimitService,
   ],

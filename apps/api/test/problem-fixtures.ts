@@ -1,3 +1,7 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { buildZip } from '@libs/problems/testing';
+import type { ZipTestEntry } from '@libs/problems/testing';
 import { emptyProblemData } from '@libs/database';
 import type {
   Problem,
@@ -140,3 +144,14 @@ export const testCase = (
 export const dataFixture = (
   overrides: Partial<ProblemData> = {},
 ): ProblemData => ({ ...emptyProblemData(), ...overrides });
+
+/** A stored zip straight on the data volume, bypassing the upload route. */
+export const writeDataArchive = (
+  api: ApiTest,
+  code: string,
+  entries: ZipTestEntry[],
+  name = 'tests.zip',
+): void => {
+  mkdirSync(join(api.problemDataRoot, code), { recursive: true });
+  writeFileSync(join(api.problemDataRoot, code, name), buildZip(entries));
+};

@@ -12,6 +12,20 @@ import { validationPipe } from './pipes/validation.pipe';
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/** Nest's ValidationPipe recurses over the body and overflows the stack on hostile nesting; no endpoint needs this depth. */
+const MAX_BODY_DEPTH = 32;
+
+function isTooDeep(body: unknown): boolean {
+  const pending: Array<[unknown, number]> = [[body, 0]];
+  for (let next = pending.pop(); next; next = pending.pop()) {
+    const [value, depth] = next;
+    if (typeof value !== 'object' || value === null) continue;
+    if (depth >= MAX_BODY_DEPTH) return true;
+    for (const child of Object.values(value)) pending.push([child, depth + 1]);
+  }
+  return false;
+}
+
 export const fastifyAdapter = ({
   trustProxy = false,
   logLevel = 'silent',
@@ -28,6 +42,26 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyMultipart, {
     limits: { files: 1, fields: 0, fileSize: MAX_UPLOAD_BYTES },
   });
+  // `@RouteConfig({ bodyLimit })` raises Fastify's 1 MiB default for that route only.
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onRoute', (route) => {
+      const { bodyLimit } = (route.config ?? {}) as { bodyLimit?: number };
+      if (bodyLimit) route.bodyLimit = bodyLimit;
+    });
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('preValidation', async (request, reply) => {
+      if (isTooDeep(request.body))
+        await reply.status(400).send({
+          error: {
+            code: 'validation_failed',
+            message: 'Request body is nested too deeply',
+          },
+        });
+    });
   app.enableShutdownHooks();
   app.useGlobalPipes(validationPipe);
   app.useGlobalFilters(new AppExceptionFilter());
