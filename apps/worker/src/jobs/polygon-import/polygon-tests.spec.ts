@@ -292,6 +292,21 @@ describe('planTests', () => {
     );
   });
 
+  it('rejects a dependency chain whose expanded batch rows exceed the limit', () => {
+    const groups = Array.from({ length: 20 }, (_item, index) => ({
+      name: `g${index}`,
+      points: 1,
+      policy: 'complete-group' as const,
+      dependencies: index ? [`g${index - 1}`] : [],
+    }));
+    const tests = Array.from({ length: 1000 }, (_item, index) =>
+      test(0, `g${Math.floor(index / 50)}`),
+    );
+    expect(() => plan({ tests, groups })).toThrow(
+      new PolygonImportError('expanded batch rows exceed the limit of 9999'),
+    );
+  });
+
   it('rejects groups and dependencies without names', () => {
     const xml = (group: string) =>
       withTimeLimit('1000').replace(

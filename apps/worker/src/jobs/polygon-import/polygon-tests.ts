@@ -180,7 +180,9 @@ export function planTests(
       const cases = closure(group);
       plannedRows += cases.length + 2;
       if (plannedRows > MAX_PLANNED_CASES)
-        throw new PolygonImportError('too many testcases');
+        throw new PolygonImportError(
+          `expanded batch rows exceed the limit of ${MAX_PLANNED_CASES}`,
+        );
       return { ...group, cases };
     });
   for (const group of groups.values())

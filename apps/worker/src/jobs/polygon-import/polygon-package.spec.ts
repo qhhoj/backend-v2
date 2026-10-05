@@ -1,4 +1,5 @@
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ZipArchive } from '@libs/problems';
@@ -32,6 +33,18 @@ const written = (content: Buffer) => {
 };
 const openDescriptors = () => readdirSync('/proc/self/fd').length;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+const POLL_MS = 20;
+const POLL_LIMIT_MS = 1000;
+/** Descriptors close asynchronously: poll until the count is back at the baseline (or the limit passes) and return it. */
+const descriptorsAfterRelease = async (baseline: number) => {
+  for (
+    let waited = 0;
+    waited < POLL_LIMIT_MS && openDescriptors() > baseline;
+    waited += POLL_MS
+  )
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+  return openDescriptors();
+};
 const NEVER_HANGS_MS = 5000;
 const withinTimeout = <T>(work: Promise<T>) =>
   Promise.race([
@@ -244,20 +257,18 @@ describe('repackTests', () => {
     const pkg = await opened(
       buildZip([
         { name: 'problem.xml', content: '<problem/>' },
-        { name: 'tests/01', content: Buffer.alloc(8 * 1024 * 1024, 'a') },
+        { name: 'tests/01', content: randomBytes(5 * 1024 * 1024) },
         { name: 'tests/01.a', content: '1' },
       ]),
     );
     const output = repackTests(pkg, [planned('tests/01', 'tests/01.a')]);
     await output[Symbol.asyncIterator]().next();
     output.destroy();
-    await settle();
     pkg.close();
-    await settle();
-    expect(openDescriptors()).toBe(baseline);
+    expect(await descriptorsAfterRelease(baseline)).toBe(baseline);
   });
 
-  it('releases the package file when planning fails after a member was already planned', async () => {
+  it('regression guard: releases the package file when planning fails after a member was already planned', async () => {
     const baseline = openDescriptors();
     const pkg = await opened(
       buildPolygonPackage({
@@ -277,10 +288,8 @@ describe('repackTests', () => {
         ),
       ),
     ).rejects.toThrow(PolygonImportError);
-    await settle();
     pkg.close();
-    await settle();
-    expect(openDescriptors()).toBe(baseline);
+    expect(await descriptorsAfterRelease(baseline)).toBe(baseline);
   });
 
   it('truncates member names echoed in errors', async () => {

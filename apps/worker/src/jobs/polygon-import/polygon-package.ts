@@ -135,7 +135,7 @@ export function repackTests(
   if (missing) {
     fail(
       new PolygonImportError(
-        `not full package: ${missing.from.slice(0, MAX_SHOWN_PATH)} is missing`,
+        `not full package: ${shown(missing.from)} is missing`,
       ),
     );
     return output;

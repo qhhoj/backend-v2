@@ -94,7 +94,7 @@ export class ProblemData {
 export const ProblemDataSchema = SchemaFactory.createForClass(ProblemData);
 
 /** A plain case row; batch markers and real cases override its fields. */
-export const EMPTY_TEST_CASE: ProblemTestCase = {
+export const EMPTY_TEST_CASE: Readonly<ProblemTestCase> = Object.freeze({
   type: 'C',
   input: '',
   output: '',
@@ -105,7 +105,7 @@ export const EMPTY_TEST_CASE: ProblemTestCase = {
   checkerArgs: null,
   outputPrefix: null,
   outputLimit: null,
-};
+});
 
 export const emptyProblemData = (): ProblemData => ({
   archive: null,
