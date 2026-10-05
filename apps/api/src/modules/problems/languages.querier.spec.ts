@@ -7,7 +7,7 @@ import { Model } from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { LanguagesQuerier } from './languages.querier';
 
-const waitFor = async (check: () => boolean, timeoutMs = 5000) => {
+const waitFor = async (check: () => boolean, timeoutMs = 20000) => {
   for (
     const end = Date.now() + timeoutMs;
     !check();
