@@ -225,6 +225,9 @@ describe('problem uploads', () => {
       ).expect(201),
     );
     expect(url).toBe(`/media/materials/${problemId}/my_file_final.zip`);
+    expect(url).toMatch(
+      /^\/media\/materials\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\/my_file_final\.zip$/,
+    );
     expect(
       existsSync(
         join(

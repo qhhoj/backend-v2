@@ -81,6 +81,7 @@ export class ProblemsRepository {
   /** Compare-and-set on `dataVersion`; false when another writer got there first. A missing counter counts as 0. */
   async updateData(
     id: string,
+    code: string,
     expectedVersion: number,
     data: ProblemData,
   ): Promise<boolean> {
@@ -88,6 +89,7 @@ export class ProblemsRepository {
       .updateOne(
         {
           _id: id,
+          code,
           dataVersion:
             expectedVersion === 0 ? { $in: [0, null] } : expectedVersion,
         },

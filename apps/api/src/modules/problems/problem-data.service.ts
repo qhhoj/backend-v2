@@ -103,7 +103,7 @@ export class ProblemDataService implements OnModuleInit {
     );
   }
 
-  /** The new code's PDFs go too: a reused code must not serve another problem's statement. */
+  /** The new code's PDFs go too: a reused code must not serve another problem's statement. The orphan check in `edit` is not atomic with this move, so a lost race shows up only as the log line. */
   private async moveData(oldCode: string, newCode: string): Promise<void> {
     try {
       await this.pdfCache.delete(oldCode);
@@ -405,7 +405,7 @@ export class ProblemDataService implements OnModuleInit {
   }
 
   /**
-   * Compiles, persists with a compare-and-set on `version` (409 when another writer won) and only then writes or removes init.yml, so Mongo stays authoritative.
+   * Compiles, persists with a compare-and-set on `version` and the code the files are written under, so a rename in between is a 409 before anything is written (a staged upload that already moved with the directory is left to the hourly stale-upload sweep) (409 when another writer won) and only then writes or removes init.yml, so Mongo stays authoritative.
    * A configuration or archive problem becomes `feedback`, never an error.
    * Residual window: two sequential winners can still write init.yml out of order (A persists, B persists, B writes, A writes).
    */
@@ -422,7 +422,12 @@ export class ProblemDataService implements OnModuleInit {
     );
     let matched: boolean;
     try {
-      matched = await this.repository.updateData(problem._id, version, stored);
+      matched = await this.repository.updateData(
+        problem._id,
+        problem.code,
+        version,
+        stored,
+      );
     } catch (error) {
       if (isDocumentTooLarge(error))
         throw invalid('cases', 'The test data is too large.');

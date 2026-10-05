@@ -401,4 +401,83 @@ describe('problem data files', () => {
     await authed(api.http().get(`${url}/%2e%2e`), editor).expect(404);
     await authed(api.http().get(`${url}/.upload-x`), editor).expect(404);
   });
+  describe('a rename between load and compare-and-set', () => {
+    const racerDirectory = () => join(api.problemDataRoot, 'racer');
+    const racerArchive = async () =>
+      dataOf(
+        await authed(api.http().get(`${PROBLEMS}/racer/data`), editor).expect(
+          200,
+        ),
+      ).archive;
+    const renameDuringNextUpdate = () => {
+      const repository = api.app.get(ProblemsRepository);
+      const original = repository.updateData.bind(repository);
+      return jest
+        .spyOn(repository, 'updateData')
+        .mockImplementationOnce(async (...args) => {
+          await api.problems.updateOne({ code: 'racer' }, { code: 'renamed' });
+          return original(...args);
+        });
+    };
+
+    beforeAll(async () => {
+      await createProblem(api, catalog, {
+        code: 'racer',
+        authors: [(await api.users.findOne({ username: 'editor' }))!._id],
+      });
+      await upload(
+        `${PROBLEMS}/racer/data/archive`,
+        editor,
+        buildZip(tests(1)),
+        'first.zip',
+      ).expect(201);
+      await authed(api.http().put(`${PROBLEMS}/racer/data`), editor)
+        .send({
+          checker: 'standard',
+          grader: 'standard',
+          cases: [{ type: 'C', input: '1.in', output: '1.out', points: 1 }],
+        })
+        .expect(200);
+    });
+    afterEach(async () => {
+      jest.restoreAllMocks();
+      await api.problems.updateOne({ code: 'renamed' }, { code: 'racer' });
+    });
+
+    it('answers 409 and writes nothing when it lands inside a PUT', async () => {
+      const initBefore = readFileSync(
+        join(racerDirectory(), 'init.yml'),
+        'utf8',
+      );
+      const before = await api.problems.findOne({ code: 'racer' }).lean();
+      renameDuringNextUpdate();
+      await authed(api.http().put(`${PROBLEMS}/racer/data`), editor)
+        .send({
+          checker: 'standard',
+          grader: 'standard',
+          cases: [{ type: 'C', input: '1.in', output: '1.out', points: 7 }],
+        })
+        .expect(409);
+      expect(readFileSync(join(racerDirectory(), 'init.yml'), 'utf8')).toBe(
+        initBefore,
+      );
+      await api.problems.updateOne({ code: 'renamed' }, { code: 'racer' });
+      expect(
+        (await api.problems.findOne({ code: 'racer' }).lean())!.data,
+      ).toEqual(before!.data);
+    });
+    it('answers 409, not 500, when it lands inside an archive upload', async () => {
+      renameDuringNextUpdate();
+      await upload(
+        `${PROBLEMS}/racer/data/archive`,
+        editor,
+        buildZip(tests(2)),
+        'raced.zip',
+      ).expect(409);
+      await api.problems.updateOne({ code: 'renamed' }, { code: 'racer' });
+      expect(existsSync(join(racerDirectory(), 'raced.zip'))).toBe(false);
+      expect(await racerArchive()).toBe('first.zip');
+      expect(existsSync(join(racerDirectory(), 'first.zip'))).toBe(true);
+    });
+  });
 });

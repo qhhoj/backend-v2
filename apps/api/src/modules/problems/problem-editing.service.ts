@@ -148,6 +148,9 @@ const ID_ARRAY_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left) === JSON.stringify(right);
 
+/** Besides the statement text, the rendered PDF shows these. */
+const PDF_INPUT_FIELDS = ['name', 'timeLimit', 'memoryLimit', 'languageLimits'];
+
 @Injectable()
 export class ProblemEditingService {
   constructor(
@@ -276,7 +279,11 @@ export class ProblemEditingService {
         problem._id,
         updated.suggester === null ? null : uuidStr(updated.suggester),
       );
-    if (descriptionChanged || markupFlipped)
+    if (
+      descriptionChanged ||
+      markupFlipped ||
+      PDF_INPUT_FIELDS.some((field) => field in changes)
+    )
       this.events.emit('statementChanged', problem._id);
     return this.problems.detail(principal, updated.code, 'en');
   }

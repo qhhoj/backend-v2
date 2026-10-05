@@ -54,7 +54,7 @@ describe('problem data and pdf cache follow problem events', () => {
     catalog = await seedCatalog(api);
     await api.problems.init();
     const editorUser = await createUserWith(api, 'editor', {
-      permissions: ['judge.edit_own_problem'],
+      permissions: ['judge.edit_own_problem', 'judge.upload_problem_material'],
     });
     editor = await loginAs(api, editorUser._id);
     for (const code of [
@@ -64,6 +64,8 @@ describe('problem data and pdf cache follow problem events', () => {
       'staged',
       'broken',
       'recycled',
+      'titled',
+      'attached',
     ])
       await createProblem(api, catalog, { code, authors: [editorUser._id] });
   });
@@ -127,8 +129,33 @@ describe('problem data and pdf cache follow problem events', () => {
       );
     } finally {
       logged.mockRestore();
+      rmSync(outside, { recursive: true, force: true });
     }
     expect(await api.problems.findOne({ code: 'broken2' })).not.toBeNull();
+  });
+  it('deletes the cached PDFs when the name changes', async () => {
+    seedFiles('titled');
+    await authed(api.http().patch(`${PROBLEMS}/titled`), editor)
+      .send({ name: 'A new title' })
+      .expect(200);
+    await waitFor(
+      () =>
+        !existsSync(pdf('titled', 'en')) && !existsSync(pdf('titled', 'vi')),
+    );
+  });
+  it('deletes the cached PDFs when a material is uploaded', async () => {
+    seedFiles('attached');
+    await authed(api.http().post(`${PROBLEMS}/attached/material`), editor)
+      .attach('file', Buffer.from('zip'), {
+        filename: 'data.zip',
+        contentType: 'application/octet-stream',
+      })
+      .expect(201);
+    await waitFor(
+      () =>
+        !existsSync(pdf('attached', 'en')) &&
+        !existsSync(pdf('attached', 'vi')),
+    );
   });
   it('deletes the cached PDFs when the statement changes', async () => {
     seedFiles('other');

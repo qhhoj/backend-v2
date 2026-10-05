@@ -16,6 +16,7 @@ import { sanitizeSvg } from '@libs/render';
 import { readMultipartFile, rejectFile } from './multipart';
 import type { UploadedFile } from './multipart';
 import { ProblemEditingService } from './problem-editing.service';
+import { ProblemEvents } from './problem.events';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
@@ -50,6 +51,7 @@ export class ProblemUploadsService {
     private readonly editing: ProblemEditingService,
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
+    private readonly events: ProblemEvents,
   ) {}
 
   async uploadImage(
@@ -115,6 +117,7 @@ export class ProblemUploadsService {
       `materials/${problem._id}/${name}`,
       content,
     );
+    this.events.emit('statementChanged', problem._id);
     return { url };
   }
 
