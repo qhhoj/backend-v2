@@ -1,4 +1,4 @@
-import { crc32 } from 'node:zlib';
+import { crc32, deflateRawSync } from 'node:zlib';
 
 export const PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48,
@@ -23,6 +23,23 @@ export interface ZipTestEntry {
   symlink?: boolean;
   /** Lies about the uncompressed size (bomb and ratio tests). */
   declaredSize?: number;
+  /** `store` (default) or raw `deflate` of the content. */
+  method?: 'store' | 'deflate';
+  /** Bytes written as the entry data instead of the content (corrupt and truncated members). */
+  data?: Buffer;
+  /** Lies about the CRC-32 of the content. */
+  checksum?: number;
+  /** Sets the encryption bit. */
+  encrypted?: boolean;
+  /** Writes this compression method number in both headers (unsupported methods). */
+  methodNumber?: number;
+  /** Extra field bytes for the central directory header. */
+  centralExtra?: Buffer;
+}
+
+export interface ZipTestOptions {
+  /** Lies about the entry count in the end-of-central-directory record. */
+  declaredEntryCount?: number;
 }
 
 const LOCAL_HEADER = 0x04034b50;
@@ -30,11 +47,17 @@ const CENTRAL_HEADER = 0x02014b50;
 const END_RECORD = 0x06054b50;
 const MADE_BY_UNIX = 0x031e;
 const UTF8_NAMES_FLAG = 0x0800;
+const ENCRYPTED_FLAG = 0x0001;
+const METHOD_STORE = 0;
+const METHOD_DEFLATE = 8;
 const REGULAR_FILE = 0o100644;
 const SYMLINK = 0o120777;
 
-/** Hand-written stored (method 0) zip: tests need names and attributes real zip writers refuse (`..`, absolute paths, symlinks, lying sizes). Fewer than 65535 entries. */
-export function buildZip(entries: ZipTestEntry[]): Buffer {
+/** Hand-written zip: tests need names, attributes and sizes real zip writers refuse (`..`, absolute paths, symlinks, lying sizes). Fewer than 65535 entries. */
+export function buildZip(
+  entries: ZipTestEntry[],
+  options: ZipTestOptions = {},
+): Buffer {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
@@ -43,41 +66,52 @@ export function buildZip(entries: ZipTestEntry[]): Buffer {
     const content = Buffer.isBuffer(entry.content)
       ? entry.content
       : Buffer.from(entry.content ?? '', 'utf8');
+    const deflated = entry.method === 'deflate';
+    const data = entry.data ?? (deflated ? deflateRawSync(content) : content);
+    const method =
+      entry.methodNumber ?? (deflated ? METHOD_DEFLATE : METHOD_STORE);
+    const flags = UTF8_NAMES_FLAG | (entry.encrypted ? ENCRYPTED_FLAG : 0);
     const declared = entry.declaredSize ?? content.length;
-    const checksum = crc32(content);
+    const checksum = entry.checksum ?? crc32(content);
+    const extra = entry.centralExtra ?? Buffer.alloc(0);
     const local = Buffer.alloc(30 + name.length);
     local.writeUInt32LE(LOCAL_HEADER, 0);
     local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(UTF8_NAMES_FLAG, 6);
+    local.writeUInt16LE(flags, 6);
+    local.writeUInt16LE(method, 8);
     local.writeUInt32LE(checksum, 14);
-    local.writeUInt32LE(content.length, 18);
+    local.writeUInt32LE(data.length, 18);
     local.writeUInt32LE(declared, 22);
     local.writeUInt16LE(name.length, 26);
     name.copy(local, 30);
-    const central = Buffer.alloc(46 + name.length);
+    const central = Buffer.alloc(46 + name.length + extra.length);
     central.writeUInt32LE(CENTRAL_HEADER, 0);
     central.writeUInt16LE(MADE_BY_UNIX, 4);
     central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(UTF8_NAMES_FLAG, 8);
+    central.writeUInt16LE(flags, 8);
+    central.writeUInt16LE(method, 10);
     central.writeUInt32LE(checksum, 16);
-    central.writeUInt32LE(content.length, 20);
+    central.writeUInt32LE(data.length, 20);
     central.writeUInt32LE(declared, 24);
     central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(extra.length, 30);
     central.writeUInt32LE(
       ((entry.symlink ? SYMLINK : REGULAR_FILE) << 16) >>> 0,
       38,
     );
     central.writeUInt32LE(offset, 42);
     name.copy(central, 46);
-    locals.push(local, content);
+    extra.copy(central, 46 + name.length);
+    locals.push(local, data);
     centrals.push(central);
-    offset += local.length + content.length;
+    offset += local.length + data.length;
   }
   const centralSize = centrals.reduce((sum, buffer) => sum + buffer.length, 0);
+  const count = options.declaredEntryCount ?? entries.length;
   const end = Buffer.alloc(22);
   end.writeUInt32LE(END_RECORD, 0);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt16LE(count, 8);
+  end.writeUInt16LE(count, 10);
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   return Buffer.concat([...locals, ...centrals, end]);
