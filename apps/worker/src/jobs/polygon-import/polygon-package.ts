@@ -15,7 +15,7 @@ export const SOURCE_MAX_BYTES = 1024 * 1024;
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const PROBLEM_XML = 'problem.xml';
 const MAX_SHOWN_PATH = 100;
-const shown = (name: string) => name.slice(0, MAX_SHOWN_PATH);
+export const shown = (name: string) => name.slice(0, MAX_SHOWN_PATH);
 
 const asImportError = (error: unknown): unknown =>
   error instanceof ZipError || error instanceof XmlError

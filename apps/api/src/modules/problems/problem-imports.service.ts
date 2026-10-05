@@ -20,14 +20,15 @@ import { ImportJobResponse } from './dto/import-job.response';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { rejectFile, saveMultipartFile } from './multipart';
 import { ProblemDataService } from './problem-data.service';
-import { ProblemEditingService } from './problem-editing.service';
+import { ProblemEditingService, unique } from './problem-editing.service';
 import { ProblemsRepository } from './problems.repository';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from './rate-limits';
 
 export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 const JOB_RETENTION = { age: 24 * 60 * 60 };
+/** Longest import error shown; worker messages can echo problem.xml text. */
+const MAX_SHOWN_REASON = 1000;
 const GENERIC_FAILURE = 'Import failed';
-const unique = (ids: string[]) => [...new Set(ids)];
 
 @Injectable()
 export class ProblemImportsService {
@@ -168,5 +169,8 @@ export class ProblemImportsService {
 /** Only a failure the worker wrote for the requester is shown; the rest may carry paths and driver details. */
 const shownReason = (reason: string): string =>
   reason.startsWith(POLYGON_ERROR_PREFIX)
-    ? reason.slice(POLYGON_ERROR_PREFIX.length)
+    ? reason.slice(
+        POLYGON_ERROR_PREFIX.length,
+        POLYGON_ERROR_PREFIX.length + MAX_SHOWN_REASON,
+      )
     : GENERIC_FAILURE;

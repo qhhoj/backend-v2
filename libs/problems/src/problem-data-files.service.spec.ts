@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -202,5 +203,20 @@ describe('ProblemDataFilesService', () => {
     await files.importPackagePath('0192b0e0-0000-7000-8000-000000000002');
     expect(existsSync(stale)).toBe(false);
     expect(existsSync(recent)).toBe(true);
+  });
+  it('still hands out a path when a stale package cannot be removed', async () => {
+    const directory = join(root, '.imports');
+    const stale = join(directory, 'locked.zip');
+    writeFileSync(stale, 'x');
+    const longAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    utimesSync(stale, longAgo, longAgo);
+    chmodSync(directory, 0o500);
+    try {
+      expect(
+        await files.importPackagePath('0192b0e0-0000-7000-8000-000000000003'),
+      ).toBe(join(directory, '0192b0e0-0000-7000-8000-000000000003.zip'));
+    } finally {
+      chmodSync(directory, 0o700);
+    }
   });
 });

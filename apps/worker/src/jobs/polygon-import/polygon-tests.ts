@@ -1,6 +1,7 @@
 import { EMPTY_TEST_CASE, PROBLEM_LIMITS } from '@libs/database';
 import type { JsonObject, ProblemTestCase } from '@libs/database';
 import { PolygonImportError } from './polygon-import.error';
+import { shown } from './polygon-package';
 import { childOf, childrenOf, childText, descendant } from './polygon-xml';
 import type { XmlElement } from './polygon-xml';
 
@@ -111,7 +112,9 @@ export function planTests(
     if (!name) throw new PolygonImportError('group without a name');
     const policy = group.attributes['points-policy'];
     if (policy !== 'complete-group' && policy !== 'each-test')
-      throw new PolygonImportError(`unknown points policy for group ${name}`);
+      throw new PolygonImportError(
+        `unknown points policy for group ${shown(name)}`,
+      );
     const dependencies = childrenOf(
       childOf(group, 'dependencies') ?? group,
       'dependency',
@@ -167,7 +170,7 @@ export function planTests(
       seen.add(name);
       const dependency = groups.get(name);
       if (!dependency)
-        throw new PolygonImportError(`unknown dependency group ${name}`);
+        throw new PolygonImportError(`unknown dependency group ${shown(name)}`);
       dependency.cases.forEach((index) => cases.add(index));
       for (const name of dependency.dependencies) pending.push(name);
     }

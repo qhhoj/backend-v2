@@ -14,6 +14,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
+import { IMPORT_LIMIT } from '../src/modules/problems/rate-limits';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -71,7 +72,11 @@ describe('Polygon import routes', () => {
       api,
       (await createUserWith(api, 'admin', { isSuperuser: true }))._id,
     );
-    await createProblem(api, catalog, { code: 'mine', authors: [importerId] });
+    await createProblem(api, catalog, {
+      code: 'mine',
+      authors: [importerId],
+      dataVersion: 3,
+    });
     await createProblem(api, catalog, { code: 'theirs' });
     await createProblem(api, catalog, {
       code: 'fancy',
@@ -228,7 +233,7 @@ describe('Polygon import routes', () => {
       mode: 'update',
       points: 1500,
       isFullMarkup: false,
-      expectedDataVersion: 0,
+      expectedDataVersion: 3,
     });
     for (const key of [
       'authors',
@@ -280,18 +285,29 @@ describe('Polygon import routes', () => {
       .body;
     expect((shownBody as { data: Status }).data.error).toBe('not full package');
   });
+  it('caps the import error it shows', async () => {
+    const jobId = jobIdOf(await upload('code=longerr', creator).expect(202));
+    await failAllJobs(() => `${POLYGON_ERROR_PREFIX}${'x'.repeat(5000)}`);
+    const body = (await statusOf(jobId, creator).expect(200)).body as {
+      data: Status;
+    };
+    expect(body.data.error).toBe('x'.repeat(1000));
+  });
   it('rate-limits imports per user and sweeps stale packages', async () => {
     const stale = join(importsDirectory(), 'stale.zip');
     writeFileSync(stale, 'x');
     const longAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
     utimesSync(stale, longAgo, longAgo);
     const statuses: number[] = [];
-    for (let attempt = 0; attempt < 12; attempt += 1)
+    for (let attempt = 0; attempt < IMPORT_LIMIT + 2; attempt += 1)
       statuses.push(
         (await upload('code=rl', admin, Buffer.from('nope'))).status,
       );
-    expect(statuses.slice(0, 2)).toEqual([400, 400]);
-    expect(statuses.at(-1)).toBe(429);
+    expect(statuses).toEqual([
+      ...Array<number>(IMPORT_LIMIT).fill(400),
+      429,
+      429,
+    ]);
     expect(existsSync(stale)).toBe(false);
   });
 });

@@ -182,7 +182,7 @@ export class ProblemDataFilesService {
       const path = resolve(directory, entry);
       const stats = await lstat(path).catch(() => null);
       if (stats?.isFile() && stats.mtimeMs < oldest)
-        await rm(path, { force: true });
+        await rm(path, { force: true }).catch(() => undefined);
     }
   }
 

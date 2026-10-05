@@ -67,7 +67,7 @@ const CREATE_BASELINE: Partial<Record<keyof CreateProblemDto, unknown>> = {
 };
 /** The only field a request may set to null (it clears the license). */
 const NULLABLE_FIELDS: ReadonlyArray<keyof CreateProblemDto> = ['licenseId'];
-const unique = (ids: string[]) => [...new Set(ids)];
+export const unique = (ids: string[]) => [...new Set(ids)];
 /** Id and limit lists are sets: order never counts as a change. */
 const comparable = (value: unknown) =>
   Array.isArray(value)
