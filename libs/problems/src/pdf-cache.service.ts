@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, rename, rm } from 'node:fs/promises';
+import { access, mkdir, open, rename, rm } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { assertRealPathInside, ENV, SAFE_SEGMENT } from '@libs/common';
 import type { Env } from '@libs/common';
@@ -33,6 +34,19 @@ export class PdfCacheService {
       () => true,
       () => false,
     );
+  }
+
+  /** The cached file opened for reading (caller closes it), or null when there is none; holding the handle means a later deletion cannot break a response that already started. */
+  async open(
+    code: string,
+    lang: StatementLanguage,
+  ): Promise<FileHandle | null> {
+    const path = this.pathOf(code, lang);
+    await assertRealPathInside(this.root, path);
+    return open(path, 'r').catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
   }
 
   async delete(code: string): Promise<void> {

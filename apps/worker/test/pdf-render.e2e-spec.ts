@@ -230,6 +230,36 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
   it('leaves no scratch html behind', () => {
     expect(readdirSync(join(worker.pdfCacheRoot, '.tmp'))).toEqual([]);
   });
+  it('discards a render whose statement changed meanwhile', async () => {
+    const browser = worker.module.get(BrowserService);
+    const renderPdf = browser.renderPdf.bind(browser);
+    const spyOnRender = jest
+      .spyOn(browser, 'renderPdf')
+      .mockImplementationOnce(async (htmlPath, pdfPath) => {
+        await renderPdf(htmlPath, pdfPath);
+        await worker.problems.updateOne(
+          { code: 'nomedia' },
+          { descriptionHtml: '<p>Edited while rendering</p>' },
+        );
+      });
+    try {
+      expect(
+        await processor.process(job({ code: 'nomedia', lang: 'en' })),
+      ).toBe('stale');
+    } finally {
+      spyOnRender.mockRestore();
+    }
+    expect(
+      readdirSync(worker.pdfCacheRoot).filter((name) =>
+        name.startsWith('nomedia.en.pdf.'),
+      ),
+    ).toEqual([]);
+    const cachedBefore = pdfOf('nomedia.en.pdf');
+    expect(await processor.process(job({ code: 'nomedia', lang: 'en' }))).toBe(
+      'rendered',
+    );
+    expect(pdfOf('nomedia.en.pdf').equals(cachedBefore)).toBe(false);
+  });
   it('skips a missing problem without writing a file', async () => {
     expect(await processor.process(job({ code: 'ghost', lang: 'en' }))).toBe(
       'missing',

@@ -34,6 +34,16 @@ describe('PdfCacheService', () => {
     expect(await cache.exists('sum', 'vi')).toBe(false);
     await cache.delete('sum');
   });
+  it('opens the cached file, or reports none', async () => {
+    writeFileSync(cache.pathOf('open', 'en'), '%PDF-1.4');
+    const handle = await cache.open('open', 'en');
+    expect((await handle?.readFile('utf8')) ?? '').toBe('%PDF-1.4');
+    await handle?.close();
+    expect(await cache.open('open', 'vi')).toBeNull();
+    await expect(cache.open('../x', 'en')).rejects.toThrow(
+      'Invalid problem code',
+    );
+  });
   it('leaves nothing behind when producing the file fails', async () => {
     await expect(
       cache.write('bad', 'en', () => Promise.reject(new Error('boom'))),

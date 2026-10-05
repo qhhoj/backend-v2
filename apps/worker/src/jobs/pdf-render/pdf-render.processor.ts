@@ -27,7 +27,7 @@ export class PdfRenderProcessor
     this.worker.concurrency = this.env.pdfConcurrency;
   }
 
-  process(job: Job<PdfRenderJob>): Promise<'rendered' | 'missing'> {
+  process(job: Job<PdfRenderJob>): Promise<'rendered' | 'missing' | 'stale'> {
     return this.render.render(job.data);
   }
 
