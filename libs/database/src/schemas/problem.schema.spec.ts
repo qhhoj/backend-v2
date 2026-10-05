@@ -72,4 +72,47 @@ describe('Problem schema', () => {
       acRate: 0,
     });
   });
+  it('stores the data subdocument with its defaults and rejects unknown checkers', async () => {
+    const problem = await Problems.create({
+      ...base,
+      code: 'withdata',
+      data: {
+        cases: [{ type: 'C', input: '1.in', output: '1.out', points: 1 }],
+      },
+    });
+    expect(problem.toJSON().data).toMatchObject({
+      archive: null,
+      checker: 'standard',
+      checkerArgs: null,
+      grader: 'standard',
+      graderArgs: null,
+      unicode: false,
+      nobigmath: false,
+      feedback: '',
+      cases: [
+        {
+          type: 'C',
+          input: '1.in',
+          output: '1.out',
+          points: 1,
+          isPretest: false,
+          generatorArgs: '',
+          checker: '',
+          checkerArgs: null,
+          outputPrefix: null,
+          outputLimit: null,
+        },
+      ],
+    });
+    expect(
+      (await Problems.create({ ...base, code: 'nodata' })).data,
+    ).toBeNull();
+    await expect(
+      Problems.create({
+        ...base,
+        code: 'badchecker',
+        data: { checker: 'magic' },
+      }),
+    ).rejects.toThrow(/validation failed/);
+  });
 });

@@ -8,6 +8,7 @@ export type ProblemDocument = HydratedDocument<Problem>;
 
 /** List rows never carry statement or editorial bodies. */
 const LIST_PROJECTION = {
+  data: 0,
   description: 0,
   descriptionHtml: 0,
   summary: 0,

@@ -1,4 +1,10 @@
-import type { Problem, User } from '@libs/database';
+import { EMPTY_PROBLEM_DATA } from '@libs/database';
+import type {
+  Problem,
+  ProblemData,
+  ProblemTestCase,
+  User,
+} from '@libs/database';
 import type { EditorialResponse } from '../src/modules/problems/dto/editorial.response';
 import type { ProblemDetailResponse } from '../src/modules/problems/dto/problem-detail.response';
 import type { Test as SupertestRequest } from 'supertest';
@@ -115,3 +121,22 @@ export const detailOf = ({ body }: { body: unknown }) =>
   (body as { data: ProblemDetailResponse }).data;
 export const editorialOf = ({ body }: { body: unknown }) =>
   (body as { data: EditorialResponse }).data;
+
+export const testCase = (
+  overrides: Partial<ProblemTestCase>,
+): ProblemTestCase => ({
+  type: 'C',
+  input: '',
+  output: '',
+  points: null,
+  isPretest: false,
+  generatorArgs: '',
+  checker: '',
+  checkerArgs: null,
+  outputPrefix: null,
+  outputLimit: null,
+  ...overrides,
+});
+export const dataFixture = (
+  overrides: Partial<ProblemData> = {},
+): ProblemData => ({ ...EMPTY_PROBLEM_DATA, cases: [], ...overrides });

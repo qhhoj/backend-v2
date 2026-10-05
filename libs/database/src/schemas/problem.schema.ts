@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
+import { ProblemData, ProblemDataSchema } from './problem-data.schema';
 
 const UUID = MongooseSchema.Types.UUID;
 
@@ -109,6 +110,8 @@ export class Problem {
   /** Written by sub-project 2. */
   @Prop({ default: 0 }) userCount!: number;
   @Prop({ default: 0 }) acRate!: number;
+  /** Test data configuration (3b); null until the data editor or an import writes it. */
+  @Prop({ type: ProblemDataSchema, default: null }) data!: ProblemData | null;
 }
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);

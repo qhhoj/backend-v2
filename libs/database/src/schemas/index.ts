@@ -13,6 +13,7 @@ export * from './activation-key.schema';
 export * from './group.schema';
 export * from './language.schema';
 export * from './license.schema';
+export * from './problem-data.schema';
 export * from './problem-group.schema';
 export * from './problem-type.schema';
 export * from './problem.schema';
