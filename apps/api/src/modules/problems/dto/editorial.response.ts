@@ -1,6 +1,6 @@
 import type { ProblemSolution, StatementLanguage } from '@libs/database';
 import type { ProblemDocument } from '../problems.repository';
-import { statementFor } from '../statement';
+import { statementFor } from '@libs/problems';
 import { UserSummaryResponse } from './user-summary.response';
 
 export class EditorialResponse {

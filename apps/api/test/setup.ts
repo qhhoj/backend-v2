@@ -55,9 +55,17 @@ export async function setupApiTest({
   const mailer = new InMemoryMailer();
   const replSet = await startMongo();
   const mediaRoot = mkdtempSync(join(tmpdir(), 'qhhoj-media-'));
+  const problemDataRoot = mkdtempSync(join(tmpdir(), 'qhhoj-problem-data-'));
+  const pdfCacheRoot = mkdtempSync(join(tmpdir(), 'qhhoj-pdf-cache-'));
+  const removeRoots = () =>
+    [mediaRoot, problemDataRoot, pdfCacheRoot].forEach((root) =>
+      rmSync(root, { recursive: true, force: true }),
+    );
   Object.assign(process.env, TEST_ENV, {
     MONGO_URL: replSet.getUri('qhhoj'),
     MEDIA_ROOT: mediaRoot,
+    PROBLEM_DATA_ROOT: problemDataRoot,
+    PDF_CACHE_ROOT: pdfCacheRoot,
   });
   let app: NestFastifyApplication | undefined;
   try {
@@ -75,7 +83,7 @@ export async function setupApiTest({
       await app?.close();
     } finally {
       await replSet.stop();
-      rmSync(mediaRoot, { recursive: true, force: true });
+      removeRoots();
     }
     throw error;
   }
@@ -107,12 +115,14 @@ export async function setupApiTest({
       );
     },
     mediaRoot,
+    problemDataRoot,
+    pdfCacheRoot,
     sessions: readyApp.get(SessionService),
     mailer,
     teardown: async () => {
       await readyApp.close();
       await replSet.stop();
-      rmSync(mediaRoot, { recursive: true, force: true });
+      removeRoots();
     },
   };
 }

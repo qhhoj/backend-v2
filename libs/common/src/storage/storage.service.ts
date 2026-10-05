@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, resolve, sep } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 import { ENV, type Env } from '../env/env';
+import { writeFileAtomically } from './atomic-write';
 
-const SAFE_SEGMENT = /^[\w-][\w.-]*$/;
+export const SAFE_SEGMENT = /^[\w-][\w.-]*$/;
 
 /** Files on the local media volume (statement images, PDF statements, materials); nginx serves MEDIA_ROOT at MEDIA_URL. */
 @Injectable()
@@ -17,18 +17,8 @@ export class StorageService {
     this.urlBase = env.mediaUrl;
   }
 
-  /** Written to a temp name then renamed, so readers never see a partial file. */
   async save(relativePath: string, content: Buffer): Promise<string> {
-    const target = this.resolveInside(relativePath);
-    await mkdir(dirname(target), { recursive: true });
-    const temporary = `${target}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, content);
-      await rename(temporary, target);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
+    await writeFileAtomically(this.resolveInside(relativePath), content);
     return this.publicUrl(relativePath);
   }
 

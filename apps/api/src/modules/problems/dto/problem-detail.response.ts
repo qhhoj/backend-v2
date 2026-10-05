@@ -6,7 +6,7 @@ import { LicensesQuerier } from '../licenses.querier';
 import { ProblemGroupsQuerier } from '../problem-groups.querier';
 import { ProblemTypesQuerier } from '../problem-types.querier';
 import type { ProblemDocument } from '../problems.repository';
-import { statementFor } from '../statement';
+import { statementFor } from '@libs/problems';
 import {
   CatalogItemResponse,
   LanguageResponse,

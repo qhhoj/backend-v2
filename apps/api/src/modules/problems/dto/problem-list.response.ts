@@ -4,7 +4,7 @@ import { ProblemGroupsQuerier } from '../problem-groups.querier';
 import { ProblemTypesQuerier } from '../problem-types.querier';
 import { isEditorialPublished } from '../problem-search';
 import type { ProblemDocument } from '../problems.repository';
-import { statementFor } from '../statement';
+import { statementFor } from '@libs/problems';
 import { CatalogItemResponse } from './problem-meta.response';
 
 export class ProblemListItemResponse {

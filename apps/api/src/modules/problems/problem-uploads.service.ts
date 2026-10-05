@@ -4,14 +4,14 @@ import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, RateLimitService, StorageService } from '@libs/common';
 import { newId } from '@libs/database';
-import { sanitizeSvg } from '@libs/render';
-import { basename, extname } from 'node:path';
 import {
   isPdf,
   isSvgWithinLimits,
   sniffImage,
   SVG_MAX_BYTES,
-} from './file-sniff';
+} from '@libs/problems';
+import { sanitizeSvg } from '@libs/render';
+import { basename, extname } from 'node:path';
 import { ProblemEditingService } from './problem-editing.service';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';

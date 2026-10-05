@@ -61,6 +61,15 @@
         "tsConfigPath": "libs/render/tsconfig.lib.json"
       }
     },
+    "problems": {
+      "type": "library",
+      "root": "libs/problems",
+      "entryFile": "index",
+      "sourceRoot": "libs/problems/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/problems/tsconfig.lib.json"
+      }
+    },
     "migrator": {
       "type": "application",
       "root": "apps/migrator",

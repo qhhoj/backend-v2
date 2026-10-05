@@ -21,12 +21,13 @@ libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
   auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
+  problems/   statement helpers, file sniffing, problem data and PDF cache file services
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
 
-- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render` (and `@libs/<name>/*`) -> `libs/<name>/src`
+- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems` (and `@libs/<name>/*`) -> `libs/<name>/src`
 - Import from the alias root (`@libs/database`) except `/testing` entry points
 - Each lib exports through `libs/<name>/src/index.ts`; add new files there
 

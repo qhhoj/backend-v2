@@ -22,6 +22,10 @@ export interface Env {
   mediaRoot: string;
   /** Public URL prefix of `mediaRoot`, without a trailing slash. */
   mediaUrl: string;
+  /** Shared judge volume: `<root>/<code>/` holds init.yml, the archive and checker/grader sources. */
+  problemDataRoot: string;
+  /** Rendered statement PDFs, `<root>/<code>.<lang>.pdf`; shared between api and worker. */
+  pdfCacheRoot: string;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
     google: OAuthClient | null;
@@ -91,6 +95,8 @@ export function loadEnv(
     mailFrom: source.MAIL_FROM || 'QHHOJ <no-reply@qhhoj.local>',
     mediaRoot: required('MEDIA_ROOT'),
     mediaUrl: (source.MEDIA_URL || '/media').replace(/\/+$/, ''),
+    problemDataRoot: required('PROBLEM_DATA_ROOT'),
+    pdfCacheRoot: required('PDF_CACHE_ROOT'),
     oauth: {
       google: oauthClient('GOOGLE'),
       facebook: oauthClient('FACEBOOK'),

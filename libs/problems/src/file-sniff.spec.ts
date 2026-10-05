@@ -1,4 +1,4 @@
-import { GIF, JPG, PDF, PNG, SVG } from '../../../test/sample-files';
+import { GIF, JPG, PDF, PNG, SVG } from './testing';
 import {
   isPdf,
   isSvgWithinLimits,

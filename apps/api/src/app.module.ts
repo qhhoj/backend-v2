@@ -7,6 +7,7 @@ import {
   StorageModule,
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
+import { ProblemFilesModule } from '@libs/problems';
 import { AuthApiModule } from './modules/auth/auth-api.module';
 import { ApiV2Module } from './modules/api-v2/api-v2.module';
 import { ProblemsApiModule } from './modules/problems/problems-api.module';
@@ -19,6 +20,7 @@ import { HealthController } from './health.controller';
     RedisModule,
     MailModule,
     StorageModule,
+    ProblemFilesModule,
     ScheduleModule.forRoot(),
     AuthApiModule,
     ProblemsApiModule,

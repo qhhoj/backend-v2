@@ -46,6 +46,12 @@
       ],
       "@libs/render/*": [
         "libs/render/src/*"
+      ],
+      "@libs/problems": [
+        "libs/problems/src"
+      ],
+      "@libs/problems/*": [
+        "libs/problems/src/*"
       ]
     }
   }

@@ -9,7 +9,7 @@ import {
   seedCatalog,
   TestSession,
 } from './problem-fixtures';
-import { PDF, PNG, SVG_WITH_SCRIPT } from './sample-files';
+import { PDF, PNG, SVG_WITH_SCRIPT } from '@libs/problems/testing';
 import { ApiTest, errorCode, setupApiTest } from './setup';
 
 const PROBLEMS = '/api/internal/problems';
