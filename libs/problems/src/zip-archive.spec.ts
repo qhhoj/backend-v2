@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -122,6 +123,51 @@ describe('ZipArchive', () => {
       ZipArchive.fromBuffer(buildZip(three, { declaredEntryCount: 3 })),
     ).resolves.toBeInstanceOf(ZipArchive);
   });
+
+  it('accepts zip64 archives and refuses a zip64 count that hides records', async () => {
+    const three = [{ name: 'a' }, { name: 'b' }, { name: 'c' }];
+    const zip = await ZipArchive.fromBuffer(buildZip(three, { zip64: true }));
+    expect(zip.names()).toEqual(['a', 'b', 'c']);
+    zip.close();
+    await expect(
+      ZipArchive.fromBuffer(
+        buildZip(three, { zip64: true, declaredEntryCount: 1 }),
+      ),
+    ).rejects.toThrow(
+      new ZipError('Archive central directory is inconsistent.'),
+    );
+    const path = join(directory, 'zip64.zip');
+    writeFileSync(path, buildZip(three, { zip64: true }));
+    await expect(listZipEntries(path)).resolves.toEqual(['a', 'b', 'c']);
+    writeFileSync(
+      path,
+      buildZip(three, { zip64: true, declaredEntryCount: 1 }),
+    );
+    await expect(listZipEntries(path)).rejects.toThrow(ZipError);
+  });
+
+  const hasZipBinary = (() => {
+    try {
+      execFileSync('zip', ['-v'], { stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  (hasZipBinary ? it : it.skip)(
+    'accepts what Info-ZIP writes when streaming from stdin',
+    async () => {
+      const path = join(directory, 'streamed.zip');
+      writeFileSync(
+        path,
+        execFileSync('zip', ['-', '-'], {
+          input: randomBytes(100 * 1024),
+          maxBuffer: 1024 ** 2,
+        }),
+      );
+      expect(await listZipEntries(path)).toEqual(['-']);
+    },
+  );
 
   it('stops at 25000 entries and 2 GiB declared', async () => {
     const gigabyte = 1024 ** 3;

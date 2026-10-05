@@ -1,3 +1,4 @@
+import { open as openFile } from 'node:fs/promises';
 import { crc32 } from 'node:zlib';
 import { pipeline, Transform } from 'node:stream';
 import type { Readable } from 'node:stream';
@@ -56,9 +57,7 @@ const hasBadSegment = (name: string) =>
 /** yauzl names an entry from its Unicode Path extra, Python's zipfile from the raw name; refuse the entries on which they differ. */
 const hasForeignUnicodePath = (entry: Entry) =>
   entry.extraFields.some((field) => field.id === UNICODE_PATH_EXTRA) &&
-  !(entry as Entry & { fileNameRaw: Buffer }).fileNameRaw.equals(
-    Buffer.from(entry.fileName, 'utf8'),
-  );
+  !entry.fileNameRaw.equals(Buffer.from(entry.fileName, 'utf8'));
 
 /** The first rule an entry breaks, or undefined. yauzl itself rejects `..`, absolute paths and backslashes. */
 function violation(entry: Entry, records: number): string | undefined {
@@ -91,11 +90,36 @@ interface ZipFileInternals {
   comment: string;
 }
 
-/** Python's zipfile (the judge) trusts the central directory offset, yauzl the entry count; a count that hides records would skip every check, so the records must end exactly where the end record starts. Zip64 archives, whose end record is preceded by a zip64 one, are refused as inconsistent too. */
-function endsWhereEndRecordStarts(zip: ZipFile): boolean {
-  const { readEntryCursor, fileSize, comment } =
-    zip as unknown as ZipFileInternals;
-  return readEntryCursor === fileSize - END_RECORD_BYTES - comment.length;
+const ZIP64_LOCATOR_BYTES = 20;
+const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
+const ZIP64_RECORD_OFFSET_AT = 8;
+
+/** Reads `length` bytes at `position` of the archive. */
+type ReadAt = (position: number, length: number) => Promise<Buffer>;
+
+/** Where the central directory must end: at the zip64 end record when a zip64 locator precedes the end record, else at the end record itself. */
+async function expectedCentralEnd(
+  zip: ZipFile,
+  readAt: ReadAt,
+): Promise<number> {
+  const { fileSize, comment } = zip as unknown as ZipFileInternals;
+  const endRecordStart = fileSize - END_RECORD_BYTES - comment.length;
+  const locatorStart = endRecordStart - ZIP64_LOCATOR_BYTES;
+  if (locatorStart < 0) return endRecordStart;
+  const locator = await readAt(locatorStart, ZIP64_LOCATOR_BYTES);
+  return locator.readUInt32LE(0) === ZIP64_LOCATOR_SIGNATURE
+    ? Number(locator.readBigUInt64LE(ZIP64_RECORD_OFFSET_AT))
+    : endRecordStart;
+}
+
+/** Python's zipfile (the judge) trusts the central directory offset, yauzl the entry count; a count that hides records would skip every check, so the records must end exactly where the end record (zip64 or not) starts. */
+async function assertCentralDirectoryIsConsistent(
+  zip: ZipFile,
+  readAt: ReadAt,
+): Promise<void> {
+  const { readEntryCursor } = zip as unknown as ZipFileInternals;
+  if (readEntryCursor !== (await expectedCentralEnd(zip, readAt)))
+    throw new ZipError('Archive central directory is inconsistent.');
 }
 
 /** Walks the central directory once (lazy entries, so memory is one entry at a time) and applies every bound. Every record counts, directories included. */
@@ -111,11 +135,7 @@ function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
     zip.on('error', (error: Error) =>
       fail(`The archive is not a valid zip file: ${shown(error.message)}`),
     );
-    zip.on('end', () =>
-      endsWhereEndRecordStarts(zip)
-        ? resolve(entries)
-        : fail('Archive central directory is inconsistent.'),
-    );
+    zip.on('end', () => resolve(entries));
     zip.on('entry', (entry: Entry) => {
       records += 1;
       const broken = violation(entry, records);
@@ -185,22 +205,45 @@ export class ZipArchive {
   ) {}
 
   static async open(path: string): Promise<ZipArchive> {
+    const readAt: ReadAt = async (position, length) => {
+      const handle = await openFile(path, 'r');
+      try {
+        const { buffer } = await handle.read(
+          Buffer.alloc(length),
+          0,
+          length,
+          position,
+        );
+        return buffer;
+      } finally {
+        await handle.close();
+      }
+    };
     return ZipArchive.collect(
       await openZipFile((callback) => yauzl.open(path, OPEN_OPTIONS, callback)),
+      readAt,
     );
   }
 
   static async fromBuffer(buffer: Buffer): Promise<ZipArchive> {
+    const readAt: ReadAt = (position, length) =>
+      Promise.resolve(buffer.subarray(position, position + length));
     return ZipArchive.collect(
       await openZipFile((callback) =>
         yauzl.fromBuffer(buffer, OPEN_OPTIONS, callback),
       ),
+      readAt,
     );
   }
 
-  private static async collect(zip: ZipFile): Promise<ZipArchive> {
+  private static async collect(
+    zip: ZipFile,
+    readAt: ReadAt,
+  ): Promise<ZipArchive> {
     try {
-      return new ZipArchive(zip, await collectEntries(zip));
+      const entries = await collectEntries(zip);
+      await assertCentralDirectoryIsConsistent(zip, readAt);
+      return new ZipArchive(zip, entries);
     } catch (error) {
       zip.close();
       throw error;

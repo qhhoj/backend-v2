@@ -40,6 +40,8 @@ export interface ZipTestEntry {
 export interface ZipTestOptions {
   /** Lies about the entry count in the end-of-central-directory record. */
   declaredEntryCount?: number;
+  /** Writes a zip64 end record and locator, as Info-ZIP does when streaming from stdin. */
+  zip64?: boolean;
 }
 
 const LOCAL_HEADER = 0x04034b50;
@@ -110,9 +112,38 @@ export function buildZip(
   const count = options.declaredEntryCount ?? entries.length;
   const end = Buffer.alloc(22);
   end.writeUInt32LE(END_RECORD, 0);
-  end.writeUInt16LE(count, 8);
-  end.writeUInt16LE(count, 10);
+  end.writeUInt16LE(options.zip64 ? 0xffff : count, 8);
+  end.writeUInt16LE(options.zip64 ? 0xffff : count, 10);
   end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, ...centrals, end]);
+  end.writeUInt32LE(options.zip64 ? 0xffffffff : offset, 16);
+  const zip64 = options.zip64
+    ? zip64Tail(count, centralSize, offset, offset + centralSize)
+    : Buffer.alloc(0);
+  return Buffer.concat([...locals, ...centrals, zip64, end]);
+}
+
+const ZIP64_RECORD = 0x06064b50;
+const ZIP64_LOCATOR = 0x07064b50;
+
+/** The zip64 end-of-central-directory record followed by its locator. */
+function zip64Tail(
+  count: number,
+  centralSize: number,
+  centralOffset: number,
+  recordOffset: number,
+): Buffer {
+  const record = Buffer.alloc(56);
+  record.writeUInt32LE(ZIP64_RECORD, 0);
+  record.writeBigUInt64LE(44n, 4);
+  record.writeUInt16LE(45, 12);
+  record.writeUInt16LE(45, 14);
+  record.writeBigUInt64LE(BigInt(count), 24);
+  record.writeBigUInt64LE(BigInt(count), 32);
+  record.writeBigUInt64LE(BigInt(centralSize), 40);
+  record.writeBigUInt64LE(BigInt(centralOffset), 48);
+  const locator = Buffer.alloc(20);
+  locator.writeUInt32LE(ZIP64_LOCATOR, 0);
+  locator.writeBigUInt64LE(BigInt(recordOffset), 8);
+  locator.writeUInt32LE(1, 16);
+  return Buffer.concat([record, locator]);
 }
