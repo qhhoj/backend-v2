@@ -1,19 +1,29 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Post,
   Put,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
 import { RouteConfig } from '@nestjs/platform-fastify';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { createReadStream } from 'node:fs';
+import type { ReadStream } from 'node:fs';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RawResponse } from '@libs/common';
 import { DATA_BODY_LIMIT_BYTES } from './dto/limits';
-import { PutProblemDataDto } from './dto/problem-data.dto';
+import {
+  DataFileKindParamDto,
+  DataFileNameParamDto,
+  DataSourceKindParamDto,
+  PutProblemDataDto,
+} from './dto/problem-data.dto';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { ProblemCodeParamDto } from './dto/problem-params.dto';
 import { ProblemDataWriteGuard } from './problem-data-write.guard';
@@ -52,5 +62,47 @@ export class ProblemDataController {
     const yaml = await this.data.init(auth, code);
     reply.type('text/yaml; charset=utf-8');
     return yaml;
+  }
+
+  @Post(':code/data/archive')
+  uploadArchive(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { code }: ProblemCodeParamDto,
+    @Req() request: FastifyRequest,
+  ): Promise<ProblemDataResponse> {
+    return this.data.uploadArchive(auth, code, request);
+  }
+
+  @Post(':code/data/files/:kind')
+  uploadSource(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { code, kind }: DataSourceKindParamDto,
+    @Req() request: FastifyRequest,
+  ): Promise<ProblemDataResponse> {
+    return this.data.uploadSource(auth, code, kind, request);
+  }
+
+  @Delete(':code/data/files/:kind')
+  deleteFile(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { code, kind }: DataFileKindParamDto,
+  ): Promise<ProblemDataResponse> {
+    return this.data.deleteFile(auth, code, kind);
+  }
+
+  /** Always an attachment with `nosniff`: uploaded files are never rendered by the browser. */
+  @RawResponse()
+  @Get(':code/data/files/:name')
+  async download(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { code, name }: DataFileNameParamDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<ReadStream> {
+    const file = await this.data.download(auth, code, name);
+    reply
+      .type('application/octet-stream')
+      .header('Content-Disposition', `attachment; filename="${file.filename}"`)
+      .header('X-Content-Type-Options', 'nosniff');
+    return createReadStream(file.path);
   }
 }

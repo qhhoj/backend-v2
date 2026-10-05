@@ -12,6 +12,8 @@ import {
 } from '@libs/problems';
 import { sanitizeSvg } from '@libs/render';
 import { basename, extname } from 'node:path';
+import { readMultipartFile, rejectFile } from './multipart';
+import type { UploadedFile } from './multipart';
 import { ProblemEditingService } from './problem-editing.service';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
@@ -31,11 +33,6 @@ const MATERIAL_EXTENSIONS: ReadonlySet<string> = new Set(
   ).split(' '),
 );
 
-interface Upload {
-  filename: string;
-  content: Buffer;
-}
-
 /** Client names never reach the filesystem as sent: allow-listed characters only, no `..`, no leading dot, capped. */
 export const safeFileName = (name: string): string =>
   basename(name)
@@ -45,8 +42,9 @@ export const safeFileName = (name: string): string =>
     .replace(/^\.+/, '')
     .slice(0, FILE_NAME_MAX_LENGTH) || 'material';
 
-const rejectFile = (message: string) =>
-  new AppError('validation_failed', 400, message, { file: [message] });
+/** Lower-cased extension without the dot; `''` when there is none. */
+export const extensionOf = (name: string): string =>
+  extname(name).slice(1).toLowerCase();
 
 function sanitizedSvg(content: Buffer): Buffer {
   if (content.length > SVG_MAX_BYTES)
@@ -121,7 +119,7 @@ export class ProblemUploadsService {
       MATERIAL_MAX_BYTES,
     );
     const name = safeFileName(filename);
-    if (!MATERIAL_EXTENSIONS.has(extname(name).slice(1).toLowerCase()))
+    if (!MATERIAL_EXTENSIONS.has(extensionOf(name)))
       throw rejectFile('This file type is not allowed as problem material.');
     const url = await this.replaceFile(
       auth,
@@ -133,44 +131,18 @@ export class ProblemUploadsService {
     return { url };
   }
 
-  /** Reserves upload budget (never released), then streams the single multipart file under the size limit; exceeding it is 413. */
+  /** Reserves upload budget (never released), then reads the single multipart file under the size limit. */
   private async readUpload(
     auth: AuthContext,
     request: FastifyRequest,
     maxBytes: number,
-  ): Promise<Upload> {
+  ): Promise<UploadedFile> {
     await this.rateLimit.reserve(
       [`upload:user:${auth.principal.userId}`],
       UPLOAD_LIMIT,
       UPLOAD_WINDOW_SECONDS,
     );
-    if (!request.isMultipart()) throw rejectFile('A file is required.');
-    let upload: Upload | undefined;
-    try {
-      const parts = request.parts({
-        limits: { files: 1, fields: 0, fileSize: maxBytes },
-      });
-      for await (const part of parts) {
-        if (part.type !== 'file' || part.fieldname !== 'file' || upload)
-          throw rejectFile('Send exactly one file in the "file" field.');
-        upload = {
-          filename: part.filename,
-          content: await part.toBuffer(),
-        };
-      }
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-      if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE')
-        throw new AppError(
-          'file_too_large',
-          413,
-          `The file exceeds ${maxBytes} bytes`,
-        );
-      throw rejectFile('The upload is malformed.');
-    }
-    if (!upload?.content.length)
-      throw rejectFile('A non-empty file is required.');
-    return upload;
+    return readMultipartFile(request, maxBytes);
   }
 
   /** Saves the new file and records it; the previous file is removed afterwards, the new one if recording fails. */

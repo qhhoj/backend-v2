@@ -1,9 +1,16 @@
 import { applyDecorators } from '@nestjs/common';
-import { CASE_CHECKERS, CASE_TYPES, CHECKERS, GRADERS } from '@libs/database';
+import {
+  CASE_CHECKERS,
+  CASE_TYPES,
+  CHECKERS,
+  DATA_FILE_KINDS,
+  GRADERS,
+} from '@libs/database';
 import type {
   CaseChecker,
   CaseType,
   Checker,
+  DataFileKind,
   Grader,
   JsonObject,
 } from '@libs/database';
@@ -74,4 +81,26 @@ export class PutProblemDataDto {
   @ValidateNested({ each: true })
   @Type(() => TestCaseDto)
   cases!: TestCaseDto[];
+}
+
+export const SOURCE_FILE_KINDS = [
+  'generator',
+  'customChecker',
+  'customGrader',
+  'customHeader',
+] as const;
+export type SourceFileKind = (typeof SOURCE_FILE_KINDS)[number];
+
+export class DataSourceKindParamDto {
+  @IsString() code!: string;
+  @IsIn(SOURCE_FILE_KINDS) kind!: SourceFileKind;
+}
+export class DataFileKindParamDto {
+  @IsString() code!: string;
+  @IsIn(DATA_FILE_KINDS) kind!: DataFileKind;
+}
+/** Unvalidated beyond length: an unsafe name is a 404, never a 400 (see `ProblemDataService.download`). */
+export class DataFileNameParamDto {
+  @IsString() code!: string;
+  @IsString() @MaxLength(120) name!: string;
 }

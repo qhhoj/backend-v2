@@ -1,6 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, rename, rm, rmdir } from 'node:fs/promises';
+import {
+  access,
+  lstat,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  rmdir,
+} from 'node:fs/promises';
 import { basename, dirname, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import {
@@ -14,8 +22,8 @@ import { PROBLEM_CODE_PATTERN } from '@libs/database';
 
 export const INIT_FILE = 'init.yml';
 const IMPORTS_DIRECTORY = '.imports';
-const UPLOAD_PREFIX = 'upload-';
-const UPLOAD_SUFFIX = '.tmp';
+/** Dot-prefixed: `safeName` refuses leading dots, so no client file can ever be named like a staged upload. */
+const UPLOAD_PREFIX = '.upload-';
 
 /** `<PROBLEM_DATA_ROOT>/<code>/` is the judge contract: init.yml, the archive and the checker/grader sources, all flat single segments. */
 @Injectable()
@@ -105,15 +113,14 @@ export class ProblemDataFilesService {
   /** A fresh temporary path inside the problem directory, for streaming uploads before they are validated. */
   async stageUpload(code: string): Promise<string> {
     await mkdir(this.directoryOf(code), { recursive: true });
-    const stagedPath = this.pathOf(
-      code,
-      `${UPLOAD_PREFIX}${randomUUID()}${UPLOAD_SUFFIX}`,
+    const stagedPath = this.resolveInside(
+      `${this.codeOf(code)}/${UPLOAD_PREFIX}${randomUUID()}`,
     );
     await assertRealPathInside(this.root, stagedPath);
     return stagedPath;
   }
 
-  /** Only a path handed out by `stageUpload` for this code can be committed. */
+  /** Only a regular file at a path handed out by `stageUpload` for this code can be committed. */
   async commitUpload(
     code: string,
     stagedPath: string,
@@ -123,7 +130,7 @@ export class ProblemDataFilesService {
     if (
       dirname(stagedPath) !== this.directoryOf(code) ||
       !staged.startsWith(UPLOAD_PREFIX) ||
-      !staged.endsWith(UPLOAD_SUFFIX)
+      !(await lstat(stagedPath)).isFile()
     )
       throw new Error(`Not a staged upload of ${code}: ${stagedPath}`);
     const target = this.pathOf(code, name);

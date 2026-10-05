@@ -1,5 +1,6 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -84,7 +85,7 @@ describe('ProblemDataFilesService', () => {
   it("refuses a staged path that is not this code's upload", async () => {
     const staged = await files.stageUpload('sum');
     await expect(
-      files.commitUpload('sum', join(root, 'other', 'upload-x.tmp'), 'a.zip'),
+      files.commitUpload('sum', join(root, 'other', '.upload-x'), 'a.zip'),
     ).rejects.toThrow('Not a staged upload');
     await expect(
       files.commitUpload('sum', join(root, 'sum', 'init.yml'), 'a.zip'),
@@ -95,6 +96,24 @@ describe('ProblemDataFilesService', () => {
     await expect(files.commitUpload('other', staged, 'a.zip')).rejects.toThrow(
       'Not a staged upload',
     );
+  });
+  it('refuses to commit a staged path that is a symlink or a directory, and an unprefixed name', async () => {
+    const staged = await files.stageUpload('sum');
+    symlinkSync('/etc/passwd', staged);
+    await expect(files.commitUpload('sum', staged, 'a.zip')).rejects.toThrow(
+      'Not a staged upload',
+    );
+    rmSync(staged);
+    mkdirSync(staged);
+    await expect(files.commitUpload('sum', staged, 'a.zip')).rejects.toThrow(
+      'Not a staged upload',
+    );
+    rmSync(staged, { recursive: true });
+    writeFileSync(join(root, 'sum', 'upload-x.tmp'), 'x');
+    await expect(
+      files.commitUpload('sum', join(root, 'sum', 'upload-x.tmp'), 'a.zip'),
+    ).rejects.toThrow('Not a staged upload');
+    expect(existsSync(join(root, 'sum', 'a.zip'))).toBe(false);
   });
   it('refuses a problem directory that is a symlink to outside the root', async () => {
     const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));
@@ -129,7 +148,7 @@ describe('ProblemDataFilesService', () => {
   });
   it('stages an upload inside the problem directory and commits it by rename', async () => {
     const staged = await files.stageUpload('sum');
-    expect(staged.startsWith(join(root, 'sum') + '/upload-')).toBe(true);
+    expect(staged.startsWith(join(root, 'sum') + '/.upload-')).toBe(true);
     writeFileSync(staged, 'zip bytes');
     await files.commitUpload('sum', staged, 'data.zip');
     expect(readFileSync(join(root, 'sum', 'data.zip'), 'utf8')).toBe(

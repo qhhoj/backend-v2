@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
+import { rm } from 'node:fs/promises';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, isDocumentTooLarge } from '@libs/common';
-import { emptyProblemData } from '@libs/database';
-import type { Problem, ProblemData } from '@libs/database';
+import { AppError, isDocumentTooLarge, RateLimitService } from '@libs/common';
+import { DATA_FILE_KINDS, emptyProblemData } from '@libs/database';
+import type { DataFileKind, Problem, ProblemData } from '@libs/database';
 import {
   compileInitYaml,
   INIT_FILE,
@@ -12,13 +14,27 @@ import {
   ZipError,
 } from '@libs/problems';
 import { PutProblemDataDto } from './dto/problem-data.dto';
+import type { SourceFileKind } from './dto/problem-data.dto';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { MAX_CASE_ARGS_BYTES, maxTestcasesFor } from './dto/limits';
 import { fieldDiff } from './field-diff';
+import { readMultipartFile, rejectFile, saveMultipartFile } from './multipart';
 import { ProblemEditingService } from './problem-editing.service';
+import { extensionOf, safeFileName } from './problem-uploads.service';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
+import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
 import { RevisionsRepository } from './revisions.repository';
+
+export const ARCHIVE_MAX_BYTES = 512 * 1024 * 1024;
+export const SOURCE_MAX_BYTES = 1024 * 1024;
+/** What the compiler can use per kind (the legacy upload validators, minus `.py` checkers the compiler always rejected). */
+export const SOURCE_EXTENSIONS: Record<SourceFileKind, readonly string[]> = {
+  generator: ['cpp', 'cc', 'c', 'pas', 'java', 'py'],
+  customChecker: ['cpp', 'pas', 'java'],
+  customGrader: ['cpp'],
+  customHeader: ['h'],
+};
 
 const invalid = (field: string, message: string) =>
   new AppError('validation_failed', 400, message, { [field]: [message] });
@@ -59,6 +75,7 @@ export class ProblemDataService {
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly dataFiles: ProblemDataFilesService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   async get(auth: AuthContext, code: string): Promise<ProblemDataResponse> {
@@ -95,16 +112,13 @@ export class ProblemDataService {
       },
       version,
     );
-    const changes = dataChanges(previous, stored);
-    if (Object.keys(changes).length)
-      await this.revisions.append({
-        entity: 'problem',
-        entityId: problem._id,
-        action: 'data',
-        userId: auth.principal.userId,
-        changes,
-        comment: 'Data edited from site',
-      });
+    await this.recordChange(
+      auth,
+      problem,
+      previous,
+      stored,
+      'Data edited from site',
+    );
     return this.response(auth.principal, problem, stored, archiveFiles);
   }
 
@@ -114,6 +128,164 @@ export class ProblemDataService {
     if (yaml === null)
       throw new AppError('not_found', 404, 'No init.yml has been generated');
     return yaml;
+  }
+
+  /** Streams the zip into the problem directory, validates it (bounds, names), then swaps it in and recompiles. */
+  async uploadArchive(
+    auth: AuthContext,
+    code: string,
+    request: FastifyRequest,
+  ): Promise<ProblemDataResponse> {
+    const problem = await this.writableProblem(auth.principal, code);
+    await this.reserveUpload(auth);
+    const staged = await this.dataFiles.stageUpload(problem.code);
+    const { filename } = await saveMultipartFile(
+      request,
+      ARCHIVE_MAX_BYTES,
+      staged,
+    );
+    const name = safeFileName(filename);
+    try {
+      if (extensionOf(name) !== 'zip')
+        throw rejectFile('The archive must be a .zip file.');
+      await listZipEntries(staged);
+    } catch (error) {
+      await rm(staged, { force: true });
+      throw error instanceof ZipError ? rejectFile(error.message) : error;
+    }
+    return this.replaceFile(auth, problem, 'archive', name, () =>
+      this.dataFiles.commitUpload(problem.code, staged, name),
+    );
+  }
+
+  async uploadSource(
+    auth: AuthContext,
+    code: string,
+    kind: SourceFileKind,
+    request: FastifyRequest,
+  ): Promise<ProblemDataResponse> {
+    const problem = await this.writableProblem(auth.principal, code);
+    await this.reserveUpload(auth);
+    const { filename, content } = await readMultipartFile(
+      request,
+      SOURCE_MAX_BYTES,
+    );
+    const name = safeFileName(filename);
+    if (!SOURCE_EXTENSIONS[kind].includes(extensionOf(name)))
+      throw rejectFile(
+        `Allowed extensions for ${kind}: ${SOURCE_EXTENSIONS[kind].join(', ')}`,
+      );
+    return this.replaceFile(auth, problem, kind, name, () =>
+      this.dataFiles.writeFile(problem.code, name, content),
+    );
+  }
+
+  /** Clears the field and recompiles first (Mongo stays authoritative), then drops the file. */
+  async deleteFile(
+    auth: AuthContext,
+    code: string,
+    kind: DataFileKind,
+  ): Promise<ProblemDataResponse> {
+    const problem = await this.writableProblem(auth.principal, code);
+    const { data: previous, version } = await this.loadData(problem);
+    const { stored, archiveFiles } = await this.compileAndStore(
+      problem,
+      { ...previous, [kind]: null },
+      version,
+    );
+    const name = previous[kind];
+    if (name) await this.dataFiles.removeFile(problem.code, name);
+    await this.recordChange(auth, problem, previous, stored, `${kind} removed`);
+    return this.response(auth.principal, problem, stored, archiveFiles);
+  }
+
+  /** Legacy `problem_data_file`: editors only (manually managed problems included), an unsafe or unknown name is a 404. */
+  async download(
+    auth: AuthContext,
+    code: string,
+    name: string,
+  ): Promise<{ path: string; filename: string }> {
+    const problem = await this.editing.editableProblem(auth.principal, code);
+    const missing = new AppError('not_found', 404, 'No such file');
+    let path: string;
+    try {
+      path = this.dataFiles.pathOf(problem.code, name);
+    } catch {
+      throw missing;
+    }
+    if (!(await this.dataFiles.exists(problem.code, name))) throw missing;
+    return { path, filename: name };
+  }
+
+  private reserveUpload(auth: AuthContext): Promise<() => Promise<void>> {
+    return this.rateLimit.reserve(
+      [`upload:user:${auth.principal.userId}`],
+      UPLOAD_LIMIT,
+      UPLOAD_WINDOW_SECONDS,
+    );
+  }
+
+  /**
+   * Stores the new file, recompiles with the version loaded just before, and only after a matched update drops the previous file of that kind (a lost race removes the new file instead).
+   * A name already used by another kind is refused, so one upload never overwrites a sibling's file.
+   */
+  private async replaceFile(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    kind: DataFileKind,
+    name: string,
+    store: () => Promise<void>,
+  ): Promise<ProblemDataResponse> {
+    const { data: previous, version } = await this.loadData(problem);
+    if (
+      DATA_FILE_KINDS.some(
+        (other) => other !== kind && previous[other] === name,
+      )
+    )
+      throw rejectFile(
+        `The name ${name} is already used by another data file.`,
+      );
+    await store();
+    const old = previous[kind];
+    try {
+      const { stored, archiveFiles } = await this.compileAndStore(
+        problem,
+        { ...previous, [kind]: name },
+        version,
+      );
+      if (old && old !== name)
+        await this.dataFiles.removeFile(problem.code, old);
+      await this.recordChange(
+        auth,
+        problem,
+        previous,
+        stored,
+        `${kind} uploaded`,
+      );
+      return this.response(auth.principal, problem, stored, archiveFiles);
+    } catch (error) {
+      if (old !== name) await this.dataFiles.removeFile(problem.code, name);
+      throw error;
+    }
+  }
+
+  private async recordChange(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    before: ProblemData,
+    after: ProblemData,
+    comment: string,
+  ): Promise<void> {
+    const changes = dataChanges(before, after);
+    if (Object.keys(changes).length)
+      await this.revisions.append({
+        entity: 'problem',
+        entityId: problem._id,
+        action: 'data',
+        userId: auth.principal.userId,
+        changes,
+        comment,
+      });
   }
 
   /** Data routes need an editable problem (404/403) that is not manually managed (404, legacy `ProblemManagerMixin`). */
