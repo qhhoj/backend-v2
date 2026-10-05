@@ -1,5 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { crc32, deflateRawSync } from 'node:zlib';
@@ -146,6 +152,49 @@ describe('ZipArchive', () => {
     await expect(listZipEntries(path)).rejects.toThrow(ZipError);
   });
 
+  it('refuses crafted 64-bit offsets on the disk path, promptly, without leaks or uncaught errors', async () => {
+    const three = [{ name: 'a' }, { name: 'b' }, { name: 'c' }];
+    const crafted = {
+      'locator 2^53': { zip64: true, zip64RecordOffset: 2n ** 53n },
+      'locator 2^64-1': { zip64: true, zip64RecordOffset: 2n ** 64n - 1n },
+      'central directory 2^53': { zip64: true, zip64CentralOffset: 2n ** 53n },
+    };
+    const uncaught: Error[] = [];
+    const record = (error: Error) => uncaught.push(error);
+    process.on('uncaughtException', record);
+    const before = openFileDescriptors();
+    try {
+      for (const [label, options] of Object.entries(crafted)) {
+        const path = join(directory, `crafted-${label.replace(/\W/g, '')}.zip`);
+        writeFileSync(path, buildZip(three, options));
+        const duration = await timeOf(() =>
+          expect(ZipArchive.open(path)).rejects.toThrow(ZipError),
+        );
+        expect(duration).toBeLessThan(1000);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } finally {
+      process.off('uncaughtException', record);
+    }
+    expect(uncaught).toEqual([]);
+    expect(openFileDescriptors()).toBe(before);
+  });
+
+  it('refuses entries that point outside the archive', async () => {
+    await rejects([{ name: 'a', localHeaderOffset: 1_000_000 }], ZipError);
+    await rejects(
+      [
+        {
+          name: 'a',
+          content: 'x',
+          method: 'deflate',
+          declaredCompressedSize: 1_000_000,
+        },
+      ],
+      ZipError,
+    );
+  });
+
   const hasZipBinary = (() => {
     try {
       execFileSync('zip', ['-v'], { stdio: 'ignore' });
@@ -158,13 +207,13 @@ describe('ZipArchive', () => {
     'accepts what Info-ZIP writes when streaming from stdin',
     async () => {
       const path = join(directory, 'streamed.zip');
-      writeFileSync(
-        path,
-        execFileSync('zip', ['-', '-'], {
-          input: randomBytes(100 * 1024),
-          maxBuffer: 1024 ** 2,
-        }),
-      );
+      execFileSync('zip', [path, '-'], {
+        input: randomBytes(100 * 1024),
+        stdio: ['pipe', 'ignore', 'ignore'],
+      });
+      expect(
+        readFileSync(path).includes(Buffer.from([0x50, 0x4b, 0x06, 0x07])),
+      ).toBe(true);
       expect(await listZipEntries(path)).toEqual(['-']);
     },
   );

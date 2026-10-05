@@ -1,6 +1,7 @@
 import { open as openFile } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { crc32 } from 'node:zlib';
-import { pipeline, Transform } from 'node:stream';
+import { pipeline, Readable as ReadableStream, Transform } from 'node:stream';
 import type { Readable } from 'node:stream';
 import yauzl from 'yauzl';
 import type { Entry, ZipFile } from 'yauzl';
@@ -25,6 +26,13 @@ const DELETE_CHARACTER = 0x7f;
 const FIRST_PRINTABLE = 0x20;
 const MAX_SHOWN_NAME = 100;
 const END_RECORD_BYTES = 22;
+const LOCAL_HEADER_BYTES = 30;
+const READ_CHUNK_BYTES = 64 * 1024;
+
+interface ArchiveBounds {
+  fileSize: number;
+  centralDirectoryStart: number;
+}
 const UNICODE_PATH_EXTRA = 0x7075;
 
 /** A problem in an uploaded archive; the message is shown to the uploader. */
@@ -60,7 +68,11 @@ const hasForeignUnicodePath = (entry: Entry) =>
   !entry.fileNameRaw.equals(Buffer.from(entry.fileName, 'utf8'));
 
 /** The first rule an entry breaks, or undefined. yauzl itself rejects `..`, absolute paths and backslashes. */
-function violation(entry: Entry, records: number): string | undefined {
+function violation(
+  entry: Entry,
+  records: number,
+  bounds: ArchiveBounds,
+): string | undefined {
   const name = shown(entry.fileName);
   if (records > ZIP_LIMITS.maxEntries)
     return `The archive has too many files (limit ${ZIP_LIMITS.maxEntries}).`;
@@ -74,6 +86,14 @@ function violation(entry: Entry, records: number): string | undefined {
   if (isSymlink(entry)) return `Symbolic links are not allowed: ${name}`;
   if (!entry.canDecodeFileData())
     return `${name} is encrypted or uses an unsupported compression method.`;
+  if (
+    entry.relativeOffsetOfLocalHeader + LOCAL_HEADER_BYTES > bounds.fileSize ||
+    entry.relativeOffsetOfLocalHeader +
+      LOCAL_HEADER_BYTES +
+      entry.compressedSize >
+      bounds.centralDirectoryStart
+  )
+    return `${name} points outside the archive.`;
   if (
     entry.uncompressedSize >
     entry.compressedSize * ZIP_LIMITS.maxRatio + 1024
@@ -126,6 +146,8 @@ async function assertCentralDirectoryIsConsistent(
 function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
   return new Promise((resolve, reject) => {
     const entries = new Map<string, Entry>();
+    const { fileSize, readEntryCursor } = zip as unknown as ZipFileInternals;
+    const bounds = { fileSize, centralDirectoryStart: readEntryCursor };
     let records = 0;
     let totalBytes = 0;
     const fail = (message: string) => {
@@ -138,7 +160,7 @@ function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
     zip.on('end', () => resolve(entries));
     zip.on('entry', (entry: Entry) => {
       records += 1;
-      const broken = violation(entry, records);
+      const broken = violation(entry, records, bounds);
       if (broken) return fail(broken);
       if (isDirectory(entry)) return zip.readEntry();
       if (entries.has(entry.fileName))
@@ -197,6 +219,67 @@ function exactly(entry: Entry): Transform {
   });
 }
 
+/** Every byte offset in an archive comes from the (untrusted) archive, so a single reader validates them all: yauzl's own fd reader throws a RangeError from inside a callback for offsets past 2^53, which leaves the open hanging and the descriptor leaked. */
+class FileHandleReader extends yauzl.RandomAccessReader {
+  private closing?: Promise<void>;
+
+  constructor(private readonly handle: FileHandle) {
+    super();
+  }
+
+  async readAt(position: number, length: number): Promise<Buffer> {
+    const { buffer } = await this.handle.read(
+      Buffer.alloc(length),
+      0,
+      length,
+      position,
+    );
+    return buffer;
+  }
+
+  _readStreamForRange(start: number, end: number): Readable {
+    const valid =
+      Number.isSafeInteger(start) &&
+      Number.isSafeInteger(end) &&
+      start >= 0 &&
+      start <= end;
+    if (!valid)
+      return new ReadableStream({
+        read() {
+          this.destroy(new ZipError('The archive points outside itself.'));
+        },
+      });
+    let position = start;
+    const handle = this.handle;
+    return new ReadableStream({
+      read() {
+        const length = Math.min(READ_CHUNK_BYTES, end - position);
+        if (length <= 0) return void this.push(null);
+        handle.read(Buffer.alloc(length), 0, length, position).then(
+          ({ bytesRead, buffer }) => {
+            position += bytesRead;
+            this.push(bytesRead === 0 ? null : buffer.subarray(0, bytesRead));
+          },
+          (error: Error) => this.destroy(error),
+        );
+      },
+    });
+  }
+
+  close(callback: (error: Error | null) => void): void {
+    this.closeOnce().then(
+      () => callback(null),
+      (error: Error) => callback(error),
+    );
+  }
+
+  /** Closes the handle exactly once, however many paths ask. */
+  closeOnce(): Promise<void> {
+    this.closing ??= this.handle.close();
+    return this.closing;
+  }
+}
+
 /** Read-only view of a zip with every bound of `ZIP_LIMITS` enforced; file entries only. */
 export class ZipArchive {
   private constructor(
@@ -205,24 +288,22 @@ export class ZipArchive {
   ) {}
 
   static async open(path: string): Promise<ZipArchive> {
-    const readAt: ReadAt = async (position, length) => {
-      const handle = await openFile(path, 'r');
-      try {
-        const { buffer } = await handle.read(
-          Buffer.alloc(length),
-          0,
-          length,
-          position,
-        );
-        return buffer;
-      } finally {
-        await handle.close();
-      }
-    };
-    return ZipArchive.collect(
-      await openZipFile((callback) => yauzl.open(path, OPEN_OPTIONS, callback)),
-      readAt,
-    );
+    const handle = await openFile(path, 'r').catch(() => {
+      throw new ZipError('The archive is not a valid zip file.');
+    });
+    const reader = new FileHandleReader(handle);
+    try {
+      const { size } = await handle.stat();
+      const zip = await openZipFile((callback) =>
+        yauzl.fromRandomAccessReader(reader, size, OPEN_OPTIONS, callback),
+      );
+      return await ZipArchive.collect(zip, (position, length) =>
+        reader.readAt(position, length),
+      );
+    } catch (error) {
+      await reader.closeOnce();
+      throw error;
+    }
   }
 
   static async fromBuffer(buffer: Buffer): Promise<ZipArchive> {

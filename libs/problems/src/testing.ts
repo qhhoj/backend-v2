@@ -35,6 +35,10 @@ export interface ZipTestEntry {
   methodNumber?: number;
   /** Extra field bytes for the central directory header. */
   centralExtra?: Buffer;
+  /** Lies about where the local header starts. */
+  localHeaderOffset?: number;
+  /** Lies about the compressed size in the central directory. */
+  declaredCompressedSize?: number;
 }
 
 export interface ZipTestOptions {
@@ -42,6 +46,10 @@ export interface ZipTestOptions {
   declaredEntryCount?: number;
   /** Writes a zip64 end record and locator, as Info-ZIP does when streaming from stdin. */
   zip64?: boolean;
+  /** With `zip64`: lies about the zip64 end record offset in the locator. */
+  zip64RecordOffset?: bigint;
+  /** With `zip64`: lies about the central directory offset in the zip64 end record. */
+  zip64CentralOffset?: bigint;
 }
 
 const LOCAL_HEADER = 0x04034b50;
@@ -93,7 +101,7 @@ export function buildZip(
     central.writeUInt16LE(flags, 8);
     central.writeUInt16LE(method, 10);
     central.writeUInt32LE(checksum, 16);
-    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(entry.declaredCompressedSize ?? data.length, 20);
     central.writeUInt32LE(declared, 24);
     central.writeUInt16LE(name.length, 28);
     central.writeUInt16LE(extra.length, 30);
@@ -101,7 +109,7 @@ export function buildZip(
       ((entry.symlink ? SYMLINK : REGULAR_FILE) << 16) >>> 0,
       38,
     );
-    central.writeUInt32LE(offset, 42);
+    central.writeUInt32LE(entry.localHeaderOffset ?? offset, 42);
     name.copy(central, 46);
     extra.copy(central, 46 + name.length);
     locals.push(local, data);
@@ -117,7 +125,7 @@ export function buildZip(
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(options.zip64 ? 0xffffffff : offset, 16);
   const zip64 = options.zip64
-    ? zip64Tail(count, centralSize, offset, offset + centralSize)
+    ? zip64Tail(count, centralSize, offset, offset + centralSize, options)
     : Buffer.alloc(0);
   return Buffer.concat([...locals, ...centrals, zip64, end]);
 }
@@ -131,6 +139,7 @@ function zip64Tail(
   centralSize: number,
   centralOffset: number,
   recordOffset: number,
+  options: ZipTestOptions,
 ): Buffer {
   const record = Buffer.alloc(56);
   record.writeUInt32LE(ZIP64_RECORD, 0);
@@ -140,10 +149,16 @@ function zip64Tail(
   record.writeBigUInt64LE(BigInt(count), 24);
   record.writeBigUInt64LE(BigInt(count), 32);
   record.writeBigUInt64LE(BigInt(centralSize), 40);
-  record.writeBigUInt64LE(BigInt(centralOffset), 48);
+  record.writeBigUInt64LE(
+    options.zip64CentralOffset ?? BigInt(centralOffset),
+    48,
+  );
   const locator = Buffer.alloc(20);
   locator.writeUInt32LE(ZIP64_LOCATOR, 0);
-  locator.writeBigUInt64LE(BigInt(recordOffset), 8);
+  locator.writeBigUInt64LE(
+    options.zip64RecordOffset ?? BigInt(recordOffset),
+    8,
+  );
   locator.writeUInt32LE(1, 16);
   return Buffer.concat([record, locator]);
 }
