@@ -10,7 +10,7 @@
 - Render stack pins: `markdown-it` 15.0.2, `katex` 0.19.0, `sanitize-html` 2.17.5 (2.17.6+ pulls ESM-only `htmlparser2@12`, breaks Jest CJS; do not bump), `@fastify/multipart` 10.1.2
 - Versions pinned in `package.json`; `fastify` pinned via `overrides` to a single copy; bump when `@nestjs/platform-fastify` or an advisory requires it
 - Jobs: `bullmq` 5.81.5 + `@nestjs/bullmq` 11.0.5 (12 is ESM-only; do not bump)
-- `playwright` 1.63.0 (Chromium: `npx playwright install --with-deps chromium`), `yaml` 2.9.1, `yauzl` 3.4.0 / `yazl` 3.3.1, `saxes` 6.0.0 (`fast-xml-parser` 5 is ESM-only)
+- `playwright` 1.63.0 (Chromium: `npx playwright install --with-deps chromium`), `yaml` 2.9.1 (dev), `yauzl` 3.4.0 / `yazl` 3.3.1, `saxes` 6.0.0 (`fast-xml-parser` 5 is ESM-only)
 - Worker image: `pandoc` >= 3, util-linux `prlimit` (pandoc runs under `prlimit --as=768MiB`; without it conversion fails closed), Chromium
 - Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
 
@@ -48,14 +48,13 @@ tools/legacy/   regenerates the fixtures
 ```
 
 - Flow: `controller -> service -> querier | repository`
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|spec`
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|spec`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Roles also include `processor` (BullMQ job consumer, `apps/worker`)
-- Jobs: `@Processor(QUEUE, { concurrency }) extends WorkerHost`, one module per job; queue names and job data types live in `libs/problems/src/queues.ts`
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts`
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
 - `<feature>.events.ts`: in-process `EventEmitter` wrapper for notifying other modules (`problem.events.ts`)
@@ -91,7 +90,7 @@ tools/legacy/   regenerates the fixtures
 - Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`
 - Multipart routes read `request.parts({ limits: { files: 1, fields: 0, fileSize } })`, check for a single file and the expected fieldname, and never declare `@Body()`; an oversized file is `file_too_large` 413
 - Multipart helpers: `problems/multipart.ts` (`readMultipartFile` buffers, `saveMultipartFile` streams to a path); per-call `limits` override the plugin default
-- Raw file responses: `@RawResponse()` + `@Res({ passthrough: true })`
+- Raw file responses: `@RawResponse()` + `@Res({ passthrough: true })` (the PDF route uses plain `@Res()` to keep its 202)
 - App wiring: `configureApp(app)` + `fastifyAdapter()` from `@libs/common` (used by `main.ts` and tests)
 
 ## Auth
@@ -148,22 +147,21 @@ tools/legacy/   regenerates the fixtures
 
 - `Problem.data` subdocument + `compileInitYaml` (`libs/problems`): sorted keys, `feedback` instead of `errors`, per-case `bridged` rejected, custom checker args composed from the uploaded source
 - Volume: `PROBLEM_DATA_ROOT/<code>/` flat (`init.yml`, archive, sources); Polygon packages stage in `PROBLEM_DATA_ROOT/.imports/`
-- Routes (`/api/internal/problems/:code/data`): `GET`/`PUT` (8 MiB body, 300 cases, 9999 with `judge.create_mass_testcases`), `GET init`, `POST archive` (.zip, 512 MiB), `POST|DELETE files/:kind` (`generator|customChecker|customGrader|customHeader`, 1 MiB), `GET files/:name` (attachment, `nosniff`)
+- Routes (`/api/internal/problems/:code/data`): `GET`/`PUT` (8 MiB body, 300 cases, 9999 with `judge.create_mass_testcases`), `GET init`, `POST archive` (.zip, 512 MiB), `POST files/:kind` (`generator|customChecker|customGrader|customHeader`, 1 MiB), `DELETE files/:kind` (those plus `archive`), `GET files/:name` (attachment, `nosniff`)
 - Source extensions: generator `cpp cc c pas java py`, customChecker `cpp pas java`, customGrader `cpp`, customHeader `h`
 - Zip bounds (`ZIP_LIMITS`): 25000 entries, 2 GiB total, 512 MiB per entry, ratio 1100; no symlinks, control characters or Unicode-path mismatch
-- `isManuallyManaged` problem -> 404 on data routes; mirror problem -> 403 on writes
+- `isManuallyManaged` problem -> 404 on data routes except `GET files/:name`; mirror problem -> 403 on writes
 - Rename: pre-check, then the `codeRenamed` listener moves the directory (and drops cached PDFs)
 - Materials: `MEDIA_ROOT/materials/<problemId>/`
 - PDF: `GET /:code/pdf` -> 200 file, 202 `rendering`, 503 `pdf_unavailable`; cache `PDF_CACHE_ROOT/<code>.<lang>.pdf`, dropped on `statementChanged` / `codeRenamed`; job id `pdf-<code>-<lang>`, `removeOnComplete: true`, `removeOnFail` kept 10 min (503 + `Retry-After` meanwhile)
 - Polygon import (`judge.import_polygon_package`): options in the query string; `POST /problems/imports` 202 `{ jobId }` (package <= 512 MiB, 10 per hour per user), `GET /problems/imports/:jobId` (requester or superuser); job retained 24 h
-- Import semantics: create defaults for catalog fields; update keeps catalog fields, points and authors unless given; non-interactive legacy semantics; tests repacked as `tests.zip`; images re-hosted; a compile error fails the job before the DB write
-- Tags (`/api/internal/tags`, `catalog`, `:code`, `:code/assign`): tagging needs `allowTagging` plus `judge.add_tagproblem` or rating >= 1900; link presets (Codeforces, CodeforcesGym, AtCoder, VNOJ, Kattis); no external OJ calls
+- Import semantics: create defaults for catalog fields; update keeps catalog fields, points and authors unless given; every option comes from the job (no prompts); tests repacked as `tests.zip`; images re-hosted; a compile error fails the job before the DB write
+- Tags (`/api/internal/tags`, `catalog`, `:code`, `:code/assign`): tagging needs `allowTagging` plus `judge.add_tagproblem` or rating >= 1900; link presets (Codeforces, CodeforcesGym, Atcoder, VNOJ, Kattis); no external OJ calls
 
 ## Data conventions
 
 - `tagGroups`/`tags` are querier-backed; `tagProblems` is a repository
 - `Problem.data` and `dataVersion` are projected out of lists and reset on clone
-
 - `_id` is a UUIDv7: declare `@IdProp() _id!: string`
 - Helpers (`@libs/database`): `newId()` new id string, `uuidStr(value)` Binary -> hex string, `toUuid(id)` string -> BSON `UUID` for raw driver queries
 - UUID arrays on hydrated docs (`user.groups`, ...): index access, spread and `toJSON()` give strings, but `.map/.filter/.flatMap/.slice` give raw buffers; map through `uuidStr` first
@@ -203,7 +201,7 @@ Add a job:
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush); migrator e2e also needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`
-- Playwright and pandoc specs skip when the binary is missing (CI installs both)
+- Playwright specs skip without Chromium; the pandoc spec skips locally and fails in CI without pandoc
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
 
 ## Commands
@@ -224,11 +222,10 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all three builds.
 
 ## Env and deploy
 
-- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by every app, the migrator included (every app validates env)
+- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api and the worker (both validate env); the migrator reads only `MONGO_URL` and `LEGACY_*`
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly)
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
-- Worker image: `prlimit`, pandoc >= 3, Chromium (see Stack)
 - Worker tuning: `PDF_RENDER_TIMEOUT_MS`, `PDF_MAX_BYTES`, `PDF_CONCURRENCY`; the Polygon import queue runs one job at a time
 
 ## Commits
