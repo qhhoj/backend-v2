@@ -9,7 +9,9 @@
 - Jest 29 + `mongodb-memory-server`; ESLint + Prettier
 - Render stack pins: `markdown-it` 15.0.2, `katex` 0.19.0, `sanitize-html` 2.17.5 (2.17.6+ pulls ESM-only `htmlparser2@12`, breaks Jest CJS; do not bump), `@fastify/multipart` 10.1.2
 - Versions pinned in `package.json`; `fastify` pinned via `overrides` to a single copy; bump when `@nestjs/platform-fastify` or an advisory requires it
-- Worker image (Polygon import) needs `pandoc` >= 3 and util-linux `prlimit` (pandoc runs under `prlimit --as`; without it conversion fails closed)
+- Jobs: `bullmq` 5.81.5 + `@nestjs/bullmq` 11.0.5 (12 is ESM-only; do not bump)
+- `playwright` 1.63.0 (Chromium: `npx playwright install --with-deps chromium`), `yaml` 2.9.1, `yauzl` 3.4.0 / `yazl` 3.3.1, `saxes` 6.0.0 (`fast-xml-parser` 5 is ESM-only)
+- Worker image: `pandoc` >= 3, util-linux `prlimit` (pandoc runs under `prlimit --as=768MiB`; without it conversion fails closed), Chromium
 - Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
 
 ## Layout
@@ -18,11 +20,12 @@
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import)
 libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
   auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
-  problems/   statement helpers, file sniffing, problem data and PDF cache file services
+  problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
@@ -51,6 +54,9 @@ tools/legacy/   regenerates the fixtures
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
+- Roles also include `processor` (BullMQ job consumer, `apps/worker`)
+- Jobs: `@Processor(QUEUE, { concurrency }) extends WorkerHost`, one module per job; queue names and job data types live in `libs/problems/src/queues.ts`
+- `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
 - `<feature>.events.ts`: in-process `EventEmitter` wrapper for notifying other modules (`problem.events.ts`)
 
@@ -84,6 +90,8 @@ tools/legacy/   regenerates the fixtures
 - Query DTOs: `@Type(() => Number)` for numbers; `dto/transforms.ts` (`toArray`, `toBoolean`) for arrays and booleans
 - Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`
 - Multipart routes read `request.parts({ limits: { files: 1, fields: 0, fileSize } })`, check for a single file and the expected fieldname, and never declare `@Body()`; an oversized file is `file_too_large` 413
+- Multipart helpers: `problems/multipart.ts` (`readMultipartFile` buffers, `saveMultipartFile` streams to a path); per-call `limits` override the plugin default
+- Raw file responses: `@RawResponse()` + `@Res({ passthrough: true })`
 - App wiring: `configureApp(app)` + `fastifyAdapter()` from `@libs/common` (used by `main.ts` and tests)
 
 ## Auth
@@ -136,7 +144,25 @@ tools/legacy/   regenerates the fixtures
 - Text index: `await model.init()` in fixtures before `$text` queries
 - `/api/v2`: legacy Django envelope (`api_version`, `method`, `fetched`, `data`/`error`); unknown query params are ignored; an invalid Bearer token is 403 `login required`
 
+## Problem data
+
+- `Problem.data` subdocument + `compileInitYaml` (`libs/problems`): sorted keys, `feedback` instead of `errors`, per-case `bridged` rejected, custom checker args composed from the uploaded source
+- Volume: `PROBLEM_DATA_ROOT/<code>/` flat (`init.yml`, archive, sources); Polygon packages stage in `PROBLEM_DATA_ROOT/.imports/`
+- Routes (`/api/internal/problems/:code/data`): `GET`/`PUT` (8 MiB body, 300 cases, 9999 with `judge.create_mass_testcases`), `GET init`, `POST archive` (.zip, 512 MiB), `POST|DELETE files/:kind` (`generator|customChecker|customGrader|customHeader`, 1 MiB), `GET files/:name` (attachment, `nosniff`)
+- Source extensions: generator `cpp cc c pas java py`, customChecker `cpp pas java`, customGrader `cpp`, customHeader `h`
+- Zip bounds (`ZIP_LIMITS`): 25000 entries, 2 GiB total, 512 MiB per entry, ratio 1100; no symlinks, control characters or Unicode-path mismatch
+- `isManuallyManaged` problem -> 404 on data routes; mirror problem -> 403 on writes
+- Rename: pre-check, then the `codeRenamed` listener moves the directory (and drops cached PDFs)
+- Materials: `MEDIA_ROOT/materials/<problemId>/`
+- PDF: `GET /:code/pdf` -> 200 file, 202 `rendering`, 503 `pdf_unavailable`; cache `PDF_CACHE_ROOT/<code>.<lang>.pdf`, dropped on `statementChanged` / `codeRenamed`; job id `pdf-<code>-<lang>`, `removeOnComplete: true`, `removeOnFail` kept 10 min (503 + `Retry-After` meanwhile)
+- Polygon import (`judge.import_polygon_package`): options in the query string; `POST /problems/imports` 202 `{ jobId }` (package <= 512 MiB, 10 per hour per user), `GET /problems/imports/:jobId` (requester or superuser); job retained 24 h
+- Import semantics: create defaults for catalog fields; update keeps catalog fields, points and authors unless given; non-interactive legacy semantics; tests repacked as `tests.zip`; images re-hosted; a compile error fails the job before the DB write
+- Tags (`/api/internal/tags`, `catalog`, `:code`, `:code/assign`): tagging needs `allowTagging` plus `judge.add_tagproblem` or rating >= 1900; link presets (Codeforces, CodeforcesGym, AtCoder, VNOJ, Kattis); no external OJ calls
+
 ## Data conventions
+
+- `tagGroups`/`tags` are querier-backed; `tagProblems` is a repository
+- `Problem.data` and `dataVersion` are projected out of lists and reset on clone
 
 - `_id` is a UUIDv7: declare `@IdProp() _id!: string`
 - Helpers (`@libs/database`): `newId()` new id string, `uuidStr(value)` Binary -> hex string, `toUuid(id)` string -> BSON `UUID` for raw driver queries
@@ -176,6 +202,8 @@ Add a job:
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush); migrator e2e also needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
+- Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`
+- Playwright and pandoc specs skip when the binary is missing (CI installs both)
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
 
 ## Commands
@@ -188,9 +216,20 @@ Add a job:
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run build` | build `api` |
 | `npx nest build migrator` | build migrator |
+| `npx nest build worker` | build worker |
 | `npx nest start api` | run the API |
+| `npx nest start worker` | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
 
-CI (`.github/workflows/ci.yml`): lint, typecheck, test, both builds.
+CI (`.github/workflows/ci.yml`): lint, typecheck, test, all three builds.
+
+## Env and deploy
+
+- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by every app, the migrator included (every app validates env)
+- The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
+- `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly)
+- Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
+- Worker image: `prlimit`, pandoc >= 3, Chromium (see Stack)
+- Worker tuning: `PDF_RENDER_TIMEOUT_MS`, `PDF_MAX_BYTES`, `PDF_CONCURRENCY`; the Polygon import queue runs one job at a time
 
 ## Commits
 
