@@ -4,3 +4,5 @@ export * from './file-sniff';
 export * from './problem-data-files.service';
 export * from './pdf-cache.service';
 export * from './problem-files.module';
+export * from './problem-data.error';
+export * from './init-yaml';

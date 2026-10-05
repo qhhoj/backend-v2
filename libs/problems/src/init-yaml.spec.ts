@@ -1,0 +1,368 @@
+import { parse } from 'yaml';
+import { emptyProblemData } from '@libs/database';
+import type { ProblemData, ProblemTestCase } from '@libs/database';
+import { compileInitYaml } from './init-yaml';
+import { ProblemDataError } from './problem-data.error';
+
+const testCase = (overrides: Partial<ProblemTestCase>): ProblemTestCase => ({
+  type: 'C',
+  input: '',
+  output: '',
+  points: null,
+  isPretest: false,
+  generatorArgs: '',
+  checker: '',
+  checkerArgs: null,
+  outputPrefix: null,
+  outputLimit: null,
+  ...overrides,
+});
+const plain = (index: number, extra: Partial<ProblemTestCase> = {}) =>
+  testCase({
+    input: `${index}.in`,
+    output: `${index}.out`,
+    points: 1,
+    ...extra,
+  });
+const data = (overrides: Partial<ProblemData>): ProblemData => ({
+  ...emptyProblemData(),
+  archive: 'tests.zip',
+  ...overrides,
+});
+const files = new Set(['1.in', '1.out', '2.in', '2.out', '3.in', '3.out']);
+const compile = (overrides: Partial<ProblemData>, entries = files) =>
+  compileInitYaml(data(overrides), entries);
+const init = (overrides: Partial<ProblemData>, entries = files) =>
+  parse(compile(overrides, entries).yaml ?? '') as Record<string, unknown>;
+const failsWith = (
+  overrides: Partial<ProblemData>,
+  message: string,
+  entries = files,
+) =>
+  expect(() => compile(overrides, entries)).toThrow(
+    new ProblemDataError(message),
+  );
+
+describe('compileInitYaml', () => {
+  it('writes nothing without cases', () =>
+    expect(compile({ cases: [] })).toEqual({ yaml: null, cases: [] }));
+  it('emits sorted keys, archive, test cases and the standard checker', () => {
+    expect(
+      compile({ cases: [plain(1), plain(2, { isPretest: true })] }).yaml,
+    ).toBe(
+      [
+        'archive: tests.zip',
+        'checker: standard',
+        'pretest_test_cases:',
+        '  - in: 2.in',
+        '    out: 2.out',
+        '    points: 1',
+        'test_cases:',
+        '  - in: 1.in',
+        '    out: 1.out',
+        '    points: 1',
+        '',
+      ].join('\n'),
+    );
+  });
+  it('builds batches: members lose their points and inherit the batch pretest flag, S/E rows lose files', () => {
+    const { yaml, cases } = compile({
+      cases: [
+        testCase({
+          type: 'S',
+          points: 30,
+          isPretest: true,
+          input: 'junk',
+          generatorArgs: 'a\nb',
+          outputLimit: 5,
+        }),
+        plain(1, { points: 7, isPretest: false }),
+        plain(2, { points: null }),
+        testCase({
+          type: 'E',
+          input: 'junk',
+          output: 'junk',
+          generatorArgs: 'x',
+          checker: 'floats',
+          checkerArgs: { precision: 2 },
+        }),
+        plain(3, { points: 70 }),
+      ],
+    });
+    expect(parse(yaml!)).toEqual({
+      archive: 'tests.zip',
+      checker: 'standard',
+      pretest_test_cases: [
+        {
+          points: 30,
+          generator_args: ['a', 'b'],
+          output_limit_length: 5,
+          batched: [
+            { in: '1.in', out: '1.out' },
+            { in: '2.in', out: '2.out' },
+          ],
+        },
+      ],
+      test_cases: [{ in: '3.in', out: '3.out', points: 70 }],
+    });
+    expect(cases[0]).toMatchObject({
+      type: 'S',
+      input: '',
+      output: '',
+      points: 30,
+    });
+    expect(cases[1]).toMatchObject({ points: null, isPretest: true });
+    expect(cases[3]).toMatchObject({
+      type: 'E',
+      input: '',
+      output: '',
+      generatorArgs: '',
+      checker: '',
+      checkerArgs: null,
+      isPretest: true,
+    });
+  });
+  it.each([
+    [
+      'Points must be defined for non-batch case #1.',
+      [plain(1, { points: null })],
+    ],
+    [
+      'Batch start case #1 requires points.',
+      [testCase({ type: 'S' }), plain(1), testCase({ type: 'E' })],
+    ],
+    [
+      'Attempt to end batch outside of one in case #1.',
+      [testCase({ type: 'E' })],
+    ],
+    [
+      'Empty batches not allowed.',
+      [testCase({ type: 'S', points: 1 }), testCase({ type: 'E' })],
+    ],
+    [
+      'Empty batches not allowed.',
+      [
+        testCase({ type: 'S', points: 1 }),
+        testCase({ type: 'S', points: 1 }),
+        plain(1),
+        testCase({ type: 'E' }),
+      ],
+    ],
+    ['Total points must be greater than 0.', [plain(1, { points: 0 })]],
+    ['Input file for case 1 does not exist: 9.in', [plain(9)]],
+    [
+      'Output file for case 2 does not exist: 9.out',
+      [plain(1), plain(2, { output: '9.out' })],
+    ],
+    [
+      'Case #1: a custom checker can only be set for the whole problem.',
+      [plain(1, { checker: 'bridged' as never })],
+    ],
+  ])('rejects: %s', (message, cases) => failsWith({ cases }, message));
+  it('closes an open batch at the end and counts its points', () =>
+    expect(
+      init({ cases: [testCase({ type: 'S', points: 5 }), plain(1)] }),
+    ).toMatchObject({
+      test_cases: [{ points: 5, batched: [{ in: '1.in', out: '1.out' }] }],
+    }));
+  it('skips the file check with a generator and names it', () =>
+    expect(
+      init(
+        {
+          generator: 'gen.cpp',
+          cases: [plain(9, { generatorArgs: '1 2\n3' })],
+        },
+        new Set(),
+      ),
+    ).toMatchObject({
+      generator: 'gen.cpp',
+      test_cases: [
+        { in: '9.in', out: '9.out', points: 1, generator_args: ['1 2', '3'] },
+      ],
+    }));
+  it('emits per-case checkers with and without args, and clears args of cases without a checker', () => {
+    const { yaml, cases } = compile({
+      cases: [
+        plain(1, { checker: 'floats', checkerArgs: { precision: 3 } }),
+        plain(2, { checker: 'identical' }),
+        plain(3, { checkerArgs: { stale: true } }),
+      ],
+    });
+    expect((parse(yaml!) as { test_cases: unknown[] }).test_cases).toEqual([
+      {
+        in: '1.in',
+        out: '1.out',
+        points: 1,
+        checker: { name: 'floats', args: { precision: 3 } },
+      },
+      { in: '2.in', out: '2.out', points: 1, checker: 'identical' },
+      { in: '3.in', out: '3.out', points: 1 },
+    ]);
+    expect(cases[2].checkerArgs).toBeNull();
+  });
+  it('composes the custom checker from the uploaded source: files, lang by extension, type default testlib', () => {
+    expect(
+      init({
+        checker: 'bridged',
+        customChecker: 'chk.cpp',
+        checkerArgs: { type: 'themis' },
+        cases: [plain(1)],
+      }).checker,
+    ).toEqual({
+      name: 'bridged',
+      args: { files: 'chk.cpp', lang: 'CPP17', type: 'themis' },
+    });
+    expect(
+      init({ checker: 'bridged', customChecker: 'chk.pas', cases: [plain(1)] })
+        .checker,
+    ).toEqual({
+      name: 'bridged',
+      args: { files: 'chk.pas', lang: 'PAS', type: 'testlib' },
+    });
+    failsWith(
+      { checker: 'bridged', cases: [plain(1)] },
+      'A custom checker file is required for the custom checker.',
+    );
+    failsWith(
+      { checker: 'bridged', customChecker: 'chk.py', cases: [plain(1)] },
+      'Only C++, Pascal, or Java checkers are supported.',
+    );
+  });
+  it('emits floats checkers with args and plain checkers without', () => {
+    expect(
+      init({
+        checker: 'floatsabs',
+        checkerArgs: { precision: 6 },
+        cases: [plain(1)],
+      }).checker,
+    ).toEqual({ name: 'floatsabs', args: { precision: 6 } });
+    expect(
+      init({ checker: 'linecount', checkerArgs: {}, cases: [plain(1)] })
+        .checker,
+    ).toBe('linecount');
+  });
+  it('maps graders: file io, interactive, signature (with allow_main), output_only', () => {
+    expect(
+      init({
+        graderArgs: {
+          io_method: 'file',
+          io_input_file: 'a.inp',
+          io_output_file: 'a.out',
+        },
+        cases: [plain(1)],
+      }).file_io,
+    ).toEqual({ input: 'a.inp', output: 'a.out' });
+    failsWith(
+      {
+        graderArgs: { io_method: 'file', io_input_file: 'a.inp' },
+        cases: [plain(1)],
+      },
+      'You must specify both input and output files.',
+    );
+    failsWith(
+      {
+        graderArgs: {
+          io_method: 'file',
+          io_input_file: 1,
+          io_output_file: 'a',
+        },
+        cases: [plain(1)],
+      },
+      'Input/Output file must be a string.',
+    );
+    expect(
+      init({
+        grader: 'interactive',
+        customGrader: 'inter.cpp',
+        cases: [plain(1)],
+      }).interactive,
+    ).toEqual({ files: 'inter.cpp', type: 'testlib', lang: 'CPP17' });
+    failsWith(
+      { grader: 'interactive', customGrader: 'inter.py', cases: [plain(1)] },
+      'Only accept `.cpp` interactor',
+    );
+    failsWith(
+      { grader: 'interactive', cases: [plain(1)] },
+      'Only accept `.cpp` interactor',
+    );
+    expect(
+      init({
+        grader: 'signature',
+        customGrader: 'entry.cpp',
+        customHeader: 'sig.h',
+        graderArgs: { allow_main: true },
+        cases: [plain(1)],
+      }).signature_grader,
+    ).toEqual({ entry: 'entry.cpp', header: 'sig.h', allow_main: true });
+    expect(
+      init({
+        grader: 'signature',
+        customGrader: 'entry.cpp',
+        customHeader: 'sig.h',
+        cases: [plain(1)],
+      }).signature_grader,
+    ).toEqual({ entry: 'entry.cpp', header: 'sig.h' });
+    failsWith(
+      {
+        grader: 'signature',
+        customGrader: 'entry.cpp',
+        customHeader: 'sig.hpp',
+        cases: [plain(1)],
+      },
+      'Only accept `.h` header',
+    );
+    failsWith(
+      {
+        grader: 'signature',
+        customGrader: 'entry.c',
+        customHeader: 'sig.h',
+        cases: [plain(1)],
+      },
+      'Only accept `.cpp` entry',
+    );
+    expect(init({ grader: 'output_only', cases: [plain(1)] })).toMatchObject({
+      output_only: true,
+    });
+  });
+  it('emits global limits and hints', () =>
+    expect(
+      init({
+        outputLimit: 100,
+        outputPrefix: 10,
+        unicode: true,
+        nobigmath: true,
+        cases: [plain(1, { outputLimit: 7, outputPrefix: 3 })],
+      }),
+    ).toMatchObject({
+      output_limit_length: 100,
+      output_prefix_length: 10,
+      hints: ['unicode', 'nobigmath'],
+      test_cases: [{ output_limit_length: 7, output_prefix_length: 3 }],
+    }));
+  it('does not mutate the input', () => {
+    const input = data({
+      cases: [testCase({ type: 'S', points: 1, input: 'junk' }), plain(1)],
+    });
+    compileInitYaml(input, files);
+    expect(input.cases[0].input).toBe('junk');
+  });
+  it('compiles 9999 cases in linear time', () => {
+    const build = (count: number) => {
+      const many = Array.from({ length: count }, (_item, index) =>
+        plain(index),
+      );
+      const entries = new Set(many.flatMap((row) => [row.input, row.output]));
+      const started = performance.now();
+      const { yaml } = compile({ cases: many }, entries);
+      return { yaml, elapsed: performance.now() - started };
+    };
+    build(999);
+    const small = build(999).elapsed;
+    const large = build(9999);
+    expect(
+      (parse(large.yaml!) as { test_cases: unknown[] }).test_cases,
+    ).toHaveLength(9999);
+    expect(large.elapsed).toBeLessThan(Math.max(small, 5) * 40);
+    expect(large.elapsed).toBeLessThan(5000);
+  });
+});
