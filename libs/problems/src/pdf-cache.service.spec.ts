@@ -3,6 +3,8 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  readdirSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,5 +44,25 @@ describe('PdfCacheService', () => {
     const scratch = await cache.scratchPath('sum.en.html');
     expect(scratch).toBe(join(root, '.tmp', 'sum.en.html'));
     expect(existsSync(join(root, '.tmp'))).toBe(true);
+  });
+  it.each(['../x', 'a/b', '', '.hidden', 'a..b'])(
+    'refuses the scratch name %j',
+    (name) =>
+      expect(cache.scratchPath(name)).rejects.toThrow(
+        'Unsafe scratch file name',
+      ),
+  );
+  it('refuses a language outside the statement languages', () =>
+    expect(() => cache.pathOf('sum', '../x' as 'en')).toThrow(
+      'Invalid statement language',
+    ));
+  it('refuses a scratch directory that is a symlink to outside the root', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));
+    rmSync(join(root, '.tmp'), { recursive: true, force: true });
+    symlinkSync(outside, join(root, '.tmp'));
+    await expect(cache.scratchPath('x.html')).rejects.toThrow('symlink');
+    expect(readdirSync(outside)).toEqual([]);
+    rmSync(join(root, '.tmp'));
+    rmSync(outside, { recursive: true, force: true });
   });
 });

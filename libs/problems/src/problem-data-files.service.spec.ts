@@ -4,6 +4,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -47,13 +48,71 @@ describe('ProblemDataFilesService', () => {
     (name) =>
       expect(() => files.pathOf('sum', name)).toThrow('Unsafe data file name'),
   );
-  it('refuses codes that escape the root', () => {
-    expect(() => files.directoryOf('../etc')).toThrow(
-      'Path escapes PROBLEM_DATA_ROOT',
+  it.each([
+    '.imports',
+    'a/b',
+    'Sum',
+    '../etc',
+    '',
+    'sum/../taken',
+    'x\0y',
+    'a'.repeat(33),
+  ])('refuses the code %j', (code) => {
+    expect(() => files.directoryOf(code)).toThrow('Invalid problem code');
+    expect(() => files.pathOf(code, 'init.yml')).toThrow(
+      'Invalid problem code',
     );
-    expect(() => files.directoryOf('')).toThrow(
-      'Path escapes PROBLEM_DATA_ROOT',
+  });
+  it('keeps the import queue out of rename', async () => {
+    await expect(files.rename('.imports', 'stolen')).rejects.toThrow(
+      'Invalid problem code',
     );
+  });
+  it('refuses to rename onto an existing directory and leaves it untouched', async () => {
+    await files.writeInit('keep', 'x: 1\n');
+    await files.writeInit('src', 'x: 2\n');
+    await expect(files.rename('src', 'keep')).rejects.toThrow(
+      'Data directory already exists: keep',
+    );
+    expect(await files.readInit('keep')).toBe('x: 1\n');
+    expect(await files.readInit('src')).toBe('x: 2\n');
+  });
+  it('leaves no reservation behind when the source is missing', async () => {
+    await files.rename('ghost2', 'reserved');
+    expect(existsSync(join(root, 'reserved'))).toBe(false);
+  });
+  it("refuses a staged path that is not this code's upload", async () => {
+    const staged = await files.stageUpload('sum');
+    await expect(
+      files.commitUpload('sum', join(root, 'other', 'upload-x.tmp'), 'a.zip'),
+    ).rejects.toThrow('Not a staged upload');
+    await expect(
+      files.commitUpload('sum', join(root, 'sum', 'init.yml'), 'a.zip'),
+    ).rejects.toThrow('Not a staged upload');
+    await expect(
+      files.commitUpload('sum', '/etc/passwd', 'a.zip'),
+    ).rejects.toThrow('Not a staged upload');
+    await expect(files.commitUpload('other', staged, 'a.zip')).rejects.toThrow(
+      'Not a staged upload',
+    );
+  });
+  it('refuses a problem directory that is a symlink to outside the root', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));
+    writeFileSync(join(outside, 'init.yml'), 'secret: 1\n');
+    symlinkSync(outside, join(root, 'planted'));
+    await expect(
+      files.writeFile('planted', 'a.txt', Buffer.from('x')),
+    ).rejects.toThrow('symlink');
+    await expect(files.readInit('planted')).rejects.toThrow('symlink');
+    await expect(files.removeInit('planted')).rejects.toThrow('symlink');
+    await expect(files.exists('planted')).rejects.toThrow('symlink');
+    expect(readdirSync(outside)).toEqual(['init.yml']);
+    rmSync(outside, { recursive: true, force: true });
+  });
+  it('accepts a long safe file name', async () => {
+    const name = `${'n'.repeat(225)}.zip`;
+    await files.writeFile('sum', name, Buffer.from('x'));
+    expect(await files.exists('sum', name)).toBe(true);
   });
   it('renames a directory, refuses an existing target and ignores a missing source', async () => {
     await files.writeInit('old', 'x: 1\n');

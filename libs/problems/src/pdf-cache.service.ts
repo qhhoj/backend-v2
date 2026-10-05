@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, rename, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { ENV } from '@libs/common';
+import { resolve, sep } from 'node:path';
+import { assertRealPathInside, ENV, SAFE_SEGMENT } from '@libs/common';
 import type { Env } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, STATEMENT_LANGUAGES } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
@@ -21,11 +21,15 @@ export class PdfCacheService {
   pathOf(code: string, lang: StatementLanguage): string {
     if (!PROBLEM_CODE_PATTERN.test(code))
       throw new Error(`Invalid problem code: ${code}`);
-    return join(this.root, `${code}.${lang}.pdf`);
+    if (!STATEMENT_LANGUAGES.includes(lang))
+      throw new Error(`Invalid statement language: ${lang}`);
+    return this.resolveInside(`${code}.${lang}.pdf`);
   }
 
-  exists(code: string, lang: StatementLanguage): Promise<boolean> {
-    return access(this.pathOf(code, lang)).then(
+  async exists(code: string, lang: StatementLanguage): Promise<boolean> {
+    const path = this.pathOf(code, lang);
+    await assertRealPathInside(this.root, path);
+    return access(path).then(
       () => true,
       () => false,
     );
@@ -45,8 +49,9 @@ export class PdfCacheService {
     lang: StatementLanguage,
     produce: (temporaryPath: string) => Promise<void>,
   ): Promise<void> {
-    await mkdir(this.root, { recursive: true });
     const target = this.pathOf(code, lang);
+    await mkdir(this.root, { recursive: true });
+    await assertRealPathInside(this.root, target);
     const temporary = `${target}.${randomUUID()}.tmp`;
     try {
       await produce(temporary);
@@ -58,8 +63,18 @@ export class PdfCacheService {
   }
 
   async scratchPath(name: string): Promise<string> {
-    const directory = join(this.root, SCRATCH_DIRECTORY);
-    await mkdir(directory, { recursive: true });
-    return join(directory, name);
+    if (!SAFE_SEGMENT.test(name) || name.includes('..'))
+      throw new Error(`Unsafe scratch file name: ${name}`);
+    const path = this.resolveInside(`${SCRATCH_DIRECTORY}/${name}`);
+    await mkdir(this.resolveInside(SCRATCH_DIRECTORY), { recursive: true });
+    await assertRealPathInside(this.root, path);
+    return path;
+  }
+
+  private resolveInside(relativePath: string): string {
+    const target = resolve(this.root, relativePath);
+    if (!target.startsWith(this.root + sep))
+      throw new Error(`Path escapes PDF_CACHE_ROOT: ${relativePath}`);
+    return target;
   }
 }
