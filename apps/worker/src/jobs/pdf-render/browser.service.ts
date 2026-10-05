@@ -9,17 +9,14 @@ import type { Env } from '@libs/common';
 import { isAllowedRequest } from './local-file-policy';
 import { KATEX_DIST_DIR, PAGE_FOOTER } from './pdf-template';
 
-export const RENDER_TIMEOUT_MS = 30_000;
-export const MAX_PDF_BYTES = 50 * 1024 * 1024;
-
 const withTimeout = <Value>(
   work: Promise<Value>,
-  message: string,
+  timeoutMs: number,
 ): Promise<Value> =>
   new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error(message)),
-      RENDER_TIMEOUT_MS,
+      () => reject(new Error(`PDF rendering exceeded ${timeoutMs} ms`)),
+      timeoutMs,
     );
     work.then(resolve, reject).finally(() => clearTimeout(timer));
   });
@@ -33,26 +30,38 @@ export class BrowserService implements OnModuleDestroy {
   constructor(@Inject(ENV) private readonly env: Env) {}
 
   async renderPdf(htmlPath: string, pdfPath: string): Promise<void> {
-    const allowedPaths = [htmlPath, KATEX_DIST_DIR, this.env.mediaRoot];
+    const pageUrl = pathToFileURL(htmlPath).href;
+    const resourcePaths = [KATEX_DIST_DIR, this.env.mediaRoot];
     const context = await (
       await this.launch()
-    ).newContext({ javaScriptEnabled: false, serviceWorkers: 'block' });
+    ).newContext({
+      javaScriptEnabled: false,
+      serviceWorkers: 'block',
+      acceptDownloads: false,
+    });
     try {
-      // Any request not for an allowed local file (statement images, iframes, redirects) is aborted: no SSRF from user content.
-      await context.route('**/*', async (route) =>
-        (await isAllowedRequest(route.request().url(), allowedPaths))
+      // Statement content (images, iframes, stylesheets, redirects) may only load KaTeX and MEDIA_ROOT files: no SSRF, no other local file.
+      // The page file itself is allowed only as the top-level navigation, so an `<iframe src="?x">` cannot embed it again.
+      // `data:` and `srcdoc` documents are not routed by Playwright; they are inert (no JavaScript, and their requests go through this route).
+      await context.route('**/*', async (route) => {
+        const request = route.request();
+        const isPage =
+          request.url() === pageUrl &&
+          request.isNavigationRequest() &&
+          request.frame().parentFrame() === null;
+        return isPage || (await isAllowedRequest(request.url(), resourcePaths))
           ? route.continue()
-          : route.abort(),
-      );
+          : route.abort();
+      });
       const page = await context.newPage();
       await withTimeout(
-        this.printPage(page, htmlPath, pdfPath),
-        `PDF rendering exceeded ${RENDER_TIMEOUT_MS} ms`,
+        this.printPage(page, pageUrl, pdfPath),
+        this.env.pdfRenderTimeoutMs,
       );
       const { size } = await stat(pdfPath);
-      if (size > MAX_PDF_BYTES)
+      if (size > this.env.pdfMaxBytes)
         throw new Error(
-          `PDF is ${size} bytes, over the ${MAX_PDF_BYTES} limit`,
+          `PDF is ${size} bytes, over the ${this.env.pdfMaxBytes} limit`,
         );
     } finally {
       await context.close();
@@ -61,10 +70,10 @@ export class BrowserService implements OnModuleDestroy {
 
   private async printPage(
     page: Awaited<ReturnType<Browser['newPage']>>,
-    htmlPath: string,
+    pageUrl: string,
     pdfPath: string,
   ): Promise<void> {
-    await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'load' });
+    await page.goto(pageUrl, { waitUntil: 'load' });
     await page.pdf({
       path: pdfPath,
       format: 'A4',
@@ -79,18 +88,28 @@ export class BrowserService implements OnModuleDestroy {
   private launch(): Promise<Browser> {
     // file:// documents are opaque origins: without this flag Chromium blocks KaTeX's @font-face loads and falls back to system fonts.
     this.browser ??= chromium
-      .launch({ args: ['--allow-file-access-from-files'] })
+      .launch({
+        args: [
+          '--allow-file-access-from-files',
+          '--host-resolver-rules=MAP * ~NOTFOUND',
+        ],
+      })
       .then((browser) => {
         browser.on('disconnected', () => {
           this.logger.warn('Chromium exited; it relaunches on the next job');
           this.browser = null;
         });
         return browser;
+      })
+      .catch((error: unknown) => {
+        this.browser = null;
+        throw error;
       });
     return this.browser;
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.browser) await (await this.browser).close();
+    const browser = await this.browser?.catch(() => null);
+    await browser?.close();
   }
 }

@@ -26,6 +26,12 @@ export interface Env {
   problemDataRoot: string;
   /** Rendered statement PDFs, `<root>/<code>.<lang>.pdf`; shared between api and worker. */
   pdfCacheRoot: string;
+  /** Worker: a single PDF render (page load and printing) is aborted after this long. */
+  pdfRenderTimeoutMs: number;
+  /** Worker: a rendered PDF larger than this is discarded. */
+  pdfMaxBytes: number;
+  /** Worker: PDF renders running at once. */
+  pdfConcurrency: number;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
     google: OAuthClient | null;
@@ -77,6 +83,12 @@ export function loadEnv(
       problems.push(`${name} requires both CLIENT_ID and CLIENT_SECRET`);
     return clientId && clientSecret ? { clientId, clientSecret } : null;
   };
+  const positiveInteger = (name: string, fallback: number): number => {
+    const value = Number(source[name] ?? fallback);
+    if (!Number.isInteger(value) || value < 1)
+      problems.push(`${name} must be a positive integer`);
+    return value;
+  };
   const env: Env = {
     mongoUrl: required('MONGO_URL'),
     redisUrl: required('REDIS_URL'),
@@ -97,6 +109,9 @@ export function loadEnv(
     mediaUrl: (source.MEDIA_URL || '/media').replace(/\/+$/, ''),
     problemDataRoot: required('PROBLEM_DATA_ROOT'),
     pdfCacheRoot: required('PDF_CACHE_ROOT'),
+    pdfRenderTimeoutMs: positiveInteger('PDF_RENDER_TIMEOUT_MS', 30_000),
+    pdfMaxBytes: positiveInteger('PDF_MAX_BYTES', 52_428_800),
+    pdfConcurrency: positiveInteger('PDF_CONCURRENCY', 2),
     oauth: {
       google: oauthClient('GOOGLE'),
       facebook: oauthClient('FACEBOOK'),

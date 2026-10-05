@@ -35,6 +35,39 @@ describe('pdf template', () => {
       '<link rel="stylesheet" href="file:///repo/node_modules/katex/dist/katex.min.css">',
     );
   });
+  it.each([
+    [
+      'double quotes',
+      '<img src="/media/a.png">',
+      'src="file:///var/lib/qhhoj/media/a.png"',
+    ],
+    [
+      'single quotes',
+      "<img src='/media/a.png'>",
+      "src='file:///var/lib/qhhoj/media/a.png'",
+    ],
+    [
+      'no quotes',
+      '<img src=/media/a.png>',
+      'src=file:///var/lib/qhhoj/media/a.png',
+    ],
+    [
+      'an anchor',
+      '<a href="/media/m.zip">m</a>',
+      'href="file:///var/lib/qhhoj/media/m.zip"',
+    ],
+  ])(
+    'resolves media urls written with %s',
+    (_label, descriptionHtml, expected) =>
+      expect(buildPdfHtml({ ...input, descriptionHtml })).toContain(expected),
+  );
+  it('leaves lookalike prefixes alone', () =>
+    expect(
+      buildPdfHtml({
+        ...input,
+        descriptionHtml: '<img src="/mediafoo/a.png">',
+      }),
+    ).toContain('src="/mediafoo/a.png"'));
   it('lists limits, per-language limits and the materials link', () => {
     const html = buildPdfHtml(input);
     expect(html).toContain('<b>Time limit:</b> 1.5s');

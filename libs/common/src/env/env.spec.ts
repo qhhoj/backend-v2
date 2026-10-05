@@ -5,7 +5,14 @@ const valid = validEnv;
 
 describe('loadEnv', () => {
   it('applies defaults', () =>
-    expect(loadEnv(valid)).toEqual({
+    expect(
+      loadEnv({
+        ...valid,
+        PDF_RENDER_TIMEOUT_MS: undefined,
+        PDF_MAX_BYTES: undefined,
+        PDF_CONCURRENCY: undefined,
+      }),
+    ).toEqual({
       mongoUrl: valid.MONGO_URL,
       redisUrl: valid.REDIS_URL,
       encryptionKey: valid.ENCRYPTION_KEY,
@@ -21,6 +28,9 @@ describe('loadEnv', () => {
       mediaRoot: valid.MEDIA_ROOT,
       problemDataRoot: valid.PROBLEM_DATA_ROOT,
       pdfCacheRoot: valid.PDF_CACHE_ROOT,
+      pdfRenderTimeoutMs: 30000,
+      pdfMaxBytes: 52428800,
+      pdfConcurrency: 2,
       mediaUrl: '/media',
       oauth: { google: null, facebook: null, github: null },
     }));
@@ -59,6 +69,26 @@ describe('loadEnv', () => {
       cookieSecure: false,
       pwnedApiUrl: null,
     }));
+  it('reads the PDF render limits', () =>
+    expect(
+      loadEnv({
+        ...valid,
+        PDF_RENDER_TIMEOUT_MS: '200',
+        PDF_MAX_BYTES: '1000',
+        PDF_CONCURRENCY: '4',
+      }),
+    ).toMatchObject({
+      pdfRenderTimeoutMs: 200,
+      pdfMaxBytes: 1000,
+      pdfConcurrency: 4,
+    }));
+  it.each(['0', '-1', '1.5', 'abc', ''])(
+    'rejects PDF_CONCURRENCY=%j',
+    (value) =>
+      expect(() => loadEnv({ ...valid, PDF_CONCURRENCY: value })).toThrow(
+        'PDF_CONCURRENCY must be a positive integer',
+      ),
+  );
   it('strips the trailing slash of MEDIA_URL', () =>
     expect(
       loadEnv({ ...valid, MEDIA_URL: 'https://cdn.test/media/' }).mediaUrl,

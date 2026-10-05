@@ -8,4 +8,7 @@ export const validEnv = {
   MEDIA_ROOT: '/var/lib/qhhoj/media',
   PROBLEM_DATA_ROOT: '/var/lib/qhhoj/problems',
   PDF_CACHE_ROOT: '/var/lib/qhhoj/pdf-cache',
+  PDF_RENDER_TIMEOUT_MS: '30000',
+  PDF_MAX_BYTES: '52428800',
+  PDF_CONCURRENCY: '2',
 };

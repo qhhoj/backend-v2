@@ -8,13 +8,16 @@ import {
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
 import type { Job } from 'bullmq';
 import { chromium } from 'playwright';
+import { ENV } from '@libs/common';
+import type { Env } from '@libs/common';
 import { newId } from '@libs/database';
 import { renderMarkdown } from '@libs/render';
 import type { PdfRenderJob } from '@libs/problems';
+import { BrowserService } from '../src/jobs/pdf-render/browser.service';
 import { PdfRenderProcessor } from '../src/jobs/pdf-render/pdf-render.processor';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
@@ -125,6 +128,28 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
       description: missingImage,
       descriptionHtml: renderMarkdown(missingImage, 'problem'),
     });
+    const outside = join(worker.pdfCacheRoot, 'outside.png');
+    writeFileSync(outside, NOISE_PNG);
+    const outsideReferences = [
+      `<img src="file://${outside}">`,
+      `<img src="/media/${relative(worker.mediaRoot, outside)}">`,
+      `<base href="file://${worker.pdfCacheRoot}/"><img src="outside.png">`,
+      `<img src="file://${outside}?x#y">`,
+    ].join('');
+    await worker.problems.create({
+      ...base,
+      code: 'outside',
+      name: 'Outside',
+      description: 'raw',
+      descriptionHtml: `<p>Hello</p>${outsideReferences}`,
+    });
+    await worker.problems.create({
+      ...base,
+      code: 'selfframes',
+      name: 'Self frames',
+      description: 'raw',
+      descriptionHtml: `<p>Hello</p>${'<iframe src="?x"></iframe>'.repeat(50)}`,
+    });
     await worker.problems.create({
       ...base,
       code: 'hostile',
@@ -162,6 +187,45 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
     expect(
       pdfOf('hostile.en.pdf').length - pdfOf('nomedia.en.pdf').length,
     ).toBeLessThan(EMBEDDED_IMAGE_MIN_BYTES);
+  });
+  it('does not load local files outside MEDIA_ROOT and KaTeX, however they are referenced', async () => {
+    await processor.process(job({ code: 'hostile', lang: 'en' }));
+    await processor.process(job({ code: 'outside', lang: 'en' }));
+    expect(
+      pdfOf('outside.en.pdf').length - pdfOf('hostile.en.pdf').length,
+    ).toBeLessThan(EMBEDDED_IMAGE_MIN_BYTES);
+  });
+  it('does not let the page embed itself through iframes', async () => {
+    await processor.process(job({ code: 'hostile', lang: 'en' }));
+    const started = Date.now();
+    await processor.process(job({ code: 'selfframes', lang: 'en' }));
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(
+      pdfOf('selfframes.en.pdf').length - pdfOf('hostile.en.pdf').length,
+    ).toBeLessThan(EMBEDDED_IMAGE_MIN_BYTES);
+  });
+  it('relaunches Chromium after a failed launch', async () => {
+    const browser = new BrowserService(worker.module.get<Env>(ENV));
+    const htmlPath = join(worker.pdfCacheRoot, 'launch.html');
+    writeFileSync(htmlPath, '<p>hi</p>');
+    const pdfPath = join(worker.pdfCacheRoot, 'launch.pdf');
+    jest
+      .spyOn(chromium, 'launch')
+      .mockRejectedValueOnce(new Error('no chromium'));
+    await expect(browser.renderPdf(htmlPath, pdfPath)).rejects.toThrow(
+      'no chromium',
+    );
+    await browser.renderPdf(htmlPath, pdfPath);
+    expect(pdfOf('launch.pdf').subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    await browser.onModuleDestroy();
+  });
+  it('tolerates shutdown after a failed launch', async () => {
+    const browser = new BrowserService(worker.module.get<Env>(ENV));
+    jest.spyOn(chromium, 'launch').mockRejectedValueOnce(new Error('boom'));
+    await browser
+      .renderPdf('/nonexistent.html', '/nonexistent.pdf')
+      .catch(() => undefined);
+    await expect(browser.onModuleDestroy()).resolves.toBeUndefined();
   });
   it('leaves no scratch html behind', () => {
     expect(readdirSync(join(worker.pdfCacheRoot, '.tmp'))).toEqual([]);

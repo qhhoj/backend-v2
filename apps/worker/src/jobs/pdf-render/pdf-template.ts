@@ -57,10 +57,19 @@ const unwrapTables = (html: string) =>
       '<table class="table">',
     )
     .replaceAll('</table></div>', '</table>');
-/** Media is read straight from the shared volume (no network from a PDF render); `//host` links become https like legacy. */
+const escapeRegExp = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Media is read straight from the shared volume (no network from a PDF render), in double-quoted, single-quoted and unquoted `src`/`href`; `//host` links become https like legacy. */
 const absolutify = (html: string, mediaUrl: string, mediaRoot: string) =>
   html
-    .replaceAll(`="${mediaUrl}/`, `="${pathToFileURL(mediaRoot).href}/`)
+    .replace(
+      new RegExp(
+        `(\\b(?:src|href)\\s*=\\s*["']?)${escapeRegExp(mediaUrl)}/`,
+        'gi',
+      ),
+      (_match, attribute: string) =>
+        `${attribute}${pathToFileURL(mediaRoot).href}/`,
+    )
     .replaceAll('="//', '="https://')
     .replaceAll("='//", "='https://");
 

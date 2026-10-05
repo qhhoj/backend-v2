@@ -22,7 +22,10 @@ const temporaryDirectory = (prefix: string) =>
 
 export async function setupWorkerTest({
   overrides = [],
+  env = {},
 }: {
+  /** Extra environment variables (e.g. render limits), applied before the module compiles. */
+  env?: Record<string, string>;
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
 } = {}) {
   const replSet = await startMongo();
@@ -36,6 +39,7 @@ export async function setupWorkerTest({
     MEDIA_ROOT: roots.mediaRoot,
     PROBLEM_DATA_ROOT: roots.problemDataRoot,
     PDF_CACHE_ROOT: roots.pdfCacheRoot,
+    ...env,
   });
   const cleanup = async () => {
     await replSet.stop();
