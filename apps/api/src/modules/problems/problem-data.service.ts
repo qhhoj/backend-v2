@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { rm } from 'node:fs/promises';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, isDocumentTooLarge, RateLimitService } from '@libs/common';
+import {
+  AppError,
+  isDocumentTooLarge,
+  RateLimitService,
+  writeFileAtomically,
+} from '@libs/common';
 import { DATA_FILE_KINDS, emptyProblemData } from '@libs/database';
 import type { DataFileKind, Problem, ProblemData } from '@libs/database';
 import {
@@ -196,23 +201,30 @@ export class ProblemDataService {
       throw rejectFile(
         `Allowed extensions for ${kind}: ${SOURCE_EXTENSIONS[kind].join(', ')}`,
       );
-    const { data: previous, version } = await this.loadData(problem);
-    this.assertNameFree(previous, kind, name);
-    const { stored, archiveFiles } = await this.compileAndStore(
-      problem,
-      { ...previous, [kind]: name },
-      version,
-    );
-    await this.dataFiles.writeFile(problem.code, name, content);
-    await this.removeReplaced(problem.code, previous[kind], name);
-    await this.recordChange(
-      auth,
-      problem,
-      previous,
-      stored,
-      `${kind} uploaded`,
-    );
-    return this.response(auth.principal, problem, stored, archiveFiles);
+    const staged = await this.dataFiles.stageUpload(problem.code);
+    try {
+      await writeFileAtomically(staged, content);
+      const { data: previous, version } = await this.loadData(problem);
+      this.assertNameFree(previous, kind, name);
+      const { stored, archiveFiles } = await this.compileAndStore(
+        problem,
+        { ...previous, [kind]: name },
+        version,
+      );
+      await this.dataFiles.commitUpload(problem.code, staged, name);
+      await this.removeReplaced(problem.code, previous[kind], name);
+      await this.recordChange(
+        auth,
+        problem,
+        previous,
+        stored,
+        `${kind} uploaded`,
+      );
+      return this.response(auth.principal, problem, stored, archiveFiles);
+    } catch (error) {
+      await rm(staged, { force: true });
+      throw error;
+    }
   }
 
   /** Clears the field and recompiles first (Mongo stays authoritative), then drops the file. */

@@ -131,7 +131,8 @@ export class ProblemDataFilesService {
       if (!entry.startsWith(UPLOAD_PREFIX)) continue;
       const path = this.resolveInside(`${code}/${entry}`);
       const stats = await lstat(path).catch(() => null);
-      if (stats && stats.mtimeMs < oldest) await rm(path, { force: true });
+      if (stats?.isFile() && stats.mtimeMs < oldest)
+        await rm(path, { force: true });
     }
   }
 

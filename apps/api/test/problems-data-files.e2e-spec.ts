@@ -1,10 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { ProblemsRepository } from '../src/modules/problems/problems.repository';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { listZipEntries } from '@libs/problems';
 import { buildZip } from '@libs/problems/testing';
 import { ProblemDataResponse } from '../src/modules/problems/dto/problem-data.response';
+import { ProblemsRepository } from '../src/modules/problems/problems.repository';
 import {
   authed,
   createProblem,
@@ -261,7 +261,13 @@ describe('problem data files', () => {
         readdirSync(directory).filter((name) => name.startsWith('.')),
       ).toEqual([]);
     });
-    it('lets exactly one of two concurrent archive uploads win, intact on disk', async () => {
+    it('lets exactly one of two concurrent same-name archive uploads win, intact on disk', async () => {
+      await upload(
+        `${PROBLEMS}/sum/data/archive`,
+        editor,
+        buildZip(tests(1)),
+        'first.zip',
+      ).expect(201);
       const repository = api.app.get(ProblemsRepository);
       const original = repository.findByCodeWithData.bind(repository);
       let arrived = 0;
@@ -275,31 +281,35 @@ describe('problem data files', () => {
           await bothRead;
           return problem;
         });
-      const [first, second] = await Promise.all([
+      const [small, large] = await Promise.all([
         upload(
           `${PROBLEMS}/sum/data/archive`,
           editor,
           buildZip(tests(2)),
-          'one.zip',
+          'tests.zip',
         ),
         upload(
           `${PROBLEMS}/sum/data/archive`,
           editor,
           buildZip(tests(4)),
-          'two.zip',
+          'tests.zip',
         ),
       ]);
       spy.mockRestore();
-      expect([first.status, second.status].sort()).toEqual([201, 409]);
+      expect([small.status, large.status].sort()).toEqual([201, 409]);
       const stored = await storedData();
-      expect(stored.archive).toBe(first.status === 201 ? 'one.zip' : 'two.zip');
-      expect(
-        await listZipEntries(join(directory, stored.archive as string)),
-      ).toEqual(stored.archiveFiles);
-      expect(initArchive()).toBe(stored.archive);
+      expect(stored.archive).toBe('tests.zip');
+      expect(stored.archiveFiles).toHaveLength(small.status === 201 ? 4 : 8);
+      expect(await listZipEntries(join(directory, 'tests.zip'))).toEqual(
+        stored.archiveFiles,
+      );
+      expect(initArchive()).toBe('tests.zip');
       expect(
         readdirSync(directory).filter((name) => name.endsWith('.zip')),
-      ).toEqual([stored.archive]);
+      ).toEqual(['tests.zip']);
+      expect(
+        readdirSync(directory).filter((name) => name.startsWith('.')),
+      ).toEqual([]);
     });
     it('keeps the old source when a same-name re-upload loses the CAS', async () => {
       const url = `${PROBLEMS}/sum/data/files/generator`;
@@ -309,7 +319,9 @@ describe('problem data files', () => {
       spy.mockRestore();
       expect(readFileSync(join(directory, 'gen.cpp'), 'utf8')).toBe('v1');
     });
-    it('lets exactly one of two concurrent source uploads win with its own file', async () => {
+    it('lets exactly one of two concurrent same-name source uploads win with its own content', async () => {
+      const url = `${PROBLEMS}/sum/data/files/generator`;
+      await upload(url, editor, Buffer.from('old'), 'first.cpp').expect(201);
       const repository = api.app.get(ProblemsRepository);
       const original = repository.findByCodeWithData.bind(repository);
       let arrived = 0;
@@ -323,21 +335,20 @@ describe('problem data files', () => {
           await bothRead;
           return problem;
         });
-      const url = `${PROBLEMS}/sum/data/files/generator`;
       const [first, second] = await Promise.all([
-        upload(url, editor, Buffer.from('first'), 'a.cpp'),
-        upload(url, editor, Buffer.from('second'), 'b.cpp'),
+        upload(url, editor, Buffer.from('first'), 'gen2.cpp'),
+        upload(url, editor, Buffer.from('second'), 'gen2.cpp'),
       ]);
       spy.mockRestore();
       expect([first.status, second.status].sort()).toEqual([201, 409]);
-      const { generator } = await storedData();
-      expect(generator).toBe(first.status === 201 ? 'a.cpp' : 'b.cpp');
-      expect(readFileSync(join(directory, generator as string), 'utf8')).toBe(
+      expect((await storedData()).generator).toBe('gen2.cpp');
+      expect(readFileSync(join(directory, 'gen2.cpp'), 'utf8')).toBe(
         first.status === 201 ? 'first' : 'second',
       );
+      expect(existsSync(join(directory, 'first.cpp'))).toBe(false);
       expect(
-        existsSync(join(directory, first.status === 201 ? 'b.cpp' : 'a.cpp')),
-      ).toBe(false);
+        readdirSync(directory).filter((name) => name.startsWith('.')),
+      ).toEqual([]);
     });
   });
   it('deletes a file, clears the field and recompiles', async () => {

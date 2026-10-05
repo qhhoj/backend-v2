@@ -521,6 +521,5 @@ describe('compileInitYaml', () => {
     ).toHaveLength(9999);
     expect(large.elapsed).toBeLessThan(Math.max(small, 5) * 40);
     expect(large.elapsed).toBeLessThan(5000);
-    console.log();
   });
 });
