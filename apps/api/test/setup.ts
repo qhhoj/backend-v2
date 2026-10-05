@@ -15,6 +15,9 @@ import {
   ProblemGroup,
   ProblemType,
   Revision,
+  Tag,
+  TagGroup,
+  TagProblem,
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
@@ -26,6 +29,8 @@ import { LanguagesQuerier } from '../src/modules/problems/languages.querier';
 import { LicensesQuerier } from '../src/modules/problems/licenses.querier';
 import { ProblemGroupsQuerier } from '../src/modules/problems/problem-groups.querier';
 import { ProblemTypesQuerier } from '../src/modules/problems/problem-types.querier';
+import { TagGroupsQuerier } from '../src/modules/tags/tag-groups.querier';
+import { TagsQuerier } from '../src/modules/tags/tags.querier';
 import { setupOpenApi } from '../src/openapi';
 
 export { TEST_ENV };
@@ -87,6 +92,11 @@ export async function setupApiTest({
     problems: readyApp.get<Model<Problem>>(getModelToken(Problem.name)),
     revisions: readyApp.get<Model<Revision>>(getModelToken(Revision.name)),
     licenses: readyApp.get<Model<License>>(getModelToken(License.name)),
+    tagGroups: readyApp.get<Model<TagGroup>>(getModelToken(TagGroup.name)),
+    tags: readyApp.get<Model<Tag>>(getModelToken(Tag.name)),
+    tagProblems: readyApp.get<Model<TagProblem>>(
+      getModelToken(TagProblem.name),
+    ),
     languages: readyApp.get<Model<Language>>(getModelToken(Language.name)),
     /** Streams are disabled in tests; call after inserting catalog rows. */
     resyncCatalog: async () => {
@@ -96,6 +106,8 @@ export async function setupApiTest({
           ProblemGroupsQuerier,
           LicensesQuerier,
           LanguagesQuerier,
+          TagGroupsQuerier,
+          TagsQuerier,
         ].map((querier) => readyApp.get(querier).resync()),
       );
     },
