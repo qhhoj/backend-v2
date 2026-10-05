@@ -1,5 +1,7 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import type { FastifyRequest } from 'fastify';
 import { rm } from 'node:fs/promises';
 import type { AuthContext, Principal } from '@libs/auth';
@@ -9,7 +11,11 @@ import {
   RateLimitService,
   writeFileAtomically,
 } from '@libs/common';
-import { DATA_FILE_KINDS, emptyProblemData } from '@libs/database';
+import {
+  DATA_FILE_KINDS,
+  emptyProblemData,
+  STATEMENT_LANGUAGES,
+} from '@libs/database';
 import type { DataFileKind, Problem, ProblemData } from '@libs/database';
 import {
   compileInitYaml,
@@ -17,11 +23,14 @@ import {
   extensionOf,
   listZipEntries,
   ProblemDataError,
+  PDF_QUEUE,
   PdfCacheService,
+  pdfJobId,
   ProblemDataFilesService,
   safeFileName,
   ZipError,
 } from '@libs/problems';
+import type { PdfRenderJob } from '@libs/problems';
 import { PutProblemDataDto } from './dto/problem-data.dto';
 import type { SourceFileKind } from './dto/problem-data.dto';
 import { ProblemDataResponse } from './dto/problem-data.response';
@@ -89,6 +98,7 @@ export class ProblemDataService implements OnModuleInit {
     private readonly rateLimit: RateLimitService,
     private readonly pdfCache: PdfCacheService,
     private readonly events: ProblemEvents,
+    @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
   ) {}
 
   /** Both volumes are keyed by code: the data directory follows the problem; cached PDFs are stale after a rename or any statement change. */
@@ -106,8 +116,8 @@ export class ProblemDataService implements OnModuleInit {
   /** The new code's PDFs go too: a reused code must not serve another problem's statement. The orphan check in `edit` is not atomic with this move, so a lost race shows up only as the log line. */
   private async moveData(oldCode: string, newCode: string): Promise<void> {
     try {
-      await this.pdfCache.delete(oldCode);
-      await this.pdfCache.delete(newCode);
+      await this.dropPdfsOf(oldCode);
+      await this.dropPdfsOf(newCode);
       await this.dataFiles.rename(oldCode, newCode);
     } catch (error) {
       this.logger.error(
@@ -120,10 +130,20 @@ export class ProblemDataService implements OnModuleInit {
   private async dropPdfs(problemId: string): Promise<void> {
     try {
       const problem = await this.repository.findById(problemId);
-      if (problem) await this.pdfCache.delete(problem.code);
+      if (problem) await this.dropPdfsOf(problem.code);
     } catch (error) {
       this.logger.error(`Dropping cached PDFs of ${problemId} failed`, error);
     }
+  }
+
+  /** Cached files and render jobs (a failed one would keep answering 503 for a statement that has changed since); an active job cannot be removed, the worker's stale check covers it. */
+  private async dropPdfsOf(code: string): Promise<void> {
+    await this.pdfCache.delete(code);
+    await Promise.all(
+      STATEMENT_LANGUAGES.map((lang) =>
+        this.pdfQueue.remove(pdfJobId(code, lang)),
+      ),
+    );
   }
 
   async get(auth: AuthContext, code: string): Promise<ProblemDataResponse> {

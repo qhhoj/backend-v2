@@ -4,6 +4,7 @@ export class AppError extends Error {
     readonly status = 400,
     message = code,
     readonly fields?: Record<string, string[]>,
+    readonly headers?: Record<string, string>,
   ) {
     super(message);
   }

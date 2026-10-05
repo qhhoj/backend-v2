@@ -5,6 +5,5 @@ export const UPLOAD_WINDOW_SECONDS = 60 * 60;
 /** Per client IP; only enqueue attempts count, cached hits are free. */
 export const PDF_RENDER_LIMIT = 30;
 export const PDF_RENDER_WINDOW_SECONDS = 60;
-/** Fresh render jobs per problem and language before clients get 503 instead of 202 (failed jobs are removed, so every failure shows up as a new job). */
-export const PDF_JOB_RETRY_LIMIT = 5;
-export const PDF_JOB_RETRY_WINDOW_SECONDS = 10 * 60;
+/** A failed render job is kept this long: requests get 503 + Retry-After meanwhile, then it is cleared and rendering is retried. */
+export const PDF_FAIL_WINDOW_SECONDS = 10 * 60;

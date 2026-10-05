@@ -24,13 +24,16 @@ export class AppExceptionFilter implements ExceptionFilter {
     const req = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
     if (exception instanceof AppError)
-      return reply.status(exception.status).send({
-        error: {
-          code: exception.code,
-          message: exception.message,
-          ...(exception.fields && { fields: exception.fields }),
-        },
-      });
+      return reply
+        .status(exception.status)
+        .headers(exception.headers ?? {})
+        .send({
+          error: {
+            code: exception.code,
+            message: exception.message,
+            ...(exception.fields && { fields: exception.fields }),
+          },
+        });
     if (exception instanceof HttpException && exception.getStatus() < 500)
       return reply.status(exception.getStatus()).send({
         error: {

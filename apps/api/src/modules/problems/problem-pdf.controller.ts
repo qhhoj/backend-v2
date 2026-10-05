@@ -1,6 +1,5 @@
 import { Controller, Get, Param, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { createReadStream } from 'node:fs';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import {
@@ -28,13 +27,22 @@ export class ProblemPdfController {
       request.ip,
       code,
       lang,
+      request.method !== 'HEAD',
     );
-    if (location.status === 'ready')
+    if (location.status === 'rendering')
+      return reply.code(202).send({ data: { status: 'rendering' } });
+    const { file, filename } = location;
+    try {
+      const { size } = await file.stat();
       return reply
         .type('application/pdf')
         .header('X-Content-Type-Options', 'nosniff')
-        .header('Content-Disposition', `inline; filename="${code}.${lang}.pdf"`)
-        .send(createReadStream(location.path));
-    return reply.code(202).send({ data: { status: 'rendering' } });
+        .header('Content-Disposition', `inline; filename="${filename}"`)
+        .header('Content-Length', size)
+        .send(file.createReadStream());
+    } catch (error) {
+      await file.close();
+      throw error;
+    }
   }
 }
