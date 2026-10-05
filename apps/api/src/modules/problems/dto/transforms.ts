@@ -8,3 +8,6 @@ export const toBoolean = ({ value }: { value: unknown }): unknown =>
     : value === 'false' || value === '0'
       ? false
       : value;
+/** Surrounding whitespace is dropped; non-strings are left for the validators. */
+export const trim = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;

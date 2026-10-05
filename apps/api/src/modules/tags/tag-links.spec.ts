@@ -28,5 +28,7 @@ describe('parseProblemLink', () => {
     'https://codeforces.com/problemset/problem/1/A/',
     'https://example.com/p/1',
     'https://codeforces.com/problemset/problem/1/A?x=1',
+    `https://codeforces.com/problemset/problem/1/${'A'.repeat(40)}`,
+    `https://open.kattis.com/problems/${'a'.repeat(27)}`,
   ])('rejects %s', (link) => expect(parseProblemLink(link)).toBeNull());
 });

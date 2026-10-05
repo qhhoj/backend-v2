@@ -243,4 +243,62 @@ describe('tag catalogue', () => {
     await api.http().get(`${TAGS}/GHOST`).expect(404);
     await api.http().get(`${TAGS}/not%20a%20code`).expect(404);
   });
+  it('rejects bad input and resolves codes case-insensitively', async () => {
+    const tooLong = `https://codeforces.com/problemset/problem/1/${'A'.repeat(40)}`;
+    expect(
+      fieldsOf(
+        await authed(api.http().post(TAGS), tagger)
+          .send({ link: tooLong, name: 'X' })
+          .expect(400),
+      ),
+    ).toHaveProperty('link');
+    expect(
+      fieldsOf(
+        await authed(api.http().post(TAGS), tagger)
+          .send({ link: 'https://oj.vnoi.info/problem/post', name: '   ' })
+          .expect(400),
+      ),
+    ).toHaveProperty('name');
+    await authed(api.http().post(TAGS), tagger)
+      .send({ link: 'https://oj.vnoi.info/problem/post', name: '  Post  ' })
+      .expect(201);
+    const found = dataOf<TagProblemResponse>(
+      await api.http().get(`${TAGS}/vnoj_POST`).expect(200),
+    );
+    expect(found).toMatchObject({ code: 'VNOJ_post', name: 'Post' });
+
+    await api
+      .http()
+      .post(`${TAGS}/VNOJ_post/assign`)
+      .send({ tagCodes: ['bfs'] })
+      .expect(401);
+    const assigned = dataOf<TagProblemResponse>(
+      await authed(api.http().post(`${TAGS}/vnoj_post/assign`), tagger)
+        .send({ tagCodes: ['BFS', 'bfs', 'dp-basic', 'bfs'] })
+        .expect(200),
+    );
+    expect(assigned.tags.map((tag) => tag.code)).toEqual(['bfs', 'dp-basic']);
+    await authed(api.http().post(`${TAGS}/VNOJ_post/assign`), tagger)
+      .send({ tagCodes: ['knapsack'] })
+      .expect(200);
+    const revisions = await api.revisions
+      .find({ entity: 'tagProblem', action: 'assign', entityId: found.id })
+      .sort({ createdAt: 1 })
+      .lean();
+    expect(revisions.map((revision) => revision.changes)).toEqual([
+      { tags: { before: [], after: ['bfs', 'dp-basic'] } },
+      {
+        tags: {
+          before: ['bfs', 'dp-basic'],
+          after: ['bfs', 'dp-basic', 'knapsack'],
+        },
+      },
+    ]);
+    expect(
+      dataOf<TagProblemListItemResponse[]>(
+        await api.http().get(`${TAGS}?tag=BFS`).expect(200),
+      ).map((item) => item.code),
+    ).toEqual(['CF_1_A', 'VNOJ_post']);
+    await api.http().get(`${TAGS}?judges=Bogus`).expect(400);
+  });
 });

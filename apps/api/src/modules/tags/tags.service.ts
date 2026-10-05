@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { AppError, Paginated } from '@libs/common';
+import { AppError, isDuplicateKey, Paginated } from '@libs/common';
 import { TAG_PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Tag, TagProblem } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
@@ -94,18 +94,20 @@ export class TagsService {
         link: ['This link or online judge is not currently supported.'],
       });
     if (await this.repository.findByCode(parsed.code))
-      throw new AppError(
-        'conflict',
-        409,
-        `Tag problem ${parsed.code} already exists`,
-      );
-    const problem = await this.repository.create({
-      code: parsed.code,
-      name: dto.name,
-      link: dto.link,
-      judge: parsed.judge,
-      tags: [],
-    });
+      throw this.alreadyExists(parsed.code);
+    const problem = await this.repository
+      .create({
+        code: parsed.code,
+        name: dto.name,
+        link: dto.link,
+        judge: parsed.judge,
+        tags: [],
+      })
+      .catch((error: unknown) => {
+        throw isDuplicateKey(error, 'code')
+          ? this.alreadyExists(parsed.code)
+          : error;
+      });
     await this.repository.appendRevision({
       entityId: problem._id,
       action: 'create',
@@ -118,6 +120,10 @@ export class TagsService {
       comment: 'Created on site',
     });
     return this.response(problem);
+  }
+
+  private alreadyExists(code: string): AppError {
+    return new AppError('conflict', 409, `Tag problem ${code} already exists`);
   }
 
   /** Adds the tags that are not on the problem yet (legacy ignores duplicates) and records who added what. */
@@ -135,17 +141,22 @@ export class TagsService {
       throw new AppError('validation_failed', 400, 'Unknown tags', {
         tagCodes: [`Unknown tag: ${unknown.join(', ')}`],
       });
-    const added: string[] = [];
-    for (const tag of [...new Set(dto.tagCodes)].map((tagCode) =>
-      this.tags.byCode(tagCode)!,
-    ))
+    const before = this.tagsOf(problem);
+    const requested = new Map(
+      dto.tagCodes.map((tagCode) => {
+        const tag = this.tags.byCode(tagCode)!;
+        return [tag._id, tag];
+      }),
+    );
+    const added: Tag[] = [];
+    for (const tag of requested.values())
       if (
         await this.repository.assign(problem._id, {
           tagId: tag._id,
           assignerId: auth.principal.userId,
         })
       )
-        added.push(tag.name);
+        added.push(tag);
     if (added.length)
       await this.repository.appendRevision({
         entityId: problem._id,
@@ -153,11 +164,11 @@ export class TagsService {
         userId: auth.principal.userId,
         changes: {
           tags: {
-            before: this.tagsOf(problem).map((tag) => tag.code),
-            after: added,
+            before: before.map((tag) => tag.code),
+            after: [...before, ...added].sort(byCode).map((tag) => tag.code),
           },
         },
-        comment: `Assigned new tags ${added.join(', ')} from site`,
+        comment: `Assigned new tags ${added.map((tag) => tag.name).join(', ')} from site`,
       });
     return this.detail(problem.code);
   }

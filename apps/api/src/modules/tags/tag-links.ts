@@ -1,3 +1,5 @@
+import { TAG_PROBLEM_CODE_PATTERN } from '@libs/database';
+
 /** Legacy `OJ_PROBLEM_PRESET`: the external judges whose problem urls we can turn into a tag-problem code. */
 const PRESETS: ReadonlyArray<{
   pattern: RegExp;
@@ -48,8 +50,11 @@ export function parseProblemLink(
 ): { code: string; judge: string } | null {
   for (const preset of PRESETS) {
     const match = preset.pattern.exec(link);
-    if (match)
-      return { code: preset.code(match.slice(1)), judge: preset.judge };
+    if (!match) continue;
+    const code = preset.code(match.slice(1));
+    return TAG_PROBLEM_CODE_PATTERN.test(code)
+      ? { code, judge: preset.judge }
+      : null;
   }
   return null;
 }

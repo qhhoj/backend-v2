@@ -33,8 +33,10 @@ export class TagsQuerier extends BaseCatalogQuerier<Tag> {
     return super.byIds(ids).map(withGroupIdString);
   }
 
+  /** Case-insensitive, like the unique index on `code`. */
   byCode(code: string): Tag | null {
-    return this.all().find((tag) => tag.code === code) ?? null;
+    const wanted = code.toLowerCase();
+    return this.all().find((tag) => tag.code.toLowerCase() === wanted) ?? null;
   }
 
   byGroup(groupId: string): Tag[] {
