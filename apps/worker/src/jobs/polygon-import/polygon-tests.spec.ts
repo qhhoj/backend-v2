@@ -1,0 +1,310 @@
+import { emptyProblemData } from '@libs/database';
+import { compileInitYaml } from '@libs/problems';
+import { buildProblemXml } from '../../../test/polygon-fixtures';
+import { PolygonImportError } from './polygon-import.error';
+import { formatPathPattern, planTests } from './polygon-tests';
+import type { TestPlan } from './polygon-tests';
+import { parseXml } from './polygon-xml';
+
+const options = { ignoreZeroPointBatches: false, ignoreZeroPointCases: false };
+const plan = (fixture: Parameters<typeof buildProblemXml>[0], overrides = {}) =>
+  planTests(parseXml(buildProblemXml(fixture)), { ...options, ...overrides });
+const test = (points?: number, group?: string) => ({
+  input: 'i',
+  answer: 'o',
+  points,
+  group,
+});
+const rows = (cases: TestPlan['cases']) =>
+  cases.map(
+    (row) =>
+      `${row.type}${row.points ?? ''}${row.input ? `:${row.input}` : ''}`,
+  );
+const fixtureXml = (xml: string) => planTests(parseXml(xml), options);
+const withTimeLimit = (value: string, points = '1') =>
+  `<problem><judging><testset name="tests"><time-limit>${value}</time-limit><memory-limit>1048576</memory-limit><input-path-pattern>t/%d</input-path-pattern><answer-path-pattern>t/%d.a</answer-path-pattern><tests><test points="${points}"/></tests></testset></judging></problem>`;
+
+describe('planTests', () => {
+  it('formats path patterns like printf', () => {
+    expect(formatPathPattern('tests/%02d', 7)).toBe('tests/07');
+    expect(formatPathPattern('tests/%02d.a', 123)).toBe('tests/123.a');
+    expect(formatPathPattern('tests/%d', 7)).toBe('tests/7');
+    expect(() => formatPathPattern('tests/%2147483647d', 7)).toThrow(
+      PolygonImportError,
+    );
+  });
+
+  it('converts limits (ms to s, bytes to KB, clamped) and names the repacked files', () => {
+    const result = plan({
+      tests: [test(), test()],
+      timeLimitMs: 2500,
+      memoryLimitBytes: 4 * 1024 ** 3,
+    });
+    expect(result).toMatchObject({
+      timeLimit: 2.5,
+      memoryLimit: 1048576,
+      partial: false,
+    });
+    expect(result.tests[1]).toEqual({
+      index: 1,
+      inputPath: 'tests/02',
+      answerPath: 'tests/02.a',
+      inputName: '02.inp',
+      outputName: '02.out',
+    });
+    expect(rows(result.cases)).toEqual(['C0:01.inp', 'C1:02.inp']);
+  });
+
+  it('builds complete-group batches and flattens each-test groups', () => {
+    const result = plan({
+      tests: [
+        test(0, 'g1'),
+        test(0, 'g1'),
+        test(5, 'g2'),
+        test(5, 'g2'),
+        test(7),
+      ],
+      groups: [
+        { name: 'g1', points: 30, policy: 'complete-group' },
+        { name: 'g2', points: 0, policy: 'each-test' },
+      ],
+    });
+    expect(result.partial).toBe(true);
+    expect(rows(result.cases)).toEqual([
+      'S30',
+      'C:01.inp',
+      'C:02.inp',
+      'E',
+      'C5:03.inp',
+      'C5:04.inp',
+      'C7:05.inp',
+    ]);
+  });
+
+  it('folds dependencies and rejects them on each-test groups', () => {
+    const result = plan({
+      tests: [test(0, 'g1'), test(0, 'g2'), test(0, 'g3')],
+      groups: [
+        { name: 'g1', points: 10, policy: 'complete-group' },
+        {
+          name: 'g2',
+          points: 20,
+          policy: 'complete-group',
+          dependencies: ['g1'],
+        },
+        {
+          name: 'g3',
+          points: 30,
+          policy: 'complete-group',
+          dependencies: ['g2'],
+        },
+      ],
+    });
+    expect(rows(result.cases)).toEqual([
+      'S10',
+      'C:01.inp',
+      'E',
+      'S20',
+      'C:01.inp',
+      'C:02.inp',
+      'E',
+      'S30',
+      'C:01.inp',
+      'C:02.inp',
+      'C:03.inp',
+      'E',
+    ]);
+    expect(() =>
+      plan({
+        tests: [test(1, 'g')],
+        groups: [
+          { name: 'g', points: 1, policy: 'each-test', dependencies: ['x'] },
+        ],
+      }),
+    ).toThrow(
+      new PolygonImportError(
+        'dependencies are only supported for batches with complete-group point policy',
+      ),
+    );
+    expect(() =>
+      plan({
+        tests: [test(1, 'g')],
+        groups: [
+          {
+            name: 'g',
+            points: 1,
+            policy: 'complete-group',
+            dependencies: ['x'],
+          },
+        ],
+      }),
+    ).toThrow(new PolygonImportError('unknown dependency group x'));
+  });
+
+  it('survives dependency cycles', () => {
+    const result = plan({
+      tests: [test(0, 'a'), test(0, 'b')],
+      groups: [
+        { name: 'a', points: 1, policy: 'complete-group', dependencies: ['b'] },
+        { name: 'b', points: 1, policy: 'complete-group', dependencies: ['a'] },
+      ],
+    });
+    expect(rows(result.cases)).toEqual([
+      'S1',
+      'C:01.inp',
+      'C:02.inp',
+      'E',
+      'S1',
+      'C:01.inp',
+      'C:02.inp',
+      'E',
+    ]);
+  });
+
+  it('normalises fractional points with the gcd', () => {
+    const result = plan({
+      tests: [test(0.5, 'g1'), test(1.5), test(2.5)],
+      groups: [{ name: 'g1', points: 0.5, policy: 'complete-group' }],
+    });
+    expect(rows(result.cases)).toEqual([
+      'S1',
+      'C:01.inp',
+      'E',
+      'C3:02.inp',
+      'C5:03.inp',
+    ]);
+  });
+
+  it('gives the last case one point when nothing scores, and can drop zero-point batches and cases', () => {
+    expect(rows(plan({ tests: [test(0), test(0)] }).cases)).toEqual([
+      'C0:01.inp',
+      'C1:02.inp',
+    ]);
+    const fixture = {
+      tests: [test(0, 'g0'), test(0), test(3)],
+      groups: [{ name: 'g0', points: 0, policy: 'complete-group' as const }],
+    };
+    expect(rows(plan(fixture).cases)).toEqual([
+      'S0',
+      'C:01.inp',
+      'E',
+      'C0:02.inp',
+      'C3:03.inp',
+    ]);
+    expect(
+      rows(
+        plan(fixture, {
+          ignoreZeroPointBatches: true,
+          ignoreZeroPointCases: true,
+        }).cases,
+      ),
+    ).toEqual(['C3:03.inp']);
+  });
+
+  it('reads file io from judging and rejects a testset without tests', () => {
+    expect(
+      plan({
+        tests: [test(1)],
+        judging: { inputFile: 'a.inp', outputFile: 'a.out' },
+      }).graderArgs,
+    ).toEqual({
+      io_method: 'file',
+      io_input_file: 'a.inp',
+      io_output_file: 'a.out',
+    });
+    expect(plan({ tests: [test(1)] }).graderArgs).toBeNull();
+    expect(() => plan({ tests: [] })).toThrow(
+      new PolygonImportError('no testcases found'),
+    );
+  });
+
+  it('never marks a case with a problem-wide-only checker', () => {
+    const result = plan({
+      tests: [test(1, 'g'), test(2)],
+      groups: [{ name: 'g', points: 1, policy: 'complete-group' }],
+    });
+    expect(
+      result.cases.every(
+        (row) => row.checker === '' && row.checkerArgs === null,
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['a non-numeric time limit', withTimeLimit('fast'), 'time limit'],
+    [
+      'a missing time limit',
+      withTimeLimit('').replace('<time-limit></time-limit>', ''),
+      'time limit',
+    ],
+    ['non-numeric points', withTimeLimit('1000', 'many'), 'points'],
+    ['negative points', withTimeLimit('1000', '-5'), 'points'],
+    ['infinite points', withTimeLimit('1000', '1e999'), 'points'],
+  ])('rejects %s without hanging', (_label, xml, message) =>
+    expect(() => fixtureXml(xml)).toThrow(message),
+  );
+
+  it('rejects more tests or groups than a problem may hold, before doing quadratic work', () => {
+    const tests = Array.from({ length: 10_000 }, () => test(1));
+    expect(() => plan({ tests })).toThrow(
+      new PolygonImportError('too many testcases'),
+    );
+    const groups = Array.from({ length: 1001 }, (_item, index) => ({
+      name: `g${index}`,
+      points: 1,
+      policy: 'complete-group' as const,
+    }));
+    expect(() => plan({ tests: [test(1)], groups })).toThrow(
+      new PolygonImportError('too many groups'),
+    );
+    const chain = (length: number) => ({
+      tests: [test(1)],
+      groups: Array.from({ length }, (_item, index) => ({
+        name: `g${index}`,
+        points: 1,
+        policy: 'complete-group' as const,
+        dependencies: index ? [`g${index - 1}`] : [],
+      })),
+    });
+    const timed = (work: () => unknown) => {
+      const started = performance.now();
+      work();
+      return Math.max(performance.now() - started, 1);
+    };
+    plan(chain(10));
+    const small = timed(() => plan(chain(10)));
+    // Dependency closure is quadratic in the group count; the group cap keeps that bounded.
+    expect(timed(() => plan(chain(1000)))).toBeLessThan(small * 100 * 100);
+  });
+
+  it('feeds init.yml compilation cleanly: batches, each-test cases and fractional points', () => {
+    const result = plan({
+      tests: [test(0, 'g1'), test(0, 'g1'), test(0.5, 'g2'), test(1.5)],
+      groups: [
+        { name: 'g1', points: 2.5, policy: 'complete-group' },
+        { name: 'g2', points: 0, policy: 'each-test' },
+      ],
+    });
+    const names = result.tests.flatMap((planned) => [
+      planned.inputName,
+      planned.outputName,
+    ]);
+    const compiled = compileInitYaml(
+      {
+        ...emptyProblemData(),
+        cases: result.cases,
+        graderArgs: result.graderArgs,
+      },
+      new Set(names),
+    );
+    expect(compiled.yaml).toContain('batched');
+    expect(
+      compiled.cases.filter((row) => row.type === 'S').map((row) => row.points),
+    ).toEqual([5]);
+    expect(
+      compiled.cases
+        .filter((row) => row.type === 'C' && row.points !== null)
+        .map((row) => row.points),
+    ).toEqual([1, 3]);
+  });
+});
