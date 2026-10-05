@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type { Permission } from '@libs/auth';
-import { isDocumentTooLarge } from '@libs/common';
+import { isDocumentTooLarge, isDuplicateKey } from '@libs/common';
 import {
   DATA_FILE_KINDS,
   dataVersionIs,
@@ -14,6 +14,7 @@ import {
   PROBLEM_LIMITS,
   Revision,
   User,
+  uuidStr,
 } from '@libs/database';
 import type { ProblemData, ProblemTranslation } from '@libs/database';
 import { dataChanges, fieldDiff } from '@libs/problems';
@@ -43,7 +44,6 @@ export interface AppliedImport {
 }
 
 const FULL_MARKUP_PERMISSION: Permission = 'judge.problem_full_markup';
-const DUPLICATE_KEY = 11000;
 
 const definedOnly = <Fields extends object>(fields: Fields): Fields =>
   Object.fromEntries(
@@ -62,11 +62,11 @@ const summaryOf = (problem: Partial<Problem>) => ({
   memoryLimit: problem.memoryLimit,
   partial: problem.partial,
   points: problem.points,
-  groupId: problem.groupId,
-  typeIds: problem.typeIds,
-  allowedLanguages: problem.allowedLanguages,
-  authors: problem.authors,
-  curators: problem.curators,
+  groupId: problem.groupId && uuidStr(problem.groupId),
+  typeIds: problem.typeIds?.map(uuidStr),
+  allowedLanguages: problem.allowedLanguages?.map(uuidStr),
+  authors: problem.authors?.map(uuidStr),
+  curators: problem.curators?.map(uuidStr),
 });
 
 @Injectable()
@@ -88,6 +88,14 @@ export class PolygonImportRepository {
   async resolveTarget(job: PolygonImportJob): Promise<ImportTarget> {
     const existing = await this.problems.findOne({ code: job.code }).exec();
     this.checkTarget(job, existing);
+    if (
+      existing &&
+      job.expectedDataVersion !== undefined &&
+      existing.dataVersion !== job.expectedDataVersion
+    )
+      throw new PolygonImportError(
+        'Test data changed since the import was queued',
+      );
     return existing && { dataVersion: existing.dataVersion };
   }
 
@@ -102,7 +110,10 @@ export class PolygonImportRepository {
       ...(requester?.permissions ?? []),
       ...groups.flatMap((group) => group.permissions),
     ]);
-    if (!requester?.isSuperuser && !permissions.has(FULL_MARKUP_PERMISSION))
+    if (
+      !requester?.isActive ||
+      (!requester.isSuperuser && !permissions.has(FULL_MARKUP_PERMISSION))
+    )
       throw new PolygonImportError(
         `Full markup requires ${FULL_MARKUP_PERMISSION}`,
       );
@@ -119,7 +130,7 @@ export class PolygonImportRepository {
         this.write(job, imported, target, session),
       );
     } catch (error) {
-      if ((error as { code?: number }).code === DUPLICATE_KEY)
+      if (isDuplicateKey(error, 'code'))
         throw new PolygonImportError(
           `problem with code ${job.code} already exists`,
         );
@@ -151,7 +162,7 @@ export class PolygonImportRepository {
       memoryLimit: imported.memoryLimit,
       partial: imported.partial,
       data: imported.data,
-      // A package without a tutorial leaves an existing editorial alone; a new one keeps the editorial's publication state.
+      // A re-import with a tutorial keeps the editorial's publication state (it is never un-published); one without a tutorial removes the editorial.
       solution: imported.solution && {
         isPublic: false,
         publishOn: new Date(),

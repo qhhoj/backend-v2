@@ -8,11 +8,11 @@ import {
 import { PolygonImportError } from './polygon-import.error';
 import { PolygonPackage } from './polygon-package';
 import {
-  assertStatementMarkdown,
   buildDescription,
   mainSolution,
   parseStatements,
   rehostImages,
+  renderStatement,
   withMainSolution,
 } from './polygon-statements';
 import type { PolygonImportJob } from '@libs/problems';
@@ -150,6 +150,7 @@ describe('polygon statements', () => {
         language: 'vi',
         name: 'Tổng',
         description: expect.stringContaining('Cộng.') as string,
+        descriptionHtml: expect.stringContaining('Cộng.') as string,
       },
     ]);
     expect(result.tutorial).toBe('Cộng lại.');
@@ -332,16 +333,16 @@ describe('statement paths and validation', () => {
   });
   it('accepts ordinary statements and rejects what an editor would reject', () => {
     expect(() =>
-      assertStatementMarkdown('Fine $x$.', 'problem', 'statement'),
+      renderStatement('Fine $x$.', 'problem', 'statement'),
     ).not.toThrow();
     expect(() =>
-      assertStatementMarkdown('a'.repeat(200_001), 'problem', 'statement'),
+      renderStatement('a'.repeat(200_001), 'problem', 'statement'),
     ).toThrow(PolygonImportError);
+    expect(() => renderStatement('say “hi”', 'problem', 'statement')).toThrow(
+      /disallowed characters/,
+    );
     expect(() =>
-      assertStatementMarkdown('say “hi”', 'problem', 'statement'),
-    ).toThrow(/disallowed characters/);
-    expect(() =>
-      assertStatementMarkdown('<div>'.repeat(600), 'problem-full', 'statement'),
+      renderStatement('<div>'.repeat(600), 'problem-full', 'statement'),
     ).toThrow(PolygonImportError);
   });
   it('fails the import, not the worker, when a converted statement is invalid', async () => {

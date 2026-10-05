@@ -10,7 +10,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import type { Job } from 'bullmq';
 import type { Model } from 'mongoose';
 import { parse } from 'yaml';
-import { newId, Revision } from '@libs/database';
+import { Group, newId, Problem, Revision } from '@libs/database';
 import { listZipEntries } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { PNG } from '@libs/problems/testing';
@@ -169,6 +169,7 @@ describe('PolygonImportProcessor', () => {
       await worker.users.create({
         username: 'writer',
         password: '!',
+        isActive: true,
         permissions: ['judge.problem_full_markup'],
       })
     )._id;
@@ -331,7 +332,13 @@ describe('PolygonImportProcessor', () => {
     ]);
   });
 
-  it('applies what an update is given', async () => {
+  it('applies what an update is given and records only real changes', async () => {
+    const latestChanges = async () =>
+      Object.keys(
+        (await revisions
+          .findOne({ action: 'import' })
+          .sort({ createdAt: -1, _id: -1 }))!.changes,
+      );
     await processor.process(
       bareUpdate({ points: 1200, groupId: otherGroupId, authors: [writerId] }),
     );
@@ -340,6 +347,74 @@ describe('PolygonImportProcessor', () => {
       groupId: otherGroupId,
       authors: [writerId],
       typeIds: [typeId],
+    });
+    expect(await latestChanges()).toEqual(
+      expect.arrayContaining(['points', 'groupId', 'authors']),
+    );
+    await processor.process(
+      bareUpdate({
+        points: 1200,
+        groupId: otherGroupId,
+        authors: [writerId],
+        typeIds: [typeId],
+        allowedLanguages: [],
+        curators: [],
+      }),
+    );
+    expect(await latestChanges()).not.toEqual(
+      expect.arrayContaining(['points']),
+    );
+    expect(await latestChanges()).toEqual(
+      expect.not.arrayContaining([
+        'groupId',
+        'typeIds',
+        'authors',
+        'curators',
+        'allowedLanguages',
+        'points',
+      ]),
+    );
+  });
+
+  it('keeps a published editorial on re-import and removes it when the package has no tutorial', async () => {
+    await worker.problems.updateOne(
+      { code: 'sum' },
+      { $set: { 'solution.isPublic': true, 'solution.authors': [writerId] } },
+    );
+    await processor.process(bareUpdate());
+    expect(
+      (await worker.problems.findOne({ code: 'sum' }))!.solution,
+    ).toMatchObject({ isPublic: true, authors: [writerId] });
+    const noTutorial = {
+      ...fixture,
+      statements: [
+        {
+          ...fixture.statements![0],
+          properties: properties({ legend: 'Add.', tutorial: '' }),
+        },
+      ],
+    };
+    await processor.process(
+      bareUpdate(
+        { appendMainSolution: false },
+        buildPolygonPackage(noTutorial),
+      ),
+    );
+    expect(
+      (await worker.problems.findOne({ code: 'sum' }))!.solution,
+    ).toBeNull();
+  });
+
+  it('refuses an update when the data version moved since the job was queued', async () => {
+    const { dataVersion } = (await worker.problems.findOne({ code: 'sum' }))!;
+    const imagesBefore = imageCount();
+    await expect(
+      processor.process(bareUpdate({ expectedDataVersion: dataVersion - 1 })),
+    ).rejects.toThrow('Test data changed since the import was queued');
+    expect(imageCount()).toBe(imagesBefore);
+    await processor.process(bareUpdate({ expectedDataVersion: dataVersion }));
+    expect(await worker.problems.findOne({ code: 'sum' })).toMatchObject({
+      dataVersion: dataVersion + 1,
     });
   });
 
@@ -460,6 +535,44 @@ describe('PolygonImportProcessor', () => {
     });
   });
 
+  it('accepts full-markup writers through a group or superuser rights and refuses inactive or unknown requesters', async () => {
+    const group = await worker.module
+      .get<Model<Group>>(getModelToken(Group.name))
+      .create({ name: 'Markup', permissions: ['judge.problem_full_markup'] });
+    const viaGroup = await worker.users.create({
+      username: 'grouped',
+      password: '!',
+      isActive: true,
+      groups: [group._id],
+    });
+    const superuser = await worker.users.create({
+      username: 'root',
+      password: '!',
+      isActive: true,
+      isSuperuser: true,
+    });
+    const inactive = await worker.users.create({
+      username: 'dormant',
+      password: '!',
+      permissions: ['judge.problem_full_markup'],
+    });
+    await processor.process(
+      job({ code: 'viagroup', isFullMarkup: true, requesterId: viaGroup._id }),
+    );
+    await processor.process(
+      job({ code: 'viaroot', isFullMarkup: true, requesterId: superuser._id }),
+    );
+    for (const requester of [inactive._id, newId()]) {
+      await expect(
+        processor.process(
+          job({ code: 'denied', isFullMarkup: true, requesterId: requester }),
+        ),
+      ).rejects.toThrow('judge.problem_full_markup');
+    }
+    expect(await worker.problems.countDocuments({ code: 'denied' })).toBe(0);
+    expect(existsSync(dataDirectory('denied'))).toBe(false);
+  });
+
   it('refuses an update whose markup mode changed since the job was queued', async () => {
     const imagesBefore = imageCount();
     await expect(
@@ -507,6 +620,61 @@ describe('PolygonImportProcessor', () => {
     expect(readdirSync(dataDirectory('sum')).sort()).toEqual(filesBefore);
     expect(imageCount()).toBe(imagesBefore);
   });
+
+  it('removes the empty data directory of an update that fails after staging', async () => {
+    await worker.problems.create({
+      code: 'nodir',
+      name: 'No dir',
+      timeLimit: 1,
+      memoryLimit: 1024,
+      points: 800,
+      typeIds: [typeId],
+      groupId,
+    });
+    const repository = worker.module.get(PolygonImportRepository);
+    const resolveTarget = repository.resolveTarget.bind(repository);
+    const stale = jest
+      .spyOn(repository, 'resolveTarget')
+      .mockImplementationOnce(async (importJob) => {
+        const target = await resolveTarget(importJob);
+        await worker.problems.updateOne(
+          { code: 'nodir' },
+          { $inc: { dataVersion: 1 } },
+        );
+        return target;
+      });
+    await expect(
+      processor.process(bareUpdate({ code: 'nodir' })),
+    ).rejects.toThrow('changed');
+    stale.mockRestore();
+    expect(existsSync(dataDirectory('nodir'))).toBe(false);
+  });
+
+  it.each([
+    [
+      'a duplicate code',
+      { code: 11000, keyPattern: { code: 1 } },
+      'already exists',
+    ],
+    ['a too-large document', { code: 10334 }, 'too large'],
+  ])(
+    'maps %s from the transaction to an import error and cleans up',
+    async (_label, mongoError, message) => {
+      const imagesBefore = imageCount();
+      const create = jest
+        .spyOn(
+          worker.module.get<Model<Problem>>(getModelToken(Problem.name)),
+          'create',
+        )
+        .mockRejectedValueOnce(Object.assign(new Error('mongo'), mongoError));
+      await expect(processor.process(job({ code: 'raced' }))).rejects.toThrow(
+        message,
+      );
+      create.mockRestore();
+      expect(existsSync(dataDirectory('raced'))).toBe(false);
+      expect(imageCount()).toBe(imagesBefore);
+    },
+  );
 
   it('refuses an update of a mirror problem', async () => {
     await worker.problems.updateOne(

@@ -20,13 +20,15 @@ import type {
   PolygonImportResult,
 } from '@libs/problems';
 import type { Readable } from 'node:stream';
-import type { RenderStyle } from '@libs/render';
 import { PandocService } from './pandoc.service';
 import { parseAssets } from './polygon-assets';
 import type { PolygonAssets } from './polygon-assets';
 import { PolygonImportError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
-import type { ImportedProblem } from './polygon-import.repository';
+import type {
+  ImportedProblem,
+  ImportTarget,
+} from './polygon-import.repository';
 import {
   CHECKER_FILE,
   INTERACTOR_FILE,
@@ -41,7 +43,6 @@ import {
   renderStatement,
   withMainSolution,
 } from './polygon-statements';
-import type { ImportedStatements } from './polygon-statements';
 import { planTests } from './polygon-tests';
 import type { PlannedTest } from './polygon-tests';
 
@@ -80,7 +81,7 @@ export class PolygonImportService {
    */
   private async run(
     job: PolygonImportJob,
-    target: Awaited<ReturnType<PolygonImportRepository['resolveTarget']>>,
+    target: ImportTarget,
   ): Promise<PolygonImportResult> {
     const pkg = await PolygonPackage.open(job.packagePath);
     const savedImages: string[] = [];
@@ -123,8 +124,10 @@ export class PolygonImportService {
         cases: plan.cases,
       };
       const compiled = this.compile(data, plan.tests);
+      const { tutorial, ...statement } = statements;
       const imported: ImportedProblem = {
-        ...this.renderStatements(statements, job.isFullMarkup),
+        ...statement,
+        solution: this.renderTutorial(tutorial),
         timeLimit: plan.timeLimit,
         memoryLimit: plan.memoryLimit,
         partial: plan.partial,
@@ -145,8 +148,7 @@ export class PolygonImportService {
       await this.dropPdfs(job.code);
       return { problemId: applied.problemId, code: job.code };
     } catch (error) {
-      if (!committed)
-        await this.undo(job, savedImages, staged, target === null);
+      if (!committed) await this.undo(job, savedImages, staged);
       throw error;
     } finally {
       pkg.close();
@@ -158,16 +160,14 @@ export class PolygonImportService {
     job: PolygonImportJob,
     savedImages: string[],
     staged: StagedFile[],
-    isCreate: boolean,
   ): Promise<void> {
     await Promise.all([
       ...savedImages.map((relativePath) => this.storage.delete(relativePath)),
       ...staged.map(({ stagedPath }) => rm(stagedPath, { force: true })),
     ]).catch(() => undefined);
-    if (isCreate)
-      await this.dataFiles
-        .removeDirectoryIfEmpty(job.code)
-        .catch(() => undefined);
+    await this.dataFiles
+      .removeDirectoryIfEmpty(job.code)
+      .catch(() => undefined);
   }
 
   /** `rehostImages` has already sniffed the bytes and sanitised SVG; the extension follows the sniffed type. */
@@ -193,39 +193,15 @@ export class PolygonImportService {
     }
   }
 
-  /** The editor's render path and limits (`parseStatements` already applied them to the description, translations and tutorial; the appended solution source is new text), style following the target problem. */
-  private renderStatements(
-    statements: ImportedStatements,
-    isFullMarkup: boolean,
-  ): Pick<
-    ImportedProblem,
-    'name' | 'description' | 'descriptionHtml' | 'translations' | 'solution'
-  > {
-    const style: RenderStyle = isFullMarkup ? 'problem-full' : 'problem';
-    const tutorial = statements.tutorial.trim();
-    return {
-      name: statements.name,
-      description: statements.description,
-      descriptionHtml: renderStatement(
-        statements.description,
-        style,
-        'description',
-      ),
-      translations: statements.translations.map((translation) => ({
-        ...translation,
-        descriptionHtml: renderStatement(
-          translation.description,
-          style,
-          `statement ${translation.language}`,
-        ),
-      })),
-      solution: tutorial
-        ? {
-            content: tutorial,
-            contentHtml: renderStatement(tutorial, 'solution', 'tutorial'),
-          }
-        : null,
-    };
+  /** The appended solution source is text `parseStatements` never saw, so the finished editorial gets the editor's limits and the sanitising `solution` style here. */
+  private renderTutorial(markdown: string): ImportedProblem['solution'] {
+    const content = markdown.trim();
+    return content
+      ? {
+          content,
+          contentHtml: renderStatement(content, 'solution', 'tutorial'),
+        }
+      : null;
   }
 
   private async stageFiles(

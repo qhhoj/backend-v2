@@ -36,11 +36,14 @@ export type ImageSaver = (bytes: Buffer, name: string) => Promise<string>;
 export interface ImportedStatements {
   name: string;
   description: string;
+  descriptionHtml: string;
   translations: Array<{
     language: StatementLanguage;
     name: string;
     description: string;
+    descriptionHtml: string;
   }>;
+  /** Markdown only: the caller appends the main solution, then renders the whole. */
   tutorial: string;
 }
 interface StatementSource {
@@ -204,15 +207,6 @@ export function renderStatement(
   }
 }
 
-/** `renderStatement` for callers that only need the limits checked. */
-export function assertStatementMarkdown(
-  text: string,
-  style: RenderStyle,
-  label: string,
-): void {
-  renderStatement(text, style, label);
-}
-
 /** The editor's rules for a statement name: 1..100 characters, no disallowed ones. */
 function assertStatementName(name: string, language: string): void {
   if (name.length < 1 || name.length > MAX_NAME_LENGTH)
@@ -312,6 +306,7 @@ export async function parseStatements(
   const result: ImportedStatements = {
     name: '',
     description: '',
+    descriptionHtml: '',
     translations: [],
     tutorial: '',
   };
@@ -322,10 +317,15 @@ export async function parseStatements(
       pkg,
       saveImage,
     );
-    assertStatementMarkdown(description, style, `statement ${source.language}`);
+    const descriptionHtml = renderStatement(
+      description,
+      style,
+      `statement ${source.language}`,
+    );
     if (source.language === mainLanguage) {
       result.name = source.name;
       result.description = description;
+      result.descriptionHtml = descriptionHtml;
       continue;
     }
     /** Languages come from problem.xml: `constructor` or `__proto__` must not resolve through the prototype. */
@@ -348,6 +348,7 @@ export async function parseStatements(
       language: siteLanguage,
       name: source.name,
       description,
+      descriptionHtml,
     });
   }
   const tutorials = sources.filter(
@@ -370,7 +371,6 @@ export async function parseStatements(
       pkg,
       saveImage,
     );
-    assertStatementMarkdown(result.tutorial, 'solution', 'tutorial');
   }
   return result;
 }

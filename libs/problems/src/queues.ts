@@ -35,6 +35,8 @@ export interface PolygonImportJob {
   ignoreZeroPointBatches: boolean;
   ignoreZeroPointCases: boolean;
   appendMainSolution: boolean;
+  /** The problem's `dataVersion` when the import was queued (update only); the worker refuses if it moved since. */
+  expectedDataVersion?: number;
 }
 
 export interface PolygonImportResult {
