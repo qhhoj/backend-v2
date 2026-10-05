@@ -214,7 +214,8 @@ describe('problem uploads', () => {
     ).expect(404);
     expect(await api.revisions.countDocuments({ action: 'upload' })).toBe(1);
   });
-  it('stores materials under materials/<code>/<safe name>', async () => {
+  it('stores materials under materials/<problem id>/<safe name>', async () => {
+    const problemId = (await api.problems.findOne({ code: 'sum' }))!._id;
     const url = urlOf(
       await upload(
         `${PROBLEMS}/sum/material`,
@@ -223,9 +224,16 @@ describe('problem uploads', () => {
         'my file (final).zip',
       ).expect(201),
     );
-    expect(url).toBe('/media/materials/sum/my_file_final.zip');
+    expect(url).toBe(`/media/materials/${problemId}/my_file_final.zip`);
     expect(
-      existsSync(join(api.mediaRoot, 'materials', 'sum', 'my_file_final.zip')),
+      existsSync(
+        join(
+          api.mediaRoot,
+          'materials',
+          String(problemId),
+          'my_file_final.zip',
+        ),
+      ),
     ).toBe(true);
     expect((await api.problems.findOne({ code: 'sum' }))!.materialUrl).toBe(
       url,
@@ -304,13 +312,14 @@ describe('problem uploads', () => {
     ).toBe(sharedUrl);
   });
   it.each([
-    ['../../../evil.zip', '/media/materials/sum/evil.zip'],
-    ['..%2F..%2Fevil.zip', '/media/materials/sum/2F.2Fevil.zip'],
-    ['.hidden.txt', '/media/materials/sum/hidden.txt'],
-    ['a/b\\..\\c.zip', '/media/materials/sum/c.zip'],
+    ['../../../evil.zip', 'evil.zip'],
+    ['..%2F..%2Fevil.zip', '2F.2Fevil.zip'],
+    ['.hidden.txt', 'hidden.txt'],
+    ['a/b\\..\\c.zip', 'c.zip'],
   ])(
     'never lets the material name %s leave its directory',
-    async (name, expected) => {
+    async (name, safeName) => {
+      const problemId = (await api.problems.findOne({ code: 'sum' }))!._id;
       expect(
         urlOf(
           await upload(
@@ -320,7 +329,7 @@ describe('problem uploads', () => {
             name,
           ).expect(201),
         ),
-      ).toBe(expected);
+      ).toBe(`/media/materials/${problemId}/${safeName}`);
     },
   );
   it.each([

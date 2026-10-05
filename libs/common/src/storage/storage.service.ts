@@ -26,7 +26,7 @@ export class StorageService {
     await rm(this.resolveInside(relativePath), { force: true });
   }
 
-  /** Relative path of a url this service produced, only if it is exactly `pdf/<name>` (kind `pdf`) or `materials/<code>/<name>` (kind `materials`) with safe single segments; else null. */
+  /** Relative path of a url this service produced, only if it is exactly `pdf/<name>` (kind `pdf`) or `materials/<problemId>/<name>` (kind `materials`) with safe single segments; else null. */
   relativePathOf(url: string | null, kind: 'pdf' | 'materials'): string | null {
     const prefix = this.publicUrl('');
     if (!url?.startsWith(prefix)) return null;

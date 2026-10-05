@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import type { OnModuleInit } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { rm } from 'node:fs/promises';
 import type { AuthContext, Principal } from '@libs/auth';
@@ -16,6 +17,7 @@ import {
   extensionOf,
   listZipEntries,
   ProblemDataError,
+  PdfCacheService,
   ProblemDataFilesService,
   safeFileName,
   ZipError,
@@ -27,6 +29,7 @@ import { MAX_CASE_ARGS_BYTES, maxTestcasesFor } from './dto/limits';
 import { fieldDiff } from './field-diff';
 import { readMultipartFile, rejectFile, saveMultipartFile } from './multipart';
 import { ProblemEditingService } from './problem-editing.service';
+import { ProblemEvents } from './problem.events';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
@@ -75,14 +78,53 @@ function dataChanges(before: ProblemData, after: ProblemData) {
 }
 
 @Injectable()
-export class ProblemDataService {
+export class ProblemDataService implements OnModuleInit {
+  private readonly logger = new Logger(ProblemDataService.name);
+
   constructor(
     private readonly editing: ProblemEditingService,
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly dataFiles: ProblemDataFilesService,
     private readonly rateLimit: RateLimitService,
+    private readonly pdfCache: PdfCacheService,
+    private readonly events: ProblemEvents,
   ) {}
+
+  /** Both volumes are keyed by code: the data directory follows the problem; cached PDFs are stale after a rename or any statement change. */
+  onModuleInit(): void {
+    this.events.on(
+      'codeRenamed',
+      (oldCode, newCode) => void this.moveData(oldCode, newCode),
+    );
+    this.events.on(
+      'statementChanged',
+      (problemId) => void this.dropPdfs(problemId),
+    );
+  }
+
+  /** The new code's PDFs go too: a reused code must not serve another problem's statement. */
+  private async moveData(oldCode: string, newCode: string): Promise<void> {
+    try {
+      await this.pdfCache.delete(oldCode);
+      await this.pdfCache.delete(newCode);
+      await this.dataFiles.rename(oldCode, newCode);
+    } catch (error) {
+      this.logger.error(
+        `Moving problem data ${oldCode} -> ${newCode} failed`,
+        error,
+      );
+    }
+  }
+
+  private async dropPdfs(problemId: string): Promise<void> {
+    try {
+      const problem = await this.repository.findById(problemId);
+      if (problem) await this.pdfCache.delete(problem.code);
+    } catch (error) {
+      this.logger.error(`Dropping cached PDFs of ${problemId} failed`, error);
+    }
+  }
 
   async get(auth: AuthContext, code: string): Promise<ProblemDataResponse> {
     const problem = await this.managedProblem(auth.principal, code);

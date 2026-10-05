@@ -6,6 +6,7 @@ import { uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import type { RenderStyle } from '@libs/render';
+import { ProblemDataFilesService } from '@libs/problems';
 import { CloneProblemDto } from './dto/clone.dto';
 import { PutEditorialDto } from './dto/editorial.dto';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
@@ -160,6 +161,7 @@ export class ProblemEditingService {
     private readonly languages: LanguagesQuerier,
     private readonly events: ProblemEvents,
     private readonly rateLimit: RateLimitService,
+    private readonly dataFiles: ProblemDataFilesService,
   ) {}
 
   async create(
@@ -210,6 +212,17 @@ export class ProblemEditingService {
     const fields = this.toFields(dto);
     this.assertFieldGates(principal, dto, fields, before);
     await this.assertReferences(dto);
+    if (
+      fields.code !== undefined &&
+      fields.code !== problem.code &&
+      (await this.dataFiles.exists(fields.code))
+    )
+      throw new AppError(
+        'validation_failed',
+        400,
+        'Problem data directory is taken',
+        { code: ['A test data directory for this code already exists.'] },
+      );
     const markupFlipped =
       fields.isFullMarkup !== undefined &&
       fields.isFullMarkup !== problem.isFullMarkup;

@@ -112,7 +112,7 @@ export class ProblemUploadsService {
       auth,
       problem,
       'materialUrl',
-      `materials/${problem.code}/${name}`,
+      `materials/${problem._id}/${name}`,
       content,
     );
     return { url };
