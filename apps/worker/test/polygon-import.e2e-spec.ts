@@ -361,19 +361,7 @@ describe('PolygonImportProcessor', () => {
         curators: [],
       }),
     );
-    expect(await latestChanges()).not.toEqual(
-      expect.arrayContaining(['points']),
-    );
-    expect(await latestChanges()).toEqual(
-      expect.not.arrayContaining([
-        'groupId',
-        'typeIds',
-        'authors',
-        'curators',
-        'allowedLanguages',
-        'points',
-      ]),
-    );
+    expect(await latestChanges()).toEqual(['description']);
   });
 
   it('keeps a published editorial on re-import and removes it when the package has no tutorial', async () => {
