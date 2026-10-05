@@ -22,16 +22,15 @@ describe('PdfCacheService', () => {
     expect(() => cache.pathOf('../x', 'en')).toThrow('Invalid problem code');
     expect(() => cache.pathOf('Sum', 'en')).toThrow('Invalid problem code');
   });
-  it('writes through a temp file, reports existence and deletes every language at once', async () => {
+  it('writes through a temp file and deletes every language at once', async () => {
     await cache.write('sum', 'en', (temporary) =>
       Promise.resolve(writeFileSync(temporary, '%PDF-1.4')),
     );
     writeFileSync(cache.pathOf('sum', 'vi'), '%PDF-1.4');
-    expect(await cache.exists('sum', 'en')).toBe(true);
     expect(readFileSync(cache.pathOf('sum', 'en'), 'utf8')).toBe('%PDF-1.4');
     await cache.delete('sum');
-    expect(await cache.exists('sum', 'en')).toBe(false);
-    expect(await cache.exists('sum', 'vi')).toBe(false);
+    expect(existsSync(cache.pathOf('sum', 'en'))).toBe(false);
+    expect(existsSync(cache.pathOf('sum', 'vi'))).toBe(false);
     await cache.delete('sum');
   });
   it('opens the cached file, or reports none', async () => {

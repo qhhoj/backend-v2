@@ -105,6 +105,7 @@ export class PdfRenderService {
       katexCssUrl: pathToFileURL(join(KATEX_DIST_DIR, 'katex.min.css')).href,
       mediaUrl: this.env.mediaUrl,
       mediaRoot: this.env.mediaRoot,
+      siteUrl: this.env.siteUrl,
     });
   }
 }

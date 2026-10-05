@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, open, rename, rm } from 'node:fs/promises';
+import { mkdir, open, rename, rm } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { assertRealPathInside, ENV, SAFE_SEGMENT } from '@libs/common';
@@ -25,15 +25,6 @@ export class PdfCacheService {
     if (!STATEMENT_LANGUAGES.includes(lang))
       throw new Error(`Invalid statement language: ${lang}`);
     return this.resolveInside(`${code}.${lang}.pdf`);
-  }
-
-  async exists(code: string, lang: StatementLanguage): Promise<boolean> {
-    const path = this.pathOf(code, lang);
-    await assertRealPathInside(this.root, path);
-    return access(path).then(
-      () => true,
-      () => false,
-    );
   }
 
   /** The cached file opened for reading (caller closes it), or null when there is none; holding the handle means a later deletion cannot break a response that already started. */

@@ -11,6 +11,7 @@ const input = {
   katexCssUrl: 'file:///repo/node_modules/katex/dist/katex.min.css',
   mediaUrl: '/media',
   mediaRoot: '/var/lib/qhhoj/media',
+  siteUrl: 'https://qhhoj.test',
 };
 
 describe('pdf template', () => {
@@ -52,9 +53,14 @@ describe('pdf template', () => {
       'src=file:///var/lib/qhhoj/media/a.png',
     ],
     [
-      'an anchor',
+      'a stylesheet link',
+      '<link rel="stylesheet" href="/media/a.css">',
+      'href="file:///var/lib/qhhoj/media/a.css"',
+    ],
+    [
+      'an anchor (kept a site link, never a file path)',
       '<a href="/media/m.zip">m</a>',
-      'href="file:///var/lib/qhhoj/media/m.zip"',
+      'href="https://qhhoj.test/media/m.zip"',
     ],
   ])(
     'resolves media urls written with %s',

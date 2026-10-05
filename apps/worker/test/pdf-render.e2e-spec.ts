@@ -158,6 +158,7 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
       descriptionHtml: `<p>Hello</p>${hostile}`,
     });
   });
+  afterEach(() => jest.restoreAllMocks());
   afterAll(async () => {
     await worker.teardown();
     await new Promise((done) => spy.close(done));

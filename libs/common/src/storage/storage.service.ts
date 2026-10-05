@@ -18,7 +18,11 @@ export class StorageService {
   }
 
   async save(relativePath: string, content: Buffer): Promise<string> {
-    await writeFileAtomically(this.resolveInside(relativePath), content);
+    await writeFileAtomically(
+      this.resolveInside(relativePath),
+      content,
+      this.root,
+    );
     return this.publicUrl(relativePath);
   }
 

@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { escapeRegExp } from '@libs/common';
 
 /** Apps run from the repo root (`node dist/apps/<app>/main`), so KaTeX's CSS and fonts are addressed from there; webpack rewrites `require.resolve`, hence no resolve. */
 export const KATEX_DIST_DIR = join(
@@ -26,6 +27,7 @@ export interface PdfTemplateInput {
   katexCssUrl: string;
   mediaUrl: string;
   mediaRoot: string;
+  siteUrl: string;
 }
 
 const UNITS = ['KB', 'MB', 'GB', 'TB'];
@@ -57,21 +59,31 @@ const unwrapTables = (html: string) =>
       '<table class="table">',
     )
     .replaceAll('</table></div>', '</table>');
-const escapeRegExp = (text: string) =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** Media is read straight from the shared volume (no network from a PDF render), in double-quoted, single-quoted and unquoted `src`/`href`; `//host` links become https like legacy. */
-const absolutify = (html: string, mediaUrl: string, mediaRoot: string) =>
-  html
+/** Chromium loads media straight from the shared volume (no network from a PDF render): `src` and `<link href>` take the file path, in double-quoted, single-quoted and unquoted form. An anchor would be a dead link naming the server's directory, so it gets the site URL instead. `//host` links become https like legacy. */
+const absolutify = (
+  html: string,
+  { mediaUrl, mediaRoot, siteUrl }: PdfTemplateInput,
+) => {
+  const prefixed = (attribute: string) =>
+    new RegExp(`(${attribute}\\s*=\\s*["']?)${escapeRegExp(mediaUrl)}/`, 'gi');
+  const anchorPrefix = mediaUrl.startsWith('/') ? siteUrl + mediaUrl : mediaUrl;
+  const filePrefix = `${pathToFileURL(mediaRoot).href}/`;
+  return html
     .replace(
-      new RegExp(
-        `(\\b(?:src|href)\\s*=\\s*["']?)${escapeRegExp(mediaUrl)}/`,
-        'gi',
-      ),
-      (_match, attribute: string) =>
-        `${attribute}${pathToFileURL(mediaRoot).href}/`,
+      prefixed('\\bsrc'),
+      (_match, attribute: string) => `${attribute}${filePrefix}`,
+    )
+    .replace(
+      prefixed('<link\\b[^>]*?\\bhref'),
+      (_match, attribute: string) => `${attribute}${filePrefix}`,
+    )
+    .replace(
+      prefixed('<a\\b[^>]*?\\bhref'),
+      (_match, attribute: string) => `${attribute}${anchorPrefix}/`,
     )
     .replaceAll('="//', '="https://')
     .replaceAll("='//", "='https://");
+};
 
 const limitRows = (
   limits: PdfTemplateInput['languageLimits'],
@@ -118,7 +130,7 @@ export function buildPdfHtml(input: PdfTemplateInput): string {
 <div class="problem-info-entry"><b>Memory limit:</b> ${formatKilobytes(input.memoryLimit)}${limitRows(input.languageLimits, (limit) => formatKilobytes(limit.memoryLimit))}</div>
 </div>
 <hr>
-<div class="content-description printing">${absolutify(unwrapTables(input.descriptionHtml), input.mediaUrl, input.mediaRoot)}</div>
+<div class="content-description printing">${absolutify(unwrapTables(input.descriptionHtml), input)}</div>
 ${materials}
 </body></html>`;
 }

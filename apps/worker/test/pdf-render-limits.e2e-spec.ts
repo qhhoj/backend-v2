@@ -30,7 +30,7 @@ describeWithChromium('PdfRenderProcessor limits (Chromium)', () => {
     let processor: PdfRenderProcessor;
     beforeAll(async () => {
       worker = await setupWorkerTest({
-        env: { PDF_RENDER_TIMEOUT_MS: '200' },
+        env: { PDF_RENDER_TIMEOUT_MS: '1000' },
       });
       processor = worker.module.get(PdfRenderProcessor);
       await worker.problems.create([
@@ -54,7 +54,7 @@ describeWithChromium('PdfRenderProcessor limits (Chromium)', () => {
       await processor.process(job({ code: 'light', lang: 'en' }));
       await expect(
         processor.process(job({ code: 'heavy', lang: 'en' })),
-      ).rejects.toThrow('exceeded 200 ms');
+      ).rejects.toThrow('exceeded 1000 ms');
       expect(existsSync(join(worker.pdfCacheRoot, 'heavy.en.pdf'))).toBe(false);
       expect(readdirSync(join(worker.pdfCacheRoot, '.tmp'))).toEqual([]);
       expect(
