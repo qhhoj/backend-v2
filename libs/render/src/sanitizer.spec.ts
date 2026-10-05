@@ -1,5 +1,4 @@
 import katex from 'katex';
-import { LEGACY_STYLE_PROPERTIES, MATHML_TAGS } from './legacy-allow-list';
 import { sanitizeStatementHtml, sanitizeSvg } from './sanitizer';
 
 const MATHML_N =
@@ -11,10 +10,6 @@ const serialised = (html: string) =>
     .replace(/<path d="([^"]*)"\/>/g, '<path d="$1"></path>');
 
 describe('sanitizeStatementHtml', () => {
-  it('ships the generated legacy allow-list', () => {
-    expect(LEGACY_STYLE_PROPERTIES).toHaveLength(577);
-    expect(MATHML_TAGS).toHaveLength(202);
-  });
   it.each([
     ['<script>alert(1)</script><p>ok</p>', '<p>ok</p>'],
     ['<img src="x" onerror="alert(1)">', '<img src="x" />'],
@@ -58,6 +53,8 @@ describe('sanitizeStatementHtml', () => {
       '<table><tr><td colspan="2">x</td></tr></table>',
     ],
     ['<p>a<br>b</p><hr>', '<p>a<br />b</p><hr />'],
+    ['<p style="foo-bar:1;color:red">p</p>', '<p style="color:red">p</p>'],
+    ['<math><mfoo><mi>x</mi></mfoo></math>', '<math><mi>x</mi></math>'],
     ['<p style="background:red&#10;url(https://evil/x.png)">p</p>', '<p>p</p>'],
     ['<p style="background:red&#13;url(https://evil/x.png)">p</p>', '<p>p</p>'],
     ['<p style="width:red&#10;expression(alert(1))">p</p>', '<p>p</p>'],

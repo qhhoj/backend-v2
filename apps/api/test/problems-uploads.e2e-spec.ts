@@ -9,6 +9,7 @@ import {
   seedCatalog,
   TestSession,
 } from './problem-fixtures';
+import { SVG_MAX_BYTES } from '@libs/problems';
 import { PDF, PNG, SVG_WITH_SCRIPT } from '@libs/problems/testing';
 import { ApiTest, errorCode, setupApiTest } from './setup';
 
@@ -152,6 +153,35 @@ describe('problem uploads', () => {
       staff,
       Buffer.from(svg),
       'bomb.svg',
+      'image/svg+xml',
+    ).expect(400);
+    expect(
+      (response.body as { error: { fields: Record<string, string[]> } }).error
+        .fields,
+    ).toHaveProperty('file');
+  });
+  it('accepts an svg of exactly the byte cap and refuses one byte more', async () => {
+    const svgOfSize = (bytes: number) => {
+      const wrapper = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
+      return Buffer.from(
+        wrapper.replace(
+          '</svg>',
+          ' '.repeat(bytes - wrapper.length) + '</svg>',
+        ),
+      );
+    };
+    await upload(
+      `${PROBLEMS}/uploads/image`,
+      staff,
+      svgOfSize(SVG_MAX_BYTES),
+      'edge.svg',
+      'image/svg+xml',
+    ).expect(201);
+    const response = await upload(
+      `${PROBLEMS}/uploads/image`,
+      staff,
+      svgOfSize(SVG_MAX_BYTES + 1),
+      'over.svg',
       'image/svg+xml',
     ).expect(400);
     expect(

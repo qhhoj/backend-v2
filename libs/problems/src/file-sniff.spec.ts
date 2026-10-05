@@ -1,10 +1,5 @@
 import { GIF, JPG, PDF, PNG, SVG } from './testing';
-import {
-  isPdf,
-  isSvgWithinLimits,
-  sniffImage,
-  SVG_MAX_BYTES,
-} from './file-sniff';
+import { isPdf, isSvgWithinLimits, sniffImage } from './file-sniff';
 
 describe('file sniffing', () => {
   it.each([
@@ -60,5 +55,4 @@ describe('isSvgWithinLimits', () => {
     (character) => expect(timed(`<${character}>`.repeat(20001))).toBe(false),
   );
   it('rejects an unterminated tag', () => expect(timed('<svg><g')).toBe(false));
-  it('exposes a 512 KiB byte cap', () => expect(SVG_MAX_BYTES).toBe(524288));
 });

@@ -63,6 +63,8 @@ describe('isMarkupWithinLimits', () => {
       run('<p>x</p>'.repeat(250000)) /
       Math.max(run('<p>x</p>'.repeat(50000)), 1);
     expect(ratio).toBeLessThan(15);
-    expect(run('<a/>'.repeat(250000))).toBeLessThan(500);
+    // Same byte size: without the early abort at depth 500 the two take equally long.
+    const flat = '<p>x</p>'.repeat(250000);
+    expect(run(`${'<a>'.repeat(501)}${flat}`)).toBeLessThan(run(flat) / 2);
   });
 });

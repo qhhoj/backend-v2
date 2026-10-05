@@ -226,9 +226,10 @@ describe('renderMarkdown', () => {
       expect(performance.now() - started).toBeLessThan(2000);
     });
     it('keeps a flood after a bogus declaration fast (markdown-it leaves a real svg open, so "/>" is legitimate)', () => {
-      const started = performance.now();
-      renderMarkdown(`<!<svg>>${'<a/>'.repeat(49990)}`, 'problem');
-      expect(performance.now() - started).toBeLessThan(2000);
+      expectLinear(
+        (count) => renderMarkdown(`<!<svg>>${'<a/>'.repeat(count)}`, 'problem'),
+        8000,
+      );
     });
     it('renders formula-only statements without hitting the tag cap', () => {
       const letters = 'x'.repeat(999);
