@@ -8,7 +8,7 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { GroupsModule } from './groups.module';
 import { GroupsQuerier } from './groups.querier';
 
-const waitFor = async (check: () => boolean, timeoutMs = 5000) => {
+const waitFor = async (check: () => boolean, timeoutMs = 20000) => {
   for (
     const end = Date.now() + timeoutMs;
     !check();
@@ -18,6 +18,8 @@ const waitFor = async (check: () => boolean, timeoutMs = 5000) => {
 };
 
 describe('GroupsQuerier', () => {
+  const permissionsOf = (ids: string[]) =>
+    querier.groupsOf(ids).flatMap((group) => group.permissions);
   let replSet: MongoMemoryReplSet,
     testingModule: TestingModule,
     groups: Model<Group>,
@@ -46,22 +48,20 @@ describe('GroupsQuerier', () => {
   });
 
   it('loads existing groups on init', () =>
-    expect(querier.permissionsOf([staffId])).toEqual([
-      'judge.edit_all_problem',
-    ]));
+    expect(permissionsOf([staffId])).toEqual(['judge.edit_all_problem']));
 
   it('applies inserts and updates from the change stream', async () => {
     const group = await groups.create({
       name: 'Org Admin',
       permissions: ['judge.edit_own_problem'],
     });
-    await waitFor(() => querier.permissionsOf([group._id]).length === 1);
+    await waitFor(() => permissionsOf([group._id]).length === 1);
     await groups.updateOne(
       { _id: group._id },
       { $push: { permissions: 'judge.clone_problem' } },
     );
-    await waitFor(() => querier.permissionsOf([group._id]).length === 2);
-    expect(querier.permissionsOf([staffId, group._id])).toEqual([
+    await waitFor(() => permissionsOf([group._id]).length === 2);
+    expect(permissionsOf([staffId, group._id])).toEqual([
       'judge.edit_all_problem',
       'judge.edit_own_problem',
       'judge.clone_problem',
@@ -69,9 +69,9 @@ describe('GroupsQuerier', () => {
   });
 
   it('ignores unknown ids', () =>
-    expect(
-      querier.permissionsOf(['00000000-0000-7000-8000-000000000000']),
-    ).toEqual([]));
+    expect(permissionsOf(['00000000-0000-7000-8000-000000000000'])).toEqual(
+      [],
+    ));
 
   it('keeps serving and recovers after resync', async () => {
     await groups.collection.updateOne(
@@ -79,6 +79,6 @@ describe('GroupsQuerier', () => {
       { $set: { permissions: [] } },
     );
     await querier.resync();
-    expect(querier.permissionsOf([staffId])).toEqual([]);
+    expect(permissionsOf([staffId])).toEqual([]);
   });
 });

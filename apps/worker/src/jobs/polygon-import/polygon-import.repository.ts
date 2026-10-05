@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { permissionsOf } from '@libs/auth';
 import type { Permission } from '@libs/auth';
 import { isDocumentTooLarge, isDuplicateKey } from '@libs/common';
 import {
@@ -106,13 +107,10 @@ export class PolygonImportRepository {
     const groups = requester
       ? await this.groups.find({ _id: { $in: requester.groups } }).exec()
       : [];
-    const permissions = new Set([
-      ...(requester?.permissions ?? []),
-      ...groups.flatMap((group) => group.permissions),
-    ]);
     if (
       !requester?.isActive ||
-      (!requester.isSuperuser && !permissions.has(FULL_MARKUP_PERMISSION))
+      (!requester.isSuperuser &&
+        !permissionsOf(requester, groups).has(FULL_MARKUP_PERMISSION))
     )
       throw new PolygonImportError(
         `Full markup requires ${FULL_MARKUP_PERMISSION}`,
@@ -177,7 +175,6 @@ export class PolygonImportRepository {
       const catalog = definedOnly({
         groupId: job.groupId,
         typeIds: job.typeIds,
-        allowedLanguages: job.allowedLanguages,
         points: job.points,
         authors: job.authors,
         curators: job.curators,
@@ -259,14 +256,12 @@ export class PolygonImportRepository {
     return {
       groupId: job.groupId ?? (await oldest(this.problemGroups, 'group')),
       typeIds: job.typeIds ?? [await oldest(this.problemTypes, 'type')],
-      allowedLanguages:
-        job.allowedLanguages ??
-        (
-          await this.languages
-            .find({ includeInProblem: true }, { _id: 1 })
-            .session(session)
-            .exec()
-        ).map((language) => language._id),
+      allowedLanguages: (
+        await this.languages
+          .find({ includeInProblem: true }, { _id: 1 })
+          .session(session)
+          .exec()
+      ).map((language) => language._id),
       points: job.points ?? PROBLEM_LIMITS.points.min,
       authors: job.authors ?? [],
       curators: job.curators ?? [],
@@ -275,7 +270,11 @@ export class PolygonImportRepository {
 
   private checkTarget(
     job: PolygonImportJob,
-    existing: { isFullMarkup: boolean; mirrorOf: string | null } | null,
+    existing: {
+      isFullMarkup: boolean;
+      isManuallyManaged: boolean;
+      mirrorOf: string | null;
+    } | null,
   ): void {
     if (job.mode === 'create' && existing)
       throw new PolygonImportError(
@@ -288,6 +287,8 @@ export class PolygonImportRepository {
       throw new PolygonImportError(
         'a mirror problem takes its test data from the source problem',
       );
+    if (existing.isManuallyManaged)
+      throw new PolygonImportError('the problem is manually managed');
     if (existing.isFullMarkup !== job.isFullMarkup)
       throw new PolygonImportError(
         'the problem markup mode changed since the import was queued',

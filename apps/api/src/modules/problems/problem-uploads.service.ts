@@ -6,6 +6,7 @@ import { AppError, RateLimitService, StorageService } from '@libs/common';
 import { newId } from '@libs/database';
 import {
   extensionOf,
+  IMAGE_MAX_BYTES,
   safeFileName,
   isPdf,
   isSvgWithinLimits,
@@ -22,7 +23,6 @@ import type { ProblemDocument } from './problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
 import { RevisionsRepository } from './revisions.repository';
 
-const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const STATEMENT_MAX_BYTES = 5 * 1024 * 1024;
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
 /** Archives, documents, test data, sources and plain images; never anything a browser would run or render as markup. */

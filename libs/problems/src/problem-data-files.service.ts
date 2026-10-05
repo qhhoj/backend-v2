@@ -165,11 +165,16 @@ export class ProblemDataFilesService {
     await rename(stagedPath, target);
   }
 
-  /** Uploaded Polygon packages wait here for the worker; the api streams straight into this path. Packages of lost jobs are swept on the way. */
-  async importPackagePath(jobId: string): Promise<string> {
-    const path = this.resolveInside(
+  /** Where the package of import job `jobId` lives: the api writes it there and the worker, which is given only the job id, reads it from the same place. */
+  importPackagePathOf(jobId: string): string {
+    return this.resolveInside(
       `${IMPORTS_DIRECTORY}/${this.safeName(jobId)}.zip`,
     );
+  }
+
+  /** Uploaded Polygon packages wait here for the worker; the api streams straight into this path. Packages of lost jobs are swept on the way. */
+  async importPackagePath(jobId: string): Promise<string> {
+    const path = this.importPackagePathOf(jobId);
     await mkdir(dirname(path), { recursive: true });
     await assertRealPathInside(this.root, path);
     await this.sweepStaleImports(dirname(path));

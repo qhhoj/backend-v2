@@ -16,7 +16,6 @@ export interface PdfRenderJob {
 
 /** Everything the api resolved and authorised before enqueueing; the worker never re-reads request state. */
 export interface PolygonImportJob {
-  packagePath: string;
   requesterId: string;
   code: string;
   mode: 'create' | 'update';
@@ -25,7 +24,6 @@ export interface PolygonImportJob {
   curators?: string[];
   groupId?: string;
   typeIds?: string[];
-  allowedLanguages?: string[];
   points?: number;
   /** Render style of the target problem (an update keeps the problem's flag). */
   isFullMarkup: boolean;
@@ -37,6 +35,8 @@ export interface PolygonImportJob {
   ignoreZeroPointBatches: boolean;
   ignoreZeroPointCases: boolean;
   appendMainSolution: boolean;
+  /** The requester's testcase limit: 300, or 9999 with `judge.create_mass_testcases`. */
+  maxCases: number;
   /** The problem's `dataVersion` when the import was queued (update only); the worker refuses if it moved since. */
   expectedDataVersion?: number;
 }

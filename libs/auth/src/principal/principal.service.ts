@@ -3,6 +3,7 @@ import { uuidStr } from '@libs/database';
 import { GroupsQuerier } from '../groups/groups.querier';
 import { UserDocument } from '../users/users.repository';
 import { Principal } from './principal';
+import { permissionsOf } from './permissions-of';
 
 @Injectable()
 export class PrincipalService {
@@ -15,10 +16,10 @@ export class PrincipalService {
       username: user.username,
       isSuperuser: user.isSuperuser,
       isStaff: user.isStaff,
-      permissions: new Set([
-        ...user.permissions,
-        ...this.groups.permissionsOf(user.groups.map(uuidStr)),
-      ]),
+      permissions: permissionsOf(
+        user,
+        this.groups.groupsOf(user.groups.map(uuidStr)),
+      ),
       organizationIds: user.organizations.map(uuidStr),
     };
   }

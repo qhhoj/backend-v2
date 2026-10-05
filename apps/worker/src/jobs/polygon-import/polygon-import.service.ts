@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { rm } from 'node:fs/promises';
 import { StorageService, writeFileAtomically } from '@libs/common';
@@ -13,6 +13,7 @@ import {
   pdfJobId,
   ProblemDataError,
   ProblemDataFilesService,
+  SOURCE_MAX_BYTES,
 } from '@libs/problems';
 import type {
   PdfRenderJob,
@@ -26,6 +27,7 @@ import type { PolygonAssets } from './polygon-assets';
 import { PolygonImportError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
 import type {
+  AppliedImport,
   ImportedProblem,
   ImportTarget,
 } from './polygon-import.repository';
@@ -34,7 +36,6 @@ import {
   INTERACTOR_FILE,
   PolygonPackage,
   repackTests,
-  SOURCE_MAX_BYTES,
   TESTS_ARCHIVE,
 } from './polygon-package';
 import {
@@ -54,6 +55,8 @@ interface StagedFile {
 
 @Injectable()
 export class PolygonImportService {
+  private readonly logger = new Logger(PolygonImportService.name);
+
   constructor(
     private readonly pandoc: PandocService,
     private readonly storage: StorageService,
@@ -64,14 +67,18 @@ export class PolygonImportService {
   ) {}
 
   /** Pre-checks that cost nothing come first; the uploaded package is removed however the job ends. */
-  async import(job: PolygonImportJob): Promise<PolygonImportResult> {
+  async import(
+    jobId: string,
+    job: PolygonImportJob,
+  ): Promise<PolygonImportResult> {
+    const packagePath = this.dataFiles.importPackagePathOf(jobId);
     try {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
       await this.repository.assertFullMarkupWriter(job);
-      return await this.run(job, target);
+      return await this.run(packagePath, job, target);
     } finally {
-      await rm(job.packagePath, { force: true });
+      await rm(packagePath, { force: true });
     }
   }
 
@@ -80,10 +87,11 @@ export class PolygonImportService {
    * Before the commit a failure removes the images and staged files it saved; after it, Mongo is authoritative and nothing it references is removed.
    */
   private async run(
+    packagePath: string,
     job: PolygonImportJob,
     target: ImportTarget,
   ): Promise<PolygonImportResult> {
-    const pkg = await PolygonPackage.open(job.packagePath);
+    const pkg = await PolygonPackage.open(packagePath);
     const savedImages: string[] = [];
     const staged: StagedFile[] = [];
     let committed = false;
@@ -138,14 +146,7 @@ export class PolygonImportService {
       );
       const applied = await this.repository.apply(job, imported, target);
       committed = true;
-      for (const { name, stagedPath } of staged)
-        await this.dataFiles.commitUpload(job.code, stagedPath, name);
-      const kept = new Set(staged.map(({ name }) => name));
-      for (const name of applied.previousFiles)
-        if (!kept.has(name)) await this.dataFiles.removeFile(job.code, name);
-      if (compiled.yaml === null) await this.dataFiles.removeInit(job.code);
-      else await this.dataFiles.writeInit(job.code, compiled.yaml);
-      await this.dropPdfs(job.code);
+      await this.finish(job.code, applied, staged, compiled.yaml);
       return { problemId: applied.problemId, code: job.code };
     } catch (error) {
       if (!committed) await this.undo(job, savedImages, staged);
@@ -153,6 +154,52 @@ export class PolygonImportService {
     } finally {
       pkg.close();
     }
+  }
+
+  /** Everything after the commit: a failure here leaves the problem imported, so it is logged with its cause and reported to the requester as an import that needs attention, never as "Import failed". */
+  private async finish(
+    code: string,
+    applied: AppliedImport,
+    staged: StagedFile[],
+    yaml: string | null,
+  ): Promise<void> {
+    const kept = new Set(staged.map(({ name }) => name));
+    const steps: Array<[string, () => Promise<unknown>]> = [
+      [
+        'moving the data files into place',
+        async () => {
+          for (const { name, stagedPath } of staged)
+            await this.dataFiles.commitUpload(code, stagedPath, name);
+        },
+      ],
+      [
+        'removing the unused data files',
+        async () => {
+          for (const name of applied.previousFiles)
+            if (!kept.has(name)) await this.dataFiles.removeFile(code, name);
+        },
+      ],
+      [
+        'writing init.yml',
+        () =>
+          yaml === null
+            ? this.dataFiles.removeInit(code)
+            : this.dataFiles.writeInit(code, yaml),
+      ],
+      ['dropping the cached PDFs', () => this.dropPdfs(code)],
+    ];
+    for (const [step, work] of steps)
+      try {
+        await work();
+      } catch (error) {
+        this.logger.error(
+          `Polygon import of ${code}: committed, but ${step} failed`,
+          error instanceof Error ? error.stack : String(error),
+        );
+        throw new PolygonImportError(
+          `the problem was imported, but ${step} failed`,
+        );
+      }
   }
 
   /** Images the statement references are saved as they are found, so a failed job must take them back. */

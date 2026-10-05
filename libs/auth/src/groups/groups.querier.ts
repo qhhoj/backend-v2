@@ -43,7 +43,11 @@ export class GroupsQuerier
     );
   }
 
-  permissionsOf(groupIds: string[]): string[] {
-    return groupIds.flatMap((id) => this.perms.get(id) ?? []);
+  /** The known groups among `groupIds`, as the permission holders `permissionsOf` takes. */
+  groupsOf(groupIds: string[]): Array<{ permissions: string[] }> {
+    return groupIds.flatMap((id) => {
+      const permissions = this.perms.get(id);
+      return permissions ? [{ permissions }] : [];
+    });
   }
 }

@@ -29,6 +29,7 @@ import {
   pdfJobId,
   ProblemDataFilesService,
   safeFileName,
+  SOURCE_MAX_BYTES,
   ZipError,
 } from '@libs/problems';
 import type { PdfRenderJob } from '@libs/problems';
@@ -45,7 +46,6 @@ import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
 import { RevisionsRepository } from './revisions.repository';
 
 export const ARCHIVE_MAX_BYTES = 512 * 1024 * 1024;
-export const SOURCE_MAX_BYTES = 1024 * 1024;
 /** What the compiler can use per kind (the legacy upload validators, minus `.py` checkers the compiler always rejected). */
 export const SOURCE_EXTENSIONS: Record<SourceFileKind, readonly string[]> = {
   generator: ['cpp', 'cc', 'c', 'pas', 'java', 'py'],
@@ -396,7 +396,8 @@ export class ProblemDataService implements OnModuleInit {
   }
 
   /**
-   * Compiles, persists with a compare-and-set on `version` and the code the files are written under, so a rename in between is a 409 before anything is written (a staged upload that already moved with the directory is left to the hourly stale-upload sweep) (409 when another writer won) and only then writes or removes init.yml, so Mongo stays authoritative.
+   * Compiles, then persists with a compare-and-set on `version` and on the code the files are written under, and only then writes or removes init.yml, so Mongo stays authoritative.
+   * A 409 means another writer won, or the problem was renamed in between; either way nothing was written. A staged upload that already moved with a renamed directory is left to the hourly stale-upload sweep.
    * A configuration or archive problem becomes `feedback`, never an error.
    * Residual window: two sequential winners can still write init.yml out of order (A persists, B persists, B writes, A writes).
    */

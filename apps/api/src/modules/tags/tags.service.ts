@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { AppError, isDuplicateKey, Paginated } from '@libs/common';
+import {
+  AppError,
+  escapeRegExp,
+  isDuplicateKey,
+  Paginated,
+} from '@libs/common';
 import { TAG_PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Tag, TagProblem } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
@@ -26,8 +31,6 @@ import { TagsQuerier } from './tags.querier';
 export const TAG_MIN_RATING = 1900;
 const byCode = (left: { code: string }, right: { code: string }) =>
   left.code.localeCompare(right.code);
-const escapeRegExp = (text: string) =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 @Injectable()
 export class TagsService {

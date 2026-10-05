@@ -10,9 +10,6 @@ import type { PlannedTest } from './polygon-tests';
 export const TESTS_ARCHIVE = 'tests.zip';
 export const CHECKER_FILE = 'checker.cpp';
 export const INTERACTOR_FILE = 'interactor.cpp';
-/** Every member we inflate into memory has a cap checked against the central directory before reading. */
-export const SOURCE_MAX_BYTES = 1024 * 1024;
-export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const PROBLEM_XML = 'problem.xml';
 const MAX_SHOWN_PATH = 100;
 export const shown = (name: string) => name.slice(0, MAX_SHOWN_PATH);

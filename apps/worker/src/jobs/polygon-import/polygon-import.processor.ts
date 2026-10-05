@@ -17,7 +17,8 @@ export class PolygonImportProcessor extends WorkerHost {
   /** A `PolygonImportError` is shown to the requester, so it is stored with the prefix the api looks for. */
   async process(job: Job<PolygonImportJob>): Promise<PolygonImportResult> {
     try {
-      return await this.imports.import(job.data);
+      if (!job.id) throw new Error('A queued job always has an id');
+      return await this.imports.import(job.id, job.data);
     } catch (error) {
       throw error instanceof PolygonImportError
         ? new Error(POLYGON_ERROR_PREFIX + error.message)

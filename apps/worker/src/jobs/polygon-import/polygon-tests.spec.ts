@@ -6,7 +6,11 @@ import { formatPathPattern, planTests } from './polygon-tests';
 import type { TestPlan } from './polygon-tests';
 import { parseXml } from './polygon-xml';
 
-const options = { ignoreZeroPointBatches: false, ignoreZeroPointCases: false };
+const options = {
+  ignoreZeroPointBatches: false,
+  ignoreZeroPointCases: false,
+  maxCases: 9999,
+};
 const plan = (fixture: Parameters<typeof buildProblemXml>[0], overrides = {}) =>
   planTests(parseXml(buildProblemXml(fixture)), { ...options, ...overrides });
 const test = (points?: number, group?: string) => ({
@@ -25,6 +29,24 @@ const withTimeLimit = (value: string, points = '1') =>
   `<problem><judging><testset name="tests"><time-limit>${value}</time-limit><memory-limit>1048576</memory-limit><input-path-pattern>t/%d</input-path-pattern><answer-path-pattern>t/%d.a</answer-path-pattern><tests><test points="${points}"/></tests></testset></judging></problem>`;
 
 describe('planTests', () => {
+  it('honours the requester testcase limit, counting expanded batch rows too', () => {
+    const tests = (count: number) => ({
+      tests: Array.from({ length: count }, () => test(1)),
+    });
+    expect(plan(tests(300), { maxCases: 300 }).tests).toHaveLength(300);
+    expect(() => plan(tests(301), { maxCases: 300 })).toThrow(
+      new PolygonImportError('too many testcases'),
+    );
+    const batch = {
+      tests: Array.from({ length: 150 }, () => test(1, 'g')),
+      groups: [{ name: 'g', points: 10, policy: 'complete-group' as const }],
+    };
+    expect(plan(batch, { maxCases: 9999 }).cases.length).toBeGreaterThan(150);
+    expect(() => plan(batch, { maxCases: 150 })).toThrow(
+      new PolygonImportError('expanded batch rows exceed the limit of 150'),
+    );
+  });
+
   it('formats path patterns like printf', () => {
     expect(formatPathPattern('tests/%02d', 7)).toBe('tests/07');
     expect(formatPathPattern('tests/%02d.a', 123)).toBe('tests/123.a');

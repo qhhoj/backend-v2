@@ -23,6 +23,8 @@ export interface TestPlan {
 export interface TestPlanOptions {
   ignoreZeroPointBatches: boolean;
   ignoreZeroPointCases: boolean;
+  /** The requester's testcase limit (the editor's rule), authorised by the api. */
+  maxCases: number;
 }
 interface Group {
   name: string;
@@ -32,8 +34,7 @@ interface Group {
   cases: number[];
 }
 
-/** problem.xml is untrusted: bounds keep the dependency closure and the output finite. Cases mirror the api's highest per-problem limit (`MAX_TESTCASES_MASS`); real problems have far fewer groups. */
-const MAX_PLANNED_CASES = 9999;
+/** problem.xml is untrusted: bounds keep the dependency closure and the output finite; the case bound is the requester's `maxCases`, and real problems have far fewer groups. */
 const MAX_GROUPS = 1000;
 const MAX_POINTS = 1_000_000;
 const MAX_PATTERN_WIDTH = 9;
@@ -96,7 +97,7 @@ export function planTests(
   if (!testset) throw new PolygonImportError('testset tests not found');
   const testNodes = childrenOf(childOf(testset, 'tests') ?? testset, 'test');
   if (!testNodes.length) throw new PolygonImportError('no testcases found');
-  if (testNodes.length > MAX_PLANNED_CASES)
+  if (testNodes.length > options.maxCases)
     throw new PolygonImportError('too many testcases');
   const inputPattern = childText(testset, 'input-path-pattern');
   const answerPattern = childText(testset, 'answer-path-pattern');
@@ -182,9 +183,9 @@ export function planTests(
     .map((group) => {
       const cases = closure(group);
       plannedRows += cases.length + 2;
-      if (plannedRows > MAX_PLANNED_CASES)
+      if (plannedRows > options.maxCases)
         throw new PolygonImportError(
-          `expanded batch rows exceed the limit of ${MAX_PLANNED_CASES}`,
+          `expanded batch rows exceed the limit of ${options.maxCases}`,
         );
       return { ...group, cases };
     });

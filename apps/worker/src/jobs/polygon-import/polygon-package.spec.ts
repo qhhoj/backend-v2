@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ZipArchive } from '@libs/problems';
+import { IMAGE_MAX_BYTES, SOURCE_MAX_BYTES, ZipArchive } from '@libs/problems';
 import { buildZip } from '@libs/problems/testing';
 import {
   buildPolygonPackage,
@@ -10,11 +10,9 @@ import {
 } from '../../../test/polygon-fixtures';
 import { PolygonImportError } from './polygon-import.error';
 import {
-  IMAGE_MAX_BYTES,
   PolygonPackage,
   repackTests,
   resolveMemberPath,
-  SOURCE_MAX_BYTES,
 } from './polygon-package';
 import type { PlannedTest } from './polygon-tests';
 

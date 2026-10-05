@@ -3,20 +3,18 @@ import { posix } from 'node:path';
 import type { StatementLanguage } from '@libs/database';
 import {
   findDisallowedCharacter,
+  IMAGE_MAX_BYTES,
   isSvgWithinLimits,
   MAX_MARKDOWN_LENGTH,
   sniffImage,
+  SOURCE_MAX_BYTES,
   SVG_MAX_BYTES,
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { renderMarkdown, RenderLimitError, sanitizeSvg } from '@libs/render';
 import type { RenderStyle } from '@libs/render';
 import { PolygonImportError } from './polygon-import.error';
-import {
-  IMAGE_MAX_BYTES,
-  resolveMemberPath,
-  SOURCE_MAX_BYTES,
-} from './polygon-package';
+import { resolveMemberPath } from './polygon-package';
 import type { PolygonPackage } from './polygon-package';
 import { childOf, descendant, descendants } from './polygon-xml';
 import type { XmlElement } from './polygon-xml';

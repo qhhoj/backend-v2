@@ -27,6 +27,10 @@ export const isPdf = (content: Buffer): boolean =>
   content.subarray(0, 5).toString('latin1') === '%PDF-';
 
 export const SVG_MAX_BYTES = 512 * 1024;
+/** A statement image upload, or an image of a Polygon package. */
+export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/** A checker, grader or generator source. */
+export const SOURCE_MAX_BYTES = 1024 * 1024;
 const SVG_MAX_TAGS = 20000;
 const SVG_MAX_DEPTH = 1000;
 

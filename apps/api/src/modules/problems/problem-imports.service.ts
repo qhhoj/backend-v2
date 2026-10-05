@@ -16,6 +16,7 @@ import {
   ZipError,
 } from '@libs/problems';
 import type { PolygonImportJob, PolygonImportResult } from '@libs/problems';
+import { maxTestcasesFor } from './dto/limits';
 import { ImportJobResponse } from './dto/import-job.response';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { rejectFile, saveMultipartFile } from './multipart';
@@ -60,15 +61,11 @@ export class ProblemImportsService {
     try {
       await saveMultipartFile(request, POLYGON_PACKAGE_MAX_BYTES, packagePath);
       await this.assertPackage(packagePath);
-      await this.queue.add(
-        'import',
-        { ...job, packagePath },
-        {
-          jobId,
-          removeOnComplete: JOB_RETENTION,
-          removeOnFail: JOB_RETENTION,
-        },
-      );
+      await this.queue.add('import', job, {
+        jobId,
+        removeOnComplete: JOB_RETENTION,
+        removeOnFail: JOB_RETENTION,
+      });
     } catch (error) {
       await rm(packagePath, { force: true });
       throw error;
@@ -97,7 +94,7 @@ export class ProblemImportsService {
   private async resolveJob(
     auth: AuthContext,
     query: PolygonImportQueryDto,
-  ): Promise<Omit<PolygonImportJob, 'packagePath'>> {
+  ): Promise<PolygonImportJob> {
     const { principal } = auth;
     const options = {
       requesterId: principal.userId,
@@ -117,6 +114,7 @@ export class ProblemImportsService {
       ignoreZeroPointBatches: query.ignoreZeroPointBatches,
       ignoreZeroPointCases: query.ignoreZeroPointCases,
       appendMainSolution: query.appendMainSolution,
+      maxCases: maxTestcasesFor(principal),
     };
     if (query.mode === 'update') {
       const problem = await this.data.writableProblem(principal, query.code);

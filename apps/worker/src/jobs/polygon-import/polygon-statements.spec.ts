@@ -15,12 +15,12 @@ import {
   renderStatement,
   withMainSolution,
 } from './polygon-statements';
+import { SVG_MAX_BYTES } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { buildZip, PNG, SVG_WITH_SCRIPT } from '@libs/problems/testing';
 
 const identity = (tex: string) => Promise.resolve(tex);
 const job = (overrides: Partial<PolygonImportJob> = {}): PolygonImportJob => ({
-  packagePath: '',
   requesterId: 'u',
   code: 'sum',
   mode: 'create',
@@ -28,7 +28,6 @@ const job = (overrides: Partial<PolygonImportJob> = {}): PolygonImportJob => ({
   curators: [],
   groupId: 'g',
   typeIds: ['t'],
-  allowedLanguages: [],
   points: 800,
   isFullMarkup: false,
   mainStatementLanguage: null,
@@ -37,6 +36,7 @@ const job = (overrides: Partial<PolygonImportJob> = {}): PolygonImportJob => ({
   ignoreZeroPointBatches: false,
   ignoreZeroPointCases: false,
   appendMainSolution: false,
+  maxCases: 300,
   ...overrides,
 });
 const openPackage = async (
@@ -283,6 +283,36 @@ describe('rehostImages containment and content', () => {
       rehostImages('![image](fig.png)', 'statements/english', pkg, saveEcho()),
     ).rejects.toThrow(PolygonImportError);
     pkg.close();
+  });
+  it('enforces the SVG byte cap exactly', async () => {
+    const svgOfSize = (bytes: number) => {
+      const wrapper = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
+      return Buffer.from(
+        wrapper.replace(
+          '</svg>',
+          ' '.repeat(bytes - wrapper.length) + '</svg>',
+        ),
+      );
+    };
+    const rehost = async (svg: Buffer) => {
+      const pkg = await englishPackage({ 'fig.svg': svg });
+      try {
+        return await rehostImages(
+          '![image](fig.svg)',
+          'statements/english',
+          pkg,
+          saveEcho(),
+        );
+      } finally {
+        pkg.close();
+      }
+    };
+    await expect(rehost(svgOfSize(SVG_MAX_BYTES))).resolves.toContain(
+      '/media/images/',
+    );
+    await expect(rehost(svgOfSize(SVG_MAX_BYTES + 1))).rejects.toThrow(
+      'SVG is too large or too complex',
+    );
   });
   it('does not interpret $ patterns of the stored url', async () => {
     const pkg = await englishPackage({ 'fig.png': PNG });

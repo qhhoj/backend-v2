@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -11,7 +12,11 @@ import type { Job } from 'bullmq';
 import type { Model } from 'mongoose';
 import { parse } from 'yaml';
 import { Group, newId, Problem, Revision } from '@libs/database';
-import { listZipEntries, POLYGON_ERROR_PREFIX } from '@libs/problems';
+import {
+  listZipEntries,
+  POLYGON_ERROR_PREFIX,
+  ProblemDataFilesService,
+} from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { PNG } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
@@ -63,19 +68,21 @@ describe('PolygonImportProcessor', () => {
       code: 'int main() {}',
     },
   };
-  const stage = (name: string, pkg: Buffer) => {
+  const packagePathOf = (jobId: string) =>
+    join(worker.problemDataRoot, '.imports', `${jobId}.zip`);
+  const stage = (jobId: string, pkg: Buffer) => {
     mkdirSync(join(worker.problemDataRoot, '.imports'), { recursive: true });
-    const path = join(worker.problemDataRoot, '.imports', `${name}.zip`);
-    writeFileSync(path, pkg);
-    return path;
+    writeFileSync(packagePathOf(jobId), pkg);
   };
   const job = (
     overrides: Partial<PolygonImportJob>,
     pkg = buildPolygonPackage(fixture),
-  ): Job<PolygonImportJob> =>
-    ({
+  ): Job<PolygonImportJob> => {
+    const id = newId();
+    stage(id, pkg);
+    return {
+      id,
       data: {
-        packagePath: stage(newId(), pkg),
         requesterId,
         code: 'sum',
         mode: 'create',
@@ -83,7 +90,6 @@ describe('PolygonImportProcessor', () => {
         curators: [],
         groupId,
         typeIds: [typeId],
-        allowedLanguages: [],
         points: 800,
         isFullMarkup: false,
         mainStatementLanguage: 'english',
@@ -92,9 +98,11 @@ describe('PolygonImportProcessor', () => {
         ignoreZeroPointBatches: false,
         ignoreZeroPointCases: false,
         appendMainSolution: true,
+        maxCases: 300,
         ...overrides,
       },
-    }) as Job<PolygonImportJob>;
+    } as Job<PolygonImportJob>;
+  };
   /** An update that gives nothing but the package. */
   const bareUpdate = (
     overrides: Partial<PolygonImportJob> = {},
@@ -107,7 +115,6 @@ describe('PolygonImportProcessor', () => {
         curators: undefined,
         groupId: undefined,
         typeIds: undefined,
-        allowedLanguages: undefined,
         points: undefined,
         ...overrides,
       },
@@ -257,7 +264,7 @@ describe('PolygonImportProcessor', () => {
       ],
     });
     expect(imageCount()).toBe(imagesBefore + 1);
-    expect(existsSync(created.data.packagePath)).toBe(false);
+    expect(existsSync(packagePathOf(created.id!))).toBe(false);
     expect(existsSync(join(worker.pdfCacheRoot, 'sum.en.pdf'))).toBe(false);
   });
 
@@ -276,7 +283,11 @@ describe('PolygonImportProcessor', () => {
       before: 'standard',
       after: 'bridged',
     });
-    expect(revision!.changes.cases).toMatchObject({ after: { count: 5 } });
+    expect(revision!.changes.cases).toEqual({
+      before: { count: 0 },
+      after: { count: 5, changed: [0, 1, 2, 3, 4] },
+    });
+    expect(changes).not.toContain('01.inp');
   });
 
   it('creates with the catalog defaults when none are given', async () => {
@@ -286,7 +297,6 @@ describe('PolygonImportProcessor', () => {
         authors: undefined,
         groupId: undefined,
         typeIds: undefined,
-        allowedLanguages: undefined,
         points: undefined,
       }),
     );
@@ -357,7 +367,6 @@ describe('PolygonImportProcessor', () => {
         groupId: otherGroupId,
         authors: [writerId],
         typeIds: [typeId],
-        allowedLanguages: [],
         curators: [],
       }),
     );
@@ -673,6 +682,57 @@ describe('PolygonImportProcessor', () => {
       create.mockRestore();
       expect(existsSync(dataDirectory('raced'))).toBe(false);
       expect(imageCount()).toBe(imagesBefore);
+    },
+  );
+
+  it('refuses an update of a problem that became manually managed after queueing, leaving data and files untouched', async () => {
+    await worker.problems.updateOne(
+      { code: 'plain' },
+      { $set: { isManuallyManaged: true } },
+    );
+    const before = await worker.problems.findOne({ code: 'plain' });
+    const filesBefore = existsSync(dataDirectory('plain'))
+      ? readdirSync(dataDirectory('plain')).sort()
+      : null;
+    await expect(
+      processor.process(bareUpdate({ code: 'plain' })),
+    ).rejects.toThrow(`${POLYGON_ERROR_PREFIX}the problem is manually managed`);
+    expect(await worker.problems.findOne({ code: 'plain' })).toMatchObject({
+      dataVersion: before!.dataVersion,
+      name: before!.name,
+    });
+    expect(
+      existsSync(dataDirectory('plain'))
+        ? readdirSync(dataDirectory('plain')).sort()
+        : null,
+    ).toEqual(filesBefore);
+    await worker.problems.updateOne(
+      { code: 'plain' },
+      { $set: { isManuallyManaged: false } },
+    );
+  });
+
+  it.each([
+    ['moving the data files into place', 'commitUpload'],
+    ['writing init.yml', 'writeInit'],
+  ] as const)(
+    'reports a failure after the commit (%s) as imported, naming the step and hiding the cause',
+    async (step, method) => {
+      const dataFiles = worker.module.get(ProblemDataFilesService);
+      const failing = jest
+        .spyOn(dataFiles, method)
+        .mockRejectedValueOnce(new Error('EACCES: /data/problems/lost'));
+      const failure = await processor
+        .process(job({ code: 'tail' }))
+        .catch((error: Error) => error);
+      failing.mockRestore();
+      const imported = await worker.problems.countDocuments({ code: 'tail' });
+      await worker.problems.deleteOne({ code: 'tail' });
+      rmSync(dataDirectory('tail'), { recursive: true, force: true });
+      expect((failure as Error).message).toBe(
+        `${POLYGON_ERROR_PREFIX}the problem was imported, but ${step} failed`,
+      );
+      expect(imported).toBe(1);
     },
   );
 

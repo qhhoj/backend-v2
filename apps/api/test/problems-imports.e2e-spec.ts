@@ -132,7 +132,6 @@ describe('Polygon import routes', () => {
     );
     const job = await queue.getJob(jobId);
     expect(job?.data).toEqual({
-      packagePath: join(importsDirectory(), `${jobId}.zip`),
       requesterId: creatorId,
       code: 'newsum',
       mode: 'create',
@@ -146,8 +145,9 @@ describe('Polygon import routes', () => {
       ignoreZeroPointBatches: false,
       ignoreZeroPointCases: false,
       appendMainSolution: true,
+      maxCases: 300,
     });
-    expect(existsSync(job!.data.packagePath)).toBe(true);
+    expect(existsSync(join(importsDirectory(), `${jobId}.zip`))).toBe(true);
     expect((await statusOf(jobId, creator).expect(200)).body).toEqual({
       data: { id: jobId, state: 'waiting', result: null, error: null },
     });
@@ -163,6 +163,28 @@ describe('Polygon import routes', () => {
       importerId,
       creatorId,
     ]);
+  });
+  it("puts the requester's testcase limit in the job: 300, or 9999 with judge.create_mass_testcases", async () => {
+    const massImporter = await loginAs(
+      api,
+      (
+        await createUserWith(api, 'mass', {
+          permissions: [
+            'judge.import_polygon_package',
+            'judge.add_problem',
+            'judge.create_mass_testcases',
+          ],
+        })
+      )._id,
+    );
+    const limitOf = async (code: string, session: TestSession) =>
+      (
+        await queue.getJob(
+          jobIdOf(await upload(`code=${code}`, session).expect(202)),
+        )
+      )?.data.maxCases;
+    expect(await limitOf('lim1', creator)).toBe(300);
+    expect(await limitOf('lim2', massImporter)).toBe(9999);
   });
   it('shows a job only to its requester and a superuser', async () => {
     const jobId = jobIdOf(await upload('code=seen', creator).expect(202));
@@ -235,13 +257,7 @@ describe('Polygon import routes', () => {
       isFullMarkup: false,
       expectedDataVersion: 3,
     });
-    for (const key of [
-      'authors',
-      'curators',
-      'groupId',
-      'typeIds',
-      'allowedLanguages',
-    ])
+    for (const key of ['authors', 'curators', 'groupId', 'typeIds'])
       expect(data).not.toHaveProperty(key);
   });
   it('refuses a package without problem.xml or a non-zip and removes the file', async () => {
