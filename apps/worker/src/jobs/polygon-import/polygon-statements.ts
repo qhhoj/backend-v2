@@ -50,6 +50,7 @@ interface StatementSource {
   properties: ProblemProperties;
 }
 
+const MAX_NAME_LENGTH = 100;
 const fence = (text: string, language = '') =>
   `\`\`\`${language}\n${text}\n\`\`\`\n`;
 
@@ -88,7 +89,15 @@ export async function buildDescription(
 /** Every pattern is bounded: an unterminated `![image](` or `<img` rescans at most 500 or 1000 characters from each start. */
 const MARKDOWN_IMAGE = /!\[image\]\(([^)\n]{1,500})\)/g;
 const IMG_TAG = /<\s*img[^>]{0,1000}>/gi;
-const IMG_SRC = /src\s*=\s*(["'])([^"'\n]*)\1/i;
+const IMG_SRC = /(\ssrc\s*=\s*)(["'])([^"'\n]*)\2/i;
+const MARKDOWN_IMAGE_START = /!\[image\]\(/g;
+const IMG_TAG_START = /<\s*img\b/gi;
+const SRC_ATTRIBUTE = /\ssrc\s*=/gi;
+const countOf = (pattern: RegExp, text: string) =>
+  [...text.matchAll(pattern)].length;
+/** The one `src` of an `<img>` tag, or null when the tag has none, several, or one this parser does not understand (unquoted, mixed quotes). */
+const srcMatch = (tag: string) =>
+  countOf(SRC_ATTRIBUTE, tag) === 1 ? IMG_SRC.exec(tag) : null;
 
 /** Image bytes a visitor's browser will get: type from the bytes, SVG sanitized. The extension of `name` follows the sniffed type. */
 export function prepareImage(
@@ -143,16 +152,19 @@ export async function rehostImages(
     }
     urls.set(imagePath, url);
   };
-  const sources = (
-    pattern: RegExp,
-    pick: (match: RegExpMatchArray) => string | undefined,
-  ) =>
-    [...text.matchAll(pattern)].map(pick).filter((path) => path !== undefined);
-  const tagSources = sources(IMG_TAG, (match) => IMG_SRC.exec(match[0])?.[2]);
-  for (const imagePath of [
-    ...sources(MARKDOWN_IMAGE, (match) => match[1]),
-    ...tagSources,
-  ])
+  const markdownPaths = [...text.matchAll(MARKDOWN_IMAGE)].map(
+    (match) => match[1],
+  );
+  const tags = [...text.matchAll(IMG_TAG)].map((match) => match[0]);
+  const tagPaths = tags.flatMap((tag) => srcMatch(tag)?.[3] ?? []);
+  if (
+    markdownPaths.length !== countOf(MARKDOWN_IMAGE_START, text) ||
+    tagPaths.length !== countOf(IMG_TAG_START, text)
+  )
+    throw new PolygonImportError(
+      'unsupported image reference in the statement',
+    );
+  for (const imagePath of [...markdownPaths, ...tagPaths])
     await rehost(imagePath);
   return text
     .replace(
@@ -160,10 +172,10 @@ export async function rehostImages(
       (match, imagePath: string) => `![image](${urls.get(imagePath)})`,
     )
     .replace(IMG_TAG, (tag) =>
-      tag.replace(IMG_SRC, (source, quote: string, imagePath: string) =>
-        urls.has(imagePath)
-          ? `src=${quote}${urls.get(imagePath)}${quote}`
-          : source,
+      tag.replace(
+        IMG_SRC,
+        (source, lead: string, quote: string, imagePath: string) =>
+          `${lead}${quote}${urls.get(imagePath)}${quote}`,
       ),
     );
 }
@@ -190,6 +202,18 @@ export function assertStatementMarkdown(
       throw new PolygonImportError(`${label}: ${error.message}`);
     throw error;
   }
+}
+
+/** The editor's rules for a statement name: 1..100 characters, no disallowed ones. */
+function assertStatementName(name: string, language: string): void {
+  if (name.length < 1 || name.length > MAX_NAME_LENGTH)
+    throw new PolygonImportError(
+      `statement name for ${language} must be 1 to ${MAX_NAME_LENGTH} characters`,
+    );
+  if (findDisallowedCharacter(name) !== null)
+    throw new PolygonImportError(
+      `statement name for ${language} has disallowed characters`,
+    );
 }
 
 const isString = (value: unknown): value is string => typeof value === 'string';
@@ -239,6 +263,10 @@ export async function parseStatements(
   const sources: StatementSource[] = [];
   for (const node of nodes) {
     const language = node.attributes.language ?? 'unknown';
+    if (sources.some((source) => source.language === language))
+      throw new PolygonImportError(
+        `two statements in the language ${language}`,
+      );
     const folder = posix.dirname(resolveMemberPath(node.attributes.path ?? ''));
     const propertiesPath = resolveMemberPath('problem-properties.json', folder);
     if (!pkg.has(propertiesPath))
@@ -251,6 +279,7 @@ export async function parseStatements(
         'name',
         (candidate) => candidate.attributes.language === language,
       )?.attributes.value ?? '';
+    assertStatementName(name, language);
     sources.push({
       language,
       name,
@@ -290,7 +319,10 @@ export async function parseStatements(
       result.description = description;
       continue;
     }
-    const siteLanguage = job.statementLanguages[source.language];
+    /** Languages come from problem.xml: `constructor` or `__proto__` must not resolve through the prototype. */
+    const siteLanguage = Object.hasOwn(job.statementLanguages, source.language)
+      ? job.statementLanguages[source.language]
+      : undefined;
     if (!siteLanguage)
       throw new PolygonImportError(
         `invalid site language for ${source.language}`,

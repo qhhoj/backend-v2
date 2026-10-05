@@ -35,7 +35,7 @@ describeWithPandoc('PandocService (pandoc >= 3)', () => {
   it('fences code blocks even without a language', async () => {
     expect(
       await pandoc.texToMarkdown('\\begin{verbatim}\n1 2\n\\end{verbatim}'),
-    ).toContain('```\n1 2\n```');
+    ).toMatch(/^```[ \t]*\n1 2\n```$/m);
   }, 30000);
   it('turns includegraphics into an image reference', async () => {
     expect(await pandoc.texToMarkdown('\\includegraphics{fig.png}')).toContain(
@@ -61,6 +61,20 @@ describeWithPandoc('PandocService (pandoc >= 3)', () => {
     },
     30000,
   );
+  it('rejects a billion-laughs macro expansion well within the timeout', async () => {
+    const macros = ['\\newcommand{\\la}{lol}'];
+    for (let level = 1; level < 14; level += 1) {
+      const previous = `\\l${String.fromCharCode(96 + level)}`;
+      macros.push(
+        `\\newcommand{\\l${String.fromCharCode(97 + level)}}{${previous.repeat(10)}}`,
+      );
+    }
+    const started = Date.now();
+    await expect(
+      pandoc.texToMarkdown(`${macros.join('\n')}\n\\ln`),
+    ).rejects.toThrow('statement conversion ran out of memory');
+    expect(Date.now() - started).toBeLessThan(30_000);
+  }, 40000);
 });
 
 /** A stand-in binary: the shell script receives what pandoc would. */
@@ -74,6 +88,7 @@ const fakePandoc = (script: string, limits: Record<string, number> = {}) => {
       timeoutMs: 60_000,
       maxInputBytes: 1024 * 1024,
       maxOutputBytes: 8 * 1024 * 1024,
+      maxMemoryBytes: 768 * 1024 * 1024,
       ...limits,
     };
   })();
@@ -102,6 +117,32 @@ describe('PandocService process handling', () => {
     const started = Date.now();
     await expect(flood.texToMarkdown('x')).rejects.toThrow('too large');
     expect(Date.now() - started).toBeLessThan(10_000);
+  });
+  it('settles at the timeout even when a grandchild outside the group keeps the pipes', async () => {
+    const orphan = fakePandoc('setsid sleep 3 &\nsleep 30', { timeoutMs: 300 });
+    const started = Date.now();
+    await expect(orphan.texToMarkdown('x')).rejects.toThrow('pandoc timed out');
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+  it('limits the address space and reports exhaustion as an import error', async () => {
+    const greedy = fakePandoc(
+      `python3 -c 'bytearray(1024**3)' 2>/dev/null || { echo "pandoc: out of memory" >&2; exit 251; }`,
+      { maxMemoryBytes: 256 * 1024 * 1024 },
+    );
+    await expect(greedy.texToMarkdown('x')).rejects.toThrow(
+      'statement conversion ran out of memory',
+    );
+    const frugal = fakePandoc(`python3 -c 'bytearray(1024**3)' && echo ok`, {
+      maxMemoryBytes: 4 * 1024 ** 3,
+    });
+    expect(await frugal.texToMarkdown('x')).toContain('ok');
+  });
+  it('fails closed when prlimit is missing', async () => {
+    const unlimited = new (class extends PandocService {
+      protected readonly limiter = '/nonexistent/prlimit';
+    })();
+    await expect(unlimited.texToMarkdown('x')).rejects.toThrow('prlimit');
+    await expect(unlimited.assertAvailable()).rejects.toThrow('prlimit');
   });
   it('refuses TeX above the input cap without starting a process', async () => {
     const never = fakePandoc('exit 99', { maxInputBytes: 100 });

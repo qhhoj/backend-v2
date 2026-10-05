@@ -5,6 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PolygonImportError } from './polygon-import.error';
 
+/** util-linux `prlimit` is part of the worker image; without it conversion fails closed rather than running unbounded. */
+class PrlimitMissingError extends PolygonImportError {
+  constructor() {
+    super('prlimit (util-linux) is required to run pandoc but was not found');
+  }
+}
+const OUT_OF_MEMORY = /out of memory|heap (exhausted|overflow)/i;
 const FILTER_FILE = 'filter.lua';
 const VERSION_TIMEOUT_MS = 10_000;
 const MINIMUM_MAJOR_VERSION = 3;
@@ -170,7 +177,7 @@ function Div(el)
 end
 `;
 
-/** The statement is attacker-controlled TeX: `--sandbox` (pandoc >= 2.15) forbids \input, \include, \includegraphics and \verbatiminput from reading local files. */
+/** The statement is attacker-controlled TeX: `--sandbox` (pandoc >= 2.15) forbids \input, \include, \includegraphics and \verbatiminput from reading local files. It does NOT restrict Lua filters, so the filter must stay a trusted constant (PANDOC_FILTER), never derived from a package. */
 export const PANDOC_ARGUMENTS = [
   '--sandbox',
   '-f',
@@ -183,16 +190,20 @@ interface ProcessLimits {
   timeoutMs: number;
   maxInputBytes: number;
   maxOutputBytes: number;
+  /** Address-space cap enforced by `prlimit --as`: a billion-laughs macro or deeply nested markup otherwise grows pandoc to gigabytes. */
+  maxMemoryBytes: number;
 }
 
 /** pandoc >= 3 in the worker image; TeX → GitHub-flavoured Markdown through the legacy Lua filter. The TeX goes in on stdin and never in argv; the process is killed on timeout and on output overflow. */
 @Injectable()
 export class PandocService {
   protected readonly binary: string = 'pandoc';
+  protected readonly limiter: string = 'prlimit';
   protected readonly limits: ProcessLimits = {
     timeoutMs: 60_000,
     maxInputBytes: 1024 * 1024,
     maxOutputBytes: 8 * 1024 * 1024,
+    maxMemoryBytes: 768 * 1024 * 1024,
   };
 
   async texToMarkdown(tex: string): Promise<string> {
@@ -221,7 +232,8 @@ export class PandocService {
         VERSION_TIMEOUT_MS,
       );
       return banner.split('\n')[0].split(' ')[1].split('.').map(Number);
-    } catch {
+    } catch (error) {
+      if (error instanceof PrlimitMissingError) throw error;
       return null;
     }
   }
@@ -240,12 +252,16 @@ export class PandocService {
     timeoutMs = this.limits.timeoutMs,
   ): Promise<string> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.binary, args, {
-        cwd,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        detached: true,
-        env: { PATH: process.env.PATH ?? '' },
-      });
+      const child = spawn(
+        this.limiter,
+        [`--as=${this.limits.maxMemoryBytes}`, '--', this.binary, ...args],
+        {
+          cwd,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          detached: true,
+          env: { PATH: process.env.PATH ?? '' },
+        },
+      );
       const chunks: Buffer[] = [];
       let outputBytes = 0;
       let errorText = '';
@@ -261,7 +277,12 @@ export class PandocService {
       const abort = (reason: string) => {
         failure ??= new PolygonImportError(reason);
         killGroup();
+        /** A grandchild outside the group could keep the pipes open; settle without waiting for them. */
+        child.stdout.destroy();
+        child.stderr.destroy();
+        settle();
       };
+      const settle = () => reject(failure as PolygonImportError);
       const timer = setTimeout(() => abort('pandoc timed out'), timeoutMs);
       child.stdout.on('data', (chunk: Buffer) => {
         outputBytes += chunk.length;
@@ -275,16 +296,22 @@ export class PandocService {
       child.stdin.on('error', () => undefined);
       child.once('error', (error) => {
         clearTimeout(timer);
-        reject(new PolygonImportError(`pandoc failed: ${error.message}`));
+        reject(
+          (error as NodeJS.ErrnoException).code === 'ENOENT'
+            ? new PrlimitMissingError()
+            : new PolygonImportError(`pandoc failed: ${error.message}`),
+        );
       });
       child.once('close', (code) => {
         clearTimeout(timer);
-        if (failure) return reject(failure);
-        if (code !== 0)
-          return reject(
-            new PolygonImportError(`pandoc failed: ${errorText.trim()}`),
-          );
-        resolve(Buffer.concat(chunks).toString('utf8'));
+        if (failure) return settle();
+        if (code === 0) return resolve(Buffer.concat(chunks).toString('utf8'));
+        failure = new PolygonImportError(
+          OUT_OF_MEMORY.test(errorText)
+            ? 'statement conversion ran out of memory'
+            : `pandoc failed: ${errorText.trim()}`,
+        );
+        settle();
       });
       child.stdin.end(input);
     });

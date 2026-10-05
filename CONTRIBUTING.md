@@ -9,6 +9,7 @@
 - Jest 29 + `mongodb-memory-server`; ESLint + Prettier
 - Render stack pins: `markdown-it` 15.0.2, `katex` 0.19.0, `sanitize-html` 2.17.5 (2.17.6+ pulls ESM-only `htmlparser2@12`, breaks Jest CJS; do not bump), `@fastify/multipart` 10.1.2
 - Versions pinned in `package.json`; `fastify` pinned via `overrides` to a single copy; bump when `@nestjs/platform-fastify` or an advisory requires it
+- Worker image (Polygon import) needs `pandoc` >= 3 and util-linux `prlimit` (pandoc runs under `prlimit --as`; without it conversion fails closed)
 - Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
 
 ## Layout

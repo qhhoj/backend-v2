@@ -10,6 +10,7 @@ import { PolygonPackage } from './polygon-package';
 import {
   assertStatementMarkdown,
   buildDescription,
+  mainSolution,
   parseStatements,
   rehostImages,
   withMainSolution,
@@ -297,12 +298,14 @@ describe('rehostImages containment and content', () => {
     const pkg = await englishPackage({ 'fig.png': PNG });
     const time = async (size: number) => {
       const started = process.hrtime.bigint();
-      await rehostImages(
-        `![image](${'![image]('.repeat(size)}\n<img ${'<img src="'.repeat(size)}`,
-        'statements/english',
-        pkg,
-        saveEcho(),
-      );
+      await expect(
+        rehostImages(
+          `![image](${'![image]('.repeat(size)}\n<img ${'<img src="'.repeat(size)}`,
+          'statements/english',
+          pkg,
+          saveEcho(),
+        ),
+      ).rejects.toThrow('unsupported image reference');
       return Number(process.hrtime.bigint() - started);
     };
     await time(2000);
@@ -368,5 +371,137 @@ describe('statement paths and validation', () => {
       parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
     ).rejects.toThrow(PolygonImportError);
     pkg.close();
+  });
+});
+
+describe('hostile problem.xml values', () => {
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty'])(
+    'does not resolve the statement language %s through the prototype',
+    async (language) => {
+      const pkg = await openPackage({
+        tests: [{ input: '1', answer: '1' }],
+        statements: [
+          { language: 'english', name: 'Sum', properties: properties() },
+          { language, name: 'X', properties: properties() },
+        ],
+      });
+      await expect(
+        parseStatements(
+          await pkg.problemXml(),
+          pkg,
+          job({ mainStatementLanguage: 'english' }),
+          identity,
+          saveEcho(),
+        ),
+      ).rejects.toThrow(`invalid site language for ${language}`);
+      pkg.close();
+    },
+  );
+  it('refuses two statements in one language', async () => {
+    const statement =
+      '<statement language="english" path="statements/english/problem.tex" type="application/x-tex"/>';
+    const xml = `<problem><names><name language="english" value="S"/></names><statements>${statement}${statement}</statements></problem>`;
+    const path = join(
+      mkdtempSync(join(tmpdir(), 'qhhoj-polygon-')),
+      'package.zip',
+    );
+    writeFileSync(
+      path,
+      buildZip([
+        { name: 'problem.xml', content: xml },
+        {
+          name: 'statements/english/problem-properties.json',
+          content: JSON.stringify(properties()),
+        },
+      ]),
+    );
+    const pkg = await PolygonPackage.open(path);
+    await expect(
+      parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
+    ).rejects.toThrow('two statements in the language english');
+    pkg.close();
+  });
+  it.each([
+    ['empty', ''],
+    ['too long', 'n'.repeat(101)],
+    ['disallowed', 'say “hi”'],
+  ])('rejects a %s statement name', async (_label, name) => {
+    const pkg = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      statements: [{ language: 'english', name, properties: properties() }],
+    });
+    await expect(
+      parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
+    ).rejects.toThrow(PolygonImportError);
+    pkg.close();
+  });
+});
+
+describe('leftover image references', () => {
+  it.each([
+    ['a path above 500 characters', `![image](${'a'.repeat(501)}.png)`],
+    ['mixed quotes', `<img src="fig.png'>`],
+    ['an unquoted src', '<img src=fig.png>'],
+    [
+      'two src attributes',
+      '<img src="fig.png" src="https://evil.example/x.png">',
+    ],
+    ['no src', '<img alt="x">'],
+    ['an oversized tag', `<img alt="${'x'.repeat(1100)}" src="fig.png">`],
+    ['an unterminated tag', '<img src="fig.png"'],
+    ['an unterminated markdown image', '![image](fig.png'],
+  ])('fails on %s instead of leaving it in the text', async (_label, text) => {
+    const pkg = await englishPackage({ 'fig.png': PNG });
+    await expect(
+      rehostImages(text, 'statements/english', pkg, saveEcho()),
+    ).rejects.toThrow('unsupported image reference');
+    pkg.close();
+  });
+  it('rewrites only the real src of a tag that also has data-src', async () => {
+    const pkg = await englishPackage({ 'fig.png': PNG });
+    const text = await rehostImages(
+      '<img data-src="x" src="fig.png">',
+      'statements/english',
+      pkg,
+      saveEcho(),
+    );
+    expect(text).toBe('<img data-src="x" src="/media/images/1">');
+    pkg.close();
+  });
+});
+
+describe('mainSolution', () => {
+  it('reads the trimmed source and its type', async () => {
+    const pkg = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      solution: {
+        path: 'solutions/main.py',
+        type: 'python.3',
+        code: '\nprint(1)\n',
+      },
+    });
+    expect(await mainSolution(await pkg.problemXml(), pkg)).toEqual({
+      code: 'print(1)',
+      sourceType: 'python.3',
+    });
+    pkg.close();
+  });
+  it('fails when there is no main solution or its source is not in the package', async () => {
+    const none = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      solution: null,
+    });
+    await expect(mainSolution(await none.problemXml(), none)).rejects.toThrow(
+      'main solution not found',
+    );
+    none.close();
+    const missing = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      omitEntries: ['solutions/main.cpp'],
+    });
+    await expect(
+      mainSolution(await missing.problemXml(), missing),
+    ).rejects.toThrow(PolygonImportError);
+    missing.close();
   });
 });
