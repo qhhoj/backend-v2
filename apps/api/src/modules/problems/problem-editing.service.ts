@@ -86,7 +86,7 @@ const withoutRenderedHtml = (
     description,
   })),
 });
-/** Never carried over by a clone: identity, timestamps, people, statement translations, editorial and mirror links. */
+/** Never carried over by a clone: identity, timestamps, people, statement translations, editorial, mirror links and test data. */
 export const CLONE_RESET_FIELDS = [
   'id',
   'createdAt',

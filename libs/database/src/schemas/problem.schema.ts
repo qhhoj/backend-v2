@@ -111,7 +111,8 @@ export class Problem {
   @Prop({ default: 0 }) userCount!: number;
   @Prop({ default: 0 }) acRate!: number;
   /** Test data configuration (3b); null until the data editor or an import writes it. */
-  @Prop({ type: ProblemDataSchema, default: null }) data!: ProblemData | null;
+  @Prop({ type: ProblemDataSchema, default: null, select: false })
+  data!: ProblemData | null;
 }
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);

@@ -1,4 +1,4 @@
-import { EMPTY_PROBLEM_DATA } from '@libs/database';
+import { emptyProblemData } from '@libs/database';
 import type {
   Problem,
   ProblemData,
@@ -139,4 +139,4 @@ export const testCase = (
 });
 export const dataFixture = (
   overrides: Partial<ProblemData> = {},
-): ProblemData => ({ ...EMPTY_PROBLEM_DATA, cases: [], ...overrides });
+): ProblemData => ({ ...emptyProblemData(), ...overrides });

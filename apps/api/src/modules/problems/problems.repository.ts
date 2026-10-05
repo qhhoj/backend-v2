@@ -6,7 +6,7 @@ import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
 export type ProblemDocument = HydratedDocument<Problem>;
 
-/** List rows never carry statement or editorial bodies. */
+/** List rows never carry statement or editorial bodies, nor test data. */
 const LIST_PROJECTION = {
   data: 0,
   description: 0,
@@ -26,6 +26,11 @@ export class ProblemsRepository {
 
   findByCode(code: string): Promise<ProblemDocument | null> {
     return this.problems.findOne({ code }).exec();
+  }
+
+  /** `data` is `select: false` (it can hold thousands of cases); only the data editor loads it. */
+  findByCodeWithData(code: string): Promise<ProblemDocument | null> {
+    return this.problems.findOne({ code }).select('+data').exec();
   }
 
   findById(id: string): Promise<ProblemDocument | null> {

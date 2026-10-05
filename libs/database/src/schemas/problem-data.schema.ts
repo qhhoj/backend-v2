@@ -26,6 +26,7 @@ export const CUSTOM_CHECKER_TYPES = [
   'peg',
   'default',
 ] as const;
+export type CustomCheckerType = (typeof CUSTOM_CHECKER_TYPES)[number];
 export const CASE_TYPES = ['C', 'S', 'E'] as const;
 export type CaseType = (typeof CASE_TYPES)[number];
 export const DATA_FILE_KINDS = [
@@ -35,6 +36,17 @@ export const DATA_FILE_KINDS = [
   'customGrader',
   'customHeader',
 ] as const;
+/** Per-case override: any checker except `bridged`, which needs the problem's custom checker file. */
+export const CASE_CHECKERS = [
+  '',
+  'standard',
+  'floats',
+  'floatsabs',
+  'floatsrel',
+  'identical',
+  'linecount',
+] as const;
+export type CaseChecker = (typeof CASE_CHECKERS)[number];
 export type DataFileKind = (typeof DATA_FILE_KINDS)[number];
 export type JsonObject = Record<string, unknown>;
 
@@ -48,8 +60,8 @@ export class ProblemTestCase {
   @Prop({ type: Number, default: null }) points!: number | null;
   @Prop({ default: false }) isPretest!: boolean;
   @Prop({ default: '' }) generatorArgs!: string;
-  @Prop({ type: String, default: '', enum: ['', ...CHECKERS] }) checker!:
-    Checker | '';
+  @Prop({ type: String, default: '', enum: CASE_CHECKERS })
+  checker!: CaseChecker;
   @Prop({ type: Mixed, default: null }) checkerArgs!: JsonObject | null;
   @Prop({ type: Number, default: null }) outputPrefix!: number | null;
   @Prop({ type: Number, default: null }) outputLimit!: number | null;
@@ -81,7 +93,7 @@ export class ProblemData {
 }
 export const ProblemDataSchema = SchemaFactory.createForClass(ProblemData);
 
-export const EMPTY_PROBLEM_DATA: ProblemData = {
+export const emptyProblemData = (): ProblemData => ({
   archive: null,
   generator: null,
   customChecker: null,
@@ -97,4 +109,4 @@ export const EMPTY_PROBLEM_DATA: ProblemData = {
   nobigmath: false,
   feedback: '',
   cases: [],
-};
+});

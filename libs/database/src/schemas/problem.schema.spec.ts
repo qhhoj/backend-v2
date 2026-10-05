@@ -115,4 +115,13 @@ describe('Problem schema', () => {
       }),
     ).rejects.toThrow(/validation failed/);
   });
+  it('refuses a per-case bridged checker', async () => {
+    await expect(
+      Problems.create({
+        ...base,
+        code: 'casebridged',
+        data: { cases: [{ type: 'C', checker: 'bridged' }] },
+      }),
+    ).rejects.toThrow(/validation failed/);
+  });
 });
