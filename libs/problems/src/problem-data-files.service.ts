@@ -4,6 +4,7 @@ import {
   access,
   lstat,
   mkdir,
+  readdir,
   readFile,
   rename,
   rm,
@@ -24,6 +25,7 @@ export const INIT_FILE = 'init.yml';
 const IMPORTS_DIRECTORY = '.imports';
 /** Dot-prefixed: `safeName` refuses leading dots, so no client file can ever be named like a staged upload. */
 const UPLOAD_PREFIX = '.upload-';
+const STALE_UPLOAD_MS = 60 * 60 * 1000;
 
 /** `<PROBLEM_DATA_ROOT>/<code>/` is the judge contract: init.yml, the archive and the checker/grader sources, all flat single segments. */
 @Injectable()
@@ -117,7 +119,20 @@ export class ProblemDataFilesService {
       `${this.codeOf(code)}/${UPLOAD_PREFIX}${randomUUID()}`,
     );
     await assertRealPathInside(this.root, stagedPath);
+    await this.sweepStaleUploads(code);
     return stagedPath;
+  }
+
+  /** Staged files left by a crashed request: dropped once an hour old, so abandoned uploads never pile up. */
+  private async sweepStaleUploads(code: string): Promise<void> {
+    const directory = this.directoryOf(code);
+    const oldest = Date.now() - STALE_UPLOAD_MS;
+    for (const entry of await readdir(directory)) {
+      if (!entry.startsWith(UPLOAD_PREFIX)) continue;
+      const path = this.resolveInside(`${code}/${entry}`);
+      const stats = await lstat(path).catch(() => null);
+      if (stats && stats.mtimeMs < oldest) await rm(path, { force: true });
+    }
   }
 
   /** Only a regular file at a path handed out by `stageUpload` for this code can be committed. */

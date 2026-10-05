@@ -7,3 +7,4 @@ export * from './problem-files.module';
 export * from './problem-data.error';
 export * from './init-yaml';
 export * from './zip-archive';
+export * from './file-names';

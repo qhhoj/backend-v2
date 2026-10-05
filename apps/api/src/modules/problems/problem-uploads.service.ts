@@ -5,13 +5,14 @@ import type { AuthContext } from '@libs/auth';
 import { AppError, RateLimitService, StorageService } from '@libs/common';
 import { newId } from '@libs/database';
 import {
+  extensionOf,
+  safeFileName,
   isPdf,
   isSvgWithinLimits,
   sniffImage,
   SVG_MAX_BYTES,
 } from '@libs/problems';
 import { sanitizeSvg } from '@libs/render';
-import { basename, extname } from 'node:path';
 import { readMultipartFile, rejectFile } from './multipart';
 import type { UploadedFile } from './multipart';
 import { ProblemEditingService } from './problem-editing.service';
@@ -23,7 +24,6 @@ import { RevisionsRepository } from './revisions.repository';
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const STATEMENT_MAX_BYTES = 5 * 1024 * 1024;
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
-const FILE_NAME_MAX_LENGTH = 100;
 /** Archives, documents, test data, sources and plain images; never anything a browser would run or render as markup. */
 const MATERIAL_EXTENSIONS: ReadonlySet<string> = new Set(
   (
@@ -32,19 +32,6 @@ const MATERIAL_EXTENSIONS: ReadonlySet<string> = new Set(
     'png jpg jpeg gif'
   ).split(' '),
 );
-
-/** Client names never reach the filesystem as sent: allow-listed characters only, no `..`, no leading dot, capped. */
-export const safeFileName = (name: string): string =>
-  basename(name)
-    .replace(/\s+/g, '_')
-    .replace(/[^\w.-]/g, '')
-    .replace(/\.{2,}/g, '.')
-    .replace(/^\.+/, '')
-    .slice(0, FILE_NAME_MAX_LENGTH) || 'material';
-
-/** Lower-cased extension without the dot; `''` when there is none. */
-export const extensionOf = (name: string): string =>
-  extname(name).slice(1).toLowerCase();
 
 function sanitizedSvg(content: Buffer): Buffer {
   if (content.length > SVG_MAX_BYTES)

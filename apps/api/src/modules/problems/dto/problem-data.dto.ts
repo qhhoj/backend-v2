@@ -99,8 +99,8 @@ export class DataFileKindParamDto {
   @IsString() code!: string;
   @IsIn(DATA_FILE_KINDS) kind!: DataFileKind;
 }
-/** Unvalidated beyond length: an unsafe name is a 404, never a 400 (see `ProblemDataService.download`). */
+/** Unvalidated beyond length (100 = Fastify's maxParamLength, so a longer name is a 414 before this runs): an unsafe name is a 404, never a 400 (see `ProblemDataService.download`). */
 export class DataFileNameParamDto {
   @IsString() code!: string;
-  @IsString() @MaxLength(120) name!: string;
+  @IsString() @MaxLength(100) name!: string;
 }

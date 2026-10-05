@@ -8,9 +8,11 @@ import type { DataFileKind, Problem, ProblemData } from '@libs/database';
 import {
   compileInitYaml,
   INIT_FILE,
+  extensionOf,
   listZipEntries,
   ProblemDataError,
   ProblemDataFilesService,
+  safeFileName,
   ZipError,
 } from '@libs/problems';
 import { PutProblemDataDto } from './dto/problem-data.dto';
@@ -20,7 +22,6 @@ import { MAX_CASE_ARGS_BYTES, maxTestcasesFor } from './dto/limits';
 import { fieldDiff } from './field-diff';
 import { readMultipartFile, rejectFile, saveMultipartFile } from './multipart';
 import { ProblemEditingService } from './problem-editing.service';
-import { extensionOf, safeFileName } from './problem-uploads.service';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from './rate-limits';
@@ -130,7 +131,10 @@ export class ProblemDataService {
     return yaml;
   }
 
-  /** Streams the zip into the problem directory, validates it (bounds, names), then swaps it in and recompiles. */
+  /**
+   * Streams the zip to a staged file, validates it (bounds, names), compiles against the staged path, and only after a matched update gives it its final name and drops the previous archive.
+   * Any failure removes the staged file and nothing else, so a lost race never touches the winner's archive.
+   */
   async uploadArchive(
     auth: AuthContext,
     code: string,
@@ -139,23 +143,40 @@ export class ProblemDataService {
     const problem = await this.writableProblem(auth.principal, code);
     await this.reserveUpload(auth);
     const staged = await this.dataFiles.stageUpload(problem.code);
-    const { filename } = await saveMultipartFile(
-      request,
-      ARCHIVE_MAX_BYTES,
-      staged,
-    );
-    const name = safeFileName(filename);
     try {
-      if (extensionOf(name) !== 'zip')
-        throw rejectFile('The archive must be a .zip file.');
-      await listZipEntries(staged);
+      const { filename } = await saveMultipartFile(
+        request,
+        ARCHIVE_MAX_BYTES,
+        staged,
+        (clientName) => {
+          if (extensionOf(safeFileName(clientName)) !== 'zip')
+            throw rejectFile('The archive must be a .zip file.');
+        },
+      );
+      const name = safeFileName(filename);
+      await this.assertZip(staged);
+      const { data: previous, version } = await this.loadData(problem);
+      this.assertNameFree(previous, 'archive', name);
+      const { stored, archiveFiles } = await this.compileAndStore(
+        problem,
+        { ...previous, archive: name },
+        version,
+        staged,
+      );
+      await this.dataFiles.commitUpload(problem.code, staged, name);
+      await this.removeReplaced(problem.code, previous.archive, name);
+      await this.recordChange(
+        auth,
+        problem,
+        previous,
+        stored,
+        'archive uploaded',
+      );
+      return this.response(auth.principal, problem, stored, archiveFiles);
     } catch (error) {
       await rm(staged, { force: true });
-      throw error instanceof ZipError ? rejectFile(error.message) : error;
+      throw error;
     }
-    return this.replaceFile(auth, problem, 'archive', name, () =>
-      this.dataFiles.commitUpload(problem.code, staged, name),
-    );
   }
 
   async uploadSource(
@@ -175,9 +196,23 @@ export class ProblemDataService {
       throw rejectFile(
         `Allowed extensions for ${kind}: ${SOURCE_EXTENSIONS[kind].join(', ')}`,
       );
-    return this.replaceFile(auth, problem, kind, name, () =>
-      this.dataFiles.writeFile(problem.code, name, content),
+    const { data: previous, version } = await this.loadData(problem);
+    this.assertNameFree(previous, kind, name);
+    const { stored, archiveFiles } = await this.compileAndStore(
+      problem,
+      { ...previous, [kind]: name },
+      version,
     );
+    await this.dataFiles.writeFile(problem.code, name, content);
+    await this.removeReplaced(problem.code, previous[kind], name);
+    await this.recordChange(
+      auth,
+      problem,
+      previous,
+      stored,
+      `${kind} uploaded`,
+    );
+    return this.response(auth.principal, problem, stored, archiveFiles);
   }
 
   /** Clears the field and recompiles first (Mongo stays authoritative), then drops the file. */
@@ -225,18 +260,12 @@ export class ProblemDataService {
     );
   }
 
-  /**
-   * Stores the new file, recompiles with the version loaded just before, and only after a matched update drops the previous file of that kind (a lost race removes the new file instead).
-   * A name already used by another kind is refused, so one upload never overwrites a sibling's file.
-   */
-  private async replaceFile(
-    auth: AuthContext,
-    problem: ProblemDocument,
+  /** A name already used by another kind is refused, so one upload never overwrites a sibling's file. */
+  private assertNameFree(
+    previous: ProblemData,
     kind: DataFileKind,
     name: string,
-    store: () => Promise<void>,
-  ): Promise<ProblemDataResponse> {
-    const { data: previous, version } = await this.loadData(problem);
+  ): void {
     if (
       DATA_FILE_KINDS.some(
         (other) => other !== kind && previous[other] === name,
@@ -245,28 +274,23 @@ export class ProblemDataService {
       throw rejectFile(
         `The name ${name} is already used by another data file.`,
       );
-    await store();
-    const old = previous[kind];
+  }
+
+  private async assertZip(path: string): Promise<void> {
     try {
-      const { stored, archiveFiles } = await this.compileAndStore(
-        problem,
-        { ...previous, [kind]: name },
-        version,
-      );
-      if (old && old !== name)
-        await this.dataFiles.removeFile(problem.code, old);
-      await this.recordChange(
-        auth,
-        problem,
-        previous,
-        stored,
-        `${kind} uploaded`,
-      );
-      return this.response(auth.principal, problem, stored, archiveFiles);
+      await listZipEntries(path);
     } catch (error) {
-      if (old !== name) await this.dataFiles.removeFile(problem.code, name);
-      throw error;
+      throw error instanceof ZipError ? rejectFile(error.message) : error;
     }
+  }
+
+  private async removeReplaced(
+    code: string,
+    previousName: string | null,
+    name: string,
+  ): Promise<void> {
+    if (previousName && previousName !== name)
+      await this.dataFiles.removeFile(code, previousName);
   }
 
   private async recordChange(
@@ -335,8 +359,13 @@ export class ProblemDataService {
     problem: ProblemDocument,
     data: ProblemData,
     version: number,
+    archivePath?: string,
   ): Promise<{ stored: ProblemData; archiveFiles: string[] }> {
-    const { stored, yaml, archiveFiles } = await this.compile(problem, data);
+    const { stored, yaml, archiveFiles } = await this.compile(
+      problem,
+      data,
+      archivePath,
+    );
     let matched: boolean;
     try {
       matched = await this.repository.updateData(problem._id, version, stored);
@@ -356,12 +385,17 @@ export class ProblemDataService {
     return { stored, archiveFiles };
   }
 
-  private async compile(problem: ProblemDocument, data: ProblemData) {
+  /** `archivePath` overrides where the archive is read: a staged upload is compiled before it takes its final name. */
+  private async compile(
+    problem: ProblemDocument,
+    data: ProblemData,
+    archivePath?: string,
+  ) {
     let archiveFiles: string[] = [];
     try {
       if (data.archive)
         archiveFiles = await listZipEntries(
-          this.dataFiles.pathOf(problem.code, data.archive),
+          archivePath ?? this.dataFiles.pathOf(problem.code, data.archive),
         );
       const compiled = compileInitYaml(data, new Set(archiveFiles));
       return {

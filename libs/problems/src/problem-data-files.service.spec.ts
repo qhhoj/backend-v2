@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -114,6 +115,23 @@ describe('ProblemDataFilesService', () => {
       files.commitUpload('sum', join(root, 'sum', 'upload-x.tmp'), 'a.zip'),
     ).rejects.toThrow('Not a staged upload');
     expect(existsSync(join(root, 'sum', 'a.zip'))).toBe(false);
+  });
+  it('sweeps staged uploads older than an hour and keeps fresh ones and real files', async () => {
+    const directory = join(root, 'sweep');
+    mkdirSync(directory);
+    const old = join(directory, '.upload-old');
+    const fresh = join(directory, '.upload-fresh');
+    const real = join(directory, 'tests.zip');
+    for (const path of [old, fresh, real]) writeFileSync(path, 'x');
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    utimesSync(old, twoHoursAgo, twoHoursAgo);
+    utimesSync(real, twoHoursAgo, twoHoursAgo);
+    const staged = await files.stageUpload('sweep');
+    expect(readdirSync(directory).sort()).toEqual([
+      '.upload-fresh',
+      'tests.zip',
+    ]);
+    expect(existsSync(staged)).toBe(false);
   });
   it('refuses a problem directory that is a symlink to outside the root', async () => {
     const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));

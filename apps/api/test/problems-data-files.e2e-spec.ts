@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { ProblemsRepository } from '../src/modules/problems/problems.repository';
 import { join } from 'node:path';
 import { parse } from 'yaml';
+import { listZipEntries } from '@libs/problems';
 import { buildZip } from '@libs/problems/testing';
 import { ProblemDataResponse } from '../src/modules/problems/dto/problem-data.response';
 import {
@@ -131,7 +133,7 @@ describe('problem data files', () => {
       .expect(400);
     await upload(archive, plain, buildZip(tests(1)), 'tests.zip').expect(403);
     expect(readdirSync(directory).sort()).toEqual(['init.yml', 'tests.zip']);
-    expect(existsSync(join(api.problemDataRoot, 'evil'))).toBe(false);
+    expect(readdirSync(api.problemDataRoot).sort()).toEqual(['sum']);
   });
   it('accepts an archive larger than the 20 MiB plugin default (per-call limit wins)', async () => {
     const big = buildZip([
@@ -218,6 +220,126 @@ describe('problem data files', () => {
       },
     });
   });
+  describe('lost races never leave disk and Mongo disagreeing', () => {
+    const storedData = async () =>
+      dataOf(
+        await authed(api.http().get(`${PROBLEMS}/sum/data`), editor).expect(
+          200,
+        ),
+      );
+    const initArchive = () =>
+      (
+        parse(readFileSync(join(directory, 'init.yml'), 'utf8')) as {
+          archive: string;
+        }
+      ).archive;
+    const loseNextUpdate = () =>
+      jest
+        .spyOn(api.app.get(ProblemsRepository), 'updateData')
+        .mockResolvedValueOnce(false);
+
+    it('keeps the old archive when a same-name re-upload loses the CAS', async () => {
+      await upload(
+        `${PROBLEMS}/sum/data/archive`,
+        editor,
+        buildZip(tests(1)),
+        'race.zip',
+      ).expect(201);
+      const before = await listZipEntries(join(directory, 'race.zip'));
+      const spy = loseNextUpdate();
+      await upload(
+        `${PROBLEMS}/sum/data/archive`,
+        editor,
+        buildZip(tests(3)),
+        'race.zip',
+      ).expect(409);
+      spy.mockRestore();
+      expect(await listZipEntries(join(directory, 'race.zip'))).toEqual(before);
+      expect((await storedData()).archiveFiles).toEqual(before);
+      expect(initArchive()).toBe('race.zip');
+      expect(
+        readdirSync(directory).filter((name) => name.startsWith('.')),
+      ).toEqual([]);
+    });
+    it('lets exactly one of two concurrent archive uploads win, intact on disk', async () => {
+      const repository = api.app.get(ProblemsRepository);
+      const original = repository.findByCodeWithData.bind(repository);
+      let arrived = 0;
+      let release!: () => void;
+      const bothRead = new Promise<void>((resolve) => (release = resolve));
+      const spy = jest
+        .spyOn(repository, 'findByCodeWithData')
+        .mockImplementation(async (code) => {
+          const problem = await original(code);
+          if (++arrived === 2) release();
+          await bothRead;
+          return problem;
+        });
+      const [first, second] = await Promise.all([
+        upload(
+          `${PROBLEMS}/sum/data/archive`,
+          editor,
+          buildZip(tests(2)),
+          'one.zip',
+        ),
+        upload(
+          `${PROBLEMS}/sum/data/archive`,
+          editor,
+          buildZip(tests(4)),
+          'two.zip',
+        ),
+      ]);
+      spy.mockRestore();
+      expect([first.status, second.status].sort()).toEqual([201, 409]);
+      const stored = await storedData();
+      expect(stored.archive).toBe(first.status === 201 ? 'one.zip' : 'two.zip');
+      expect(
+        await listZipEntries(join(directory, stored.archive as string)),
+      ).toEqual(stored.archiveFiles);
+      expect(initArchive()).toBe(stored.archive);
+      expect(
+        readdirSync(directory).filter((name) => name.endsWith('.zip')),
+      ).toEqual([stored.archive]);
+    });
+    it('keeps the old source when a same-name re-upload loses the CAS', async () => {
+      const url = `${PROBLEMS}/sum/data/files/generator`;
+      await upload(url, editor, Buffer.from('v1'), 'gen.cpp').expect(201);
+      const spy = loseNextUpdate();
+      await upload(url, editor, Buffer.from('v2'), 'gen.cpp').expect(409);
+      spy.mockRestore();
+      expect(readFileSync(join(directory, 'gen.cpp'), 'utf8')).toBe('v1');
+    });
+    it('lets exactly one of two concurrent source uploads win with its own file', async () => {
+      const repository = api.app.get(ProblemsRepository);
+      const original = repository.findByCodeWithData.bind(repository);
+      let arrived = 0;
+      let release!: () => void;
+      const bothRead = new Promise<void>((resolve) => (release = resolve));
+      const spy = jest
+        .spyOn(repository, 'findByCodeWithData')
+        .mockImplementation(async (code) => {
+          const problem = await original(code);
+          if (++arrived === 2) release();
+          await bothRead;
+          return problem;
+        });
+      const url = `${PROBLEMS}/sum/data/files/generator`;
+      const [first, second] = await Promise.all([
+        upload(url, editor, Buffer.from('first'), 'a.cpp'),
+        upload(url, editor, Buffer.from('second'), 'b.cpp'),
+      ]);
+      spy.mockRestore();
+      expect([first.status, second.status].sort()).toEqual([201, 409]);
+      const { generator } = await storedData();
+      expect(generator).toBe(first.status === 201 ? 'a.cpp' : 'b.cpp');
+      expect(readFileSync(join(directory, generator as string), 'utf8')).toBe(
+        first.status === 201 ? 'first' : 'second',
+      );
+      expect(
+        existsSync(join(directory, first.status === 201 ? 'b.cpp' : 'a.cpp')),
+      ).toBe(false);
+    });
+  });
   it('deletes a file, clears the field and recompiles', async () => {
     const data = dataOf(
       await authed(
@@ -238,7 +360,10 @@ describe('problem data files', () => {
   });
   it('downloads data files for editors only, with path containment', async () => {
     const url = `${PROBLEMS}/sum/data/files`;
-    const response = await authed(api.http().get(`${url}/tests.zip`), editor)
+    const archive = dataOf(
+      await authed(api.http().get(`${PROBLEMS}/sum/data`), editor).expect(200),
+    ).archive as string;
+    const response = await authed(api.http().get(`${url}/${archive}`), editor)
       .buffer(true)
       .parse((res, done) => {
         const chunks: Buffer[] = [];
@@ -248,17 +373,15 @@ describe('problem data files', () => {
       .expect(200);
     expect(response.headers['content-type']).toBe('application/octet-stream');
     expect(response.headers['content-disposition']).toBe(
-      'attachment; filename="tests.zip"',
+      `attachment; filename="${archive}"`,
     );
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     // Buffer.equals: toEqual walks a 21 MiB buffer element by element.
     expect(
-      (response.body as Buffer).equals(
-        readFileSync(join(directory, 'tests.zip')),
-      ),
+      (response.body as Buffer).equals(readFileSync(join(directory, archive))),
     ).toBe(true);
-    await authed(api.http().get(`${url}/tests.zip`), plain).expect(403);
-    await api.http().get(`${url}/tests.zip`).expect(401);
+    await authed(api.http().get(`${url}/${archive}`), plain).expect(403);
+    await api.http().get(`${url}/${archive}`).expect(401);
     await authed(api.http().get(`${url}/nope.zip`), editor).expect(404);
     await authed(
       api.http().get(`${url}/..%2F..%2Fetc%2Fpasswd`),

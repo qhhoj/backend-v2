@@ -1,4 +1,4 @@
-import { safeFileName } from './problem-uploads.service';
+import { extensionOf, safeFileName } from './file-names';
 
 describe('safeFileName', () => {
   it.each([
@@ -16,4 +16,16 @@ describe('safeFileName', () => {
     expect(name).toMatch(/^[\w-][\w.-]{0,99}$/);
     expect(name).not.toContain('..');
   });
+});
+
+describe('extensionOf', () => {
+  it.each([
+    ['a.CPP', 'cpp'],
+    ['x.tar.gz', 'gz'],
+    ['cpp', ''],
+    ['.cpp', ''],
+    ['', ''],
+  ])('%s -> "%s"', (name, expected) =>
+    expect(extensionOf(name)).toBe(expected),
+  );
 });

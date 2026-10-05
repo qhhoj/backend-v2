@@ -1,5 +1,6 @@
 import type { JsonObject, ProblemData, ProblemTestCase } from '@libs/database';
 import { CUSTOM_CHECKER_TYPES } from '@libs/database';
+import { extensionOf } from './file-names';
 import { ProblemDataError } from './problem-data.error';
 import { emitYaml } from './yaml-emit';
 
@@ -19,8 +20,6 @@ const CHECKER_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   pas: 'PAS',
   java: 'JAVA8',
 };
-const extensionOf = (name: string) =>
-  name.split('.').pop()?.toLowerCase() ?? '';
 
 const MAX_ARGS_DEPTH = 8;
 const MAX_ARGS_ENTRIES = 200;

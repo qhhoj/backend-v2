@@ -60,11 +60,12 @@ export async function readMultipartFile(
   return { filename, content };
 }
 
-/** Large files (archives, packages): streamed to `targetPath`, which is removed again on any failure, including a truncated upload. */
+/** Large files (archives, packages): streamed to `targetPath`, which is removed again on any failure, including a truncated upload. `checkFilename` runs before the stream is consumed and rejects by throwing. */
 export async function saveMultipartFile(
   request: FastifyRequest,
   maxBytes: number,
   targetPath: string,
+  checkFilename?: (filename: string) => void,
 ): Promise<{ filename: string; bytes: number }> {
   let bytes = 0;
   try {
@@ -72,6 +73,7 @@ export async function saveMultipartFile(
       request,
       maxBytes,
       async (part) => {
+        checkFilename?.(part.filename);
         part.file.on('data', (chunk: Buffer) => {
           bytes += chunk.length;
         });
