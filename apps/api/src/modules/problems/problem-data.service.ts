@@ -23,7 +23,6 @@ import { RevisionsRepository } from './revisions.repository';
 const invalid = (field: string, message: string) =>
   new AppError('validation_failed', 400, message, { [field]: [message] });
 
-/** Revisions keep the configuration plus a case summary (count, changed positions), never the case rows twice. */
 /** Everything but the case rows and the derived feedback. */
 const configOf = (data: ProblemData) =>
   Object.fromEntries(
@@ -32,6 +31,7 @@ const configOf = (data: ProblemData) =>
     ),
   );
 
+/** Revisions keep the configuration plus a case summary (count, changed positions), never the case rows twice. */
 function dataChanges(before: ProblemData, after: ProblemData) {
   const oldCases = before.cases;
   const newCases = after.cases;
@@ -63,7 +63,13 @@ export class ProblemDataService {
 
   async get(auth: AuthContext, code: string): Promise<ProblemDataResponse> {
     const problem = await this.managedProblem(auth.principal, code);
-    return this.response(auth.principal, problem, await this.dataOf(problem));
+    const { data } = await this.loadData(problem);
+    return this.response(
+      auth.principal,
+      problem,
+      data,
+      data.archive ? await this.archiveNames(problem.code, data.archive) : [],
+    );
   }
 
   async put(
@@ -79,12 +85,16 @@ export class ProblemDataService {
         `Too many testcases, number of testcases must not exceed ${limit}`,
       );
     this.assertArgsSize(dto);
-    const previous = await this.dataOf(problem);
-    const stored = await this.compileAndStore(problem, {
-      ...previous,
-      ...dto,
-      cases: dto.cases.map((row) => ({ ...row })),
-    });
+    const { data: previous, version } = await this.loadData(problem);
+    const { stored, archiveFiles } = await this.compileAndStore(
+      problem,
+      {
+        ...previous,
+        ...dto,
+        cases: dto.cases.map((row) => ({ ...row })),
+      },
+      version,
+    );
     const changes = dataChanges(previous, stored);
     if (Object.keys(changes).length)
       await this.revisions.append({
@@ -95,7 +105,7 @@ export class ProblemDataService {
         changes,
         comment: 'Data edited from site',
       });
-    return this.response(auth.principal, problem, stored);
+    return this.response(auth.principal, problem, stored, archiveFiles);
   }
 
   async init(auth: AuthContext, code: string): Promise<string> {
@@ -132,57 +142,81 @@ export class ProblemDataService {
     return problem;
   }
 
-  /** The stored data as a plain object. `data` is `select: false`, so it is loaded explicitly; the problem from the access check never carries it. */
-  async dataOf(problem: ProblemDocument): Promise<ProblemData> {
+  /** The stored data as a plain object, with the version to compare-and-set against. `data` is `select: false`, so it is loaded explicitly; the problem from the access check never carries it. */
+  async loadData(
+    problem: ProblemDocument,
+  ): Promise<{ data: ProblemData; version: number }> {
     const loaded = await this.repository.findByCodeWithData(problem.code);
     if (!loaded) throw new AppError('not_found', 404, 'No such problem');
-    return (loaded.toObject() as Problem).data ?? emptyProblemData();
+    return {
+      data: (loaded.toObject() as Problem).data ?? emptyProblemData(),
+      version: loaded.dataVersion,
+    };
   }
 
-  /** Compiles and writes init.yml (or removes it); a configuration or archive problem becomes `feedback`, never an error. */
+  /**
+   * Compiles, persists with a compare-and-set on `version` (409 when another writer won) and only then writes or removes init.yml, so Mongo stays authoritative.
+   * A configuration or archive problem becomes `feedback`, never an error.
+   * Residual window: two sequential winners can still write init.yml out of order (A persists, B persists, B writes, A writes).
+   */
   async compileAndStore(
     problem: ProblemDocument,
     data: ProblemData,
-  ): Promise<ProblemData> {
-    let stored: ProblemData;
+    version: number,
+  ): Promise<{ stored: ProblemData; archiveFiles: string[] }> {
+    const { stored, yaml, archiveFiles } = await this.compile(problem, data);
+    let matched: boolean;
     try {
-      const entries = new Set(
-        data.archive
-          ? await listZipEntries(
-              this.dataFiles.pathOf(problem.code, data.archive),
-            )
-          : [],
-      );
-      const compiled = compileInitYaml(data, entries);
-      if (compiled.yaml === null) await this.dataFiles.removeInit(problem.code);
-      else await this.dataFiles.writeInit(problem.code, compiled.yaml);
-      stored = { ...data, cases: compiled.cases, feedback: '' };
-    } catch (error) {
-      if (!(error instanceof ProblemDataError || error instanceof ZipError))
-        throw error;
-      await this.dataFiles.removeInit(problem.code);
-      stored = { ...data, feedback: error.message };
-    }
-    try {
-      await this.repository.update(problem._id, { data: stored });
+      matched = await this.repository.updateData(problem._id, version, stored);
     } catch (error) {
       if (isDocumentTooLarge(error))
         throw invalid('cases', 'The test data is too large.');
       throw error;
     }
-    return stored;
+    if (!matched)
+      throw new AppError(
+        'conflict',
+        409,
+        'Test data changed meanwhile, reload',
+      );
+    if (yaml === null) await this.dataFiles.removeInit(problem.code);
+    else await this.dataFiles.writeInit(problem.code, yaml);
+    return { stored, archiveFiles };
+  }
+
+  private async compile(problem: ProblemDocument, data: ProblemData) {
+    let archiveFiles: string[] = [];
+    try {
+      if (data.archive)
+        archiveFiles = await listZipEntries(
+          this.dataFiles.pathOf(problem.code, data.archive),
+        );
+      const compiled = compileInitYaml(data, new Set(archiveFiles));
+      return {
+        stored: { ...data, cases: compiled.cases, feedback: '' },
+        yaml: compiled.yaml,
+        archiveFiles,
+      };
+    } catch (error) {
+      if (!(error instanceof ProblemDataError || error instanceof ZipError))
+        throw error;
+      return {
+        stored: { ...data, feedback: error.message },
+        yaml: null,
+        archiveFiles,
+      };
+    }
   }
 
   /** All per-case arguments together stay bounded, however the cases split them. */
   private assertArgsSize({ cases }: PutProblemDataDto): void {
-    let bytes = 0;
-    try {
-      for (const row of cases)
-        bytes +=
-          row.generatorArgs.length + JSON.stringify(row.checkerArgs).length;
-    } catch {
-      throw invalid('cases', 'Case arguments are too deeply nested.');
-    }
+    const bytes = cases.reduce(
+      (total, row) =>
+        total +
+        row.generatorArgs.length +
+        JSON.stringify(row.checkerArgs).length,
+      0,
+    );
     if (bytes > MAX_CASE_ARGS_BYTES)
       throw invalid('cases', 'Case arguments are too large.');
   }
@@ -191,11 +225,10 @@ export class ProblemDataService {
     principal: Principal,
     problem: ProblemDocument,
     data: ProblemData,
+    archiveFiles: string[],
   ): Promise<ProblemDataResponse> {
     return ProblemDataResponse.from(data, {
-      archiveFiles: data.archive
-        ? await this.archiveNames(problem.code, data.archive)
-        : [],
+      archiveFiles,
       hasInit: await this.dataFiles.exists(problem.code, INIT_FILE),
       maxCases: maxTestcasesFor(principal),
     });

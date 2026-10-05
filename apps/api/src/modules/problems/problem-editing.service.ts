@@ -97,6 +97,7 @@ export const CLONE_RESET_FIELDS = [
   'userCount',
   'acRate',
   'data',
+  'dataVersion',
   'authors',
   'curators',
   'testers',

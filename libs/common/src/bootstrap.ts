@@ -53,6 +53,7 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
   app
     .getHttpAdapter()
     .getInstance()
+    // A hook runs outside Nest's exception filter, so the error envelope is built by hand.
     .addHook('preValidation', async (request, reply) => {
       if (isTooDeep(request.body))
         await reply.status(400).send({

@@ -113,6 +113,8 @@ export class Problem {
   /** Test data configuration (3b); null until the data editor or an import writes it. */
   @Prop({ type: ProblemDataSchema, default: null, select: false })
   data!: ProblemData | null;
+  /** Compare-and-set counter for `data`: bumped by every data write so concurrent editors cannot overwrite each other. */
+  @Prop({ default: 0 }) dataVersion!: number;
 }
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);

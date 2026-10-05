@@ -1,4 +1,4 @@
-import { isDocumentTooLarge } from './duplicate-key';
+import { isDocumentTooLarge } from './document-too-large';
 
 describe('isDocumentTooLarge', () => {
   it.each([

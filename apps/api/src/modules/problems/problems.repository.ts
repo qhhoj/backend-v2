@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { CI, Problem } from '@libs/database';
-import type { ProblemTranslation } from '@libs/database';
+import type { ProblemData, ProblemTranslation } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
 export type ProblemDocument = HydratedDocument<Problem>;
@@ -9,6 +9,7 @@ export type ProblemDocument = HydratedDocument<Problem>;
 /** List rows never carry statement or editorial bodies, nor test data. */
 const LIST_PROJECTION = {
   data: 0,
+  dataVersion: 0,
   description: 0,
   descriptionHtml: 0,
   summary: 0,
@@ -75,6 +76,25 @@ export class ProblemsRepository {
 
   async update(id: string, changes: Partial<Problem>): Promise<void> {
     await this.problems.updateOne({ _id: id }, { $set: changes }).exec();
+  }
+
+  /** Compare-and-set on `dataVersion`; false when another writer got there first. A missing counter counts as 0. */
+  async updateData(
+    id: string,
+    expectedVersion: number,
+    data: ProblemData,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.problems
+      .updateOne(
+        {
+          _id: id,
+          dataVersion:
+            expectedVersion === 0 ? { $in: [0, null] } : expectedVersion,
+        },
+        { $set: { data }, $inc: { dataVersion: 1 } },
+      )
+      .exec();
+    return matchedCount === 1;
   }
 
   /** Other problems still pointing at an uploaded file (clones copy the urls). */

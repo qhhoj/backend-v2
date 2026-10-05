@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Put, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Put,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { RouteConfig } from '@nestjs/platform-fastify';
 import type { FastifyReply } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
@@ -8,6 +16,7 @@ import { DATA_BODY_LIMIT_BYTES } from './dto/limits';
 import { PutProblemDataDto } from './dto/problem-data.dto';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { ProblemCodeParamDto } from './dto/problem-params.dto';
+import { ProblemDataWriteGuard } from './problem-data-write.guard';
 import { ProblemDataService } from './problem-data.service';
 
 @Controller('api/internal/problems')
@@ -22,6 +31,7 @@ export class ProblemDataController {
     return this.data.get(auth, code);
   }
 
+  @UseGuards(ProblemDataWriteGuard)
   @RouteConfig({ bodyLimit: DATA_BODY_LIMIT_BYTES })
   @Put(':code/data')
   put(

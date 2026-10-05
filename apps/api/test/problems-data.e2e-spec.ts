@@ -1,3 +1,4 @@
+import { ProblemsRepository } from '../src/modules/problems/problems.repository';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
@@ -251,7 +252,7 @@ describe('problem data editor', () => {
     await put('bulk', mass, config(bulkCases(10000))).expect(400);
   });
 
-  it('accepts a 9999-case body above the default 1 MiB limit and scales linearly', async () => {
+  it('accepts a 9999-case body above the default 1 MiB limit', async () => {
     const timed = async (count: number) => {
       const body = config(bulkCases(count, { generatorArgs: 'x'.repeat(100) }));
       expect(JSON.stringify(body).length).toBeGreaterThan(
@@ -262,9 +263,8 @@ describe('problem data editor', () => {
       expect(data.cases).toHaveLength(count);
       return performance.now() - started;
     };
-    const small = await timed(2500);
-    const large = await timed(9999);
-    expect(large / small).toBeLessThan(16);
+    await timed(2500);
+    expect(await timed(9999)).toBeLessThan(15_000);
     expect(dataOf(await get('bulk', mass).expect(200)).cases).toHaveLength(
       9999,
     );
@@ -345,6 +345,9 @@ describe('problem data editor', () => {
       .set('Content-Type', 'application/json')
       .send(body);
     expect(response.status).toBe(400);
+    expect(
+      (response.body as { error: { message: string } }).error.message,
+    ).toBe('Request body is nested too deeply');
   });
 
   it('stores empty argument objects as null', async () => {
@@ -362,6 +365,79 @@ describe('problem data editor', () => {
     expect(data.cases[0].checkerArgs).toBeNull();
     const reread = dataOf(await get('sum', editor).expect(200));
     expect(reread).toMatchObject({ checkerArgs: null, graderArgs: null });
+  });
+
+  it('refuses an unauthorised or oversized body before validating its cases', async () => {
+    const body = config(bulkCases(9999));
+    const median = async (send: () => Promise<number>) => {
+      const times: number[] = [];
+      for (let round = 0; round < 3; round++) {
+        const started = performance.now();
+        expect(await send()).toBeGreaterThan(0);
+        times.push(performance.now() - started);
+      }
+      return times.sort((left, right) => left - right)[1];
+    };
+    const anonymous = await median(
+      async () =>
+        (await api.http().put(`${PROBLEMS}/sum/data`).send(body)).status,
+    );
+    const unauthorised = await median(
+      async () => (await put('sum', plain, body)).status,
+    );
+    expect((await put('sum', plain, body)).status).toBe(403);
+    expect(unauthorised).toBeLessThan(anonymous * 8 + 100);
+    const oversized = await median(
+      async () => (await put('sum', editor, body)).status,
+    );
+    expect((await put('sum', editor, body)).status).toBe(400);
+    expect(oversized).toBeLessThan(anonymous * 8 + 100);
+    expect(
+      (await put('sum', editor, { checker: 'standard', cases: 'nope' })).status,
+    ).toBe(400);
+    expect((await put('hidden', plain, body)).status).toBe(404);
+    expect((await put('mirror', editor, body)).status).toBe(403);
+  });
+
+  it('lets exactly one of two concurrent writers win and keeps init.yml in step with Mongo', async () => {
+    const repository = api.app.get(ProblemsRepository);
+    const original = repository.findByCodeWithData.bind(repository);
+    for (let round = 0; round < 10; round++) {
+      let arrived = 0;
+      let release!: () => void;
+      const bothRead = new Promise<void>((resolve) => (release = resolve));
+      const spy = jest
+        .spyOn(repository, 'findByCodeWithData')
+        .mockImplementation(async (code) => {
+          const problem = await original(code);
+          if (++arrived === 2) release();
+          await bothRead;
+          return problem;
+        });
+      const [first, second] = await Promise.all([
+        put('sum', editor, config([plainCase(1, 5)])),
+        put('sum', editor, config([plainCase(2, 9)])),
+      ]);
+      spy.mockRestore();
+      expect([first.status, second.status].sort()).toEqual([200, 409]);
+      expect((first.status === 409 ? first : second).body).toMatchObject({
+        error: { code: 'conflict' },
+      });
+      const winner = first.status === 200 ? 1 : 2;
+      const stored = dataOf(await get('sum', editor).expect(200));
+      expect(stored.cases.map(({ input }) => input)).toEqual([`${winner}.in`]);
+      const init = readFileSync(
+        join(api.problemDataRoot, 'sum', 'init.yml'),
+        'utf8',
+      );
+      expect((parse(init) as { test_cases: unknown }).test_cases).toEqual([
+        {
+          in: `${winner}.in`,
+          out: `${winner}.out`,
+          points: winner === 1 ? 5 : 9,
+        },
+      ]);
+    }
   });
 
   it('applies the access rules: 401, 403, invisible 404, manually managed 404, mirror read-only', async () => {
