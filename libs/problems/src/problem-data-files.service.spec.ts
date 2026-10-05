@@ -45,6 +45,15 @@ describe('ProblemDataFilesService', () => {
     await files.removeFile('sum', 'checker.cpp');
     expect(await files.exists('sum', 'checker.cpp')).toBe(false);
   });
+  it('removes an empty problem directory and leaves one that holds a file', async () => {
+    await files.stageUpload('hollow');
+    await files.removeDirectoryIfEmpty('hollow');
+    expect(existsSync(join(root, 'hollow'))).toBe(false);
+    await files.writeFile('kept', 'tests.zip', Buffer.from('PK'));
+    await files.removeDirectoryIfEmpty('kept');
+    await files.removeDirectoryIfEmpty('never_existed');
+    expect(readdirSync(join(root, 'kept'))).toEqual(['tests.zip']);
+  });
   it.each(['../x', 'a/b', '.hidden', 'a..b', '', 'x\0y'])(
     'refuses the file name %j',
     (name) =>

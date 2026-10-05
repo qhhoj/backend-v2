@@ -19,6 +19,7 @@ import {
 import type { DataFileKind, Problem, ProblemData } from '@libs/database';
 import {
   compileInitYaml,
+  dataChanges,
   INIT_FILE,
   extensionOf,
   listZipEntries,
@@ -35,7 +36,6 @@ import { PutProblemDataDto } from './dto/problem-data.dto';
 import type { SourceFileKind } from './dto/problem-data.dto';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { MAX_CASE_ARGS_BYTES, maxTestcasesFor } from './dto/limits';
-import { fieldDiff } from './field-diff';
 import { readMultipartFile, rejectFile, saveMultipartFile } from './multipart';
 import { ProblemEditingService } from './problem-editing.service';
 import { ProblemEvents } from './problem.events';
@@ -56,35 +56,6 @@ export const SOURCE_EXTENSIONS: Record<SourceFileKind, readonly string[]> = {
 
 const invalid = (field: string, message: string) =>
   new AppError('validation_failed', 400, message, { [field]: [message] });
-
-/** Everything but the case rows and the derived feedback. */
-const configOf = (data: ProblemData) =>
-  Object.fromEntries(
-    Object.entries(data).filter(
-      ([field]) => field !== 'cases' && field !== 'feedback',
-    ),
-  );
-
-/** Revisions keep the configuration plus a case summary (count, changed positions), never the case rows twice. */
-function dataChanges(before: ProblemData, after: ProblemData) {
-  const oldCases = before.cases;
-  const newCases = after.cases;
-  const changes: Record<string, { before: unknown; after: unknown }> =
-    fieldDiff(configOf(before), configOf(after));
-  const changed = Array.from(
-    { length: Math.max(oldCases.length, newCases.length) },
-    (_item, index) => index,
-  ).filter(
-    (index) =>
-      JSON.stringify(oldCases[index]) !== JSON.stringify(newCases[index]),
-  );
-  if (changed.length)
-    changes.cases = {
-      before: { count: oldCases.length },
-      after: { count: newCases.length, changed },
-    };
-  return changes;
-}
 
 @Injectable()
 export class ProblemDataService implements OnModuleInit {

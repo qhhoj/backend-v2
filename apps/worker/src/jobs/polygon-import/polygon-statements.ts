@@ -180,12 +180,12 @@ export async function rehostImages(
     );
 }
 
-/** The limits of an editor's statement: length, disallowed characters and the render budgets (`RenderLimitError`); each failure is an import error naming `label`. */
-export function assertStatementMarkdown(
+/** The editor's statement path: length, disallowed characters and the render budgets (`RenderLimitError`), each failure an import error naming `label`; returns the HTML the editor would store. */
+export function renderStatement(
   text: string,
   style: RenderStyle,
   label: string,
-): void {
+): string {
   if (text.length > MAX_MARKDOWN_LENGTH)
     throw new PolygonImportError(
       `${label} is longer than ${MAX_MARKDOWN_LENGTH} characters`,
@@ -196,12 +196,21 @@ export function assertStatementMarkdown(
       `${label} has disallowed characters: ${disallowed}`,
     );
   try {
-    renderMarkdown(text, style);
+    return renderMarkdown(text, style);
   } catch (error) {
     if (error instanceof RenderLimitError)
       throw new PolygonImportError(`${label}: ${error.message}`);
     throw error;
   }
+}
+
+/** `renderStatement` for callers that only need the limits checked. */
+export function assertStatementMarkdown(
+  text: string,
+  style: RenderStyle,
+  label: string,
+): void {
+  renderStatement(text, style, label);
 }
 
 /** The editor's rules for a statement name: 1..100 characters, no disallowed ones. */

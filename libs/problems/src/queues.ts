@@ -18,12 +18,13 @@ export interface PolygonImportJob {
   requesterId: string;
   code: string;
   mode: 'create' | 'update';
-  authors: string[];
-  curators: string[];
-  groupId: string;
-  typeIds: string[];
-  allowedLanguages: string[];
-  points: number;
+  /** Catalog fields: on create an absent one takes the default (oldest group and type, languages included in problems, 800 points, nobody); on update an absent one keeps the problem's current value. */
+  authors?: string[];
+  curators?: string[];
+  groupId?: string;
+  typeIds?: string[];
+  allowedLanguages?: string[];
+  points?: number;
   /** Render style of the target problem (an update keeps the problem's flag). */
   isFullMarkup: boolean;
   /** Polygon statement language of the main statement; null = the only one. */

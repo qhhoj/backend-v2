@@ -8,6 +8,9 @@ const UUID = MongooseSchema.Types.UUID;
 export const PROBLEM_CODE_PATTERN = /^[a-z0-9_]{1,32}$/;
 export const STATEMENT_LANGUAGES = ['en', 'vi'] as const;
 export type StatementLanguage = (typeof STATEMENT_LANGUAGES)[number];
+/** Filter for the compare-and-set on `dataVersion`; a missing counter counts as 0. */
+export const dataVersionIs = (version: number) =>
+  version === 0 ? { $in: [0, null] } : version;
 export const SUBMISSION_SOURCE_VISIBILITIES = ['F', 'A', 'S', 'O'] as const;
 export const TESTCASE_VISIBILITIES = ['O', 'C', 'A'] as const;
 export const TESTCASE_RESULT_VISIBILITIES = ['A', 'B', 'S'] as const;

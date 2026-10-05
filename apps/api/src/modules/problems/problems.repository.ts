@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, Problem } from '@libs/database';
+import { CI, dataVersionIs, Problem } from '@libs/database';
 import type { ProblemData, ProblemTranslation } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
@@ -90,8 +90,7 @@ export class ProblemsRepository {
         {
           _id: id,
           code,
-          dataVersion:
-            expectedVersion === 0 ? { $in: [0, null] } : expectedVersion,
+          dataVersion: dataVersionIs(expectedVersion),
         },
         { $set: { data }, $inc: { dataVersion: 1 } },
       )

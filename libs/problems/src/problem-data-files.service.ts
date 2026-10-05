@@ -91,6 +91,15 @@ export class ProblemDataFilesService {
     }
   }
 
+  /** Drops a directory a failed import created for nothing; one that holds anything stays. */
+  async removeDirectoryIfEmpty(code: string): Promise<void> {
+    const directory = this.directoryOf(code);
+    await assertRealPathInside(this.root, directory);
+    await rmdir(directory).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY') throw error;
+    });
+  }
+
   /** Moves a problem's whole directory; the target is reserved first so an existing one is never merged into, and a missing source is nothing to move. */
   async rename(oldCode: string, newCode: string): Promise<void> {
     const oldDirectory = this.directoryOf(oldCode);
