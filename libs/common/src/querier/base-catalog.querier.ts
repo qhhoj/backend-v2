@@ -19,8 +19,7 @@ export abstract class BaseCatalogQuerier<Item extends { _id: string }>
   }
 
   async onModuleInit() {
-    await this.resync();
-    this.setupMongoStream(
+    await this.setupMongoStream(
       this.model,
       [],
       // eslint-disable-next-line @typescript-eslint/require-await
@@ -32,6 +31,7 @@ export abstract class BaseCatalogQuerier<Item extends { _id: string }>
             this.toItem(fullDocument as object & { _id: unknown }),
           )
         ),
+      () => this.resync(),
     );
     this.forceResyncQuerier(
       () => this.resync(),

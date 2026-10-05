@@ -6,6 +6,7 @@ import {
   ChangeStreamInsertDocument,
   ChangeStreamReplaceDocument,
   ChangeStreamUpdateDocument,
+  Timestamp,
 } from 'mongodb';
 import { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -25,38 +26,71 @@ export abstract class BaseMongoStreamQuerier {
     return CronExpression.EVERY_10_SECONDS;
   }
 
-  setupMongoStream(
+  /**
+   * Loads the snapshot with `resync` and follows changes from the moment before that load, so no change can fall
+   * into a gap (a change the snapshot already holds is applied again, which is harmless: handlers are upserts).
+   * A closed stream is replaced and resynced the same way.
+   */
+  async setupMongoStream(
     model: Model<any>,
     pipeline: Record<string, unknown>[],
     onChange: (change: QuerierChange) => Promise<void>,
+    resync: () => Promise<void>,
   ) {
-    if (process.env.DISABLE_MONGODB_STREAM === 'true') return;
-    let stream = this.getModelStream(model, pipeline, onChange);
-    const reconnect = () => {
-      stream.removeAllListeners();
-      stream.close().catch(() => {});
-      stream = this.getModelStream(model, pipeline, onChange);
+    if (process.env.DISABLE_MONGODB_STREAM === 'true') return resync();
+    const syncAndWatch = async () => {
+      const stream = this.getModelStream(
+        model,
+        pipeline,
+        onChange,
+        await this.clusterTime(model),
+      );
+      await resync().catch((error: Error) => {
+        stream.close().catch(() => {});
+        throw error;
+      });
+      return stream;
     };
+    let stream = await syncAndWatch();
+    let reconnecting = false;
     this.addJob(
       'mongo-stream-healthcheck',
       this.streamHealthCheckCronExpression(),
       () => {
-        if (stream.closed) {
-          this.streamLogger.log(
-            `MongoDB stream closed, reconnecting (${model.modelName})`,
-          );
-          reconnect();
-        }
+        if (!stream.closed || reconnecting) return;
+        this.streamLogger.log(
+          `MongoDB stream closed, reconnecting (${model.modelName})`,
+        );
+        reconnecting = true;
+        stream.removeAllListeners();
+        syncAndWatch()
+          .then((reopened) => (stream = reopened))
+          .catch((error: Error) =>
+            this.streamLogger.warn(
+              `MongoDB stream reconnect failed (${model.modelName}): ${error.message}`,
+            ),
+          )
+          .finally(() => (reconnecting = false));
       },
     );
   }
 
-  getModelStream(
+  /** The server's current operation time: a stream started at it misses no write acknowledged before this call. */
+  private async clusterTime(model: Model<any>) {
+    const { operationTime } = await model.db.db!.command({ ping: 1 });
+    return operationTime as Timestamp;
+  }
+
+  private getModelStream(
     model: Model<any>,
     pipeline: Record<string, unknown>[],
     onChange: (change: QuerierChange) => Promise<void>,
+    startAtOperationTime: Timestamp,
   ) {
-    const stream = model.watch(pipeline, { fullDocument: 'updateLookup' });
+    const stream = model.watch(pipeline, {
+      fullDocument: 'updateLookup',
+      startAtOperationTime,
+    });
     stream.on('change', (change: ChangeStreamDocument) => {
       if (!['insert', 'update', 'replace'].includes(change.operationType))
         return;

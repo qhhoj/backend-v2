@@ -20,13 +20,13 @@ export class GroupsQuerier
   }
 
   async onModuleInit() {
-    await this.resync();
-    this.setupMongoStream(
+    await this.setupMongoStream(
       this.model,
       [],
       // eslint-disable-next-line @typescript-eslint/require-await
       async ({ fullDocument: group }) =>
         void (group && this.perms.set(uuidStr(group._id), group.permissions)),
+      () => this.resync(),
     );
     this.forceResyncQuerier(
       () => this.resync(),
