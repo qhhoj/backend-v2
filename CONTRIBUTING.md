@@ -20,14 +20,14 @@
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import)
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
-  common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier
+  common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier, `runCoalesced`
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
   auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
-  judging/    scoring, submission-graded contract (`queues.ts`), bridge command stream + `BridgeCommandsService`, `notifyGraded`
+  judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
@@ -56,7 +56,7 @@ tools/legacy/   regenerates the fixtures
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`)
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`)
 - `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
@@ -168,7 +168,7 @@ tools/legacy/   regenerates the fixtures
 - Statuses QU P G D IE CE AB; results add AC WA TLE MLE OLE IR RTE SC RJ; priorities 0 contest, 1 normal, 2 rejudge, 3 batch rejudge, FIFO by id within one
 - Queue truth is Mongo: queued = `status QU`; the bridge claims QU -> P before sending; every judge packet's write filters `{ _id, judgedOn, status }`
 - API -> bridge: Redis stream `bridge:commands` (`judge`, `abort`, `disconnect-judge`, `disable-judge`), fire-and-forget via `BridgeCommandsService`; a lost `judge` command waits for the bridge's resync (`resyncMs`, 30 s), which also reconciles connected judges with Mongo (blocked, rotated key, `isDisabled`); `abort` is best-effort, the user aborts again
-- Bridge -> effects: one `submission-graded` BullMQ job per finished (D/CE/IE/AB) or rejected submission, enqueued through `notifyGraded` (1 s bound, a failure is logged and skipped, in the bridge and the api); 2b consumes it
+- Bridge -> effects: one `submission-graded` BullMQ job per finished (D/CE/IE/AB) or rejected submission, enqueued through `notifyGraded` (1 s bound, a failure is logged and skipped, in the bridge and the api); the worker's `submission-effects` consumes it
 - Bridge start: bind the port (judges wait), judges offline, P/G -> QU, stream position, queue rebuild, commands, resync, then serve judges. Stop: dispatching stops first so P/G survive for the next start
 - Start and resync requeue P/G rows without spending `requeueCount` (resync: only rows no connected judge held on two consecutive ticks)
 - Judge disconnect in flight: requeued once (`requeueCount`), IE the second time; a rejudge restores the allowance
@@ -179,6 +179,20 @@ tools/legacy/   regenerates the fixtures
 - Detail/source: problem visible (else 404), then legacy `can_see_detail` (`F` follows `all-solved`); cases by `testcaseResultVisibility` (A all, B batches, S none; superusers all), feedback for superusers/editors/`allowViewFeedback`, output unless `testcaseVisibility` O (editors always); IE messages for editors only; the list (`GET /api/internal/submissions`) is public over visible problems, and IE/QU/P/G/D/SC filters are staff-only (400)
 - Actions: invisible problem -> 404; abort (owner unless rejudged, or `judge.abort_any_submission`), rejudge/reject (`judge.rejudge_submission`/`judge.reject_submission` + edit rights; 409 while unfinished; rejudge: while in flight or locked), bulk rejudge per problem (more than 10 needs `judge.rejudge_submission_lot`, locked only with `force`; counts first, then streams chunks of at most 1000 ids)
 - Judges admin (`judge.change_judge`): `/api/internal/judges`; keys are shown once; rotate and block force-disconnect
+
+## Effects and realtime
+
+- Every recompute of a user's points or a problem's stats goes through `SubmissionEffectsService` (worker); recomputes read Mongo and `$set`, never increment. `runCoalesced` (`libs/common`) serialises one key across processes, extends its lock while the work runs, and reruns once more for every mark left meanwhile, so bursts collapse
+- Formulas (`libs/judging/src/points.ts`): user points over public, non-org-private problems (best per problem, > 0, descending; PP = sum of 0.98514^rank * points over the first 300, + 0.05 per solved); solved = AC with `casePoints >= caseTotal` (`IS_SOLVED`); problem stats exclude unlisted users, AC = `result AC` and `points >= problem.points`
+- `submission-effects` consumes `submission-graded` (concurrency 4; the user only for public, non-org-private problems); the job is enqueued with 3 attempts and exponential backoff (10 s); `submission-effects`, `effects-sweep` and `problem-rescore` start consuming only after the submissions indexes exist (`startAfterIndexes`)
+- Sweep: job scheduler every 10 min, global concurrency 1; recomputes users and problems with `judgedDate` or `date` in the window from the last watermark (`effects:sweep:until`, set only after a successful sweep; at most 24 h back) minus a 10 min overlap
+- Rescore: `problem-rescore {problemId}` (no `jobId`, 3 attempts) on `pointsChanged` (points, partial, org privacy) and `publicityChanged` in the api and after a Polygon update in the worker; one at a time; rows with status D except RJ, read through a cursor, written in 1000-row `bulkWrite`s whose filter repeats the case totals read (a rejudge that finished meanwhile keeps its points); then every user with such a row and the problem's stats
+- Rescore points use `submissionPoints` (rounded at grading end: `round(casePoints / caseTotal * points, 3)`); legacy's rescore rounded the ratio first
+- `viewerStatus` (`solved | attempted | null`) on problem list/detail: one aggregate per page (`ViewerStatusRepository`)
+- Events: Redis pub/sub `submission-events` (`SubmissionEventsService`), fire-and-forget (1 s bound, skipped while Redis is not ready), ids and status only, published by whoever writes the status. Bridge: `processing` when the request is sent to the judge, `grading-begin`, `test-case` (at most 4/s per submission), `done`, requeues as `queued`. Api: submit/rejudge -> `queued`, abort of a queued submission and reject -> `done`; bulk rejudge publishes nothing
+- SSE: `GET /api/internal/events/submissions/:id` (detail rules; `state` first, read after the stream is registered; `test-case` only when every case result is visible; `resync` after a lost subscription) and `GET /api/internal/events/submissions` (public feed: public, non-org-private problems, no progress); one subscriber connection per api process
+- Stream limits (`submissions/rate-limits.ts`, per api process): 8 per user, 16 per IP, 5000 total, 1000 feed; a client is dropped when a write stays undrained or the backlog stays above 16 KiB for 2 s in total, or at once above 256 KiB; 15 s heartbeat; access (session, user, detail rules) re-checked every 60 s
+- `/api/v2/submissions` (oldest first; totals only with `user` or `problem`) and `/api/v2/submission/:id` (login, `can_see_detail`; cases follow the problem's case visibility, stricter than legacy)
 
 ## Data conventions
 
@@ -224,6 +238,7 @@ Add a job:
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush); migrator e2e also needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
 - Bridge e2e: `setupBridgeTest` (`apps/bridge/test/setup.ts`, millisecond `FAST_TIMINGS`, `restart()`), `FakeJudge` (real TCP), `RecordingJudge` (no socket); api specs read the command stream through `apps/api/test/submission-fixtures.ts`
+- Index use is asserted with `profileQueries` (`@libs/database/testing`): no `COLLSCAN`, documents examined bounded; worker effects fixtures in `apps/worker/test/effects-fixtures.ts`; SSE through `apps/api/test/sse-client.ts` (supertest cannot read streams); `recordSubmissionEvents` (`@libs/judging/testing`)
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`
 - Playwright specs skip without Chromium; the pandoc spec skips locally and fails in CI without pandoc
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
@@ -256,6 +271,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - The bridge port must be reachable only from judge hosts (firewall)
 - Judge containers need a restart policy (the judge-server fork exits on a broken connection)
 - The qhhoj/judge-server fork must handle submission ids (UUID strings) as strings everywhere: the `%d` of the grading `Process` name in `judge.py` is fatal, `%d` in `packet.py`/`judge.py` log calls and the `int` annotations of `Submission.id`/`abort_grading` are not; the bridge is not deployable until it does
+- Streams: set `TRUST_PROXY` behind nginx, or the per-IP cap counts nginx's address; nginx must not buffer `/api/internal/events/` (`proxy_buffering off`; the api also sends `X-Accel-Buffering: no`) and needs `proxy_read_timeout` well above the 15 s heartbeat; caps are per api process
 - Worker tuning: `PDF_RENDER_TIMEOUT_MS`, `PDF_MAX_BYTES`, `PDF_CONCURRENCY`; the Polygon import queue runs one job at a time
 
 ## Commits

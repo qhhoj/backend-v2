@@ -109,4 +109,20 @@ describe('OpenAPI document', () => {
       ]),
     );
   });
+
+  it('lists the realtime and legacy submission endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/events/submissions',
+        '/api/internal/events/submissions/{id}',
+        '/api/v2/submissions',
+        '/api/v2/submission/{id}',
+      ]),
+    );
+  });
 });
