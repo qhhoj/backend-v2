@@ -5,3 +5,5 @@ export * from './queues';
 export * from './scoring';
 export * from './within-timeout';
 export * from './notify-graded';
+export * from './points';
+export * from './notify-rescore';

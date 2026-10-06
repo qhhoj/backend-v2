@@ -32,3 +32,31 @@ export const enqueueGraded = async (
     removeOnFail: { age: 7 * 24 * 60 * 60 },
   });
 };
+
+export const PROBLEM_RESCORE_QUEUE = 'problem-rescore';
+export const PROBLEM_RESCORE_JOB = 'rescore';
+/** Recompute `points` of every graded submission of the problem, then its users and stats. Enqueued by the api on `pointsChanged`/`publicityChanged` and by the worker after a Polygon re-import. */
+export interface ProblemRescoreJob {
+  problemId: string;
+}
+/** No `jobId`: an edit while a rescore of the same problem runs must queue another one (BullMQ ignores an `add` whose id is active). The queue runs one job at a time, oldest first, so the last edit wins; retried because every step is idempotent. */
+export const enqueueRescore = async (
+  queue: Queue<ProblemRescoreJob>,
+  problemId: string,
+): Promise<void> => {
+  await queue.add(
+    PROBLEM_RESCORE_JOB,
+    { problemId },
+    {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 10_000 },
+      removeOnComplete: true,
+      removeOnFail: { age: 7 * 24 * 60 * 60 },
+    },
+  );
+};
+
+/** Worker-internal: the scheduled sweep that recomputes what lost graded jobs left stale. */
+export const EFFECTS_SWEEP_QUEUE = 'effects-sweep';
+export const EFFECTS_SWEEP_JOB = 'sweep';
+export const EFFECTS_SWEEP_SCHEDULER = 'effects-sweep-every-10-minutes';
