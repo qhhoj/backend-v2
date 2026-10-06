@@ -24,6 +24,7 @@ import { ProblemsRepository } from './problems.repository';
 import { ProblemsController } from './problems.controller';
 import { ProblemsService } from './problems.service';
 import { RevisionsRepository } from './revisions.repository';
+import { ViewerStatusRepository } from './viewer-status.repository';
 
 const queriers = [
   ProblemTypesQuerier,
@@ -31,7 +32,11 @@ const queriers = [
   LicensesQuerier,
   LanguagesQuerier,
 ];
-const repositories = [ProblemsRepository, RevisionsRepository];
+const repositories = [
+  ProblemsRepository,
+  RevisionsRepository,
+  ViewerStatusRepository,
+];
 
 @Module({
   imports: [

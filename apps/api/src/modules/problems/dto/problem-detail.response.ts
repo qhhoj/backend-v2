@@ -13,11 +13,13 @@ import {
   LicenseResponse,
 } from './problem-meta.response';
 import { UserSummaryResponse } from './user-summary.response';
+import type { ViewerStatus } from '../viewer-status.repository';
 
 export interface ProblemDetailContext {
   lang: StatementLanguage;
   canEdit: boolean;
   hasEditorial: boolean;
+  viewerStatus: ViewerStatus;
   people: Map<string, UserDocument>;
   types: ProblemTypesQuerier;
   groups: ProblemGroupsQuerier;
@@ -122,6 +124,8 @@ export class ProblemDetailResponse {
   userCount!: number;
   acRate!: number;
   canEdit!: boolean;
+  /** For the signed-in viewer; null when anonymous or never submitted. */
+  viewerStatus!: ViewerStatus;
   editor!: ProblemEditorResponse | null;
 
   static from(
@@ -192,6 +196,7 @@ export class ProblemDetailResponse {
       userCount: problem.userCount,
       acRate: problem.acRate,
       canEdit: context.canEdit,
+      viewerStatus: context.viewerStatus,
       editor: context.canEdit
         ? ProblemEditorResponse.from(problem, summaries)
         : null,

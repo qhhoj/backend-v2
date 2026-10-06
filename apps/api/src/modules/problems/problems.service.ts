@@ -29,6 +29,8 @@ import { LanguagesQuerier } from './languages.querier';
 import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';
 import { ProblemTypesQuerier } from './problem-types.querier';
+import { ViewerStatusRepository } from './viewer-status.repository';
+import type { ViewerStatus } from './viewer-status.repository';
 
 const byField =
   <Item>(field: keyof Item) =>
@@ -44,6 +46,7 @@ export class ProblemsService {
     private readonly languages: LanguagesQuerier,
     private readonly repository: ProblemsRepository,
     private readonly users: UsersRepository,
+    private readonly viewerStatuses: ViewerStatusRepository,
   ) {}
 
   meta(): ProblemMetaResponse {
@@ -77,6 +80,10 @@ export class ProblemsService {
       query.page,
       query.pageSize,
     );
+    const statuses = await this.viewerStatusesOf(
+      principal,
+      items.map((problem) => problem._id),
+    );
     return new Paginated(
       items.map((problem) =>
         ProblemListItemResponse.from(
@@ -84,6 +91,7 @@ export class ProblemsService {
           query.lang,
           this.types,
           this.groups,
+          statuses.get(problem._id) ?? null,
         ),
       ),
       { page: query.page, pageSize: query.pageSize, total },
@@ -115,6 +123,10 @@ export class ProblemsService {
       lang,
       canEdit,
       hasEditorial: this.editorialVisible(principal, problem, canEdit),
+      viewerStatus:
+        (await this.viewerStatusesOf(principal, [problem._id])).get(
+          problem._id,
+        ) ?? null,
       people,
       types: this.types,
       groups: this.groups,
@@ -168,6 +180,16 @@ export class ProblemsService {
         hasPermission(principal, 'judge.see_private_solution')) ||
       canEdit
     );
+  }
+
+  /** Anonymous viewers cost no query. */
+  private viewerStatusesOf(
+    principal: Principal | null,
+    problemIds: string[],
+  ): Promise<Map<string, Exclude<ViewerStatus, null>>> {
+    return principal
+      ? this.viewerStatuses.statusesOf(principal.userId, problemIds)
+      : Promise.resolve(new Map<string, Exclude<ViewerStatus, null>>());
   }
 
   private canEdit(principal: Principal | null, problem: Problem): boolean {

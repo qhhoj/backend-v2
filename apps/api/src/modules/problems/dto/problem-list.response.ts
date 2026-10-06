@@ -6,6 +6,7 @@ import { isEditorialPublished } from '../problem-search';
 import type { ProblemDocument } from '../problems.repository';
 import { statementFor } from '@libs/problems';
 import { CatalogItemResponse } from './problem-meta.response';
+import type { ViewerStatus } from '../viewer-status.repository';
 
 export class ProblemListItemResponse {
   id!: string;
@@ -22,12 +23,15 @@ export class ProblemListItemResponse {
   isOrganizationPrivate!: boolean;
   hasPublicEditorial!: boolean;
   hasPdfStatement!: boolean;
+  /** For the signed-in viewer; null when anonymous or never submitted. */
+  viewerStatus!: ViewerStatus;
 
   static from(
     problem: ProblemDocument,
     lang: StatementLanguage,
     types: ProblemTypesQuerier,
     groups: ProblemGroupsQuerier,
+    viewerStatus: ViewerStatus,
   ): ProblemListItemResponse {
     const group = groups.byId(uuidStr(problem.groupId));
     return {
@@ -47,6 +51,7 @@ export class ProblemListItemResponse {
       isOrganizationPrivate: problem.isOrganizationPrivate,
       hasPublicEditorial: isEditorialPublished(problem.solution),
       hasPdfStatement: problem.pdfStatementUrl !== null,
+      viewerStatus,
     };
   }
 }
