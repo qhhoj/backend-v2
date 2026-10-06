@@ -12,6 +12,8 @@ import { JudgesRepository } from './judges.repository';
 
 /** Sockets beyond this are refused, which bounds unauthenticated connections. */
 export const MAX_JUDGE_CONNECTIONS = 256;
+/** Bounds the memory (up to 4 MiB each) one host can pin with sockets that never authenticate; authenticated judges are not counted. The judge port must still be reachable only from judge hosts. */
+export const MAX_UNAUTHENTICATED_PER_ADDRESS = 8;
 
 @Injectable()
 export class JudgeServerService {
@@ -34,6 +36,11 @@ export class JudgeServerService {
       timings: this.timings,
     };
     const server = createServer((socket) => {
+      if (
+        this.unauthenticatedFrom(socket.remoteAddress) >=
+        MAX_UNAUTHENTICATED_PER_ADDRESS
+      )
+        return void socket.destroy();
       const handler = new JudgeHandler(socket, services);
       this.handlers.add(handler);
       void handler.finished.then(() => this.handlers.delete(handler));
@@ -47,6 +54,13 @@ export class JudgeServerService {
       );
     });
     return this.port();
+  }
+
+  private unauthenticatedFrom(address: string | undefined): number {
+    return [...this.handlers].filter(
+      (handler) =>
+        !handler.isAuthenticated && handler.remoteAddress === address,
+    ).length;
   }
 
   port(): number {

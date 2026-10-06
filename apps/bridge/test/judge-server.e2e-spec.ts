@@ -3,6 +3,8 @@ import { deflateSync } from 'node:zlib';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { BridgeCommandsService } from '@libs/judging';
+import { MAX_PACKETS_PER_SECOND } from '../src/judges/judge.handler';
+import { MAX_UNAUTHENTICATED_PER_ADDRESS } from '../src/judges/judge-server.service';
 import { encodePacket } from '../src/protocol/packet-codec';
 import { FakeJudge, frameOf } from './fake-judge';
 import {
@@ -174,37 +176,61 @@ describe('Judge connections', () => {
       expect(Date.now() - started).toBeLessThan(HANDSHAKE_MS / 2);
     });
 
-    it('closes an authenticated judge that floods packets or handshakes twice', async () => {
-      const flooder = await fresh();
+    it('closes an authenticated judge that floods packets that need no database write', async () => {
+      const { name, problem } = await fresh();
       const flood = await FakeJudge.online(port, {
-        name: flooder.name,
+        name,
         key: KEY,
+        problems: [problem.code],
       });
+      const id = await queue(problem._id);
+      await flood.next('submission-request');
+      flood.send({ name: 'submission-acknowledged', 'submission-id': id });
       flood.write(
         Buffer.concat(
-          Array.from({ length: 300 }, () =>
-            encodePacket({
-              name: 'ping-response',
-              when: Date.now() / 1000,
-              load: 0,
-            }),
+          Array.from({ length: 2 * MAX_PACKETS_PER_SECOND }, () =>
+            encodePacket({ name: 'batch-end', 'submission-id': id }),
           ),
         ),
       );
       await flood.closed;
-      const repeater = await fresh();
-      const twice = await FakeJudge.online(port, {
-        name: repeater.name,
-        key: KEY,
-      });
+    });
+
+    it('closes an authenticated judge that handshakes twice', async () => {
+      const { name } = await fresh();
+      const twice = await FakeJudge.online(port, { name, key: KEY });
       twice.send({
         name: 'handshake',
-        id: repeater.name,
+        id: name,
         key: KEY,
         problems: [],
         executors: {},
       });
       await twice.closed;
+    });
+
+    it('refuses the ninth unauthenticated connection from one address at once', async () => {
+      const held = await Promise.all(
+        Array.from({ length: MAX_UNAUTHENTICATED_PER_ADDRESS }, () =>
+          FakeJudge.connect(port),
+        ),
+      );
+      const started = Date.now();
+      const ninth = await FakeJudge.connect(port);
+      await ninth.closed;
+      expect(Date.now() - started).toBeLessThan(HANDSHAKE_MS / 2);
+      expect(held.some((judge) => judge.isClosed)).toBe(false);
+      await Promise.all(held.map((judge) => judge.close()));
+    });
+
+    it('does not count authenticated judges against the unauthenticated cap', async () => {
+      const judges = [];
+      for (let index = 0; index <= MAX_UNAUTHENTICATED_PER_ADDRESS; index++) {
+        const { name } = await fresh();
+        judges.push(await FakeJudge.online(port, { name, key: KEY }));
+      }
+      expect(judges.some((judge) => judge.isClosed)).toBe(false);
+      await Promise.all(judges.map((judge) => judge.close()));
     });
 
     it('closes a judge that falls silent', async () => {
@@ -343,6 +369,34 @@ describe('Judge connections', () => {
       expect(
         (await bridge.gradedJobs()).map((job) => job.submissionId),
       ).toContain(id);
+      await judge.close();
+    });
+
+    it('grades a submission of 40 one-case batches sent as fast as a real judge does', async () => {
+      const { name, problem } = await fresh();
+      const judge = await FakeJudge.online(port, {
+        name,
+        key: KEY,
+        problems: [problem.code],
+      });
+      const id = await queue(problem._id);
+      await judge.next('submission-request');
+      const send = (packet: object) =>
+        judge.send({ ...packet, 'submission-id': id } as never);
+      send({ name: 'submission-acknowledged' });
+      send({ name: 'grading-begin', pretested: false });
+      for (let position = 1; position <= 40; position++) {
+        send({ name: 'batch-begin' });
+        send({ name: 'test-case-status', cases: [caseOf(position)] });
+        send({ name: 'batch-end' });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      send({ name: 'grading-end' });
+      await waitUntil(async () => (await submissionRow(id)).status === 'D');
+      expect(await submissionRow(id)).toMatchObject({
+        result: 'AC',
+        requeueCount: 0,
+      });
       await judge.close();
     });
 

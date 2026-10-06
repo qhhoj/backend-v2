@@ -24,8 +24,8 @@ import { ProtocolError } from '../protocol/protocol.error';
 import type { GradingService } from '../submissions/grading.service';
 import type { JudgesRepository } from './judges.repository';
 
-/** A judge sends a test-case batch every 0.25 s and a ping response every 10 s; far more than this is a flood. */
-export const MAX_PACKETS_PER_SECOND = 100;
+/** The judge fork sends `batch-begin`, its cases and `batch-end` unthrottled, so fast one-case batches reach hundreds of packets a second. Each frame is handled with the socket paused and costs at most one Mongo write, which bounds a flood at this rate. */
+export const MAX_PACKETS_PER_SECOND = 1000;
 /** Legacy: the reported ping is the mean of the last 6 round trips. */
 const PING_SAMPLES = 6;
 const HEADER_BYTES = 4;
@@ -54,6 +54,7 @@ export class JudgeHandler implements DispatchTarget {
   private chunks: Buffer[] = [];
   private bufferedBytes = 0;
   private lastReceivedAt = Date.now();
+  private isHandling = false;
   private windowStartedAt = Date.now();
   private packetsInWindow = 0;
   private batchNumber: number | null = null;
@@ -70,6 +71,7 @@ export class JudgeHandler implements DispatchTarget {
   ) {
     socket.setNoDelay(true);
     socket.on('data', (chunk: Buffer) => this.receive(chunk));
+    socket.on('end', () => this.close('peer ended the connection'));
     socket.on('error', (error) =>
       this.logger.warn(`${this.label()}: ${error.message}`),
     );
@@ -81,6 +83,14 @@ export class JudgeHandler implements DispatchTarget {
       () => this.close('no handshake in time'),
       services.timings.handshakeMs,
     );
+  }
+
+  get isAuthenticated(): boolean {
+    return this.authenticated;
+  }
+
+  get remoteAddress(): string | undefined {
+    return this.socket.remoteAddress;
   }
 
   submit(request: SubmissionRequest): void {
@@ -117,8 +127,12 @@ export class JudgeHandler implements DispatchTarget {
 
   private receive(chunk: Buffer): void {
     this.lastReceivedAt = Date.now();
+    this.isHandling = true;
     this.socket.pause();
     void this.consume(chunk).then(() => {
+      /** Handling time is not silence: the idle clock restarts when the judge may speak again. */
+      this.isHandling = false;
+      this.lastReceivedAt = Date.now();
       if (!this.isClosed) this.socket.resume();
     });
   }
@@ -214,21 +228,28 @@ export class JudgeHandler implements DispatchTarget {
 
   /** A server-side failure while connecting (Mongo, Redis) closes the connection: the judge reconnects, and no half-registered judge lingers. */
   private async handshake(packet: HandshakePacket): Promise<void> {
+    let isOnline: boolean;
     try {
-      await this.authenticate(packet);
+      isOnline = await this.authenticate(packet);
     } catch (error) {
       this.close('handshake failed');
       throw error;
     }
+    // outside the `try`: a failed dispatch must not drop a judge that is fully set up
+    if (isOnline) await this.services.dispatch.register(this);
   }
 
-  private async authenticate(packet: HandshakePacket): Promise<void> {
+  /** True once the judge is online and pinging, ready to be registered for work. */
+  private async authenticate(packet: HandshakePacket): Promise<boolean> {
     const judge = await this.services.judges.authenticate(
       packet.id,
       packet.key,
     );
-    if (this.isClosed) return;
-    if (!judge) return this.close(`authentication failed for ${packet.id}`);
+    if (this.isClosed) return false;
+    if (!judge) {
+      this.close(`authentication failed for ${packet.id}`);
+      return false;
+    }
     clearTimeout(this.handshakeTimer);
     this.authenticated = true;
     this.name = packet.id;
@@ -243,18 +264,23 @@ export class JudgeHandler implements DispatchTarget {
       lastIp: this.socket.remoteAddress ?? null,
     });
     /** Closed while marking online: `onClose`'s offline write may have landed first and matched nothing. */
-    if (this.isClosed)
-      return this.services.judges.markOffline(this.name, this.connectedAt);
+    if (this.isClosed) {
+      await this.services.judges.markOffline(this.name, this.connectedAt);
+      return false;
+    }
     this.pingTimer = setInterval(
       () => this.ping(),
       this.services.timings.pingIntervalMs,
     );
     this.ping();
-    await this.services.dispatch.register(this);
+    return true;
   }
 
   private ping(): void {
-    if (Date.now() - this.lastReceivedAt > this.services.timings.idleMs)
+    if (
+      !this.isHandling &&
+      Date.now() - this.lastReceivedAt > this.services.timings.idleMs
+    )
       return this.close('silent for too long');
     this.send({ name: 'ping', when: Date.now() / 1000 });
   }
