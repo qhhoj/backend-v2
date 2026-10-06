@@ -9,6 +9,7 @@ import {
   authed,
   createProblem,
   createUserWith,
+  detailOf,
   loginAs,
   seedCatalog,
 } from '../../api/test/problem-fixtures';
@@ -16,6 +17,8 @@ import type { Catalog, TestSession } from '../../api/test/problem-fixtures';
 import { dataOf } from '../../api/test/submission-fixtures';
 import { setupApiTest } from '../../api/test/setup';
 import type { ApiTest } from '../../api/test/setup';
+import { WorkerModule } from '../../worker/src/worker.module';
+import { openStream } from '../../api/test/sse-client';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
 import { JudgeServerService } from '../src/judges/judge-server.service';
@@ -216,5 +219,124 @@ describe('judging across the api and the bridge', () => {
     });
     expect(await detail(id)).toMatchObject({ status: 'D', result: 'RJ' });
     expect(await gradedJobsOf(id)).toHaveLength(3);
+  });
+  describe('with the worker', () => {
+    let worker: TestingModule;
+    let solverJudge: FakeJudge;
+    let solver: TestSession;
+    const FLOW_PROBLEM = '/api/internal/problems/xflow';
+    const viewerStatus = async () =>
+      detailOf(await authed(api.http().get(FLOW_PROBLEM), solver).expect(200))
+        .viewerStatus;
+
+    beforeAll(async () => {
+      const author = await createUserWith(api, 'flow-author', {
+        permissions: ['judge.edit_own_problem'],
+      });
+      sessions.author = await loginAs(api, author._id);
+      solver = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'solver', {
+            permissions: ['judge.spam_submission'],
+          })
+        )._id,
+      );
+      await createProblem(api, catalog, {
+        code: 'xflow',
+        authors: [author._id],
+        partial: true,
+        testcaseResultVisibility: 'A',
+      });
+      await api.judges.create({ name: 'judge-y', authKeyHash: sha256(KEY) });
+      solverJudge = await FakeJudge.online(
+        bridge.get(JudgeServerService).port(),
+        {
+          name: 'judge-y',
+          key: KEY,
+          problems: ['xflow'],
+        },
+      );
+      worker = await Test.createTestingModule({
+        imports: [WorkerModule],
+      }).compile();
+      await worker.init();
+    });
+    afterAll(async () => {
+      await solverJudge?.close();
+      await worker?.close();
+    });
+
+    it('grades to AC, streams the events, updates points, stats and viewerStatus, and follows a points edit', async () => {
+      expect(await viewerStatus()).toBeNull();
+      const { id } = dataOf<{ id: string }>(
+        await authed(
+          api.http().post('/api/internal/problems/xflow/submit'),
+          solver,
+        )
+          .send({ language: catalog.languages.cpp, source: 'int main() {}' })
+          .expect(201),
+      );
+      const stream = await openStream(
+        api,
+        `/api/internal/events/submissions/${id}`,
+        { Cookie: solver.cookie },
+      );
+      try {
+        expect(stream.status).toBe(200);
+        await stream.next('state');
+        expect(
+          (await solverJudge.next('submission-request'))['submission-id'],
+        ).toBe(id);
+        solverJudge.send({
+          name: 'submission-acknowledged',
+          'submission-id': id,
+        });
+        solverJudge.send({
+          name: 'grading-begin',
+          'submission-id': id,
+          pretested: false,
+        });
+        solverJudge.send({
+          name: 'test-case-status',
+          'submission-id': id,
+          cases: [caseOf(1, AC), caseOf(2, AC)],
+        });
+        solverJudge.send({ name: 'grading-end', 'submission-id': id });
+        await waitUntil(() =>
+          stream.messages.some((message) => message.event === 'done'),
+        );
+        const events = stream.messages.map((message) => message.event);
+        expect(events.slice(events.indexOf('grading-begin'))).toEqual([
+          'grading-begin',
+          'test-case',
+          'done',
+        ]);
+        expect(stream.messages.at(-1)?.data).toMatchObject({ status: 'D' });
+      } finally {
+        stream.close();
+      }
+      // the worker's effects: points, problem stats and the viewer's mark follow the AC
+      await waitUntil(
+        async () =>
+          (await api.users.findOne({ username: 'solver' }))?.points === 1000,
+      );
+      await waitUntil(
+        async () =>
+          (await api.problems.findOne({ code: 'xflow' }))?.userCount === 1,
+      );
+      expect(await row(id)).toMatchObject({ result: 'AC', points: 1000 });
+      expect(await viewerStatus()).toBe('solved');
+      // a points edit rescores the submission and the user
+      await authed(api.http().patch(FLOW_PROBLEM), sessions.author)
+        .send({ points: 1200 })
+        .expect(200);
+      await waitUntil(
+        async () =>
+          (await api.users.findOne({ username: 'solver' }))?.points === 1200,
+      );
+      expect(await row(id)).toMatchObject({ points: 1200 });
+      expect(await viewerStatus()).toBe('solved');
+    });
   });
 });
