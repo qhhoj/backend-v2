@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
-import { TEST_ENV, TEST_REDIS_URL } from '@libs/common/testing';
+import { getQueueToken } from '@nestjs/bullmq';
+import { TEST_ENV, TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
+import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
   Language,
   Problem,
@@ -15,6 +17,7 @@ import {
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import Redis from 'ioredis';
+import type { Queue } from 'bullmq';
 import type { Connection, Model } from 'mongoose';
 import { WorkerModule } from '../src/worker.module';
 
@@ -64,7 +67,20 @@ export async function setupWorkerTest({
     await seedBeforeBoot?.(replSet.getUri('qhhoj'));
     testingModule = await builder.compile();
     await testingModule.init();
-    if (!seedBeforeBoot) await flushRedis();
+    if (!seedBeforeBoot) {
+      // The boot-time sweep must finish before the flush, or it fails on its vanished job and races the tests.
+      const sweepQueue = testingModule.get<Queue>(
+        getQueueToken(EFFECTS_SWEEP_QUEUE),
+      );
+      await waitUntil(async () => {
+        const { active, waiting } = await sweepQueue.getJobCounts(
+          'active',
+          'waiting',
+        );
+        return active + waiting === 0;
+      });
+      await flushRedis();
+    }
   } catch (error) {
     await testingModule?.close();
     await cleanup();

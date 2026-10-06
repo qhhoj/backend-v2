@@ -12,6 +12,7 @@ import {
   EffectsSweepService,
   SWEEP_WATERMARK_KEY,
 } from '../src/jobs/effects-sweep/effects-sweep.service';
+import { SubmissionEffectsService } from '../src/jobs/submission-effects/submission-effects.service';
 import {
   insertGradedRows,
   seedGraded,
@@ -37,6 +38,12 @@ describe('effects sweep', () => {
       .findById(problemId, { userCount: 1, acRate: 1 })
       .lean())!;
 
+  const sweepQueueIdle = () =>
+    waitUntil(async () => {
+      const { active, waiting } = await queue.getJobCounts('active', 'waiting');
+      return active + waiting === 0;
+    });
+
   beforeAll(async () => {
     worker = await setupWorkerTest();
     sweeps = worker.module.get(EffectsSweepService);
@@ -49,6 +56,7 @@ describe('effects sweep', () => {
     const processor = worker.module.get(EffectsSweepProcessor);
     await processor.onApplicationBootstrap();
     await processor.onApplicationBootstrap();
+    await sweepQueueIdle();
     const schedulers = await queue.getJobSchedulers();
     expect(schedulers).toHaveLength(1);
     expect(schedulers[0]).toMatchObject({ every: 10 * MINUTE });
@@ -110,6 +118,46 @@ describe('effects sweep', () => {
     expect(await pointsOf(outside._id)).toBe(1);
   });
 
+  it('looks back at most a day after a long gap', async () => {
+    const now = Date.now();
+    await redis.set(SWEEP_WATERMARK_KEY, String(now - 48 * 60 * MINUTE));
+    const recent = await seedUser(worker, { points: 1 });
+    const stale = await seedUser(worker, { points: 1 });
+    const problem = await seedProblem(worker);
+    const at = (hoursAgo: number) => new Date(now - hoursAgo * 60 * MINUTE);
+    await seedGraded(worker, recent._id, problem._id, {
+      date: at(12),
+      judgedDate: at(12),
+    });
+    await seedGraded(worker, stale._id, problem._id, {
+      date: at(30),
+      judgedDate: at(30),
+    });
+    await sweeps.sweep(now);
+    expect(await pointsOf(recent._id)).toBe(1000);
+    expect(await pointsOf(stale._id)).toBe(1);
+  });
+
+  it('keeps the window when a recompute fails, so the next sweep covers it again', async () => {
+    const user = await seedUser(worker, { points: 1 });
+    await seedGraded(worker, user._id, (await seedProblem(worker))._id);
+    const now = Date.now();
+    const before = String(now - 30 * MINUTE);
+    await redis.set(SWEEP_WATERMARK_KEY, before);
+    const effects = worker.module.get(SubmissionEffectsService);
+    const failing = jest
+      .spyOn(effects, 'recomputeUser')
+      .mockRejectedValueOnce(new Error('boom'));
+    try {
+      await expect(sweeps.sweep(now)).rejects.toThrow('boom');
+      expect(await redis.get(SWEEP_WATERMARK_KEY)).toBe(before);
+    } finally {
+      failing.mockRestore();
+    }
+    await sweeps.sweep(now);
+    expect(await pointsOf(user._id)).toBe(1000);
+  });
+
   it('reads its window through indexes', async () => {
     const problem = await seedProblem(worker);
     await insertGradedRows(worker, 20_000, () => ({
@@ -139,6 +187,7 @@ describe('effects sweep', () => {
   it('never runs two sweeps at once, even across worker processes', async () => {
     // The harness flushes Redis after boot, which drops the queue's global concurrency.
     await worker.module.get(EffectsSweepProcessor).onApplicationBootstrap();
+    await sweepQueueIdle();
     let running = 0;
     let maxRunning = 0;
     let finished = 0;
