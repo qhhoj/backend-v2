@@ -40,6 +40,12 @@ describe('parseBridgeCommand', () => {
       judgeName: null,
       bannedJudges: [],
     }),
+    JSON.stringify({
+      type: 'judge',
+      submissionIds: [newId()],
+      judgeName: null,
+      bannedJudges: ['a b'],
+    }),
     JSON.stringify({ type: 'judge', submissionIds: [newId()] }),
     JSON.stringify({ type: 'disconnect-judge', judgeName: 'a b', force: true }),
     JSON.stringify({ type: 'disable-judge', judgeName: 'judge-01' }),

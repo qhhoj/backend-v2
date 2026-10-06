@@ -23,6 +23,9 @@ describe('pythonRound', () => {
     [3.5, 0, 4],
     [0.25, 1, 0.2],
     [0.75, 1, 0.8],
+    [-2.5, 0, -2],
+    [-0.125, 2, -0.12],
+    [389493309600665.875, 2, 389493309600665.9],
   ])('rounds the exact tie %p to even at %p digits', (value, digits, rounded) =>
     expect(pythonRound(value, digits)).toBe(rounded),
   );
@@ -31,6 +34,7 @@ describe('pythonRound', () => {
     [1.06, 1, 1.1],
     [33.33333, 3, 33.333],
     [7, 1, 7],
+    [2.5e50, 3, 2.5e50],
   ])('rounds %p to the nearest at %p digits', (value, digits, rounded) =>
     expect(pythonRound(value, digits)).toBe(rounded),
   );

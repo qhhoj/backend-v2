@@ -8,6 +8,9 @@ import {
 } from './bridge-commands';
 import type { BridgeCommand } from './bridge-commands';
 
+/** Longest a request waits for a command to reach Redis. */
+export const PUBLISH_TIMEOUT_MS = 1000;
+
 @Injectable()
 export class BridgeCommandsService {
   private readonly logger = new Logger(BridgeCommandsService.name);
@@ -17,20 +20,34 @@ export class BridgeCommandsService {
   /** Fire-and-forget: Mongo already holds the state, a lost command only waits for the bridge's next resync, so a Redis failure never fails the request. */
   async publish(command: BridgeCommand): Promise<void> {
     try {
-      await this.redis.xadd(
-        BRIDGE_COMMANDS_STREAM,
-        'MAXLEN',
-        '~',
-        BRIDGE_COMMANDS_MAX_LENGTH,
-        '*',
-        'command',
-        JSON.stringify(command),
+      await this.withinTimeout(
+        this.redis.xadd(
+          BRIDGE_COMMANDS_STREAM,
+          'MAXLEN',
+          '~',
+          BRIDGE_COMMANDS_MAX_LENGTH,
+          '*',
+          'command',
+          JSON.stringify(command),
+        ),
       );
     } catch (error) {
       this.logger.error(
         `Bridge command ${command.type} not sent: ${(error as Error).message}`,
       );
     }
+  }
+
+  /** The shared client queues commands and retries while Redis is down; cap the wait so a Redis outage costs requests at most this long. */
+  private withinTimeout<T>(pending: Promise<T>): Promise<T> {
+    let timer: NodeJS.Timeout;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`timed out after ${PUBLISH_TIMEOUT_MS} ms`)),
+        PUBLISH_TIMEOUT_MS,
+      );
+    });
+    return Promise.race([pending, timeout]).finally(() => clearTimeout(timer));
   }
 
   async judge(

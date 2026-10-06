@@ -25,17 +25,18 @@ export interface CaseTotals {
   caseTotal: number;
 }
 
-/** Python 3 `round(value, digits)`: nearest decimal of the exact binary value; only exact ties (0.125, 2.5) go to the even neighbour, which `toFixed` would round up. Keeps rescored legacy points identical. */
+/** Python 3 `round(value, digits)`: nearest decimal of the exact binary value; only exact ties (0.125, 2.5) go to the even neighbour, where `toFixed` rounds away from zero. Keeps rescored legacy points identical. */
 export function pythonRound(value: number, digits: number): number {
-  const exact = value.toFixed(100);
-  const cut = exact.indexOf('.') + digits + 1;
-  const isTie = exact[cut] === '5' && /^0*$/.test(exact.slice(cut + 1));
-  if (!isTie) return Number(value.toFixed(digits));
-  const scaled = value * 10 ** digits;
-  return (
-    (Math.floor(scaled) % 2 === 0 ? Math.floor(scaled) : Math.ceil(scaled)) /
-    10 ** digits
-  );
+  const rounded = Number(value.toFixed(digits));
+  // Scaling by a power of two is exact: a tie is an odd number of half-units.
+  const halves = value * 2 ** (digits + 1);
+  if (!Number.isInteger(halves) || halves % 2 === 0) return rounded;
+  // The tie's decimal expansion has digits + 1 decimals; dropping the trailing 5 rounds toward zero.
+  const towardZero = value.toFixed(digits + 1).slice(0, -1);
+  const lastDigit = towardZero.endsWith('.')
+    ? towardZero.at(-2)
+    : towardZero.at(-1);
+  return Number(lastDigit) % 2 === 0 ? Number(towardZero) : rounded;
 }
 
 /** Legacy `on_grading_end`: time and memory are the largest over cases; plain cases add their points and totals; a batch adds its smallest points and its largest total; sums are rounded to one decimal. */

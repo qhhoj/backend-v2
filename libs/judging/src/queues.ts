@@ -22,7 +22,7 @@ export const gradedJobOf = (submission: {
   problemId: uuidStr(submission.problem),
 });
 
-/** Shared by the bridge and the api so every producer uses the same job name and retention. */
+/** Shared by the bridge and the api so every producer uses the same job name and retention. No deterministic `jobId` on purpose: BullMQ would drop the job of a rejudge finishing while the previous one is still active, leaving stale stats. */
 export const enqueueGraded = async (
   queue: Queue<SubmissionGradedJob>,
   job: SubmissionGradedJob,
