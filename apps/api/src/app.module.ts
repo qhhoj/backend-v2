@@ -11,6 +11,7 @@ import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
 import { AuthApiModule } from './modules/auth/auth-api.module';
 import { ApiV2Module } from './modules/api-v2/api-v2.module';
+import { JudgesApiModule } from './modules/judges/judges-api.module';
 import { ProblemsApiModule } from './modules/problems/problems-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
 import { HealthController } from './health.controller';
@@ -28,6 +29,7 @@ import { HealthController } from './health.controller';
     AuthApiModule,
     ProblemsApiModule,
     TagsApiModule,
+    JudgesApiModule,
     ApiV2Module,
   ],
   controllers: [HealthController],

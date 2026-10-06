@@ -9,12 +9,15 @@ import { MAILER, REDIS } from '@libs/common';
 import { createTestApp, InMemoryMailer, TEST_ENV } from '@libs/common/testing';
 import {
   Group,
+  Judge,
   Language,
   License,
   Problem,
   ProblemGroup,
   ProblemType,
   Revision,
+  Submission,
+  SubmissionSource,
   Tag,
   TagGroup,
   TagProblem,
@@ -98,6 +101,13 @@ export async function setupApiTest({
       getModelToken(TagProblem.name),
     ),
     languages: readyApp.get<Model<Language>>(getModelToken(Language.name)),
+    judges: readyApp.get<Model<Judge>>(getModelToken(Judge.name)),
+    submissions: readyApp.get<Model<Submission>>(
+      getModelToken(Submission.name),
+    ),
+    submissionSources: readyApp.get<Model<SubmissionSource>>(
+      getModelToken(SubmissionSource.name),
+    ),
     /** Streams are disabled in tests; call after inserting catalog rows. */
     resyncCatalog: async () => {
       await Promise.all(
