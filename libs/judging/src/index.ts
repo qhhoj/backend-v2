@@ -4,3 +4,4 @@ export * from './judging.module';
 export * from './queues';
 export * from './scoring';
 export * from './within-timeout';
+export * from './notify-graded';

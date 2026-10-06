@@ -73,6 +73,7 @@ describe('submission actions', () => {
           ],
         },
       ],
+      ['editor', { permissions: ['judge.edit_own_problem'] }],
       [
         'outsider',
         {
@@ -91,9 +92,14 @@ describe('submission actions', () => {
     problemId = (
       await createProblem(api, catalog, {
         code: 'acts',
-        authors: [ids.manager, ids.lot],
+        authors: [ids.manager, ids.lot, ids.editor],
       })
     )._id;
+    await createProblem(api, catalog, {
+      code: 'hidden',
+      isPublic: false,
+      authors: [ids.manager],
+    });
   });
   beforeEach(async () => {
     await api.submissions.deleteMany({});
@@ -171,6 +177,13 @@ describe('submission actions', () => {
           },
         ],
         requeueCount: 1,
+        error: 'OLD LOG',
+        judgedOn: 'judge-9',
+        judgedDate: new Date(),
+        memory: 123,
+        currentTestcase: 4,
+        batch: true,
+        isPretested: true,
       });
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
       const after = await row(id);
@@ -183,6 +196,14 @@ describe('submission actions', () => {
         cases: [],
         priority: 2,
         requeueCount: 0,
+        error: null,
+        judgedOn: null,
+        judgedDate: null,
+        memory: null,
+        caseTotal: 0,
+        currentTestcase: 0,
+        batch: false,
+        isPretested: false,
       });
       expect(after.rejudgedDate).toBeInstanceOf(Date);
       expect(await bridgeCommands(api)).toEqual([
@@ -252,6 +273,46 @@ describe('submission actions', () => {
     });
   });
 
+  describe('visibility and permissions', () => {
+    it('answers 404 on a private problem to everyone who cannot see it, owner included', async () => {
+      const hidden = (await api.problems.findOne({ code: 'hidden' }))!._id;
+      const id = await seed({ problem: hidden });
+      for (const who of ['owner', 'other', 'aborter', 'lot'])
+        for (const action of ['abort', 'rejudge', 'reject'])
+          await post(who, `${SUBMISSIONS}/${id}/${action}`).expect(404);
+      expect((await row(id)).status).toBe('D');
+    });
+
+    it('needs the permission of each action on top of edit rights', async () => {
+      const id = await seed();
+      await post('editor', `${SUBMISSIONS}/${id}/rejudge`).expect(403);
+      await post('editor', `${SUBMISSIONS}/${id}/reject`).expect(403);
+      await post('lot', `${SUBMISSIONS}/${id}/reject`).expect(403);
+      await post('editor', `${SUBMISSIONS}/rejudge`, {
+        problem: 'acts',
+      }).expect(403);
+      expect(await row(id)).toMatchObject({ status: 'D', result: 'AC' });
+    });
+
+    it('still succeeds once, without a retry hazard, when the graded job cannot be enqueued', async () => {
+      const add = jest
+        .spyOn(graded, 'add')
+        .mockRejectedValue(new Error('redis down'));
+      try {
+        const queued = await seed({ status: 'QU', result: null });
+        await post('owner', `${SUBMISSIONS}/${queued}/abort`).expect(204);
+        expect((await row(queued)).status).toBe('AB');
+        const finished = await seed();
+        await post('manager', `${SUBMISSIONS}/${finished}/reject`).expect(204);
+        expect((await row(finished)).result).toBe('RJ');
+        expect(add).toHaveBeenCalledTimes(2);
+      } finally {
+        add.mockRestore();
+      }
+      expect(await gradedIds()).toEqual([]);
+    });
+  });
+
   describe('bulk rejudge', () => {
     const bulk = (who: string, body: object) =>
       post(who, `${SUBMISSIONS}/rejudge`, { problem: 'acts', ...body });
@@ -270,6 +331,36 @@ describe('submission actions', () => {
         command.type === 'judge' ? command.submissionIds : [],
       );
       expect([...commanded].sort()).toEqual([...seeded].sort());
+    });
+
+    it('allows exactly 10 submissions without the lot permission', async () => {
+      await Promise.all(Array.from({ length: 10 }, () => seed()));
+      expect(dataOf(await bulk('manager', {}).expect(200))).toEqual({
+        count: 10,
+      });
+    });
+
+    it('resets and commands in chunks of at most 1000 ids', async () => {
+      const template = {
+        user: ids.owner,
+        problem: problemId,
+        language: catalog.languages.cpp,
+        status: 'D',
+        result: 'AC',
+      };
+      await api.submissions.insertMany(
+        Array.from({ length: 2100 }, () => template),
+      );
+      expect(dataOf(await bulk('lot', {}).expect(200))).toEqual({
+        count: 2100,
+      });
+      const sizes = (await bridgeCommands(api)).map((command) =>
+        command.type === 'judge' ? command.submissionIds.length : 0,
+      );
+      expect(sizes.sort()).toEqual([100, 1000, 1000]);
+      expect(
+        await api.submissions.countDocuments({ status: 'QU', priority: 3 }),
+      ).toBe(2100);
     });
 
     it('filters by id range, language and result; skips locked unless forced and never touches running ones', async () => {

@@ -1,8 +1,8 @@
 import type { Queue } from 'bullmq';
 import type { Problem, SubmissionCase } from '@libs/database';
+import { GRADED_ENQUEUE_TIMEOUT_MS } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import {
-  ENQUEUE_TIMEOUT_MS,
   GradingService,
   LOST_JUDGE_MESSAGE,
 } from '../src/submissions/grading.service';
@@ -439,7 +439,7 @@ describe('Grading (bridge Mongo layer)', () => {
     await grading.addCases(id, JUDGE, [reported(1)]);
     const started = Date.now();
     await offline.gradingEnd(id, JUDGE);
-    expect(Date.now() - started).toBeLessThan(ENQUEUE_TIMEOUT_MS * 3);
+    expect(Date.now() - started).toBeLessThan(GRADED_ENQUEUE_TIMEOUT_MS * 3);
     expect(await stored(id)).toMatchObject({ status: 'D', result: 'AC' });
     expect(await bridge.gradedJobs()).toEqual([]);
   });

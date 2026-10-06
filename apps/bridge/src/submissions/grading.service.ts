@@ -4,17 +4,11 @@ import type { Queue } from 'bullmq';
 import type { SubmissionCase } from '@libs/database';
 import type { QueuedSubmission } from '../dispatch/dispatch';
 import type { SubmissionRequest } from '../protocol/judge-packets';
-import {
-  enqueueGraded,
-  SUBMISSION_GRADED_QUEUE,
-  withinTimeout,
-} from '@libs/judging';
+import { notifyGraded, SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { SubmissionsRepository } from './submissions.repository';
 import type { CasesOutcome } from './submissions.repository';
 
-/** Longest a finishing packet waits for its graded job to reach Redis; the verdict is already in Mongo. */
-export const ENQUEUE_TIMEOUT_MS = 1000;
 export type DisconnectOutcome = 'requeued' | 'failed' | 'stale';
 export const LOST_JUDGE_MESSAGE =
   'The judge disconnected twice while grading this submission';
@@ -126,15 +120,7 @@ export class GradingService {
     return failed ? 'failed' : 'stale';
   }
 
-  /** Never retried or awaited past the bound: a late `add` is still delivered when Redis returns, and a retry would double-count stats (`enqueueGraded` has no `jobId`). */
-  private async notify(job: SubmissionGradedJob | null): Promise<void> {
-    if (!job) return;
-    try {
-      await withinTimeout(enqueueGraded(this.graded, job), ENQUEUE_TIMEOUT_MS);
-    } catch (error) {
-      this.logger.error(
-        `Graded job of submission ${job.submissionId} not enqueued: ${(error as Error).message}`,
-      );
-    }
+  private notify(job: SubmissionGradedJob | null): Promise<void> {
+    return notifyGraded(this.graded, job, this.logger);
   }
 }

@@ -115,7 +115,25 @@ export class SubmissionsService {
     };
   }
 
-  /** 404 for an unknown or malformed id or a problem the viewer cannot see; 403 unless legacy `can_see_detail` lets the viewer in. */
+  /** 404 for an unknown or malformed id or a problem the viewer cannot see, whoever owns the submission. */
+  async visible(
+    principal: Principal,
+    id: string,
+  ): Promise<{ submission: SubmissionDocument; problem: ProblemDocument }> {
+    const submission = await this.submissions.findById(id);
+    const problem =
+      submission && (await this.problems.findById(uuidStr(submission.problem)));
+    // Unlike legacy, the problem must be visible too (source visibility A never exposes a private problem).
+    if (
+      !submission ||
+      !problem ||
+      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem))
+    )
+      throw new AppError('not_found', 404, 'No such submission');
+    return { submission, problem };
+  }
+
+  /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in. */
   private async viewable(
     principal: Principal,
     id: string,
@@ -124,18 +142,8 @@ export class SubmissionsService {
     problem: ProblemDocument;
     canEdit: boolean;
   }> {
-    const submission = await this.submissions.findById(id);
-    const problem =
-      submission && (await this.problems.findById(uuidStr(submission.problem)));
-    const view = problem && ProblemAccess.accessView(problem);
-    // Unlike legacy, the problem must be visible too (source visibility A never exposes a private problem).
-    if (
-      !submission ||
-      !problem ||
-      !view ||
-      !ProblemAccess.canSee(principal, view)
-    )
-      throw new AppError('not_found', 404, 'No such submission');
+    const { submission, problem } = await this.visible(principal, id);
+    const view = ProblemAccess.accessView(problem);
     const canEdit = ProblemAccess.canEdit(principal, view);
     const access = detailAccess(
       principal,

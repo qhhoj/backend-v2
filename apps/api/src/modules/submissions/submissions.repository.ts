@@ -16,7 +16,8 @@ import {
   uuidStr,
 } from '@libs/database';
 
-const RESET_BATCH = 1000;
+/** Ids per reset and per bridge `judge` command. */
+export const ID_CHUNK = 1000;
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 
@@ -113,40 +114,33 @@ export class SubmissionsRepository {
 
   /** Legacy `judge_submission`: back to QU at `priority` with every result cleared, except while a judge holds it (P/G). The requeue allowance is restored: a rejudge is a fresh attempt. Returns how many were reset. */
   async resetForJudging(ids: string[], priority: number): Promise<number> {
-    let reset = 0;
-    for (let start = 0; start < ids.length; start += RESET_BATCH) {
-      const { modifiedCount } = await this.submissions
-        .updateMany(
-          {
-            _id: { $in: ids.slice(start, start + RESET_BATCH) },
-            status: { $nin: [...IN_FLIGHT_STATUSES] },
+    const { modifiedCount } = await this.submissions
+      .updateMany(
+        { _id: { $in: ids }, status: { $nin: [...IN_FLIGHT_STATUSES] } },
+        {
+          $set: {
+            status: 'QU',
+            result: null,
+            time: null,
+            memory: null,
+            points: null,
+            casePoints: 0,
+            caseTotal: 0,
+            error: null,
+            cases: [],
+            currentTestcase: 0,
+            batch: false,
+            isPretested: false,
+            judgedOn: null,
+            judgedDate: null,
+            rejudgedDate: new Date(),
+            priority,
+            requeueCount: 0,
           },
-          {
-            $set: {
-              status: 'QU',
-              result: null,
-              time: null,
-              memory: null,
-              points: null,
-              casePoints: 0,
-              caseTotal: 0,
-              error: null,
-              cases: [],
-              currentTestcase: 0,
-              batch: false,
-              isPretested: false,
-              judgedOn: null,
-              judgedDate: null,
-              rejudgedDate: new Date(),
-              priority,
-              requeueCount: 0,
-            },
-          },
-        )
-        .exec();
-      reset += modifiedCount;
-    }
-    return reset;
+        },
+      )
+      .exec();
+    return modifiedCount;
   }
 
   /** Legacy `Submission.reject`, once judging is over: result RJ, no points, cases cleared. */
@@ -160,9 +154,25 @@ export class SubmissionsRepository {
     return matchedCount === 1;
   }
 
-  async idsMatching(filter: FilterQuery<Submission>): Promise<string[]> {
-    return (
-      await this.submissions.find(filter, { _id: 1 }).sort({ _id: 1 }).lean()
-    ).map((row) => uuidStr(row._id));
+  countMatching(filter: FilterQuery<Submission>): Promise<number> {
+    return this.submissions.countDocuments(filter).exec();
+  }
+
+  /** Matching ids in order, `ID_CHUNK` at a time, so a problem's whole history is never held in memory. */
+  async *idChunks(filter: FilterQuery<Submission>): AsyncGenerator<string[]> {
+    let chunk: string[] = [];
+    const cursor = this.submissions
+      .find(filter, { _id: 1 })
+      .sort({ _id: 1 })
+      .lean()
+      .cursor();
+    for await (const row of cursor) {
+      chunk.push(uuidStr(row._id));
+      if (chunk.length === ID_CHUNK) {
+        yield chunk;
+        chunk = [];
+      }
+    }
+    if (chunk.length) yield chunk;
   }
 }
