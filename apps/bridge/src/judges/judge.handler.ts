@@ -29,6 +29,13 @@ export const MAX_PACKETS_PER_SECOND = 1000;
 /** Legacy: the reported ping is the mean of the last 6 round trips. */
 const PING_SAMPLES = 6;
 const HEADER_BYTES = 4;
+/** Packets of a running grading: ignored until this connection saw `grading-begin`. */
+const AFTER_GRADING_BEGIN: ReadonlySet<string> = new Set([
+  'grading-end',
+  'test-case-status',
+  'batch-begin',
+  'batch-end',
+]);
 
 export interface JudgeHandlerServices {
   judges: JudgesRepository;
@@ -59,6 +66,8 @@ export class JudgeHandler implements DispatchTarget {
   private packetsInWindow = 0;
   private batchNumber: number | null = null;
   private inBatch = false;
+  /** Whether this connection saw `grading-begin` for the current request: a judge that reconnected mid-grading still sends the old run's tail before the new run begins. */
+  private gradingBegun = false;
   private readonly roundTrips: number[] = [];
   private readonly handshakeTimer: NodeJS.Timeout;
   private pingTimer?: NodeJS.Timeout;
@@ -94,6 +103,7 @@ export class JudgeHandler implements DispatchTarget {
   }
 
   submit(request: SubmissionRequest): void {
+    this.gradingBegun = false;
     this.send(submissionRequestPacket(request));
     this.ackTimer = setTimeout(
       () => this.close(`no acknowledgement of ${request.submissionId}`),
@@ -315,12 +325,23 @@ export class JudgeHandler implements DispatchTarget {
 
   private async onSubmissionPacket(packet: SubmissionPacket): Promise<void> {
     const { submissionId } = packet;
-    if (submissionId !== this.workingOn) return this.rejectForeign(packet.name);
+    if (submissionId !== this.workingOn) {
+      if (packet.name === 'submission-acknowledged')
+        return this.rejectForeign(packet.name);
+      return this.logger.warn(
+        `${this.label()}: ignoring ${packet.name} for ${submissionId}, working on ${this.workingOn}`,
+      );
+    }
+    if (!this.gradingBegun && AFTER_GRADING_BEGIN.has(packet.name))
+      return this.logger.warn(
+        `${this.label()}: ignoring ${packet.name} before grading-begin of ${submissionId}`,
+      );
     const { grading } = this.services;
     switch (packet.name) {
       case 'submission-acknowledged':
         return clearTimeout(this.ackTimer);
       case 'grading-begin':
+        this.gradingBegun = true;
         this.batchNumber = null;
         this.inBatch = false;
         return grading.beginGrading(submissionId, this.name, packet.pretested);
@@ -364,6 +385,7 @@ export class JudgeHandler implements DispatchTarget {
   /** Frees the judge first, like legacy `_free_self`, so the next submission is sent while this result is written. */
   private async finish(write: () => Promise<void>): Promise<void> {
     clearTimeout(this.ackTimer);
+    this.gradingBegun = false;
     this.batchNumber = null;
     this.inBatch = false;
     /** Caught at once: if `write` throws first, an unobserved rejection would crash the process. */
@@ -378,7 +400,7 @@ export class JudgeHandler implements DispatchTarget {
     await next;
   }
 
-  /** A packet for a submission this judge is not working on: its own in-flight submission becomes IE and the connection closes; the other submission is never touched (legacy only for wrong acknowledgements). */
+  /** Legacy: an acknowledgement of a submission this judge is not working on fails its own in-flight submission (IE) and closes the connection; the other submission is never touched. */
   private async rejectForeign(packetName: string): Promise<void> {
     const current = this.workingOn;
     if (current !== null) {

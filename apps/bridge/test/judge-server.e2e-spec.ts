@@ -402,7 +402,7 @@ describe('Judge connections', () => {
       await judge.close();
     });
 
-    it('answers a packet for another submission with IE on its own and closes', async () => {
+    it('ignores a packet for another submission: nothing is written and the connection stays', async () => {
       const { name, problem } = await fresh();
       const other = (
         await seedSubmission(bridge, catalog, { problem: problem._id })
@@ -415,13 +415,90 @@ describe('Judge connections', () => {
       const id = await queue(problem._id);
       await judge.next('submission-request');
       judge.send({ name: 'submission-acknowledged', 'submission-id': id });
+      judge.send({
+        name: 'grading-begin',
+        'submission-id': id,
+        pretested: false,
+      });
       judge.send({ name: 'grading-end', 'submission-id': other });
+      judge.send({ name: 'compile-error', 'submission-id': other, log: 'x' });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(judge.isClosed).toBe(false);
+      expect(await submissionRow(id)).toMatchObject({ status: 'G' });
+      expect(await submissionRow(other)).toMatchObject({
+        status: 'QU',
+        judgedOn: null,
+      });
+      await judge.close();
+    });
+
+    it('answers an acknowledgement of another submission with IE on its own and closes', async () => {
+      const { name, problem } = await fresh();
+      const other = (
+        await seedSubmission(bridge, catalog, { problem: problem._id })
+      )._id;
+      const judge = await FakeJudge.online(port, {
+        name,
+        key: KEY,
+        problems: [problem.code],
+      });
+      const id = await queue(problem._id);
+      await judge.next('submission-request');
+      judge.send({ name: 'submission-acknowledged', 'submission-id': other });
       await judge.closed;
       await waitUntil(async () => (await submissionRow(id)).status === 'IE');
       expect(await submissionRow(other)).toMatchObject({
         status: 'QU',
         judgedOn: null,
       });
+    });
+
+    it('ignores the old run tail (grading-end, cases, batches) until grading-begin, then grades normally', async () => {
+      const { name, problem } = await fresh();
+      const judge = await FakeJudge.online(port, {
+        name,
+        key: KEY,
+        problems: [problem.code],
+      });
+      const id = await queue(problem._id);
+      await judge.next('submission-request');
+      const send = (packet: object) =>
+        judge.send({ ...packet, 'submission-id': id } as never);
+      send({ name: 'submission-acknowledged' });
+      send({ name: 'batch-begin' });
+      send({ name: 'test-case-status', cases: [caseOf(1)] });
+      send({ name: 'batch-end' });
+      send({ name: 'grading-end' });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(judge.isClosed).toBe(false);
+      expect(await submissionRow(id)).toMatchObject({
+        status: 'P',
+        batch: false,
+      });
+      expect(
+        (await bridge.submissions.findById(id).select('+cases').lean())!.cases,
+      ).toEqual([]);
+      send({ name: 'grading-begin', pretested: false });
+      send({ name: 'test-case-status', cases: [caseOf(1)] });
+      send({ name: 'grading-end' });
+      await waitUntil(async () => (await submissionRow(id)).status === 'D');
+      expect(await submissionRow(id)).toMatchObject({ caseTotal: 1 });
+      await judge.close();
+    });
+
+    it('still accepts compile-error before grading-begin', async () => {
+      const { name, problem } = await fresh();
+      const judge = await FakeJudge.online(port, {
+        name,
+        key: KEY,
+        problems: [problem.code],
+      });
+      const id = await queue(problem._id);
+      await judge.next('submission-request');
+      judge.send({ name: 'submission-acknowledged', 'submission-id': id });
+      judge.send({ name: 'compile-error', 'submission-id': id, log: 'x' });
+      await waitUntil(async () => (await submissionRow(id)).status === 'CE');
+      await judge.close();
     });
 
     it('closes a judge that does not acknowledge in time and requeues the submission', async () => {

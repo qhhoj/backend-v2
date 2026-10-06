@@ -97,6 +97,13 @@ export class DispatchService {
     this.judges.get(name)?.disconnect(force);
   }
 
+  /** Submissions a registered judge works on, a claim still in flight included (`workingOn` is set before the claim). A closing judge counts until its close is handled. */
+  heldIds(): string[] {
+    return [...this.judges.values()].flatMap((judge) =>
+      judge.workingOn === null ? [] : [judge.workingOn],
+    );
+  }
+
   queuedIds(): string[] {
     return this.queue.map((submission) => submission.id);
   }

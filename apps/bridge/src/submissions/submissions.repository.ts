@@ -21,6 +21,11 @@ export const MAX_REQUEUES = 1;
 /** `failed`: the submission's data vanished, so it was finished as IE and still needs its graded job. */
 export type ClaimOutcome =
   { request: SubmissionRequest } | { failed: SubmissionGradedJob };
+/** A P/G row and the judge it names. */
+export interface InFlightClaim {
+  id: string;
+  judgedOn: string | null;
+}
 export type CasesOutcome = 'appended' | 'stale' | 'full';
 
 /** Back to the queue with partial results dropped; the `$set` of every requeue and reset-in-flight write. */
@@ -331,5 +336,28 @@ export class SubmissionsRepository {
       { $set: REQUEUE_RESET },
     );
     return modifiedCount;
+  }
+
+  async inFlightClaims(): Promise<InFlightClaim[]> {
+    const rows = await this.submissions
+      .find({ status: IN_FLIGHT }, { judgedOn: 1 })
+      .lean();
+    return rows.map((row) => ({
+      id: uuidStr(row._id),
+      judgedOn: row.judgedOn,
+    }));
+  }
+
+  /** Resync: P/G rows no connected judge works on go back to QU like a start-up reset. Each write still requires the row to be in flight under the judge it was read with, so a row that moved on meanwhile is left alone. */
+  async resetStranded(claims: InFlightClaim[]): Promise<number> {
+    const results = await Promise.all(
+      claims.map(({ id, judgedOn }) =>
+        this.submissions.updateOne(
+          { _id: id, status: IN_FLIGHT, judgedOn },
+          { $set: REQUEUE_RESET },
+        ),
+      ),
+    );
+    return results.filter(({ modifiedCount }) => modifiedCount === 1).length;
   }
 }

@@ -1,4 +1,6 @@
 import { Logger } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import type { Submission } from '@libs/database';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { BridgeCommandsService } from '@libs/judging';
@@ -11,6 +13,8 @@ import {
   waitUntil,
 } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
+import { BridgeModule } from '../src/bridge.module';
+import { DispatchService } from '../src/dispatch/dispatch.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
@@ -135,7 +139,7 @@ describe('Bridge restart', () => {
     ).toBe(id);
     await judge.close();
   });
-  it('keeps resyncing without double-queueing what is running or already queued', async () => {
+  it('keeps a waiting submission queued once while the judge is busy, across resync ticks', async () => {
     await seedJudge(bridge, 'restart-4', KEY);
     const problem = await seedProblem(bridge, catalog, { code: 'restart4' });
     const judge = await connect('restart-4', ['restart4']);
@@ -159,6 +163,12 @@ describe('Bridge restart', () => {
     // several resync ticks while the first is running and the second waits behind the busy judge
     await new Promise((resolve) => setTimeout(resolve, 1000));
     expect(requestedIds()).toEqual([first]);
+    expect(
+      bridge.module
+        .get(DispatchService)
+        .queuedIds()
+        .filter((id) => id === second),
+    ).toEqual([second]);
     judge.send({ name: 'grading-end', 'submission-id': first });
     await waitUntil(() => requestedIds().length === 2);
     judge.send({ name: 'submission-acknowledged', 'submission-id': second });
@@ -179,19 +189,195 @@ describe('Bridge restart', () => {
     const loadQueued = jest
       .spyOn(bridge.module.get(SubmissionsRepository), 'loadQueued')
       .mockRejectedValue(new Error('mongo down'));
-    await waitUntil(() => loadQueued.mock.calls.length >= 2);
+    try {
+      await waitUntil(() => loadQueued.mock.calls.length >= 2);
+      const { _id: id } = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+      });
+      expect(
+        judge.received.some((packet) => packet.name === 'submission-request'),
+      ).toBe(false);
+      loadQueued.mockRestore();
+      expect(
+        (await judge.next('submission-request', 3000))['submission-id'],
+      ).toBe(id);
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('mongo down'),
+      );
+    } finally {
+      loadQueued.mockRestore();
+      logged.mockRestore();
+    }
+    await judge.close();
+  });
+
+  it('leaves finished submissions alone across a restart', async () => {
+    const problem = await seedProblem(bridge, catalog, { code: 'restart6' });
+    const seed = async (status: Submission['status']) =>
+      (await seedSubmission(bridge, catalog, { problem: problem._id, status }))
+        ._id;
+    const [graded, aborted, failed] = [
+      await seed('D'),
+      await seed('AB'),
+      await seed('CE'),
+    ];
+    await bridge.restart();
+    for (const [id, status] of [
+      [graded, 'D'],
+      [aborted, 'AB'],
+      [failed, 'CE'],
+    ])
+      expect(await submissionRow(id)).toMatchObject({ status });
+  });
+
+  it('requeues a P/G row no connected judge holds without spending the requeue', async () => {
+    await seedJudge(bridge, 'restart-7', KEY);
+    const problem = await seedProblem(bridge, catalog, { code: 'restart7' });
+    const judge = await connect('restart-7', ['restart7']);
     const { _id: id } = await seedSubmission(bridge, catalog, {
       problem: problem._id,
+      status: 'G',
+      judgedOn: 'ghost',
     });
-    expect(
-      judge.received.some((packet) => packet.name === 'submission-request'),
-    ).toBe(false);
-    loadQueued.mockRestore();
     expect(
       (await judge.next('submission-request', 3000))['submission-id'],
     ).toBe(id);
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining('mongo down'));
-    logged.mockRestore();
+    expect(await submissionRow(id)).toMatchObject({
+      judgedOn: 'restart-7',
+      requeueCount: 0,
+    });
+    await judge.close();
+  });
+
+  it('never requeues a row a connected judge holds, running or in a claim', async () => {
+    await seedJudge(bridge, 'restart-8', KEY);
+    const problem = await seedProblem(bridge, catalog, { code: 'restart8' });
+    const repository = bridge.module.get(SubmissionsRepository);
+    const claim = repository.claim.bind(repository);
+    const slowClaim = jest
+      .spyOn(repository, 'claim')
+      .mockImplementation(async (...args) => {
+        const outcome = await claim(...args);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return outcome;
+      });
+    try {
+      const judge = await connect('restart-8', ['restart8']);
+      const { _id: id } = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+      });
+      await waitUntil(async () => (await submissionRow(id)).status === 'P');
+      // claimed in Mongo, request not sent yet: several ticks pass
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      expect(await submissionRow(id)).toMatchObject({
+        status: 'P',
+        judgedOn: 'restart-8',
+      });
+      expect((await judge.next('submission-request'))['submission-id']).toBe(
+        id,
+      );
+      slowClaim.mockRestore();
+      judge.send({ name: 'submission-acknowledged', 'submission-id': id });
+      judge.send({
+        name: 'grading-begin',
+        'submission-id': id,
+        pretested: false,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      expect(await submissionRow(id)).toMatchObject({
+        status: 'G',
+        judgedOn: 'restart-8',
+      });
+      expect(judge.isClosed).toBe(false);
+      await judge.close();
+    } finally {
+      slowClaim.mockRestore();
+    }
+  });
+
+  it('grades the interrupted submission and the next one when the reconnected judge still sends its old run', async () => {
+    await seedJudge(bridge, 'restart-9', KEY);
+    const problem = await seedProblem(bridge, catalog, { code: 'restart9' });
+    const seed = async () =>
+      (await seedSubmission(bridge, catalog, { problem: problem._id }))._id;
+    const interrupted = await seed();
+    const next = await seed();
+    const first = await connect('restart-9', ['restart9']);
+    await first.next('submission-request');
+    first.send({
+      name: 'submission-acknowledged',
+      'submission-id': interrupted,
+    });
+    first.send({
+      name: 'grading-begin',
+      'submission-id': interrupted,
+      pretested: false,
+    });
+    await waitUntil(
+      async () => (await submissionRow(interrupted)).status === 'G',
+    );
+    await bridge.restart();
+    await first.closed;
+    const judge = await connect('restart-9', ['restart9']);
+    const send = (id: string, packet: object) =>
+      judge.send({ ...packet, 'submission-id': id } as never);
+    expect((await judge.next('submission-request'))['submission-id']).toBe(
+      interrupted,
+    );
+    send(interrupted, { name: 'submission-acknowledged' });
+    // the old run's tail arrives before the new run begins
+    send(interrupted, { name: 'grading-end' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await submissionRow(interrupted)).toMatchObject({ status: 'P' });
+    send(interrupted, { name: 'grading-begin', pretested: false });
+    send(interrupted, { name: 'grading-end' });
+    await waitUntil(
+      async () => (await submissionRow(interrupted)).status === 'D',
+    );
+    expect((await judge.next('submission-request'))['submission-id']).toBe(
+      next,
+    );
+    send(next, { name: 'submission-acknowledged' });
+    send(next, { name: 'grading-begin', pretested: false });
+    send(next, { name: 'grading-end' });
+    await waitUntil(async () => (await submissionRow(next)).status === 'D');
+    expect(judge.isClosed).toBe(false);
+    await judge.close();
+  });
+
+  it('a second bridge on the judge port dies before touching Mongo', async () => {
+    await seedJudge(bridge, 'restart-10', KEY);
+    const problem = await seedProblem(bridge, catalog, { code: 'restart10' });
+    const judge = await connect('restart-10', ['restart10']);
+    const { _id: id } = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+    });
+    await judge.next('submission-request');
+    judge.send({ name: 'submission-acknowledged', 'submission-id': id });
+    judge.send({
+      name: 'grading-begin',
+      'submission-id': id,
+      pretested: false,
+    });
+    await waitUntil(async () => (await submissionRow(id)).status === 'G');
+    process.env.JUDGE_BRIDGE_PORT = String(bridge.judgePort());
+    const contender = await Test.createTestingModule({
+      imports: [BridgeModule],
+    }).compile();
+    try {
+      await expect(contender.init()).rejects.toThrow(/EADDRINUSE/);
+    } finally {
+      process.env.JUDGE_BRIDGE_PORT = '0';
+      // a failed init surfaces its error again when closed
+      await contender.close().catch(() => undefined);
+    }
+    expect(await submissionRow(id)).toMatchObject({
+      status: 'G',
+      judgedOn: 'restart-10',
+    });
+    expect(
+      (await bridge.judges.findOne({ name: 'restart-10' }).lean())?.online,
+    ).toBe(true);
     await judge.close();
   });
 });

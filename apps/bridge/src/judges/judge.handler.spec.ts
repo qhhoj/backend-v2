@@ -82,7 +82,11 @@ describe('JudgeHandler when the stores fail', () => {
       judgeLost: () => Promise.resolve(),
       isStopped: () => false,
     },
-    grading: { gradingEnd: outage, internalError: outage },
+    grading: {
+      beginGrading: () => Promise.resolve(),
+      gradingEnd: outage,
+      internalError: outage,
+    },
     timings: TIMINGS,
   }));
   const connectAs = async () => {
@@ -101,16 +105,17 @@ describe('JudgeHandler when the stores fail', () => {
   it('leaks no rejection when freeing the judge and writing the verdict both fail', async () => {
     await connectAs();
     state.handler.workingOn = 'sub-1';
+    send({ name: 'grading-begin', 'submission-id': 'sub-1', pretested: false });
     send({ name: 'grading-end', 'submission-id': 'sub-1' });
     await pause(200);
     expect(state.handler.isClosed).toBe(false);
     expect(state.unhandled).toEqual([]);
   });
 
-  it('still closes on a packet for another submission when failing its own submission fails', async () => {
+  it('still closes on an acknowledgement of another submission when failing its own submission fails', async () => {
     await connectAs();
     state.handler.workingOn = 'sub-1';
-    send({ name: 'grading-end', 'submission-id': 'other' });
+    send({ name: 'submission-acknowledged', 'submission-id': 'other' });
     await state.handler.finished;
     expect(state.handler.isClosed).toBe(true);
     expect(state.handler.workingOn).toBe('sub-1');
