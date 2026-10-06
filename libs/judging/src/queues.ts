@@ -1,6 +1,12 @@
 import type { Queue } from 'bullmq';
 import { uuidStr } from '@libs/database';
 
+/** Finished jobs are dropped at once; failed ones stay a week for inspection. */
+const JOB_RETENTION = {
+  removeOnComplete: true,
+  removeOnFail: { age: 7 * 24 * 60 * 60 },
+};
+
 export const SUBMISSION_GRADED_QUEUE = 'submission-graded';
 export const SUBMISSION_GRADED_JOB = 'graded';
 
@@ -27,10 +33,7 @@ export const enqueueGraded = async (
   queue: Queue<SubmissionGradedJob>,
   job: SubmissionGradedJob,
 ): Promise<void> => {
-  await queue.add(SUBMISSION_GRADED_JOB, job, {
-    removeOnComplete: true,
-    removeOnFail: { age: 7 * 24 * 60 * 60 },
-  });
+  await queue.add(SUBMISSION_GRADED_JOB, job, JOB_RETENTION);
 };
 
 export const PROBLEM_RESCORE_QUEUE = 'problem-rescore';
@@ -50,8 +53,7 @@ export const enqueueRescore = async (
     {
       attempts: 3,
       backoff: { type: 'exponential', delay: 10_000 },
-      removeOnComplete: true,
-      removeOnFail: { age: 7 * 24 * 60 * 60 },
+      ...JOB_RETENTION,
     },
   );
 };

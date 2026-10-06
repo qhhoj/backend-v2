@@ -17,17 +17,12 @@ export interface UserPoints {
   problemCount: number;
 }
 
-export interface ProblemStats {
-  userCount: number;
-  acRate: number;
-}
-
 /** Legacy `user_completed_ids`: an AC whose cases earned everything, as an aggregation expression over a submission. */
 export const IS_SOLVED = {
   $and: [{ $eq: ['$result', 'AC'] }, { $gte: ['$casePoints', '$caseTotal'] }],
 };
 
-/** Legacy `Profile.calculate_points`: positive bests sorted descending; `points` sums them all, performance points weigh the first 300 by 0.98514^rank and add 0.05 per solved problem. */
+/** Legacy `Profile.calculate_points`: positive bests sorted descending; `points` sums them all, performance points weigh the first 300 by 0.98514^rank and add 0.05 per solved problem. V8's `**` differs from CPython's `pow` by 1 ulp on some ranks (~1e-12, far below legacy's 1e-6 float_compare), so recomputed legacy values may churn at that level. */
 export function userPoints(bests: readonly ProblemBest[]): UserPoints {
   const earned = bests
     .map((best) => best.maxPoints)
