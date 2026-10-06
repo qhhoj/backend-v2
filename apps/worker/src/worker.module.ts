@@ -10,6 +10,7 @@ import { ProblemFilesModule } from '@libs/problems';
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
+import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
 import { SubmissionEffectsModule } from './jobs/submission-effects/submission-effects.module';
 
 @Module({
@@ -24,6 +25,7 @@ import { SubmissionEffectsModule } from './jobs/submission-effects/submission-ef
     PolygonImportModule,
     SubmissionEffectsModule,
     EffectsSweepModule,
+    ProblemRescoreModule,
   ],
 })
 export class WorkerModule {}

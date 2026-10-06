@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
 
 export interface ProblemEventMap {
+  /** points, partial or organisation privacy changed: submissions and users are rescored */
   pointsChanged: [problemId: string];
   publicityChanged: [problemId: string, suggester: string | null];
   codeRenamed: [oldCode: string, newCode: string];

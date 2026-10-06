@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
+import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import { PDF_QUEUE, POLYGON_QUEUE } from '@libs/problems';
 import { LanguagesQuerier } from './languages.querier';
 import { LicensesQuerier } from './licenses.querier';
@@ -18,6 +19,7 @@ import { ProblemPdfService } from './problem-pdf.service';
 import { ProblemUploadsController } from './problem-uploads.controller';
 import { ProblemUploadsService } from './problem-uploads.service';
 import { ProblemEvents } from './problem.events';
+import { ProblemRescoreService } from './problem-rescore.service';
 import { ProblemsRepository } from './problems.repository';
 import { ProblemsController } from './problems.controller';
 import { ProblemsService } from './problems.service';
@@ -34,7 +36,11 @@ const repositories = [ProblemsRepository, RevisionsRepository];
 @Module({
   imports: [
     AuthModule,
-    BullModule.registerQueue({ name: PDF_QUEUE }, { name: POLYGON_QUEUE }),
+    BullModule.registerQueue(
+      { name: PDF_QUEUE },
+      { name: POLYGON_QUEUE },
+      { name: PROBLEM_RESCORE_QUEUE },
+    ),
   ],
   controllers: [
     ProblemImportsController,
@@ -53,6 +59,7 @@ const repositories = [ProblemsRepository, RevisionsRepository];
     ProblemDataService,
     ProblemImportsService,
     ProblemPdfService,
+    ProblemRescoreService,
     ProblemEvents,
     RateLimitService,
   ],

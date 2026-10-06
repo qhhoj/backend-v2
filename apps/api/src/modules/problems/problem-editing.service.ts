@@ -39,6 +39,8 @@ const GATED_FIELDS: ReadonlyArray<[keyof CreateProblemDto, Permission]> = [
   ['isManuallyManaged', 'judge.change_manually_managed'],
   ['isFullMarkup', 'judge.problem_full_markup'],
 ];
+/** What a submission or a user's points are worth depends on these (legacy rescored on each). */
+const RESCORE_FIELDS = ['points', 'partial', 'isOrganizationPrivate'] as const;
 /** Django-admin-only in legacy. */
 const STAFF_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
   'authors',
@@ -275,7 +277,8 @@ export class ProblemEditingService {
     });
     if ('code' in changes)
       this.events.emit('codeRenamed', problem.code, updated.code);
-    if ('points' in changes) this.events.emit('pointsChanged', problem._id);
+    if (RESCORE_FIELDS.some((field) => field in changes))
+      this.events.emit('pointsChanged', problem._id);
     if ('isPublic' in changes)
       this.events.emit(
         'publicityChanged',

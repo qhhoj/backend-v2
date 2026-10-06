@@ -5,6 +5,8 @@ import { rm } from 'node:fs/promises';
 import { StorageService, writeFileAtomically } from '@libs/common';
 import { emptyProblemData, newId, STATEMENT_LANGUAGES } from '@libs/database';
 import type { ProblemData } from '@libs/database';
+import { notifyRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import type { ProblemRescoreJob } from '@libs/judging';
 import {
   compileInitYaml,
   extensionOf,
@@ -64,6 +66,8 @@ export class PolygonImportService {
     private readonly pdfCache: PdfCacheService,
     private readonly repository: PolygonImportRepository,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
+    @InjectQueue(PROBLEM_RESCORE_QUEUE)
+    private readonly rescoreQueue: Queue<ProblemRescoreJob>,
   ) {}
 
   /** Pre-checks that cost nothing come first; the uploaded package is removed however the job ends. */
@@ -146,6 +150,9 @@ export class PolygonImportService {
       );
       const applied = await this.repository.apply(job, imported, target);
       committed = true;
+      // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
+      if (job.mode === 'update')
+        await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);
       await this.finish(job.code, applied, staged, compiled.yaml);
       return { problemId: applied.problemId, code: job.code };
     } catch (error) {

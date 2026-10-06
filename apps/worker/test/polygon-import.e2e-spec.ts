@@ -11,6 +11,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import type { Job } from 'bullmq';
 import type { Model } from 'mongoose';
 import { parse } from 'yaml';
+import { waitUntil } from '@libs/common/testing';
 import { Group, newId, Problem, Revision } from '@libs/database';
 import {
   listZipEntries,
@@ -22,6 +23,7 @@ import { PNG } from '@libs/problems/testing';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { PolygonImportRepository } from '../src/jobs/polygon-import/polygon-import.repository';
+import { seedGraded, seedUser } from './effects-fixtures';
 import { buildPolygonPackage, properties } from './polygon-fixtures';
 import type { PolygonFixture } from './polygon-fixtures';
 import { setupWorkerTest } from './setup';
@@ -748,5 +750,21 @@ describe('PolygonImportProcessor', () => {
       { code: 'plain' },
       { $set: { mirrorOf: null } },
     );
+  });
+
+  it('rescores the problem after an update, so new points reach its submissions', async () => {
+    await processor.process(job({ code: 'rescored' }));
+    const problem = await worker.problems.findOne({ code: 'rescored' });
+    const solver = await seedUser(worker);
+    const submission = await seedGraded(worker, solver._id, problem!._id, {
+      points: 800,
+      casePoints: 2,
+      caseTotal: 2,
+    });
+    await processor.process(bareUpdate({ code: 'rescored', points: 1000 }));
+    await waitUntil(async () => {
+      const row = await worker.submissions.findById(submission._id).lean();
+      return row!.points === 1000;
+    });
   });
 });
