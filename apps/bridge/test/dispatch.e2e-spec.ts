@@ -286,10 +286,11 @@ describe('DispatchService', () => {
     let commands: CommandsService;
     let errors: jest.SpyInstance;
     let warnings: jest.SpyInstance;
-    beforeAll(() => {
+    beforeAll(async () => {
       redis = new Redis(TEST_REDIS_URL);
       publisher = new BridgeCommandsService(redis);
       commands = bridge.module.get(CommandsService);
+      await commands.stop(); // the bridge's own reader, started at bootstrap, would also read these commands
     });
     beforeEach(() => {
       errors = jest.spyOn(Logger.prototype, 'error').mockImplementation();

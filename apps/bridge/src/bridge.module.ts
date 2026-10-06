@@ -6,6 +6,9 @@ import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import { BRIDGE_TIMINGS, DEFAULT_BRIDGE_TIMINGS } from './bridge-timings';
 import { CommandsService } from './dispatch/commands.service';
 import { DispatchService } from './dispatch/dispatch.service';
+import { JudgeServerService } from './judges/judge-server.service';
+import { JudgesRepository } from './judges/judges.repository';
+import { BridgeService } from './bridge.service';
 import { GradingService } from './submissions/grading.service';
 import { SubmissionsRepository } from './submissions/submissions.repository';
 
@@ -22,6 +25,9 @@ import { SubmissionsRepository } from './submissions/submissions.repository';
     GradingService,
     DispatchService,
     CommandsService,
+    JudgesRepository,
+    JudgeServerService,
+    BridgeService,
   ],
 })
 export class BridgeModule {}

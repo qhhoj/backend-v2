@@ -21,6 +21,7 @@ import type { SubmissionGradedJob } from '@libs/judging';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
 import type { BridgeTimings } from '../src/bridge-timings';
+import { JudgeServerService } from '../src/judges/judge-server.service';
 
 /** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). */
 export const FAST_TIMINGS: BridgeTimings = {
@@ -99,6 +100,8 @@ export async function setupBridgeTest({
     get graded() {
       return graded();
     },
+    /** The port the current module's judge server listens on (`JUDGE_BRIDGE_PORT=0`). */
+    judgePort: () => current.get(JudgeServerService).port(),
     /** Nothing consumes the queue in 2a, so every job waits. */
     gradedJobs: async (): Promise<SubmissionGradedJob[]> =>
       (await graded().getJobs(['waiting'])).map((job) => job.data),

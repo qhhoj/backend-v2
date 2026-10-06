@@ -1,5 +1,5 @@
 import { deflateSync } from 'node:zlib';
-import { frameOf } from '../../test/frame-of';
+import { frameOf } from '../../test/fake-judge';
 import {
   decodeFrame,
   HANDSHAKE_LIMITS,
