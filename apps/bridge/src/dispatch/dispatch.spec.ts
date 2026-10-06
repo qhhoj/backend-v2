@@ -140,4 +140,14 @@ describe('nextFor', () => {
     expect(nextFor(free, queue, [free, ...busy])).toBeNull();
     expect(lookups).toBeLessThan(2 * busy.length);
   });
+  it('memoizes hold-back per candidate set, not per problem', () => {
+    const self = judge('x');
+    const busyCapable = judge('y', { workingOn: newId() });
+    const heldSum = queued({ priority: 3 });
+    const bannedY = queued({ priority: 3, bannedJudges: ['y'] });
+    const named = queued({ priority: 3, judgeName: 'x' });
+    const judges = [self, busyCapable];
+    expect(nextFor(self, [heldSum, bannedY], judges)).toBe(bannedY);
+    expect(nextFor(self, [heldSum, named], judges)).toBe(named);
+  });
 });
