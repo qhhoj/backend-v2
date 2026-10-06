@@ -42,13 +42,18 @@ export class JudgesRepository {
     return matchedCount === 1;
   }
 
-  /** Submit with `judgeId`: the judge is connected and reported the problem's (mirror root's) code. */
-  async isOnlineFor(name: string, problemCode: string): Promise<boolean> {
+  /** Submit with `judgeId`: the judge is connected, reported the problem's (mirror root's) code and runs the language. */
+  async isOnlineFor(
+    name: string,
+    problemCode: string,
+    languageKey: string,
+  ): Promise<boolean> {
     return (
       (await this.judges.exists({
         name,
         online: true,
         problems: problemCode,
+        'runtimes.language': languageKey,
       })) !== null
     );
   }

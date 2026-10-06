@@ -117,6 +117,31 @@ describe('DispatchService', () => {
     });
   });
 
+  it('takes the new priority and judge of a queued submission that was rejudged', async () => {
+    const problem = await freshProblem();
+    const older = await submit(problem._id);
+    const newer = await submit(problem._id);
+    await enqueue(older, newer);
+    expect(dispatch.queuedIds()).toEqual([older, newer]);
+    await bridge.submissions.updateOne(
+      { _id: older },
+      { $set: { priority: 2 } },
+    );
+    const entries = await repository.loadQueued([older, newer]);
+    await dispatch.enqueue(
+      entries.map((entry) =>
+        entry.id === older ? { ...entry, judgeName: 'wanted' } : entry,
+      ),
+    );
+    expect(dispatch.queuedIds()).toEqual([newer, older]);
+    const other = new RecordingJudge('other', [problem.code]);
+    await dispatch.register(other);
+    expect(sentTo(other)).toEqual([newer]);
+    const wanted = new RecordingJudge('wanted', [problem.code]);
+    await dispatch.register(wanted);
+    expect(sentTo(wanted)).toEqual([older]);
+  });
+
   it('terminates a running submission on abort and forgets a queued one', async () => {
     const problem = await freshProblem();
     const judge = new RecordingJudge('aborter', [problem.code]);

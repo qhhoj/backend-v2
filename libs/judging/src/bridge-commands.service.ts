@@ -18,7 +18,7 @@ export class BridgeCommandsService {
 
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-  /** Fire-and-forget: Mongo already holds the state, a lost command only waits for the bridge's next resync, so a Redis failure never fails the request. */
+  /** Fire-and-forget: Mongo already holds the state, a lost `judge` command or judge change waits for the bridge's next resync (an `abort` is best-effort), so a Redis failure never fails the request. */
   async publish(command: BridgeCommand): Promise<void> {
     try {
       await withinTimeout(

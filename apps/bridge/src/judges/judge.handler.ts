@@ -50,6 +50,8 @@ export class JudgeHandler implements DispatchTarget {
   problems: ReadonlySet<string> = new Set<string>();
   executors: ReadonlySet<string> = new Set<string>();
   isDisabled = false;
+  /** The hash this connection authenticated with; a different stored hash means the key was rotated. */
+  authKeyHash = '';
   load = Number.POSITIVE_INFINITY;
   workingOn: string | null = null;
   isClosed = false;
@@ -266,6 +268,7 @@ export class JudgeHandler implements DispatchTarget {
     this.problems = new Set(packet.problems);
     this.executors = new Set(packet.executors);
     this.isDisabled = judge.isDisabled;
+    this.authKeyHash = judge.authKeyHash;
     this.connectedAt = new Date();
     this.send({ name: 'handshake-success' });
     await this.services.judges.markOnline(this.name, this.connectedAt, {

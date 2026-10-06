@@ -29,6 +29,7 @@ function setup() {
     dispatch: {
       enqueue: record('enqueue', undefined),
       heldIds,
+      connectedNames: () => [] as string[],
       stop: () => calls.push('dispatch.stop'),
     },
     commands: {
@@ -88,7 +89,12 @@ describe('BridgeService', () => {
     await bridge.onApplicationBootstrap();
     calls.length = 0;
     await bridge.onModuleDestroy();
-    expect(calls).toEqual(['dispatch.stop', 'commands.stop', 'server.close']);
+    expect(calls).toEqual([
+      'dispatch.stop',
+      'commands.stop',
+      'server.close',
+      'setAllOffline',
+    ]);
     services.submissions.loadQueued.mockClear();
     await tick(5);
     expect(services.submissions.loadQueued).not.toHaveBeenCalled();

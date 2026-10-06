@@ -6,6 +6,7 @@ export class RecordingJudge implements DispatchTarget {
   workingOn: string | null = null;
   isDisabled = false;
   isClosed = false;
+  authKeyHash = '';
   problems: ReadonlySet<string>;
   executors: ReadonlySet<string> = new Set(['CPP17', 'PY3']);
   readonly received: SubmissionRequest[] = [];

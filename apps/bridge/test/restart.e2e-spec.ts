@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Submission } from '@libs/database';
 import Redis from 'ioredis';
+import { sha256 } from '@libs/auth';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { BridgeCommandsService } from '@libs/judging';
 import { FakeJudge } from './fake-judge';
@@ -15,6 +16,7 @@ import {
 import type { BridgeCatalog } from './fixtures';
 import { BridgeModule } from '../src/bridge.module';
 import { DispatchService } from '../src/dispatch/dispatch.service';
+import { JudgeServerService } from '../src/judges/judge-server.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
@@ -379,5 +381,90 @@ describe('Bridge restart', () => {
       (await bridge.judges.findOne({ name: 'restart-10' }).lean())?.online,
     ).toBe(true);
     await judge.close();
+  });
+
+  describe('a judge change whose command was lost', () => {
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
+    const hasRequest = (judge: FakeJudge) =>
+      judge.received.some((packet) => packet.name === 'submission-request');
+
+    it('disconnects a judge blocked in Mongo within a tick, and it grades nothing more', async () => {
+      await seedJudge(bridge, 'restart-11', KEY);
+      const problem = await seedProblem(bridge, catalog, { code: 'restart11' });
+      const judge = await connect('restart-11', ['restart11']);
+      await bridge.judges.updateOne(
+        { name: 'restart-11' },
+        { isBlocked: true },
+      );
+      await judge.closed;
+      const { _id: id } = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+      });
+      await settle();
+      expect(hasRequest(judge)).toBe(false);
+      expect(await submissionRow(id)).toMatchObject({ status: 'QU' });
+    });
+
+    it('disconnects a judge whose key was rotated in Mongo, and keeps one whose row is unchanged', async () => {
+      await seedJudge(bridge, 'restart-12', KEY);
+      await seedJudge(bridge, 'restart-13', KEY);
+      const rotated = await connect('restart-12', []);
+      const kept = await connect('restart-13', []);
+      await bridge.judges.updateOne(
+        { name: 'restart-12' },
+        { authKeyHash: sha256('another key') },
+      );
+      await rotated.closed;
+      expect(kept.isClosed).toBe(false);
+      await kept.close();
+    });
+
+    it('applies a disable and an enable made in Mongo to a connected judge', async () => {
+      await seedJudge(bridge, 'restart-14', KEY);
+      const problem = await seedProblem(bridge, catalog, { code: 'restart14' });
+      const judge = await connect('restart-14', ['restart14']);
+      await bridge.judges.updateOne(
+        { name: 'restart-14' },
+        { isDisabled: true },
+      );
+      await settle();
+      const { _id: id } = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+      });
+      await settle();
+      expect(hasRequest(judge)).toBe(false);
+      await bridge.judges.updateOne(
+        { name: 'restart-14' },
+        { isDisabled: false },
+      );
+      expect(
+        (await judge.next('submission-request', 3000))['submission-id'],
+      ).toBe(id);
+      await judge.close();
+    });
+  });
+
+  it('marks its judges offline when it stops, while a submission they hold stays P/G', async () => {
+    await seedJudge(bridge, 'restart-15', KEY);
+    const problem = await seedProblem(bridge, catalog, { code: 'restart15' });
+    const stopping = await Test.createTestingModule({
+      imports: [BridgeModule],
+    }).compile();
+    await stopping.init();
+    const judge = await FakeJudge.online(
+      stopping.get(JudgeServerService).port(),
+      { name: 'restart-15', key: KEY, problems: ['restart15'] },
+    );
+    const { _id: id } = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+    });
+    await new BridgeCommandsService(redis).judge([id]);
+    await judge.next('submission-request');
+    await stopping.close();
+    await judge.closed;
+    expect(
+      (await bridge.judges.findOne({ name: 'restart-15' }).lean())?.online,
+    ).toBe(false);
+    expect(await submissionRow(id)).toMatchObject({ status: 'P' });
   });
 });

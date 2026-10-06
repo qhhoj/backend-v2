@@ -14,7 +14,8 @@ describe('JudgeServerService start-up', () => {
     { judgeBridgePort: 0, judgeBridgeHost: '127.0.0.1' } as never,
     TIMINGS,
     {
-      authenticate: () => Promise.resolve({ isDisabled: false }),
+      authenticate: () =>
+        Promise.resolve({ isDisabled: false, authKeyHash: 'hash' }),
       markOnline: () => Promise.resolve(),
       markOffline: () => Promise.resolve(),
       updatePing: () => Promise.resolve(),

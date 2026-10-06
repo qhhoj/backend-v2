@@ -13,6 +13,13 @@ export const OFFLINE_FIELDS = {
   runtimes: [],
 } as const;
 
+export interface JudgeAccess {
+  name: string;
+  isBlocked: boolean;
+  isDisabled: boolean;
+  authKeyHash: string;
+}
+
 /** Compared when the name is unknown, so the timing does not reveal which names exist. */
 const UNKNOWN_JUDGE_HASH = sha256('no such judge');
 
@@ -25,7 +32,7 @@ export class JudgesRepository {
   async authenticate(
     name: string,
     key: string,
-  ): Promise<{ isDisabled: boolean } | null> {
+  ): Promise<{ isDisabled: boolean; authKeyHash: string } | null> {
     const judge = JUDGE_NAME_PATTERN.test(name)
       ? await this.judges
           .findOne({ name }, { authKeyHash: 1, isBlocked: 1, isDisabled: 1 })
@@ -36,8 +43,18 @@ export class JudgesRepository {
       judge?.authKeyHash ?? UNKNOWN_JUDGE_HASH,
     );
     return judge && keyMatches && !judge.isBlocked
-      ? { isDisabled: judge.isDisabled }
+      ? { isDisabled: judge.isDisabled, authKeyHash: judge.authKeyHash }
       : null;
+  }
+
+  /** What the resync compares connected judges against: Mongo is the truth when a block, disable or key rotation command was lost. */
+  async accessOf(names: string[]): Promise<JudgeAccess[]> {
+    return this.judges
+      .find(
+        { name: { $in: names } },
+        { name: 1, isBlocked: 1, isDisabled: 1, authKeyHash: 1 },
+      )
+      .lean();
   }
 
   async markOnline(
@@ -72,7 +89,7 @@ export class JudgesRepository {
     await this.judges.updateOne({ name, startTime }, { $set: { problems } });
   }
 
-  /** Bridge start: no judge is connected yet, whatever the last run left behind. */
+  /** Bridge start and stop: no judge is connected, whatever the last run left behind. */
   async setAllOffline(): Promise<void> {
     await this.judges.updateMany({}, { $set: OFFLINE_FIELDS });
   }

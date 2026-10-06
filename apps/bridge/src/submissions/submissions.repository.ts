@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { unique } from '@libs/common';
 import {
   IN_FLIGHT_STATUSES,
   Language,
@@ -40,7 +41,6 @@ export const REQUEUE_RESET = {
 } as const;
 
 const IN_FLIGHT = { $in: [...IN_FLIGHT_STATUSES] };
-const unique = (values: string[]): string[] => [...new Set(values)];
 
 /** Every write a judge packet causes filters on the submission's judge and status, so stale, duplicate or replayed packets change nothing. */
 @Injectable()

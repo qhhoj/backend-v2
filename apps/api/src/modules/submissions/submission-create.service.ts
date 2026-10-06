@@ -46,7 +46,7 @@ export class SubmissionCreateService {
   ): Promise<SubmitResponse> {
     const { principal } = auth;
     const problem = await this.problems.visibleProblem(principal, code);
-    this.assertLanguage(problem, dto.language);
+    const languageKey = this.assertLanguage(problem, dto.language);
     if (
       !principal.isSuperuser &&
       problem.bannedUsers.map(uuidStr).includes(principal.userId)
@@ -57,7 +57,7 @@ export class SubmissionCreateService {
         'You are banned from submitting to this problem',
       );
     if (dto.judgeId !== undefined)
-      await this.assertJudge(principal, problem, dto.judgeId);
+      await this.assertJudge(principal, problem, dto.judgeId, languageKey);
     await this.rateLimit.reserve(
       [`submit:user:${principal.userId}`],
       SUBMIT_LIMIT,
@@ -96,7 +96,8 @@ export class SubmissionCreateService {
     return { id };
   }
 
-  private assertLanguage(problem: ProblemDocument, languageId: string): void {
+  /** Returns the language's key, the name judges know it by. */
+  private assertLanguage(problem: ProblemDocument, languageId: string): string {
     const language = this.languages.byId(languageId);
     if (
       !language ||
@@ -108,13 +109,15 @@ export class SubmissionCreateService {
       );
     if (language.fileOnly)
       throw invalidField('language', 'File submissions are not supported yet.');
+    return language.key;
   }
 
-  /** Legacy `judge_choices`: editors only, among online judges that have the problem (a mirror: its root). */
+  /** Legacy `judge_choices`: editors only, among online judges that have the problem (a mirror: its root) and run the language. */
   private async assertJudge(
     principal: Principal,
     problem: ProblemDocument,
     judgeName: string,
+    languageKey: string,
   ): Promise<void> {
     if (!ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem)))
       throw new AppError(
@@ -125,10 +128,13 @@ export class SubmissionCreateService {
     const judged = problem.mirrorRoot
       ? await this.problemsRepository.findById(uuidStr(problem.mirrorRoot))
       : problem;
-    if (!judged || !(await this.judges.isOnlineFor(judgeName, judged.code)))
+    if (
+      !judged ||
+      !(await this.judges.isOnlineFor(judgeName, judged.code, languageKey))
+    )
       throw invalidField(
         'judgeId',
-        'That judge is offline or does not have this problem.',
+        'That judge is offline, or lacks this problem or language.',
       );
   }
 }

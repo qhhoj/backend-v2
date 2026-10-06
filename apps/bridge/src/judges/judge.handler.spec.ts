@@ -64,7 +64,8 @@ function useHandler(build: () => Record<string, unknown>) {
 }
 
 const judgesStub = (overrides: Record<string, unknown> = {}) => ({
-  authenticate: () => Promise.resolve({ isDisabled: false }),
+  authenticate: () =>
+    Promise.resolve({ isDisabled: false, authKeyHash: 'hash' }),
   markOnline: () => Promise.resolve(),
   markOffline: () => Promise.resolve(),
   updatePing: () => Promise.resolve(),

@@ -43,12 +43,13 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     );
   }
 
-  /** Dispatching stops first, so judges dropped by the shutdown leave their submissions P/G for the next start instead of spending their requeue. */
+  /** Dispatching stops first, so judges dropped by the shutdown leave their submissions P/G for the next start instead of spending their requeue; judges are marked offline once their sockets are gone. */
   async onModuleDestroy(): Promise<void> {
     clearInterval(this.resyncTimer);
     this.dispatch.stop();
     await this.commands.stop();
     await this.server.close();
+    await this.judges.setAllOffline();
   }
 
   /** Mongo is the truth: queued submissions no command announced (Redis failure, trimmed stream) still reach a judge, and P/G rows no judge works on go back to the queue. `enqueue` skips queued and running ids and `claim` is a compare-and-set, so a tick racing a dispatch changes nothing. A tick still running when the next fires is skipped; a failure waits for the next tick. */
@@ -56,6 +57,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     if (this.resyncing) return;
     this.resyncing = true;
     try {
+      await this.reconcileJudges();
       await this.requeueStranded();
       await this.dispatch.enqueue(await this.submissions.loadQueued());
     } catch (error) {
@@ -63,6 +65,13 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     } finally {
       this.resyncing = false;
     }
+  }
+
+  /** A block, disable or key rotation whose command was lost still takes effect: connected judges are compared with their rows. */
+  private async reconcileJudges(): Promise<void> {
+    const names = this.dispatch.connectedNames();
+    if (names.length)
+      await this.dispatch.reconcile(await this.judges.accessOf(names));
   }
 
   /** A P/G row no judge works on (a lost judge's requeue failed, a write was lost) would never be sent again. A judge frees itself before its result write lands, so a row counts as stranded only when it was unheld on two consecutive ticks; `requeueCount` is not spent, the judge did not fail. */

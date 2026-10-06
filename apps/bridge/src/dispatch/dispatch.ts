@@ -28,6 +28,8 @@ export interface JudgeState {
 export interface DispatchTarget extends JudgeState {
   /** True from the moment the socket is closing; its close is handled a little later (`judgeLost`). */
   readonly isClosed: boolean;
+  /** The key hash the judge authenticated with. */
+  readonly authKeyHash: string;
   submit(request: SubmissionRequest): void;
   terminate(): void;
   disconnect(force: boolean): void;

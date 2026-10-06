@@ -15,9 +15,7 @@ import {
   UNFINISHED_STATUSES,
   uuidStr,
 } from '@libs/database';
-
-/** Ids per reset and per bridge `judge` command. */
-export const ID_CHUNK = 1000;
+import { JUDGE_COMMAND_BATCH } from '@libs/judging';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 
@@ -158,7 +156,7 @@ export class SubmissionsRepository {
     return this.submissions.countDocuments(filter).exec();
   }
 
-  /** Matching ids in order, `ID_CHUNK` at a time, so a problem's whole history is never held in memory. */
+  /** Matching ids in order, `JUDGE_COMMAND_BATCH` at a time, so a problem's whole history is never held in memory. */
   async *idChunks(filter: FilterQuery<Submission>): AsyncGenerator<string[]> {
     let chunk: string[] = [];
     const cursor = this.submissions
@@ -168,7 +166,7 @@ export class SubmissionsRepository {
       .cursor();
     for await (const row of cursor) {
       chunk.push(uuidStr(row._id));
-      if (chunk.length === ID_CHUNK) {
+      if (chunk.length === JUDGE_COMMAND_BATCH) {
         yield chunk;
         chunk = [];
       }

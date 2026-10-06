@@ -1,16 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import type { SubmissionRequest } from '../protocol/judge-packets';
+import type { JudgeAccess } from '../judges/judges.repository';
 import { GradingService } from '../submissions/grading.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { insertQueued, nextFor, pickJudge } from './dispatch';
 import type { DispatchTarget, QueuedSubmission } from './dispatch';
+
+const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
+  left.priority === right.priority &&
+  left.judgeName === right.judgeName &&
+  left.bannedJudges.join() === right.bannedJudges.join();
 
 /** The bridge's in-memory view (legacy `JudgeList`): connected judges by name and the queue in dispatch order. Mongo stays the truth: nothing is sent before `claim` moved it QU → P. */
 @Injectable()
 export class DispatchService {
   private readonly judges = new Map<string, DispatchTarget>();
   private readonly queue: QueuedSubmission[] = [];
-  private readonly queued = new Set<string>();
+  private readonly queued = new Map<string, QueuedSubmission>();
   private stopped = false;
 
   constructor(
@@ -26,17 +32,20 @@ export class DispatchService {
     await this.offerWork(judge);
   }
 
-  /** Queued or running ids are skipped, so rejudges and resyncs are idempotent. */
+  /** Running ids are skipped and an unchanged queued entry stays put, so resyncs are idempotent; a queued entry that changed (a rejudge) is replaced. */
   async enqueue(submissions: QueuedSubmission[]): Promise<void> {
     for (const submission of submissions) {
-      if (this.isKnown(submission.id)) continue;
+      if (this.isRunning(submission.id)) continue;
+      const queued = this.queued.get(submission.id);
+      if (queued && isSameEntry(queued, submission)) continue;
+      this.removeQueued(submission.id);
       const judge = this.stopped
         ? null
         : pickJudge(this.connected(), submission);
       if (judge) await this.dispatch(judge, submission);
       else {
         insertQueued(this.queue, submission);
-        this.queued.add(submission.id);
+        this.queued.set(submission.id, submission);
       }
     }
   }
@@ -91,6 +100,26 @@ export class DispatchService {
     if (!judge) return;
     judge.isDisabled = isDisabled;
     await this.offerWork(judge);
+  }
+
+  connectedNames(): string[] {
+    return [...this.judges.keys()];
+  }
+
+  /** Mongo is the truth for access: a connected judge that is now blocked, deleted or holds a rotated key is dropped, and a changed `isDisabled` is applied. Covers a lost command. */
+  async reconcile(access: JudgeAccess[]): Promise<void> {
+    const byName = new Map(access.map((judge) => [judge.name, judge]));
+    for (const [name, judge] of this.judges) {
+      const stored = byName.get(name);
+      if (
+        !stored ||
+        stored.isBlocked ||
+        stored.authKeyHash !== judge.authKeyHash
+      )
+        judge.disconnect(true);
+      else if (stored.isDisabled !== judge.isDisabled)
+        await this.setDisabled(name, stored.isDisabled);
+    }
   }
 
   disconnect(name: string, force: boolean): void {
@@ -148,12 +177,9 @@ export class DispatchService {
     return [...this.judges.values()].filter((judge) => !judge.isClosed);
   }
 
-  private isKnown(submissionId: string): boolean {
-    return (
-      this.queued.has(submissionId) ||
-      [...this.judges.values()].some(
-        (judge) => judge.workingOn === submissionId,
-      )
+  private isRunning(submissionId: string): boolean {
+    return [...this.judges.values()].some(
+      (judge) => judge.workingOn === submissionId,
     );
   }
 

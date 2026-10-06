@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated } from '@libs/common';
+import { AppError, Paginated, unique } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
@@ -23,7 +23,6 @@ import {
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
-const unique = (values: string[]): string[] => [...new Set(values)];
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
 
 @Injectable()

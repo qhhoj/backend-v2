@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { AuthContext, Permission, Principal } from '@libs/auth';
-import { AppError, isDuplicateKey, RateLimitService } from '@libs/common';
+import {
+  AppError,
+  isDuplicateKey,
+  RateLimitService,
+  unique,
+} from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
@@ -67,7 +72,6 @@ const CREATE_BASELINE: Partial<Record<keyof CreateProblemDto, unknown>> = {
 };
 /** The only field a request may set to null (it clears the license). */
 const NULLABLE_FIELDS: ReadonlyArray<keyof CreateProblemDto> = ['licenseId'];
-export const unique = (ids: string[]) => [...new Set(ids)];
 /** Id and limit lists are sets: order never counts as a change. */
 const comparable = (value: unknown) =>
   Array.isArray(value)

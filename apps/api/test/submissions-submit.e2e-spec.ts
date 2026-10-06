@@ -72,7 +72,20 @@ describe('POST /api/internal/problems/:code/submit', () => {
     });
     await createProblem(api, catalog, { code: 'hidden', isPublic: false });
     await api.judges.create([
-      { name: 'judge-on', authKeyHash: 'h', online: true, problems: ['sum'] },
+      {
+        name: 'judge-on',
+        authKeyHash: 'h',
+        online: true,
+        problems: ['sum'],
+        runtimes: [{ language: 'CPP17', name: 'g++', version: '11.4' }],
+      },
+      {
+        name: 'judge-py-only',
+        authKeyHash: 'h',
+        online: true,
+        problems: ['sum'],
+        runtimes: [{ language: 'PY3', name: 'python', version: '3.12' }],
+      },
       {
         name: 'judge-other',
         authKeyHash: 'h',
@@ -171,7 +184,12 @@ describe('POST /api/internal/problems/:code/submit', () => {
 
   it('lets only editors pick a judge, and only one that is online with the problem', async () => {
     await submit('alice', 'sum', { judgeId: 'judge-on' }).expect(403);
-    for (const judgeId of ['judge-off', 'judge-other', 'ghost'])
+    for (const judgeId of [
+      'judge-off',
+      'judge-other',
+      'judge-py-only',
+      'ghost',
+    ])
       expect(
         fieldsOf(await submit('editor', 'sum', { judgeId }).expect(400)),
       ).toEqual(['judgeId']);
