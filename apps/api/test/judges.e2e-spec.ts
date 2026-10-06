@@ -105,9 +105,17 @@ describe('/api/internal/judges', () => {
         { language: 'CPP17', name: 'g++', version: '11.4', priority: 0 },
       ],
     });
-    expect(listed.map((judge) => judge.name)).toEqual(
-      [...listed.map((judge) => judge.name)].sort(),
+    // created last, listed first: the list is ordered by name, not by insertion
+    await create('judge-0');
+    const ordered = dataOf<Array<{ name: string }>>(
+      await authed(api.http().get(JUDGES), admin).expect(200),
     );
+    expect(ordered.map((judge) => judge.name)).toEqual([
+      'judge-0',
+      'judge-a',
+      'judge-dup',
+      'judge-live',
+    ]);
   });
 
   it('rotates the key, killing the old one and the open connection', async () => {
