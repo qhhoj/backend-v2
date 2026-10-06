@@ -1,9 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, RateLimitService, REDIS } from '@libs/common';
+import { AppError, RateLimitService, REDIS, withRedisLock } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { BridgeCommandsService } from '@libs/judging';
 import { JudgesRepository } from '../judges/judges.repository';
@@ -18,9 +17,7 @@ import {
   SUBMIT_LIMIT,
   SUBMIT_WINDOW_SECONDS,
   UNFINISHED_LIMIT,
-  USER_LOCK_RETRIES,
-  USER_LOCK_RETRY_MS,
-  USER_LOCK_TTL_MS,
+  USER_LOCK_SECONDS,
 } from './rate-limits';
 import { SubmissionsRepository } from './submissions.repository';
 
@@ -77,53 +74,26 @@ export class SubmissionCreateService {
       );
     const id = hasPermission(principal, 'judge.spam_submission')
       ? await create()
-      : await this.withUserLock(principal.userId, async () => {
-          if (
-            (await this.submissions.countUnfinished(principal.userId)) >=
-            UNFINISHED_LIMIT
-          )
-            throw new AppError(
-              'rate_limited',
-              429,
-              'Wait until your earlier submissions are judged',
-            );
-          return create();
-        });
+      : await withRedisLock(
+          this.redis,
+          `submit-lock:user:${principal.userId}`,
+          USER_LOCK_SECONDS,
+          'Another submission is being created; try again',
+          async () => {
+            if (
+              (await this.submissions.countUnfinished(principal.userId)) >=
+              UNFINISHED_LIMIT
+            )
+              throw new AppError(
+                'rate_limited',
+                429,
+                'Wait until your earlier submissions are judged',
+              );
+            return create();
+          },
+        );
     await this.commands.judge([id], dto.judgeId ?? null);
     return { id };
-  }
-
-  /** Serialises a user's count-then-insert, so parallel submits cannot all pass the unfinished limit. */
-  private async withUserLock<Result>(
-    userId: string,
-    work: () => Promise<Result>,
-  ): Promise<Result> {
-    const key = `lock:submit:${userId}`;
-    const token = randomUUID();
-    for (let attempt = 0; ; attempt += 1) {
-      if (
-        (await this.redis.set(key, token, 'PX', USER_LOCK_TTL_MS, 'NX')) ===
-        'OK'
-      )
-        break;
-      if (attempt >= USER_LOCK_RETRIES)
-        throw new AppError(
-          'rate_limited',
-          429,
-          'Another submission is being created; try again',
-        );
-      await new Promise((resolve) => setTimeout(resolve, USER_LOCK_RETRY_MS));
-    }
-    try {
-      return await work();
-    } finally {
-      await this.redis.eval(
-        "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end",
-        1,
-        key,
-        token,
-      );
-    }
   }
 
   private assertLanguage(problem: ProblemDocument, languageId: string): void {

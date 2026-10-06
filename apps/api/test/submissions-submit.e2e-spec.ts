@@ -86,7 +86,10 @@ describe('POST /api/internal/problems/:code/submit', () => {
     await api.submissions.deleteMany({});
     await clearBridgeCommands(api);
     const redis = api.app.get<Redis>(REDIS);
-    const spent = await redis.keys('rate:*');
+    const spent = [
+      ...(await redis.keys('rate:*')),
+      ...(await redis.keys('submit-lock:*')),
+    ];
     if (spent.length) await redis.del(...spent);
   });
   afterAll(() => api.teardown());
@@ -200,10 +203,42 @@ describe('POST /api/internal/problems/:code/submit', () => {
       await Promise.all(Array.from({ length: 6 }, () => submit('alice')))
     ).map((response) => response.status);
     expect(statuses.filter((status) => status === 201)).toHaveLength(1);
-    expect(statuses.filter((status) => status === 429)).toHaveLength(5);
+    expect(statuses.filter((status) => status === 409)).toHaveLength(5);
     expect(
       await api.submissions.countDocuments({ user: users.alice._id }),
     ).toBe(2);
+  });
+
+  it('counts source length in code points, so astral text within the cap is stored', async () => {
+    const id = idOf(
+      await submit('spammer', 'sum', { source: '😀'.repeat(40000) }).expect(
+        201,
+      ),
+    );
+    expect(
+      (await api.submissionSources.findById(id).lean())?.source,
+    ).toHaveLength(80000);
+    expect(
+      fieldsOf(
+        await submit('spammer', 'sum', {
+          source: '😀'.repeat(MAX_SOURCE_LENGTH + 1),
+        }).expect(400),
+      ),
+    ).toEqual(['source']);
+  });
+
+  it('still answers 201 and tells the bridge when releasing the lock fails', async () => {
+    const redis = api.app.get<Redis>(REDIS);
+    const release = jest
+      .spyOn(redis, 'eval')
+      .mockRejectedValueOnce(new Error('redis gone'));
+    const id = idOf(await submit('alice').expect(201));
+    release.mockRestore();
+    expect(
+      (await bridgeCommands(api)).map(
+        (command) => command.type === 'judge' && command.submissionIds,
+      ),
+    ).toEqual([[id]]);
   });
 
   it('rate limits each user', async () => {

@@ -7,7 +7,15 @@ import { MAX_SOURCE_LENGTH } from './submission.schema';
 @Schema({ ...baseSchemaOptions, collection: 'submissionSources' })
 export class SubmissionSource {
   @Prop({ type: MongooseSchema.Types.UUID, required: true }) _id!: string;
-  @Prop({ required: true, maxlength: MAX_SOURCE_LENGTH }) source!: string;
+  /** Counted in code points, like the DTO and legacy Python `len`; `maxlength` would count UTF-16 units. */
+  @Prop({
+    required: true,
+    validate: {
+      validator: (text: string) => [...text].length <= MAX_SOURCE_LENGTH,
+      message: `exceeds ${MAX_SOURCE_LENGTH} characters`,
+    },
+  })
+  source!: string;
 }
 export const SubmissionSourceSchema =
   SchemaFactory.createForClass(SubmissionSource);

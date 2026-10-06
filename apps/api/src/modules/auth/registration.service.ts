@@ -16,6 +16,7 @@ import {
   MAILER,
   RateLimitService,
   REDIS,
+  withRedisLock,
 } from '@libs/common';
 import type { Env, Mailer } from '@libs/common';
 import { ActivationKey, uuidStr } from '@libs/database';
@@ -30,8 +31,6 @@ import {
 
 const ACTIVATION_DAYS = 7;
 const EMAIL_LOCK_SECONDS = 30;
-const RELEASE_LOCK_SCRIPT =
-  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
 
 @Injectable()
 export class RegistrationService {
@@ -68,31 +67,13 @@ export class RegistrationService {
     );
     // Emails are not uniquely indexed (legacy duplicates), so serialize per email.
     const lockKey = `register-lock:email:${email.toLowerCase()}`;
-    const lockToken = randomBytes(16).toString('hex');
-    const locked = await this.redis.set(
+    return withRedisLock(
+      this.redis,
       lockKey,
-      lockToken,
-      'EX',
       EMAIL_LOCK_SECONDS,
-      'NX',
+      'Registration in progress; try again',
+      signup,
     );
-    if (locked !== 'OK')
-      throw new AppError(
-        'conflict',
-        409,
-        'Registration in progress; try again',
-      );
-    try {
-      return await signup();
-    } finally {
-      try {
-        await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, lockToken);
-      } catch (error) {
-        this.logger.error(
-          `Registration lock release failed: ${(error as Error).message}`,
-        );
-      }
-    }
   }
 
   /** Username/email uniqueness and password policy; throws `validation_failed` with per-field messages. Call under `withRegistrationSlot`. */

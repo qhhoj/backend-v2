@@ -73,6 +73,7 @@ describe('OpenAPI document', () => {
         '/api/internal/problems/{code}/data/files/{kind}',
         '/api/internal/problems/{code}/data/files/{name}',
         '/api/internal/problems/{code}/pdf',
+        '/api/internal/problems/{code}/submit',
         '/api/internal/problems/imports',
         '/api/internal/problems/imports/{jobId}',
         '/api/internal/tags',
