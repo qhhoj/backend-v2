@@ -11,7 +11,7 @@ const NEST_LEVELS: Array<[LogLevel, string]> = [
 ];
 const SEVERITY = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'];
 
-/** The worker has no pino: `LOG_LEVEL` selects which Nest logger levels are printed. */
+/** Apps without pino (worker, bridge): `LOG_LEVEL` selects which Nest logger levels are printed. */
 export function nestLogLevels(logLevel: string): LogLevel[] {
   const enabledUpTo = SEVERITY.indexOf(logLevel);
   return NEST_LEVELS.filter(

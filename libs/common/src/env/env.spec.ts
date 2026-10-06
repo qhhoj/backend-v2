@@ -95,6 +95,9 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...valid, JUDGE_BRIDGE_PORT: '0' }).judgeBridgePort).toBe(
       0,
     );
+    expect(loadEnv({ ...valid, JUDGE_BRIDGE_PORT: '' }).judgeBridgePort).toBe(
+      9999,
+    );
     for (const port of ['65536', '-1', '1.5', 'nine'])
       expect(() => loadEnv({ ...valid, JUDGE_BRIDGE_PORT: port })).toThrow(
         'JUDGE_BRIDGE_PORT must be 0-65535',
@@ -108,7 +111,7 @@ describe('loadEnv', () => {
     expect(() =>
       loadEnv({ ENCRYPTION_KEY: 'zz', TOKEN_SECRET: 'short', PORT: '0' }),
     ).toThrow(
-      'Invalid environment: MONGO_URL is required; REDIS_URL is required; SITE_URL is required; SMTP_URL is required; MEDIA_ROOT is required; PROBLEM_DATA_ROOT is required; PDF_CACHE_ROOT is required; ENCRYPTION_KEY must be 64 hex chars; TOKEN_SECRET must be at least 32 chars; PORT must be 1-65535',
+      'Invalid environment: MONGO_URL is required; REDIS_URL is required; SITE_URL is required; PORT must be 1-65535; SMTP_URL is required; MEDIA_ROOT is required; PROBLEM_DATA_ROOT is required; PDF_CACHE_ROOT is required; ENCRYPTION_KEY must be 64 hex chars; TOKEN_SECRET must be at least 32 chars',
     ));
   it.each(['true', '1', ''])('rejects TRUST_PROXY=%j', (value) =>
     expect(() => loadEnv({ ...valid, TRUST_PROXY: value })).toThrow(

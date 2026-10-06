@@ -34,6 +34,8 @@ describe('BridgeModule harness', () => {
 
     expect(await bridge.problems.countDocuments({ code: 'aplusb' })).toBe(1);
     expect(await bridge.judges.countDocuments({ name: 'judge1' })).toBe(1);
+    expect(await bridge.submissions.countDocuments()).toBe(1);
+    expect(await bridge.gradedJobs()).toEqual([]);
     expect((await bridge.sources.findById(submission._id))?.source).toBe(
       'print(1)',
     );

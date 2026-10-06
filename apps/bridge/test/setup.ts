@@ -48,10 +48,17 @@ export async function setupBridgeTest({
       .overrideProvider(BRIDGE_TIMINGS)
       .useValue({ ...FAST_TIMINGS, ...timings })
       .compile();
-    await compiled.init();
+    try {
+      await compiled.init();
+    } catch (error) {
+      await compiled.close();
+      throw error;
+    }
     return compiled;
   };
   let current: TestingModule;
+  /** Set while `current` is closed (a failed restart), so `teardown` does not close it twice. */
+  let currentClosed = false;
   try {
     const redis = new Redis(TEST_REDIS_URL);
     await redis.flushdb();
@@ -61,8 +68,8 @@ export async function setupBridgeTest({
     await replSet.stop();
     throw error;
   }
-  const model = <Document>(name: string) =>
-    current.get<Model<Document>>(getModelToken(name));
+  const model = <Entity>(name: string) =>
+    current.get<Model<Entity>>(getModelToken(name));
   const graded = () =>
     current.get<Queue<SubmissionGradedJob>>(
       getQueueToken(SUBMISSION_GRADED_QUEUE),
@@ -98,10 +105,12 @@ export async function setupBridgeTest({
     /** A bridge process restart: same Mongo and Redis, fresh in-memory state. */
     restart: async () => {
       await current.close();
+      currentClosed = true;
       current = await compile();
+      currentClosed = false;
     },
     teardown: async () => {
-      await current.close();
+      if (!currentClosed) await current.close();
       await replSet.stop();
     },
   };

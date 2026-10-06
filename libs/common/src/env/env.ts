@@ -34,6 +34,7 @@ export interface Env {
   pdfConcurrency: number;
   /** Bridge: judges connect to this TCP port (DMOJ judge protocol); 0 picks a free port (tests). */
   judgeBridgePort: number;
+  /** Bridge: interface the judge port listens on. */
   judgeBridgeHost: string;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
@@ -92,10 +93,12 @@ export function loadEnv(
       problems.push(`${name} must be a positive integer`);
     return value;
   };
-  const portNumber = (name: string, fallback: number): number => {
-    const value = Number(source[name] ?? fallback);
-    if (!Number.isInteger(value) || value < 0 || value > 65535)
-      problems.push(`${name} must be 0-65535`);
+  /** Blank counts as unset; `min` 0 allows "any free port". */
+  const portNumber = (name: string, fallback: number, min: number): number => {
+    const raw = source[name]?.trim();
+    const value = raw ? Number(raw) : fallback;
+    if (!Number.isInteger(value) || value < min || value > 65535)
+      problems.push(`${name} must be ${min}-65535`);
     return value;
   };
   const env: Env = {
@@ -104,7 +107,7 @@ export function loadEnv(
     encryptionKey: source.ENCRYPTION_KEY ?? '',
     tokenSecret: source.TOKEN_SECRET ?? '',
     siteUrl: required('SITE_URL'),
-    port: Number(source.PORT ?? 3000),
+    port: portNumber('PORT', 3000, 1),
     logLevel: source.LOG_LEVEL ?? 'info',
     trustProxy: proxies('TRUST_PROXY'),
     cookieSecure: flag('COOKIE_SECURE', true),
@@ -121,7 +124,7 @@ export function loadEnv(
     pdfRenderTimeoutMs: positiveInteger('PDF_RENDER_TIMEOUT_MS', 30_000),
     pdfMaxBytes: positiveInteger('PDF_MAX_BYTES', 52_428_800),
     pdfConcurrency: positiveInteger('PDF_CONCURRENCY', 2),
-    judgeBridgePort: portNumber('JUDGE_BRIDGE_PORT', 9999),
+    judgeBridgePort: portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
     judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
     oauth: {
       google: oauthClient('GOOGLE'),
@@ -135,8 +138,6 @@ export function loadEnv(
     problems.push('ENCRYPTION_KEY must be 64 hex chars');
   if (env.tokenSecret.length < 32)
     problems.push('TOKEN_SECRET must be at least 32 chars');
-  if (!Number.isInteger(env.port) || env.port < 1 || env.port > 65535)
-    problems.push('PORT must be 1-65535');
   if (!LOG_LEVELS.includes(env.logLevel))
     problems.push(`LOG_LEVEL must be one of ${LOG_LEVELS.join('|')}`);
   if (problems.length)
