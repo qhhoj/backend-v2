@@ -85,4 +85,28 @@ describe('OpenAPI document', () => {
       ]),
     );
   });
+
+  it('lists the judging endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/problems/{code}/submit',
+        '/api/internal/submissions',
+        '/api/internal/submissions/rejudge',
+        '/api/internal/submissions/{id}',
+        '/api/internal/submissions/{id}/source',
+        '/api/internal/submissions/{id}/abort',
+        '/api/internal/submissions/{id}/rejudge',
+        '/api/internal/submissions/{id}/reject',
+        '/api/internal/judges',
+        '/api/internal/judges/{name}',
+        '/api/internal/judges/{name}/key',
+        '/api/internal/judges/{name}/disconnect',
+      ]),
+    );
+  });
 });

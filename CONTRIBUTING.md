@@ -21,17 +21,19 @@ apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
   worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import)
+  bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
   auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
+  judging/    scoring, submission-graded contract (`queues.ts`), bridge command stream + `BridgeCommandsService`, `notifyGraded`
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
 
-- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems` (and `@libs/<name>/*`) -> `libs/<name>/src`
+- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging` (and `@libs/<name>/*`) -> `libs/<name>/src`
 - Import from the alias root (`@libs/database`) except `/testing` entry points
 - Each lib exports through `libs/<name>/src/index.ts`; add new files there
 
@@ -48,13 +50,14 @@ tools/legacy/   regenerates the fixtures
 ```
 
 - Flow: `controller -> service -> querier | repository`
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|spec`
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|handler|spec`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts`
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`)
+- `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
 - `<feature>.events.ts`: in-process `EventEmitter` wrapper for notifying other modules (`problem.events.ts`)
@@ -159,6 +162,24 @@ tools/legacy/   regenerates the fixtures
 - Import semantics: create defaults for catalog fields; update keeps catalog fields, points and authors unless given; every option comes from the job (no prompts); tests repacked as `tests.zip`; images re-hosted; a compile error fails the job before the DB write; the case limit is the requester's (300, or 9999 with `judge.create_mass_testcases`); the worker finds the package at `.imports/<jobId>.zip` and refuses a manually managed or mirror target
 - Tags (`/api/internal/tags`, `catalog`, `:code`, `:code/assign`): tagging needs `allowTagging` plus `judge.add_tagproblem` or rating >= 1900; link presets (Codeforces, CodeforcesGym, Atcoder, VNOJ, Kattis); no external OJ calls
 
+## Judging
+
+- Collections: `submissions` (`cases` is `select: false`, at most 10000), `submissionSources` (`_id` = submission id, at most 65536 code points, counted by `codePointLength`), `judges` (`authKeyHash` = sha256 of the key; online fields written only by the bridge)
+- Statuses QU P G D IE CE AB; results add AC WA TLE MLE OLE IR RTE SC RJ; priorities 0 contest, 1 normal, 2 rejudge, 3 batch rejudge, FIFO by id within one
+- Queue truth is Mongo: queued = `status QU`; the bridge claims QU -> P before sending; every judge packet's write filters `{ _id, judgedOn, status }`
+- API -> bridge: Redis stream `bridge:commands` (`judge`, `abort`, `disconnect-judge`, `disable-judge`), fire-and-forget via `BridgeCommandsService`; a lost command waits for the bridge's resync (`resyncMs`, 30 s)
+- Bridge -> effects: one `submission-graded` BullMQ job per finished (D/CE/IE/AB) or rejected submission, enqueued through `notifyGraded` (1 s bound, a failure is logged and skipped, in the bridge and the api); 2b consumes it
+- Bridge start: bind the port (judges wait), judges offline, P/G -> QU (requeue allowance untouched), stream position, queue rebuild, commands, resync, then serve judges. Stop: dispatching stops first so P/G survive for the next start
+- Resync also requeues P/G rows no connected judge held on two consecutive ticks (`requeueCount` not spent)
+- Judge disconnect in flight: requeued once (`requeueCount`), IE the second time; a rejudge restores the allowance
+- Packets: 4 MiB compressed / 8 MiB inflated before authentication (`HANDSHAKE_LIMITS`; any packet but `handshake` closes the connection), 8 MiB / 32 MiB after; JSON nesting depth 16; 1000 packets/s; 15 s absolute handshake deadline, 60 s silence (paused while a packet is handled), 20 s acknowledgement; 10000 cases; case text in UTF-8 bytes (512 output/extended feedback, 50 feedback); 64 KiB logs; 256 sockets, 8 unauthenticated per remote address
+- Packet handling: a packet for another submission is logged and ignored; only a wrong `submission-acknowledged` fails the judge's own submission (IE) and closes; `grading-end`, `test-case-status`, `batch-*` are ignored until `grading-begin`
+- Dispatch: lowest load among free candidates, random tie-break; a rejudge never takes the last free candidate when another judge could; mirrors dispatch under `mirrorRoot`'s code; `languageLimits` override limits; `short-circuit = !partial`
+- Submit: visible problem, allowed non-file-only language, not banned (superuser exempt), `judgeId` (a judge name) for editors and only to an online judge with the problem; 20 per minute per user; 2 unfinished (429 `rate_limited`) unless `judge.spam_submission`, counted under a fail-fast `withRedisLock` (`libs/common`; contention -> 409)
+- Detail/source: problem visible (else 404), then legacy `can_see_detail` (`F` follows `all-solved`); cases by `testcaseResultVisibility` (A all, B batches, S none; superusers all), feedback for superusers/editors/`allowViewFeedback`, output unless `testcaseVisibility` O (editors always); IE messages for editors only
+- Actions: invisible problem -> 404; abort (owner unless rejudged, or `judge.abort_any_submission`), rejudge/reject (`judge.rejudge_submission`/`judge.reject_submission` + edit rights; 409 while judging, rejudge also while locked), bulk rejudge per problem (more than 10 needs `judge.rejudge_submission_lot`, locked only with `force`; counts first, then streams chunks of at most 1000 ids)
+- Judges admin (`judge.change_judge`): `/api/internal/judges`; keys are shown once; rotate and block force-disconnect
+
 ## Data conventions
 
 - `tagGroups`/`tags` are querier-backed; `tagProblems` is a repository
@@ -169,6 +190,7 @@ tools/legacy/   regenerates the fixtures
 - `@Schema({ ...baseSchemaOptions, collection: '<name>' })`: timestamps, no `__v`, `toJSON` returns `id` instead of `_id`
 - Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schema.spec.ts`); `ciIndex(schema, field, unique = true)`, e.g. `ciIndex(UserSchema, 'email', false)` for non-unique
 - Catalog collections (languages, licenses, problem types and groups) are querier-backed and never deleted
+- `submissions`, `submissionSources` and `judges` are repository-backed
 - Register every schema in `SCHEMAS` (`libs/database/src/schemas/index.ts`) and export it there
 
 ## Backfill jobs (migrator)
@@ -201,6 +223,7 @@ Add a job:
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush); migrator e2e also needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
+- Bridge e2e: `setupBridgeTest` (`apps/bridge/test/setup.ts`, millisecond `FAST_TIMINGS`, `restart()`), `FakeJudge` (real TCP), `RecordingJudge` (no socket); api specs read the command stream through `apps/api/test/submission-fixtures.ts`
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`
 - Playwright specs skip without Chromium; the pandoc spec skips locally and fails in CI without pandoc
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
@@ -216,10 +239,12 @@ Add a job:
 | `npm run build` | build `api` |
 | `npx nest build migrator` | build migrator |
 | `npx nest build worker` | build worker |
+| `npx nest build bridge` | build bridge |
 | `npx nest start api` | run the API |
+| `npx nest start bridge` | run the bridge (exactly one instance) |
 | `npx nest start worker` | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
 
-CI (`.github/workflows/ci.yml`): lint, typecheck, test, all three builds.
+CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
 ## Env and deploy
 
@@ -227,6 +252,10 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all three builds.
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly)
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
+- Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); validates the same env as the api (`loadEnv`); exactly one instance
+- The bridge port must be reachable only from judge hosts (firewall)
+- Judge containers need a restart policy (the judge-server fork exits when its socket drops mid-send)
+- The qhhoj/judge-server fork must send and accept submission ids as strings (`packet.py` `%d` -> `%s`); the bridge is not deployable until it does
 - Worker tuning: `PDF_RENDER_TIMEOUT_MS`, `PDF_MAX_BYTES`, `PDF_CONCURRENCY`; the Polygon import queue runs one job at a time
 
 ## Commits
