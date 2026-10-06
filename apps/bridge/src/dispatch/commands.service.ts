@@ -12,12 +12,20 @@ const READ_BATCH = 100;
 const RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 30_000;
 
-/** Reads the api's command stream on a dedicated blocking connection (never the shared client) and applies each command to the dispatcher in order. */
+/** The wait after a failed read doubles up to a cap. */
+export const nextRetryDelay = (delayMs: number): number =>
+  Math.min(delayMs * 2, MAX_RETRY_DELAY_MS);
+
+/**
+ * Reads the api's command stream on a dedicated blocking connection (never the shared client) and applies each command to the dispatcher in order.
+ * The connection never reconnects by itself: a dropped link or a failing read is logged, waited out with a doubling delay (`stop` cuts the wait short) and retried on a fresh connection from the last id read.
+ */
 @Injectable()
 export class CommandsService {
   private readonly logger = new Logger(CommandsService.name);
   private reader: Redis | null = null;
   private reading: Promise<void> | null = null;
+  private running = false;
   private wake: (() => void) | null = null;
 
   constructor(
@@ -40,13 +48,15 @@ export class CommandsService {
 
   /** A no-op while already reading (`BridgeService` starts it at boot). */
   start(fromId: string): void {
-    this.reading ??= this.readFrom(this.connection(), fromId);
+    if (this.reading) return;
+    this.running = true;
+    this.reading = this.readFrom(fromId);
   }
 
   async stop(): Promise<void> {
-    const reader = this.reader;
+    this.running = false;
+    this.reader?.disconnect();
     this.reader = null;
-    reader?.disconnect();
     this.wake?.();
     await this.reading;
     this.reading = null;
@@ -61,21 +71,25 @@ export class CommandsService {
   }
 
   private connection(): Redis {
-    if (!this.reader) {
-      this.reader = new Redis(this.env.redisUrl, {
+    if (!this.reader || this.reader.status === 'end') {
+      const reader = new Redis(this.env.redisUrl, {
         maxRetriesPerRequest: null,
+        retryStrategy: () => null,
       });
-      this.reader.on('error', () => undefined); // surfaced by the failing read, which retries
+      reader.on('error', (error) =>
+        this.logger.error(`Bridge command connection: ${error.message}`),
+      );
+      this.reader = reader;
     }
     return this.reader;
   }
 
-  private async readFrom(reader: Redis, fromId: string): Promise<void> {
+  private async readFrom(fromId: string): Promise<void> {
     let lastId = fromId;
     let retryDelay = RETRY_DELAY_MS;
-    while (this.reader === reader) {
+    while (this.running) {
       try {
-        const streams = await reader.xread(
+        const streams = await this.connection().xread(
           'COUNT',
           READ_BATCH,
           'BLOCK',
@@ -87,17 +101,29 @@ export class CommandsService {
         for (const [, entries] of streams ?? [])
           for (const [id, fields] of entries) {
             lastId = id;
-            await this.apply(fields[fields.indexOf('command') + 1]);
+            await this.applyEntry(fields);
           }
         retryDelay = RETRY_DELAY_MS;
       } catch (error) {
-        if (this.reader !== reader) return;
+        if (!this.running) return;
         this.logger.error(
           `Reading bridge commands failed: ${(error as Error).message}`,
         );
         await this.sleep(retryDelay);
-        retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY_MS);
+        retryDelay = nextRetryDelay(retryDelay);
       }
+    }
+  }
+
+  /** A command that fails to apply (Mongo down) is dropped, not retried: the next resync recovers it. */
+  private async applyEntry(fields: string[]): Promise<void> {
+    const at = fields.indexOf('command');
+    try {
+      await this.apply(at === -1 ? undefined : fields[at + 1]);
+    } catch (error) {
+      this.logger.error(
+        `Applying a bridge command failed: ${(error as Error).message}`,
+      );
     }
   }
 

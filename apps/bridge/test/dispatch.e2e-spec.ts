@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { BRIDGE_COMMANDS_STREAM, BridgeCommandsService } from '@libs/judging';
@@ -189,20 +190,124 @@ describe('DispatchService', () => {
     ).toContain(id);
   });
 
-  describe('commands from the api', () => {
-    const redis = new Redis(TEST_REDIS_URL);
-    const publisher = new BridgeCommandsService(redis);
-    let commands: CommandsService;
-    beforeAll(async () => {
-      commands = bridge.module.get(CommandsService);
-      commands.start(await commands.position());
+  it('never sends a closed judge work, and queues it for the others', async () => {
+    const problem = await freshProblem();
+    const closing = new RecordingJudge('closed', [problem.code]);
+    await dispatch.register(closing);
+    closing.isClosed = true;
+    const id = await submit(problem._id);
+    await enqueue(id);
+    expect(sentTo(closing)).toEqual([]);
+    expect(dispatch.queuedIds()).toContain(id);
+    await dispatch.judgeFree(closing);
+    expect(sentTo(closing)).toEqual([]);
+  });
+
+  it('gives back a submission claimed for a judge that closed during the claim', async () => {
+    const problem = await freshProblem();
+    const judge = new RecordingJudge('closing', [problem.code]);
+    await dispatch.register(judge);
+    const id = await submit(problem._id);
+    const pending = dispatch.enqueue(await repository.loadQueued([id]));
+    expect(judge.workingOn).toBe(id);
+    judge.isClosed = true;
+    await pending;
+    expect(sentTo(judge)).toEqual([]);
+    expect(await statusOf(id)).toMatchObject({
+      status: 'QU',
+      judgedOn: null,
+      requeueCount: 0,
     });
-    afterAll(async () => {
+    expect(dispatch.queuedIds()).toContain(id);
+    await dispatch.judgeLost(judge);
+    expect(dispatch.queuedIds()).toContain(id);
+  });
+
+  it('lets the replacing connection grade a submission claimed during the replacement, untouched by the old close', async () => {
+    const problem = await freshProblem();
+    const first = new RecordingJudge('same', [problem.code]);
+    await dispatch.register(first);
+    const id = await submit(problem._id);
+    const pending = dispatch.enqueue(await repository.loadQueued([id]));
+    expect(first.workingOn).toBe(id);
+    const second = new RecordingJudge('same', [problem.code]);
+    const registering = dispatch.register(second);
+    await pending;
+    await registering;
+    expect(sentTo(first)).toEqual([]);
+    expect(sentTo(second)).toEqual([id]);
+    await dispatch.judgeLost(first);
+    expect(await statusOf(id)).toMatchObject({
+      status: 'P',
+      judgedOn: 'same',
+      requeueCount: 0,
+    });
+  });
+
+  it('never sends one judge two submissions or one submission twice under concurrent enqueues', async () => {
+    const problem = await freshProblem();
+    const judge = new RecordingJudge('solo', [problem.code]);
+    await dispatch.register(judge);
+    const one = await submit(problem._id);
+    const two = await submit(problem._id);
+    const queuedOne = await repository.loadQueued([one]);
+    const queuedTwo = await repository.loadQueued([two]);
+    await Promise.all([
+      dispatch.enqueue(queuedOne),
+      dispatch.enqueue(queuedOne),
+      dispatch.enqueue(queuedTwo),
+      dispatch.enqueue(queuedTwo),
+    ]);
+    expect(sentTo(judge)).toEqual([one]);
+    expect(dispatch.queuedIds()).toContain(two);
+    expect(dispatch.queuedIds()).not.toContain(one);
+    await dispatch.judgeFree(judge);
+    expect(sentTo(judge)).toEqual([one, two]);
+  });
+
+  describe('commands from the api', () => {
+    let redis: Redis;
+    let publisher: BridgeCommandsService;
+    let commands: CommandsService;
+    let errors: jest.SpyInstance;
+    let warnings: jest.SpyInstance;
+    beforeAll(() => {
+      redis = new Redis(TEST_REDIS_URL);
+      publisher = new BridgeCommandsService(redis);
+      commands = bridge.module.get(CommandsService);
+    });
+    beforeEach(() => {
+      errors = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      warnings = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    });
+    afterEach(async () => {
       await commands.stop();
-      await redis.quit();
+      await redis.del(BRIDGE_COMMANDS_STREAM);
+      jest.restoreAllMocks();
+    });
+    afterAll(() => redis.quit());
+
+    it('does not replay commands published before its start position', async () => {
+      const problem = await freshProblem();
+      const judge = new RecordingJudge('earlier', [problem.code]);
+      await dispatch.register(judge);
+      await publisher.publish({
+        type: 'disconnect-judge',
+        judgeName: 'earlier',
+        force: true,
+      });
+      commands.start(await commands.position());
+      await publisher.publish({
+        type: 'disable-judge',
+        judgeName: 'earlier',
+        isDisabled: true,
+      });
+      await waitUntil(() => judge.isDisabled);
+      expect(judge.disconnects).toEqual([]);
     });
 
-    it('applies judge, abort, disable and disconnect commands, skipping malformed entries', async () => {
+    it('applies judge, abort, disable and disconnect commands, skipping a malformed entry with a warning', async () => {
+      commands.start(await commands.position());
       const problem = await freshProblem();
       const light = new RecordingJudge('cmd-light', [problem.code], 0);
       const named = new RecordingJudge('cmd-named', [problem.code], 0.5);
@@ -211,9 +316,11 @@ describe('DispatchService', () => {
       const id = await submit(problem._id);
       await redis.xadd(BRIDGE_COMMANDS_STREAM, '*', 'command', '{broken');
       await publisher.judge([id], 'cmd-named');
-      await waitUntil(() => named.received.length === 1);
+      await waitUntil(() => named.received.length === 1, 500);
       expect(sentTo(named)).toEqual([id]);
       expect(sentTo(light)).toEqual([]);
+      expect(warnings).toHaveBeenCalledTimes(1);
+      expect(errors).not.toHaveBeenCalled();
       await publisher.publish({ type: 'abort', submissionId: id });
       await publisher.publish({
         type: 'disable-judge',
@@ -229,6 +336,42 @@ describe('DispatchService', () => {
       expect(named.terminations).toBe(1);
       expect(light.isDisabled).toBe(true);
       expect(light.disconnects).toEqual([false]);
+    });
+
+    it('keeps reading after its connection drops, and logs it', async () => {
+      commands.start(await commands.position());
+      const problem = await freshProblem();
+      const judge = new RecordingJudge('dropped', [problem.code]);
+      await dispatch.register(judge);
+      const id = await submit(problem._id);
+      await enqueue(id);
+      (commands as unknown as { reader: Redis }).reader.stream.destroy();
+      await publisher.publish({ type: 'abort', submissionId: id });
+      await waitUntil(() => judge.terminations === 1, 8000);
+      expect(errors).toHaveBeenCalled();
+    });
+
+    it('backs off on a reply error, recovers, and stops without waiting out the backoff', async () => {
+      const problem = await freshProblem();
+      const judge = new RecordingJudge('backoff', [problem.code]);
+      await dispatch.register(judge);
+      await redis.set(BRIDGE_COMMANDS_STREAM, 'not a stream');
+      commands.start('0-0');
+      await waitUntil(() => errors.mock.calls.length >= 1, 8000);
+      await redis.del(BRIDGE_COMMANDS_STREAM);
+      await publisher.publish({
+        type: 'disable-judge',
+        judgeName: 'backoff',
+        isDisabled: true,
+      });
+      await waitUntil(() => judge.isDisabled, 8000);
+      await redis.del(BRIDGE_COMMANDS_STREAM);
+      await redis.set(BRIDGE_COMMANDS_STREAM, 'not a stream');
+      const before = errors.mock.calls.length;
+      await waitUntil(() => errors.mock.calls.length > before, 8000);
+      const started = Date.now();
+      await commands.stop();
+      expect(Date.now() - started).toBeLessThan(500);
     });
   });
 });

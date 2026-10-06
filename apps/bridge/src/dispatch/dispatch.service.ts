@@ -77,6 +77,7 @@ export class DispatchService {
 
   /** Running: the judge is told to terminate (it answers `submission-terminated`). Queued: dropped; the api already wrote AB. */
   abort(submissionId: string): void {
+    // An abort during the claim window terminates before the request arrives (rare; the judge then grades it in full).
     const judge = [...this.judges.values()].find(
       (candidate) => candidate.workingOn === submissionId,
     );
@@ -108,7 +109,7 @@ export class DispatchService {
     return this.stopped;
   }
 
-  /** Reserves the judge, claims in Mongo, then sends. A submission no longer QU is dropped and the judge looks again; if the judge vanished during the claim, the claim is given back. */
+  /** Reserves the judge, claims in Mongo, then sends. A submission no longer QU is dropped and the judge looks again; if the judge vanished during the claim, the claim is given back. A claim that threw (released, null) stays out of the memory queue until the next resync. */
   private async dispatch(
     judge: DispatchTarget,
     submission: QueuedSubmission,
@@ -116,6 +117,7 @@ export class DispatchService {
     judge.workingOn = submission.id;
     const request = await this.grading.claim(submission, judge.name);
     if (judge.isClosed || this.judges.get(judge.name) !== judge) {
+      judge.workingOn = null; // it never saw the submission, so a later close must not requeue it
       if (
         request &&
         (await this.submissions.release(submission.id, judge.name))
@@ -143,9 +145,9 @@ export class DispatchService {
 
   private removeQueued(submissionId: string): void {
     if (!this.queued.delete(submissionId)) return;
-    this.queue.splice(
-      this.queue.findIndex((submission) => submission.id === submissionId),
-      1,
+    const index = this.queue.findIndex(
+      (submission) => submission.id === submissionId,
     );
+    if (index !== -1) this.queue.splice(index, 1);
   }
 }
