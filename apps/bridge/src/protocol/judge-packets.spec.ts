@@ -29,6 +29,7 @@ describe('caseStatusFromBitmask', () => {
     [8 | 64, 'MLE'],
     [64 | 2, 'OLE'],
     [2 | 16 | 1, 'RTE'],
+    [4 | 8, 'TLE'],
     [16 | 1, 'IR'],
     [1 | 32, 'WA'],
     [32, 'SC'],
@@ -175,6 +176,31 @@ describe('parseJudgePacket', () => {
         executors: {},
       },
     ],
+    [
+      {
+        name: 'handshake',
+        id: 'judge-01',
+        key: 'k',
+        problems: [],
+        executors: { CPP: [['g++', [[1]]]] },
+      },
+    ],
+    [
+      {
+        name: 'handshake',
+        id: 'judge-01',
+        key: 'k',
+        problems: [],
+        executors: { CPP: [['g++', 7]] },
+      },
+    ],
+    [
+      {
+        name: 'test-case-status',
+        'submission-id': id,
+        cases: [reportedCase({ position: MAX_SUBMISSION_CASES + 1 })],
+      },
+    ],
     [{ name: 'grading-end' }],
     [{ name: 'grading-end', 'submission-id': 7 }],
     [{ name: 'compile-error', 'submission-id': id }],
@@ -198,6 +224,19 @@ describe('parseJudgePacket', () => {
   ])('refuses the malformed %j', (packet) =>
     expect(() => parseJudgePacket(packet)).toThrow(ProtocolError),
   );
+  it('refuses an absurdly nested runtime version without overflowing the stack', () => {
+    let version: unknown[] = [];
+    for (let depth = 0; depth < 200000; depth++) version = [version];
+    expect(() =>
+      parseJudgePacket({
+        name: 'handshake',
+        id: 'judge-01',
+        key: 'k',
+        problems: [],
+        executors: { CPP: [['g++', version]] },
+      }),
+    ).toThrow(ProtocolError);
+  });
   it('refuses more than 10000 cases in one packet', () =>
     expect(() =>
       parseJudgePacket({
@@ -230,9 +269,12 @@ describe('parseJudgePacket', () => {
       }),
     ).toThrow(ProtocolError),
   );
-  it('keeps a ping load only when it is not negative', () => {
+  it('keeps a ping load only when it is finite and not negative', () => {
     expect(
       parseJudgePacket({ name: 'ping-response', when: 1, load: -0.5 }),
+    ).toMatchObject({ load: null });
+    expect(
+      parseJudgePacket({ name: 'ping-response', when: 1, load: Infinity }),
     ).toMatchObject({ load: null });
     expect(
       parseJudgePacket({ name: 'ping-response', when: 1, load: 0 }),

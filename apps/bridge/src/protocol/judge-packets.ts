@@ -99,14 +99,14 @@ const boundedText = (
   maxLength: number,
 ): string => {
   const value = packet[field];
-  return typeof value === 'string' && value.length <= maxLength
+  return typeof value === 'string' && Buffer.byteLength(value) <= maxLength
     ? value
     : invalid(packet, field);
 };
 /** Shortens to at most `maxBytes` of UTF-8 without splitting a character (the schema bounds bytes, not characters). */
 export function clipBytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text) <= maxBytes) return text;
   const bytes = Buffer.from(text, 'utf8');
-  if (bytes.length <= maxBytes) return text;
   let end = maxBytes;
   while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
   return bytes.subarray(0, end).toString('utf8');
@@ -144,6 +144,21 @@ function problemCodes(packet: Packet): string[] {
   });
 }
 
+/** `null`, a string, or the `[major, minor, ...]` list a runtime reports. */
+function versionText(packet: Packet, version: unknown): string {
+  if (version === null || version === undefined) return '';
+  if (typeof version === 'string') return version;
+  if (
+    Array.isArray(version) &&
+    version.length <= MAX_RUNTIMES_PER_EXECUTOR &&
+    version.every(
+      (part) => typeof part === 'string' || typeof part === 'number',
+    )
+  )
+    return version.join('.');
+  return invalid(packet, 'executors');
+}
+
 function handshake(packet: Packet): HandshakePacket {
   const { executors } = packet;
   if (
@@ -155,7 +170,7 @@ function handshake(packet: Packet): HandshakePacket {
     return invalid(packet, 'executors');
   const runtimes = Object.entries(executors).flatMap(([language, versions]) => {
     if (
-      language.length > MAX_NAME_LENGTH ||
+      Buffer.byteLength(language) > MAX_NAME_LENGTH ||
       !Array.isArray(versions) ||
       versions.length > MAX_RUNTIMES_PER_EXECUTOR
     )
@@ -166,10 +181,8 @@ function handshake(packet: Packet): HandshakePacket {
       const [name, version] = entry as [string, unknown];
       return {
         language,
-        name: name.slice(0, MAX_NAME_LENGTH),
-        version: Array.isArray(version)
-          ? version.join('.').slice(0, MAX_NAME_LENGTH)
-          : optionalText(version, MAX_NAME_LENGTH),
+        name: clipBytes(name, MAX_NAME_LENGTH),
+        version: clipBytes(versionText(packet, version), MAX_NAME_LENGTH),
         priority,
       };
     });
@@ -190,6 +203,7 @@ function caseReport(packet: Packet, raw: unknown): CaseReport {
   if (
     !Number.isSafeInteger(value.position) ||
     (value.position as number) < 1 ||
+    (value.position as number) > MAX_SUBMISSION_CASES ||
     !Number.isSafeInteger(value.status)
   )
     return invalid(packet, 'cases');
@@ -265,7 +279,10 @@ export function parseJudgePacket(packet: Packet): JudgePacket | null {
       return {
         name: 'ping-response',
         when,
-        load: typeof load === 'number' && load >= 0 ? load : null,
+        load:
+          typeof load === 'number' && Number.isFinite(load) && load >= 0
+            ? load
+            : null,
       };
     }
     default:
