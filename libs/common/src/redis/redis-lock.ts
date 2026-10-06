@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type Redis from 'ioredis';
 import { AppError } from '../errors/app.error';
 
-const RELEASE_LOCK_SCRIPT =
+export const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
 const logger = new Logger('RedisLock');
 

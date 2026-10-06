@@ -140,3 +140,5 @@ SubmissionSchema.index({ user: 1, status: 1 });
 SubmissionSchema.index({ user: 1, problem: 1, result: 1 });
 SubmissionSchema.index({ status: 1, priority: 1, _id: 1 });
 SubmissionSchema.index({ date: -1 });
+// Problem stats count a problem's rows of listed users without reading documents.
+SubmissionSchema.index({ problem: 1, user: 1 });

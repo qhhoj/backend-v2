@@ -22,4 +22,5 @@ export * from './storage/storage.module';
 export * from './text/escape-regexp';
 export * from './log-levels';
 export * from './redis/redis-lock';
+export * from './redis/redis-coalesce';
 export * from './collections/unique';

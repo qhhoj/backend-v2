@@ -1,0 +1,118 @@
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { Problem, Submission, toUuid, User, uuidStr } from '@libs/database';
+import { IS_SOLVED } from '@libs/judging';
+import type { ProblemBest, UserPoints } from '@libs/judging';
+
+export type EffectsProblem = Pick<
+  Problem,
+  '_id' | 'points' | 'partial' | 'isPublic' | 'isOrganizationPrivate'
+>;
+
+export type ProblemStats = Pick<Problem, 'userCount' | 'acRate'>;
+
+/** Every Mongo read and write of the effects, the sweep and the rescore (Task 4 adds its own rows). Recomputes read, never increment. */
+@Injectable()
+export class SubmissionEffectsRepository {
+  constructor(
+    @InjectModel(Submission.name)
+    private readonly submissions: Model<Submission>,
+    @InjectModel(Problem.name) private readonly problems: Model<Problem>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+  ) {}
+
+  findProblem(problemId: string): Promise<EffectsProblem | null> {
+    return this.problems
+      .findById(problemId, {
+        points: 1,
+        partial: 1,
+        isPublic: 1,
+        isOrganizationPrivate: 1,
+      })
+      .lean<EffectsProblem>()
+      .exec();
+  }
+
+  /** Legacy `calculate_points` data: per public, non-organisation-private problem the user's best points and whether some submission solved it. Grouped per problem first, so 10k submissions become one row per problem before the problem lookup. */
+  async problemBests(userId: string): Promise<ProblemBest[]> {
+    const rows = await this.submissions.aggregate<{
+      maxPoints: number;
+      solved: number;
+    }>([
+      { $match: { user: toUuid(userId), points: { $ne: null } } },
+      {
+        $group: {
+          _id: '$problem',
+          maxPoints: { $max: '$points' },
+          solved: { $max: { $cond: [IS_SOLVED, 1, 0] } },
+        },
+      },
+      {
+        $lookup: {
+          from: this.problems.collection.name,
+          localField: '_id',
+          foreignField: '_id',
+          pipeline: [
+            { $match: { isPublic: true, isOrganizationPrivate: false } },
+            { $project: { _id: 1 } },
+          ],
+          as: 'publicProblem',
+        },
+      },
+      { $match: { publicProblem: { $ne: [] } } },
+    ]);
+    return rows.map((row) => ({
+      maxPoints: row.maxPoints,
+      solved: row.solved === 1,
+    }));
+  }
+
+  async setUserPoints(userId: string, points: UserPoints): Promise<void> {
+    await this.users.updateOne({ _id: userId }, { $set: points }).exec();
+  }
+
+  /** Legacy `update_stats` counts over listed users: every submission, and the AC ones worth the problem's points with their distinct users. Listed means `$nin` of the unlisted users' ids, read through the partial index: unlisted users are few (staff and test accounts), so the list stays small. If they ever grow into the thousands, replace it with a `$lookup` of `users` on `user` filtered by `isUnlisted`. */
+  async problemCounts(
+    problemId: string,
+    problemPoints: number,
+  ): Promise<{ total: number; accepted: number; userCount: number }> {
+    const unlisted = (
+      await this.users.distinct('_id', { isUnlisted: true }).exec()
+    ).map((id) => toUuid(uuidStr(id)));
+    const listed = { problem: toUuid(problemId), user: { $nin: unlisted } };
+    const [total, [accepted]] = await Promise.all([
+      // Hinted: unhinted, the planner scans `{ problem, _id }` and fetches every row to test `user`.
+      this.submissions
+        .countDocuments(listed)
+        .hint({ problem: 1, user: 1 })
+        .exec(),
+      this.submissions.aggregate<{ accepted: number; userCount: number }>([
+        {
+          $match: {
+            ...listed,
+            result: 'AC',
+            points: { $gte: problemPoints },
+          },
+        },
+        { $group: { _id: '$user', submissions: { $sum: 1 } } },
+        {
+          $group: {
+            _id: null,
+            accepted: { $sum: '$submissions' },
+            userCount: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+    return {
+      total,
+      accepted: accepted?.accepted ?? 0,
+      userCount: accepted?.userCount ?? 0,
+    };
+  }
+
+  async setProblemStats(problemId: string, stats: ProblemStats): Promise<void> {
+    await this.problems.updateOne({ _id: problemId }, { $set: stats }).exec();
+  }
+}

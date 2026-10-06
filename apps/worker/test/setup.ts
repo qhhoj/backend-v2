@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { TEST_ENV, TEST_REDIS_URL } from '@libs/common/testing';
@@ -10,11 +10,12 @@ import {
   Problem,
   ProblemGroup,
   ProblemType,
+  Submission,
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import Redis from 'ioredis';
-import type { Model } from 'mongoose';
+import type { Connection, Model } from 'mongoose';
 import { WorkerModule } from '../src/worker.module';
 
 const temporaryDirectory = (prefix: string) =>
@@ -73,6 +74,8 @@ export async function setupWorkerTest({
     problemGroups: ready.get<Model<ProblemGroup>>(
       getModelToken(ProblemGroup.name),
     ),
+    submissions: ready.get<Model<Submission>>(getModelToken(Submission.name)),
+    db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
     teardown: async () => {
       await ready.close();

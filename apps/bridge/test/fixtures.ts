@@ -2,17 +2,7 @@ import { sha256 } from '@libs/auth';
 import type { Judge, Problem, Submission } from '@libs/database';
 import type { BridgeTest } from './setup';
 
-export const waitUntil = async (
-  condition: () => Promise<boolean> | boolean,
-  timeoutMs = 5000,
-): Promise<void> => {
-  const deadline = Date.now() + timeoutMs;
-  while (!(await condition())) {
-    if (Date.now() > deadline)
-      throw new Error(`Condition not met within ${timeoutMs} ms`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-};
+export { waitUntil } from '@libs/common/testing';
 
 export async function seedCatalog(test: BridgeTest) {
   const [cpp, python] = await test.languages.create([

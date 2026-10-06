@@ -97,3 +97,8 @@ UserSchema.index(
     },
   },
 );
+// Problem stats leave unlisted users out; there are few of them.
+UserSchema.index(
+  { isUnlisted: 1 },
+  { partialFilterExpression: { isUnlisted: true } },
+);

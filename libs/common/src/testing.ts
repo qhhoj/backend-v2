@@ -41,3 +41,16 @@ export const TEST_ENV = {
   DISABLE_MONGODB_STREAM: 'true',
   SMTP_URL: 'smtp://127.0.0.1:2525',
 };
+
+/** Polls `condition` every 20 ms until it holds; throws after `timeoutMs`. */
+export const waitUntil = async (
+  condition: () => Promise<boolean> | boolean,
+  timeoutMs = 5000,
+): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await condition())) {
+    if (Date.now() > deadline)
+      throw new Error(`Condition not met within ${timeoutMs} ms`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+};
