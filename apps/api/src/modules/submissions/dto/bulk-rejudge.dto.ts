@@ -15,12 +15,12 @@ export class BulkRejudgeDto {
   /** Problem code; required. */
   @Matches(PROBLEM_CODE_PATTERN) problem!: string;
   /** Inclusive id range (UUIDv7 ids sort by submission time). */
-  @IsOptional() @IsUUID('all') idFrom?: string;
-  @IsOptional() @IsUUID('all') idTo?: string;
+  @IsOptional() @IsUUID('7') idFrom?: string;
+  @IsOptional() @IsUUID('7') idTo?: string;
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
-  @IsUUID('all', { each: true })
+  @IsUUID('7', { each: true })
   languages?: string[];
   @IsOptional()
   @IsArray()

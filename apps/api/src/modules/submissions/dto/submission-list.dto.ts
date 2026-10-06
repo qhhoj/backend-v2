@@ -25,7 +25,7 @@ export class SubmissionListQueryDto {
   @IsOptional()
   @Transform(toArray)
   @ArrayMaxSize(50)
-  @IsUUID('all', { each: true })
+  @IsUUID('7', { each: true })
   language?: string[];
   @IsOptional()
   @Transform(toArray)

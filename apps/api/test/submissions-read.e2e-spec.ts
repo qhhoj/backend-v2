@@ -193,6 +193,16 @@ describe('submission read flow', () => {
       expect(await idsOf('result=AC&result=WA')).toHaveLength(3);
     });
 
+    it('rejects the nil and max UUIDs, which Mongoose cannot cast, in language with 400', async () => {
+      for (const unusable of [
+        '00000000-0000-0000-0000-000000000000',
+        'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      ])
+        await as('other', `${SUBMISSIONS}?language=${unusable}`)
+          .expect(400)
+          .expect(errorCode('validation_failed'));
+    });
+
     it('lets only staff filter by IE, QU, P, G, D and SC', async () => {
       for (const [query, field] of [
         ['status=QU', 'status'],

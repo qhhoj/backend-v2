@@ -21,6 +21,8 @@ import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 const SUBMISSIONS = '/api/internal/submissions';
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+const MAX_UUID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 
 describe('submission actions', () => {
   let api: ApiTest;
@@ -387,6 +389,19 @@ describe('submission actions', () => {
       expect(await counted({ results: ['WA'], force: true })).toBe(1);
       expect((await row(locked)).status).toBe('QU');
       expect((await row(running)).status).toBe('G');
+    });
+
+    it('rejects the nil and max UUIDs, which Mongoose cannot cast, with 400', async () => {
+      for (const unusable of [NIL_UUID, MAX_UUID]) {
+        for (const body of [
+          { idFrom: unusable },
+          { idTo: unusable },
+          { languages: [unusable] },
+        ])
+          await bulk('lot', body)
+            .expect(400)
+            .expect(errorCode('validation_failed'));
+      }
     });
 
     it('needs edit rights on the problem and a visible problem', async () => {

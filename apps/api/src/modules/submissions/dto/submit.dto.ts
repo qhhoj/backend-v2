@@ -29,7 +29,7 @@ const IsSourceLength = () => (target: object, propertyName: string) =>
 
 export class SubmitDto {
   /** Language id; must be one of the problem's allowed languages. */
-  @IsUUID('all') language!: string;
+  @IsUUID('7') language!: string;
   @IsString() @IsSourceLength() source!: string;
   /** Name of the judge to use (legacy `judge-id`); problem editors only. */
   @IsOptional() @IsString() @Matches(JUDGE_NAME_PATTERN) judgeId?: string;
