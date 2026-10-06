@@ -109,7 +109,7 @@
       "<rootDir>/libs/"
     ],
     "moduleNameMapper": {
-      "^@libs/(common|database|auth|render|problems)(|/.*)$": "<rootDir>/libs/$1/src$2"
+      "^@libs/(common|database|auth|render|problems|judging)(|/.*)$": "<rootDir>/libs/$1/src$2"
     },
     "testTimeout": 60000
   }

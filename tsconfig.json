@@ -52,6 +52,12 @@
       ],
       "@libs/problems/*": [
         "libs/problems/src/*"
+      ],
+      "@libs/judging": [
+        "libs/judging/src"
+      ],
+      "@libs/judging/*": [
+        "libs/judging/src/*"
       ]
     }
   }

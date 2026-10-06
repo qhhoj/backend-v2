@@ -87,6 +87,15 @@
       "compilerOptions": {
         "tsConfigPath": "apps/migrator/tsconfig.app.json"
       }
+    },
+    "judging": {
+      "type": "library",
+      "root": "libs/judging",
+      "entryFile": "index",
+      "sourceRoot": "libs/judging/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/judging/tsconfig.lib.json"
+      }
     }
   }
 }
