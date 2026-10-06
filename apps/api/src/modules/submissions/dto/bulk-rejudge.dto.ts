@@ -1,0 +1,36 @@
+import { PROBLEM_CODE_PATTERN, SUBMISSION_RESULTS } from '@libs/database';
+import type { SubmissionResult } from '@libs/database';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsUUID,
+  Matches,
+} from 'class-validator';
+
+/** Legacy problem "rejudge submissions" form (`rejudge_problem_filter`). */
+export class BulkRejudgeDto {
+  /** Problem code; required. */
+  @Matches(PROBLEM_CODE_PATTERN) problem!: string;
+  /** Inclusive id range (UUIDv7 ids sort by submission time). */
+  @IsOptional() @IsUUID('all') idFrom?: string;
+  @IsOptional() @IsUUID('all') idTo?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID('all', { each: true })
+  languages?: string[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(SUBMISSION_RESULTS.length)
+  @IsIn(SUBMISSION_RESULTS, { each: true })
+  results?: SubmissionResult[];
+  /** Also rejudge locked submissions. */
+  @IsOptional() @IsBoolean() force?: boolean;
+}
+
+export class BulkRejudgeResponse {
+  count!: number;
+}

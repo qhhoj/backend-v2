@@ -7,12 +7,16 @@ import type {
   Model,
 } from 'mongoose';
 import {
+  IN_FLIGHT_STATUSES,
   isUuid,
   newId,
   Submission,
   SubmissionSource,
   UNFINISHED_STATUSES,
+  uuidStr,
 } from '@libs/database';
+
+const RESET_BATCH = 1000;
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 
@@ -94,5 +98,71 @@ export class SubmissionsRepository {
         points: { $gte: points },
       })) !== null
     );
+  }
+
+  /** QU → AB in one step; false when the bridge claimed it meanwhile (the abort command then terminates it). */
+  async abortQueued(id: string): Promise<boolean> {
+    const { modifiedCount } = await this.submissions
+      .updateOne(
+        { _id: id, status: 'QU' },
+        { $set: { status: 'AB', result: 'AB', points: 0 } },
+      )
+      .exec();
+    return modifiedCount === 1;
+  }
+
+  /** Legacy `judge_submission`: back to QU at `priority` with every result cleared, except while a judge holds it (P/G). The requeue allowance is restored: a rejudge is a fresh attempt. Returns how many were reset. */
+  async resetForJudging(ids: string[], priority: number): Promise<number> {
+    let reset = 0;
+    for (let start = 0; start < ids.length; start += RESET_BATCH) {
+      const { modifiedCount } = await this.submissions
+        .updateMany(
+          {
+            _id: { $in: ids.slice(start, start + RESET_BATCH) },
+            status: { $nin: [...IN_FLIGHT_STATUSES] },
+          },
+          {
+            $set: {
+              status: 'QU',
+              result: null,
+              time: null,
+              memory: null,
+              points: null,
+              casePoints: 0,
+              caseTotal: 0,
+              error: null,
+              cases: [],
+              currentTestcase: 0,
+              batch: false,
+              isPretested: false,
+              judgedOn: null,
+              judgedDate: null,
+              rejudgedDate: new Date(),
+              priority,
+              requeueCount: 0,
+            },
+          },
+        )
+        .exec();
+      reset += modifiedCount;
+    }
+    return reset;
+  }
+
+  /** Legacy `Submission.reject`, once judging is over: result RJ, no points, cases cleared. */
+  async reject(id: string): Promise<boolean> {
+    const { matchedCount } = await this.submissions
+      .updateOne(
+        { _id: id, status: { $nin: [...UNFINISHED_STATUSES] } },
+        { $set: { result: 'RJ', points: 0, casePoints: 0, cases: [] } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  async idsMatching(filter: FilterQuery<Submission>): Promise<string[]> {
+    return (
+      await this.submissions.find(filter, { _id: 1 }).sort({ _id: 1 }).lean()
+    ).map((row) => uuidStr(row._id));
   }
 }
