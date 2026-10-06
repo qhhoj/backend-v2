@@ -1,0 +1,350 @@
+import type { Problem, SubmissionCase } from '@libs/database';
+import {
+  GradingService,
+  LOST_JUDGE_MESSAGE,
+} from '../src/submissions/grading.service';
+import { SubmissionsRepository } from '../src/submissions/submissions.repository';
+import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
+import type { BridgeCatalog } from './fixtures';
+import { setupBridgeTest } from './setup';
+import type { BridgeTest } from './setup';
+
+const JUDGE = 'judge-01';
+const reported = (
+  position: number,
+  extra: Partial<SubmissionCase> = {},
+): SubmissionCase => ({
+  position,
+  status: 'AC',
+  time: position / 10,
+  memory: position * 1000,
+  points: 1,
+  total: 1,
+  batch: null,
+  feedback: '',
+  extendedFeedback: '',
+  output: '',
+  ...extra,
+});
+
+describe('Grading (bridge Mongo layer)', () => {
+  let bridge: BridgeTest;
+  let catalog: BridgeCatalog;
+  let repository: SubmissionsRepository;
+  let grading: GradingService;
+  let codes = 0;
+  const nextCode = () => {
+    codes += 1;
+    return `p${codes}`;
+  };
+  /** A problem and a submission claimed by `JUDGE`. */
+  const claimed = async (problemFields: Partial<Problem> = {}) => {
+    const problem = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      ...problemFields,
+    });
+    const submission = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+    });
+    const [queued] = await repository.loadQueued([submission._id]);
+    const request = await repository.claim(queued, JUDGE);
+    return { problem, id: submission._id, queued, request };
+  };
+  const stored = async (id: string) =>
+    (await bridge.submissions.findById(id).select('+cases').lean())!;
+
+  beforeAll(async () => {
+    bridge = await setupBridgeTest();
+    catalog = await seedCatalog(bridge);
+    repository = bridge.module.get(SubmissionsRepository);
+    grading = bridge.module.get(GradingService);
+  });
+  beforeEach(() => bridge.graded.obliterate({ force: true }));
+  afterAll(() => bridge.teardown());
+
+  it('loads queued submissions in priority then id order, mirrors under their root code', async () => {
+    const root = await seedProblem(bridge, catalog, { code: 'root' });
+    const mirror = await seedProblem(bridge, catalog, {
+      code: 'mirror',
+      mirrorOf: root._id,
+      mirrorRoot: root._id,
+    });
+    const rejudge = await seedSubmission(bridge, catalog, {
+      problem: root._id,
+      priority: 2,
+    });
+    const fresh = await seedSubmission(bridge, catalog, {
+      problem: mirror._id,
+      language: catalog.python._id,
+    });
+    const done = await seedSubmission(bridge, catalog, {
+      problem: root._id,
+      status: 'D',
+    });
+    expect(
+      await repository.loadQueued([rejudge._id, fresh._id, done._id]),
+    ).toEqual([
+      {
+        id: fresh._id,
+        problemCode: 'root',
+        languageKey: 'PY3',
+        priority: 1,
+        judgeName: null,
+        bannedJudges: [],
+      },
+      {
+        id: rejudge._id,
+        problemCode: 'root',
+        languageKey: 'CPP17',
+        priority: 2,
+        judgeName: null,
+        bannedJudges: [],
+      },
+    ]);
+  });
+
+  it('claims a queued submission once and builds the request from the problem', async () => {
+    const problem = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      partial: false,
+      timeLimit: 2,
+      memoryLimit: 262144,
+      languageLimits: [
+        { languageId: catalog.cpp._id, timeLimit: 5, memoryLimit: 65536 },
+      ],
+    });
+    const hourAgo = new Date(Date.now() - 3600_000);
+    await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+      status: 'D',
+      date: hourAgo,
+    });
+    await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+      status: 'CE',
+      date: hourAgo,
+    });
+    const cpp = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+      source: '#include <cstdio>',
+    });
+    const python = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+      language: catalog.python._id,
+    });
+    const [cppQueued, pythonQueued] = await repository.loadQueued([
+      cpp._id,
+      python._id,
+    ]);
+    expect(await repository.claim(cppQueued, JUDGE)).toEqual({
+      submissionId: cpp._id,
+      problemCode: problem.code,
+      languageKey: 'CPP17',
+      source: '#include <cstdio>',
+      timeLimit: 5,
+      memoryLimit: 65536,
+      shortCircuit: true,
+      pretestsOnly: false,
+      inContest: null,
+      attemptNo: 2,
+      userId: catalog.user._id,
+      fileOnly: false,
+      fileSizeLimit: 0,
+    });
+    expect(await stored(cpp._id)).toMatchObject({
+      status: 'P',
+      judgedOn: JUDGE,
+    });
+    expect(await repository.claim(cppQueued, 'judge-02')).toBeNull();
+    expect(await repository.claim(pythonQueued, JUDGE)).toMatchObject({
+      timeLimit: 2,
+      memoryLimit: 262144,
+    });
+  });
+
+  it('grades a batched run: worst case, batch minimum, points scaled for a partial problem', async () => {
+    const { id, problem } = await claimed({ points: 1000, partial: true });
+    await grading.beginGrading(id, JUDGE, false);
+    expect(await stored(id)).toMatchObject({
+      status: 'G',
+      currentTestcase: 1,
+      cases: [],
+    });
+    await grading.markBatched(id, JUDGE);
+    await grading.addCases(id, JUDGE, [
+      reported(1, { batch: 1 }),
+      reported(2, { batch: 1, status: 'WA', points: 0 }),
+    ]);
+    await grading.addCases(id, JUDGE, [reported(3)]);
+    await grading.gradingEnd(id, JUDGE);
+    expect(await stored(id)).toMatchObject({
+      status: 'D',
+      result: 'WA',
+      batch: true,
+      casePoints: 1,
+      caseTotal: 2,
+      points: 500,
+      time: 0.3,
+      memory: 3000,
+      currentTestcase: 4,
+    });
+    expect(await bridge.gradedJobs()).toEqual([
+      { submissionId: id, userId: catalog.user._id, problemId: problem._id },
+    ]);
+  });
+
+  it('zeroes a non-partial result short of full marks and keeps full marks', async () => {
+    const short = await claimed({ points: 1000, partial: false });
+    const full = await claimed({ points: 1000, partial: false });
+    for (const { id } of [short, full])
+      await grading.beginGrading(id, JUDGE, false);
+    await grading.addCases(short.id, JUDGE, [
+      reported(1),
+      reported(2, { status: 'WA', points: 0 }),
+    ]);
+    await grading.addCases(full.id, JUDGE, [reported(1), reported(2)]);
+    for (const { id } of [short, full]) await grading.gradingEnd(id, JUDGE);
+    expect((await stored(short.id)).points).toBe(0);
+    expect((await stored(full.id)).points).toBe(1000);
+  });
+
+  it('ignores stale packets: another judge, a repeated end, cases after the end', async () => {
+    const { id } = await claimed();
+    await grading.beginGrading(id, JUDGE, false);
+    expect(await grading.addCases(id, 'judge-02', [reported(1)])).toBe('stale');
+    await grading.addCases(id, JUDGE, [reported(1)]);
+    await grading.gradingEnd(id, JUDGE);
+    await grading.gradingEnd(id, JUDGE);
+    expect(await grading.addCases(id, JUDGE, [reported(2)])).toBe('stale');
+    await grading.beginGrading(id, JUDGE, true);
+    await grading.terminated(id, JUDGE);
+    expect(await stored(id)).toMatchObject({
+      status: 'D',
+      result: 'AC',
+      isPretested: false,
+    });
+    expect((await stored(id)).cases).toHaveLength(1);
+    expect(await bridge.gradedJobs()).toHaveLength(1);
+  });
+
+  it('keeps compile messages and finishes on compile errors, internal errors and termination', async () => {
+    const compiled = await claimed();
+    await grading.compileMessage(compiled.id, JUDGE, 'warning: unused');
+    expect(await stored(compiled.id)).toMatchObject({
+      status: 'P',
+      error: 'warning: unused',
+    });
+    await grading.compileError(compiled.id, JUDGE, 'error: expected ;');
+    const crashed = await claimed();
+    await grading.beginGrading(crashed.id, JUDGE, false);
+    await grading.internalError(crashed.id, JUDGE, 'Traceback');
+    const aborted = await claimed();
+    await grading.beginGrading(aborted.id, JUDGE, false);
+    await grading.terminated(aborted.id, JUDGE);
+    expect(await stored(compiled.id)).toMatchObject({
+      status: 'CE',
+      result: 'CE',
+      error: 'error: expected ;',
+    });
+    expect(await stored(crashed.id)).toMatchObject({
+      status: 'IE',
+      result: 'IE',
+      error: 'Traceback',
+    });
+    expect(await stored(aborted.id)).toMatchObject({
+      status: 'AB',
+      result: 'AB',
+      points: 0,
+    });
+    expect(
+      (await bridge.gradedJobs()).map((job) => job.submissionId).sort(),
+    ).toEqual([compiled.id, crashed.id, aborted.id].sort());
+  });
+
+  it('refuses cases beyond 10000 per submission without writing', async () => {
+    const { id } = await claimed();
+    await grading.beginGrading(id, JUDGE, false);
+    const many = Array.from({ length: 9999 }, (_unused, index) =>
+      reported(index + 1),
+    );
+    expect(await grading.addCases(id, JUDGE, many)).toBe('appended');
+    expect(
+      await grading.addCases(id, JUDGE, [reported(10000), reported(10001)]),
+    ).toBe('full');
+    expect((await stored(id)).cases).toHaveLength(9999);
+    expect(await grading.addCases(id, JUDGE, [reported(10000)])).toBe(
+      'appended',
+    );
+    expect((await stored(id)).cases).toHaveLength(10000);
+  });
+
+  it('requeues on the first judge loss and fails on the second', async () => {
+    const { id } = await claimed();
+    await grading.beginGrading(id, JUDGE, false);
+    await grading.addCases(id, JUDGE, [reported(1)]);
+    expect(await grading.disconnected(id, JUDGE)).toBe('requeued');
+    expect(await stored(id)).toMatchObject({
+      status: 'QU',
+      requeueCount: 1,
+      judgedOn: null,
+      cases: [],
+    });
+    expect(await bridge.gradedJobs()).toEqual([]);
+    const [queued] = await repository.loadQueued([id]);
+    await repository.claim(queued, 'judge-02');
+    expect(await grading.disconnected(id, 'judge-02')).toBe('failed');
+    expect(await stored(id)).toMatchObject({
+      status: 'IE',
+      result: 'IE',
+      error: LOST_JUDGE_MESSAGE,
+    });
+    expect(await bridge.gradedJobs()).toHaveLength(1);
+    expect(await grading.disconnected(id, 'judge-02')).toBe('stale');
+  });
+
+  it('releases an unsent claim without spending the requeue', async () => {
+    const { id } = await claimed();
+    expect(await repository.release(id, 'judge-02')).toBe(false);
+    expect(await repository.release(id, JUDGE)).toBe(true);
+    expect(await stored(id)).toMatchObject({
+      status: 'QU',
+      judgedOn: null,
+      requeueCount: 0,
+    });
+  });
+
+  it('ignores every packet from a judge that does not hold the submission', async () => {
+    const { id } = await claimed();
+    await grading.compileMessage(id, 'judge-02', 'warning');
+    await grading.compileError(id, 'judge-02', 'error');
+    await grading.internalError(id, 'judge-02', 'boom');
+    await grading.terminated(id, 'judge-02');
+    expect(await grading.disconnected(id, 'judge-02')).toBe('stale');
+    await grading.beginGrading(id, 'judge-02', true);
+    expect(await stored(id)).toMatchObject({
+      status: 'P',
+      judgedOn: JUDGE,
+      error: null,
+      requeueCount: 0,
+    });
+    await grading.beginGrading(id, JUDGE, false);
+    await grading.markBatched(id, 'judge-02');
+    await grading.gradingEnd(id, 'judge-02');
+    expect(await stored(id)).toMatchObject({ status: 'G', batch: false });
+    expect(await bridge.gradedJobs()).toEqual([]);
+  });
+
+  it('ignores packets for a finished submission', async () => {
+    const { id } = await claimed();
+    await grading.compileError(id, JUDGE, 'error: expected ;');
+    await grading.internalError(id, JUDGE, 'late');
+    await grading.compileMessage(id, JUDGE, 'late');
+    await grading.beginGrading(id, JUDGE, false);
+    expect(await grading.disconnected(id, JUDGE)).toBe('stale');
+    expect(await stored(id)).toMatchObject({
+      status: 'CE',
+      error: 'error: expected ;',
+    });
+    expect(await bridge.gradedJobs()).toHaveLength(1);
+  });
+});
