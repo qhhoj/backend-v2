@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { SubmissionRequest } from '../protocol/judge-packets';
 import { GradingService } from '../submissions/grading.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { insertQueued, nextFor, pickJudge } from './dispatch';
@@ -115,7 +116,13 @@ export class DispatchService {
     submission: QueuedSubmission,
   ): Promise<void> {
     judge.workingOn = submission.id;
-    const request = await this.grading.claim(submission, judge.name);
+    let request: SubmissionRequest | null;
+    try {
+      request = await this.grading.claim(submission, judge.name);
+    } catch (error) {
+      judge.workingOn = null; // the claim failed and could not be released (Mongo down): the judge is free, the resync recovers the submission
+      throw error;
+    }
     if (judge.isClosed || this.judges.get(judge.name) !== judge) {
       judge.workingOn = null; // it never saw the submission, so a later close must not requeue it
       if (

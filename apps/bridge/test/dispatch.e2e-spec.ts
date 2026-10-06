@@ -244,6 +244,21 @@ describe('DispatchService', () => {
     });
   });
 
+  it('frees the judge when both the claim and its release fail, and serves it once Mongo is back', async () => {
+    const problem = await freshProblem();
+    const judge = new RecordingJudge('outage', [problem.code]);
+    await dispatch.register(judge);
+    const lost = await submit(problem._id);
+    const outage = new Error('mongo down');
+    jest.spyOn(repository, 'claim').mockRejectedValueOnce(outage);
+    jest.spyOn(repository, 'release').mockRejectedValueOnce(outage);
+    await expect(enqueue(lost)).rejects.toThrow('mongo down');
+    expect(judge.workingOn).toBeNull();
+    const next = await submit(problem._id);
+    await enqueue(next);
+    expect(sentTo(judge)).toEqual([next]);
+  });
+
   it('never sends one judge two submissions or one submission twice under concurrent enqueues', async () => {
     const problem = await freshProblem();
     const judge = new RecordingJudge('solo', [problem.code]);
