@@ -48,7 +48,7 @@ describe('problem rescore', () => {
     const rejected = await seedGraded(worker, user._id, problem._id, {
       result: 'RJ',
       points: 0,
-      casePoints: 0,
+      casePoints: 4,
       caseTotal: 4,
     });
     const compileError = await seedGraded(worker, user._id, problem._id, {
@@ -126,6 +126,29 @@ describe('problem rescore', () => {
     };
     expect(await repository.setPoints([stale])).toBe(0);
     expect(await pointsOf(submission._id)).toBe(750);
+  });
+
+  it('drops a write to a row whose rejudge began meanwhile', async () => {
+    const user = await seedUser(worker);
+    const problem = await seedProblem(worker);
+    const submission = await seedGraded(worker, user._id, problem._id, {
+      result: 'WA',
+      points: 250,
+      casePoints: 1,
+      caseTotal: 4,
+    });
+    await worker.submissions.updateOne(
+      { _id: submission._id },
+      { status: 'G' },
+    );
+    const stale: RescoredRow = {
+      id: submission._id,
+      casePoints: 1,
+      caseTotal: 4,
+      points: 999,
+    };
+    expect(await repository.setPoints([stale])).toBe(0);
+    expect(await pointsOf(submission._id)).toBe(250);
   });
 
   it('follows the problem publicity in its users points', async () => {

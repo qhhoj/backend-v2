@@ -15,6 +15,7 @@ import {
   EFFECTS_SWEEP_QUEUE,
   EFFECTS_SWEEP_SCHEDULER,
 } from '@libs/judging';
+import { startAfterIndexes } from '../start-after-indexes';
 import {
   EffectsSweepService,
   SWEEP_INTERVAL_MS,
@@ -39,7 +40,7 @@ export class EffectsSweepProcessor
   /**
    * One schedule for every worker process (the upsert is idempotent). BullMQ adds the next run when the current one starts, so a slow sweep would overlap it on another process; global concurrency 1 makes the next one wait (no Redis lock).
    * BullMQ queues a first sweep when the schedule is created or its slot has passed, so a first boot or a restart after a missed slot sweeps at once; a warm restart within the interval does not. That sweep's window starts at the stored watermark less the overlap, so what it cannot see is a CE (no grading-begin, found by `date`) queued more than 20 minutes before it, and a grading that began more than 20 minutes before it (`judgedDate` is grading-begin) whose graded job was lost.
-   * Consumption starts only once the submissions indexes exist: the window reads are index-bound.
+   * The window reads are index-bound.
    */
   async onApplicationBootstrap(): Promise<void> {
     await this.queue.setGlobalConcurrency(1);
@@ -51,8 +52,7 @@ export class EffectsSweepProcessor
         opts: { removeOnComplete: true, removeOnFail: 100 },
       },
     );
-    await this.submissions.init();
-    if (!this.worker.isRunning()) void this.worker.run();
+    await startAfterIndexes(this.worker, this.submissions);
   }
 
   process(): Promise<{ users: number; problems: number }> {

@@ -7,6 +7,7 @@ import type { Model } from 'mongoose';
 import { Submission } from '@libs/database';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
+import { startAfterIndexes } from '../start-after-indexes';
 import { SubmissionEffectsService } from './submission-effects.service';
 
 export const SUBMISSION_EFFECTS_CONCURRENCY = 4;
@@ -29,10 +30,9 @@ export class SubmissionEffectsProcessor
     super();
   }
 
-  /** Consumption starts only once the submissions indexes exist: the stats count is hinted to one, and Mongo rejects a hint to a missing index. */
-  async onApplicationBootstrap(): Promise<void> {
-    await this.submissions.init();
-    void this.worker.run();
+  /** The stats count is hinted to a submissions index. */
+  onApplicationBootstrap(): Promise<void> {
+    return startAfterIndexes(this.worker, this.submissions);
   }
 
   process(job: Job<SubmissionGradedJob>): Promise<void> {

@@ -7,12 +7,15 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
-import type { Job } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import type { Model } from 'mongoose';
 import { parse } from 'yaml';
 import { waitUntil } from '@libs/common/testing';
 import { Group, newId, Problem, Revision } from '@libs/database';
+import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import type { ProblemRescoreJob } from '@libs/judging';
 import {
   listZipEntries,
   POLYGON_ERROR_PREFIX,
@@ -752,16 +755,32 @@ describe('PolygonImportProcessor', () => {
     );
   });
 
-  it('rescores the problem after an update, so new points reach its submissions', async () => {
-    await processor.process(job({ code: 'rescored' }));
-    const problem = await worker.problems.findOne({ code: 'rescored' });
-    const solver = await seedUser(worker);
-    const submission = await seedGraded(worker, solver._id, problem!._id, {
-      points: 800,
-      casePoints: 2,
-      caseTotal: 2,
-    });
-    await processor.process(bareUpdate({ code: 'rescored', points: 1000 }));
+  it('rescores the problem after an update only, so new points reach its submissions', async () => {
+    const queue = worker.module.get<Queue<ProblemRescoreJob>>(
+      getQueueToken(PROBLEM_RESCORE_QUEUE),
+    );
+    const queued = async () => {
+      const counts = await queue.getJobCounts('paused', 'waiting', 'delayed');
+      return counts.paused + counts.waiting + counts.delayed;
+    };
+    let submission: Awaited<ReturnType<typeof seedGraded>>;
+    // Paused, a queued job stays visible instead of being consumed at once.
+    await queue.pause();
+    try {
+      await processor.process(job({ code: 'rescored' }));
+      expect(await queued()).toBe(0);
+      const problem = await worker.problems.findOne({ code: 'rescored' });
+      const solver = await seedUser(worker);
+      submission = await seedGraded(worker, solver._id, problem!._id, {
+        points: 800,
+        casePoints: 2,
+        caseTotal: 2,
+      });
+      await processor.process(bareUpdate({ code: 'rescored', points: 1000 }));
+      expect(await queued()).toBe(1);
+    } finally {
+      await queue.resume();
+    }
     await waitUntil(async () => {
       const row = await worker.submissions.findById(submission._id).lean();
       return row!.points === 1000;

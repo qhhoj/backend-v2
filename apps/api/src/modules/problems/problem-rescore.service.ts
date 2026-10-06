@@ -8,8 +8,8 @@ import { ProblemEvents } from './problem.events';
 
 /** Points, partial and organisation privacy (`pointsChanged`) and publicity (`publicityChanged`) decide what every submission and user is worth; the worker rescores. */
 @Injectable()
-export class ProblemRescoreService implements OnModuleInit {
-  private readonly logger = new Logger(ProblemRescoreService.name);
+export class ProblemRescoreEnqueuer implements OnModuleInit {
+  private readonly logger = new Logger(ProblemRescoreEnqueuer.name);
 
   constructor(
     private readonly events: ProblemEvents,
