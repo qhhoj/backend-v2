@@ -104,10 +104,10 @@ export class SubmissionActionsService {
       ))
     )
       throw new AppError('conflict', 409, 'The submission is being judged');
-    await this.commands.judge([id]);
     await this.events.publish(
       submissionEvent(gradedJobOf(submission), 'queued', 'QU'),
     );
+    await this.commands.judge([id]);
   }
 
   /** `judge.reject_submission` on an editable problem, once judging is over. */

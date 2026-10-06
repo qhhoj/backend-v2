@@ -14,8 +14,14 @@ export class SubmissionEventsService {
 
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-  /** Fire-and-forget like bridge commands: Mongo holds the state, and a page that missed an event gets the current state when its stream reconnects. */
+  /** Fire-and-forget like bridge commands; skipped at once while the client is not ready, so an outage costs nothing: Mongo holds the state, and a page that missed an event gets the current state when its stream reconnects. */
   async publish(event: SubmissionEvent): Promise<void> {
+    if (this.redis.status !== 'ready') {
+      this.logger.warn(
+        `Event ${event.type} of submission ${event.submissionId} skipped: Redis is ${this.redis.status}`,
+      );
+      return;
+    }
     try {
       await withinTimeout(
         this.redis.publish(SUBMISSION_EVENTS_CHANNEL, JSON.stringify(event)),

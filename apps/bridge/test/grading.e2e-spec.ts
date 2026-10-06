@@ -1,4 +1,5 @@
 import type { Queue } from 'bullmq';
+import Redis from 'ioredis';
 import type { Problem, SubmissionCase } from '@libs/database';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import {
@@ -56,8 +57,9 @@ describe('Grading (bridge Mongo layer)', () => {
       problem: problem._id,
     });
     const [queued] = await repository.loadQueued([submission._id]);
-    const request = await grading.claim(queued, JUDGE);
-    return { problem, id: submission._id, queued, request };
+    const claim = await grading.claim(queued, JUDGE);
+    if (claim) grading.sent(claim.subject);
+    return { problem, id: submission._id, queued, request: claim?.request };
   };
   const stored = async (id: string) =>
     (await bridge.submissions.findById(id).select('+cases').lean())!;
@@ -145,7 +147,7 @@ describe('Grading (bridge Mongo layer)', () => {
       cpp._id,
       python._id,
     ]);
-    expect(await grading.claim(cppQueued, JUDGE)).toEqual({
+    expect((await grading.claim(cppQueued, JUDGE))?.request).toEqual({
       submissionId: cpp._id,
       problemCode: problem.code,
       languageKey: 'CPP17',
@@ -165,7 +167,7 @@ describe('Grading (bridge Mongo layer)', () => {
       judgedOn: JUDGE,
     });
     expect(await grading.claim(cppQueued, 'judge-02')).toBeNull();
-    expect(await grading.claim(pythonQueued, JUDGE)).toMatchObject({
+    expect((await grading.claim(pythonQueued, JUDGE))?.request).toMatchObject({
       timeLimit: 2,
       memoryLimit: 262144,
     });
@@ -416,7 +418,7 @@ describe('Grading (bridge Mongo layer)', () => {
       judgedOn: null,
       requeueCount: 0,
     });
-    expect(await grading.claim(queued, JUDGE)).toMatchObject({
+    expect((await grading.claim(queued, JUDGE))?.request).toMatchObject({
       submissionId: submission._id,
     });
   });
@@ -432,6 +434,54 @@ describe('Grading (bridge Mongo layer)', () => {
       result: 'AC',
       points: 0,
     });
+  });
+
+  it('never stalls judge packets while the events Redis is down', async () => {
+    const unreachable = new Redis('redis://10.255.255.1:6379', {
+      maxRetriesPerRequest: 3,
+      connectTimeout: 500,
+    });
+    unreachable.on('error', () => undefined);
+    const offline = new GradingService(
+      repository,
+      bridge.graded,
+      new SubmissionEventsService(unreachable),
+    );
+    const timed = async (action: () => Promise<unknown>) => {
+      const started = Date.now();
+      await action();
+      return Date.now() - started;
+    };
+    const problem = await seedProblem(bridge, catalog, { code: nextCode() });
+    const submission = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+    });
+    const [queued] = await repository.loadQueued([submission._id]);
+    const durations: number[] = [];
+    let claim: Awaited<ReturnType<GradingService['claim']>> = null;
+    durations.push(
+      await timed(async () => {
+        claim = await offline.claim(queued, JUDGE);
+      }),
+    );
+    durations.push(
+      await timed(() => Promise.resolve(offline.sent(claim!.subject))),
+    );
+    durations.push(
+      await timed(() => offline.beginGrading(submission._id, JUDGE, false)),
+    );
+    for (let position = 1; position <= 3; position += 1)
+      durations.push(
+        await timed(() =>
+          offline.addCases(submission._id, JUDGE, [reported(position)]),
+        ),
+      );
+    durations.push(
+      await timed(() => offline.gradingEnd(submission._id, JUDGE)),
+    );
+    unreachable.disconnect();
+    expect(Math.max(...durations)).toBeLessThan(100);
+    expect(await stored(submission._id)).toMatchObject({ status: 'D' });
   });
 
   it('finishes promptly, with the verdict stored, when the graded queue never answers', async () => {
@@ -514,7 +564,7 @@ describe('Grading (bridge Mongo layer)', () => {
       const trackedWhileClaimed = grading.trackedCount();
       expect(await grading.disconnected(id, JUDGE)).toBe('requeued');
       const [queued] = await repository.loadQueued([id]);
-      await grading.claim(queued, JUDGE);
+      grading.sent((await grading.claim(queued, JUDGE))!.subject);
       expect(await grading.disconnected(id, JUDGE)).toBe('failed');
       await recorder.waitFor(() => eventsOf(id).length === 4);
       expect(typesAndStatuses(id)).toEqual([
@@ -542,10 +592,11 @@ describe('Grading (bridge Mongo layer)', () => {
     it('publishes queued for every submission a start or a resync returns to the queue without a judge loss', async () => {
       const { id: stranded } = await claimed();
       const { id: other } = await claimed();
+      const trackedBefore = grading.trackedCount();
       const claims = (await repository.inFlightClaims()).filter(
         (claim) => claim.id === stranded,
       );
-      await grading.announceRequeued(await repository.resetStranded(claims));
+      grading.announceRequeued(await repository.resetStranded(claims));
       await recorder.waitFor(() =>
         eventsOf(stranded).some((event) => event.type === 'queued'),
       );
@@ -554,7 +605,8 @@ describe('Grading (bridge Mongo layer)', () => {
         ['queued', 'QU'],
       ]);
       expect(typesAndStatuses(other)).toEqual([['processing', 'P']]);
-      await grading.announceRequeued(await repository.resetInFlight());
+      expect(grading.trackedCount()).toBe(trackedBefore - 1);
+      grading.announceRequeued(await repository.resetInFlight());
       await recorder.waitFor(() =>
         eventsOf(other).some((event) => event.type === 'queued'),
       );
@@ -566,11 +618,36 @@ describe('Grading (bridge Mongo layer)', () => {
         status: 'QU',
         requeueCount: 0,
       });
+      expect(grading.trackedCount()).toBeLessThan(trackedBefore - 1);
+    });
+
+    it('publishes nothing and tracks nothing for a claim the judge never received', async () => {
+      const problem = await seedProblem(bridge, catalog, { code: nextCode() });
+      const submission = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+      });
+      const [queued] = await repository.loadQueued([submission._id]);
+      const trackedBefore = grading.trackedCount();
+      const findSource = bridge.sources.findById.bind(bridge.sources);
+      let loseJudge = Promise.resolve('' as string);
+      jest.spyOn(bridge.sources, 'findById').mockImplementationOnce(((
+        sourceId: string,
+      ) => {
+        // the judge's socket closes while the claim is still reading
+        loseJudge = grading.disconnected(submission._id, JUDGE);
+        return findSource(sourceId);
+      }) as never);
+      await grading.claim(queued, JUDGE);
+      expect(await loseJudge).toBe('requeued');
+      await settle();
+      expect(eventsOf(submission._id)).toEqual([]);
+      expect(grading.trackedCount()).toBe(trackedBefore);
     });
 
     it('publishes nothing for packets of a judge that does not hold the submission', async () => {
       const { id } = await claimed();
       await grading.beginGrading(id, 'judge-02', false);
+      await grading.addCases(id, 'judge-02', [reported(1)]);
       await grading.compileError(id, 'judge-02', 'nope');
       await settle();
       expect(eventsOf(id).map((event) => event.type)).toEqual(['processing']);

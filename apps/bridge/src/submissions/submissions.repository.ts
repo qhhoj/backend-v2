@@ -332,14 +332,7 @@ export class SubmissionsRepository {
 
   /** Bridge start: whatever was handed to a judge before the stop goes back to the queue, and is returned so its requeue can be announced. Not a judge failure, so `requeueCount` is untouched and nothing becomes IE. */
   async resetInFlight(): Promise<SubmissionGradedJob[]> {
-    const rows = await this.submissions
-      .find({ status: IN_FLIGHT }, { user: 1, problem: 1 })
-      .lean();
-    await this.submissions.updateMany(
-      { _id: { $in: rows.map((row) => row._id) }, status: IN_FLIGHT },
-      { $set: REQUEUE_RESET },
-    );
-    return rows.map(gradedJobOf);
+    return this.resetStranded(await this.inFlightClaims());
   }
 
   async inFlightClaims(): Promise<InFlightClaim[]> {

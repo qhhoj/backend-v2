@@ -97,7 +97,6 @@ export class SubmissionCreateService {
             return create();
           },
         );
-    await this.commands.judge([id], dto.judgeId ?? null);
     await this.events.publish(
       submissionEvent(
         { submissionId: id, userId: principal.userId, problemId: problem._id },
@@ -105,6 +104,7 @@ export class SubmissionCreateService {
         'QU',
       ),
     );
+    await this.commands.judge([id], dto.judgeId ?? null);
     return { id };
   }
 

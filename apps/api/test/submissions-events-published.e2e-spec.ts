@@ -106,6 +106,26 @@ describe('submission events published by the api', () => {
     expect(eventsOf(rejected)).toEqual([['done', 'D']]);
   });
 
+  it('publishes nothing when aborting a running submission: the judge decides its end', async () => {
+    const running = await seed({ status: 'G', judgedOn: 'judge-01' });
+    await authed(
+      api.http().post(`${SUBMISSIONS}/${running}/abort`),
+      owner,
+    ).expect(204);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(eventsOf(running)).toEqual([]);
+  });
+
+  it('publishes the actual status of a rejected submission', async () => {
+    const compileError = await seed({ status: 'CE' });
+    await authed(
+      api.http().post(`${SUBMISSIONS}/${compileError}/reject`),
+      manager,
+    ).expect(204);
+    await recorder.waitFor(() => eventsOf(compileError).length === 1);
+    expect(eventsOf(compileError)).toEqual([['done', 'CE']]);
+  });
+
   it('publishes nothing for a bulk rejudge', async () => {
     const ids = [await seed(), await seed()];
     await authed(api.http().post(`${SUBMISSIONS}/rejudge`), manager)

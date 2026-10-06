@@ -32,7 +32,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     const port = await this.server.listen();
     await this.judges.setAllOffline();
     const requeued = await this.submissions.resetInFlight();
-    await this.grading.announceRequeued(requeued);
+    this.grading.announceRequeued(requeued);
     const position = await this.commands.position();
     await this.dispatch.enqueue(await this.submissions.loadQueued());
     this.commands.start(position);
@@ -90,7 +90,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     this.unheldBefore = new Set(unheld.map((claim) => claim.id));
     if (!stranded.length) return;
     const requeued = await this.submissions.resetStranded(stranded);
-    await this.grading.announceRequeued(requeued);
+    this.grading.announceRequeued(requeued);
     this.logger.warn(
       `Resync requeued ${requeued.length} submissions no judge held`,
     );

@@ -30,6 +30,10 @@ describe('submission events', () => {
     'not json',
     'null',
     JSON.stringify({
+      ...submissionEvent(subject(), 'test-case', 'G'),
+      currentTestcase: 1.5,
+    }),
+    JSON.stringify({
       ...submissionEvent(subject(), 'done', 'D'),
       type: 'explode',
     }),

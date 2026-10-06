@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import type { SubmissionRequest } from '../protocol/judge-packets';
 import type { JudgeAccess } from '../judges/judges.repository';
 import { GradingService } from '../submissions/grading.service';
+import type { Claimed } from '../submissions/grading.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { insertQueued, nextFor, pickJudge } from './dispatch';
 import type { DispatchTarget, QueuedSubmission } from './dispatch';
@@ -156,21 +156,22 @@ export class DispatchService {
     submission: QueuedSubmission,
   ): Promise<void> {
     judge.workingOn = submission.id;
-    let request: SubmissionRequest | null;
+    let claimed: Claimed | null;
     try {
-      request = await this.grading.claim(submission, judge.name);
+      claimed = await this.grading.claim(submission, judge.name);
     } catch (error) {
       judge.workingOn = null; // the claim failed and could not be released (Mongo down): the judge is free, the resync recovers the submission
       throw error;
     }
     if (judge.isClosed || this.judges.get(judge.name) !== judge) {
       judge.workingOn = null; // it never saw the submission, so a later close must not requeue it
-      if (request && (await this.grading.release(submission.id, judge.name)))
+      if (claimed && (await this.grading.release(submission.id, judge.name)))
         await this.enqueue([submission]);
       return;
     }
-    if (!request) return this.judgeFree(judge);
-    judge.submit(request);
+    if (!claimed) return this.judgeFree(judge);
+    this.grading.sent(claimed.subject);
+    judge.submit(claimed.request);
   }
 
   /** Registered judges whose socket is not closing. */

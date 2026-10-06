@@ -20,6 +20,12 @@ export const LOST_JUDGE_MESSAGE =
 /** Test-case events per submission: at most one per interval (4/s; legacy allowed 5 per 0.5 s). */
 export const PROGRESS_EVENT_INTERVAL_MS = 250;
 
+/** A claimed submission and whom its events name; `sent` starts tracking once the judge really got it. */
+export interface Claimed {
+  request: SubmissionRequest;
+  subject: SubmissionGradedJob;
+}
+
 interface Tracked {
   subject: SubmissionGradedJob;
   progressAt: number;
@@ -39,11 +45,11 @@ export class GradingService {
     private readonly events: SubmissionEventsService,
   ) {}
 
-  /** The request for `judgeName`, or null when the submission is no longer queued or lost its data (finished as IE, graded job enqueued). */
+  /** The claim for `judgeName`, or null when the submission is no longer queued or lost its data (finished as IE, graded job enqueued). */
   async claim(
     queued: QueuedSubmission,
     judgeName: string,
-  ): Promise<SubmissionRequest | null> {
+  ): Promise<Claimed | null> {
     let outcome: Awaited<ReturnType<SubmissionsRepository['claim']>>;
     try {
       outcome = await this.submissions.claim(queued, judgeName);
@@ -57,9 +63,13 @@ export class GradingService {
     if (outcome && 'failed' in outcome)
       await this.finished(outcome.failed, 'IE');
     if (!outcome || !('request' in outcome)) return null;
-    this.tracked.set(queued.id, { subject: outcome.subject, progressAt: 0 });
-    await this.publish(outcome.subject, 'processing', 'P');
-    return outcome.request;
+    return outcome;
+  }
+
+  /** The request is about to reach the judge: events start here, so a judge that vanished mid-claim leaves no `processing` behind. */
+  sent(subject: SubmissionGradedJob): void {
+    this.tracked.set(subject.submissionId, { subject, progressAt: 0 });
+    this.publish(subject, 'processing', 'P');
   }
 
   /** The judge vanished between the claim and the request: back to the queue without spending the requeue. */
@@ -68,17 +78,17 @@ export class GradingService {
     const released = await this.submissions.release(submissionId, judgeName);
     if (released) {
       this.tracked.delete(submissionId);
-      if (tracked) await this.publish(tracked.subject, 'queued', 'QU');
+      if (tracked) this.publish(tracked.subject, 'queued', 'QU');
     }
     return released;
   }
 
   /** Rows a start or a resync returned to the queue (no judge loss). */
-  async announceRequeued(subjects: SubmissionGradedJob[]): Promise<void> {
-    for (const { submissionId } of subjects) this.tracked.delete(submissionId);
-    await Promise.all(
-      subjects.map((subject) => this.publish(subject, 'queued', 'QU')),
-    );
+  announceRequeued(subjects: SubmissionGradedJob[]): void {
+    for (const subject of subjects) {
+      this.tracked.delete(subject.submissionId);
+      this.publish(subject, 'queued', 'QU');
+    }
   }
 
   async beginGrading(
@@ -87,7 +97,7 @@ export class GradingService {
     pretested: boolean,
   ): Promise<void> {
     if (await this.submissions.beginGrading(submissionId, judgeName, pretested))
-      await this.publishTracked(submissionId, 'grading-begin', 'G');
+      this.publishTracked(submissionId, 'grading-begin', 'G');
   }
 
   markBatched(submissionId: string, judgeName: string): Promise<void> {
@@ -113,7 +123,7 @@ export class GradingService {
       now - tracked.progressAt >= PROGRESS_EVENT_INTERVAL_MS
     ) {
       tracked.progressAt = now;
-      await this.publish(
+      this.publish(
         tracked.subject,
         'test-case',
         'G',
@@ -175,7 +185,7 @@ export class GradingService {
     const tracked = this.tracked.get(submissionId);
     if (await this.submissions.requeue(submissionId, judgeName)) {
       this.tracked.delete(submissionId);
-      if (tracked) await this.publish(tracked.subject, 'queued', 'QU');
+      if (tracked) this.publish(tracked.subject, 'queued', 'QU');
       return 'requeued';
     }
     const failed = await this.submissions.finishWith(
@@ -201,26 +211,29 @@ export class GradingService {
     if (!job) return;
     this.tracked.delete(job.submissionId);
     await notifyGraded(this.graded, job, this.logger);
-    await this.publish(job, 'done', status);
+    this.publish(job, 'done', status);
   }
 
-  private async publishTracked(
+  private publishTracked(
     submissionId: string,
     type: SubmissionEventType,
     status: SubmissionStatus,
-  ): Promise<void> {
+  ): void {
     const tracked = this.tracked.get(submissionId);
-    if (tracked) await this.publish(tracked.subject, type, status);
+    if (tracked) this.publish(tracked.subject, type, status);
   }
 
+  /** Never awaited: a Redis stall must not hold up judge packets. Commands of one connection run in call order, so events of a submission cannot reorder. */
   private publish(
     subject: SubmissionGradedJob,
     type: SubmissionEventType,
     status: SubmissionStatus,
     currentTestcase = 0,
-  ): Promise<void> {
-    return this.events.publish(
-      submissionEvent(subject, type, status, currentTestcase),
-    );
+  ): void {
+    this.events
+      .publish(submissionEvent(subject, type, status, currentTestcase))
+      .catch((error: Error) =>
+        this.logger.error(`Event ${type} not published: ${error.message}`),
+      );
   }
 }
