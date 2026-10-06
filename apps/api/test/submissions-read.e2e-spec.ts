@@ -7,6 +7,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
+import { SubmissionsRepository } from '../src/modules/submissions/submissions.repository';
 import { dataOf, seedSubmission } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
@@ -205,11 +206,25 @@ describe('submission read flow', () => {
           (response.body as { error: { fields: object } }).error.fields,
         ).toHaveProperty(field);
       }
+      const problem = await problemWith('staff_filter');
+      const finished = await seedSubmission(api, {
+        user: ids.owner,
+        problem: problem._id,
+        language: catalog.languages.cpp,
+        status: 'D',
+      });
+      await seedSubmission(api, {
+        user: ids.owner,
+        problem: problem._id,
+        language: catalog.languages.cpp,
+        status: 'QU',
+        result: null,
+      });
       expect(
-        (await listed('staff', 'status=D&problem=vis_a')).data.map(
+        (await listed('staff', 'status=D&problem=staff_filter')).data.map(
           (row) => row.id,
         ),
-      ).toEqual([owned['vis_a']]);
+      ).toEqual([finished._id]);
     });
 
     it('answers an empty page for an unknown user or a problem the viewer cannot see', async () => {
@@ -238,8 +253,23 @@ describe('submission read flow', () => {
 
     it('opens an all-solved submission once the viewer solved the problem with full points', async () => {
       const path = `${SUBMISSIONS}/${owned['vis_s']}`;
-      await as('other', path).expect(403).expect(errorCode('forbidden'));
       const problem = (await api.problems.findOne({ code: 'vis_s' }))!;
+      // Neither someone else's full-score AC nor the viewer's own full-score non-AC counts.
+      await seedSubmission(api, {
+        user: ids.tester,
+        problem: problem._id,
+        language: catalog.languages.cpp,
+        result: 'AC',
+        points: 1000,
+      });
+      await seedSubmission(api, {
+        user: ids.other,
+        problem: problem._id,
+        language: catalog.languages.cpp,
+        result: 'WA',
+        points: 1000,
+      });
+      await as('other', path).expect(403).expect(errorCode('forbidden'));
       await seedSubmission(api, {
         user: ids.other,
         problem: problem._id,
@@ -256,6 +286,27 @@ describe('submission read flow', () => {
         points: 1000,
       });
       await as('other', path).expect(200);
+    });
+
+    it('loads cases only for a viewer who passed the check and sees them', async () => {
+      const findById = jest.spyOn(
+        api.app.get(SubmissionsRepository),
+        'findById',
+      );
+      const casesLoaded = () =>
+        findById.mock.calls.filter(([, withCases]) => withCases).length;
+      for (const [who, code, status] of [
+        ['other', 'vis_o', 403],
+        ['other', 'priv', 404],
+        ['owner', 'res_s', 200],
+      ] as const) {
+        findById.mockClear();
+        await as(who, `${SUBMISSIONS}/${owned[code]}`).expect(status);
+        expect(casesLoaded()).toBe(0);
+      }
+      await as('owner', `${SUBMISSIONS}/${owned['vis_a']}`).expect(200);
+      expect(casesLoaded()).toBe(1);
+      findById.mockRestore();
     });
 
     it('needs a login and answers 404 for unknown and malformed ids', async () => {

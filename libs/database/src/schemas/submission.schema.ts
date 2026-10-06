@@ -132,6 +132,9 @@ export const SubmissionSchema = SchemaFactory.createForClass(Submission);
 // Lists sort by `-_id` (UUIDv7 is time-ordered), so the `_id` indexes replace the spec's `{user, date}` and `{problem, date}`; `{date}` stays for date-range reports.
 SubmissionSchema.index({ user: 1, _id: -1 });
 SubmissionSchema.index({ problem: 1, _id: -1 });
+// Filtered lists count by `problem $in` plus one more field: these keep that count index-only.
+SubmissionSchema.index({ problem: 1, result: 1, _id: -1 });
+SubmissionSchema.index({ problem: 1, language: 1, _id: -1 });
 SubmissionSchema.index({ user: 1, status: 1 });
 SubmissionSchema.index({ user: 1, problem: 1, result: 1 });
 SubmissionSchema.index({ status: 1, priority: 1, _id: 1 });

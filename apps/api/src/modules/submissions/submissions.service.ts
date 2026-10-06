@@ -81,11 +81,14 @@ export class SubmissionsService {
     principal: Principal,
     id: string,
   ): Promise<SubmissionDetailResponse> {
-    const { submission, problem, canEdit } = await this.viewable(
-      principal,
-      id,
-      true,
-    );
+    const viewed = await this.viewable(principal, id);
+    const { problem, canEdit } = viewed;
+    const visibility = caseVisibility(principal, problem, canEdit);
+    // Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them.
+    const submission =
+      visibility.cases === 'none'
+        ? viewed.submission
+        : ((await this.submissions.findById(id, true)) ?? viewed.submission);
     const [owner] = await this.users.findByIds([uuidStr(submission.user)]);
     return SubmissionDetailResponse.withDetails(
       submission,
@@ -95,7 +98,7 @@ export class SubmissionsService {
         language: this.languages.byId(uuidStr(submission.language)),
       },
       {
-        visibility: caseVisibility(principal, problem, canEdit),
+        visibility,
         showError: canEdit || submission.status !== 'IE',
       },
     );
@@ -105,9 +108,9 @@ export class SubmissionsService {
     principal: Principal,
     id: string,
   ): Promise<SubmissionSourceResponse> {
-    const { submission } = await this.viewable(principal, id, false);
+    const { submission } = await this.viewable(principal, id);
     return {
-      id: submission._id,
+      id: uuidStr(submission._id),
       source: (await this.submissions.findSource(submission._id)) ?? '',
     };
   }
@@ -116,13 +119,12 @@ export class SubmissionsService {
   private async viewable(
     principal: Principal,
     id: string,
-    withCases: boolean,
   ): Promise<{
     submission: SubmissionDocument;
     problem: ProblemDocument;
     canEdit: boolean;
   }> {
-    const submission = await this.submissions.findById(id, withCases);
+    const submission = await this.submissions.findById(id);
     const problem =
       submission && (await this.problems.findById(uuidStr(submission.problem)));
     const view = problem && ProblemAccess.accessView(problem);

@@ -89,6 +89,13 @@ describe('detailAccess', () => {
       'granted',
     ],
     [
+      'a reviewer of a public problem that has a suggester',
+      viewer({ permissions: new Set(['judge.suggest_new_problem']) }),
+      problem({ suggester: 'someone', submissionSourceVisibility: 'O' }),
+      false,
+      'denied',
+    ],
+    [
       'anyone when A',
       viewer(),
       problem({ submissionSourceVisibility: 'A' }),
