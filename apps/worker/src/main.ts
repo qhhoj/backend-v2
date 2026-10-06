@@ -1,6 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { loadEnv } from '@libs/common';
-import { nestLogLevels } from './log-levels';
+import { loadEnv, nestLogLevels } from '@libs/common';
 import { WorkerModule } from './worker.module';
 
 async function bootstrap() {

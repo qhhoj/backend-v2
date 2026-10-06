@@ -96,6 +96,15 @@
       "compilerOptions": {
         "tsConfigPath": "libs/judging/tsconfig.lib.json"
       }
+    },
+    "bridge": {
+      "type": "application",
+      "root": "apps/bridge",
+      "entryFile": "main",
+      "sourceRoot": "apps/bridge/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/bridge/tsconfig.app.json"
+      }
     }
   }
 }

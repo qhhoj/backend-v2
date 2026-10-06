@@ -31,6 +31,8 @@ describe('loadEnv', () => {
       pdfRenderTimeoutMs: 30000,
       pdfMaxBytes: 52428800,
       pdfConcurrency: 2,
+      judgeBridgePort: 9999,
+      judgeBridgeHost: '0.0.0.0',
       mediaUrl: '/media',
       oauth: { google: null, facebook: null, github: null },
     }));
@@ -89,6 +91,15 @@ describe('loadEnv', () => {
         'PDF_CONCURRENCY must be a positive integer',
       ),
   );
+  it('accepts 0 (any free port) for the judge bridge and rejects out-of-range ports', () => {
+    expect(loadEnv({ ...valid, JUDGE_BRIDGE_PORT: '0' }).judgeBridgePort).toBe(
+      0,
+    );
+    for (const port of ['65536', '-1', '1.5', 'nine'])
+      expect(() => loadEnv({ ...valid, JUDGE_BRIDGE_PORT: port })).toThrow(
+        'JUDGE_BRIDGE_PORT must be 0-65535',
+      );
+  });
   it('strips the trailing slash of MEDIA_URL', () =>
     expect(
       loadEnv({ ...valid, MEDIA_URL: 'https://cdn.test/media/' }).mediaUrl,

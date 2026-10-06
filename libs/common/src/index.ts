@@ -20,3 +20,4 @@ export * from './storage/atomic-write';
 export * from './storage/storage.service';
 export * from './storage/storage.module';
 export * from './text/escape-regexp';
+export * from './log-levels';

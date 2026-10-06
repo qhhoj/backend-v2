@@ -32,6 +32,9 @@ export interface Env {
   pdfMaxBytes: number;
   /** Worker: PDF renders running at once. */
   pdfConcurrency: number;
+  /** Bridge: judges connect to this TCP port (DMOJ judge protocol); 0 picks a free port (tests). */
+  judgeBridgePort: number;
+  judgeBridgeHost: string;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
     google: OAuthClient | null;
@@ -89,6 +92,12 @@ export function loadEnv(
       problems.push(`${name} must be a positive integer`);
     return value;
   };
+  const portNumber = (name: string, fallback: number): number => {
+    const value = Number(source[name] ?? fallback);
+    if (!Number.isInteger(value) || value < 0 || value > 65535)
+      problems.push(`${name} must be 0-65535`);
+    return value;
+  };
   const env: Env = {
     mongoUrl: required('MONGO_URL'),
     redisUrl: required('REDIS_URL'),
@@ -112,6 +121,8 @@ export function loadEnv(
     pdfRenderTimeoutMs: positiveInteger('PDF_RENDER_TIMEOUT_MS', 30_000),
     pdfMaxBytes: positiveInteger('PDF_MAX_BYTES', 52_428_800),
     pdfConcurrency: positiveInteger('PDF_CONCURRENCY', 2),
+    judgeBridgePort: portNumber('JUDGE_BRIDGE_PORT', 9999),
+    judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
     oauth: {
       google: oauthClient('GOOGLE'),
       facebook: oauthClient('FACEBOOK'),

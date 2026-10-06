@@ -17,6 +17,8 @@
     "start:prod": "node dist/apps/api/main",
     "start:worker": "nest start worker",
     "start:prod:worker": "node dist/apps/worker/main",
+    "start:bridge": "nest start bridge",
+    "start:prod:bridge": "node dist/apps/bridge/main",
     "lint": "eslint \"{apps,libs}/**/*.ts\"",
     "test": "jest --runInBand",
     "typecheck": "tsc --noEmit -p tsconfig.json"
