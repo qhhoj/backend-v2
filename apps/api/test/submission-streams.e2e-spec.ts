@@ -1,3 +1,5 @@
+import { request as httpRequest } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { newId } from '@libs/database';
@@ -8,6 +10,7 @@ import {
   SubmissionEventsService,
 } from '@libs/judging';
 import type { SubmissionEventType } from '@libs/judging';
+import { SubmissionsService } from '../src/modules/submissions/submissions.service';
 import { STREAM_LIMITS } from '../src/modules/submissions/rate-limits';
 import type { StreamLimits } from '../src/modules/submissions/rate-limits';
 import { SubmissionStreamsService } from '../src/modules/submissions/submission-streams.service';
@@ -30,7 +33,7 @@ const LIMITS: StreamLimits = {
   perIp: 5,
   total: 50,
   feedTotal: 4,
-  maxBufferedBytes: 64 * 1024,
+  maxBufferedBytes: 256 * 1024,
   heartbeatMs: 100,
   recheckMs: 150,
 };
@@ -310,6 +313,89 @@ describe('submission event streams', () => {
   it('heartbeats an idle stream', async () => {
     const feed = await open(null, EVENTS);
     await waitUntil(() => feed.pings() >= 2, 2000);
+  });
+
+  it('frees the slot of a client that left while the access lookups were pending', async () => {
+    const submission = await seed('stream_a');
+    const service = api.app.get(SubmissionsService);
+    const original = service.streamAccess.bind(service);
+    const delayed = jest
+      .spyOn(service, 'streamAccess')
+      .mockImplementation(async (...args) => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return original(...args);
+      });
+    try {
+      const { port } = api.app.getHttpServer().address() as AddressInfo;
+      const aborted = httpRequest({
+        host: '127.0.0.1',
+        port,
+        path: `${EVENTS}/${submission._id}`,
+        headers: { Cookie: sessions.owner.cookie },
+      });
+      aborted.on('error', () => undefined);
+      aborted.end();
+      await waitUntil(() => streams.openCounts().total === 1);
+      aborted.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    } finally {
+      delayed.mockRestore();
+    }
+    expect(streams.openCounts()).toMatchObject({
+      total: 0,
+      users: 0,
+      ips: 0,
+      submissions: 0,
+    });
+  });
+
+  it('does not lose an event published while the stream was opening', async () => {
+    const submission = await seed('stream_a');
+    const service = api.app.get(SubmissionsService);
+    const original = service.streamAccess.bind(service);
+    const racing = jest
+      .spyOn(service, 'streamAccess')
+      .mockImplementation(async (...args) => {
+        const access = await original(...args);
+        await api.submissions.updateOne(
+          { _id: submission._id },
+          { status: 'D', result: 'AC' },
+        );
+        await publish(submission, 'done', 'D');
+        return access;
+      });
+    try {
+      const client = await open('owner', `${EVENTS}/${submission._id}`);
+      expect((await client.next('state')).data).toMatchObject({ status: 'D' });
+    } finally {
+      racing.mockRestore();
+    }
+  });
+
+  it('keeps a client up when a burst of events arrives in one tick', async () => {
+    const submission = await seed('stream_a');
+    const client = await open('owner', `${EVENTS}/${submission._id}`);
+    await client.next('state');
+    await Promise.all(
+      Array.from({ length: 300 }, () => publish(submission, 'processing', 'P')),
+    );
+    await waitUntil(
+      () =>
+        client.messages.filter(({ event }) => event === 'processing').length ===
+        300,
+      5000,
+    );
+  });
+
+  it('delivers to a stream opened with an uppercase id', async () => {
+    const submission = await seed('stream_a');
+    const client = await open(
+      'owner',
+      `${EVENTS}/${submission._id.toUpperCase()}`,
+    );
+    await client.next('state');
+    await publish(submission, 'done', 'D');
+    await client.next('done');
   });
 
   it('closes every stream and its Redis listener on shutdown, and shutting down twice is harmless', async () => {

@@ -26,6 +26,13 @@ const replyOn = (raw: StalledResponse, hijack = jest.fn()) =>
     raw,
   }) as unknown as FastifyReply;
 
+/** A client that reads, but only on a later tick (a healthy slow-ish socket). */
+class DrainingResponse extends StalledResponse {
+  override _write(...args: unknown[]): void {
+    setImmediate(args[2] as () => void);
+  }
+}
+
 describe('openEventStream', () => {
   it('takes the response over with event-stream headers, keeping the reply headers', () => {
     const raw = new StalledResponse();
@@ -69,5 +76,34 @@ describe('openEventStream', () => {
     expect(() => stream.send(sseFrame('done', {}))).not.toThrow();
     await stream.closed;
     expect(failed).not.toHaveBeenCalled();
+  });
+
+  it('keeps a client that reads, however many frames one tick writes', async () => {
+    const raw = new DrainingResponse();
+    const stream = openEventStream(replyOn(raw), 64 * 1024, 20);
+    for (let sent = 0; sent < 200; sent += 1)
+      stream.send(sseFrame('done', { sent }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(raw.destroyed).toBe(false);
+    stream.close();
+  });
+
+  it('drops a client that never drains once the grace period ends, before any byte cap', async () => {
+    const raw = new StalledResponse();
+    const stream = openEventStream(replyOn(raw), 1024 * 1024, 20);
+    stream.send(sseFrame('done', { padding: 'x'.repeat(100) }));
+    expect(raw.destroyed).toBe(false);
+    await stream.closed;
+    expect(raw.destroyed).toBe(true);
+  });
+
+  it('is closed from the start when the client left before the stream opened', async () => {
+    const raw = new StalledResponse();
+    raw.destroy();
+    await new Promise((resolve) => raw.once('close', resolve));
+    const writeHead = jest.spyOn(raw, 'writeHead');
+    const stream = openEventStream(replyOn(raw), 1024, 20);
+    await expect(stream.closed).resolves.toBeUndefined();
+    expect(writeHead).not.toHaveBeenCalled();
   });
 });

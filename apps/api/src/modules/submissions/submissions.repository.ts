@@ -18,6 +18,18 @@ import {
 import { JUDGE_COMMAND_BATCH } from '@libs/judging';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
+const STATE_FIELDS = {
+  status: 1,
+  result: 1,
+  points: 1,
+  casePoints: 1,
+  caseTotal: 1,
+  currentTestcase: 1,
+} as const;
+export type SubmissionState = Pick<
+  Submission,
+  '_id' | keyof typeof STATE_FIELDS
+>;
 
 @Injectable()
 export class SubmissionsRepository {
@@ -59,6 +71,15 @@ export class SubmissionsRepository {
     if (!isUuid(id)) return Promise.resolve(null);
     const query = this.submissions.findById(id);
     return (withCases ? query.select('+cases') : query).exec();
+  }
+
+  /** Just what a stream's `state` shows. */
+  findState(id: string): Promise<SubmissionState | null> {
+    if (!isUuid(id)) return Promise.resolve(null);
+    return this.submissions
+      .findById(id, STATE_FIELDS)
+      .lean<SubmissionState>()
+      .exec();
   }
 
   async findSource(id: string): Promise<string | null> {

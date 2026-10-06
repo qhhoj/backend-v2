@@ -7,7 +7,6 @@ import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { Submission } from '@libs/database';
 import { parseSubmissionEvent, SUBMISSION_EVENTS_CHANNEL } from '@libs/judging';
 import type { SubmissionEvent } from '@libs/judging';
 import { ProblemEvents } from '../problems/problem.events';
@@ -16,6 +15,8 @@ import { STREAM_LIMITS } from './rate-limits';
 import type { StreamLimits } from './rate-limits';
 import { HEARTBEAT_FRAME, openEventStream, sseFrame } from './sse';
 import type { EventStream } from './sse';
+import { SubmissionsRepository } from './submissions.repository';
+import type { SubmissionState } from './submissions.repository';
 import { SubmissionsService } from './submissions.service';
 
 /** How long the feed trusts a problem's publicity; a `publicityChanged` in this process drops it at once. */
@@ -40,14 +41,15 @@ const decrement = (counts: Map<string, number>, key: string) => {
 };
 
 /** What a stream starts with, so a page that reconnects never misses the end. */
-const stateOf = (submission: Submission) => ({
+const stateOf = (submission: SubmissionState, caseEvents: boolean) => ({
   submissionId: uuidStr(submission._id),
   status: submission.status,
   result: submission.result,
   points: submission.points,
   casePoints: submission.casePoints,
   caseTotal: submission.caseTotal,
-  currentTestcase: submission.currentTestcase,
+  // The progress `test-case` events carry, withheld like them.
+  currentTestcase: caseEvents ? submission.currentTestcase : null,
 });
 
 /** Live submission events over SSE: one Redis subscription per api process fans `submission-events` out to the open streams, capped per user, per IP and in total, dropped when they stop reading, and re-authorised every `recheckMs`. */
@@ -77,6 +79,7 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     @Inject(ENV) private readonly env: Env,
     @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
     private readonly submissions: SubmissionsService,
+    private readonly submissionRows: SubmissionsRepository,
     private readonly problems: ProblemsRepository,
     private readonly problemEvents: ProblemEvents,
     private readonly sessions: SessionService,
@@ -103,9 +106,11 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     this.subscriber = subscriber;
     await subscriber.subscribe(SUBMISSION_EVENTS_CHANNEL);
     this.subscribed = true;
-    this.problemEvents.on('publicityChanged', (problemId) =>
-      this.feedProblems.delete(problemId),
-    );
+    // `pointsChanged` also covers the organisation-private flag.
+    for (const name of ['publicityChanged', 'pointsChanged'] as const)
+      this.problemEvents.on(name, (problemId) =>
+        this.feedProblems.delete(problemId),
+      );
     this.heartbeatTimer = setInterval(
       () => this.broadcast(HEARTBEAT_FRAME),
       this.limits.heartbeatMs,
@@ -134,7 +139,7 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     return this.subscribed;
   }
 
-  /** The caps first (429, so refused clients cost no lookups), then the detail rules (404, 403), then the stream; its first event is the current state. */
+  /** The caps first (429: refused clients skip the detail lookups), then the detail rules (404, 403), then the stream. `state` is read after the stream is registered, so an event published during the lookups is either in it or delivered after it; it may follow an event that already reached the stream, and clients treat the latest status as current. */
   async openSubmission(
     auth: AuthContext,
     submissionId: string,
@@ -142,20 +147,30 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     reply: FastifyReply,
   ): Promise<void> {
     const release = this.reserve(request.ip, auth.principal.userId);
+    let entry: OpenStream;
     try {
       const { submission, caseEvents } = await this.submissions.streamAccess(
         auth.principal,
         submissionId,
       );
-      const entry = this.open(reply, release, {
-        submissionId,
+      entry = this.open(reply, release, {
+        submissionId: uuidStr(submission._id),
         auth,
         caseEvents,
       });
-      entry.stream.send(sseFrame('state', stateOf(submission)));
     } catch (error) {
       release();
       throw error;
+    }
+    try {
+      const state = await this.submissionRows.findState(entry.submissionId!);
+      if (!state) return entry.stream.close();
+      entry.stream.send(sseFrame('state', stateOf(state, entry.caseEvents)));
+    } catch (error) {
+      this.logger.error(
+        `Reading a stream's state failed: ${(error as Error).message}`,
+      );
+      entry.stream.close();
     }
   }
 
