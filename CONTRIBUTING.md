@@ -106,7 +106,7 @@ tools/legacy/   regenerates the fixtures
 - SPA contract: cookie `qhhoj_session`; send `X-CSRF-Token` (from `/auth/me` or login) on POST/PUT/PATCH/DELETE
 - API tokens (Bearer) skip the CSRF, 2FA and pwned-password gates but cannot reach `@SessionOnly()` routes; the token stays valid across a password change (design choice)
 - Login rate limiting is reserve-then-release, per IP plus per resolved account; unknown usernames are limited per NFKC-lowercased name
-- Behind nginx set `TRUST_PROXY` to its address (e.g. the container network CIDR); otherwise every client shares one IP and the per-IP login limit becomes global
+- Behind nginx set `TRUST_PROXY` to its address (e.g. the container network CIDR); otherwise every client shares one IP and the per-IP limits (login, streams) become global
 - `@fastify/cookie` is pinned at 11.0.2: 11.1.1+ depends on ESM-only `cookie` 2, which breaks Jest CJS; do not bump
 - New permissions: add the codename to `libs/auth/src/principal/permissions.ts`
 - Account flows live in `apps/api/src/modules/auth/<flow>.controller.ts` + `<flow>.service.ts` + `dto/` (registration, password-reset, totp, webauthn, social, impersonation); add new flows the same way and list their paths in `apps/api/test/openapi.e2e-spec.ts`
@@ -168,7 +168,7 @@ tools/legacy/   regenerates the fixtures
 - Statuses QU P G D IE CE AB; results add AC WA TLE MLE OLE IR RTE SC RJ; priorities 0 contest, 1 normal, 2 rejudge, 3 batch rejudge, FIFO by id within one
 - Queue truth is Mongo: queued = `status QU`; the bridge claims QU -> P before sending; every judge packet's write filters `{ _id, judgedOn, status }`
 - API -> bridge: Redis stream `bridge:commands` (`judge`, `abort`, `disconnect-judge`, `disable-judge`), fire-and-forget via `BridgeCommandsService`; a lost `judge` command waits for the bridge's resync (`resyncMs`, 30 s), which also reconciles connected judges with Mongo (blocked, rotated key, `isDisabled`); `abort` is best-effort, the user aborts again
-- Bridge -> effects: one `submission-graded` BullMQ job per finished (D/CE/IE/AB) or rejected submission, enqueued through `notifyGraded` (1 s bound, a failure is logged and skipped, in the bridge and the api); the worker's `submission-effects` consumes it
+- Bridge -> effects: one `submission-graded` BullMQ job per finished (D/CE/IE/AB) or rejected submission, enqueued through `notifyGraded` (1 s bound, a failure is logged and skipped, in the bridge and the api)
 - Bridge start: bind the port (judges wait), judges offline, P/G -> QU, stream position, queue rebuild, commands, resync, then serve judges. Stop: dispatching stops first so P/G survive for the next start
 - Start and resync requeue P/G rows without spending `requeueCount` (resync: only rows no connected judge held on two consecutive ticks)
 - Judge disconnect in flight: requeued once (`requeueCount`), IE the second time; a rejudge restores the allowance
@@ -187,7 +187,7 @@ tools/legacy/   regenerates the fixtures
 - `submission-effects` consumes `submission-graded` (concurrency 4; the user only for public, non-org-private problems); the job is enqueued with 3 attempts and exponential backoff (10 s); `submission-effects`, `effects-sweep` and `problem-rescore` start consuming only after the submissions indexes exist (`startAfterIndexes`)
 - Sweep: job scheduler every 10 min, global concurrency 1; recomputes users and problems with `judgedDate` or `date` in the window from the last watermark (`effects:sweep:until`, set only after a successful sweep; at most 24 h back) minus a 10 min overlap
 - Rescore: `problem-rescore {problemId}` (no `jobId`, 3 attempts) on `pointsChanged` (points, partial, org privacy) and `publicityChanged` in the api and after a Polygon update in the worker; one at a time; rows with status D except RJ, read through a cursor, written in 1000-row `bulkWrite`s whose filter repeats the case totals read (a rejudge that finished meanwhile keeps its points); then every user with such a row and the problem's stats
-- Rescore points use `submissionPoints` (rounded at grading end: `round(casePoints / caseTotal * points, 3)`); legacy's rescore rounded the ratio first
+- Rescore points use `submissionPoints` (`round(casePoints / caseTotal * points, 3)`, as at grading end); legacy's rescore rounded the ratio first
 - `viewerStatus` (`solved | attempted | null`) on problem list/detail: one aggregate per page (`ViewerStatusRepository`)
 - Events: Redis pub/sub `submission-events` (`SubmissionEventsService`), fire-and-forget (1 s bound, skipped while Redis is not ready), ids and status only, published by whoever writes the status. Bridge: `processing` when the request is sent to the judge, `grading-begin`, `test-case` (at most 4/s per submission), `done`, requeues as `queued`. Api: submit/rejudge -> `queued`, abort of a queued submission and reject -> `done`; bulk rejudge publishes nothing
 - SSE: `GET /api/internal/events/submissions/:id` (detail rules; `state` first, read after the stream is registered; `test-case` only when every case result is visible; `resync` after a lost subscription) and `GET /api/internal/events/submissions` (public feed: public, non-org-private problems, no progress); one subscriber connection per api process
@@ -271,7 +271,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - The bridge port must be reachable only from judge hosts (firewall)
 - Judge containers need a restart policy (the judge-server fork exits on a broken connection)
 - The qhhoj/judge-server fork must handle submission ids (UUID strings) as strings everywhere: the `%d` of the grading `Process` name in `judge.py` is fatal, `%d` in `packet.py`/`judge.py` log calls and the `int` annotations of `Submission.id`/`abort_grading` are not; the bridge is not deployable until it does
-- Streams: set `TRUST_PROXY` behind nginx, or the per-IP cap counts nginx's address; nginx must not buffer `/api/internal/events/` (`proxy_buffering off`; the api also sends `X-Accel-Buffering: no`) and needs `proxy_read_timeout` well above the 15 s heartbeat; caps are per api process
+- Streams: nginx must not buffer `/api/internal/events/` (`proxy_buffering off`; the api also sends `X-Accel-Buffering: no`) and needs `proxy_read_timeout` well above the 15 s heartbeat
 - Worker tuning: `PDF_RENDER_TIMEOUT_MS`, `PDF_MAX_BYTES`, `PDF_CONCURRENCY`; the Polygon import queue runs one job at a time
 
 ## Commits
