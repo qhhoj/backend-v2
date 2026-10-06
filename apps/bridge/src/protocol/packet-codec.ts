@@ -7,7 +7,7 @@ export const MAX_PACKET_BYTES = 8 * 1024 * 1024;
 export const MAX_INFLATED_BYTES = 32 * 1024 * 1024;
 /** Caps for a connection that has not authenticated yet: only a handshake is legitimate. */
 export const MAX_HANDSHAKE_PACKET_BYTES = 4 * 1024 * 1024;
-export const MAX_HANDSHAKE_INFLATED_BYTES = 16 * 1024 * 1024;
+export const MAX_HANDSHAKE_INFLATED_BYTES = 8 * 1024 * 1024;
 /** Compressed and inflated byte caps for one frame. */
 export interface FrameLimits {
   packetBytes: number;
