@@ -60,6 +60,7 @@ const heldBack = (
 export function pickJudge<Judge extends JudgeState>(
   judges: Iterable<Judge>,
   submission: QueuedSubmission,
+  /** Must return a value in [0, 1). */
   random: () => number = Math.random,
 ): Judge | null {
   const candidates = [...judges].filter((judge) => canJudge(judge, submission));
@@ -92,21 +93,38 @@ export function insertQueued(
   queue.splice(low, 0, submission);
 }
 
-/** What a judge that just became free (or connected) takes: the first queued submission it can judge that is not held back for new work. */
+/**
+ * What a judge that just became free (or connected) takes: the first queued submission it can judge that is not held back for new work.
+ * `judge` must be among `judges` and already marked free. Hold-back is decided once per candidate set, so a batch rejudge scans in O(queue + judges).
+ */
 export function nextFor(
   judge: JudgeState,
   queue: readonly QueuedSubmission[],
   judges: Iterable<JudgeState>,
 ): QueuedSubmission | null {
   const all = [...judges];
+  const heldByCandidates = new Map<string, boolean>();
+  const isHeld = (submission: QueuedSubmission): boolean => {
+    if (submission.priority < SUBMISSION_PRIORITY.rejudge) return false;
+    const key = JSON.stringify([
+      submission.problemCode,
+      submission.languageKey,
+      submission.judgeName,
+      submission.bannedJudges,
+    ]);
+    let held = heldByCandidates.get(key);
+    if (held === undefined) {
+      held = heldBack(
+        submission,
+        all.filter((other) => canJudge(other, submission)),
+      );
+      heldByCandidates.set(key, held);
+    }
+    return held;
+  };
   return (
     queue.find(
-      (submission) =>
-        canJudge(judge, submission) &&
-        !heldBack(
-          submission,
-          all.filter((other) => canJudge(other, submission)),
-        ),
+      (submission) => canJudge(judge, submission) && !isHeld(submission),
     ) ?? null
   );
 }

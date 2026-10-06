@@ -107,4 +107,37 @@ describe('nextFor', () => {
     expect(nextFor(free, [rejudge], [free, busy])).toBeNull();
     expect(nextFor(free, [rejudge], [free])).toBe(rejudge);
   });
+  it('hold-back counts only capable candidates: incapable and disabled judges never reserve', () => {
+    const free = judge('a');
+    const incapable = judge('b', { problems: new Set(['mul']) });
+    const disabled = judge('c', { isDisabled: true });
+    const rejudge = queued({ priority: 3 });
+    expect(nextFor(free, [rejudge], [free, incapable, disabled])).toBe(rejudge);
+    expect(pickJudge([free, incapable, disabled], rejudge)).toBe(free);
+  });
+  it('keeps scanning past a held-back rejudge to one no other judge could take', () => {
+    const free = judge('a', { problems: new Set(['sum', 'mul']) });
+    const busy = judge('b', { workingOn: newId() });
+    const held = queued({ priority: 2, problemCode: 'sum' });
+    const later = queued({ priority: 2, problemCode: 'mul' });
+    const queue: QueuedSubmission[] = [];
+    for (const entry of [held, later]) insertQueued(queue, entry);
+    expect(nextFor(free, queue, [free, busy])).toBe(later);
+  });
+  it('holds a whole batch rejudge without rescanning the judges per entry', () => {
+    let lookups = 0;
+    const counting = new Set(['sum']);
+    const originalHas = counting.has.bind(counting);
+    counting.has = (value: string) => {
+      lookups += 1;
+      return originalHas(value);
+    };
+    const free = judge('a');
+    const busy = Array.from({ length: 49 }, (_unused, index) =>
+      judge(`busy${index}`, { workingOn: newId(), problems: counting }),
+    );
+    const queue = Array.from({ length: 10000 }, () => queued({ priority: 2 }));
+    expect(nextFor(free, queue, [free, ...busy])).toBeNull();
+    expect(lookups).toBeLessThan(2 * busy.length);
+  });
 });
