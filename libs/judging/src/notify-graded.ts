@@ -7,7 +7,7 @@ import { withinTimeout } from './within-timeout';
 /** Longest a request or packet waits for a graded job to reach Redis; the state is already in Mongo. */
 export const GRADED_ENQUEUE_TIMEOUT_MS = 1000;
 
-/** Never retried, rethrown or awaited past the bound: a late `add` is still delivered when Redis returns, and a retry would double-count stats (`enqueueGraded` has no `jobId`). */
+/** Never retried, rethrown or awaited past the bound: a late `add` is still delivered when Redis returns, and a retried `add` would queue a duplicate job (`enqueueGraded` has no `jobId`; duplicates are harmless recomputes, just wasted work). */
 export async function notifyGraded(
   queue: Queue<SubmissionGradedJob>,
   job: SubmissionGradedJob | null,

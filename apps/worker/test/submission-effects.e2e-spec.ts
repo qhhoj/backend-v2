@@ -170,6 +170,39 @@ describe('submission effects', () => {
     expect((await pointsOf(user._id)).problemCount).toBe(1);
   });
 
+  it('retries a failed job after a partial run and lands the same state, with nothing left failed', async () => {
+    const queue = worker.module.get<Queue<SubmissionGradedJob>>(
+      getQueueToken(SUBMISSION_GRADED_QUEUE),
+    );
+    const user = await seedUser(worker);
+    const problem = await seedProblem(worker, { points: 900 });
+    const submission = await seedGraded(worker, user._id, problem._id, {
+      points: 900,
+    });
+    const recomputeUser = effects.recomputeUser.bind(effects);
+    // The user is recomputed, then the attempt dies before the problem's stats.
+    const failing = jest
+      .spyOn(effects, 'recomputeUser')
+      .mockImplementationOnce(async (userId) => {
+        await recomputeUser(userId);
+        throw new Error('mongo hiccup');
+      });
+    await enqueueGraded(queue, gradedJobOf(submission));
+    await waitUntil(async () => (await queue.getDelayed()).length === 1);
+    failing.mockRestore();
+    const [delayed] = await queue.getDelayed();
+    expect(delayed.attemptsMade).toBe(1);
+    expect((await statsOf(problem._id)).userCount).toBe(0);
+    await delayed.promote();
+    await waitUntil(async () => (await statsOf(problem._id)).userCount === 1);
+    expect(await statsOf(problem._id)).toMatchObject({ acRate: 100 });
+    expect(await pointsOf(user._id)).toMatchObject({
+      points: 900,
+      problemCount: 1,
+    });
+    expect(await queue.getFailedCount()).toBe(0);
+  });
+
   it('leaves user points alone for a job on a private problem (legacy gate) but updates its stats', async () => {
     const user = await seedUser(worker, { points: 123 });
     const problem = await seedProblem(worker, { isPublic: false });
