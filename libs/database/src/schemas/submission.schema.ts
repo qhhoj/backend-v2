@@ -56,6 +56,8 @@ export const SUBMISSION_PRIORITY = {
   batchRejudge: 3,
 } as const;
 export const MAX_SOURCE_LENGTH = 65536;
+/** Unicode code points (legacy Python `len`): neither UTF-16 units nor validator.js `isLength`, which drops variation selectors. */
+export const codePointLength = (text: string): number => [...text].length;
 /** Bytes, not characters: bounds the 10000-case submission document under Mongo's 16 MB. */
 export const MAX_CASE_FEEDBACK_LENGTH = 50;
 export const MAX_CASE_TEXT_LENGTH = 512;

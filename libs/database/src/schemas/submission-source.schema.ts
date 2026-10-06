@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions } from '../schema';
-import { MAX_SOURCE_LENGTH } from './submission.schema';
+import { codePointLength, MAX_SOURCE_LENGTH } from './submission.schema';
 
 /** Kept apart from `submissions` so lists never carry source text; `_id` is the submission's id. */
 @Schema({ ...baseSchemaOptions, collection: 'submissionSources' })
@@ -11,7 +11,7 @@ export class SubmissionSource {
   @Prop({
     required: true,
     validate: {
-      validator: (text: string) => [...text].length <= MAX_SOURCE_LENGTH,
+      validator: (text: string) => codePointLength(text) <= MAX_SOURCE_LENGTH,
       message: `exceeds ${MAX_SOURCE_LENGTH} characters`,
     },
   })

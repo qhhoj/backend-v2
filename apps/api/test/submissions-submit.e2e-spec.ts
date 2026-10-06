@@ -227,6 +227,22 @@ describe('POST /api/internal/problems/:code/submit', () => {
     ).toEqual(['source']);
   });
 
+  it('counts variation-selector sequences as code points, never 500', async () => {
+    const sequence = '\u2764\uFE0F';
+    const atCap = sequence.repeat(MAX_SOURCE_LENGTH / 2);
+    const id = idOf(
+      await submit('spammer', 'sum', { source: atCap }).expect(201),
+    );
+    expect((await api.submissionSources.findById(id).lean())?.source).toBe(
+      atCap,
+    );
+    expect(
+      fieldsOf(
+        await submit('spammer', 'sum', { source: `${atCap}x` }).expect(400),
+      ),
+    ).toEqual(['source']);
+  });
+
   it('still answers 201 and tells the bridge when releasing the lock fails', async () => {
     const redis = api.app.get<Redis>(REDIS);
     const release = jest
