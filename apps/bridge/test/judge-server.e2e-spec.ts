@@ -262,6 +262,7 @@ describe('Judge connections', () => {
         name,
         key: KEY,
         problems: [problem.code],
+        answerPings: false, // a ping reply written mid-trickle would interleave with the frame
       });
       const id = await queue(problem._id);
       await judge.next('submission-request');
@@ -277,6 +278,7 @@ describe('Judge connections', () => {
         judge.write(frame.subarray(sent, sent + 50));
         await new Promise((resolve) => setImmediate(resolve));
       }
+      expect(judge.isClosed).toBe(false);
       await waitUntil(async () => (await submissionRow(id)).error === log);
       expect(judge.isClosed).toBe(false);
       await judge.close();
