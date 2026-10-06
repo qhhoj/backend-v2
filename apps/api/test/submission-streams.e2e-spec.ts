@@ -398,6 +398,35 @@ describe('submission event streams', () => {
     await client.next('done');
   });
 
+  it('drops a paused feed client under a flood, with memory bounded', async () => {
+    const submission = await seed('stream_a');
+    const { port } = api.app.getHttpServer().address() as AddressInfo;
+    const paused = httpRequest({ host: '127.0.0.1', port, path: EVENTS });
+    paused.on('error', () => undefined);
+    paused.on('response', (response) => {
+      response.socket.pause();
+      response.pause();
+    });
+    paused.end();
+    await waitUntil(() => streams.openCounts().feed === 1);
+    const rssBefore = process.memoryUsage().rss;
+    // Small batches: no single tick passes the cap, only the accumulated backlog can.
+    for (
+      let batch = 0;
+      batch < 3000 && streams.openCounts().feed === 1;
+      batch += 1
+    )
+      await Promise.all(
+        Array.from({ length: 200 }, () => publish(submission, 'done', 'D')),
+      );
+    await waitUntil(() => streams.openCounts().feed === 0, 5000);
+    global.gc?.();
+    expect(process.memoryUsage().rss - rssBefore).toBeLessThan(
+      200 * 1024 * 1024,
+    );
+    paused.destroy();
+  }, 60_000);
+
   it('closes every stream and its Redis listener on shutdown, and shutting down twice is harmless', async () => {
     const submission = await seed('stream_a');
     const subscribed = await open('owner', `${EVENTS}/${submission._id}`);

@@ -106,4 +106,22 @@ describe('openEventStream', () => {
     await expect(stream.closed).resolves.toBeUndefined();
     expect(writeHead).not.toHaveBeenCalled();
   });
+
+  it('drops a client whose backlog stays high although it keeps draining a little', async () => {
+    class TrickleResponse extends StalledResponse {
+      constructor() {
+        super();
+        Object.defineProperty(this, 'writableLength', { value: 20 * 1024 });
+      }
+      override write(): boolean {
+        return true;
+      }
+    }
+    const raw = new TrickleResponse();
+    const stream = openEventStream(replyOn(raw), 1024 * 1024, 40);
+    stream.send(sseFrame('done', {}));
+    const trickle = setInterval(() => raw.emit('drain'), 10);
+    await stream.closed.finally(() => clearInterval(trickle));
+    expect(raw.destroyed).toBe(true);
+  });
 });

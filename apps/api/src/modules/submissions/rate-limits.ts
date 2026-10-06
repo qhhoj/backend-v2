@@ -19,7 +19,7 @@ export interface StreamLimits {
   total: number;
   /** Open public-feed streams per api process (the feed needs no login, so it gets a tighter cap). */
   feedTotal: number;
-  /** Hard bound on the unsent bytes a client may hold (memory); a client that merely stops draining is dropped sooner, after `DRAIN_GRACE_MS`. The kernel's socket buffers hold more on top, per connection. */
+  /** Hard bound on a client's backlog (`response.writableLength`: output queue plus socket write buffer; memory); a client that merely stops draining is dropped sooner, after `DRAIN_GRACE_MS`. The kernel's socket buffers hold more on top, per connection. */
   maxBufferedBytes: number;
   heartbeatMs: number;
   /** How often submission streams re-check the session and the detail rules (five lookups per stream per tick, one stream after another, so a tick can outlast this and the next is skipped: keep it at tens of seconds). */
