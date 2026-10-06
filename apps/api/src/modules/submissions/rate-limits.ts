@@ -8,3 +8,30 @@ export const USER_LOCK_SECONDS = 10;
 
 /** Legacy `DMOJ_SUBMISSIONS_REJUDGE_LIMIT`: a bulk rejudge above this needs `judge.rejudge_submission_lot`. */
 export const BULK_REJUDGE_LIMIT = 10;
+
+/** Live event streams (`submission-streams.service.ts`); counted per api process. */
+export interface StreamLimits {
+  /** Open submission streams per signed-in user. */
+  perUser: number;
+  /** Open streams (feed and submissions) per client IP (`request.ip`, which honours `TRUST_PROXY`). */
+  perIp: number;
+  /** Open streams per api process. */
+  total: number;
+  /** Open public-feed streams per api process (the feed needs no login, so it gets a tighter cap). */
+  feedTotal: number;
+  /** Unsent bytes a client may hold before it is dropped. */
+  maxBufferedBytes: number;
+  heartbeatMs: number;
+  /** How often submission streams re-check the session and the detail rules (four lookups per stream per tick: keep it at tens of seconds). */
+  recheckMs: number;
+}
+export const STREAM_LIMITS = Symbol('STREAM_LIMITS');
+export const DEFAULT_STREAM_LIMITS: StreamLimits = {
+  perUser: 8,
+  perIp: 16,
+  total: 5000,
+  feedTotal: 1000,
+  maxBufferedBytes: 16 * 1024,
+  heartbeatMs: 15_000,
+  recheckMs: 60_000,
+};

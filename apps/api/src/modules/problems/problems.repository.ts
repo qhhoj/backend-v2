@@ -38,6 +38,16 @@ export class ProblemsRepository {
     return this.problems.findById(id).exec();
   }
 
+  /** The flags that put a problem's submissions on the public feed. */
+  findPublicity(
+    id: string,
+  ): Promise<Pick<Problem, 'isPublic' | 'isOrganizationPrivate'> | null> {
+    return this.problems
+      .findById(id, { isPublic: 1, isOrganizationPrivate: 1 })
+      .lean<Pick<Problem, 'isPublic' | 'isOrganizationPrivate'>>()
+      .exec();
+  }
+
   async list(
     filter: FilterQuery<Problem>,
     sort: Record<string, 1 | -1>,

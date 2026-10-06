@@ -9,6 +9,9 @@ import { SubmissionActionsController } from './submission-actions.controller';
 import { SubmissionActionsService } from './submission-actions.service';
 import { SubmissionCreateController } from './submission-create.controller';
 import { SubmissionCreateService } from './submission-create.service';
+import { DEFAULT_STREAM_LIMITS, STREAM_LIMITS } from './rate-limits';
+import { SubmissionStreamsController } from './submission-streams.controller';
+import { SubmissionStreamsService } from './submission-streams.service';
 import { SubmissionsController } from './submissions.controller';
 import { SubmissionsRepository } from './submissions.repository';
 import { SubmissionsService } from './submissions.service';
@@ -25,6 +28,7 @@ import { SubmissionsService } from './submissions.service';
     SubmissionCreateController,
     SubmissionsController,
     SubmissionActionsController,
+    SubmissionStreamsController,
   ],
   providers: [
     SubmissionsRepository,
@@ -32,6 +36,8 @@ import { SubmissionsService } from './submissions.service';
     SubmissionsService,
     SubmissionActionsService,
     RateLimitService,
+    SubmissionStreamsService,
+    { provide: STREAM_LIMITS, useValue: DEFAULT_STREAM_LIMITS },
   ],
 })
 export class SubmissionsApiModule {}

@@ -103,6 +103,18 @@ export class SubmissionsService {
     );
   }
 
+  /** The detail rules for a live stream, and whether case progress may be shown (every case result visible). */
+  async streamAccess(
+    principal: Principal,
+    id: string,
+  ): Promise<{ submission: SubmissionDocument; caseEvents: boolean }> {
+    const { submission, problem, canEdit } = await this.viewable(principal, id);
+    return {
+      submission,
+      caseEvents: caseVisibility(principal, problem, canEdit).cases === 'all',
+    };
+  }
+
   async source(
     principal: Principal,
     id: string,
