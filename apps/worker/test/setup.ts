@@ -24,7 +24,10 @@ const temporaryDirectory = (prefix: string) =>
 export async function setupWorkerTest({
   overrides = [],
   env = {},
+  seedBeforeBoot,
 }: {
+  /** Runs against the empty database and Redis before the module boots (no indexes yet, a queued job already waiting); Redis is then not flushed after boot. */
+  seedBeforeBoot?: (mongoUri: string) => Promise<void>;
   /** Extra environment variables (e.g. render limits), applied before the module compiles. */
   env?: Record<string, string>;
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
@@ -47,16 +50,21 @@ export async function setupWorkerTest({
     for (const root of Object.values(roots))
       rmSync(root, { recursive: true, force: true });
   };
+  const flushRedis = async () => {
+    const redis = new Redis(TEST_REDIS_URL);
+    await redis.flushdb();
+    await redis.quit();
+  };
   const builder = Test.createTestingModule({ imports: [WorkerModule] });
   for (const { provide, useValue } of overrides)
     builder.overrideProvider(provide).useValue(useValue);
   let testingModule: TestingModule | undefined;
   try {
+    await flushRedis();
+    await seedBeforeBoot?.(replSet.getUri('qhhoj'));
     testingModule = await builder.compile();
     await testingModule.init();
-    const redis = new Redis(TEST_REDIS_URL);
-    await redis.flushdb();
-    await redis.quit();
+    if (!seedBeforeBoot) await flushRedis();
   } catch (error) {
     await testingModule?.close();
     await cleanup();

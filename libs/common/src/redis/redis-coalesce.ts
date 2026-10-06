@@ -3,16 +3,20 @@ import { randomBytes } from 'node:crypto';
 import type Redis from 'ioredis';
 import { RELEASE_LOCK_SCRIPT } from './redis-lock';
 
-/** How long a crashed owner keeps the key; a live owner extends it every third of this while `work` runs, so no recompute length lets a second owner in. Its pending mark expires with it (the effects sweep catches up). */
+/** How long a crashed owner keeps the key; a live owner extends the lock and the pending mark every third of this while `work` runs, so no recompute length lets a second owner in. Its pending mark expires with it (the effects sweep catches up). */
 export const COALESCE_TTL_SECONDS = 60;
 
-const EXTEND_LOCK_SCRIPT =
-  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
+/** Owner-checked: extends the lock and, when present, the pending mark, so a visitor's mark never expires while the owner still runs (`EXPIRE` of a missing key is a no-op). */
+const EXTEND_SCRIPT =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('EXPIRE', KEYS[2], ARGV[2]) return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0";
 const logger = new Logger('RedisCoalesce');
+/** Redis failing around the work must not mask the work's own error or fail a run that succeeded: the lock expires on its own and the sweep recovers. */
+const logRedisFailure = (what: string) => (error: Error) =>
+  logger.error(`${what} failed: ${error.message}`);
 
 /**
  * Runs `work` for `key` so it never runs twice at once, across processes, and always runs once more after the last call: a caller marks the key dirty, then either becomes the owner, which reruns `work` until nobody marked it again, or leaves the work to the current owner and returns.
- * Recomputes are reads followed by `$set`; without this, two interleaved recomputes could write the older result last. Bursts collapse: 100 graded submissions on one problem cost a few stats recomputes, not 100.
+ * Recomputes are reads followed by `$set`; without this, two interleaved recomputes could write the older result last. Bursts collapse: 100 graded submissions on one problem cost a few stats recomputes, not 100. While marks keep arriving the owner keeps looping, so its caller (a queue job) stays busy; that is a hot key, not a hang.
  */
 export async function runCoalesced(
   redis: Redis,
@@ -29,7 +33,7 @@ export async function runCoalesced(
     const heartbeat = setInterval(
       () => {
         redis
-          .eval(EXTEND_LOCK_SCRIPT, 1, lockKey, token, ttlSeconds)
+          .eval(EXTEND_SCRIPT, 2, lockKey, dirtyKey, token, ttlSeconds)
           .catch((error: Error) =>
             logger.error(`Lock ${lockKey} extension failed: ${error.message}`),
           );
@@ -39,11 +43,13 @@ export async function runCoalesced(
     try {
       while ((await redis.getdel(dirtyKey)) !== null) await work();
     } catch (error) {
-      await markDirty();
+      await markDirty().catch(logRedisFailure(`Mark ${dirtyKey} restore`));
       throw error;
     } finally {
       clearInterval(heartbeat);
-      await redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, token);
+      await redis
+        .eval(RELEASE_LOCK_SCRIPT, 1, lockKey, token)
+        .catch(logRedisFailure(`Lock ${lockKey} release`));
     }
     // A caller that marked the key after the last check saw the lock held and left: run for it.
     if (!(await redis.exists(dirtyKey))) return;

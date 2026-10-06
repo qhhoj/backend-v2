@@ -98,7 +98,7 @@ describe('runCoalesced', () => {
     expect(work).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the lock of a recompute that outlives the time to live, so no second owner runs concurrently', async () => {
+  it('keeps the lock and the marks of visitors during a recompute that outlives the time to live: no second owner at once, and a run for the visitor after', async () => {
     let running = 0;
     let maxRunning = 0;
     let runs = 0;
@@ -110,7 +110,7 @@ describe('runCoalesced', () => {
       running -= 1;
     };
     const owner = runCoalesced(redis, key, work, 1);
-    await sleep(1700);
+    await sleep(500);
     await runCoalesced(otherProcess, key, work, 1);
     await owner;
     expect(maxRunning).toBe(1);

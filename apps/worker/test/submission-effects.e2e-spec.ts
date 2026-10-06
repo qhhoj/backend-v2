@@ -123,8 +123,8 @@ describe('submission effects', () => {
 
   it('recomputes problem stats like legacy update_stats: unlisted users left out, AC worth full points', async () => {
     const problem = await seedProblem(worker, { points: 1000 });
-    const [alice, bob, carol, erin] = await Promise.all(
-      [1, 2, 3, 4].map(() => seedUser(worker)),
+    const [alice, bob, carol, erin, frank] = await Promise.all(
+      [1, 2, 3, 4, 5].map(() => seedUser(worker)),
     );
     const dave = await seedUser(worker, { isUnlisted: true });
     await seedGraded(worker, alice._id, problem._id);
@@ -141,10 +141,16 @@ describe('submission effects', () => {
       casePoints: 1,
       caseTotal: 2,
     });
+    // Full cases but below the problem's points (re-pointed since): legacy `update_stats` does not count it.
+    await seedGraded(worker, frank._id, problem._id, {
+      points: 500,
+      casePoints: 1,
+      caseTotal: 1,
+    });
     await effects.recomputeProblem(problem._id);
     expect(await statsOf(problem._id)).toMatchObject({
       userCount: 2,
-      acRate: 60,
+      acRate: 50,
     });
   });
 

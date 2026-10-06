@@ -72,7 +72,7 @@ export class SubmissionEffectsRepository {
     await this.users.updateOne({ _id: userId }, { $set: points }).exec();
   }
 
-  /** Legacy `update_stats` counts over listed users: every submission, and the AC ones worth the problem's points with their distinct users. Listed means `$nin` of the unlisted users' ids, read through the partial index: unlisted users are few (staff and test accounts), so the list stays small. If they ever grow into the thousands, replace it with a `$lookup` of `users` on `user` filtered by `isUnlisted`. */
+  /** Legacy `update_stats` counts over listed users: every submission, and the AC ones worth the problem's points with their distinct users. Listed means `$nin` of the unlisted users' ids, read through the partial index: unlisted users are few (staff and test accounts), so the list stays small. A submission whose user has no `users` row counts as listed (legacy's join would drop it); only possible after a hard delete of a user. If they ever grow into the thousands, replace it with a `$lookup` of `users` on `user` filtered by `isUnlisted`. */
   async problemCounts(
     problemId: string,
     problemPoints: number,
