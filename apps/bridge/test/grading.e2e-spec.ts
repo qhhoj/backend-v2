@@ -1,9 +1,15 @@
 import type { Queue } from 'bullmq';
 import type { Problem, SubmissionCase } from '@libs/database';
-import { GRADED_ENQUEUE_TIMEOUT_MS } from '@libs/judging';
+import { TEST_REDIS_URL } from '@libs/common/testing';
+import {
+  GRADED_ENQUEUE_TIMEOUT_MS,
+  SubmissionEventsService,
+} from '@libs/judging';
+import { recordSubmissionEvents } from '@libs/judging/testing';
 import type { SubmissionGradedJob } from '@libs/judging';
 import {
   GradingService,
+  PROGRESS_EVENT_INTERVAL_MS,
   LOST_JUDGE_MESSAGE,
 } from '../src/submissions/grading.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
@@ -433,7 +439,11 @@ describe('Grading (bridge Mongo layer)', () => {
     const hanging = {
       add: () => new Promise<never>(() => undefined),
     } as unknown as Queue<SubmissionGradedJob>;
-    const offline = new GradingService(repository, hanging);
+    const offline = new GradingService(
+      repository,
+      hanging,
+      bridge.module.get(SubmissionEventsService),
+    );
     const { id } = await claimed();
     await grading.beginGrading(id, JUDGE, false);
     await grading.addCases(id, JUDGE, [reported(1)]);
@@ -442,5 +452,131 @@ describe('Grading (bridge Mongo layer)', () => {
     expect(Date.now() - started).toBeLessThan(GRADED_ENQUEUE_TIMEOUT_MS * 3);
     expect(await stored(id)).toMatchObject({ status: 'D', result: 'AC' });
     expect(await bridge.gradedJobs()).toEqual([]);
+  });
+
+  describe('events', () => {
+    let recorder: Awaited<ReturnType<typeof recordSubmissionEvents>>;
+    const eventsOf = (id: string) =>
+      recorder.events.filter((event) => event.submissionId === id);
+    const typesAndStatuses = (id: string) =>
+      eventsOf(id).map(({ type, status }) => [type, status]);
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+    beforeEach(async () => {
+      recorder = await recordSubmissionEvents(TEST_REDIS_URL);
+    });
+    afterEach(() => recorder.stop());
+
+    it('publishes each status change once, throttles progress and always sends done', async () => {
+      const { id, problem } = await claimed();
+      const trackedWhileClaimed = grading.trackedCount();
+      await grading.beginGrading(id, JUDGE, false);
+      const started = Date.now();
+      for (let position = 1; position <= 20; position += 1)
+        await grading.addCases(id, JUDGE, [reported(position)]);
+      const elapsed = Date.now() - started;
+      await grading.gradingEnd(id, JUDGE);
+      await grading.gradingEnd(id, JUDGE);
+      await recorder.waitFor(() =>
+        eventsOf(id).some((event) => event.type === 'done'),
+      );
+      await settle();
+      const events = eventsOf(id);
+      const types = events.map((event) => event.type);
+      expect(types.slice(0, 2)).toEqual(['processing', 'grading-begin']);
+      expect(types.at(-1)).toBe('done');
+      expect(types.filter((type) => type === 'done')).toHaveLength(1);
+      const progress = events.filter((event) => event.type === 'test-case');
+      expect(progress.length).toBeGreaterThanOrEqual(1);
+      expect(progress.length).toBeLessThanOrEqual(
+        Math.ceil(elapsed / PROGRESS_EVENT_INTERVAL_MS) + 1,
+      );
+      expect(progress[0].currentTestcase).toBe(2);
+      expect(events.at(-1)).toMatchObject({ status: 'D', currentTestcase: 0 });
+      for (const event of events) {
+        expect(Object.keys(event).sort()).toEqual([
+          'currentTestcase',
+          'problemId',
+          'status',
+          'submissionId',
+          'type',
+          'userId',
+        ]);
+        expect(event).toMatchObject({
+          userId: catalog.user._id,
+          problemId: problem._id,
+        });
+      }
+      expect(grading.trackedCount()).toBe(trackedWhileClaimed - 1);
+    });
+
+    it('publishes queued when a judge loss requeues, and done IE when the second loss fails it', async () => {
+      const { id } = await claimed();
+      const trackedWhileClaimed = grading.trackedCount();
+      expect(await grading.disconnected(id, JUDGE)).toBe('requeued');
+      const [queued] = await repository.loadQueued([id]);
+      await grading.claim(queued, JUDGE);
+      expect(await grading.disconnected(id, JUDGE)).toBe('failed');
+      await recorder.waitFor(() => eventsOf(id).length === 4);
+      expect(typesAndStatuses(id)).toEqual([
+        ['processing', 'P'],
+        ['queued', 'QU'],
+        ['processing', 'P'],
+        ['done', 'IE'],
+      ]);
+      expect(grading.trackedCount()).toBe(trackedWhileClaimed - 1);
+    });
+
+    it('publishes queued when an unsent claim is released', async () => {
+      const { id } = await claimed();
+      const trackedWhileClaimed = grading.trackedCount();
+      expect(await grading.release(id, 'judge-02')).toBe(false);
+      expect(await grading.release(id, JUDGE)).toBe(true);
+      await recorder.waitFor(() => eventsOf(id).length === 2);
+      expect(typesAndStatuses(id)).toEqual([
+        ['processing', 'P'],
+        ['queued', 'QU'],
+      ]);
+      expect(grading.trackedCount()).toBe(trackedWhileClaimed - 1);
+    });
+
+    it('publishes queued for every submission a start or a resync returns to the queue without a judge loss', async () => {
+      const { id: stranded } = await claimed();
+      const { id: other } = await claimed();
+      const claims = (await repository.inFlightClaims()).filter(
+        (claim) => claim.id === stranded,
+      );
+      await grading.announceRequeued(await repository.resetStranded(claims));
+      await recorder.waitFor(() =>
+        eventsOf(stranded).some((event) => event.type === 'queued'),
+      );
+      expect(typesAndStatuses(stranded)).toEqual([
+        ['processing', 'P'],
+        ['queued', 'QU'],
+      ]);
+      expect(typesAndStatuses(other)).toEqual([['processing', 'P']]);
+      await grading.announceRequeued(await repository.resetInFlight());
+      await recorder.waitFor(() =>
+        eventsOf(other).some((event) => event.type === 'queued'),
+      );
+      expect(typesAndStatuses(other)).toEqual([
+        ['processing', 'P'],
+        ['queued', 'QU'],
+      ]);
+      expect(await stored(other)).toMatchObject({
+        status: 'QU',
+        requeueCount: 0,
+      });
+    });
+
+    it('publishes nothing for packets of a judge that does not hold the submission', async () => {
+      const { id } = await claimed();
+      await grading.beginGrading(id, 'judge-02', false);
+      await grading.compileError(id, 'judge-02', 'nope');
+      await settle();
+      expect(eventsOf(id).map((event) => event.type)).toEqual(['processing']);
+      await grading.compileError(id, JUDGE, 'error: expected ;');
+      await recorder.waitFor(() => eventsOf(id).length === 2);
+      expect(eventsOf(id)[1]).toMatchObject({ type: 'done', status: 'CE' });
+    });
   });
 });

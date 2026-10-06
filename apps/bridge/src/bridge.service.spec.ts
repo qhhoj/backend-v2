@@ -16,16 +16,17 @@ function setup() {
   const inFlightClaims = jest.fn(
     record('inFlightClaims', [] as Array<{ id: string; judgedOn: string }>),
   );
-  const resetStranded = jest.fn(record('resetStranded', 0));
+  const resetStranded = jest.fn(record('resetStranded', []));
   const heldIds = jest.fn((): string[] => []);
   const services = {
     judges: { setAllOffline: record('setAllOffline', undefined) },
     submissions: {
-      resetInFlight: record('resetInFlight', 0),
+      resetInFlight: record('resetInFlight', []),
       loadQueued,
       inFlightClaims,
       resetStranded,
     },
+    grading: { announceRequeued: jest.fn() },
     dispatch: {
       enqueue: record('enqueue', undefined),
       hasQueued: () => false,
@@ -51,6 +52,7 @@ function setup() {
     services.server as never,
     services.judges as never,
     services.submissions as never,
+    services.grading as never,
   );
   return { bridge, calls, services };
 }
@@ -81,6 +83,32 @@ describe('BridgeService', () => {
       'enqueue',
       'commands.start',
       'acceptJudges',
+    ]);
+    await bridge.onModuleDestroy();
+  });
+
+  it('announces the submissions a start and a resync return to the queue', async () => {
+    const { bridge, services } = setup();
+    const subject = (submissionId: string) => ({
+      submissionId,
+      userId: 'user',
+      problemId: 'problem',
+    });
+    services.submissions.resetInFlight = jest.fn(() =>
+      Promise.resolve([subject('interrupted')]),
+    ) as never;
+    await bridge.onApplicationBootstrap();
+    expect(services.grading.announceRequeued).toHaveBeenLastCalledWith([
+      subject('interrupted'),
+    ]);
+    const ghost = { id: 'ghost', judgedOn: 'judge-01' };
+    services.submissions.inFlightClaims.mockResolvedValue([ghost]);
+    services.submissions.resetStranded.mockResolvedValue([
+      subject('ghost'),
+    ] as never);
+    await tick(2);
+    expect(services.grading.announceRequeued).toHaveBeenLastCalledWith([
+      subject('ghost'),
     ]);
     await bridge.onModuleDestroy();
   });

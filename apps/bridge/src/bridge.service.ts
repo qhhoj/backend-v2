@@ -6,6 +6,7 @@ import { CommandsService } from './dispatch/commands.service';
 import { DispatchService } from './dispatch/dispatch.service';
 import { JudgeServerService } from './judges/judge-server.service';
 import { JudgesRepository } from './judges/judges.repository';
+import { GradingService } from './submissions/grading.service';
 import { SubmissionsRepository } from './submissions/submissions.repository';
 
 /** Start and stop order of the bridge, in one place. Mongo is the queue's truth: a start rebuilds the in-memory queue from it and a resync keeps reading it. */
@@ -23,6 +24,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly server: JudgeServerService,
     private readonly judges: JudgesRepository,
     private readonly submissions: SubmissionsRepository,
+    private readonly grading: GradingService,
   ) {}
 
   /** The port is bound first, so a second process dies on EADDRINUSE before touching Mongo; connecting judges wait. Then judges offline and P/G back to QU; the stream position is read before the queue is rebuilt, so a command published meanwhile is not missed; judges are served last. */
@@ -30,6 +32,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     const port = await this.server.listen();
     await this.judges.setAllOffline();
     const requeued = await this.submissions.resetInFlight();
+    await this.grading.announceRequeued(requeued);
     const position = await this.commands.position();
     await this.dispatch.enqueue(await this.submissions.loadQueued());
     this.commands.start(position);
@@ -39,7 +42,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     );
     this.server.acceptJudges();
     this.logger.log(
-      `Judges connect on port ${port}; ${requeued} interrupted submissions requeued`,
+      `Judges connect on port ${port}; ${requeued.length} interrupted submissions requeued`,
     );
   }
 
@@ -86,7 +89,10 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     const stranded = unheld.filter((claim) => this.unheldBefore.has(claim.id));
     this.unheldBefore = new Set(unheld.map((claim) => claim.id));
     if (!stranded.length) return;
-    const count = await this.submissions.resetStranded(stranded);
-    this.logger.warn(`Resync requeued ${count} submissions no judge held`);
+    const requeued = await this.submissions.resetStranded(stranded);
+    await this.grading.announceRequeued(requeued);
+    this.logger.warn(
+      `Resync requeued ${requeued.length} submissions no judge held`,
+    );
   }
 }

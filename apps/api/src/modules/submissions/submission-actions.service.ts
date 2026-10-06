@@ -16,6 +16,8 @@ import {
   gradedJobOf,
   notifyGraded,
   SUBMISSION_GRADED_QUEUE,
+  submissionEvent,
+  SubmissionEventsService,
 } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import type { FilterQuery } from 'mongoose';
@@ -62,6 +64,7 @@ export class SubmissionActionsService {
     private readonly problems: ProblemsService,
     private readonly visibility: SubmissionsService,
     private readonly commands: BridgeCommandsService,
+    private readonly events: SubmissionEventsService,
     @InjectQueue(SUBMISSION_GRADED_QUEUE)
     private readonly graded: Queue<SubmissionGradedJob>,
   ) {}
@@ -76,8 +79,12 @@ export class SubmissionActionsService {
     )
       throw new AppError('forbidden', 403, 'You cannot abort this submission');
     if (!UNFINISHED_STATUSES.includes(submission.status)) return;
-    if (await this.submissions.abortQueued(id))
+    if (await this.submissions.abortQueued(id)) {
       await this.notifyGraded(submission);
+      await this.events.publish(
+        submissionEvent(gradedJobOf(submission), 'done', 'AB'),
+      );
+    }
     await this.commands.publish({ type: 'abort', submissionId: id });
   }
 
@@ -98,6 +105,9 @@ export class SubmissionActionsService {
     )
       throw new AppError('conflict', 409, 'The submission is being judged');
     await this.commands.judge([id]);
+    await this.events.publish(
+      submissionEvent(gradedJobOf(submission), 'queued', 'QU'),
+    );
   }
 
   /** `judge.reject_submission` on an editable problem, once judging is over. */
@@ -114,9 +124,12 @@ export class SubmissionActionsService {
         'The submission is still being judged',
       );
     await this.notifyGraded(submission);
+    await this.events.publish(
+      submissionEvent(gradedJobOf(submission), 'done', submission.status),
+    );
   }
 
-  /** Every matching submission of one problem, at batch priority; above `BULK_REJUDGE_LIMIT` needs `judge.rejudge_submission_lot`. */
+  /** Every matching submission of one problem, at batch priority; publishes no events (up to 100k `queued` would flood every feed; pages see `processing` from the bridge); above `BULK_REJUDGE_LIMIT` needs `judge.rejudge_submission_lot`. */
   async bulkRejudge(
     principal: Principal,
     dto: BulkRejudgeDto,

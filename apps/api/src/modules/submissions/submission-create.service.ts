@@ -4,7 +4,11 @@ import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, RateLimitService, REDIS, withRedisLock } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import { BridgeCommandsService } from '@libs/judging';
+import {
+  BridgeCommandsService,
+  submissionEvent,
+  SubmissionEventsService,
+} from '@libs/judging';
 import { JudgesRepository } from '../judges/judges.repository';
 import { LanguagesQuerier } from '../problems/languages.querier';
 import { ProblemAccess } from '../problems/problem-access';
@@ -34,6 +38,7 @@ export class SubmissionCreateService {
     private readonly judges: JudgesRepository,
     private readonly submissions: SubmissionsRepository,
     private readonly commands: BridgeCommandsService,
+    private readonly events: SubmissionEventsService,
     private readonly rateLimit: RateLimitService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
@@ -93,6 +98,13 @@ export class SubmissionCreateService {
           },
         );
     await this.commands.judge([id], dto.judgeId ?? null);
+    await this.events.publish(
+      submissionEvent(
+        { submissionId: id, userId: principal.userId, problemId: problem._id },
+        'queued',
+        'QU',
+      ),
+    );
     return { id };
   }
 

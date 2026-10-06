@@ -165,10 +165,7 @@ export class DispatchService {
     }
     if (judge.isClosed || this.judges.get(judge.name) !== judge) {
       judge.workingOn = null; // it never saw the submission, so a later close must not requeue it
-      if (
-        request &&
-        (await this.submissions.release(submission.id, judge.name))
-      )
+      if (request && (await this.grading.release(submission.id, judge.name)))
         await this.enqueue([submission]);
       return;
     }

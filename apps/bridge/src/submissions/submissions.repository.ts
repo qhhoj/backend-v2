@@ -21,7 +21,8 @@ import type { SubmissionRequest } from '../protocol/judge-packets';
 export const MAX_REQUEUES = 1;
 /** `failed`: the submission's data vanished, so it was finished as IE and still needs its graded job. */
 export type ClaimOutcome =
-  { request: SubmissionRequest } | { failed: SubmissionGradedJob };
+  | { request: SubmissionRequest; subject: SubmissionGradedJob }
+  | { failed: SubmissionGradedJob };
 /** A P/G row and the judge it names. */
 export interface InFlightClaim {
   id: string;
@@ -179,7 +180,7 @@ export class SubmissionsRepository {
       fileOnly: false,
       fileSizeLimit: 0,
     };
-    return { request };
+    return { request, subject: gradedJobOf(submission) };
   }
 
   /** The judge vanished between the claim and the request: back to the queue without spending the requeue (the judge never saw it). */
@@ -329,13 +330,16 @@ export class SubmissionsRepository {
     return modifiedCount === 1;
   }
 
-  /** Bridge start: whatever was handed to a judge before the stop goes back to the queue. Not a judge failure, so `requeueCount` is untouched and nothing becomes IE. */
-  async resetInFlight(): Promise<number> {
-    const { modifiedCount } = await this.submissions.updateMany(
-      { status: IN_FLIGHT },
+  /** Bridge start: whatever was handed to a judge before the stop goes back to the queue, and is returned so its requeue can be announced. Not a judge failure, so `requeueCount` is untouched and nothing becomes IE. */
+  async resetInFlight(): Promise<SubmissionGradedJob[]> {
+    const rows = await this.submissions
+      .find({ status: IN_FLIGHT }, { user: 1, problem: 1 })
+      .lean();
+    await this.submissions.updateMany(
+      { _id: { $in: rows.map((row) => row._id) }, status: IN_FLIGHT },
       { $set: REQUEUE_RESET },
     );
-    return modifiedCount;
+    return rows.map(gradedJobOf);
   }
 
   async inFlightClaims(): Promise<InFlightClaim[]> {
@@ -348,16 +352,19 @@ export class SubmissionsRepository {
     }));
   }
 
-  /** Resync: P/G rows no connected judge works on go back to QU like a start-up reset. Each write still requires the row to be in flight under the judge it was read with, so a row that moved on meanwhile is left alone. */
-  async resetStranded(claims: InFlightClaim[]): Promise<number> {
-    const results = await Promise.all(
+  /** Resync: P/G rows no connected judge works on go back to QU like a start-up reset; those that did are returned. Each write still requires the row to be in flight under the judge it was read with, so a row that moved on meanwhile is left alone. */
+  async resetStranded(claims: InFlightClaim[]): Promise<SubmissionGradedJob[]> {
+    const rows = await Promise.all(
       claims.map(({ id, judgedOn }) =>
-        this.submissions.updateOne(
-          { _id: id, status: IN_FLIGHT, judgedOn },
-          { $set: REQUEUE_RESET },
-        ),
+        this.submissions
+          .findOneAndUpdate(
+            { _id: id, status: IN_FLIGHT, judgedOn },
+            { $set: REQUEUE_RESET },
+            { projection: { user: 1, problem: 1 } },
+          )
+          .lean(),
       ),
     );
-    return results.filter(({ modifiedCount }) => modifiedCount === 1).length;
+    return rows.flatMap((row) => (row ? [gradedJobOf(row)] : []));
   }
 }
