@@ -4,6 +4,7 @@ import { startMongo } from '../testing';
 import { newId } from '../uuid';
 import {
   MAX_CASE_FEEDBACK_LENGTH,
+  MAX_CASE_TEXT_LENGTH,
   MAX_SOURCE_LENGTH,
   SubmissionSchema,
 } from './submission.schema';
@@ -21,6 +22,7 @@ describe('Submission schemas', () => {
     problem: newId(),
     language: newId(),
   });
+  const cjk = (characters: number) => '漢'.repeat(characters);
   const acceptedCase = {
     position: 1,
     status: 'AC',
@@ -70,6 +72,22 @@ describe('Submission schemas', () => {
         ],
       },
     ],
+    // 3 bytes per character: under the character limit, over the byte limit
+    [
+      {
+        cases: [
+          { ...acceptedCase, feedback: cjk(MAX_CASE_FEEDBACK_LENGTH / 2) },
+        ],
+      },
+    ],
+    [
+      {
+        cases: [
+          { ...acceptedCase, extendedFeedback: cjk(MAX_CASE_TEXT_LENGTH / 2) },
+        ],
+      },
+    ],
+    [{ cases: [{ ...acceptedCase, output: cjk(MAX_CASE_TEXT_LENGTH / 2) }] }],
   ])('rejects %j', async (fields) => {
     await expect(
       Submissions.create({ ...references(), ...fields }),

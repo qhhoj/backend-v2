@@ -56,7 +56,13 @@ export const SUBMISSION_PRIORITY = {
   batchRejudge: 3,
 } as const;
 export const MAX_SOURCE_LENGTH = 65536;
+/** Bytes, not characters: bounds the 10000-case submission document under Mongo's 16 MB. */
 export const MAX_CASE_FEEDBACK_LENGTH = 50;
+export const MAX_CASE_TEXT_LENGTH = 512;
+const withinBytes = (limit: number) => ({
+  validator: (text: string) => Buffer.byteLength(text) <= limit,
+  message: `exceeds ${limit} bytes`,
+});
 
 @Schema({ _id: false })
 export class SubmissionCase {
@@ -69,10 +75,12 @@ export class SubmissionCase {
   @Prop({ default: 0 }) total!: number;
   /** Batch number (1-based) or null for a case outside any batch. */
   @Prop({ type: Number, default: null }) batch!: number | null;
-  @Prop({ default: '', maxlength: MAX_CASE_FEEDBACK_LENGTH })
+  @Prop({ default: '', validate: withinBytes(MAX_CASE_FEEDBACK_LENGTH) })
   feedback!: string;
-  @Prop({ default: '' }) extendedFeedback!: string;
-  @Prop({ default: '' }) output!: string;
+  @Prop({ default: '', validate: withinBytes(MAX_CASE_TEXT_LENGTH) })
+  extendedFeedback!: string;
+  @Prop({ default: '', validate: withinBytes(MAX_CASE_TEXT_LENGTH) })
+  output!: string;
 }
 export const SubmissionCaseSchema =
   SchemaFactory.createForClass(SubmissionCase);
@@ -119,7 +127,7 @@ export class Submission {
 }
 
 export const SubmissionSchema = SchemaFactory.createForClass(Submission);
-// Lists sort by `-_id` (UUIDv7 is time-ordered), so these `_id` indexes replace date indexes.
+// Lists sort by `-_id` (UUIDv7 is time-ordered), so the `_id` indexes replace the spec's `{user, date}` and `{problem, date}`; `{date}` stays for date-range reports.
 SubmissionSchema.index({ user: 1, _id: -1 });
 SubmissionSchema.index({ problem: 1, _id: -1 });
 SubmissionSchema.index({ user: 1, status: 1 });

@@ -1,4 +1,5 @@
 import { UUID } from 'mongodb';
+import mongoose from 'mongoose';
 import { isUuid, newId, toUuid, uuidStr } from './uuid';
 
 describe('uuid', () => {
@@ -22,10 +23,41 @@ describe('uuid', () => {
     });
     expect(uuidStr(mongooseBuffer)).toBe(id);
   });
-  it('recognises uuids of any version and nothing else', () => {
-    expect(isUuid(newId())).toBe(true);
-    expect(isUuid('6F9619FF-8B86-D011-B42D-00C04FC964FF')).toBe(true);
-    for (const value of ['', 'abc', `${newId()}x`, newId().replace(/-/g, '')])
-      expect(isUuid(value)).toBe(false);
+  describe('isUuid', () => {
+    const Probe = mongoose.model(
+      'UuidProbe',
+      new mongoose.Schema({ _id: mongoose.Schema.Types.UUID }),
+    );
+    const mongooseCasts = (value: string) => {
+      try {
+        Probe.findById(value).cast(Probe);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    // Mongoose's own matcher is unanchored, so it also casts `<uuid>x`; isUuid must not.
+    it.each([
+      [newId(), true],
+      ['6F9619FF-8B86-4011-B42D-00C04FC964FF', true],
+      ['6f9619ff-8b86-4011-b42d-00c04fc964ff', true],
+      ['6F9619FF-8B86-D011-B42D-00C04FC964FF', false],
+      ['00000000-0000-0000-0000-000000000000', false],
+      ['ffffffff-ffff-ffff-ffff-ffffffffffff', false],
+      ['', false],
+      ['abc', false],
+      [`${newId()}x`, false],
+      [newId().replace(/-/g, ''), false],
+    ])('isUuid(%s) is %s', (value, expected) => {
+      expect(isUuid(value)).toBe(expected);
+      if (expected) expect(mongooseCasts(value)).toBe(true);
+    });
+    it('rejects ids Mongoose cannot cast', () => {
+      for (const value of [
+        '6F9619FF-8B86-D011-B42D-00C04FC964FF',
+        '00000000-0000-0000-0000-000000000000',
+      ])
+        expect([isUuid(value), mongooseCasts(value)]).toEqual([false, false]);
+    });
   });
 });
