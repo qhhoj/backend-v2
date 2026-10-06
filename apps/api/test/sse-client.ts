@@ -21,18 +21,6 @@ export interface SseClient {
   close(): void;
 }
 
-export const waitUntil = async (
-  condition: () => boolean | Promise<boolean>,
-  timeoutMs = 3000,
-): Promise<void> => {
-  const deadline = Date.now() + timeoutMs;
-  while (!(await condition())) {
-    if (Date.now() > deadline)
-      throw new Error(`Condition not met within ${timeoutMs} ms`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-};
-
 /** A real HTTP client: supertest waits for the end of a body, which a stream never reaches. */
 export function openStream(
   api: ApiTest,

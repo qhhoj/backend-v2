@@ -3,7 +3,7 @@ import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { Submission, SubmissionResult } from '@libs/database';
+import type { Submission } from '@libs/database';
 import { LanguagesQuerier } from '../problems/languages.querier';
 import { ProblemsRepository } from '../problems/problems.repository';
 import { caseVisibility } from '../submissions/submission-access';
@@ -109,7 +109,7 @@ export class ApiV2SubmissionsService {
       user: query.user,
       problem: query.problem,
       language: languageIds,
-      result: query.result as SubmissionResult[] | undefined,
+      result: query.result,
     });
   }
 

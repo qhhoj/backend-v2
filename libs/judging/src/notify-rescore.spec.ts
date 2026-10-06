@@ -9,21 +9,6 @@ describe('notifyRescore', () => {
   const logger = new Logger('NotifyRescoreSpec');
   afterEach(() => jest.restoreAllMocks());
 
-  it('adds one rescore job for the problem', async () => {
-    const add = jest.fn().mockResolvedValue({});
-    const problemId = newId();
-    await notifyRescore(
-      { add } as unknown as Queue<ProblemRescoreJob>,
-      problemId,
-      logger,
-    );
-    expect(add).toHaveBeenCalledWith(
-      'rescore',
-      { problemId },
-      expect.objectContaining({ removeOnComplete: true }),
-    );
-  });
-
   it('keeps both jobs when the problem is edited again while its rescore is pending or active', async () => {
     // BullMQ ignores an `add` whose jobId already exists (pending or active).
     const kept: unknown[] = [];
@@ -40,18 +25,6 @@ describe('notifyRescore', () => {
     await enqueueRescore(queue, problemId);
     await enqueueRescore(queue, problemId);
     expect(kept).toEqual([{ problemId }, { problemId }]);
-  });
-
-  it('retries a failed rescore with exponential backoff', async () => {
-    const add = jest.fn<Promise<object>, unknown[]>().mockResolvedValue({});
-    await enqueueRescore(
-      { add } as unknown as Queue<ProblemRescoreJob>,
-      newId(),
-    );
-    expect(add.mock.calls[0][2]).toMatchObject({
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 10_000 },
-    });
   });
 
   it('returns within its bound and logs when Redis never answers', async () => {

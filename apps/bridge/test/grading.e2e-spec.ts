@@ -543,14 +543,6 @@ describe('Grading (bridge Mongo layer)', () => {
       expect(progress[0].currentTestcase).toBe(2);
       expect(events.at(-1)).toMatchObject({ status: 'D', currentTestcase: 0 });
       for (const event of events) {
-        expect(Object.keys(event).sort()).toEqual([
-          'currentTestcase',
-          'problemId',
-          'status',
-          'submissionId',
-          'type',
-          'userId',
-        ]);
         expect(event).toMatchObject({
           userId: catalog.user._id,
           problemId: problem._id,

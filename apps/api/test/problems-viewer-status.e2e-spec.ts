@@ -88,6 +88,16 @@ describe('viewerStatus', () => {
       new Set([null]),
     ));
 
+  it('costs an anonymous viewer no submissions query', async () => {
+    const db = api.app.get<Connection>(getConnectionToken()).db!;
+    const operations = await profileQueries(db, async () => {
+      await statusesFor(null);
+    });
+    expect(
+      operations.filter(({ collection }) => collection === 'submissions'),
+    ).toEqual([]);
+  });
+
   it('shows the same status on the detail', async () => {
     const detail = (code: string, who: TestSession | null) => {
       const request = api.http().get(`${PROBLEMS}/${code}`);

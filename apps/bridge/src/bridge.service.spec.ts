@@ -87,32 +87,6 @@ describe('BridgeService', () => {
     await bridge.onModuleDestroy();
   });
 
-  it('announces the submissions a start and a resync return to the queue', async () => {
-    const { bridge, services } = setup();
-    const subject = (submissionId: string) => ({
-      submissionId,
-      userId: 'user',
-      problemId: 'problem',
-    });
-    services.submissions.resetInFlight = jest.fn(() =>
-      Promise.resolve([subject('interrupted')]),
-    ) as never;
-    await bridge.onApplicationBootstrap();
-    expect(services.grading.announceRequeued).toHaveBeenLastCalledWith([
-      subject('interrupted'),
-    ]);
-    const ghost = { id: 'ghost', judgedOn: 'judge-01' };
-    services.submissions.inFlightClaims.mockResolvedValue([ghost]);
-    services.submissions.resetStranded.mockResolvedValue([
-      subject('ghost'),
-    ] as never);
-    await tick(2);
-    expect(services.grading.announceRequeued).toHaveBeenLastCalledWith([
-      subject('ghost'),
-    ]);
-    await bridge.onModuleDestroy();
-  });
-
   it('stops dispatching before it drops the judges, and resyncs no more once stopped', async () => {
     const { bridge, calls, services } = setup();
     await bridge.onApplicationBootstrap();

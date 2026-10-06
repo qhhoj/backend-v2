@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { sha256 } from '@libs/auth';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { BridgeCommandsService } from '@libs/judging';
+import { recordSubmissionEvents } from '@libs/judging/testing';
 import { FakeJudge } from './fake-judge';
 import {
   seedCatalog,
@@ -78,6 +79,44 @@ describe('Bridge restart', () => {
       (await bridge.gradedJobs()).map((job) => job.submissionId),
     ).not.toContain(id);
     await again.close();
+  });
+
+  describe('announces the submissions it returns to the queue', () => {
+    let recorder: Awaited<ReturnType<typeof recordSubmissionEvents>>;
+    beforeEach(async () => {
+      recorder = await recordSubmissionEvents(TEST_REDIS_URL);
+    });
+    afterEach(() => recorder.stop());
+    const queuedEventsOf = (id: string) =>
+      recorder.events.filter(
+        (event) => event.submissionId === id && event.type === 'queued',
+      );
+
+    it('a start announces the P/G rows it resets', async () => {
+      const problem = await seedProblem(bridge, catalog, { code: 'announce1' });
+      const { _id: id } = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+        status: 'G',
+        judgedOn: 'gone',
+      });
+      await bridge.restart();
+      await recorder.waitFor(() => queuedEventsOf(id).length === 1);
+      expect(queuedEventsOf(id)[0]).toMatchObject({
+        status: 'QU',
+        problemId: problem._id,
+      });
+    });
+
+    it('a resync announces a P/G row no judge holds', async () => {
+      const problem = await seedProblem(bridge, catalog, { code: 'announce2' });
+      const { _id: id } = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+        status: 'P',
+        judgedOn: 'ghost',
+      });
+      await recorder.waitFor(() => queuedEventsOf(id).length === 1);
+      expect(await submissionRow(id)).toMatchObject({ status: 'QU' });
+    });
   });
 
   it('marks judges a crashed bridge left online as offline', async () => {

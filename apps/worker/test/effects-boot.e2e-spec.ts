@@ -63,7 +63,11 @@ describe('submission effects at boot', () => {
     const queue = new Queue(SUBMISSION_GRADED_QUEUE, {
       connection: { url: TEST_REDIS_URL },
     });
-    expect(await queue.getFailedCount()).toBe(0);
+    // waitUntil's 5 s is shorter than the 10 s first backoff: a failed first attempt would still sit in `delayed`.
+    expect(await queue.getJobCounts('failed', 'delayed')).toEqual({
+      failed: 0,
+      delayed: 0,
+    });
     await queue.close();
   });
 });

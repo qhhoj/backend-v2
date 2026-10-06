@@ -22,6 +22,9 @@ export const IS_SOLVED = {
   $and: [{ $eq: ['$result', 'AC'] }, { $gte: ['$casePoints', '$caseTotal'] }],
 };
 
+/** `$group` accumulator: 1 when some submission of the group is solved, else 0. */
+export const ANY_SOLVED = { $max: { $cond: [IS_SOLVED, 1, 0] } };
+
 /** Legacy `Profile.calculate_points`: positive bests sorted descending; `points` sums them all, performance points weigh the first 300 by 0.98514^rank and add 0.05 per solved problem. V8's `**` differs from CPython's `pow` by 1 ulp on some ranks (~1e-12, far below legacy's 1e-6 float_compare), so recomputed legacy values may churn at that level. */
 export function userPoints(bests: readonly ProblemBest[]): UserPoints {
   const earned = bests

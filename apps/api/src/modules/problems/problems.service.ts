@@ -30,7 +30,7 @@ import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';
 import { ProblemTypesQuerier } from './problem-types.querier';
 import { ViewerStatusRepository } from './viewer-status.repository';
-import type { ViewerStatus } from './viewer-status.repository';
+import type { ViewerMark } from './viewer-status.repository';
 
 const byField =
   <Item>(field: keyof Item) =>
@@ -186,10 +186,10 @@ export class ProblemsService {
   private viewerStatusesOf(
     principal: Principal | null,
     problemIds: string[],
-  ): Promise<Map<string, Exclude<ViewerStatus, null>>> {
+  ): Promise<Map<string, ViewerMark>> {
     return principal
       ? this.viewerStatuses.statusesOf(principal.userId, problemIds)
-      : Promise.resolve(new Map<string, Exclude<ViewerStatus, null>>());
+      : Promise.resolve(new Map<string, ViewerMark>());
   }
 
   private canEdit(principal: Principal | null, problem: Problem): boolean {

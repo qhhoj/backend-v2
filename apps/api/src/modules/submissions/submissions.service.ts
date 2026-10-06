@@ -23,10 +23,11 @@ import {
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
+/** `result` and `status` only feed `$in`, so they stay plain strings: `/api/v2` passes the raw query values. */
 export type SubmissionFilters = Pick<
   SubmissionListQueryDto,
-  'user' | 'problem' | 'language' | 'result' | 'status'
->;
+  'user' | 'problem' | 'language'
+> & { result?: readonly string[]; status?: readonly string[] };
 
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
 

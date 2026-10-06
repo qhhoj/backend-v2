@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Problem, Submission, toUuid, User, uuidStr } from '@libs/database';
-import { IS_SOLVED } from '@libs/judging';
+import { ANY_SOLVED } from '@libs/judging';
 import type { ProblemBest, UserPoints } from '@libs/judging';
 
 export type EffectsProblem = Pick<
@@ -62,7 +62,7 @@ export class SubmissionEffectsRepository {
         $group: {
           _id: '$problem',
           maxPoints: { $max: '$points' },
-          solved: { $max: { $cond: [IS_SOLVED, 1, 0] } },
+          solved: ANY_SOLVED,
         },
       },
       {

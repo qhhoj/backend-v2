@@ -63,6 +63,7 @@ describe('problem rescore at boot', () => {
     const queue = new Queue(PROBLEM_RESCORE_QUEUE, {
       connection: { url: TEST_REDIS_URL },
     });
+    // waitUntil's 5 s is shorter than the 10 s first backoff: a failed first attempt would still sit in `delayed`.
     expect(await queue.getJobCounts('failed', 'delayed')).toEqual({
       failed: 0,
       delayed: 0,

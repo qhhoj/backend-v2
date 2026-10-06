@@ -2,10 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Submission, toUuid, uuidStr } from '@libs/database';
-import { IS_SOLVED } from '@libs/judging';
+import { ANY_SOLVED } from '@libs/judging';
 
 /** Legacy `user_completed_ids` / `user_attempted_ids`: solved = some AC whose cases earned everything, attempted = any other submission (compile errors and queued ones included). */
-export type ViewerStatus = 'solved' | 'attempted' | null;
+export type ViewerMark = 'solved' | 'attempted';
+export type ViewerStatus = ViewerMark | null;
 
 @Injectable()
 export class ViewerStatusRepository {
@@ -18,7 +19,7 @@ export class ViewerStatusRepository {
   async statusesOf(
     userId: string,
     problemIds: string[],
-  ): Promise<Map<string, Exclude<ViewerStatus, null>>> {
+  ): Promise<Map<string, ViewerMark>> {
     if (!problemIds.length) return new Map();
     const rows = await this.submissions.aggregate<{
       _id: unknown;
@@ -33,7 +34,7 @@ export class ViewerStatusRepository {
       {
         $group: {
           _id: '$problem',
-          solved: { $max: { $cond: [IS_SOLVED, 1, 0] } },
+          solved: ANY_SOLVED,
         },
       },
     ]);

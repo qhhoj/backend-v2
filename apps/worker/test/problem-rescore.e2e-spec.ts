@@ -208,11 +208,17 @@ describe('problem rescore', () => {
     expect(await userPointsOf(userIds[0])).toBe(1000);
   }, 120_000);
 
-  it('the rescore queued by the last edit settles the points', async () => {
-    // Relies on processor concurrency 1 and FIFO only: the harness flushes Redis after boot, dropping the global concurrency.
-    const queue = worker.module.get<Queue<ProblemRescoreJob>>(
+  const queueOf = () =>
+    worker.module.get<Queue<ProblemRescoreJob>>(
       getQueueToken(PROBLEM_RESCORE_QUEUE),
     );
+  const drained = async () => {
+    const counts = await queueOf().getJobCounts('waiting', 'active', 'delayed');
+    return counts.waiting + counts.active + counts.delayed === 0;
+  };
+
+  it('the rescore queued by an edit made during the previous rescore settles the points', async () => {
+    const queue = queueOf();
     const user = await seedUser(worker);
     const problem = await seedProblem(worker, { points: 1000, partial: true });
     await insertGradedRows(worker, 5000, () => ({
@@ -223,14 +229,24 @@ describe('problem rescore', () => {
       casePoints: 1,
       caseTotal: 2,
     }));
-    await worker.problems.updateOne({ _id: problem._id }, { points: 1600 });
-    await enqueueRescore(queue, problem._id);
-    await worker.problems.updateOne({ _id: problem._id }, { points: 3000 });
-    await enqueueRescore(queue, problem._id);
-    await waitUntil(async () => {
-      const counts = await queue.getJobCounts('waiting', 'active', 'delayed');
-      return counts.waiting + counts.active + counts.delayed === 0;
-    }, 60_000);
+    // The second edit lands while the first job is active: a dropped (deduplicated) second job leaves 800.
+    const rescore = rescores.rescore.bind(rescores);
+    const spy = jest
+      .spyOn(rescores, 'rescore')
+      .mockImplementationOnce(async (problemId) => {
+        const result = await rescore(problemId);
+        await worker.problems.updateOne({ _id: problemId }, { points: 3000 });
+        await enqueueRescore(queue, problemId);
+        return result;
+      });
+    try {
+      await worker.problems.updateOne({ _id: problem._id }, { points: 1600 });
+      await enqueueRescore(queue, problem._id);
+      await waitUntil(() => spy.mock.calls.length === 2, 60_000);
+      await waitUntil(drained, 60_000);
+    } finally {
+      spy.mockRestore();
+    }
     expect(
       await worker.submissions.countDocuments({
         problem: problem._id,
@@ -239,4 +255,32 @@ describe('problem rescore', () => {
     ).toBe(5000);
     expect(await userPointsOf(user._id)).toBe(1500);
   }, 90_000);
+
+  it('retries a failed rescore after its backoff and lands the points without a failure', async () => {
+    const queue = queueOf();
+    const user = await seedUser(worker);
+    const problem = await seedProblem(worker, { points: 1000, partial: true });
+    const submission = await seedGraded(worker, user._id, problem._id, {
+      result: 'WA',
+      points: 100,
+      casePoints: 1,
+      caseTotal: 2,
+    });
+    const spy = jest
+      .spyOn(rescores, 'rescore')
+      .mockRejectedValueOnce(new Error('mongo blip'));
+    try {
+      await enqueueRescore(queue, problem._id);
+      await waitUntil(async () => (await queue.getDelayedCount()) === 1);
+      const [retry] = await queue.getJobs(['delayed']);
+      expect(retry.attemptsMade).toBe(1);
+      expect(await pointsOf(submission._id)).toBe(100);
+      await retry.promote();
+      await waitUntil(async () => (await pointsOf(submission._id)) === 500);
+    } finally {
+      spy.mockRestore();
+    }
+    await waitUntil(drained);
+    expect(await queue.getFailedCount()).toBe(0);
+  });
 });

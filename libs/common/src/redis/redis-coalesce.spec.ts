@@ -90,9 +90,9 @@ describe('runCoalesced', () => {
     const work = jest.fn(() => Promise.resolve());
     await runCoalesced(redis, key, work);
     expect(work).not.toHaveBeenCalled();
-    expect(await redis.ttl(`${key}:dirty`)).toBeLessThanOrEqual(
-      COALESCE_TTL_SECONDS,
-    );
+    const ttl = await redis.ttl(`${key}:dirty`);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(COALESCE_TTL_SECONDS);
     await sleep(1100);
     await runCoalesced(redis, key, work);
     expect(work).toHaveBeenCalledTimes(1);

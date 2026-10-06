@@ -2,6 +2,7 @@ import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
+import { waitUntil } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import type { Submission, SubmissionStatus } from '@libs/database';
 import {
@@ -21,7 +22,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { openStream, waitUntil } from './sse-client';
+import { openStream } from './sse-client';
 import type { SseClient } from './sse-client';
 import { seedSubmission } from './submission-fixtures';
 import { setupApiTest } from './setup';
@@ -121,16 +122,19 @@ describe('submission event streams', () => {
     await publish(submission, 'grading-begin', 'G');
     await publish(submission, 'test-case', 'G', 3);
     await publish(submission, 'done', 'D');
-    expect((await client.next('processing')).data).toMatchObject({
-      status: 'P',
-    });
-    expect((await client.next('grading-begin')).data).toMatchObject({
-      status: 'G',
-    });
-    expect((await client.next('test-case')).data).toMatchObject({
-      currentTestcase: 3,
-    });
-    expect((await client.next('done')).data).toMatchObject({ status: 'D' });
+    await waitUntil(() => client.messages.length === 4);
+    expect(client.messages.map((message) => message.event)).toEqual([
+      'processing',
+      'grading-begin',
+      'test-case',
+      'done',
+    ]);
+    expect(client.messages.map((message) => message.data)).toMatchObject([
+      { status: 'P' },
+      { status: 'G' },
+      { currentTestcase: 3 },
+      { status: 'D' },
+    ]);
   });
 
   it('gates like the detail: 401 anonymous, 404 unknown or invisible, 403 without detail rights', async () => {
