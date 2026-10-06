@@ -1,9 +1,12 @@
 import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
+import type { SubmissionCase } from '@libs/database';
 import { BRIDGE_COMMANDS_STREAM, BridgeCommandsService } from '@libs/judging';
+import { recordSubmissionEvents } from '@libs/judging/testing';
 import { CommandsService } from '../src/dispatch/commands.service';
 import { DispatchService } from '../src/dispatch/dispatch.service';
+import { GradingService } from '../src/submissions/grading.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import {
   seedCatalog,
@@ -413,6 +416,63 @@ describe('DispatchService', () => {
       const started = Date.now();
       await commands.stop();
       expect(Date.now() - started).toBeLessThan(500);
+    });
+  });
+
+  describe('submission events', () => {
+    const reportedCase: SubmissionCase = {
+      position: 1,
+      status: 'AC',
+      time: 0.1,
+      memory: 1000,
+      points: 1,
+      total: 1,
+      batch: null,
+      feedback: '',
+      extendedFeedback: '',
+      output: '',
+    };
+
+    it('publishes processing, grading-begin, test-case and done for a dispatched submission, and queued when its judge is lost', async () => {
+      const grading = bridge.module.get(GradingService);
+      const recorder = await recordSubmissionEvents(TEST_REDIS_URL);
+      try {
+        const problem = await freshProblem();
+        const judge = new RecordingJudge('evented', [problem.code]);
+        await dispatch.register(judge);
+        const graded = await submit(problem._id);
+        await enqueue(graded);
+        await grading.beginGrading(graded, judge.name, false);
+        await grading.addCases(graded, judge.name, [reportedCase]);
+        await grading.gradingEnd(graded, judge.name);
+        await dispatch.judgeFree(judge);
+        const lost = await submit(problem._id);
+        await enqueue(lost);
+        await grading.beginGrading(lost, judge.name, false);
+        await dispatch.judgeLost(judge);
+        await recorder.waitFor((events) =>
+          events.some(
+            (event) => event.submissionId === lost && event.type === 'queued',
+          ),
+        );
+        const typesOf = (id: string) =>
+          recorder.events
+            .filter((event) => event.submissionId === id)
+            .map((event) => event.type);
+        expect(typesOf(graded)).toEqual([
+          'processing',
+          'grading-begin',
+          'test-case',
+          'done',
+        ]);
+        expect(typesOf(lost)).toEqual([
+          'processing',
+          'grading-begin',
+          'queued',
+        ]);
+      } finally {
+        await recorder.stop();
+      }
     });
   });
 });
