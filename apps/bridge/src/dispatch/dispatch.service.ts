@@ -102,6 +102,10 @@ export class DispatchService {
     await this.offerWork(judge);
   }
 
+  hasQueued(submissionId: string): boolean {
+    return this.queued.has(submissionId);
+  }
+
   connectedNames(): string[] {
     return [...this.judges.keys()];
   }

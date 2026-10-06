@@ -52,14 +52,18 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.judges.setAllOffline();
   }
 
-  /** Mongo is the truth: queued submissions no command announced (Redis failure, trimmed stream) still reach a judge, and P/G rows no judge works on go back to the queue. `enqueue` skips queued and running ids and `claim` is a compare-and-set, so a tick racing a dispatch changes nothing. A tick still running when the next fires is skipped; a failure waits for the next tick. */
+  /** Mongo is the truth: queued submissions no command announced (Redis failure, trimmed stream) still reach a judge, and P/G rows no judge works on go back to the queue. the tick enqueues only ids not yet queued, `enqueue` skips running ids and `claim` is a compare-and-set, so a tick racing a dispatch changes nothing. A tick still running when the next fires is skipped; a failure waits for the next tick. */
   private async resync(): Promise<void> {
     if (this.resyncing) return;
     this.resyncing = true;
     try {
       await this.reconcileJudges();
       await this.requeueStranded();
-      await this.dispatch.enqueue(await this.submissions.loadQueued());
+      const rows = await this.submissions.loadQueued();
+      // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it
+      await this.dispatch.enqueue(
+        rows.filter((row) => !this.dispatch.hasQueued(row.id)),
+      );
     } catch (error) {
       this.logger.error(`Queue resync failed: ${(error as Error).message}`);
     } finally {

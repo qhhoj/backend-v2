@@ -383,6 +383,41 @@ describe('Bridge restart', () => {
     await judge.close();
   });
 
+  it('keeps a submission targeted at a busy judge for it across resync ticks', async () => {
+    await seedJudge(bridge, 'restart-16', KEY);
+    await seedJudge(bridge, 'restart-17', KEY);
+    const problem = await seedProblem(bridge, catalog, { code: 'restart16' });
+    const busy = await connect('restart-16', ['restart16']);
+    const free = await connect('restart-17', ['restart16']);
+    const first = (
+      await seedSubmission(bridge, catalog, { problem: problem._id })
+    )._id;
+    await new BridgeCommandsService(redis).judge([first], 'restart-16');
+    expect(await busy.next('submission-request')).toMatchObject({
+      'submission-id': first,
+    });
+    busy.send({ name: 'submission-acknowledged', 'submission-id': first });
+    busy.send({
+      name: 'grading-begin',
+      'submission-id': first,
+      pretested: false,
+    });
+    const targeted = (
+      await seedSubmission(bridge, catalog, { problem: problem._id })
+    )._id;
+    await new BridgeCommandsService(redis).judge([targeted], 'restart-16');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(
+      free.received.filter((packet) => packet.name === 'submission-request'),
+    ).toEqual([]);
+    busy.send({ name: 'grading-end', 'submission-id': first });
+    expect((await busy.next('submission-request'))['submission-id']).toBe(
+      targeted,
+    );
+    await busy.close();
+    await free.close();
+  });
+
   describe('a judge change whose command was lost', () => {
     const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
     const hasRequest = (judge: FakeJudge) =>
@@ -410,6 +445,10 @@ describe('Bridge restart', () => {
       await seedJudge(bridge, 'restart-13', KEY);
       const rotated = await connect('restart-12', []);
       const kept = await connect('restart-13', []);
+      await seedJudge(bridge, 'restart-18', KEY);
+      const deleted = await connect('restart-18', []);
+      await bridge.judges.deleteOne({ name: 'restart-18' });
+      await deleted.closed;
       await bridge.judges.updateOne(
         { name: 'restart-12' },
         { authKeyHash: sha256('another key') },

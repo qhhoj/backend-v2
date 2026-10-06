@@ -28,6 +28,7 @@ function setup() {
     },
     dispatch: {
       enqueue: record('enqueue', undefined),
+      hasQueued: () => false,
       heldIds,
       connectedNames: () => [] as string[],
       stop: () => calls.push('dispatch.stop'),
