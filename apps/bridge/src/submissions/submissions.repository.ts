@@ -18,6 +18,9 @@ import type { SubmissionRequest } from '../protocol/judge-packets';
 
 /** Judge disconnects forgiven while a submission is in flight; the next one is an internal error. */
 export const MAX_REQUEUES = 1;
+/** `failed`: the submission's data vanished, so it was finished as IE and still needs its graded job. */
+export type ClaimOutcome =
+  { request: SubmissionRequest } | { failed: SubmissionGradedJob };
 export type CasesOutcome = 'appended' | 'stale' | 'full';
 
 /** Back to the queue with partial results dropped; the `$set` of every requeue and reset-in-flight write. */
@@ -112,7 +115,7 @@ export class SubmissionsRepository {
   async claim(
     queued: QueuedSubmission,
     judgeName: string,
-  ): Promise<SubmissionRequest | null> {
+  ): Promise<ClaimOutcome | null> {
     const submission = await this.submissions
       .findOneAndUpdate(
         { _id: queued.id, status: 'QU' },
@@ -144,19 +147,19 @@ export class SubmissionsRepository {
     ]);
     if (!problem || !source) {
       this.logger.error(`Submission ${queued.id} lost its problem or source`);
-      await this.finishWith(
+      const failed = await this.finishWith(
         queued.id,
         judgeName,
         'IE',
         'Submission data is missing',
       );
-      return null;
+      return failed && { failed };
     }
     const languageId = uuidStr(submission.language);
     const limit = problem.languageLimits.find(
       (entry) => uuidStr(entry.languageId) === languageId,
     );
-    return {
+    const request: SubmissionRequest = {
       submissionId: queued.id,
       problemCode: queued.problemCode,
       languageKey: queued.languageKey,
@@ -171,6 +174,7 @@ export class SubmissionsRepository {
       fileOnly: false,
       fileSizeLimit: 0,
     };
+    return { request };
   }
 
   /** The judge vanished between the claim and the request: back to the queue without spending the requeue (the judge never saw it). */

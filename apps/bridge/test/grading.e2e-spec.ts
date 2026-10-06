@@ -1,5 +1,8 @@
+import type { Queue } from 'bullmq';
 import type { Problem, SubmissionCase } from '@libs/database';
+import type { SubmissionGradedJob } from '@libs/judging';
 import {
+  ENQUEUE_TIMEOUT_MS,
   GradingService,
   LOST_JUDGE_MESSAGE,
 } from '../src/submissions/grading.service';
@@ -47,7 +50,7 @@ describe('Grading (bridge Mongo layer)', () => {
       problem: problem._id,
     });
     const [queued] = await repository.loadQueued([submission._id]);
-    const request = await repository.claim(queued, JUDGE);
+    const request = await grading.claim(queued, JUDGE);
     return { problem, id: submission._id, queued, request };
   };
   const stored = async (id: string) =>
@@ -136,7 +139,7 @@ describe('Grading (bridge Mongo layer)', () => {
       cpp._id,
       python._id,
     ]);
-    expect(await repository.claim(cppQueued, JUDGE)).toEqual({
+    expect(await grading.claim(cppQueued, JUDGE)).toEqual({
       submissionId: cpp._id,
       problemCode: problem.code,
       languageKey: 'CPP17',
@@ -155,8 +158,8 @@ describe('Grading (bridge Mongo layer)', () => {
       status: 'P',
       judgedOn: JUDGE,
     });
-    expect(await repository.claim(cppQueued, 'judge-02')).toBeNull();
-    expect(await repository.claim(pythonQueued, JUDGE)).toMatchObject({
+    expect(await grading.claim(cppQueued, 'judge-02')).toBeNull();
+    expect(await grading.claim(pythonQueued, JUDGE)).toMatchObject({
       timeLimit: 2,
       memoryLimit: 262144,
     });
@@ -291,7 +294,7 @@ describe('Grading (bridge Mongo layer)', () => {
     });
     expect(await bridge.gradedJobs()).toEqual([]);
     const [queued] = await repository.loadQueued([id]);
-    await repository.claim(queued, 'judge-02');
+    await grading.claim(queued, 'judge-02');
     expect(await grading.disconnected(id, 'judge-02')).toBe('failed');
     expect(await stored(id)).toMatchObject({
       status: 'IE',
@@ -346,5 +349,56 @@ describe('Grading (bridge Mongo layer)', () => {
       error: 'error: expected ;',
     });
     expect(await bridge.gradedJobs()).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      'source',
+      (bridge_: BridgeTest, id: string) =>
+        bridge_.sources.deleteOne({ _id: id }),
+    ],
+    [
+      'problem',
+      (bridge_: BridgeTest, id: string, problemId: string) =>
+        bridge_.problems.deleteOne({ _id: problemId }),
+    ],
+  ])(
+    'finishes a claimed submission as IE, with one graded job, when its %s is gone',
+    async (_name, remove) => {
+      const problem = await seedProblem(bridge, catalog, { code: nextCode() });
+      const submission = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+      });
+      const [queued] = await repository.loadQueued([submission._id]);
+      await remove(bridge, submission._id, problem._id);
+      expect(await grading.claim(queued, JUDGE)).toBeNull();
+      expect(await stored(submission._id)).toMatchObject({
+        status: 'IE',
+        result: 'IE',
+      });
+      expect(await bridge.gradedJobs()).toEqual([
+        {
+          submissionId: submission._id,
+          userId: catalog.user._id,
+          problemId: problem._id,
+        },
+      ]);
+    },
+  );
+
+  it('finishes promptly, with the verdict stored, when the graded queue never answers', async () => {
+    // BullMQ's `add` never rejects while Redis is down: it waits forever.
+    const hanging = {
+      add: () => new Promise<never>(() => undefined),
+    } as unknown as Queue<SubmissionGradedJob>;
+    const offline = new GradingService(repository, hanging);
+    const { id } = await claimed();
+    await grading.beginGrading(id, JUDGE, false);
+    await grading.addCases(id, JUDGE, [reported(1)]);
+    const started = Date.now();
+    await offline.gradingEnd(id, JUDGE);
+    expect(Date.now() - started).toBeLessThan(ENQUEUE_TIMEOUT_MS * 3);
+    expect(await stored(id)).toMatchObject({ status: 'D', result: 'AC' });
+    expect(await bridge.gradedJobs()).toEqual([]);
   });
 });
