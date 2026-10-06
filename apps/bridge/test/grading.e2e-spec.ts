@@ -279,6 +279,8 @@ describe('Grading (bridge Mongo layer)', () => {
       'appended',
     );
     expect((await stored(id)).cases).toHaveLength(10000);
+    expect(await grading.addCases(id, JUDGE, [reported(10001)])).toBe('full');
+    expect((await stored(id)).cases).toHaveLength(10000);
   });
 
   it('requeues on the first judge loss and fails on the second', async () => {
@@ -385,6 +387,46 @@ describe('Grading (bridge Mongo layer)', () => {
       ]);
     },
   );
+
+  it('treats an empty case packet as a no-op', async () => {
+    const { id } = await claimed();
+    await grading.beginGrading(id, JUDGE, false);
+    expect(await grading.addCases(id, JUDGE, [])).toBe('stale');
+    expect(await stored(id)).toMatchObject({ currentTestcase: 1, cases: [] });
+  });
+
+  it('puts a claimed submission back in the queue when building its request throws', async () => {
+    const problem = await seedProblem(bridge, catalog, { code: nextCode() });
+    const submission = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+    });
+    const [queued] = await repository.loadQueued([submission._id]);
+    jest.spyOn(bridge.problems, 'findById').mockImplementationOnce(() => {
+      throw new Error('mongo hiccup');
+    });
+    expect(await grading.claim(queued, JUDGE)).toBeNull();
+    expect(await stored(submission._id)).toMatchObject({
+      status: 'QU',
+      judgedOn: null,
+      requeueCount: 0,
+    });
+    expect(await grading.claim(queued, JUDGE)).toMatchObject({
+      submissionId: submission._id,
+    });
+  });
+
+  it('still finishes a submission whose problem was deleted mid-grading, with no points', async () => {
+    const { id, problem } = await claimed();
+    await grading.beginGrading(id, JUDGE, false);
+    await grading.addCases(id, JUDGE, [reported(1)]);
+    await bridge.problems.deleteOne({ _id: problem._id });
+    await grading.gradingEnd(id, JUDGE);
+    expect(await stored(id)).toMatchObject({
+      status: 'D',
+      result: 'AC',
+      points: 0,
+    });
+  });
 
   it('finishes promptly, with the verdict stored, when the graded queue never answers', async () => {
     // BullMQ's `add` never rejects while Redis is down: it waits forever.

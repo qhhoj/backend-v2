@@ -220,6 +220,7 @@ export class SubmissionsRepository {
     judgeName: string,
     cases: SubmissionCase[],
   ): Promise<CasesOutcome> {
+    if (!cases.length) return 'stale';
     const grading = { _id: submissionId, judgedOn: judgeName, status: 'G' };
     const { matchedCount } = await this.submissions.updateOne(
       {
@@ -262,6 +263,10 @@ export class SubmissionsRepository {
     const problem = await this.problems
       .findById(submission.problem, { points: 1, partial: 1 })
       .lean();
+    if (!problem)
+      this.logger.warn(
+        `Submission ${submissionId} graded with 0 points: its problem is gone, rescore it once restored`,
+      );
     const totals = gradeCases(submission.cases);
     const { modifiedCount } = await this.submissions.updateOne(grading, {
       $set: {

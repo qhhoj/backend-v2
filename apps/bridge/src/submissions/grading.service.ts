@@ -35,7 +35,16 @@ export class GradingService {
     queued: QueuedSubmission,
     judgeName: string,
   ): Promise<SubmissionRequest | null> {
-    const outcome = await this.submissions.claim(queued, judgeName);
+    let outcome: Awaited<ReturnType<SubmissionsRepository['claim']>>;
+    try {
+      outcome = await this.submissions.claim(queued, judgeName);
+    } catch (error) {
+      this.logger.error(
+        `Claiming submission ${queued.id} failed, back to the queue: ${(error as Error).message}`,
+      );
+      await this.submissions.release(queued.id, judgeName);
+      return null;
+    }
     if (outcome && 'failed' in outcome) await this.notify(outcome.failed);
     return outcome && 'request' in outcome ? outcome.request : null;
   }
