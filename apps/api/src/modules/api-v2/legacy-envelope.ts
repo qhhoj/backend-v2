@@ -6,10 +6,14 @@ export const LEGACY_MESSAGES: Record<number, string> = {
   404: 'page/object not found',
 };
 
+/** Django `isoformat()` of an aware UTC datetime. */
+export const isoformat = (date: Date) =>
+  date.toISOString().replace('Z', '+00:00');
+
 const header = (method: string) => ({
   api_version: '2.0',
   method: method.toLowerCase(),
-  fetched: new Date().toISOString().replace('Z', '+00:00'),
+  fetched: isoformat(new Date()),
 });
 
 export const legacyEnvelope = (method: string, data: unknown) => ({
@@ -51,3 +55,21 @@ export function legacyPage<Item>(
     total_pages: totalPages,
   };
 }
+
+export type LegacyInfinitePage<Item> = Omit<
+  LegacyPage<Item>,
+  'total_objects' | 'total_pages'
+>;
+
+/** Legacy infinite pagination (no basic filter): no totals, `has_more` from one extra row, so the whole collection is never counted. */
+export const legacyInfinitePage = <Item>(
+  objects: Item[],
+  page: number,
+  hasMore: boolean,
+): LegacyInfinitePage<Item> => ({
+  current_object_count: objects.length,
+  objects_per_page: API_V2_PAGE_SIZE,
+  page_index: page,
+  has_more: hasMore,
+  objects,
+});

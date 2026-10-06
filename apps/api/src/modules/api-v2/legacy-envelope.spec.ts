@@ -1,4 +1,9 @@
-import { legacyEnvelope, legacyError, legacyPage } from './legacy-envelope';
+import {
+  legacyEnvelope,
+  legacyError,
+  legacyInfinitePage,
+  legacyPage,
+} from './legacy-envelope';
 
 describe('legacy envelope', () => {
   it('wraps data with the api_version header', () =>
@@ -33,4 +38,12 @@ describe('legacy envelope', () => {
     });
     expect(legacyPage(['x'], 1, 1001).has_more).toBe(true);
   });
+  it('pages infinitely without totals', () =>
+    expect(legacyInfinitePage(['x'], 3, true)).toEqual({
+      current_object_count: 1,
+      objects_per_page: 1000,
+      page_index: 3,
+      has_more: true,
+      objects: ['x'],
+    }));
 });

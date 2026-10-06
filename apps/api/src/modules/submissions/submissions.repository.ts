@@ -104,6 +104,20 @@ export class SubmissionsRepository {
     return { items, total };
   }
 
+  /** Oldest first (legacy `/api/v2` order); the list rows never carry the error log. */
+  findPage(
+    filter: FilterQuery<Submission>,
+    skip: number,
+    limit: number,
+  ): Promise<SubmissionDocument[]> {
+    return this.submissions
+      .find(filter, { error: 0 })
+      .sort({ _id: 1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+  }
+
   /** Legacy SOLVED visibility: an AC worth the problem's full points. */
   async hasSolved(
     userId: string,

@@ -13,13 +13,13 @@ import {
 } from 'class-validator';
 import { toArray, toBoolean } from '../../problems/dto/transforms';
 
-const API_V2_MAX_PAGE = 10000;
+export const API_V2_MAX_PAGE = 10000;
 const MAX_FILTER_VALUES = 100;
 const MAX_FILTER_LENGTH = 100;
 const NO_NUL = /^[^\0]*$/;
 
 /** Every repeatable filter is a bounded array of NUL-free strings, never an object (no Mongo operators). */
-const FilterStrings = () => (target: object, key: string) => {
+export const FilterStrings = () => (target: object, key: string) => {
   Transform(toArray)(target, key);
   ArrayMaxSize(MAX_FILTER_VALUES)(target, key);
   IsString({ each: true })(target, key);

@@ -23,6 +23,11 @@ import {
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
+export type SubmissionFilters = Pick<
+  SubmissionListQueryDto,
+  'user' | 'problem' | 'language' | 'result' | 'status'
+>;
+
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
 
 @Injectable()
@@ -45,7 +50,7 @@ export class SubmissionsService {
         [staffOnly]: [STAFF_ONLY_MESSAGE],
       });
     const meta = { page: query.page, pageSize: query.pageSize };
-    const filter = await this.listFilter(principal, query);
+    const filter = await this.filterFor(principal, query);
     if (!filter) return new Paginated([], { ...meta, total: 0 });
     const { items, total } = await this.submissions.list(
       filter,
@@ -145,7 +150,7 @@ export class SubmissionsService {
   }
 
   /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in. */
-  private async viewable(
+  async viewable(
     principal: Principal,
     id: string,
   ): Promise<{
@@ -178,15 +183,15 @@ export class SubmissionsService {
     return { submission, problem, canEdit };
   }
 
-  /** Null when nothing can match (unknown user, invisible problem). */
-  private async listFilter(
+  /** Null when nothing can match (unknown user, invisible problem); the `/api/internal` list and `/api/v2` share it. */
+  async filterFor(
     principal: Principal | null,
-    query: SubmissionListQueryDto,
+    filters: SubmissionFilters,
   ): Promise<FilterQuery<Submission> | null> {
     const clauses: FilterQuery<Submission>[] = [];
-    if (query.problem !== undefined) {
-      const problem = PROBLEM_CODE_PATTERN.test(query.problem)
-        ? await this.problems.findByCode(query.problem)
+    if (filters.problem !== undefined) {
+      const problem = PROBLEM_CODE_PATTERN.test(filters.problem)
+        ? await this.problems.findByCode(filters.problem)
         : null;
       if (
         !problem ||
@@ -201,15 +206,17 @@ export class SubmissionsService {
           problem: { $in: await this.problems.visibleIds(visible) },
         });
     }
-    if (query.user !== undefined) {
-      const user = await this.users.findByUsername(query.user);
+    if (filters.user !== undefined) {
+      const user = await this.users.findByUsername(filters.user);
       if (!user) return null;
       clauses.push({ user: user._id });
     }
-    if (query.language?.length)
-      clauses.push({ language: { $in: query.language } });
-    if (query.result?.length) clauses.push({ result: { $in: query.result } });
-    if (query.status?.length) clauses.push({ status: { $in: query.status } });
+    if (filters.language?.length)
+      clauses.push({ language: { $in: filters.language } });
+    if (filters.result?.length)
+      clauses.push({ result: { $in: filters.result } });
+    if (filters.status?.length)
+      clauses.push({ status: { $in: filters.status } });
     return clauses.length ? { $and: clauses } : {};
   }
 }
