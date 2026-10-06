@@ -22,6 +22,23 @@ export class SubmissionEffectsRepository {
     @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
+  /** Users and problems of submissions graded (`judgedDate`, set at grading-begin) or created (`date`: a compile error never reaches grading-begin) in the window; each branch has its own index. */
+  async touchedBetween(
+    from: Date,
+    to: Date,
+  ): Promise<{ userIds: string[]; problemIds: string[] }> {
+    const window = { $gte: from, $lt: to };
+    const filter = { $or: [{ judgedDate: window }, { date: window }] };
+    const [users, problems] = await Promise.all([
+      this.submissions.distinct('user', filter).exec(),
+      this.submissions.distinct('problem', filter).exec(),
+    ]);
+    return {
+      userIds: users.map(uuidStr),
+      problemIds: problems.map(uuidStr),
+    };
+  }
+
   findProblem(problemId: string): Promise<EffectsProblem | null> {
     return this.problems
       .findById(problemId, {
