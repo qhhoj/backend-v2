@@ -323,4 +323,13 @@ export class SubmissionsRepository {
     );
     return modifiedCount === 1;
   }
+
+  /** Bridge start: whatever was handed to a judge before the stop goes back to the queue. Not a judge failure, so `requeueCount` is untouched and nothing becomes IE. */
+  async resetInFlight(): Promise<number> {
+    const { modifiedCount } = await this.submissions.updateMany(
+      { status: IN_FLIGHT },
+      { $set: REQUEUE_RESET },
+    );
+    return modifiedCount;
+  }
 }

@@ -71,4 +71,9 @@ export class JudgesRepository {
   ): Promise<void> {
     await this.judges.updateOne({ name, startTime }, { $set: { problems } });
   }
+
+  /** Bridge start: no judge is connected yet, whatever the last run left behind. */
+  async setAllOffline(): Promise<void> {
+    await this.judges.updateMany({}, { $set: OFFLINE_FIELDS });
+  }
 }
