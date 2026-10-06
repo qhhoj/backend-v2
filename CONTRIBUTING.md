@@ -169,15 +169,15 @@ tools/legacy/   regenerates the fixtures
 - Queue truth is Mongo: queued = `status QU`; the bridge claims QU -> P before sending; every judge packet's write filters `{ _id, judgedOn, status }`
 - API -> bridge: Redis stream `bridge:commands` (`judge`, `abort`, `disconnect-judge`, `disable-judge`), fire-and-forget via `BridgeCommandsService`; a lost command waits for the bridge's resync (`resyncMs`, 30 s)
 - Bridge -> effects: one `submission-graded` BullMQ job per finished (D/CE/IE/AB) or rejected submission, enqueued through `notifyGraded` (1 s bound, a failure is logged and skipped, in the bridge and the api); 2b consumes it
-- Bridge start: bind the port (judges wait), judges offline, P/G -> QU (requeue allowance untouched), stream position, queue rebuild, commands, resync, then serve judges. Stop: dispatching stops first so P/G survive for the next start
-- Resync also requeues P/G rows no connected judge held on two consecutive ticks (`requeueCount` not spent)
+- Bridge start: bind the port (judges wait), judges offline, P/G -> QU, stream position, queue rebuild, commands, resync, then serve judges. Stop: dispatching stops first so P/G survive for the next start
+- Start and resync requeue P/G rows without spending `requeueCount` (resync: only rows no connected judge held on two consecutive ticks)
 - Judge disconnect in flight: requeued once (`requeueCount`), IE the second time; a rejudge restores the allowance
-- Packets: 4 MiB compressed / 8 MiB inflated before authentication (`HANDSHAKE_LIMITS`; any packet but `handshake` closes the connection), 8 MiB / 32 MiB after; JSON nesting depth 16; 1000 packets/s; 15 s absolute handshake deadline, 60 s silence (paused while a packet is handled), 20 s acknowledgement; 10000 cases; case text in UTF-8 bytes (512 output/extended feedback, 50 feedback); 64 KiB logs; 256 sockets, 8 unauthenticated per remote address
+- Packets: 4 MiB compressed / 8 MiB inflated before authentication (`HANDSHAKE_LIMITS`; any packet but `handshake` closes the connection), 8 MiB / 32 MiB after; JSON nesting depth 16; 1000 packets/s; 15 s absolute handshake deadline, 60 s silence (paused while a packet is handled), 20 s acknowledgement; 10000 cases; case text in UTF-8 bytes (clipped: 512 output/extended feedback, 50 feedback); 64 KiB logs (clipped); 256 sockets, 8 unauthenticated per remote address
 - Packet handling: a packet for another submission is logged and ignored; only a wrong `submission-acknowledged` fails the judge's own submission (IE) and closes; `grading-end`, `test-case-status`, `batch-*` are ignored until `grading-begin`
 - Dispatch: lowest load among free candidates, random tie-break; a rejudge never takes the last free candidate when another judge could; mirrors dispatch under `mirrorRoot`'s code; `languageLimits` override limits; `short-circuit = !partial`
 - Submit: visible problem, allowed non-file-only language, not banned (superuser exempt), `judgeId` (a judge name) for editors and only to an online judge with the problem; 20 per minute per user; 2 unfinished (429 `rate_limited`) unless `judge.spam_submission`, counted under a fail-fast `withRedisLock` (`libs/common`; contention -> 409)
-- Detail/source: problem visible (else 404), then legacy `can_see_detail` (`F` follows `all-solved`); cases by `testcaseResultVisibility` (A all, B batches, S none; superusers all), feedback for superusers/editors/`allowViewFeedback`, output unless `testcaseVisibility` O (editors always); IE messages for editors only
-- Actions: invisible problem -> 404; abort (owner unless rejudged, or `judge.abort_any_submission`), rejudge/reject (`judge.rejudge_submission`/`judge.reject_submission` + edit rights; 409 while judging, rejudge also while locked), bulk rejudge per problem (more than 10 needs `judge.rejudge_submission_lot`, locked only with `force`; counts first, then streams chunks of at most 1000 ids)
+- Detail/source: problem visible (else 404), then legacy `can_see_detail` (`F` follows `all-solved`); cases by `testcaseResultVisibility` (A all, B batches, S none; superusers all), feedback for superusers/editors/`allowViewFeedback`, output unless `testcaseVisibility` O (editors always); IE messages for editors only; the list (`GET /api/internal/submissions`) is public over visible problems, and IE/QU/P/G/D/SC filters are staff-only (400)
+- Actions: invisible problem -> 404; abort (owner unless rejudged, or `judge.abort_any_submission`), rejudge/reject (`judge.rejudge_submission`/`judge.reject_submission` + edit rights; 409 while unfinished; rejudge: while in flight or locked), bulk rejudge per problem (more than 10 needs `judge.rejudge_submission_lot`, locked only with `force`; counts first, then streams chunks of at most 1000 ids)
 - Judges admin (`judge.change_judge`): `/api/internal/judges`; keys are shown once; rotate and block force-disconnect
 
 ## Data conventions
@@ -241,21 +241,21 @@ Add a job:
 | `npx nest build worker` | build worker |
 | `npx nest build bridge` | build bridge |
 | `npx nest start api` | run the API |
-| `npx nest start bridge` | run the bridge (exactly one instance) |
+| `npx nest start bridge` | run the bridge |
 | `npx nest start worker` | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
 
 CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
 ## Env and deploy
 
-- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api and the worker (both validate env); the migrator reads only `MONGO_URL` and `LEGACY_*`
+- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env); the migrator reads only `MONGO_URL` and `LEGACY_*`
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly)
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
-- Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); validates the same env as the api (`loadEnv`); exactly one instance
+- Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); exactly one instance
 - The bridge port must be reachable only from judge hosts (firewall)
-- Judge containers need a restart policy (the judge-server fork exits when its socket drops mid-send)
-- The qhhoj/judge-server fork must send and accept submission ids as strings (`packet.py` `%d` -> `%s`); the bridge is not deployable until it does
+- Judge containers need a restart policy (the judge-server fork exits on a broken connection)
+- The qhhoj/judge-server fork must handle submission ids (UUID strings) as strings everywhere: the `%d` of the grading `Process` name in `judge.py` is fatal, `%d` in `packet.py`/`judge.py` log calls and the `int` annotations of `Submission.id`/`abort_grading` are not; the bridge is not deployable until it does
 - Worker tuning: `PDF_RENDER_TIMEOUT_MS`, `PDF_MAX_BYTES`, `PDF_CONCURRENCY`; the Polygon import queue runs one job at a time
 
 ## Commits
