@@ -65,6 +65,7 @@ describe('BridgeCommandsService', () => {
   it('gives up within a short fixed delay when Redis does not answer, with the normal client config', async () => {
     const unreachable = new Redis('redis://10.255.255.1:6379', {
       maxRetriesPerRequest: 3,
+      connectTimeout: 500,
     });
     unreachable.on('error', () => undefined);
     const started = Date.now();

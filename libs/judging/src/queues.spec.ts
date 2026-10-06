@@ -1,6 +1,9 @@
 import { newId } from '@libs/database';
-import { UUID } from 'mongodb';
+import { Binary } from 'mongodb';
 import { gradedJobOf } from './queues';
+
+const uuidBinary = (id: string): Binary =>
+  new Binary(Buffer.from(id.replaceAll('-', ''), 'hex'), Binary.SUBTYPE_UUID);
 
 describe('gradedJobOf', () => {
   it('reads string ids from a hydrated row', () => {
@@ -13,9 +16,9 @@ describe('gradedJobOf', () => {
     const [submissionId, userId, problemId] = [newId(), newId(), newId()];
     expect(
       gradedJobOf({
-        _id: new UUID(submissionId),
-        user: new UUID(userId),
-        problem: new UUID(problemId),
+        _id: uuidBinary(submissionId),
+        user: uuidBinary(userId),
+        problem: uuidBinary(problemId),
       }),
     ).toEqual({ submissionId, userId, problemId });
   });
