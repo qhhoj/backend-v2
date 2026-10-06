@@ -1,5 +1,5 @@
 import { UUID } from 'mongodb';
-import { newId, toUuid, uuidStr } from './uuid';
+import { isUuid, newId, toUuid, uuidStr } from './uuid';
 
 describe('uuid', () => {
   it('generates time-ordered v7 ids', () => {
@@ -21,5 +21,11 @@ describe('uuid', () => {
       toUUID: () => toUuid(id),
     });
     expect(uuidStr(mongooseBuffer)).toBe(id);
+  });
+  it('recognises uuids of any version and nothing else', () => {
+    expect(isUuid(newId())).toBe(true);
+    expect(isUuid('6F9619FF-8B86-D011-B42D-00C04FC964FF')).toBe(true);
+    for (const value of ['', 'abc', `${newId()}x`, newId().replace(/-/g, '')])
+      expect(isUuid(value)).toBe(false);
   });
 });

@@ -1,19 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, SocialAuth, User, WebauthnCredential } from '@libs/database';
+import {
+  CI,
+  isUuid,
+  SocialAuth,
+  User,
+  WebauthnCredential,
+} from '@libs/database';
 import { HydratedDocument, Model } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class UsersRepository {
   constructor(@InjectModel(User.name) private readonly users: Model<User>) {}
 
   async findById(id: string): Promise<UserDocument | null> {
-    return UUID_PATTERN.test(id) ? this.users.findById(id).exec() : null;
+    return isUuid(id) ? this.users.findById(id).exec() : null;
   }
 
   findByIds(ids: string[]): Promise<UserDocument[]> {
@@ -214,7 +217,7 @@ export class UsersRepository {
     userId: string,
     credentialId: string,
   ): Promise<boolean> {
-    if (!UUID_PATTERN.test(credentialId)) return false;
+    if (!isUuid(credentialId)) return false;
     // Match on the credential itself: timestamps make modifiedCount 1 even when nothing was pulled.
     const { matchedCount } = await this.users
       .updateOne(

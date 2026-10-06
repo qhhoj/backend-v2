@@ -35,6 +35,7 @@ export const PERMISSIONS = [
   'judge.view_all_submission',
   'judge.resubmit_other',
   'judge.lock_submission',
+  'judge.change_judge',
   'judge.organization_admin',
   'judge.edit_all_organization',
   'judge.change_open_organization',
