@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, dataVersionIs, Problem } from '@libs/database';
+import { CI, dataVersionIs, Problem, uuidStr } from '@libs/database';
 import type { ProblemData, ProblemTranslation } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
@@ -127,5 +127,16 @@ export class ProblemsRepository {
           { $set: { 'translations.$': translation } },
         )
         .exec();
+  }
+
+  /** Ids of the problems matching `filter` (a `ProblemAccess.visibleFilter`), for submission lists. */
+  async visibleIds(filter: FilterQuery<Problem>): Promise<string[]> {
+    return (await this.problems.distinct('_id', filter).exec()).map(uuidStr);
+  }
+
+  findSummaries(ids: string[]): Promise<ProblemDocument[]> {
+    return this.problems
+      .find({ _id: { $in: ids } }, { code: 1, name: 1 })
+      .exec();
   }
 }
