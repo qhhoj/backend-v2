@@ -74,6 +74,7 @@ export class ContestRescoreService {
             .map((id) => this.effects.recomputeParticipation(id)),
         );
     }
+    // Keyed on stored ratings, not `isRated`: a contest no longer rated but still holding ratings loses them here.
     if (await this.repository.hasRatings(contestId))
       await enqueueContestRating(this.ratingQueue, contestId);
     return { rescored, participations };

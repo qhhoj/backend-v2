@@ -93,6 +93,27 @@ export class ContestRatingRepository {
     return row?.contestEndTime ?? null;
   }
 
+  /** The earliest current end below `start` of a contest that still has a rating stored at or after `start` (an edit moved it earlier, its job has not run), null without one. Through the `contestEndTime` index. */
+  async earliestMovedEarlierEnd(
+    start: Date,
+    session: ClientSession,
+  ): Promise<Date | null> {
+    const contestIds = await this.ratings
+      .distinct('contest', { contestEndTime: { $gte: start } })
+      .session(session)
+      .exec();
+    const row = await this.contests
+      .findOne(
+        { _id: { $in: contestIds }, endTime: { $lt: start } },
+        { endTime: 1 },
+      )
+      .sort({ endTime: 1 })
+      .session(session)
+      .lean<{ endTime: Date }>()
+      .exec();
+    return row?.endTime ?? null;
+  }
+
   /** Rated contests ending in `[endTime, now]`, in end order (`endTime` index). */
   async ratedContestsFrom(
     endTime: Date,

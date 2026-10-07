@@ -23,7 +23,7 @@ export class ContestRatingService {
 
   /**
    * Deletes the ratings from the target's end on, re-rates every rated contest from there in end order and refreshes `users.rating`, in one transaction: a failure leaves the previous ratings.
-   * The run starts at the earlier of the target's end and its stored ratings' end, so an edited end time (moved either way) never loses ratings or leaves the contests between its old and new positions stale.
+   * The run starts at the earlier of the target's end and its stored ratings' end, then moves earlier until no contest with a rating stored at or after the start ends before it, so a contest whose end was moved (either way) keeps its ratings even when its own job has not run yet. Contests between its old and new positions stay stale only until that job runs.
    * Cost: each affected user's history is read once and extended in memory, so a run is linear in the ratings written. Production (16 rated contests, 461 ratings) takes about 1 s, far inside Mongo's 60 s transaction limit.
    */
   rateFrom(
@@ -37,8 +37,18 @@ export class ContestRatingService {
         contestId,
         session,
       );
-      const start =
+      let start =
         storedEnd && storedEnd < target.endTime ? storedEnd : target.endTime;
+      // A contest moved earlier whose own job has not run keeps ratings stored after `start`: include its new end too.
+      for (
+        let earlier = await this.repository.earliestMovedEarlierEnd(
+          start,
+          session,
+        );
+        earlier;
+        earlier = await this.repository.earliestMovedEarlierEnd(start, session)
+      )
+        start = earlier;
       if (start > now) return { contests: 0, ratings: 0 };
       const contests = await this.repository.ratedContestsFrom(
         start,

@@ -25,6 +25,6 @@ export const RatingSchema = SchemaFactory.createForClass(Rating);
 RatingSchema.index({ contest: 1, user: 1 }, { unique: true });
 RatingSchema.index({ participation: 1 }, { unique: true });
 // A user's history newest first; `users.rating` is the first row.
-RatingSchema.index({ user: 1, contestEndTime: -1 });
+RatingSchema.index({ user: 1, contestEndTime: -1, contest: -1 });
 // A re-rate deletes every rating from the target's end on.
 RatingSchema.index({ contestEndTime: 1 });

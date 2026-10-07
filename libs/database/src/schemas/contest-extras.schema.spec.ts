@@ -69,7 +69,7 @@ describe('Contest extras schemas', () => {
     );
     expect(keys).toEqual(
       expect.arrayContaining([
-        '{"user":1,"contestEndTime":-1}',
+        '{"user":1,"contestEndTime":-1,"contest":-1}',
         '{"contestEndTime":1}',
       ]),
     );

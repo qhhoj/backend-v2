@@ -489,6 +489,19 @@ describe('contest rating', () => {
     expect(afterMove).toEqual(await reRatedFromScratch(third._id));
   });
 
+  it('keeps the ratings of a contest moved before the target when only the target is rated', async () => {
+    const [first, second, third] = await seedStandingsChain('misplaced');
+    await ratings.rateFrom(first._id);
+    const movedEnd = new Date(
+      (first.endTime.getTime() + second.endTime.getTime()) / 2,
+    );
+    await worker.contests.updateOne({ _id: third._id }, { endTime: movedEnd });
+    await ratings.rateFrom(second._id);
+    const afterRun = await allRatings();
+    expect(afterRun.filter((row) => row.contest === third._id)).toHaveLength(3);
+    expect(afterRun).toEqual(await reRatedFromScratch(first._id));
+  });
+
   it('drops the ratings of a rated contest that was extended into the future', async () => {
     const [first, second] = await seedStandingsChain('extended');
     await ratings.rateFrom(first._id);
