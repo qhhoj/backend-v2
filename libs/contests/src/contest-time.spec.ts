@@ -157,6 +157,8 @@ describe('registration (legacy require_registration / can_register)', () => {
     [window(after(-2 * hour), after(-hour)), after(-1.5 * hour), true],
     [window(after(-2 * hour), after(-hour)), after(-2 * hour - 1), false],
     [window(after(-2 * hour), after(-hour)), after(-hour + 1), false],
+    [window(after(-2 * hour), after(-hour)), after(-2 * hour), true],
+    [window(after(-2 * hour), after(-hour)), after(-hour), true],
     [window(null, after(-hour)), after(-10 * hour), true],
     [window(after(-2 * hour), null), after(4 * hour), true],
   ])('is open for %p at %p: %p', (bounds, now, open) =>

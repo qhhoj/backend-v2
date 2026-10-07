@@ -1,5 +1,8 @@
+import type Redis from 'ioredis';
 import { sha256 } from '@libs/auth';
+import { REDIS } from '@libs/common';
 import { uuidStr } from '@libs/database';
+import { ParticipationsRepository } from '../src/modules/contests/participations.repository';
 import type { User } from '@libs/database';
 import type {
   ContestDetailResponse,
@@ -55,6 +58,8 @@ describe('contest participation', () => {
       'dave',
       'erin',
       'frank',
+      'tester',
+      'plainauthor',
       'author',
     ])
       await newUser(
@@ -136,6 +141,54 @@ describe('contest participation', () => {
       ).toBe(-1);
     });
 
+    it('lets a tester in before the start, as a spectator', async () => {
+      const upcoming = await createContest(api, {
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+        testers: [users.tester._id],
+      });
+      expect(
+        dataOf<ParticipationSummaryResponse>(
+          await post('tester', upcoming.key, 'join').expect(201),
+        ).virtual,
+      ).toBe(-1);
+    });
+
+    it('lets editors join a running contest whose registration closed, as spectators', async () => {
+      const contest = await createContest(api, {
+        registrationStart: hoursFromNow(-3),
+        registrationEnd: hoursFromNow(-2),
+        authors: [users.author._id],
+        testers: [users.tester._id],
+      });
+      for (const who of ['author', 'tester'])
+        expect(
+          dataOf<ParticipationSummaryResponse>(
+            await post(who, contest.key, 'join').expect(201),
+          ).virtual,
+        ).toBe(-1);
+    });
+
+    it('numbers sequential virtual joins 1, 2 and counts them apart from live users', async () => {
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      await joinParticipation(api, ended._id, users.alice._id);
+      const numbers: number[] = [];
+      for (let attempt = 0; attempt < 2; attempt += 1)
+        numbers.push(
+          dataOf<ParticipationSummaryResponse>(
+            await post('carol', ended.key, 'join').expect(201),
+          ).virtual,
+        );
+      expect(numbers).toEqual([1, 2]);
+      expect(await api.contests.findById(ended._id).lean()).toMatchObject({
+        userCount: 1,
+        virtualCount: 2,
+      });
+    });
+
     it('keeps banned users out, superusers excepted', async () => {
       const contest = await createContest(api, {
         bannedUsers: [users.carol._id, users.root._id],
@@ -174,6 +227,22 @@ describe('contest participation', () => {
         accessCode: 'opensesame',
       }).expect(201);
       await post('author', contest.key, 'join').expect(201);
+      // An existing participation re-enters without the code.
+      await post('alice', contest.key, 'join').expect(201);
+    });
+
+    it('asks testers and authors without edit rights for the code', async () => {
+      const contest = await createContest(api, {
+        accessCodeHash: sha256('opensesame'),
+        testers: [users.tester._id],
+        authors: [users.plainauthor._id],
+      });
+      for (const who of ['tester', 'plainauthor']) {
+        await post(who, contest.key, 'join').expect(403);
+        await post(who, contest.key, 'join', {
+          accessCode: 'opensesame',
+        }).expect(201);
+      }
     });
 
     it('limits guesses per user, even when the right code comes next', async () => {
@@ -213,10 +282,15 @@ describe('contest participation', () => {
         await post('frank', contest.key, 'join', { accessCode: 'nope' }).expect(
           403,
         );
+      const redis = api.app.get<Redis>(REDIS);
+      const ipCounter = async () =>
+        redis.get((await redis.keys('rate:contest-code:ip:*'))[0]);
+      expect(await ipCounter()).toBe('9');
       for (let attempt = 0; attempt < 3; attempt += 1)
         await post('frank', contest.key, 'join', {
           accessCode: 'opensesame',
         }).expect(201);
+      expect(await ipCounter()).toBe('9');
       // The tenth failure is still allowed, the eleventh attempt is not.
       await post('frank', contest.key, 'join', { accessCode: 'nope' }).expect(
         403,
@@ -278,14 +352,37 @@ describe('contest participation', () => {
         'alice',
       ],
       ['an editor', { registrationEnd: hoursFromNow(0.5) }, 'author'],
+      ['a tester', { registrationEnd: hoursFromNow(0.5) }, 'tester'],
+      [
+        'over, with an open-ended window',
+        {
+          startTime: hoursFromNow(-5),
+          endTime: hoursFromNow(-1),
+          registrationStart: hoursFromNow(-6),
+        },
+        'alice',
+      ],
     ])('refuses a registration that is %s', async (_case, fields, who) => {
       const contest = await createContest(api, {
         startTime: hoursFromNow(1),
         endTime: hoursFromNow(3),
         authors: [users.author._id],
+        testers: [users.tester._id],
         ...fields,
       });
       await post(who, contest.key, 'register').expect(409);
+    });
+
+    it('keeps banned users from registering', async () => {
+      const contest = await createContest(api, {
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+        registrationEnd: hoursFromNow(0.5),
+        bannedUsers: [users.carol._id],
+      });
+      await post('carol', contest.key, 'register')
+        .expect(403)
+        .expect(errorCode('forbidden'));
     });
   });
 
@@ -297,6 +394,19 @@ describe('contest participation', () => {
       await post('carol', other.key, 'leave').expect(404);
       await post('carol', contest.key, 'leave').expect(204);
       expect(await pointerOf('carol')).toBeNull();
+    });
+
+    it('never clears a pointer that moved to another participation', async () => {
+      const contest = await createContest(api);
+      const other = await createContest(api);
+      const stale = await joinParticipation(api, other._id, users.erin._id);
+      const joined = dataOf<ParticipationSummaryResponse>(
+        await post('erin', contest.key, 'join').expect(201),
+      );
+      await api.app
+        .get(ParticipationsRepository)
+        .clearCurrent(users.erin._id, stale._id);
+      expect(await pointerOf('erin')).toBe(joined.id);
     });
 
     it('reports the current participation and clears it once it ended or became invisible', async () => {

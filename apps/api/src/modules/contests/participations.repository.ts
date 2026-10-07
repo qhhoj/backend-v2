@@ -143,14 +143,18 @@ export class ParticipationsRepository {
     participation: ParticipationDocument,
     now: Date,
   ): Promise<ParticipationDocument> {
+    const started = await this.participations
+      .findOneAndUpdate(
+        { _id: participation._id, isRegistered: true },
+        { $set: { isRegistered: false, realStart: now } },
+        { new: true },
+      )
+      .exec();
+    // Lost the race: another join started it, so return its row, not the stale one.
     return (
-      (await this.participations
-        .findOneAndUpdate(
-          { _id: participation._id, isRegistered: true },
-          { $set: { isRegistered: false, realStart: now } },
-          { new: true },
-        )
-        .exec()) ?? participation
+      started ??
+      (await this.participations.findById(participation._id).exec()) ??
+      participation
     );
   }
 
