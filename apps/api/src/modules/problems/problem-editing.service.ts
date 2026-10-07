@@ -422,7 +422,10 @@ export class ProblemEditingService {
     principal: Principal,
     code: string,
   ): Promise<ProblemDocument> {
-    const problem = await this.problems.visibleProblem(principal, code);
+    const problem = await this.problems.visibleProblemOutsideContest(
+      principal,
+      code,
+    );
     if (!ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem)))
       throw new AppError(
         'forbidden',

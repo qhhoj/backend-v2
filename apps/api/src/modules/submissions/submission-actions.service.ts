@@ -71,7 +71,11 @@ export class SubmissionActionsService {
 
   /** Legacy `abort_submission`: the owner (unless an admin rejudged it) or `judge.abort_any_submission`. Queued → AB here; running → the bridge terminates it; finished → nothing. */
   async abort(principal: Principal, id: string): Promise<void> {
-    const { submission } = await this.visibility.visible(principal, id);
+    const { submission } = await this.visibility.visible(
+      principal,
+      id,
+      await this.visibility.viewerScope(principal),
+    );
     const isOwner = uuidStr(submission.user) === principal.userId;
     if (
       !hasPermission(principal, 'judge.abort_any_submission') &&
@@ -93,6 +97,7 @@ export class SubmissionActionsService {
     const { submission, problem } = await this.visibility.visible(
       principal,
       id,
+      await this.visibility.viewerScope(principal),
     );
     this.assertManagesProblem(principal, problem, 'judge.rejudge_submission');
     if (isLocked(submission))
@@ -115,6 +120,7 @@ export class SubmissionActionsService {
     const { submission, problem } = await this.visibility.visible(
       principal,
       id,
+      await this.visibility.viewerScope(principal),
     );
     this.assertManagesProblem(principal, problem, 'judge.reject_submission');
     if (!(await this.submissions.reject(id)))

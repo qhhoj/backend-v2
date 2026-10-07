@@ -161,11 +161,12 @@ describe('caseVisibility', () => {
     allowViewFeedback: false,
   };
   it('shows cases, batches or nothing by testcaseResultVisibility, everything to superusers', () => {
-    expect(caseVisibility(viewer(), shown, false).cases).toBe('all');
+    expect(caseVisibility(viewer(), shown, false, false).cases).toBe('all');
     expect(
       caseVisibility(
         viewer(),
         { ...shown, testcaseResultVisibility: 'B' },
+        false,
         false,
       ).cases,
     ).toBe('batches');
@@ -174,6 +175,7 @@ describe('caseVisibility', () => {
         viewer(),
         { ...shown, testcaseResultVisibility: 'S' },
         false,
+        false,
       ).cases,
     ).toBe('none');
     expect(
@@ -181,18 +183,24 @@ describe('caseVisibility', () => {
         viewer({ isSuperuser: true }),
         { ...shown, testcaseResultVisibility: 'S' },
         false,
+        false,
       ).cases,
     ).toBe('all');
   });
   it('shows feedback to superusers, editors or when allowed', () => {
-    expect(caseVisibility(viewer(), shown, false).feedback).toBe(false);
-    expect(caseVisibility(viewer(), shown, true).feedback).toBe(true);
+    expect(caseVisibility(viewer(), shown, false, false).feedback).toBe(false);
+    expect(caseVisibility(viewer(), shown, true, false).feedback).toBe(true);
     expect(
-      caseVisibility(viewer({ isSuperuser: true }), shown, false).feedback,
+      caseVisibility(viewer({ isSuperuser: true }), shown, false, false)
+        .feedback,
     ).toBe(true);
     expect(
-      caseVisibility(viewer(), { ...shown, allowViewFeedback: true }, false)
-        .feedback,
+      caseVisibility(
+        viewer(),
+        { ...shown, allowViewFeedback: true },
+        false,
+        false,
+      ).feedback,
     ).toBe(true);
   });
   it.each([

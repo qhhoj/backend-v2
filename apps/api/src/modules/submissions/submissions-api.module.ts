@@ -1,9 +1,9 @@
-import { ContestAccessModule } from '../contests/contest-access.module';
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { JudgingModule, SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { ContestAccessModule } from '../contests/contest-access.module';
 import { JudgesApiModule } from '../judges/judges-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionActionsController } from './submission-actions.controller';

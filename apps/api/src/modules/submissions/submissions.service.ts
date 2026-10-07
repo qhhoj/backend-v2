@@ -43,6 +43,11 @@ export class SubmissionsService {
     private readonly currentContest: CurrentContestService,
   ) {}
 
+  /** The viewer's current contest, resolved once per request and passed to `visible`, `viewable` and `filterFor`. */
+  viewerScope(principal: Principal | null): Promise<ContestScope | null> {
+    return this.currentContest.scopeOf(principal);
+  }
+
   /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see. */
   async list(
     principal: Principal | null,
@@ -57,7 +62,7 @@ export class SubmissionsService {
     const filter = await this.filterFor(
       principal,
       query,
-      await this.currentContest.scopeOf(principal),
+      await this.viewerScope(principal),
     );
     if (!filter) return new Paginated([], { ...meta, total: 0 });
     const { items, total } = await this.submissions.list(
@@ -93,13 +98,14 @@ export class SubmissionsService {
     principal: Principal,
     id: string,
   ): Promise<SubmissionDetailResponse> {
-    const viewed = await this.viewable(principal, id);
+    const scope = await this.viewerScope(principal);
+    const viewed = await this.viewable(principal, id, scope);
     const { problem, canEdit } = viewed;
     const visibility = caseVisibility(
       principal,
       problem,
       canEdit,
-      (await this.currentContest.scopeOf(principal)) !== null,
+      scope !== null,
     );
     // Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them.
     const submission =
@@ -126,10 +132,17 @@ export class SubmissionsService {
     principal: Principal,
     id: string,
   ): Promise<{ submission: SubmissionDocument; caseEvents: boolean }> {
-    const { submission, problem, canEdit } = await this.viewable(principal, id);
+    const scope = await this.viewerScope(principal);
+    const { submission, problem, canEdit } = await this.viewable(
+      principal,
+      id,
+      scope,
+    );
     return {
       submission,
-      caseEvents: caseVisibility(principal, problem, canEdit).cases === 'all',
+      caseEvents:
+        caseVisibility(principal, problem, canEdit, scope !== null).cases ===
+        'all',
     };
   }
 
@@ -137,7 +150,11 @@ export class SubmissionsService {
     principal: Principal,
     id: string,
   ): Promise<SubmissionSourceResponse> {
-    const { submission } = await this.viewable(principal, id);
+    const { submission } = await this.viewable(
+      principal,
+      id,
+      await this.viewerScope(principal),
+    );
     return {
       id: uuidStr(submission._id),
       source: (await this.submissions.findSource(submission._id)) ?? '',
@@ -148,6 +165,7 @@ export class SubmissionsService {
   async visible(
     principal: Principal,
     id: string,
+    scope: ContestScope | null,
   ): Promise<{ submission: SubmissionDocument; problem: ProblemDocument }> {
     const submission = await this.submissions.findById(id);
     const problem =
@@ -156,11 +174,7 @@ export class SubmissionsService {
     if (
       !submission ||
       !problem ||
-      !ProblemAccess.canSee(
-        principal,
-        ProblemAccess.accessView(problem),
-        await this.currentContest.scopeOf(principal),
-      )
+      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem), scope)
     )
       throw new AppError('not_found', 404, 'No such submission');
     return { submission, problem };
@@ -170,12 +184,13 @@ export class SubmissionsService {
   async viewable(
     principal: Principal,
     id: string,
+    scope: ContestScope | null,
   ): Promise<{
     submission: SubmissionDocument;
     problem: ProblemDocument;
     canEdit: boolean;
   }> {
-    const { submission, problem } = await this.visible(principal, id);
+    const { submission, problem } = await this.visible(principal, id, scope);
     const view = ProblemAccess.accessView(problem);
     const canEdit = ProblemAccess.canEdit(principal, view);
     const access = detailAccess(

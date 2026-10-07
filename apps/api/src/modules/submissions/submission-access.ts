@@ -63,7 +63,7 @@ export function caseVisibility(
     allowViewFeedback: boolean;
   },
   canEdit: boolean,
-  inContest = false,
+  inContest: boolean,
 ): CaseVisibility {
   return {
     cases:

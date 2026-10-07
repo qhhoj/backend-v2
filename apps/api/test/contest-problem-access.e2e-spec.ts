@@ -1,4 +1,5 @@
 import { generateApiToken } from '@libs/auth';
+import type { SubmissionCase } from '@libs/database';
 import type { ProblemListItemResponse } from '../src/modules/problems/dto/problem-list.response';
 import {
   contestProblem,
@@ -52,6 +53,13 @@ describe('contest-only problem access', () => {
       api.http().post(`/api/internal/problems/${code}/submit`),
       session,
     ).send({ language: catalog.languages.cpp, source: 'int main() {}' });
+  const ownSubmissionCount = async () =>
+    dataOf<unknown[]>(
+      await authed(
+        api.http().get('/api/internal/submissions?user=contestant'),
+        session,
+      ).expect(200),
+    ).length;
   const v2 = (path: string) =>
     api.http().get(`/api/v2${path}`).set('Authorization', `Bearer ${apiToken}`);
 
@@ -104,6 +112,7 @@ describe('contest-only problem access', () => {
       api.http().get(`/api/internal/submissions/${own._id}`),
       session,
     ).expect(200);
+    expect(await ownSubmissionCount()).toBe(1);
     await submit('mine').expect(201);
     await submit('theirs').expect(404);
   });
@@ -117,6 +126,7 @@ describe('contest-only problem access', () => {
     await enter(upcoming._id);
     await problem('public_one').expect(404);
     await submit('public_one').expect(404);
+    expect(await ownSubmissionCount()).toBe(0);
     expect(await listedCodes()).toEqual([]);
   });
 
@@ -235,5 +245,109 @@ describe('contest-only problem access', () => {
     await v2('/problem/quiet_private').expect(404);
     const listed = await v2('/problems').expect(200);
     expect(JSON.stringify(listed.body)).not.toContain('quiet_private');
+  });
+
+  it('hides the editorial while in any contest, and shows it again after leaving', async () => {
+    await createProblem(api, catalog, {
+      code: 'solved_public',
+      solution: {
+        isPublic: true,
+        publishOn: new Date('2026-01-01T00:00:00Z'),
+        authors: [],
+        content: 'x',
+        contentHtml: '<p>x</p>',
+      },
+    });
+    const contest = await createContest(api);
+    const hasEditorial = async () =>
+      dataOf<{ hasEditorial: boolean }>(
+        await problem('solved_public').expect(200),
+      ).hasEditorial;
+    const editorial = () =>
+      authed(
+        api.http().get('/api/internal/problems/solved_public/editorial'),
+        session,
+      );
+    await makeCurrent(api, userId, null);
+    await editorial().expect(200);
+    expect(await hasEditorial()).toBe(true);
+    await enter(contest._id);
+    await editorial().expect(404);
+    expect(await hasEditorial()).toBe(false);
+    await authed(
+      api.http().post(`/api/internal/contests/${contest.key}/leave`),
+      session,
+    ).expect(204);
+    await editorial().expect(200);
+    expect(await hasEditorial()).toBe(true);
+  });
+
+  it('hides testcaseVisibility C output while in a contest only', async () => {
+    const outputProblem = await createProblem(api, catalog, {
+      code: 'c_output',
+      testcaseVisibility: 'C',
+      testcaseResultVisibility: 'A',
+    });
+    const cases: SubmissionCase[] = [
+      {
+        position: 1,
+        status: 'AC',
+        time: 0.1,
+        memory: 1,
+        points: 1,
+        total: 1,
+        batch: null,
+        feedback: '',
+        extendedFeedback: '',
+        output: '42',
+      },
+    ];
+    const stored = await seedSubmission(api, {
+      user: userId,
+      problem: outputProblem._id,
+      language: catalog.languages.cpp,
+      cases,
+    });
+    const firstCase = async () =>
+      dataOf<{ cases: Array<Record<string, unknown>> }>(
+        await authed(
+          api.http().get(`/api/internal/submissions/${stored._id}`),
+          session,
+        ).expect(200),
+      ).cases[0];
+    await makeCurrent(api, userId, null);
+    expect(await firstCase()).toMatchObject({ output: '42' });
+    await enter((await createContest(api))._id);
+    expect(await firstCase()).not.toHaveProperty('output');
+  });
+
+  it('applies no contest scope to /api/v2 submission detail, like the other v2 routes', async () => {
+    const secret = await createProblem(api, catalog, {
+      code: 'v2_secret',
+      isPublic: false,
+    });
+    const open = await createProblem(api, catalog, { code: 'v2_open' });
+    const secretSubmission = await seedSubmission(api, {
+      user: userId,
+      problem: secret._id,
+      language: catalog.languages.cpp,
+    });
+    const openSubmission = await seedSubmission(api, {
+      user: userId,
+      problem: open._id,
+      language: catalog.languages.cpp,
+    });
+    const contest = await createContest(api, {
+      problems: [contestProblem(secret._id, 0)],
+    });
+    await enter(contest._id);
+    await v2(`/submission/${secretSubmission._id}`).expect(404);
+    await makeCurrent(api, userId, null);
+    const upcoming = await createContest(api, {
+      startTime: hoursFromNow(1),
+      endTime: hoursFromNow(2),
+    });
+    await enter(upcoming._id);
+    await v2(`/submission/${openSubmission._id}`).expect(200);
   });
 });

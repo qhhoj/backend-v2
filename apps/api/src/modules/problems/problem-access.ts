@@ -136,6 +136,7 @@ function visibleFilter(
   const own = ownVisibleFilter(principal);
   if (!scope) return own;
   if (!scope.started) return { _id: { $in: [] } };
+  // `{}` already matches every problem.
   return Object.keys(own).length
     ? { $or: [{ _id: { $in: [...scope.problemIds] } }, own] }
     : own;

@@ -5,12 +5,12 @@ import { AppError, Paginated } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { CurrentContestService } from '../contests/current-contest.service';
 import { EditorialResponse } from './dto/editorial.response';
 import { ProblemDetailResponse } from './dto/problem-detail.response';
 import { UserSummaryResponse } from './dto/user-summary.response';
 import { ProblemListQueryDto } from './dto/problem-list.dto';
 import { ProblemListItemResponse } from './dto/problem-list.response';
-import { CurrentContestService } from '../contests/current-contest.service';
 import { ProblemAccess } from './problem-access';
 import type { ContestScope } from './problem-access';
 import {
@@ -106,7 +106,8 @@ export class ProblemsService {
     code: string,
     lang: StatementLanguage,
   ): Promise<ProblemDetailResponse> {
-    const problem = await this.visibleProblem(principal, code);
+    const scope = await this.currentContest.scopeOf(principal);
+    const problem = await this.visibleUnder(principal, code, scope);
     const canEdit = this.canEdit(principal, problem);
     const personIds = [...problem.authors];
     if (canEdit)
@@ -125,7 +126,8 @@ export class ProblemsService {
     return ProblemDetailResponse.from(problem, {
       lang,
       canEdit,
-      hasEditorial: this.editorialVisible(principal, problem, canEdit),
+      hasEditorial:
+        scope === null && this.editorialVisible(principal, problem, canEdit),
       viewerStatus:
         (await this.viewerStatusesOf(principal, [problem._id])).get(
           problem._id,
@@ -143,10 +145,16 @@ export class ProblemsService {
     code: string,
     lang: StatementLanguage,
   ): Promise<EditorialResponse> {
-    const problem = await this.visibleProblem(principal, code);
+    const scope = await this.currentContest.scopeOf(principal);
+    const problem = await this.visibleUnder(principal, code, scope);
     const canEdit = this.canEdit(principal, problem);
     const { solution } = problem;
-    if (!solution || !this.editorialVisible(principal, problem, canEdit))
+    // Legacy `ProblemSolution` is a 404 for anyone in a contest.
+    if (
+      scope !== null ||
+      !solution ||
+      !this.editorialVisible(principal, problem, canEdit)
+    )
       throw new AppError('not_found', 404, 'No such editorial');
     const authors = (
       await this.users.findByIds(solution.authors.map(uuidStr))
@@ -166,7 +174,7 @@ export class ProblemsService {
     );
   }
 
-  /** `/api/v2` ignores the viewer's current contest (legacy `skip_contest_problem_check`). */
+  /** `/api/v2` and editing ignore the viewer's current contest (legacy `skip_contest_problem_check`; legacy edit views check `is_editable_by` only). */
   visibleProblemOutsideContest(
     principal: Principal | null,
     code: string,

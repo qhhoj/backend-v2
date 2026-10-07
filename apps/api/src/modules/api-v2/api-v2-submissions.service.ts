@@ -66,11 +66,13 @@ export class ApiV2SubmissionsService {
     principal: Principal,
     id: string,
   ): Promise<Record<string, unknown>> {
+    // No contest scope, like every `/api/v2` route (legacy `APISubmissionDetail` checks `can_see_detail` only).
     const { submission, problem, canEdit } = await this.submissions.viewable(
       principal,
       id,
+      null,
     );
-    const shown = caseVisibility(principal, problem, canEdit).cases;
+    const shown = caseVisibility(principal, problem, canEdit, false).cases;
     const withCases =
       shown === 'none'
         ? submission
