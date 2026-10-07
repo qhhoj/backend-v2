@@ -73,8 +73,10 @@ export class ContestsService {
     const viewer = await this.viewers.viewerOf(principal, contest, now);
     const canEdit = ContestAccess.canEdit(principal, view);
     const isTester = ContestAccess.isTester(principal, view);
+    const isEditor = ContestAccess.isEditor(principal, view);
     const showProblems =
       viewer.inContest ||
+      isEditor ||
       canEdit ||
       isTester ||
       contestPhase(contest, now) === 'ended';
@@ -98,7 +100,7 @@ export class ContestsService {
         })),
       viewer: {
         canEdit,
-        isEditor: ContestAccess.isEditor(principal, view),
+        isEditor,
         isTester,
         inContest: viewer.inContest,
         liveParticipation:

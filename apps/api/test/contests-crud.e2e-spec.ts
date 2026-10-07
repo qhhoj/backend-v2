@@ -11,6 +11,7 @@ import {
   createContest,
   hoursFromNow,
   joinParticipation,
+  makeCurrent,
 } from './contest-fixtures';
 import {
   authed,
@@ -79,6 +80,9 @@ describe('contest CRUD', () => {
         { permissions: ['judge.add_contest', 'judge.create_private_contest'] },
       ],
       ['rater', { permissions: ['judge.add_contest', 'judge.contest_rating'] }],
+      ['codeless', { permissions: ['judge.edit_own_contest'] }],
+      ['tester', {}],
+      ['author', {}],
       ['plain', {}],
     ];
     for (const [name, extra] of roles) {
@@ -86,6 +90,7 @@ describe('contest CRUD', () => {
       sessions[name] = await loginAs(api, users[name]._id);
     }
     problems.open = await createProblem(api, catalog, { code: 'open' });
+    problems.second = await createProblem(api, catalog, { code: 'second' });
     problems.secret = await createProblem(api, catalog, {
       code: 'secret',
       isPublic: false,
@@ -118,6 +123,15 @@ describe('contest CRUD', () => {
       expect(stored.problems).toMatchObject([
         { points: 50, order: 0, partial: true },
       ]);
+    });
+
+    it('lists the creator once among the authors', async () => {
+      const created = dataOf<ContestDetailResponse>(
+        await create('creator', { authors: [users.creator._id] }).expect(201),
+      );
+      expect(created.authors).toHaveLength(1);
+      const stored = await api.contests.findOne({ key: created.key }).lean();
+      expect(stored!.authors).toHaveLength(1);
     });
 
     it('stores no hash for an empty access code', async () => {
@@ -275,6 +289,9 @@ describe('contest CRUD', () => {
         .get(`${CONTESTS}?tag=${tag}&pageSize=2&page=2`)
         .expect(200);
       expect((page.body as { meta: { total: number } }).meta.total).toBe(3);
+      expect(
+        dataOf<ContestListItemResponse[]>(page).map((contest) => contest.key),
+      ).toEqual([past.key]);
     });
 
     it('hides an invisible contest as 404 and its problems until it ends, unless the viewer edits it', async () => {
@@ -313,6 +330,43 @@ describe('contest CRUD', () => {
       expect((await detail(ended.key)).settings).toBeNull();
     });
 
+    it('shows problems to testers, to participants in the contest and to authors without edit permission', async () => {
+      const problemsOf = [contestProblem(problems.open._id, 0)];
+      const contest = await createContest(api, {
+        problems: problemsOf,
+        testers: [users.tester._id],
+        authors: [users.author._id],
+      });
+      const tester = await detail(contest.key, 'tester');
+      expect([tester.viewer.isTester, tester.problems]).toEqual([
+        true,
+        expect.any(Array),
+      ]);
+      const author = await detail(contest.key, 'author');
+      expect([author.viewer.isEditor, author.viewer.canEdit]).toEqual([
+        true,
+        false,
+      ]);
+      expect(author.problems).toHaveLength(1);
+
+      expect((await detail(contest.key, 'plain')).problems).toBeNull();
+      const joined = await joinParticipation(api, contest._id, users.plain._id);
+      const elsewhere = await createContest(api);
+      const other = await joinParticipation(
+        api,
+        elsewhere._id,
+        users.plain._id,
+      );
+      await makeCurrent(api, users.plain._id, other._id);
+      expect((await detail(contest.key, 'plain')).viewer.inContest).toBe(false);
+      expect((await detail(contest.key, 'plain')).problems).toBeNull();
+      await makeCurrent(api, users.plain._id, joined._id);
+      const inside = await detail(contest.key, 'plain');
+      expect(inside.viewer.inContest).toBe(true);
+      expect(inside.problems).toHaveLength(1);
+      await makeCurrent(api, users.plain._id, null);
+    });
+
     it('tells a viewer about their live participation', async () => {
       const contest = await createContest(api);
       await joinParticipation(api, contest._id, users.plain._id);
@@ -334,6 +388,27 @@ describe('contest CRUD', () => {
       expect((await detail(contest.key)).name).toBe('Renamed');
     });
 
+    it('keeps the request order of problems and gates the access code on its permission', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id, users.codeless._id],
+      });
+      const ordered = [problems.second._id, problems.open._id];
+      await patch('creator', contest.key, {
+        problems: ordered.map((problem) => ({ problem, points: 1 })),
+      }).expect(200);
+      const shown = (await detail(contest.key, 'creator')).problems!;
+      expect(
+        shown.map((problem) => [problem.label, problem.problemId]),
+      ).toEqual([
+        ['1', ordered[0]],
+        ['2', ordered[1]],
+      ]);
+      await patch('codeless', contest.key, { accessCode: 'x' })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await patch('codeless', contest.key, { accessCode: '' }).expect(200);
+    });
+
     it('queues a rescore only when scoring changes', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id],
@@ -348,12 +423,13 @@ describe('contest CRUD', () => {
         problems: [{ problem: problems.open._id, points: 10 }],
       }).expect(200);
       await patch('creator', contest.key, { pointsPrecision: 1 }).expect(200);
+      await patch('creator', contest.key, { frozenLastMinutes: 30 }).expect(
+        200,
+      );
       const jobs = await rescores.getJobs(['waiting']);
-      expect(jobs.map((job) => job.data.contestId)).toEqual([
-        contest._id,
-        contest._id,
-        contest._id,
-      ]);
+      expect(jobs.map((job) => job.data.contestId)).toEqual(
+        Array(4).fill(contest._id),
+      );
       // The new format's defaults replace the old config.
       expect(
         (await api.contests.findById(contest._id).lean())!.formatConfig,

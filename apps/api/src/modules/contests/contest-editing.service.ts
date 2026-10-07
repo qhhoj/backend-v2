@@ -283,7 +283,7 @@ export class ContestEditingService {
         throw new AppError(
           'forbidden',
           403,
-          `Changing ${field} requires ${permission}`,
+          `Changing ${field === 'accessCodeHash' ? 'accessCode' : field} requires ${permission}`,
         );
     if (
       fields.isVisible === true &&
