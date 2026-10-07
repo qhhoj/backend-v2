@@ -276,6 +276,25 @@ describe('blog editing', () => {
     expect(edited.summaryHtml).toContain('<em>short</em>');
   });
 
+  it('limits post creates and edits to ten per hour per user, leaving the post unchanged', async () => {
+    const { user, session } = await person();
+    const { session: other } = await person();
+    const post = await createPost(api, { authors: [user._id] });
+    for (let index = 0; index < 5; index++)
+      await create(session, { title: `Post ${index}` }).expect(201);
+    for (let index = 0; index < 5; index++)
+      await patch(post._id, session, { title: `Edit ${index}` }).expect(200);
+    await create(session, { title: 'Over' })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    await patch(post._id, session, { title: 'Over' })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    expect(await api.blogPosts.countDocuments({ authors: user._id })).toBe(6);
+    expect((await api.blogPosts.findById(post._id))!.title).toBe('Edit 4');
+    await create(other, { title: 'Other' }).expect(201);
+  });
+
   it('deletes with delete_blogpost, taking comments, votes and the lock along and recomputing their authors', async () => {
     const { user, session } = await person();
     const { user: deleter, session: deleterSession } = await person({

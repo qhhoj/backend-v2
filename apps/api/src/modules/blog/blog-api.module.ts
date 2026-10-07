@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
+import { RateLimitService } from '@libs/common';
 import { DiscordModule } from '../discord/discord.module';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
@@ -25,7 +26,7 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
     OrganizationPostsController,
     BlogEditingController,
   ],
-  providers: [BlogPostsService, BlogEditingService],
+  providers: [BlogPostsService, BlogEditingService, RateLimitService],
   exports: [BlogPostsService],
 })
 export class BlogApiModule {}

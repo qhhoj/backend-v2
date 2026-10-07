@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { AppError, ENV, unique } from '@libs/common';
+import { AppError, ENV, RateLimitService, unique } from '@libs/common';
 import type { Env } from '@libs/common';
 import {
   canWritePersonalPost,
@@ -48,6 +48,9 @@ const revisionView = (post: Partial<BlogPost>) =>
   );
 /** User-authored posts: the `blog` style confines their layout (editorials use `solution`). */
 const POST_STYLE = 'blog';
+/** Creates and edits share one budget: each renders user Markdown and KaTeX synchronously. */
+const WRITE_LIMIT = 10;
+const WRITE_WINDOW_SECONDS = 60 * 60;
 
 @Injectable()
 export class BlogEditingService {
@@ -61,6 +64,7 @@ export class BlogEditingService {
     private readonly revisions: RevisionsRepository,
     private readonly contributions: ContributionPointsService,
     private readonly discord: DiscordWebhooksService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   /** Legacy `BlogPostCreate` and `BlogPostCreateOrganization`. */
@@ -92,6 +96,7 @@ export class BlogEditingService {
         'Solve at least 10 problems and stay unmuted to write a post',
       );
     this.assertFlags(principal, dto, { globalPost: false, sticky: false });
+    await this.reserveWrite(principal);
     const post = await this.posts.create({
       title: dto.title,
       slug: postSlug(organization ? organization.slug : principal.username),
@@ -134,6 +139,7 @@ export class BlogEditingService {
     if ((await this.users.findById(principal.userId))!.mute)
       throw forbidden('Muted users cannot edit posts');
     this.assertFlags(principal, dto, post);
+    await this.reserveWrite(principal);
     const { authorIds, content, summary, publishOn, ...fields } = dto;
     const changes: Partial<BlogPost> = { ...fields };
     if (publishOn !== undefined) changes.publishOn = new Date(publishOn);
@@ -221,6 +227,14 @@ export class BlogEditingService {
     message: string,
   ): void {
     if (!hasPermission(principal, permission)) throw forbidden(message);
+  }
+
+  private async reserveWrite(principal: Principal): Promise<void> {
+    await this.rateLimit.reserve(
+      [`blog-write:user:${principal.userId}`],
+      WRITE_LIMIT,
+      WRITE_WINDOW_SECONDS,
+    );
   }
 
   private refuseInOfficialContest(principal: Principal): void {
