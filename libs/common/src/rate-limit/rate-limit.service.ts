@@ -20,6 +20,11 @@ export class RateLimitService {
     return count as number;
   }
 
+  /** Hits counted in the key's current window, without counting one. */
+  async count(key: string): Promise<number> {
+    return Number((await this.redis.get(rateKey(key))) ?? 0);
+  }
+
   /** Hits every key before the guarded work; over the limit throws (hits stay counted), else returns a release that gives the attempt back. */
   async reserve(
     keys: string[],

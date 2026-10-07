@@ -195,6 +195,15 @@ export function loadEnv(
     inside(env.userDataRoot, env.mediaRoot)
   )
     problems.push('USER_DATA_ROOT must not be inside MEDIA_ROOT');
+  if (
+    env.userDataRoot &&
+    env.contestDataRoot &&
+    (inside(env.userDataRoot, env.contestDataRoot) ||
+      inside(env.contestDataRoot, env.userDataRoot))
+  )
+    problems.push(
+      'USER_DATA_ROOT and CONTEST_DATA_ROOT must be separate directories',
+    );
   if (problems.length)
     throw new Error(`Invalid environment: ${problems.join('; ')}`);
   return env;

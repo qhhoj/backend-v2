@@ -91,8 +91,11 @@ export class UserDataRepository {
     };
   }
 
-  /** Every submission of the user, oldest first, through `{user, _id}`. */
-  async submissionsOf(userId: string): Promise<UserDataSubmission[]> {
+  /** The user's submissions, oldest first, through `{user, _id}`; at most `limit` rows. */
+  async submissionsOf(
+    userId: string,
+    limit: number,
+  ): Promise<UserDataSubmission[]> {
     const rows = await this.submissions
       .find(
         { user: userId },
@@ -109,6 +112,7 @@ export class UserDataRepository {
         },
       )
       .sort({ _id: 1 })
+      .limit(limit)
       .lean()
       .exec();
     const [codes, languages] = await Promise.all([

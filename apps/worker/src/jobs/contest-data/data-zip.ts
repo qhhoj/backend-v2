@@ -1,4 +1,3 @@
-import { writeLazyZip } from '../lazy-zip';
 import type { ZipLimits } from '../lazy-zip';
 
 export type ContestDataLimits = ZipLimits;
@@ -63,23 +62,4 @@ export function planEntries(rows: readonly DataRow[]): DataEntry[] {
         : `${folder}/$History/${code}_${submissionId}.${suffix}`,
     };
   });
-}
-
-/** Past `maxBytes` of sources the write aborts; the partial file is the caller's to remove. */
-export function writeDataZip(
-  entries: readonly DataEntry[],
-  sourceAt: (index: number) => Promise<string>,
-  path: string,
-  maxBytes: number,
-): Promise<void> {
-  return writeLazyZip(
-    entries.map((entry) => entry.name),
-    sourceAt,
-    path,
-    maxBytes,
-    () =>
-      new ContestDataError(
-        `The sources pass ${maxBytes} bytes; narrow the filter`,
-      ),
-  );
 }

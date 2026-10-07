@@ -75,6 +75,15 @@ describe('loadEnv', () => {
     ).not.toThrow();
   });
 
+  it('refuses user and contest data roots that are equal or nested', () => {
+    const roots = (user: string, contest: string) => () =>
+      loadEnv({ ...valid, USER_DATA_ROOT: user, CONTEST_DATA_ROOT: contest });
+    expect(roots('/srv/data', '/srv/data')).toThrow(/USER_DATA_ROOT/);
+    expect(roots('/srv/data/users', '/srv/data')).toThrow(/USER_DATA_ROOT/);
+    expect(roots('/srv/data', '/srv/data/contests')).toThrow(/USER_DATA_ROOT/);
+    expect(roots('/srv/user-data', '/srv/contest-data')).not.toThrow();
+  });
+
   it('reads the optional MOSS key and contest data root, blank meaning off', () => {
     expect(loadEnv({ ...valid }).mossApiKey).toBeNull();
     expect(loadEnv({ ...valid, MOSS_API_KEY: '' }).mossApiKey).toBeNull();

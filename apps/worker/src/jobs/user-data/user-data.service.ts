@@ -25,6 +25,10 @@ export class UserDataError extends Error {}
 
 const json = (value: unknown) => JSON.stringify(value, null, 4);
 const TEMP_FILE_AGE_MS = 86_400_000;
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+/** The sweep touches only the names `userDataPath` and `userDataTempPath` produce. */
+const ZIP_FILE = new RegExp(`^${UUID}\\.zip$`);
+const TEMP_FILE = new RegExp(`^${UUID}\\.zip\\.[^/]+\\.tmp$`);
 
 @Injectable()
 export class UserDataService {
@@ -45,7 +49,10 @@ export class UserDataService {
     await rm(path, { force: true });
     const profile = await this.repository.profile(userId);
     if (!profile) return 0;
-    const submissions = await this.repository.submissionsOf(userId);
+    const submissions = await this.repository.submissionsOf(
+      userId,
+      this.limits.maxEntries + 1,
+    );
     if (submissions.length > this.limits.maxEntries)
       throw new UserDataError(
         `More than ${this.limits.maxEntries} submissions`,
@@ -102,7 +109,7 @@ export class UserDataService {
     return names.length;
   }
 
-  /** Zips past their seven days and temp files of crashed runs older than a day. Returns the files removed. */
+  /** Own zips past their seven days and own temp files of crashed runs older than a day; any other file in the root is left alone. Returns the files removed. */
   async sweep(now = new Date()): Promise<number> {
     const root = this.env.userDataRoot;
     if (!root) return 0;
@@ -111,9 +118,9 @@ export class UserDataService {
       const path = join(root, name);
       const file = await stat(path).catch(() => null);
       if (!file) continue;
-      const expired = name.endsWith('.tmp')
+      const expired = TEMP_FILE.test(name)
         ? file.mtime.getTime() + TEMP_FILE_AGE_MS <= now.getTime()
-        : name.endsWith('.zip') && isUserDataExpired(file.mtime, now);
+        : ZIP_FILE.test(name) && isUserDataExpired(file.mtime, now);
       if (expired) {
         await rm(path, { force: true });
         removed += 1;

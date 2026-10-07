@@ -47,7 +47,10 @@ describe('user data routes', () => {
     expect((await queue.getJob(userDataJobId(user._id)))?.data).toEqual({
       userId: user._id,
     });
-    expect((await status(session)).state).toBe('preparing');
+    expect(await status(session)).toMatchObject({
+      state: 'preparing',
+      canPrepare: false,
+    });
     await prepare(session).expect(409);
   });
 
@@ -55,7 +58,10 @@ describe('user data routes', () => {
     const { user, session } = await person();
     await prepare(session).expect(202);
     await queue.remove(userDataJobId(user._id));
-    expect((await status(session)).state).toBe('none');
+    expect(await status(session)).toMatchObject({
+      state: 'none',
+      canPrepare: true,
+    });
     await prepare(session).expect(202);
   });
 
@@ -89,8 +95,10 @@ describe('user data routes', () => {
     await queue.remove(userDataJobId(user._id));
     await prepare(session).expect(202);
     await queue.remove(userDataJobId(user._id));
+    expect((await status(session)).canPrepare).toBe(false);
     await prepare(session).expect(429);
     expect(await queue.getJob(userDataJobId(user._id))).toBeUndefined();
+    expect((await status(session)).canPrepare).toBe(false);
   });
 
   it('streams the zip as an attachment', async () => {

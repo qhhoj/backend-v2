@@ -89,6 +89,30 @@ describe('user data export', () => {
       email: 'owner@example.com',
       about: 'me',
     });
+    expect(Object.keys(JSON.parse(files['profile.json'])).sort()).toEqual(
+      [
+        'aceTheme',
+        'about',
+        'contributionPoints',
+        'dateJoined',
+        'displayRank',
+        'email',
+        'firstName',
+        'language',
+        'lastLogin',
+        'lastName',
+        'mathEngine',
+        'organizations',
+        'performancePoints',
+        'points',
+        'problemCount',
+        'rating',
+        'siteTheme',
+        'timezone',
+        'userScript',
+        'username',
+      ].sort(),
+    );
     for (const secret of [
       'pbkdf2',
       'TOTPSECRET',
@@ -171,15 +195,22 @@ describe('user data export', () => {
       userDataPath(worker.userDataRoot, newId()),
     ];
     const temporary = join(worker.userDataRoot, `${newId()}.zip.run.tmp`);
-    for (const path of [fresh, stale, temporary]) writeFileSync(path, 'zip');
+    const foreign = [
+      join(worker.userDataRoot, 'contest.zip'),
+      join(worker.userDataRoot, 'notes.tmp'),
+    ];
+    for (const path of [fresh, stale, temporary, ...foreign])
+      writeFileSync(path, 'zip');
     const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000);
     utimesSync(stale, eightDaysAgo, eightDaysAgo);
-    utimesSync(temporary, eightDaysAgo, eightDaysAgo);
+    for (const path of [temporary, ...foreign])
+      utimesSync(path, eightDaysAgo, eightDaysAgo);
     expect(await service.sweep()).toBe(2);
     expect([
       existsSync(fresh),
       existsSync(stale),
       existsSync(temporary),
-    ]).toEqual([true, false, false]);
+      ...foreign.map((path) => existsSync(path)),
+    ]).toEqual([true, false, false, true, true]);
   });
 });

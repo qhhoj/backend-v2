@@ -28,6 +28,8 @@ import {
 } from '../core/rate-limits';
 import type { UserDataStatusResponse } from './dto/user-data.response';
 
+const dailyKey = (userId: string) => `user-data:user:${userId}`;
+
 @Injectable()
 export class UserDataService {
   constructor(
@@ -46,6 +48,14 @@ export class UserDataService {
     const preparing =
       (await this.queue.getJob(userDataJobId(user._id))) !== undefined;
     const preparedAt = user.dataLastDownloaded;
+    const dailyLimitUsed =
+      (await this.rateLimits.count(dailyKey(user._id))) >=
+      USER_DATA_PREPARE_LIMIT;
+    const nextPrepareAt = canPrepareUserData(preparedAt, file !== null, now)
+      ? null
+      : new Date(
+          preparedAt!.getTime() + USER_DATA_PREPARE_INTERVAL_MS,
+        ).toISOString();
     return {
       state: preparing ? 'preparing' : file ? 'ready' : 'none',
       preparedAt: preparedAt?.toISOString() ?? null,
@@ -54,11 +64,8 @@ export class UserDataService {
         ? new Date(file.mtime.getTime() + USER_DATA_TTL_MS).toISOString()
         : null,
       size: file?.size ?? null,
-      nextPrepareAt: canPrepareUserData(preparedAt, file !== null, now)
-        ? null
-        : new Date(
-            preparedAt!.getTime() + USER_DATA_PREPARE_INTERVAL_MS,
-          ).toISOString(),
+      nextPrepareAt,
+      canPrepare: !preparing && nextPrepareAt === null && !dailyLimitUsed,
     };
   }
 
@@ -82,7 +89,7 @@ export class UserDataService {
         'Your data can be prepared once a day',
       );
     await this.rateLimits.reserve(
-      [`user-data:user:${user._id}`],
+      [dailyKey(user._id)],
       USER_DATA_PREPARE_LIMIT,
       USER_DATA_PREPARE_WINDOW_SECONDS,
     );

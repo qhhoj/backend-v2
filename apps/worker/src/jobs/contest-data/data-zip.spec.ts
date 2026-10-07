@@ -1,13 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { readZip } from '../../../test/read-zip';
-import {
-  ContestDataError,
-  planEntries,
-  safeSegment,
-  writeDataZip,
-} from './data-zip';
+import { planEntries, safeSegment } from './data-zip';
 import type { DataRow } from './data-zip';
 
 const row = (
@@ -83,66 +74,5 @@ describe('safeSegment', () => {
     for (const name of ['', '.', '..', '...', '/', '\u0000'])
       expect(['', '.', '..']).not.toContain(safeSegment(name));
     expect(safeSegment('x'.repeat(500)).length).toBeLessThanOrEqual(64);
-  });
-});
-
-describe('writeDataZip', () => {
-  let directory: string;
-  let path: string;
-  beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'qhhoj-data-zip-'));
-    path = join(directory, 'out.zip');
-  });
-  afterEach(() => rmSync(directory, { recursive: true, force: true }));
-
-  it('streams every entry, fetching sources lazily one at a time', async () => {
-    let inFlight = 0;
-    let peak = 0;
-    const sourceAt = async (index: number) => {
-      inFlight += 1;
-      peak = Math.max(peak, inFlight);
-      await new Promise((resolve) => setImmediate(resolve));
-      inFlight -= 1;
-      return `source ${index}`;
-    };
-    await writeDataZip(
-      [
-        { submissionId: 's1', name: 'a/x.cpp' },
-        { submissionId: 's2', name: 'b/x.cpp' },
-      ],
-      sourceAt,
-      path,
-      1024,
-    );
-    expect(await readZip(path)).toEqual({
-      'a/x.cpp': 'source 0',
-      'b/x.cpp': 'source 1',
-    });
-    expect(peak).toBe(1);
-  });
-
-  it('aborts at the byte cap', async () => {
-    await expect(
-      writeDataZip(
-        [
-          { submissionId: 's1', name: 'a/x.cpp' },
-          { submissionId: 's2', name: 'a/y.cpp' },
-        ],
-        () => Promise.resolve('x'.repeat(600)),
-        path,
-        1000,
-      ),
-    ).rejects.toThrow(ContestDataError);
-  });
-
-  it('fails when a source cannot be fetched', async () => {
-    await expect(
-      writeDataZip(
-        [{ submissionId: 's1', name: 'a/x.cpp' }],
-        () => Promise.reject(new Error('database down')),
-        path,
-        1000,
-      ),
-    ).rejects.toThrow('database down');
   });
 });
