@@ -59,7 +59,6 @@ describe('contest stats', () => {
     const contest = await createContest(api, {
       startTime: hoursFromNow(-3),
       endTime: hoursFromNow(-1),
-      showSubmissionList: true,
       problems: [
         contestProblem(problems.alpha._id, 0),
         contestProblem(problems.beta._id, 1),
@@ -125,8 +124,13 @@ describe('contest stats', () => {
       frozenLastMinutes: 60,
       authors: [users.editor._id],
       showSubmissionList: true,
+      problems: [contestProblem(problems.alpha._id, 0)],
     });
     await api.http().get(contestUrl(frozen.key, '/stats')).expect(403);
+    await authed(
+      api.http().get(contestUrl(frozen.key, '/stats')),
+      sessions.alice,
+    ).expect(403);
     await seedSubmission(api, {
       problem: problems.alpha._id,
       language: catalog.languages.cpp,
@@ -134,10 +138,11 @@ describe('contest stats', () => {
       contest: frozen._id,
       date: hoursFromNow(-1.5),
     });
-    expect((await stats(frozen.key, 'editor')).problems).toEqual([]);
-    expect((await stats(frozen.key, 'editor')).languages).toMatchObject([
-      { count: 1, acRate: 100 },
+    const editorStats = await stats(frozen.key, 'editor');
+    expect(editorStats.problems).toMatchObject([
+      { code: 'alpha', total: 1, results: { AC: 1 } },
     ]);
+    expect(editorStats.languages).toMatchObject([{ count: 1, acRate: 100 }]);
   });
 
   it('reads one contest through the contest index', async () => {
