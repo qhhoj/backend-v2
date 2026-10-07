@@ -1,12 +1,23 @@
 import { Body, Controller, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { RefuseNullFieldsPipe } from '@libs/common';
 import { ContestEditingService } from './contest-editing.service';
 import { ContestDetailResponse } from '../core/dto/contest-detail.response';
 import { CloneContestDto } from './dto/contest-clone.dto';
 import { CreateContestDto, UpdateContestDto } from './dto/contest-edit.dto';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import { QueuedResponse } from '../core/dto/queued.response';
+
+/** The `UpdateContestDto` fields typed `| null`; every other one refuses null. */
+const NULLABLE_CONTEST_FIELDS = [
+  'timeLimit',
+  'registrationStart',
+  'registrationEnd',
+  'lockedAfter',
+  'ratingFloor',
+  'ratingCeiling',
+];
 
 @Controller('api/internal/contests')
 export class ContestEditingController {
@@ -25,7 +36,8 @@ export class ContestEditingController {
   update(
     @CurrentAuth() auth: AuthContext,
     @Param() { key }: ContestKeyParamDto,
-    @Body() dto: UpdateContestDto,
+    @Body(new RefuseNullFieldsPipe(NULLABLE_CONTEST_FIELDS))
+    dto: UpdateContestDto,
   ): Promise<ContestDetailResponse> {
     return this.editing.update(auth.principal, key, dto);
   }

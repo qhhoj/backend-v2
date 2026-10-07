@@ -274,6 +274,14 @@ describe('problem create, suggest and edit', () => {
     await authed(api.http().patch(`${PROBLEMS}/keep`), setter)
       .send({ name: 'Kept' })
       .expect(200);
+    const refused = await authed(api.http().patch(`${PROBLEMS}/keep`), setter)
+      .send({ name: null, source: null, licenseId: null })
+      .expect(400);
+    expect(
+      Object.keys(
+        (refused.body as { error: { fields: object } }).error.fields,
+      ).sort(),
+    ).toEqual(['name', 'source']);
     expect(await api.problems.findOne({ code: 'keep' })).toMatchObject({
       name: 'Kept',
       description: 'Body',
@@ -311,7 +319,7 @@ describe('problem create, suggest and edit', () => {
     ]);
     await authed(api.http().patch(`${PROBLEMS}/keep`), setter)
       .send({ name: null })
-      .expect(200);
+      .expect(400);
     expect((await api.problems.findOne({ code: 'keep' }))!.name).toBe('Kept');
   });
   it('refuses renaming to a taken code and renames otherwise', async () => {

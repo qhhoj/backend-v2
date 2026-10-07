@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { RefuseNullFieldsPipe } from '@libs/common';
 import { CloneProblemDto } from './dto/clone.dto';
 import { PutEditorialDto } from './dto/editorial.dto';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
@@ -50,7 +51,7 @@ export class ProblemEditingController {
   edit(
     @CurrentAuth() auth: AuthContext,
     @Param() { code }: ProblemCodeParamDto,
-    @Body() body: UpdateProblemDto,
+    @Body(new RefuseNullFieldsPipe(['licenseId'])) body: UpdateProblemDto,
   ): Promise<ProblemDetailResponse> {
     return this.editing.edit(auth, code, body);
   }

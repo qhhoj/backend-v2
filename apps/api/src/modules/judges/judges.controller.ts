@@ -8,6 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { RequirePermission } from '@libs/auth';
+import { RefuseNullFieldsPipe } from '@libs/common';
 import {
   CreateJudgeDto,
   DisconnectJudgeDto,
@@ -39,7 +40,7 @@ export class JudgesController {
   @Patch(':name')
   update(
     @Param() { name }: JudgeNameParamDto,
-    @Body() dto: UpdateJudgeDto,
+    @Body(new RefuseNullFieldsPipe()) dto: UpdateJudgeDto,
   ): Promise<JudgeResponse> {
     return this.judges.update(name, dto);
   }

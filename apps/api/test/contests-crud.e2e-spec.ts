@@ -394,6 +394,24 @@ describe('contest CRUD', () => {
       expect((await detail(contest.key)).name).toBe('Renamed');
     });
 
+    it('refuses null on non-nullable fields and keeps the contest unchanged', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      const response = await patch('creator', contest.key, {
+        name: null,
+        isRated: null,
+        timeLimit: null,
+      }).expect(400);
+      expect(
+        Object.keys(
+          (response.body as { error: { fields: object } }).error.fields,
+        ).sort(),
+      ).toEqual(['isRated', 'name']);
+      expect((await detail(contest.key)).name).toBe(contest.name);
+      await patch('creator', contest.key, { timeLimit: null }).expect(200);
+    });
+
     it('keeps the request order of problems and gates the access code on its permission', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id, users.codeless._id],

@@ -192,4 +192,15 @@ describe('/api/internal/judges', () => {
       .expect(404);
     expect(await bridgeCommands(api)).toEqual([]);
   });
+
+  it('refuses null on a judge edit', async () => {
+    await create('judge-null');
+    await authed(api.http().patch(`${JUDGES}/judge-null`), admin)
+      .send({ isBlocked: null })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    expect(await api.judges.findOne({ name: 'judge-null' })).toMatchObject({
+      isBlocked: false,
+    });
+  });
 });
