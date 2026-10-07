@@ -98,7 +98,7 @@ const emsOf = ({ number, unit }: Measurement) =>
  * build time grows faster than linearly (adjacent symbols), measured warm on katex 0.19.0:
  * largest legitimate formulas at the 1000-char source cap ≤ 2k objects (2-column array 1929, 1000 letters 1001, 150-row array 1058),
  * a `\def`'d 20-cell array used 48 times 5761; just under the cap `x` × 19k is ~250 ms (550 ms cold), `\sqrt{x}` × 5000 ~350 ms and a 6 MB string (then refused by the output cap);
- * `x` × 38k (48 expansions of a 900-letter `\def`) took 1.4–2.7 s.
+ * `x` × 38k–43k objects (48 expansions of an 800–900-letter `\def`) took 1.4–2.7 s.
  */
 export const MAX_USER_FORMULA_NODES = 20_000;
 type TreeWalk = { nodes: number };
