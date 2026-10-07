@@ -8,6 +8,7 @@ import {
   CONTEST_RATING_QUEUE,
   contestPhase,
   enqueueContestRating,
+  isFrozen,
 } from '@libs/contests';
 import type { ContestRatingJob } from '@libs/contests';
 import { ContestsService } from '../core/contests.service';
@@ -32,6 +33,8 @@ export class ContestRatingService {
       throw new AppError('forbidden', 403, 'Rating needs judge.contest_rating');
     if (contestPhase(contest, now) !== 'ended')
       throw new AppError('conflict', 409, 'The contest has not ended');
+    if (isFrozen(contest, now))
+      throw new AppError('conflict', 409, 'Unfreeze the ranking before rating');
     await enqueueContestRating(this.ratings, contest._id);
     return { queued: true };
   }

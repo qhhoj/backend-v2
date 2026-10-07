@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { ClientSession } from 'mongoose';
 import {
   compareStandings,
+  isFrozen,
   MEAN_INIT,
   RATING_INIT,
   recalculateRatings,
@@ -19,6 +20,8 @@ type RatingRow = Omit<Rating, '_id'>;
 /** Legacy `Contest.rate` + `rate_contest`. The only writer of `ratings` and `users.rating`. */
 @Injectable()
 export class ContestRatingService {
+  private readonly logger = new Logger(ContestRatingService.name);
+
   constructor(private readonly repository: ContestRatingRepository) {}
 
   /**
@@ -33,6 +36,13 @@ export class ContestRatingService {
     return this.repository.inTransaction(async (session) => {
       const target = await this.repository.findContest(contestId, session);
       if (!target) return { contests: 0, ratings: 0 };
+      // Ratings are derived from the live standings: a frozen board must not reveal them.
+      if (isFrozen(target, now)) {
+        this.logger.warn(
+          `Contest ${contestId} is still frozen: not rated until the freeze is set to 0`,
+        );
+        return { contests: 0, ratings: 0 };
+      }
       const storedEnd = await this.repository.earliestRatingEnd(
         contestId,
         session,

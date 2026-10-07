@@ -13,6 +13,10 @@ export interface ContestTimes {
   frozenLastMinutes: number;
   formatName: ContestFormatName;
 }
+export type FreezeTimes = Pick<
+  ContestTimes,
+  'endTime' | 'frozenLastMinutes' | 'formatName'
+>;
 export interface ParticipationTimes {
   realStart: Date;
   virtual: number;
@@ -72,13 +76,13 @@ export const hasParticipationEnded = (
 ): boolean => participationEnd(contest, participation) < now;
 
 /** Legacy `frozen_time`, absolute for every participation (virtual ones included); null when the board never freezes. */
-export const frozenTime = (contest: ContestTimes): Date | null =>
+export const frozenTime = (contest: FreezeTimes): Date | null =>
   FREEZE_FORMATS.includes(contest.formatName) && contest.frozenLastMinutes > 0
     ? plus(contest.endTime, -contest.frozenLastMinutes * MINUTE_MS)
     : null;
 
 /** Legacy: stays frozen after the end until the freeze is set to 0. */
-export const isFrozen = (contest: ContestTimes, now: Date): boolean => {
+export const isFrozen = (contest: FreezeTimes, now: Date): boolean => {
   const from = frozenTime(contest);
   return from !== null && now >= from;
 };

@@ -137,14 +137,23 @@ describe('/api/v2 contests and participations', () => {
       authors: [users.editor._id],
       problems: entry,
     });
-    await joinParticipation(api, frozen._id, users.alice._id, {
-      score: 3,
-      cumtime: 30,
-      formatData: { [problemId]: liveCell },
-      frozenScore: 1,
-      frozenCumtime: 10,
-      frozenFormatData: { [problemId]: frozenCell },
-    });
+    const frozenAlice = await joinParticipation(
+      api,
+      frozen._id,
+      users.alice._id,
+      {
+        score: 3,
+        cumtime: 30,
+        formatData: { [problemId]: liveCell },
+        frozenScore: 1,
+        frozenCumtime: 10,
+        frozenFormatData: { [problemId]: frozenCell },
+      },
+    );
+    // The rating of the live standings: the frozen board must not carry it.
+    await api.ratings.create([
+      rating(frozen, users.alice._id, frozenAlice._id, 1700),
+    ]);
 
     running = await createContest(api, {
       scoreboardVisibility: 'C',
@@ -281,6 +290,13 @@ describe('/api/v2 contests and participations', () => {
     expect(
       editor.rankings.map((row: Row) => [row.score, row.solutions]),
     ).toEqual([[3, [liveCell]]]);
+    expect(anonymous.rankings.map((row: Row) => row.new_rating)).toEqual([
+      null,
+    ]);
+    expect(anonymous.rankings.map((row: Row) => row.old_rating)).toEqual([
+      null,
+    ]);
+    expect(editor.rankings.map((row: Row) => row.new_rating)).toEqual([1700]);
     const participations = (
       await bodyOf(get(`/api/v2/participations?contest=${frozen.key}`))
     ).data.objects;

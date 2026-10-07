@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Connection, Model } from 'mongoose';
 import { LIVE } from '@libs/contests';
+import type { ContestFormatName } from '@libs/database';
 import {
   Contest,
   ContestParticipation,
@@ -15,6 +16,8 @@ import {
 export interface RatableContest {
   _id: string;
   endTime: Date;
+  frozenLastMinutes: number;
+  formatName: ContestFormatName;
   isRated: boolean;
   rateAll: boolean;
   rateExclude: string[];
@@ -39,6 +42,8 @@ export interface RatingHistory {
 
 const RATABLE_FIELDS = {
   endTime: 1,
+  frozenLastMinutes: 1,
+  formatName: 1,
   isRated: 1,
   rateAll: 1,
   rateExclude: 1,

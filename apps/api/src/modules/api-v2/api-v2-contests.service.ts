@@ -243,8 +243,9 @@ export class ApiV2ContestsService {
       score: standing.score,
       cumulative_time: standing.cumtime,
       tiebreaker: standing.tiebreaker,
-      old_rating: oldRatings.get(uuidStr(row.user)) ?? null,
-      new_rating: newRatings.get(uuidStr(row._id)) ?? null,
+      // Ratings follow the live standings: a frozen board must not reveal them.
+      old_rating: frozen ? null : (oldRatings.get(uuidStr(row.user)) ?? null),
+      new_rating: frozen ? null : (newRatings.get(uuidStr(row._id)) ?? null),
       is_disqualified: row.isDisqualified,
       solutions: problemIds.map(
         (problemId) => standing.cells[problemId] ?? null,

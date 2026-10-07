@@ -55,6 +55,24 @@ describe('contest rating request', () => {
     expect(await ratingQueue.getWaitingCount()).toBe(2);
   });
 
+  it('refuses to rate while the board is frozen, also after the end, until the freeze is set to 0', async () => {
+    const contest = await createContest(api, {
+      authors: [users.rater._id],
+      formatName: 'icpc',
+      startTime: hoursFromNow(-3),
+      endTime: hoursFromNow(-1),
+      frozenLastMinutes: 120,
+    });
+    await rate('rater', contest.key).expect(409).expect(errorCode('conflict'));
+    expect(await ratingQueue.count()).toBe(0);
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { frozenLastMinutes: 0 },
+    );
+    await rate('rater', contest.key).expect(202);
+    expect(await ratingQueue.getWaitingCount()).toBe(1);
+  });
+
   it('refuses without the permission, without edit rights and before the end', async () => {
     const ended = await endedContest([users.rater._id, users.author._id]);
     await rate('author', ended.key).expect(403).expect(errorCode('forbidden'));

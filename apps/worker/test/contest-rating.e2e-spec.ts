@@ -263,6 +263,39 @@ describe('contest rating', () => {
     });
   });
 
+  it('does not rate a contest whose board is still frozen after the end, and keeps its ratings, until the freeze is 0', async () => {
+    const [alice, bob] = await newUsers('frozen_alice', 'frozen_bob');
+    const contest = await ratedContest(minutesAgo(10), {
+      formatName: 'icpc',
+      frozenLastMinutes: 30,
+    });
+    await join(contest._id, alice._id, 5, { frozenScore: 9 });
+    await join(contest._id, bob._id, 50, { frozenScore: 1 });
+
+    expect(await ratings.rateFrom(contest._id)).toEqual({
+      contests: 0,
+      ratings: 0,
+    });
+    expect(await ratingRows(contest._id)).toEqual([]);
+    expect(await userRating(bob._id)).toBeNull();
+
+    await worker.contests.updateOne(
+      { _id: contest._id },
+      { frozenLastMinutes: 0 },
+    );
+    await ratings.rateFrom(contest._id);
+    const rows = await ratingRows(contest._id);
+    expect(rows.find((row) => row.user === bob._id)?.rank).toBe(1);
+    expect(rows).toHaveLength(2);
+
+    await worker.contests.updateOne(
+      { _id: contest._id },
+      { frozenLastMinutes: 30 },
+    );
+    await ratings.rateFrom(contest._id);
+    expect(await ratingRows(contest._id)).toHaveLength(2);
+  });
+
   it('leaves ratings and users.rating untouched when the run fails midway', async () => {
     const [alice, bob] = await newUsers('atomic_alice', 'atomic_bob');
     const first = await ratedContest(daysAgo(2));
