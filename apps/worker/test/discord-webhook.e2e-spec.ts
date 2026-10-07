@@ -125,7 +125,9 @@ describe('discord webhook job', () => {
     const fetchSpy = jest
       .spyOn(globalThis, 'fetch')
       .mockImplementation((url) =>
-        Promise.reject(new Error(`Failed to parse URL from ${String(url)}`)),
+        Promise.reject(
+          new Error(`Failed to parse URL from ${String(url as string)}`),
+        ),
       );
     const logSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
     try {
