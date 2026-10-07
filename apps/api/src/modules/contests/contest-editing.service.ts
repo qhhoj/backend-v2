@@ -147,10 +147,61 @@ export class ContestEditingService {
   ): Promise<ContestDetailResponse> {
     if (RESERVED_CONTEST_KEYS.includes(dto.key))
       throw invalid('key', 'This key is reserved.');
-    const fields = await this.toFields(principal, dto, null);
+    const contest = await this.insert(principal, {
+      ...(await this.toFields(principal, dto, null)),
+      key: dto.key,
+    });
+    return this.contestsService.detail(principal, contest.key);
+  }
+
+  /** Legacy `ContestClone`: settings and problems are copied, the cloner is the only author, and per-contest collections stay with the source. */
+  async clone(
+    principal: Principal,
+    key: string,
+    newKey: string,
+  ): Promise<ContestDetailResponse> {
+    const source = await this.contestsService.editableContest(principal, key);
+    if (RESERVED_CONTEST_KEYS.includes(newKey))
+      throw invalid('key', 'This key is reserved.');
+    const { _id, createdAt, updatedAt, ...copied } =
+      source.toObject() as Contest & {
+        createdAt?: Date;
+        updatedAt?: Date;
+      };
+    void [_id, createdAt, updatedAt];
+    const ids = (values: readonly string[]) => values.map(uuidStr);
+    const contest = await this.insert(principal, {
+      ...copied,
+      key: newKey,
+      isVisible: false,
+      userCount: 0,
+      virtualCount: 0,
+      lockedAfter: null,
+      dataPreparedAt: null,
+      organizations: ids(copied.organizations),
+      privateContestants: ids(copied.privateContestants),
+      viewContestScoreboard: ids(copied.viewContestScoreboard),
+      authors: [],
+      curators: [],
+      testers: [],
+      bannedUsers: [],
+      bannedJudges: [],
+      rateExclude: [],
+      problems: copied.problems.map((entry) => ({
+        ...entry,
+        problem: uuidStr(entry.problem),
+      })),
+    });
+    return this.contestsService.detail(principal, contest.key);
+  }
+
+  /** The caller becomes an author; FSO judging is scheduled for the new end. */
+  private async insert(
+    principal: Principal,
+    fields: Partial<Contest>,
+  ): Promise<ContestDocument> {
     const contest = await this.contests.create({
       ...fields,
-      key: dto.key,
       authors: unique([...(fields.authors ?? []), principal.userId]),
     });
     await rescheduleFinalJudge(
@@ -159,7 +210,7 @@ export class ContestEditingService {
       finalJudgeTarget(contest),
       this.logger,
     );
-    return this.contestsService.detail(principal, contest.key);
+    return contest;
   }
 
   /** Scoring edits queue a rescore; a new lock is copied onto live submissions. */

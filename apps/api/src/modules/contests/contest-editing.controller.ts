@@ -3,6 +3,7 @@ import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ContestEditingService } from './contest-editing.service';
 import { ContestDetailResponse } from './dto/contest-detail.response';
+import { CloneContestDto } from './dto/contest-clone.dto';
 import { CreateContestDto, UpdateContestDto } from './dto/contest-edit.dto';
 import { ContestKeyParamDto } from './dto/contest-params.dto';
 import { QueuedResponse } from './dto/queued.response';
@@ -27,6 +28,16 @@ export class ContestEditingController {
     @Body() dto: UpdateContestDto,
   ): Promise<ContestDetailResponse> {
     return this.editing.update(auth.principal, key, dto);
+  }
+
+  @RequirePermission('judge.clone_contest')
+  @Post(':key/clone')
+  clone(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key }: ContestKeyParamDto,
+    @Body() { key: newKey }: CloneContestDto,
+  ): Promise<ContestDetailResponse> {
+    return this.editing.clone(auth.principal, key, newKey);
   }
 
   @Post(':key/rescore')
