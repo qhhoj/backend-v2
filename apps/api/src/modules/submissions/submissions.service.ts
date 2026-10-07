@@ -54,11 +54,11 @@ export class SubmissionsService {
     return this.currentContest.scopeOf(principal);
   }
 
-  /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see; `restrict` narrows it further (a contest's list). */
+  /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see; with `contestId`, only that contest's submissions, on any of its problems (legacy `ForceContestMixin` skips the problem filter, the contest's access check stands in for it). */
   async list(
     principal: Principal | null,
     query: SubmissionListQueryDto,
-    restrict: FilterQuery<Submission> = {},
+    contestId?: string,
   ): Promise<Paginated<SubmissionListItemResponse>> {
     const staffOnly = staffOnlyFilter(principal, query);
     if (staffOnly)
@@ -69,11 +69,12 @@ export class SubmissionsService {
     const filter = await this.filterFor(
       principal,
       query,
-      await this.viewerScope(principal),
+      contestId === undefined ? await this.viewerScope(principal) : null,
+      contestId,
     );
     if (!filter) return new Paginated([], { ...meta, total: 0 });
     const { items, total } = await this.submissions.list(
-      Object.keys(restrict).length ? { $and: [filter, restrict] } : filter,
+      filter,
       query.page,
       query.pageSize,
     );
@@ -260,23 +261,26 @@ export class SubmissionsService {
     principal: Principal | null,
     filters: SubmissionFilters,
     scope: ContestScope | null,
+    contestId?: string,
   ): Promise<FilterQuery<Submission> | null> {
-    const clauses: FilterQuery<Submission>[] = [];
+    const clauses: FilterQuery<Submission>[] =
+      contestId === undefined ? [] : [{ contest: contestId }];
     if (filters.problem !== undefined) {
       const problem = PROBLEM_CODE_PATTERN.test(filters.problem)
         ? await this.problems.findByCode(filters.problem)
         : null;
       if (
         !problem ||
-        !ProblemAccess.canSee(
-          principal,
-          ProblemAccess.accessView(problem),
-          scope,
-        )
+        (contestId === undefined &&
+          !ProblemAccess.canSee(
+            principal,
+            ProblemAccess.accessView(problem),
+            scope,
+          ))
       )
         return null;
       clauses.push({ problem: problem._id });
-    } else {
+    } else if (contestId === undefined) {
       const visible = ProblemAccess.visibleFilter(principal, scope);
       if (Object.keys(visible).length)
         clauses.push({

@@ -26,7 +26,7 @@ export class ContestSubmissionsService {
   ): Promise<Paginated<SubmissionListItemResponse>> {
     const contest = await this.contestsService.visibleContest(principal, key);
     const viewer = await this.viewers.viewerOf(principal, contest, now);
-    const restrict = { contest: contest._id };
+    const contestId = contest._id;
     if (
       ContestAccess.canSeeFullSubmissionList(
         principal,
@@ -35,7 +35,7 @@ export class ContestSubmissionsService {
         viewer,
       )
     )
-      return this.submissions.list(principal, query, restrict);
+      return this.submissions.list(principal, query, contestId);
     if (
       !principal ||
       (query.user !== undefined && query.user !== principal.username)
@@ -48,7 +48,7 @@ export class ContestSubmissionsService {
     return this.submissions.list(
       principal,
       { ...query, user: principal.username },
-      restrict,
+      contestId,
     );
   }
 }

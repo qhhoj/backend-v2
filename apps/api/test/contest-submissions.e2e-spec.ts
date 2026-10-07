@@ -67,10 +67,15 @@ describe('contest submissions and the freeze', () => {
   afterAll(() => api.teardown());
 
   /** A frozen icpc contest on a public problem whose sources everyone may read. */
-  const frozenScene = async (code: string, contestExtra = {}) => {
+  const frozenScene = async (
+    code: string,
+    contestExtra = {},
+    problemExtra = {},
+  ) => {
     const problem = await createProblem(api, catalog, {
       code,
       submissionSourceVisibility: 'A',
+      ...problemExtra,
     });
     const contest = await createContest(api, {
       formatName: 'icpc',
@@ -229,6 +234,95 @@ describe('contest submissions and the freeze', () => {
         await get(contestUrl(contest.key, '/submissions'), 'alice').expect(200),
       ).sort(),
     ).toEqual([aliceId, bobId].sort());
+  });
+
+  const endedUnfrozen = {
+    frozenLastMinutes: 0,
+    startTime: hoursFromNow(-5),
+    endTime: hoursFromNow(-1),
+  };
+
+  it("lists an ended contest on private problems and ignores the viewer's other current contest", async () => {
+    const { contest, aliceId, bobId } = await frozenScene(
+      'private_list_p',
+      endedUnfrozen,
+      { isPublic: false },
+    );
+    const list = contestUrl(contest.key, '/submissions');
+    for (const who of ['alice', undefined])
+      expect(idsOf(await get(list, who).expect(200)).sort()).toEqual(
+        [aliceId, bobId].sort(),
+      );
+    const upcoming = await createContest(api, {
+      startTime: hoursFromNow(5),
+      endTime: hoursFromNow(8),
+    });
+    await makeCurrent(
+      api,
+      users.alice._id,
+      (await joinParticipation(api, upcoming._id, users.alice._id))._id,
+    );
+    expect(idsOf(await get(list, 'alice').expect(200)).sort()).toEqual(
+      [aliceId, bobId].sort(),
+    );
+  });
+
+  it.each([
+    [
+      'a running unfrozen contest that hides its list',
+      'running_hidden_p',
+      {
+        formatName: 'default',
+        frozenLastMinutes: 0,
+        showSubmissionList: false,
+      },
+    ],
+    [
+      'an ended contest with a hidden scoreboard',
+      'ended_h_p',
+      { ...endedUnfrozen, formatName: 'default', scoreboardVisibility: 'H' },
+    ],
+  ])(
+    "hides another participant's submissions of %s from the global lists",
+    async (_label, code, extra) => {
+      const { aliceId, bobId, bobOutside } = await frozenScene(code, extra);
+      expect(
+        idsOf(
+          await get(
+            `/api/internal/submissions?problem=${code}`,
+            'alice',
+          ).expect(200),
+        ).sort(),
+      ).toEqual([aliceId, bobOutside].sort());
+      expect(
+        v2IdsOf(await get(`/api/v2/submissions?problem=${code}`).expect(200)),
+      ).toEqual([bobOutside]);
+      await get(`/api/internal/submissions/${bobId}`, 'alice').expect(403);
+    },
+  );
+
+  it('shows the full list to a viewer whose windowed participation ended under a P scoreboard', async () => {
+    const { contest, aliceId, bobId, bobOutside } = await frozenScene(
+      'completed_p',
+      {
+        formatName: 'default',
+        frozenLastMinutes: 0,
+        showSubmissionList: true,
+        scoreboardVisibility: 'P',
+        timeLimit: 3600,
+      },
+    );
+    await api.participations.updateMany(
+      { contest: contest._id, user: users.alice._id },
+      { realStart: hoursFromNow(-1.5) },
+    );
+    const global = '/api/internal/submissions?problem=completed_p';
+    expect(idsOf(await get(global, 'alice').expect(200)).sort()).toEqual(
+      [aliceId, bobId, bobOutside].sort(),
+    );
+    expect(idsOf(await get(global, 'bob').expect(200)).sort()).toEqual(
+      [bobId, bobOutside].sort(),
+    );
   });
 
   it('streams a frozen contest submission only to its owner and entitled viewers', async () => {
