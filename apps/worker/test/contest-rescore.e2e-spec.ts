@@ -1,7 +1,11 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
-import { CONTEST_RESCORE_QUEUE, enqueueContestRescore } from '@libs/contests';
+import {
+  CONTEST_RATING_QUEUE,
+  CONTEST_RESCORE_QUEUE,
+  enqueueContestRescore,
+} from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { newId, toUuid } from '@libs/database';
 import { enqueueRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
@@ -377,5 +381,56 @@ describe('contest rescore', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+  describe('contest rating follow-up', () => {
+    const endedRatedContest = () =>
+      contestWith({
+        isRated: true,
+        startTime: new Date(Date.now() - 3 * 3_600_000),
+        endTime: new Date(Date.now() - 3_600_000),
+        pointsPrecision: 0,
+      });
+    const ratingRows = async (contestId: string) =>
+      worker.ratings.find({ contest: contestId }).lean();
+
+    it('re-rates a contest that has ratings once its rescore finished', async () => {
+      const { contest, participation } = await endedRatedContest();
+      await worker.ratings.create({
+        user: participation.user,
+        contest: contest._id,
+        participation: participation._id,
+        contestEndTime: contest.endTime,
+        rank: 1,
+        rating: 9999,
+        mean: 9999,
+        performance: 9999,
+        lastRated: new Date(),
+      });
+      await rescores.rescore(contest._id);
+      await waitUntil(async () => {
+        const rows = await ratingRows(contest._id);
+        return rows.length === 1 && rows[0].rating !== 9999;
+      });
+    });
+
+    it('queues no rating for a contest without ratings', async () => {
+      const { contest } = await endedRatedContest();
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- re-applied with the queue as `this`
+      const add = Queue.prototype.add;
+      const queued: string[] = [];
+      const spy = jest
+        .spyOn(Queue.prototype, 'add')
+        .mockImplementation(function (this: Queue, ...args) {
+          queued.push(this.name);
+          return add.apply(this, args);
+        });
+      try {
+        await rescores.rescore(contest._id);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(queued).not.toContain(CONTEST_RATING_QUEUE);
+      expect(await ratingRows(contest._id)).toEqual([]);
+    });
   });
 });

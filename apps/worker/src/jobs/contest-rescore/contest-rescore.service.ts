@@ -1,5 +1,12 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import { contestSubmissionPoints } from '@libs/contests';
+import type { Queue } from 'bullmq';
+import {
+  CONTEST_RATING_QUEUE,
+  contestSubmissionPoints,
+  enqueueContestRating,
+} from '@libs/contests';
+import type { ContestRatingJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { ContestResultsRepository } from '../submission-effects/contest-results.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
@@ -14,9 +21,11 @@ export class ContestRescoreService {
     private readonly repository: ContestRescoreRepository,
     private readonly contestResults: ContestResultsRepository,
     private readonly effects: SubmissionEffectsService,
+    @InjectQueue(CONTEST_RATING_QUEUE)
+    private readonly ratingQueue: Queue<ContestRatingJob>,
   ) {}
 
-  /** Legacy `rescore_contest` plus the per-submission `update_contest` it relied on: every contest submission's points from its case totals and the contest's current problems, then every participation through the coalesced recompute. Rows of problems no longer in the contest keep their points. */
+  /** Legacy `rescore_contest` plus the per-submission `update_contest` it relied on: every contest submission's points from its case totals and the contest's current problems, then every participation through the coalesced recompute. Rows of problems no longer in the contest keep their points. A contest that has ratings is re-rated afterwards (disqualifications and scoring edits change the standings the ratings came from); an enqueue failure fails the run, and the retry rescores again. */
   async rescore(
     contestId: string,
   ): Promise<{ rescored: number; participations: number }> {
@@ -65,6 +74,8 @@ export class ContestRescoreService {
             .map((id) => this.effects.recomputeParticipation(id)),
         );
     }
+    if (await this.repository.hasRatings(contestId))
+      await enqueueContestRating(this.ratingQueue, contestId);
     return { rescored, participations };
   }
 }
