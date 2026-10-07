@@ -39,6 +39,14 @@ export class ParticipationsRepository {
       .exec();
   }
 
+  /** The user's live rows, through `{user}`. */
+  liveRowsOf(userId: string): Promise<ContestParticipation[]> {
+    return this.participations
+      .find({ user: userId, virtual: LIVE })
+      .lean<ContestParticipation[]>()
+      .exec();
+  }
+
   liveOf(
     userId: string,
     contestIds: string[],

@@ -9,6 +9,7 @@ import {
   toUuid,
   uuidStr,
 } from '@libs/database';
+import { ANY_SOLVED } from '@libs/judging';
 import type { FilterQuery, Model } from 'mongoose';
 
 /** Mongo's `$dateToString` rejects a zone its tzdata lacks (ICU may know it). */
@@ -127,6 +128,20 @@ export class UserPagesRepository {
         { $unwind: '$problem' },
       ])
       .exec();
+  }
+
+  /** Codes of public, non-organization-private problems the user solved (`IS_SOLVED`, like `problemCount`). */
+  async solvedCodes(userId: string): Promise<string[]> {
+    const rows = await this.submissions
+      .aggregate<{ problem: { code: string } }>([
+        { $match: { user: toUuid(userId), result: 'AC' } },
+        { $group: { _id: '$problem', solved: ANY_SOLVED } },
+        { $match: { solved: 1 } },
+        publicProblem(this.problems.collection.name, { code: 1 }),
+        { $unwind: '$problem' },
+      ])
+      .exec();
+    return rows.map((row) => row.problem.code).sort();
   }
 
   /** Legacy `get_pp_breakdown`: per public problem the best, latest submission, best first, at most `limit` rows. */

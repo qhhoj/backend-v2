@@ -16,15 +16,20 @@ export class RatingsRepository {
 
   async byParticipation(
     participationIds: string[],
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, Pick<Rating, 'rating' | 'mean' | 'performance'>>> {
     const rows = await this.ratings
       .find(
         { participation: { $in: participationIds } },
-        { participation: 1, rating: 1 },
+        { participation: 1, rating: 1, mean: 1, performance: 1 },
       )
       .lean()
       .exec();
-    return new Map(rows.map((row) => [uuidStr(row.participation), row.rating]));
+    return new Map(
+      rows.map((row) => [
+        uuidStr(row.participation),
+        { rating: row.rating, mean: row.mean, performance: row.performance },
+      ]),
+    );
   }
 
   /** Legacy `old_rating`: the latest rating of a contest that ended before `before`, through `{user, contestEndTime}`. */

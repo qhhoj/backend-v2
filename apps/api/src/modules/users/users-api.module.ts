@@ -42,5 +42,6 @@ import { UserPagesService } from './pages/user-pages.service';
     UserDataService,
     RateLimitService,
   ],
+  exports: [LeaderboardsRepository, UserPagesRepository],
 })
 export class UsersApiModule {}

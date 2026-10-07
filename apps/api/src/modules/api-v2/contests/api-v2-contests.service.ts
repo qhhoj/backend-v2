@@ -249,7 +249,9 @@ export class ApiV2ContestsService {
       tiebreaker: standing.tiebreaker,
       // Ratings follow the live standings: a frozen board must not reveal them.
       old_rating: frozen ? null : (oldRatings.get(uuidStr(row.user)) ?? null),
-      new_rating: frozen ? null : (newRatings.get(uuidStr(row._id)) ?? null),
+      new_rating: frozen
+        ? null
+        : (newRatings.get(uuidStr(row._id))?.rating ?? null),
       is_disqualified: row.isDisqualified,
       solutions: problemIds.map(
         (problemId) => standing.cells[problemId] ?? null,
