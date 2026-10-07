@@ -1,7 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import type { FilterQuery, HydratedDocument, Model, SortOrder } from 'mongoose';
-import { BlogPost, isUuid } from '@libs/database';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import type {
+  Connection,
+  FilterQuery,
+  HydratedDocument,
+  Model,
+  SortOrder,
+} from 'mongoose';
+import { unique } from '@libs/common';
+import {
+  BlogPost,
+  BlogVote,
+  Comment,
+  CommentLock,
+  CommentVote,
+  isUuid,
+  uuidStr,
+} from '@libs/database';
 
 export type BlogPostDocument = HydratedDocument<BlogPost>;
 
@@ -11,7 +26,14 @@ const LIST_PROJECTION = { content: 0, summary: 0 } as const;
 @Injectable()
 export class BlogPostsRepository {
   constructor(
+    @InjectConnection() private readonly connection: Connection,
     @InjectModel(BlogPost.name) private readonly posts: Model<BlogPost>,
+    @InjectModel(BlogVote.name) private readonly blogVotes: Model<BlogVote>,
+    @InjectModel(Comment.name) private readonly comments: Model<Comment>,
+    @InjectModel(CommentVote.name)
+    private readonly commentVotes: Model<CommentVote>,
+    @InjectModel(CommentLock.name)
+    private readonly commentLocks: Model<CommentLock>,
   ) {}
 
   findById(id: string): Promise<BlogPostDocument | null> {
@@ -44,5 +66,37 @@ export class BlogPostsRepository {
       this.posts.countDocuments(filter).exec(),
     ]);
     return { items, total };
+  }
+
+  create(fields: Partial<BlogPost>): Promise<BlogPostDocument> {
+    return this.posts.create(fields);
+  }
+
+  async update(id: string, changes: Partial<BlogPost>): Promise<void> {
+    await this.posts.updateOne({ _id: id }, { $set: changes }).exec();
+  }
+
+  /** The post and its discussion (votes, comments with their votes, the lock) in one transaction; legacy left the comments orphaned. Returns the comment authors, whose contribution points change. */
+  async deleteWithDiscussion(id: string): Promise<string[]> {
+    const page = { 'page.type': 'blog', 'page.id': id };
+    let authors: string[] = [];
+    await this.connection.transaction(async (session) => {
+      const comments = await this.comments
+        .find(page, { author: 1 }, { session })
+        .lean()
+        .exec();
+      authors = unique(comments.map((row) => uuidStr(row.author)));
+      await this.commentVotes
+        .deleteMany(
+          { comment: { $in: comments.map((row) => uuidStr(row._id)) } },
+          { session },
+        )
+        .exec();
+      await this.comments.deleteMany(page, { session }).exec();
+      await this.commentLocks.deleteMany(page, { session }).exec();
+      await this.blogVotes.deleteMany({ blog: id }, { session }).exec();
+      await this.posts.deleteOne({ _id: id }, { session }).exec();
+    });
+    return authors;
   }
 }
