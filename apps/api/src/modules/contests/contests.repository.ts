@@ -11,6 +11,7 @@ import {
   Submission,
   uuidStr,
 } from '@libs/database';
+import { JUDGEABLE_PENDING } from '@libs/judging';
 
 export type ContestDocument = HydratedDocument<Contest>;
 
@@ -118,11 +119,11 @@ export class ContestsRepository {
       .exec())!;
   }
 
-  /** Submissions still pending judgement (`PD`, held by `final_submission`) in the contest. */
+  /** Submissions final judging would still requeue (`PD` and not rejected, held by `final_submission`) in the contest. */
   async hasPendingSubmissions(contestId: string): Promise<boolean> {
     return (
       (await this.submissions
-        .exists({ contest: contestId, status: 'PD' })
+        .exists({ contest: contestId, ...JUDGEABLE_PENDING })
         .exec()) !== null
     );
   }

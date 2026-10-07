@@ -54,6 +54,7 @@ describe('contest submissions and the freeze', () => {
       ['bob', {}],
       ['author', { permissions: ['judge.edit_own_contest'] }],
       ['staff', { permissions: ['judge.view_all_submission'] }],
+      ['problemAuthor', { permissions: ['judge.edit_own_problem'] }],
     ];
     for (const [name, extra] of roles) {
       users[name] = await createUserWith(api, name, extra);
@@ -158,6 +159,35 @@ describe('contest submissions and the freeze', () => {
     expect(idsOf(await get(contestList, 'author').expect(200)).sort()).toEqual(
       [aliceId, bobId].sort(),
     );
+  });
+
+  it("opens a frozen contest submission of a source-hidden problem to the contest's editors, and to nobody else", async () => {
+    const { bobId } = await frozenScene(
+      'editor_rule_p',
+      {},
+      { submissionSourceVisibility: 'O' },
+    );
+    await get(`/api/internal/submissions/${bobId}`, 'author').expect(200);
+    await get(`/api/internal/submissions/${bobId}`, 'alice').expect(403);
+  });
+
+  it('opens a frozen contest submission by id to the problem author, who still does not see it in lists', async () => {
+    const { aliceId } = await frozenScene(
+      'problem_editor_p',
+      {},
+      { authors: [users.problemAuthor._id] },
+    );
+    await get(`/api/internal/submissions/${aliceId}`, 'problemAuthor').expect(
+      200,
+    );
+    expect(
+      idsOf(
+        await get(
+          '/api/internal/submissions?problem=problem_editor_p',
+          'problemAuthor',
+        ).expect(200),
+      ),
+    ).not.toContain(aliceId);
   });
 
   it('keeps an ended icpc contest frozen until an editor unfreezes it', async () => {

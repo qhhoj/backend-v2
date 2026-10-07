@@ -92,12 +92,12 @@ export class SubmissionActionsService {
     await this.commands.publish({ type: 'abort', submissionId: id });
   }
 
-  /** `judge.rejudge_submission` on an editable problem; a locked submission or one a judge holds is a conflict. */
+  /** `judge.rejudge_submission` on an editable problem, with no contest scope (legacy checks none); a locked submission or one a judge holds is a conflict. */
   async rejudge(principal: Principal, id: string): Promise<void> {
     const { submission, problem } = await this.visibility.visible(
       principal,
       id,
-      await this.visibility.viewerScope(principal),
+      null,
     );
     this.assertManagesProblem(principal, problem, 'judge.rejudge_submission');
     if (isLocked(submission))
@@ -121,12 +121,12 @@ export class SubmissionActionsService {
     await this.commands.judge([id]);
   }
 
-  /** `judge.reject_submission` on an editable problem, once judging is over. */
+  /** `judge.reject_submission` on an editable problem, with no contest scope, once judging is over. */
   async reject(principal: Principal, id: string): Promise<void> {
     const { submission, problem } = await this.visibility.visible(
       principal,
       id,
-      await this.visibility.viewerScope(principal),
+      null,
     );
     this.assertManagesProblem(principal, problem, 'judge.reject_submission');
     if (!(await this.submissions.reject(id)))
@@ -146,7 +146,10 @@ export class SubmissionActionsService {
     principal: Principal,
     dto: BulkRejudgeDto,
   ): Promise<BulkRejudgeResponse> {
-    const problem = await this.problems.visibleProblem(principal, dto.problem);
+    const problem = await this.problems.visibleProblemOutsideContest(
+      principal,
+      dto.problem,
+    );
     this.assertManagesProblem(principal, problem, 'judge.rejudge_submission');
     const filter = bulkFilter(problem._id, dto);
     if (

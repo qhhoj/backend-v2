@@ -497,6 +497,23 @@ describe('contest CRUD', () => {
       );
     });
 
+    it('lets final_submission be left once only rejected PD rows remain', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+        formatName: 'final_submission',
+        formatConfig: { autoJudge: true },
+      });
+      await seedSubmission(api, {
+        user: users.plain._id,
+        problem: problems.open._id,
+        language: catalog.languages.cpp,
+        contest: contest._id,
+        status: 'PD',
+        result: 'RJ',
+      });
+      await patch('creator', contest.key, { formatName: 'ioi' }).expect(200);
+    });
+
     it('rejects a null for a required field', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id],

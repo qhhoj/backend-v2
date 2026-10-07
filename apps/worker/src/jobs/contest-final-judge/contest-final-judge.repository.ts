@@ -7,11 +7,8 @@ import {
   SUBMISSION_PRIORITY,
   uuidStr,
 } from '@libs/database';
-import { gradedJobOf, requeueUpdate } from '@libs/judging';
+import { gradedJobOf, JUDGEABLE_PENDING, requeueUpdate } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
-
-/** Pending rows an editor rejected stay rejected: final judging never requeues them. */
-const JUDGEABLE_PENDING = { status: 'PD', result: { $ne: 'RJ' } } as const;
 
 export type FinalJudgeContest = Pick<
   Contest,

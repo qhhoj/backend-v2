@@ -4,6 +4,12 @@ import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import type { Submission } from '@libs/database';
 import {
+  createContest,
+  hoursFromNow,
+  joinParticipation,
+  makeCurrent,
+} from './contest-fixtures';
+import {
   authed,
   createProblem,
   createUserWith,
@@ -275,6 +281,44 @@ describe('submission actions', () => {
       const queued = await seed({ status: 'QU', result: null });
       await post('manager', `${SUBMISSIONS}/${queued}/reject`).expect(409);
       await post('owner', `${SUBMISSIONS}/${id}/reject`).expect(403);
+    });
+
+    describe('while the moderator spectates an upcoming contest (no contest scope)', () => {
+      beforeEach(async () => {
+        const upcoming = await createContest(api, {
+          startTime: hoursFromNow(5),
+          endTime: hoursFromNow(8),
+        });
+        await makeCurrent(
+          api,
+          ids.manager,
+          (await joinParticipation(api, upcoming._id, ids.manager))._id,
+        );
+      });
+      afterEach(() => makeCurrent(api, ids.manager, null));
+
+      it('rejudges', async () => {
+        await post('manager', `${SUBMISSIONS}/${await seed()}/rejudge`).expect(
+          204,
+        );
+      });
+
+      it('rejects', async () => {
+        await post('manager', `${SUBMISSIONS}/${await seed()}/reject`).expect(
+          204,
+        );
+      });
+
+      it('bulk rejudges', async () => {
+        await seed();
+        expect(
+          dataOf(
+            await post('manager', `${SUBMISSIONS}/rejudge`, {
+              problem: 'acts',
+            }).expect(200),
+          ),
+        ).toEqual({ count: 1 });
+      });
     });
 
     it('answers 404 for unknown and malformed ids', async () => {
