@@ -149,4 +149,8 @@ export class ProblemsRepository {
       .find({ _id: { $in: ids } }, { code: 1, name: 1 })
       .exec();
   }
+
+  findByIds(ids: string[]): Promise<ProblemDocument[]> {
+    return this.problems.find({ _id: { $in: ids } }).exec();
+  }
 }

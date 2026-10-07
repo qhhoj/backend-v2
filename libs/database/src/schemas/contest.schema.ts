@@ -127,7 +127,7 @@ export class Contest {
         message: `at most ${MAX_CONTEST_PROBLEMS} problems`,
       },
       {
-        // Array validators see BSON UUIDs, not strings.
+        // Elements may be BSON UUIDs or strings depending on the write path; `uuidStr` normalises both.
         validator: (problems: ContestProblem[]) =>
           new Set(problems.map(({ problem }) => uuidStr(problem))).size ===
           problems.length,

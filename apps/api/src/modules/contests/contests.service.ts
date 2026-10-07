@@ -1,0 +1,126 @@
+import { Injectable } from '@nestjs/common';
+import { UsersRepository } from '@libs/auth';
+import type { Principal } from '@libs/auth';
+import { AppError, escapeRegExp, Paginated } from '@libs/common';
+import { contestPhase } from '@libs/contests';
+import { CONTEST_KEY_PATTERN, uuidStr } from '@libs/database';
+import type { Contest } from '@libs/database';
+import type { FilterQuery, SortOrder } from 'mongoose';
+import { ProblemsRepository } from '../problems/problems.repository';
+import { ContestAccess } from './contest-access';
+import { ContestViewerService } from './contest-viewer.service';
+import { ContestsRepository } from './contests.repository';
+import type { ContestDocument } from './contests.repository';
+import {
+  ContestDetailResponse,
+  ParticipationSummaryResponse,
+} from './dto/contest-detail.response';
+import type { ContestListQueryDto } from './dto/contest-list.dto';
+import { ContestListItemResponse } from './dto/contest-list.response';
+
+@Injectable()
+export class ContestsService {
+  constructor(
+    private readonly contests: ContestsRepository,
+    private readonly viewers: ContestViewerService,
+    private readonly problems: ProblemsRepository,
+    private readonly users: UsersRepository,
+  ) {}
+
+  /** Legacy `ContestList` over `get_visible_contests`; upcoming soonest first, the rest newest first. */
+  async list(
+    principal: Principal | null,
+    query: ContestListQueryDto,
+    now = new Date(),
+  ): Promise<Paginated<ContestListItemResponse>> {
+    const clauses: FilterQuery<Contest>[] = [
+      ContestAccess.visibleFilter(principal),
+    ];
+    if (query.phase === 'upcoming') clauses.push({ startTime: { $gt: now } });
+    if (query.phase === 'running')
+      clauses.push({ startTime: { $lte: now }, endTime: { $gte: now } });
+    if (query.phase === 'ended') clauses.push({ endTime: { $lt: now } });
+    if (query.tag) clauses.push({ tags: query.tag });
+    if (query.organization) clauses.push({ organizations: query.organization });
+    if (query.rated !== undefined) clauses.push({ isRated: query.rated });
+    if (query.search) {
+      const pattern = new RegExp(escapeRegExp(query.search), 'i');
+      clauses.push({ $or: [{ key: pattern }, { name: pattern }] });
+    }
+    const sort: Record<string, SortOrder> =
+      query.phase === 'upcoming'
+        ? { startTime: 1, key: 1 }
+        : { startTime: -1, key: 1 };
+    const { items, total } = await this.contests.list(
+      { $and: clauses },
+      sort,
+      query.page,
+      query.pageSize,
+    );
+    return new Paginated(
+      items.map((contest) => ContestListItemResponse.from(contest, now)),
+      { page: query.page, pageSize: query.pageSize, total },
+    );
+  }
+
+  async detail(
+    principal: Principal | null,
+    key: string,
+    now = new Date(),
+  ): Promise<ContestDetailResponse> {
+    const contest = await this.visibleContest(principal, key);
+    const view = ContestAccess.accessView(contest);
+    const viewer = await this.viewers.viewerOf(principal, contest, now);
+    const canEdit = ContestAccess.canEdit(principal, view);
+    const isTester = ContestAccess.isTester(principal, view);
+    const showProblems =
+      viewer.inContest ||
+      canEdit ||
+      isTester ||
+      contestPhase(contest, now) === 'ended';
+    const [authors, problems] = await Promise.all([
+      this.users.findByIds(view.authors),
+      showProblems
+        ? this.problems.findSummaries(
+            contest.problems.map((entry) => uuidStr(entry.problem)),
+          )
+        : null,
+    ]);
+    return ContestDetailResponse.fromDetail(contest, {
+      now,
+      authors,
+      problems:
+        problems &&
+        problems.map((problem) => ({
+          _id: problem._id,
+          code: problem.code,
+          name: problem.name,
+        })),
+      viewer: {
+        canEdit,
+        isEditor: ContestAccess.isEditor(principal, view),
+        isTester,
+        inContest: viewer.inContest,
+        liveParticipation:
+          viewer.live &&
+          ParticipationSummaryResponse.from(viewer.live, contest),
+      },
+    });
+  }
+
+  /** 404 for malformed, unknown and invisible keys alike, so existence never leaks. */
+  async visibleContest(
+    principal: Principal | null,
+    key: string,
+  ): Promise<ContestDocument> {
+    const contest = CONTEST_KEY_PATTERN.test(key)
+      ? await this.contests.findByKey(key)
+      : null;
+    if (
+      !contest ||
+      !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
+    )
+      throw new AppError('not_found', 404, 'No such contest');
+    return contest;
+  }
+}
