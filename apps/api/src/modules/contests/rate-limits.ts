@@ -8,3 +8,6 @@ export const VIRTUAL_JOIN_ATTEMPTS = 10;
 /** Unknown, private, expired or hidden public ranking tokens per client IP; a hit gives the miss back. */
 export const RANKING_TOKEN_MISS_LIMIT = 30;
 export const RANKING_TOKEN_WINDOW_SECONDS = 10 * 60;
+/** Announcement pushes per contest (resends included): each reaches every open stream of the contest. */
+export const ANNOUNCEMENT_PUSH_LIMIT = 20;
+export const ANNOUNCEMENT_PUSH_WINDOW_SECONDS = 60 * 60;

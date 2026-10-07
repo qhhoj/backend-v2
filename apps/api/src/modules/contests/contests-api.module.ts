@@ -10,8 +10,12 @@ import {
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './contest-access.module';
+import { AnnouncementsRepository } from './announcements.repository';
+import { ContestAnnouncementsController } from './contest-announcements.controller';
+import { ContestAnnouncementsService } from './contest-announcements.service';
 import { ContestEditingController } from './contest-editing.controller';
 import { ContestEditingService } from './contest-editing.service';
+import { ContestEventsService } from './contest-events.service';
 import { ContestParticipationController } from './contest-participation.controller';
 import { ContestParticipationService } from './contest-participation.service';
 import { ContestRatingController } from './contest-rating.controller';
@@ -43,6 +47,7 @@ import { RankingLinksService } from './ranking-links.service';
   ],
   // Fastify matches a static segment (Task 7's `current`) before `:key`, whatever the controller order.
   controllers: [
+    ContestAnnouncementsController,
     ContestEditingController,
     ContestParticipationController,
     ContestRankingController,
@@ -53,6 +58,9 @@ import { RankingLinksService } from './ranking-links.service';
     RankingLinksController,
   ],
   providers: [
+    AnnouncementsRepository,
+    ContestAnnouncementsService,
+    ContestEventsService,
     ContestsService,
     ContestEditingService,
     ContestParticipationService,

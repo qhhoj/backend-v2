@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission } from '@libs/auth';
+import { AppError } from '@libs/common';
 import type { Principal } from '@libs/auth';
 import {
   contestPhase,
@@ -7,7 +8,7 @@ import {
   LIVE,
   SPECTATE,
 } from '@libs/contests';
-import { uuidStr } from '@libs/database';
+import { CONTEST_KEY_PATTERN, uuidStr } from '@libs/database';
 import { ContestAccess, NO_FACTS } from './contest-access';
 import type { ViewerFacts } from './contest-access';
 import { ContestsRepository } from './contests.repository';
@@ -27,6 +28,22 @@ export class ContestViewerService {
     private readonly participations: ParticipationsRepository,
     private readonly contests: ContestsRepository,
   ) {}
+
+  /** 404 for malformed, unknown and invisible keys alike, so existence never leaks. */
+  async visibleContest(
+    principal: Principal | null,
+    key: string,
+  ): Promise<ContestDocument> {
+    const contest = CONTEST_KEY_PATTERN.test(key)
+      ? await this.contests.findByKey(key)
+      : null;
+    if (
+      !contest ||
+      !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
+    )
+      throw new AppError('not_found', 404, 'No such contest');
+    return contest;
+  }
 
   /** Contests whose full submission list the viewer may not see now; other users' submissions of these leave every submission list. */
   async hiddenSubmissionContests(

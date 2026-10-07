@@ -4,10 +4,9 @@ import Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { SUBMISSION_EVENTS_CHANNEL } from './submission-events';
 import type { SubmissionEvent } from './submission-events';
-import { withinTimeout } from './within-timeout';
+import { publishEvent } from './publish-event';
 
-/** Longest a packet or request waits for an event to reach Redis. */
-export const EVENT_PUBLISH_TIMEOUT_MS = 1000;
+export { EVENT_PUBLISH_TIMEOUT_MS } from './publish-event';
 
 @Injectable()
 export class SubmissionEventsService implements OnModuleInit {
@@ -20,23 +19,14 @@ export class SubmissionEventsService implements OnModuleInit {
     await this.redis.ping();
   }
 
-  /** Fire-and-forget like bridge commands; skipped at once while the client is not ready, so an outage costs nothing: Mongo holds the state, and a page that missed an event gets the current state when its stream reconnects. */
-  async publish(event: SubmissionEvent): Promise<void> {
-    if (this.redis.status !== 'ready') {
-      this.logger.warn(
-        `Event ${event.type} of submission ${event.submissionId} skipped: Redis is ${this.redis.status}`,
-      );
-      return;
-    }
-    try {
-      await withinTimeout(
-        this.redis.publish(SUBMISSION_EVENTS_CHANNEL, JSON.stringify(event)),
-        EVENT_PUBLISH_TIMEOUT_MS,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Event ${event.type} of submission ${event.submissionId} not published: ${(error as Error).message}`,
-      );
-    }
+  /** Fire-and-forget like bridge commands: an outage costs nothing, Mongo holds the state and a page that missed an event gets the current state when its stream reconnects. */
+  publish(event: SubmissionEvent): Promise<void> {
+    return publishEvent(
+      this.redis,
+      SUBMISSION_EVENTS_CHANNEL,
+      event,
+      this.logger,
+      `Event ${event.type} of submission ${event.submissionId}`,
+    );
   }
 }

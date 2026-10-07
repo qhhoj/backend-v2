@@ -34,6 +34,7 @@ const LIMITS: StreamLimits = {
   perIp: 5,
   total: 50,
   feedTotal: 4,
+  contestTotal: 4,
   maxBufferedBytes: 256 * 1024,
   heartbeatMs: 100,
   recheckMs: 150,
@@ -243,6 +244,7 @@ describe('submission event streams', () => {
       ips: 0,
       submissions: 0,
       feed: 0,
+      contests: 0,
       subscriberListeners: 1,
     });
   });
@@ -299,6 +301,7 @@ describe('submission event streams', () => {
       ips: 0,
       submissions: 0,
       feed: 0,
+      contests: 0,
       subscriberListeners: 1,
     });
   });
@@ -444,6 +447,7 @@ describe('submission event streams', () => {
       ips: 0,
       submissions: 0,
       feed: 0,
+      contests: 0,
       subscriberListeners: 0,
     });
     await expect(streams.onModuleDestroy()).resolves.toBeUndefined();

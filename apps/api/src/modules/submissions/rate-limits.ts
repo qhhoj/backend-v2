@@ -19,6 +19,8 @@ export interface StreamLimits {
   total: number;
   /** Open public-feed streams per api process (the feed needs no login, so it gets a tighter cap). */
   feedTotal: number;
+  /** Open contest streams per api process (anonymous viewers of public contests included, so they get their own cap like the feed). */
+  contestTotal: number;
   /** Hard bound on a client's backlog (`response.writableLength`: output queue plus socket write buffer; memory); a client that merely stops draining is dropped sooner, after `DRAIN_GRACE_MS`. The kernel's socket buffers hold more on top, per connection. */
   maxBufferedBytes: number;
   heartbeatMs: number;
@@ -31,6 +33,7 @@ export const DEFAULT_STREAM_LIMITS: StreamLimits = {
   perIp: 16,
   total: 5000,
   feedTotal: 1000,
+  contestTotal: 2000,
   maxBufferedBytes: 256 * 1024,
   heartbeatMs: 15_000,
   recheckMs: 60_000,

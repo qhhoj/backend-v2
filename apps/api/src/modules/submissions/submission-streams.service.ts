@@ -6,9 +6,13 @@ import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, ENV } from '@libs/common';
 import type { Env } from '@libs/common';
+import { CONTEST_EVENTS_CHANNEL, parseContestEvent } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { parseSubmissionEvent, SUBMISSION_EVENTS_CHANNEL } from '@libs/judging';
 import type { SubmissionEvent } from '@libs/judging';
+import { ContestAccess } from '../contests/contest-access';
+import { ContestViewerService } from '../contests/contest-viewer.service';
+import { ContestsRepository } from '../contests/contests.repository';
 import { ProblemEvents } from '../problems/problem.events';
 import { ProblemsRepository } from '../problems/problems.repository';
 import { STREAM_LIMITS } from './rate-limits';
@@ -25,8 +29,10 @@ const FEED_PROBLEM_CACHE_SIZE = 10_000;
 
 interface OpenStream {
   stream: EventStream;
-  /** Null on the public feed. */
+  /** Null on the public feed and on contest streams. */
   submissionId: string | null;
+  /** Set on contest streams. */
+  contestId: string | null;
   auth: AuthContext | null;
   /** Submission streams: test-case progress only when the viewer sees every case result. */
   caseEvents: boolean;
@@ -61,6 +67,8 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
   private subscribed = false;
   private subscriptionLost = false;
   private readonly bySubmission = new Map<string, Set<OpenStream>>();
+  private readonly byContest = new Map<string, Set<OpenStream>>();
+  private contestStreams = 0;
   private readonly feed = new Set<OpenStream>();
   private readonly perUser = new Map<string, number>();
   private readonly perIp = new Map<string, number>();
@@ -85,6 +93,8 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     private readonly sessions: SessionService,
     private readonly users: UsersRepository,
     private readonly principals: PrincipalService,
+    private readonly contestViewers: ContestViewerService,
+    private readonly contests: ContestsRepository,
   ) {}
 
   /** Subscribe mode blocks its connection, so the subscriber is never the shared client. ioredis reconnects; once the subscription is confirmed again, open streams are told to `resync`, because events published meanwhile are lost. */
@@ -95,8 +105,10 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     subscriber.on('error', (error: Error) =>
       this.logger.error(`Submission events subscription: ${error.message}`),
     );
-    subscriber.on('message', (_channel: string, raw: string) =>
-      this.deliver(raw),
+    subscriber.on('message', (channel: string, raw: string) =>
+      channel === CONTEST_EVENTS_CHANNEL
+        ? this.deliverContest(raw)
+        : this.deliver(raw),
     );
     subscriber.on('close', () => {
       if (this.subscribed) this.subscriptionLost = true;
@@ -104,7 +116,10 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     });
     subscriber.on('ready', () => void this.confirmResubscription(subscriber));
     this.subscriber = subscriber;
-    await subscriber.subscribe(SUBMISSION_EVENTS_CHANNEL);
+    await subscriber.subscribe(
+      SUBMISSION_EVENTS_CHANNEL,
+      CONTEST_EVENTS_CHANNEL,
+    );
     this.subscribed = true;
     // `pointsChanged` also covers the organisation-private flag.
     for (const name of ['publicityChanged', 'pointsChanged'] as const)
@@ -155,6 +170,7 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
       );
       entry = this.open(reply, release, {
         submissionId: uuidStr(submission._id),
+        contestId: null,
         auth,
         caseEvents,
       });
@@ -174,6 +190,33 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Caps first (the contest cap, then IP/user/total), then visibility (404), then the stream. Nothing is sent until an event: the page fetches the list itself on (re)connect. */
+  async openContest(
+    auth: AuthContext | null,
+    key: string,
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    if (this.contestStreams >= this.limits.contestTotal)
+      throw new AppError('rate_limited', 429, 'Too many open event streams');
+    const release = this.reserve(request.ip, auth?.principal.userId ?? null);
+    try {
+      const contest = await this.contestViewers.visibleContest(
+        auth?.principal ?? null,
+        key,
+      );
+      this.open(reply, release, {
+        submissionId: null,
+        contestId: contest._id,
+        auth,
+        caseEvents: false,
+      });
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
   openFeed(request: FastifyRequest, reply: FastifyReply): void {
     if (this.feed.size >= this.limits.feedTotal)
       throw new AppError('rate_limited', 429, 'Too many open event streams');
@@ -181,6 +224,7 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     try {
       this.open(reply, release, {
         submissionId: null,
+        contestId: null,
         auth: null,
         caseEvents: false,
       });
@@ -198,6 +242,7 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
       ips: this.perIp.size,
       submissions: this.bySubmission.size,
       feed: this.feed.size,
+      contests: this.contestStreams,
       subscriberListeners: this.subscriber?.listenerCount('message') ?? 0,
     };
   }
@@ -212,7 +257,13 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
       stream: openEventStream(reply, this.limits.maxBufferedBytes),
       ...fields,
     };
-    if (entry.submissionId === null) this.feed.add(entry);
+    if (entry.contestId !== null) {
+      const listeners =
+        this.byContest.get(entry.contestId) ?? new Set<OpenStream>();
+      listeners.add(entry);
+      this.byContest.set(entry.contestId, listeners);
+      this.contestStreams += 1;
+    } else if (entry.submissionId === null) this.feed.add(entry);
     else {
       const listeners =
         this.bySubmission.get(entry.submissionId) ?? new Set<OpenStream>();
@@ -252,7 +303,10 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
   private async confirmResubscription(subscriber: Redis): Promise<void> {
     if (!this.subscriptionLost) return;
     try {
-      await subscriber.subscribe(SUBMISSION_EVENTS_CHANNEL);
+      await subscriber.subscribe(
+        SUBMISSION_EVENTS_CHANNEL,
+        CONTEST_EVENTS_CHANNEL,
+      );
     } catch (error) {
       this.logger.error(`Resubscribing failed: ${(error as Error).message}`);
       return;
@@ -263,6 +317,13 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private forget(entry: OpenStream): void {
+    if (entry.contestId !== null) {
+      const listeners = this.byContest.get(entry.contestId);
+      listeners?.delete(entry);
+      if (listeners?.size === 0) this.byContest.delete(entry.contestId);
+      this.contestStreams -= 1;
+      return;
+    }
     if (entry.submissionId === null) {
       this.feed.delete(entry);
       return;
@@ -276,6 +337,7 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
   private allStreams(): OpenStream[] {
     return [
       ...this.feed,
+      ...[...this.byContest.values()].flatMap((listeners) => [...listeners]),
       ...[...this.bySubmission.values()].flatMap((listeners) => [...listeners]),
     ];
   }
@@ -294,6 +356,17 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
         entry.stream.send(frame);
     if (this.feed.size && event.type !== 'test-case')
       this.feedQueue = this.feedQueue.then(() => this.deliverToFeed(event));
+  }
+
+  private deliverContest(raw: string): void {
+    const event = parseContestEvent(raw);
+    if (!event) return;
+    const frame = sseFrame(event.type, {
+      contestId: event.contestId,
+      announcementId: event.announcementId,
+    });
+    for (const entry of this.byContest.get(event.contestId) ?? [])
+      entry.stream.send(frame);
   }
 
   private async deliverToFeed(event: SubmissionEvent): Promise<void> {
@@ -337,7 +410,9 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     this.rechecking = true;
     try {
       for (const entry of this.allStreams())
-        if (entry.submissionId !== null)
+        if (entry.contestId !== null)
+          await this.reauthorizeContest(entry, entry.contestId);
+        else if (entry.submissionId !== null)
           await this.reauthorize(entry, entry.submissionId);
     } finally {
       this.rechecking = false;
@@ -361,6 +436,27 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
         this.logger.error(
           `Re-checking a submission stream failed: ${(error as Error).message}`,
         );
+    }
+  }
+
+  /** A contest stream closes once its session ends or the contest is no longer visible to the viewer (anonymous: to anyone). */
+  private async reauthorizeContest(
+    entry: OpenStream,
+    contestId: string,
+  ): Promise<void> {
+    try {
+      const principal = entry.auth && (await this.currentPrincipal(entry.auth));
+      if (entry.auth && !principal) return entry.stream.close();
+      const contest = await this.contests.findById(contestId);
+      if (
+        !contest ||
+        !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
+      )
+        entry.stream.close();
+    } catch (error) {
+      this.logger.error(
+        `Re-checking a contest stream failed: ${(error as Error).message}`,
+      );
     }
   }
 

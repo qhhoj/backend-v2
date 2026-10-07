@@ -3,7 +3,7 @@ import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, escapeRegExp, Paginated } from '@libs/common';
 import { contestPhase } from '@libs/contests';
-import { CONTEST_KEY_PATTERN, uuidStr } from '@libs/database';
+import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
 import { ProblemsRepository } from '../problems/problems.repository';
@@ -110,20 +110,11 @@ export class ContestsService {
     });
   }
 
-  /** 404 for malformed, unknown and invisible keys alike, so existence never leaks. */
-  async visibleContest(
+  visibleContest(
     principal: Principal | null,
     key: string,
   ): Promise<ContestDocument> {
-    const contest = CONTEST_KEY_PATTERN.test(key)
-      ? await this.contests.findByKey(key)
-      : null;
-    if (
-      !contest ||
-      !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
-    )
-      throw new AppError('not_found', 404, 'No such contest');
-    return contest;
+    return this.viewers.visibleContest(principal, key);
   }
 
   /** `visibleContest` plus legacy `is_editable_by` (403 when visible but not editable). */

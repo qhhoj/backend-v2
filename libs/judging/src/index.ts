@@ -9,4 +9,5 @@ export * from './points';
 export * from './notify-rescore';
 export * from './submission-events';
 export * from './submission-events.service';
+export * from './publish-event';
 export * from './requeue';
