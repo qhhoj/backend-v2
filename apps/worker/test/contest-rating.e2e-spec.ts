@@ -312,6 +312,32 @@ describe('contest rating', () => {
     expect(await ratingRows(contest._id)).toHaveLength(2);
   });
 
+  it('rates no later contest that is still frozen when an earlier one is rated, and matches a from-scratch re-rate once it is unfrozen', async () => {
+    const users = await newUsers('chain_frozen_a', 'chain_frozen_b');
+    const first = await ratedContest(daysAgo(2));
+    const later = await ratedContest(daysAgo(1), {
+      formatName: 'icpc',
+      frozenLastMinutes: 30,
+    });
+    for (const contest of [first, later]) {
+      await join(contest._id, users[0]._id, contest === first ? 10 : 5);
+      await join(contest._id, users[1]._id, contest === first ? 5 : 10);
+    }
+
+    await ratings.rateFrom(first._id);
+    expect(await worker.ratings.countDocuments({ contest: first._id })).toBe(2);
+    expect(await worker.ratings.countDocuments({ contest: later._id })).toBe(0);
+
+    await worker.contests.updateOne(
+      { _id: later._id },
+      { frozenLastMinutes: 0 },
+    );
+    await ratings.rateFrom(later._id);
+    expect(await worker.ratings.countDocuments({ contest: later._id })).toBe(2);
+    const incremental = await allRatings();
+    expect(incremental).toEqual(await reRatedFromScratch(first._id));
+  });
+
   it('leaves ratings and users.rating untouched when the run fails midway', async () => {
     const [alice, bob] = await newUsers('atomic_alice', 'atomic_bob');
     const first = await ratedContest(daysAgo(2));

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type { ClientSession, Connection, Model } from 'mongoose';
-import { LIVE } from '@libs/contests';
+import { FREEZE_FORMATS, LIVE } from '@libs/contests';
 import type { ContestFormatName } from '@libs/database';
 import {
   Contest,
@@ -119,7 +119,7 @@ export class ContestRatingRepository {
     return row?.endTime ?? null;
   }
 
-  /** Rated contests ending in `[endTime, now]`, in end order (`endTime` index). */
+  /** Rated contests ending in `[endTime, now]`, in end order (`endTime` index), without those still frozen: every contest here has ended, so a freezing format with `frozenLastMinutes > 0` is frozen (`isFrozen`). */
   async ratedContestsFrom(
     endTime: Date,
     now: Date,
@@ -127,7 +127,16 @@ export class ContestRatingRepository {
   ): Promise<RatableContest[]> {
     const rows = await this.contests
       .find(
-        { isRated: true, endTime: { $gte: endTime, $lte: now } },
+        {
+          isRated: true,
+          endTime: { $gte: endTime, $lte: now },
+          $nor: [
+            {
+              formatName: { $in: FREEZE_FORMATS },
+              frozenLastMinutes: { $gt: 0 },
+            },
+          ],
+        },
         RATABLE_FIELDS,
       )
       .sort({ endTime: 1, _id: 1 })
