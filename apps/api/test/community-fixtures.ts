@@ -1,4 +1,8 @@
-import { childPath, rootOf } from '@libs/community';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
+import { childPath, CONTRIBUTION_POINTS_QUEUE, rootOf } from '@libs/community';
 import type { CommentPage, CommentPageType } from '@libs/community';
 import { newId } from '@libs/database';
 import type { BlogPost, Comment, User } from '@libs/database';
@@ -70,3 +74,11 @@ export const commentPageUrl = (
 ) => `/api/internal/comments/pages/${type}/${key}${suffix}`;
 export const commentUrl = (id: string, suffix = '') =>
   `/api/internal/comments/${id}${suffix}`;
+
+/** Empties the contribution-points queue and its pending flags so a spec starts from no waiting recompute. */
+export async function clearContributionQueue(api: ApiTest) {
+  await api.app.get<Queue>(getQueueToken(CONTRIBUTION_POINTS_QUEUE)).drain();
+  const redis = api.app.get<Redis>(REDIS);
+  const pending = await redis.keys('contribution-points:pending:*');
+  if (pending.length) await redis.del(...pending);
+}

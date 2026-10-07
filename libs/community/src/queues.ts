@@ -24,33 +24,42 @@ export const clearOrganizationPointsPending = (
   organizationId: string,
 ) => redis.del(pendingKey(organizationId));
 
-/** At most one waiting job per organization: a Redis flag set here and cleared when the job starts (a `jobId` would also drop adds during a running recompute, leaving it stale). Duplicate ids collapse too. Never rethrown: the membership write is committed; a lost recompute waits for the next change (logged). */
-export async function notifyOrganizationPoints(
-  queue: Queue<OrganizationPointsJob>,
+interface FlaggedJob<Data> {
+  pendingKey: (id: string) => string;
+  jobName: string;
+  dataOf: (id: string) => Data;
+  /** Log prefix, e.g. `Points of organizations`. */
+  label: string;
+}
+
+/** At most one waiting job per id: a Redis flag set here and cleared when the job starts (a `jobId` would also drop adds during a running recompute, leaving it stale). Duplicate ids collapse too. Never rethrown: the write that caused it is committed; a lost recompute waits for the next change (logged). */
+async function enqueueFlagged<Data>(
+  queue: Queue,
   redis: Redis,
-  organizationIds: readonly string[],
+  ids: readonly string[],
+  job: FlaggedJob<Data>,
   logger: Logger,
 ): Promise<void> {
   const flagged: string[] = [];
   try {
     await withinTimeout(
       (async () => {
-        for (const organizationId of new Set(organizationIds))
+        for (const id of new Set(ids))
           if (
             (await redis.set(
-              pendingKey(organizationId),
+              job.pendingKey(id),
               '1',
               'EX',
               POINTS_PENDING_SECONDS,
               'NX',
             )) === 'OK'
           )
-            flagged.push(organizationId);
+            flagged.push(id);
         if (!flagged.length) return;
         await queue.addBulk(
-          flagged.map((organizationId) => ({
-            name: ORGANIZATION_POINTS_JOB,
-            data: { organizationId },
+          flagged.map((id) => ({
+            name: job.jobName,
+            data: job.dataOf(id),
             opts: {
               attempts: 3,
               backoff: { type: 'exponential', delay: 10_000 },
@@ -63,15 +72,65 @@ export async function notifyOrganizationPoints(
     );
   } catch (error) {
     await Promise.allSettled(
-      flagged.map((organizationId) =>
-        clearOrganizationPointsPending(redis, organizationId),
-      ),
+      flagged.map((id) => redis.del(job.pendingKey(id))),
     );
     logger.error(
-      `Points of organizations ${organizationIds.join(', ')} not enqueued: ${(error as Error).message}`,
+      `${job.label} ${ids.join(', ')} not enqueued: ${(error as Error).message}`,
     );
   }
 }
+
+export const notifyOrganizationPoints = (
+  queue: Queue<OrganizationPointsJob>,
+  redis: Redis,
+  organizationIds: readonly string[],
+  logger: Logger,
+): Promise<void> =>
+  enqueueFlagged(
+    queue,
+    redis,
+    organizationIds,
+    {
+      pendingKey,
+      jobName: ORGANIZATION_POINTS_JOB,
+      dataOf: (organizationId) => ({ organizationId }),
+      label: 'Points of organizations',
+    },
+    logger,
+  );
+
+export const CONTRIBUTION_POINTS_QUEUE = 'contribution-points';
+export const CONTRIBUTION_POINTS_JOB = 'recompute';
+/** Recompute a user's contribution points. Enqueued by votes, hide/unhide, post visibility, authors and deletion, and a suggested problem's publicity. */
+export interface ContributionPointsJob {
+  userId: string;
+}
+
+const contributionPendingKey = (userId: string) =>
+  `contribution-points:pending:${userId}`;
+
+/** The worker clears the flag when a recompute starts, like the organization flag. */
+export const clearContributionPointsPending = (redis: Redis, userId: string) =>
+  redis.del(contributionPendingKey(userId));
+
+export const notifyContributionPoints = (
+  queue: Queue<ContributionPointsJob>,
+  redis: Redis,
+  userIds: readonly string[],
+  logger: Logger,
+): Promise<void> =>
+  enqueueFlagged(
+    queue,
+    redis,
+    userIds,
+    {
+      pendingKey: contributionPendingKey,
+      jobName: CONTRIBUTION_POINTS_JOB,
+      dataOf: (userId) => ({ userId }),
+      label: 'Contribution points of users',
+    },
+    logger,
+  );
 
 export const USER_DATA_QUEUE = 'user-data';
 export const USER_DATA_JOB = 'prepare';

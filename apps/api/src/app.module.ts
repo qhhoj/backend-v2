@@ -14,6 +14,7 @@ import { ApiV2Module } from './modules/api-v2/api-v2.module';
 import { JudgesApiModule } from './modules/judges/judges-api.module';
 import { OrganizationsApiModule } from './modules/organizations/organizations-api.module';
 import { ProblemsApiModule } from './modules/problems/problems-api.module';
+import { ContributionsModule } from './modules/contributions/contributions.module';
 import { ContestsApiModule } from './modules/contests/contests-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
@@ -38,6 +39,7 @@ import { HealthController } from './health.controller';
     ContestsApiModule,
     OrganizationsApiModule,
     UsersApiModule,
+    ContributionsModule,
     ApiV2Module,
   ],
   controllers: [HealthController],

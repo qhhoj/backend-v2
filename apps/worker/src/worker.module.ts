@@ -19,6 +19,7 @@ import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
 import { SubmissionEffectsModule } from './jobs/submission-effects/submission-effects.module';
 import { UserDataModule } from './jobs/user-data/user-data.module';
+import { ContributionPointsModule } from './jobs/contribution-points/contribution-points.module';
 import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.mod
     ContestMossModule,
     ContestDataModule,
     OrganizationPointsModule,
+    ContributionPointsModule,
     UserDataModule,
     DiscordWebhookModule,
   ],

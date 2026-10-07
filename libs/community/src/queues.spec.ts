@@ -5,14 +5,22 @@ import { newId } from '@libs/database';
 import IORedis from 'ioredis';
 import type Redis from 'ioredis';
 import {
+  clearContributionPointsPending,
   clearOrganizationPointsPending,
+  CONTRIBUTION_POINTS_JOB,
+  CONTRIBUTION_POINTS_QUEUE,
   DISCORD_WEBHOOK_JOB,
+  notifyContributionPoints,
   notifyDiscord,
   notifyOrganizationPoints,
   ORGANIZATION_POINTS_JOB,
   ORGANIZATION_POINTS_QUEUE,
 } from './queues';
-import type { DiscordWebhookJob, OrganizationPointsJob } from './queues';
+import type {
+  ContributionPointsJob,
+  DiscordWebhookJob,
+  OrganizationPointsJob,
+} from './queues';
 
 describe('notifyOrganizationPoints', () => {
   let queue: Queue<OrganizationPointsJob>;
@@ -91,6 +99,52 @@ describe('notifyOrganizationPoints', () => {
     expect(
       await redis.exists(`organization-points:pending:${organizationId}`),
     ).toBe(0);
+  });
+});
+
+describe('notifyContributionPoints', () => {
+  let queue: Queue<ContributionPointsJob>;
+  let redis: Redis;
+  const logger = new Logger('spec');
+  beforeAll(() => {
+    queue = new Queue(CONTRIBUTION_POINTS_QUEUE, {
+      connection: { url: TEST_REDIS_URL },
+    });
+    redis = new IORedis(TEST_REDIS_URL);
+  });
+  beforeEach(async () => {
+    await queue.obliterate({ force: true });
+    await redis.flushdb();
+  });
+  afterAll(async () => {
+    await queue.obliterate({ force: true });
+    await queue.close();
+    redis.disconnect();
+  });
+
+  it('queues one job per distinct user until the recompute starts', async () => {
+    const [first, second] = [newId(), newId()];
+    await notifyContributionPoints(
+      queue,
+      redis,
+      [first, second, first],
+      logger,
+    );
+    await notifyContributionPoints(queue, redis, [first], logger);
+    const waiting = async () =>
+      (await queue.getJobs(['waiting'])).map((job) => [
+        job.name,
+        job.data.userId,
+      ]);
+    expect((await waiting()).sort()).toEqual(
+      [
+        [CONTRIBUTION_POINTS_JOB, first],
+        [CONTRIBUTION_POINTS_JOB, second],
+      ].sort(),
+    );
+    await clearContributionPointsPending(redis, first);
+    await notifyContributionPoints(queue, redis, [first], logger);
+    expect(await waiting()).toHaveLength(3);
   });
 });
 
