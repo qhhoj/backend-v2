@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import { ContestResultsRepository } from './contest-results.repository';
 import { SubmissionEffectsProcessor } from './submission-effects.processor';
@@ -7,7 +8,12 @@ import { SubmissionEffectsRepository } from './submission-effects.repository';
 import { SubmissionEffectsService } from './submission-effects.service';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: SUBMISSION_GRADED_QUEUE })],
+  imports: [
+    BullModule.registerQueue(
+      { name: SUBMISSION_GRADED_QUEUE },
+      { name: ORGANIZATION_POINTS_QUEUE },
+    ),
+  ],
   providers: [
     SubmissionEffectsProcessor,
     SubmissionEffectsService,

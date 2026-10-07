@@ -85,8 +85,25 @@ export class SubmissionEffectsRepository {
     }));
   }
 
-  async setUserPoints(userId: string, points: UserPoints): Promise<void> {
-    await this.users.updateOne({ _id: userId }, { $set: points }).exec();
+  /** Writes the user's points and returns what it replaced (null for a missing user), so the caller can tell whether the PP changed and for which organizations. */
+  async setUserPoints(
+    userId: string,
+    points: UserPoints,
+  ): Promise<{ performancePoints: number; organizations: string[] } | null> {
+    const previous = await this.users
+      .findOneAndUpdate(
+        { _id: userId },
+        { $set: points },
+        { projection: { performancePoints: 1, organizations: 1 } },
+      )
+      .lean()
+      .exec();
+    return (
+      previous && {
+        performancePoints: previous.performancePoints,
+        organizations: previous.organizations.map(uuidStr),
+      }
+    );
   }
 
   /** Legacy `update_stats` counts over listed users: every submission, and the AC ones worth the problem's points with their distinct users. Listed means `$nin` of the unlisted users' ids, read through the partial index: unlisted users are few (staff and test accounts), so the list stays small. A submission whose user has no `users` row counts as listed (legacy's join would drop it); only possible after a hard delete of a user. If they ever grow into the thousands, replace it with a `$lookup` of `users` on `user` filtered by `isUnlisted`. */

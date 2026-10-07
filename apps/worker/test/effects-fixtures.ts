@@ -3,6 +3,7 @@ import { newId, toUuid, uuidStr } from '@libs/database';
 import type {
   Contest,
   ContestParticipation,
+  Organization,
   Problem,
   Submission,
   User,
@@ -106,6 +107,20 @@ export async function insertGradedRows(
         ),
       );
 }
+
+let organizationCount = 0;
+export const seedOrganization = (
+  worker: WorkerTest,
+  extra: Partial<Organization> = {},
+) => {
+  organizationCount += 1;
+  return worker.organizations.create({
+    name: `Effects ${organizationCount}`,
+    slug: `effects${organizationCount}`,
+    shortName: `effects${organizationCount}`,
+    ...extra,
+  });
+};
 
 let contestCount = 0;
 /** A default-format contest running from an hour ago for three hours. */

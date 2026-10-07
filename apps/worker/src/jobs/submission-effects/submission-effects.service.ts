@@ -1,6 +1,13 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS, runCoalesced } from '@libs/common';
+import {
+  notifyOrganizationPoints,
+  ORGANIZATION_POINTS_QUEUE,
+} from '@libs/community';
+import type { OrganizationPointsJob } from '@libs/community';
 import {
   contestSubmissionPoints,
   disqualify,
@@ -18,10 +25,14 @@ import { SubmissionEffectsRepository } from './submission-effects.repository';
 /** The only place a user's points, a problem's stats or a contest participation's results are recomputed (graded jobs, the sweep, rescores). Each recompute reads Mongo and `$set`s, serialised per key across processes. */
 @Injectable()
 export class SubmissionEffectsService {
+  private readonly logger = new Logger(SubmissionEffectsService.name);
+
   constructor(
     private readonly repository: SubmissionEffectsRepository,
     private readonly contestResults: ContestResultsRepository,
     @Inject(REDIS) private readonly redis: Redis,
+    @InjectQueue(ORGANIZATION_POINTS_QUEUE)
+    private readonly organizationPoints: Queue<OrganizationPointsJob>,
   ) {}
 
   /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update. */
@@ -31,7 +42,6 @@ export class SubmissionEffectsService {
     if (problem.isPublic && !problem.isOrganizationPrivate)
       await this.recomputeUser(job.userId);
     await this.recomputeProblem(job.problemId);
-    // Hook: organisation points (sub-project 5).
     await this.applyContest(job.submissionId);
   }
 
@@ -110,13 +120,18 @@ export class SubmissionEffectsService {
     );
   }
 
+  /** Legacy `Profile.calculate_points`, which also recomputed the user's organizations when the PP moved. */
   recomputeUser(userId: string): Promise<void> {
-    return runCoalesced(this.redis, `effects:user:${userId}`, async () =>
-      this.repository.setUserPoints(
-        userId,
-        userPoints(await this.repository.problemBests(userId)),
-      ),
-    );
+    return runCoalesced(this.redis, `effects:user:${userId}`, async () => {
+      const points = userPoints(await this.repository.problemBests(userId));
+      const previous = await this.repository.setUserPoints(userId, points);
+      if (previous && previous.performancePoints !== points.performancePoints)
+        await notifyOrganizationPoints(
+          this.organizationPoints,
+          previous.organizations,
+          this.logger,
+        );
+    });
   }
 
   recomputeProblem(problemId: string): Promise<void> {
