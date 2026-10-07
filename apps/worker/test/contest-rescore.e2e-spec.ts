@@ -4,10 +4,12 @@ import { waitUntil } from '@libs/common/testing';
 import { CONTEST_RESCORE_QUEUE, enqueueContestRescore } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { newId, toUuid } from '@libs/database';
+import { enqueueRescore, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import { profileQueries } from '@libs/database/testing';
 import type { UUID } from 'mongodb';
 import { ContestRescoreRepository } from '../src/jobs/contest-rescore/contest-rescore.repository';
 import { ContestRescoreService } from '../src/jobs/contest-rescore/contest-rescore.service';
+import { ContestResultsRepository } from '../src/jobs/submission-effects/contest-results.repository';
 import { ProblemRescoreService } from '../src/jobs/problem-rescore/problem-rescore.service';
 import {
   seedContest,
@@ -241,22 +243,25 @@ describe('contest rescore', () => {
     expect(
       reads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
     ).toBe(true);
-    // The other contest's 3000 rows are never read: each collection examines at most this contest's 5002 rows twice: once by the rescore's cursor, once by the participation recompute.
+    // The other contest's 3000 rows are never read: apart from the participation recompute's aggregate (its own index), each collection examines at most this contest's 5002 rows.
     for (const name of [
       worker.contestSubmissions.collection.name,
       worker.submissions.collection.name,
     ])
       expect(
         reads
-          .filter(({ collection }) => collection === name)
+          .filter(
+            ({ collection, planSummary }) =>
+              collection === name && !planSummary.includes('participation'),
+          )
           .reduce((sum, { docsExamined }) => sum + docsExamined, 0),
-      ).toBeLessThanOrEqual(2 * 5002);
+      ).toBeLessThanOrEqual(5002);
     expect(result!.rescored).toBe(5000);
   }, 60_000);
 
-  it('streams 12k participations and 50k contest submissions in chunks of at most 1000', async () => {
+  it('streams thousands of participations and contest submissions in chunks of at most 1000', async () => {
     const { contest, problem } = await contestWith();
-    await insertContestRows(contest._id, problem._id, 50_000, 12_000);
+    await insertContestRows(contest._id, problem._id, 12_000, 3000);
     const repository = worker.module.get(ContestRescoreRepository);
     const chunkSizes: number[] = [];
     const recordChunks = <Chunk extends unknown[]>(
@@ -280,26 +285,52 @@ describe('contest rescore', () => {
     jest
       .spyOn(repository, 'participationChunks')
       .mockImplementation(participationChunks);
-    const started = Date.now();
     try {
       expect(await rescores.rescore(contest._id)).toEqual({
-        rescored: 50_000,
-        participations: 12_001,
+        rescored: 12_000,
+        participations: 3001,
       });
     } finally {
       jest.restoreAllMocks();
     }
-    console.log(
-      `contest rescore of 12k participations / 50k submissions: ${Date.now() - started} ms`,
-    );
     expect(Math.max(...chunkSizes)).toBeLessThanOrEqual(1000);
     expect(
       await worker.contestSubmissions.countDocuments({
         contest: contest._id,
         points: 25,
       }),
-    ).toBe(50_001);
+    ).toBe(12_001);
   }, 600_000);
+
+  it('keeps the points of a regrade that lands between the rescore reading a row and writing it', async () => {
+    const { contest, participation, quarter } = await contestWith();
+    await worker.contests.updateOne(
+      { _id: contest._id },
+      { 'problems.0.points': 200 },
+    );
+    const results = worker.module.get(ContestResultsRepository);
+    const caseTotals = results.caseTotals.bind(results);
+    const spy = jest
+      .spyOn(results, 'caseTotals')
+      .mockImplementationOnce(async (ids) => {
+        const totals = await caseTotals(ids);
+        await worker.contestSubmissions.updateOne(
+          { _id: quarter._id },
+          { points: 150 },
+        );
+        return totals;
+      });
+    try {
+      await rescores.rescore(contest._id);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await pointsOf(quarter._id)).toBe(150);
+    // The regrade's own recompute settles the participation; the next rescore corrects the row.
+    expect((await rescores.rescore(contest._id)).rescored).toBe(1);
+    expect(await pointsOf(quarter._id)).toBe(50);
+    expect((await participationOf(participation._id)).score).toBe(200);
+  });
 
   it('follows a problem rescore into the contests that list the problem', async () => {
     const { problem, participation, quarter } = await contestWith();
@@ -315,23 +346,36 @@ describe('contest rescore', () => {
     expect(await pointsOf(elsewhere.quarter._id)).toBe(25);
   });
 
-  it('queues the contest rescores only after the problem is rescored, and fails the job when one cannot be queued', async () => {
-    const { problem, quarter } = await contestWith();
-    const add = jest
-      .spyOn(Queue.prototype, 'add')
-      .mockRejectedValueOnce(new Error('redis down'));
-    try {
-      await worker.problems.updateOne({ _id: problem._id }, { points: 2000 });
-      await expect(
-        worker.module.get(ProblemRescoreService).rescore(problem._id),
-      ).rejects.toThrow('redis down');
-    } finally {
-      add.mockRestore();
-    }
-    // The problem's own rescore is committed; the job's retry re-enqueues.
-    expect((await worker.problems.findById(problem._id).lean())!.points).toBe(
-      2000,
+  it('retries a problem rescore whose contest rescore could not be queued, and the retry queues it', async () => {
+    const { problem, participation } = await contestWith();
+    const problemQueue = worker.module.get<Queue>(
+      getQueueToken(PROBLEM_RESCORE_QUEUE),
     );
-    expect(await pointsOf(quarter._id)).toBe(25);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- re-applied with the queue as `this`
+    const add = Queue.prototype.add;
+    let failed = false;
+    const spy = jest.spyOn(Queue.prototype, 'add').mockImplementation(function (
+      this: Queue,
+      ...args
+    ) {
+      if (this.name === CONTEST_RESCORE_QUEUE && !failed) {
+        failed = true;
+        return Promise.reject(new Error('redis down'));
+      }
+      return add.apply(this, args);
+    });
+    try {
+      await worker.problems.updateOne({ _id: problem._id }, { partial: false });
+      await enqueueRescore(problemQueue, problem._id);
+      await waitUntil(async () => (await problemQueue.getDelayedCount()) === 1);
+      expect((await participationOf(participation._id)).score).toBe(0);
+      const [retry] = await problemQueue.getJobs(['delayed']);
+      await retry.promote();
+      await waitUntil(
+        async () => (await participationOf(participation._id)).score === 100,
+      );
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

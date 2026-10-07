@@ -68,7 +68,7 @@ export class ProblemRescoreService {
           .map((userId) => this.effects.recomputeUser(userId)),
       );
     await this.effects.recomputeProblem(problemId);
-    // Legacy `rescore_problem` called `update_contest` per submission: contest points follow the problem's partial flag. Queued after the problem's writes, so a contest rescore reads them; an enqueue failure fails the job (logged, retried).
+    // Legacy `rescore_problem` called `update_contest` per submission: contest points follow the problem's partial flag.
     for (const contestId of await this.repository.contestsListing(problemId))
       await enqueueContestRescore(this.contestRescores, contestId);
     return { rescored, users: users.length };

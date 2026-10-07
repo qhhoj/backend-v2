@@ -32,7 +32,7 @@ export class ContestRescoreProcessor
     super();
   }
 
-  /** One contest rescore at a time across worker processes; each run reads the contest's current state, so the run queued by the last edit settles it (like `problem-rescore`). The limit is a Redis meta key: a flush drops it until the next boot. Consumption waits for the submissions indexes its reads hint to. */
+  /** One contest rescore at a time across worker processes; each run reads the contest's current state, so the run queued by the last edit settles it (like `problem-rescore`). The limit is a Redis meta key: a flush drops it until the next boot. Consumption waits for the submissions indexes like its siblings (`startAfterIndexes`). */
   async onApplicationBootstrap(): Promise<void> {
     await this.queue.setGlobalConcurrency(1);
     await startAfterIndexes(this.worker, this.submissions);

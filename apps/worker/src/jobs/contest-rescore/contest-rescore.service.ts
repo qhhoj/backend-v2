@@ -45,7 +45,9 @@ export class ContestRescoreService {
           contest.formatName,
           partials.get(problemId) ?? false,
         );
-        return points === row.points ? [] : [{ id, points }];
+        return points === row.points
+          ? []
+          : [{ id, previous: row.points, points }];
       });
       rescored += await this.repository.setPoints(changes);
     }

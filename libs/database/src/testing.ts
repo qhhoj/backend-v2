@@ -24,6 +24,11 @@ export async function profileQueries(
     .collection('system.profile')
     .drop()
     .catch(() => undefined);
+  // The default 1 MB profile evicts the large entries of a bulk read.
+  await db.createCollection('system.profile', {
+    capped: true,
+    size: 64 * 1024 * 1024,
+  });
   await db.command({ profile: 2 });
   try {
     await work();

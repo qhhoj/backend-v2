@@ -60,13 +60,17 @@ export class ContestRescoreRepository {
     );
   }
 
+  /** Each write requires the points the row was read with, so a regrade that landed meanwhile keeps its own (its graded job recomputes the participation). */
   async setPoints(
-    changes: Array<{ id: string; points: number }>,
+    changes: Array<{ id: string; previous: number; points: number }>,
   ): Promise<number> {
     if (!changes.length) return 0;
     const { modifiedCount } = await this.contestSubmissions.bulkWrite(
-      changes.map(({ id, points }) => ({
-        updateOne: { filter: { _id: id }, update: { $set: { points } } },
+      changes.map(({ id, previous, points }) => ({
+        updateOne: {
+          filter: { _id: id, points: previous },
+          update: { $set: { points } },
+        },
       })),
       { ordered: false },
     );
