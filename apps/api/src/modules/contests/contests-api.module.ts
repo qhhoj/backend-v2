@@ -22,6 +22,9 @@ import { ContestSubmissionsController } from './contest-submissions.controller';
 import { ContestSubmissionsService } from './contest-submissions.service';
 import { ContestsController } from './contests.controller';
 import { ContestsService } from './contests.service';
+import { OfficialRankingController } from './official-ranking.controller';
+import { OfficialRankingService } from './official-ranking.service';
+import { OfficialRankingsRepository } from './official-rankings.repository';
 import { RankingLinksController } from './ranking-links.controller';
 import { RankingLinksRepository } from './ranking-links.repository';
 import { RankingLinksService } from './ranking-links.service';
@@ -46,6 +49,7 @@ import { RankingLinksService } from './ranking-links.service';
     ContestRatingController,
     ContestSubmissionsController,
     ContestsController,
+    OfficialRankingController,
     RankingLinksController,
   ],
   providers: [
@@ -55,6 +59,8 @@ import { RankingLinksService } from './ranking-links.service';
     ContestRankingService,
     ContestRatingService,
     ContestSubmissionsService,
+    OfficialRankingService,
+    OfficialRankingsRepository,
     RankingLinksRepository,
     RankingLinksService,
     RateLimitService,
