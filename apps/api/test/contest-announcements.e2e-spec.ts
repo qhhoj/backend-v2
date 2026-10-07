@@ -1,3 +1,5 @@
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import type { User } from '@libs/database';
 import { ANNOUNCEMENT_PUSH_LIMIT } from '../src/modules/contests/rate-limits';
@@ -106,6 +108,20 @@ describe('contest announcements', () => {
       ['Second', 'Clarification'],
       2,
     ]);
+    const hostile = dataOf<AnnouncementResponse>(
+      await post('editor', contest.key, {
+        title: 'Hostile',
+        description: '<script>x()</script><b onclick="y()">bold</b>',
+      }).expect(201),
+    );
+    expect(hostile.descriptionHtml).not.toMatch(/<script|onclick/i);
+    const served = (
+      await api
+        .http()
+        .get(contestUrl(contest.key, '/announcements'))
+        .expect(200)
+    ).body as { data: AnnouncementResponse[] };
+    expect(served.data[0].descriptionHtml).not.toMatch(/<script|onclick/i);
     await post('editor', contest.key, {
       title: 'x'.repeat(101),
       description: '',
@@ -160,6 +176,36 @@ describe('contest announcements', () => {
     expect(announcementFrames(elsewhere)).toEqual([]);
     await api.contests.updateOne({ _id: contest._id }, { isPrivate: true });
     await Promise.all([viewer.closed, anonymous.closed]);
+  });
+
+  it('closes a contest stream once its session ends, even on a public contest', async () => {
+    const contest = await createContest(api);
+    const session = await loginAs(api, users.alice._id);
+    const stream = await openStream(
+      api,
+      `/api/internal/events/contests/${contest.key}`,
+      { Cookie: session.cookie },
+    );
+    opened.push(stream);
+    expect(stream.status).toBe(200);
+    await api.sessions.destroy(session.cookie.split('=')[1]);
+    await stream.closed;
+  });
+
+  it('keeps delivering announcements after the Redis subscription drops, telling clients to resync', async () => {
+    const contest = await createContest(api, {
+      authors: [users.editor._id],
+      pushAnnouncements: true,
+    });
+    const client = await open(contest.key);
+    await api.app.get<Redis>(REDIS).call('CLIENT', 'KILL', 'TYPE', 'pubsub');
+    await client.next('resync', 5000);
+    await waitUntil(() => streams.isSubscribed());
+    const created = await createAnnouncement('editor', contest.key);
+    expect((await client.next('announcement')).data).toEqual({
+      contestId: contest._id,
+      announcementId: created.id,
+    });
   });
 
   it('refuses a stream of an invisible contest and caps contest streams per process', async () => {
