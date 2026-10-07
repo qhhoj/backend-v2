@@ -1,3 +1,4 @@
+export * from './contest-data';
 export * from './contest-points';
 export * from './contest-time';
 export * from './labels';

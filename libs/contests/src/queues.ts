@@ -1,5 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
+import type { SubmissionResult } from '@libs/database';
 import { JOB_RETENTION, withinTimeout } from '@libs/judging';
 import { finalSubmissionFormat } from './formats/final-submission';
 import type { FormatName } from './formats/format';
@@ -130,3 +131,57 @@ export const requestFinalJudge = async (
     FINAL_JUDGE_OPTIONS,
   );
 };
+
+export const CONTEST_RATING_QUEUE = 'contest-rating';
+export const CONTEST_RATING_JOB = 'rate';
+/** Delete every rating from the contest's end on, then rate every rated, ended contest from there in end-time order (legacy `Contest.rate`). */
+export interface ContestRatingJob {
+  contestId: string;
+}
+/** No `jobId`, like `enqueueContestRescore`: a request during a run queues another; the queue runs one at a time and every run starts by deleting, so retries are safe. */
+export const enqueueContestRating = async (
+  queue: Queue<ContestRatingJob>,
+  contestId: string,
+): Promise<void> => {
+  await queue.add(
+    CONTEST_RATING_JOB,
+    { contestId },
+    {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 10_000 },
+      ...JOB_RETENTION,
+    },
+  );
+};
+
+export const CONTEST_MOSS_QUEUE = 'contest-moss';
+export const CONTEST_MOSS_JOB = 'moss';
+/** The MOSS key is read by the worker from its env, never carried here. */
+export interface ContestMossJob {
+  contestId: string;
+}
+
+export const CONTEST_DATA_QUEUE = 'contest-data';
+export const CONTEST_DATA_JOB = 'prepare';
+export interface ContestDataJob {
+  contestId: string;
+  /** Legacy `submission_problem_glob`, checked by the api (`*` and `?` over problem codes). */
+  problemGlob: string;
+  /** Empty: every result. */
+  results: SubmissionResult[];
+}
+
+/** At most one job per contest (an `add` with a live id is ignored), dropped as soon as it ends either way: "running" is "the job exists", and a failure never blocks the next request. */
+export const oneJobPerContest = (
+  prefix: 'moss' | 'data',
+  contestId: string,
+) => ({
+  jobId: `${prefix}-${contestId}`,
+  attempts: 1,
+  removeOnComplete: true,
+  removeOnFail: true,
+});
+export const mossJobId = (contestId: string) =>
+  oneJobPerContest('moss', contestId).jobId;
+export const contestDataJobId = (contestId: string) =>
+  oneJobPerContest('data', contestId).jobId;

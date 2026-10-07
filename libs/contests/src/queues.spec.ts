@@ -1,16 +1,25 @@
 import { Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { TEST_REDIS_URL } from '@libs/common/testing';
+import { newId } from '@libs/database';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
+  CONTEST_MOSS_JOB,
+  CONTEST_MOSS_QUEUE,
+  CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_JOB,
   CONTEST_RESCORE_QUEUE,
+  enqueueContestRating,
   finalJudgeJobId,
+  mossJobId,
+  oneJobPerContest,
   notifyContestRescore,
   rescheduleFinalJudge,
 } from './queues';
 import type {
   ContestFinalJudgeJob,
+  ContestMossJob,
+  ContestRatingJob,
   ContestRescoreJob,
   FinalJudgeTarget,
 } from './queues';
@@ -118,5 +127,59 @@ describe('rescheduleFinalJudge', () => {
       logger,
     );
     expect(await ids()).toEqual([]);
+  });
+});
+
+describe('contest extras queues', () => {
+  let mossQueue: Queue<ContestMossJob>;
+  let ratingQueue: Queue<ContestRatingJob>;
+  beforeAll(() => {
+    mossQueue = new Queue(CONTEST_MOSS_QUEUE, {
+      connection: { url: TEST_REDIS_URL },
+    });
+    ratingQueue = new Queue(CONTEST_RATING_QUEUE, {
+      connection: { url: TEST_REDIS_URL },
+    });
+  });
+  beforeEach(async () => {
+    await mossQueue.obliterate({ force: true });
+    await ratingQueue.obliterate({ force: true });
+  });
+  afterAll(async () => {
+    await mossQueue.obliterate({ force: true });
+    await ratingQueue.obliterate({ force: true });
+    await mossQueue.close();
+    await ratingQueue.close();
+  });
+
+  it('keeps one MOSS or data job per contest, dropped once it ends', async () => {
+    const contestId = newId();
+    await mossQueue.add(
+      CONTEST_MOSS_JOB,
+      { contestId },
+      oneJobPerContest('moss', contestId),
+    );
+    await mossQueue.add(
+      CONTEST_MOSS_JOB,
+      { contestId },
+      oneJobPerContest('moss', contestId),
+    );
+    expect(await mossQueue.getJobs(['waiting'])).toHaveLength(1);
+    expect((await mossQueue.getJob(mossJobId(contestId)))?.opts).toMatchObject({
+      attempts: 1,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+  });
+
+  it('queues a rating per request, retried', async () => {
+    const contestId = newId();
+    await enqueueContestRating(ratingQueue, contestId);
+    await enqueueContestRating(ratingQueue, contestId);
+    const jobs = await ratingQueue.getJobs(['waiting']);
+    expect(jobs.map((job) => [job.data, job.opts.attempts])).toEqual([
+      [{ contestId }, 3],
+      [{ contestId }, 3],
+    ]);
   });
 });

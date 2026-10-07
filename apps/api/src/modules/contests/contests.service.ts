@@ -125,4 +125,15 @@ export class ContestsService {
       throw new AppError('not_found', 404, 'No such contest');
     return contest;
   }
+
+  /** `visibleContest` plus legacy `is_editable_by` (403 when visible but not editable). */
+  async editableContest(
+    principal: Principal,
+    key: string,
+  ): Promise<ContestDocument> {
+    const contest = await this.visibleContest(principal, key);
+    if (!ContestAccess.canEdit(principal, ContestAccess.accessView(contest)))
+      throw new AppError('forbidden', 403, 'You cannot edit this contest');
+    return contest;
+  }
 }

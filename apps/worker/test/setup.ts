@@ -10,12 +10,14 @@ import { CONTEST_FINAL_JUDGE_QUEUE } from '@libs/contests';
 import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
   Contest,
+  ContestMoss,
   ContestParticipation,
   ContestSubmission,
   Language,
   Problem,
   ProblemGroup,
   ProblemType,
+  Rating,
   Submission,
   User,
 } from '@libs/database';
@@ -44,12 +46,15 @@ export async function setupWorkerTest({
     mediaRoot: temporaryDirectory('qhhoj-media-'),
     problemDataRoot: temporaryDirectory('qhhoj-problem-data-'),
     pdfCacheRoot: temporaryDirectory('qhhoj-pdf-cache-'),
+    contestDataRoot: temporaryDirectory('qhhoj-contest-data-'),
   };
   Object.assign(process.env, TEST_ENV, {
     MONGO_URL: replSet.getUri('qhhoj'),
     MEDIA_ROOT: roots.mediaRoot,
     PROBLEM_DATA_ROOT: roots.problemDataRoot,
     PDF_CACHE_ROOT: roots.pdfCacheRoot,
+    CONTEST_DATA_ROOT: roots.contestDataRoot,
+    MOSS_API_KEY: '',
     ...env,
   });
   const cleanup = async () => {
@@ -113,6 +118,8 @@ export async function setupWorkerTest({
     contestSubmissions: ready.get<Model<ContestSubmission>>(
       getModelToken(ContestSubmission.name),
     ),
+    ratings: ready.get<Model<Rating>>(getModelToken(Rating.name)),
+    contestMoss: ready.get<Model<ContestMoss>>(getModelToken(ContestMoss.name)),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
     teardown: async () => {

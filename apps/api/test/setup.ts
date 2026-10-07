@@ -9,7 +9,11 @@ import { MAILER, REDIS } from '@libs/common';
 import { createTestApp, InMemoryMailer, TEST_ENV } from '@libs/common/testing';
 import {
   Contest,
+  ContestAnnouncement,
+  ContestMoss,
+  ContestOfficialRanking,
   ContestParticipation,
+  ContestPublicRankingLink,
   ContestSubmission,
   Group,
   Judge,
@@ -18,6 +22,7 @@ import {
   Problem,
   ProblemGroup,
   ProblemType,
+  Rating,
   Revision,
   Submission,
   SubmissionSource,
@@ -44,24 +49,31 @@ export { TEST_ENV };
 export async function setupApiTest({
   controllers = [],
   overrides = [],
+  env = {},
 }: {
   controllers?: Type[];
   overrides?: Array<{ provide: unknown; useValue: unknown }>;
+  /** Extra environment variables, applied after the defaults. */
+  env?: Record<string, string>;
 } = {}) {
   const mailer = new InMemoryMailer();
   const replSet = await startMongo();
   const mediaRoot = mkdtempSync(join(tmpdir(), 'qhhoj-media-'));
   const problemDataRoot = mkdtempSync(join(tmpdir(), 'qhhoj-problem-data-'));
   const pdfCacheRoot = mkdtempSync(join(tmpdir(), 'qhhoj-pdf-cache-'));
+  const contestDataRoot = mkdtempSync(join(tmpdir(), 'qhhoj-contest-data-'));
   const removeRoots = () =>
-    [mediaRoot, problemDataRoot, pdfCacheRoot].forEach((root) =>
-      rmSync(root, { recursive: true, force: true }),
+    [mediaRoot, problemDataRoot, pdfCacheRoot, contestDataRoot].forEach(
+      (root) => rmSync(root, { recursive: true, force: true }),
     );
   Object.assign(process.env, TEST_ENV, {
     MONGO_URL: replSet.getUri('qhhoj'),
     MEDIA_ROOT: mediaRoot,
     PROBLEM_DATA_ROOT: problemDataRoot,
     PDF_CACHE_ROOT: pdfCacheRoot,
+    CONTEST_DATA_ROOT: contestDataRoot,
+    MOSS_API_KEY: '',
+    ...env,
   });
   let app: NestFastifyApplication | undefined;
   try {
@@ -118,6 +130,19 @@ export async function setupApiTest({
     contestSubmissions: readyApp.get<Model<ContestSubmission>>(
       getModelToken(ContestSubmission.name),
     ),
+    ratings: readyApp.get<Model<Rating>>(getModelToken(Rating.name)),
+    contestMoss: readyApp.get<Model<ContestMoss>>(
+      getModelToken(ContestMoss.name),
+    ),
+    announcements: readyApp.get<Model<ContestAnnouncement>>(
+      getModelToken(ContestAnnouncement.name),
+    ),
+    rankingLinks: readyApp.get<Model<ContestPublicRankingLink>>(
+      getModelToken(ContestPublicRankingLink.name),
+    ),
+    officialRankings: readyApp.get<Model<ContestOfficialRanking>>(
+      getModelToken(ContestOfficialRanking.name),
+    ),
     /** Streams are disabled in tests; call after inserting catalog rows. */
     resyncCatalog: async () => {
       await Promise.all(
@@ -134,6 +159,7 @@ export async function setupApiTest({
     mediaRoot,
     problemDataRoot,
     pdfCacheRoot,
+    contestDataRoot,
     sessions: readyApp.get(SessionService),
     mailer,
     teardown: async () => {

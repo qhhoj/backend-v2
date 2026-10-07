@@ -117,6 +117,8 @@ export class Contest {
   /** Live participations (registrations included); recomputed, never incremented. */
   @Prop({ default: 0 }) userCount!: number;
   @Prop({ default: 0 }) virtualCount!: number;
+  /** Legacy `data_last_downloaded`: when an editor last asked for the data zip. */
+  @Prop({ type: Date, default: null }) dataPreparedAt!: Date | null;
   @Prop({
     type: [ContestProblemSchema],
     default: [],

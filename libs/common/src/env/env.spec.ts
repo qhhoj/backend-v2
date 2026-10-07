@@ -35,8 +35,37 @@ describe('loadEnv', () => {
       judgeBridgePort: 9999,
       judgeBridgeHost: '0.0.0.0',
       mediaUrl: '/media',
+      mossApiKey: null,
+      contestDataRoot: null,
       oauth: { google: null, facebook: null, github: null },
     }));
+  it('reads the optional MOSS key and contest data root, blank meaning off', () => {
+    expect(loadEnv({ ...valid }).mossApiKey).toBeNull();
+    expect(loadEnv({ ...valid, MOSS_API_KEY: '' }).mossApiKey).toBeNull();
+    expect(loadEnv({ ...valid, MOSS_API_KEY: '123456' }).mossApiKey).toBe(
+      '123456',
+    );
+    expect(loadEnv({ ...valid }).contestDataRoot).toBeNull();
+    expect(
+      loadEnv({ ...valid, CONTEST_DATA_ROOT: '/srv/contest-data' })
+        .contestDataRoot,
+    ).toBe('/srv/contest-data');
+    expect(
+      loadEnv({ ...valid, CONTEST_DATA_ROOT: '' }).contestDataRoot,
+    ).toBeNull();
+  });
+  it('refuses a contest data root inside MEDIA_ROOT', () => {
+    const withRoot = (root: string) => () =>
+      loadEnv({
+        ...valid,
+        MEDIA_ROOT: '/srv/media',
+        CONTEST_DATA_ROOT: root,
+      });
+    expect(withRoot('/srv/media/data')).toThrow(/CONTEST_DATA_ROOT/);
+    expect(withRoot('/srv/media/..cache')).toThrow(/CONTEST_DATA_ROOT/);
+    expect(withRoot('/srv/media')).toThrow(/CONTEST_DATA_ROOT/);
+    expect(withRoot('/srv/media-data')).not.toThrow();
+  });
   it('reads the disqualification ban threshold', () => {
     expect(
       loadEnv({ ...valid, CONTEST_BAN_AFTER_DISQUALIFICATIONS: '3' })

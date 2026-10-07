@@ -186,9 +186,7 @@ export class ContestParticipationService {
     participationId: string,
     disqualified: boolean,
   ): Promise<ParticipationSummaryResponse> {
-    const contest = await this.contestsService.visibleContest(principal, key);
-    if (!ContestAccess.canEdit(principal, ContestAccess.accessView(contest)))
-      throw forbidden('You cannot edit this contest.');
+    const contest = await this.contestsService.editableContest(principal, key);
     const participation =
       await this.participationRows.findById(participationId);
     if (!participation || uuidStr(participation.contest) !== contest._id)

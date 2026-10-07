@@ -1,3 +1,5 @@
+import { isAbsolute, relative, resolve, sep } from 'node:path';
+
 export interface OAuthClient {
   clientId: string;
   clientSecret: string;
@@ -38,6 +40,10 @@ export interface Env {
   judgeBridgePort: number;
   /** Bridge: interface the judge port listens on. */
   judgeBridgeHost: string;
+  /** Worker: MOSS user id; null disables MOSS (routes 404). Never logged. */
+  mossApiKey: string | null;
+  /** Contest data zips, shared by the api (serves) and the worker (writes); null disables data download. Not under MEDIA_ROOT (served publicly). */
+  contestDataRoot: string | null;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
     google: OAuthClient | null;
@@ -138,6 +144,8 @@ export function loadEnv(
     ),
     judgeBridgePort: portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
     judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
+    mossApiKey: source.MOSS_API_KEY || null,
+    contestDataRoot: source.CONTEST_DATA_ROOT || null,
     oauth: {
       google: oauthClient('GOOGLE'),
       facebook: oauthClient('FACEBOOK'),
@@ -152,6 +160,18 @@ export function loadEnv(
     problems.push('TOKEN_SECRET must be at least 32 chars');
   if (!LOG_LEVELS.includes(env.logLevel))
     problems.push(`LOG_LEVEL must be one of ${LOG_LEVELS.join('|')}`);
+  const inside = (child: string, parent: string) => {
+    const relation = relative(resolve(parent), resolve(child));
+    // `..cache` is a child; only a leading `..` segment leaves the parent.
+    const [head] = relation.split(sep);
+    return relation === '' || (head !== '..' && !isAbsolute(relation));
+  };
+  if (
+    env.contestDataRoot &&
+    env.mediaRoot &&
+    inside(env.contestDataRoot, env.mediaRoot)
+  )
+    problems.push('CONTEST_DATA_ROOT must not be inside MEDIA_ROOT');
   if (problems.length)
     throw new Error(`Invalid environment: ${problems.join('; ')}`);
   return env;

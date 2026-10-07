@@ -27,7 +27,6 @@ import type { Contest, ContestProblem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../problems/problem-access';
 import { ProblemsRepository } from '../problems/problems.repository';
-import { ContestAccess } from './contest-access';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
 import { ContestsService } from './contests.service';
@@ -164,7 +163,7 @@ export class ContestEditingService {
     key: string,
     dto: UpdateContestDto,
   ): Promise<ContestDetailResponse> {
-    const contest = await this.editableContest(principal, key);
+    const contest = await this.contestsService.editableContest(principal, key);
     const fields = await this.toFields(principal, dto, contest);
     if (
       contest.formatName === 'final_submission' &&
@@ -198,7 +197,7 @@ export class ContestEditingService {
 
   /** An editor's manual rescore (legacy admin action). */
   async rescore(principal: Principal, key: string): Promise<QueuedResponse> {
-    const contest = await this.editableContest(principal, key);
+    const contest = await this.contestsService.editableContest(principal, key);
     await enqueueContestRescore(this.rescores, contest._id);
     return { queued: true };
   }
@@ -209,7 +208,7 @@ export class ContestEditingService {
     key: string,
     now = new Date(),
   ): Promise<QueuedResponse> {
-    const contest = await this.editableContest(principal, key);
+    const contest = await this.contestsService.editableContest(principal, key);
     if (contest.formatName !== 'final_submission')
       throw new AppError(
         'conflict',
@@ -220,16 +219,6 @@ export class ContestEditingService {
       throw new AppError('conflict', 409, 'The contest has not ended');
     await requestFinalJudge(this.finalJudges, contest._id);
     return { queued: true };
-  }
-
-  private async editableContest(
-    principal: Principal,
-    key: string,
-  ): Promise<ContestDocument> {
-    const contest = await this.contestsService.visibleContest(principal, key);
-    if (!ContestAccess.canEdit(principal, ContestAccess.accessView(contest)))
-      throw new AppError('forbidden', 403, 'You cannot edit this contest');
-    return contest;
   }
 
   /** The DTO as stored fields, checked against `current` (null on create). */
