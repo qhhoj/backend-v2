@@ -11,3 +11,6 @@ export const isSanitizedStyle = (style: RenderStyle): boolean =>
   style !== 'problem-full';
 /** Legacy `safe_mode: 'escape'` (`self-description`, `organization-about`, later comments): raw HTML is shown as text. */
 export const allowsRawHtml = (style: RenderStyle): boolean => style !== 'user';
+/** Text written by users (not staff): KaTeX is cut down to what a stranger's formula may cost. */
+export const isUserAuthored = (style: RenderStyle): boolean =>
+  style === 'user' || style === 'blog';

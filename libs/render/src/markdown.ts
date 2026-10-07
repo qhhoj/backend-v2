@@ -15,7 +15,12 @@ import {
   sanitizeStatementHtml,
 } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
-import { allowsRawHtml, isSanitizedStyle, RenderStyle } from './styles';
+import {
+  allowsRawHtml,
+  isSanitizedStyle,
+  isUserAuthored,
+  RenderStyle,
+} from './styles';
 import { dashesRule } from './typography';
 import { renderUserReference, userReferenceRule } from './user-reference';
 
@@ -42,7 +47,7 @@ function spliceMath(
 ): string {
   return html.replace(
     new RegExp(`<span ${MATH_SLOT_ATTRIBUTE}="${nonce}-(\\d+)"></span>`, 'g'),
-    (_slot, index: string) => formulas[Number(index)],
+    (slot, index: string) => formulas[Number(index)] ?? slot,
   );
 }
 
@@ -117,7 +122,7 @@ const assertWithinMarkupLimits = (html: string): void => {
 /** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. The `blog` style sanitizes the author's HTML with formulas held aside (KaTeX output is trusted and spliced in afterwards, never sharing the author's sanitizer pass). Throws `RenderLimitError` when the markup is too large or too deeply nested. */
 export function renderMarkdown(text: string, style: RenderStyle): string {
   const env: RenderEnv = {
-    budget: createMathBudget(),
+    budget: createMathBudget(isUserAuthored(style)),
     ...(style === 'blog'
       ? {
           deferredMath: {

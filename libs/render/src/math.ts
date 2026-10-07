@@ -22,6 +22,11 @@ const truncate = (text: string) =>
 
 /** Per-render limits on KaTeX work and output; one instance lives in the markdown-it `env` of each render. */
 export type MathBudget = {
+  /** User-authored text: tighter KaTeX limits, no parametered macros, a wall-clock budget. */
+  userAuthored: boolean;
+  /** Milliseconds clock; replaceable so the time budget is testable. */
+  clock: () => number;
+  startedAt: number;
   formulas: number;
   outputBytes: number;
   limitReported: boolean;
@@ -29,7 +34,17 @@ export type MathBudget = {
 export const MAX_FORMULAS = 2000;
 export const MAX_FORMULA_LENGTH = 1000;
 export const MAX_MATH_OUTPUT_BYTES = 1.5 * 1024 * 1024;
-export const createMathBudget = (): MathBudget => ({
+/** Total KaTeX time one user-authored render may spend; later formulas show as source. */
+export const MAX_USER_MATH_MILLISECONDS = 500;
+const USER_MAX_EXPAND = 50;
+const USER_MAX_SIZE = 50;
+export const createMathBudget = (
+  userAuthored = false,
+  clock: () => number = () => performance.now(),
+): MathBudget => ({
+  userAuthored,
+  clock,
+  startedAt: clock(),
   formulas: 0,
   outputBytes: 0,
   limitReported: false,
@@ -39,6 +54,10 @@ const sourceOf = (tex: string, displayMode: boolean) =>
   truncate(displayMode ? `$$${tex}$$` : `$${tex}$`);
 const mathError = (tex: string, displayMode: boolean, message: string) =>
   `<span class="math-error" title="${escapeHtml(truncate(message))}">${escapeHtml(sourceOf(tex, displayMode))}</span>`;
+
+/** An unescaped `#` is a macro parameter in KaTeX (nothing else uses it); a macro that repeats its argument multiplies the output per expansion. `[` after a definer is a `\\newcommand` argument count. */
+const PARAMETER_MACRO =
+  /(?<!\\)#|\\(?:[gex]?def|(?:re)?newcommand|providecommand|(?:re)?newenvironment)(?![A-Za-z])[^]*\[/;
 
 /** KaTeX HTML+MathML for `tex`; any KaTeX failure (parse error, stack overflow on deep nesting) or a spent `budget` keeps the raw source in a `math-error` span so a bad formula never fails a save. */
 export function renderMath(
@@ -56,13 +75,24 @@ export function renderMath(
     budget.limitReported = true;
     return mathError(tex, displayMode, 'Formula limit exceeded');
   }
+  if (budget?.userAuthored) {
+    if (budget.clock() - budget.startedAt > MAX_USER_MATH_MILLISECONDS)
+      return escapeHtml(sourceOf(tex, displayMode));
+    if (PARAMETER_MACRO.test(tex))
+      return mathError(
+        tex,
+        displayMode,
+        'Macros with parameters are not allowed here',
+      );
+  }
   try {
     const html = katex.renderToString(tex, {
       displayMode,
       throwOnError: true,
       strict: 'ignore',
       trust: false,
-      maxSize: MAX_SIZE,
+      maxSize: budget?.userAuthored ? USER_MAX_SIZE : MAX_SIZE,
+      ...(budget?.userAuthored ? { maxExpand: USER_MAX_EXPAND } : {}),
     });
     if (budget) {
       if (budget.outputBytes + html.length > MAX_MATH_OUTPUT_BYTES) {

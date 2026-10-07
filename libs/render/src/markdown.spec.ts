@@ -1,4 +1,5 @@
 import { renderMarkdown, renderMath } from './markdown';
+import { createMathBudget } from './math';
 import { RenderLimitError } from './render-limit.error';
 
 const full = (text: string) => renderMarkdown(text, 'problem-full');
@@ -176,9 +177,8 @@ describe('renderMarkdown', () => {
       expect(html).toContain('class="katex"');
       expect(
         renderMath('x', false, {
-          formulas: 0,
+          ...createMathBudget(),
           outputBytes: 2 * 1024 * 1024,
-          limitReported: false,
         }),
       ).toContain('Formula limit exceeded');
     });
