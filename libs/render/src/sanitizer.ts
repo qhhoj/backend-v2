@@ -1,5 +1,4 @@
 import sanitizeHtml from 'sanitize-html';
-import { KATEX_CLASSES, KATEX_UNSTYLED_CLASSES } from './katex-classes';
 import {
   LEGACY_STYLE_PROPERTIES,
   MATHML_ATTRIBUTES,
@@ -153,21 +152,34 @@ const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
   parser: { lowerCaseAttributeNames: false },
 };
 
-/** Style properties that let a post escape its own box (overlays, clickjacking). `top`/`left` stay only as KaTeX's small em offsets, `position` only in flow. */
+/** Style properties that let author HTML escape its own box (overlays, clickjacking, invisible click targets). KaTeX is never sanitized with these rules: its output is spliced in afterwards. */
 const LAYOUT_ESCAPE_PROPERTY =
-  /^(-\w+-)?(z-index|right|bottom|inset.*|transform.*)$/;
-/** `position` stays only as `relative` (KaTeX positions large operators with it); it cannot leave the post's box. */
-const IN_FLOW_POSITION = /^(relative|static)$/;
-const KATEX_OFFSET = /^-?\d{1,3}(\.\d+)?em$/;
-const RESTRICTED_VALUES: Record<string, RegExp> = {
-  position: IN_FLOW_POSITION,
-  top: KATEX_OFFSET,
-  left: KATEX_OFFSET,
+  /^(-\w+-)?(position|z-index|top|right|bottom|left|inset.*|transform.*|opacity)$/;
+/** Any viewport unit (a full-screen box), and CSS comments (they split tokens past the other checks). */
+const VIEWPORT_OR_COMMENT =
+  /\d(vw|vh|vmin|vmax|vi|vb|[dsl]v(w|h|min|max))\b|\/\*/i;
+/** Margins only ever as plain non-negative lengths, so nothing is pulled over its neighbours. */
+const SAFE_MARGIN =
+  /^(auto|\+?\d*\.?\d+(px|em|rem|%|ch|ex|pt|cm|mm|in)?)(\s+(auto|\+?\d*\.?\d+(px|em|rem|%|ch|ex|pt|cm|mm|in)?)){0,3}$/i;
+const BLOG_STYLE_VALUE = {
+  test: (value: string) =>
+    !VIEWPORT_OR_COMMENT.test(value) && STYLE_VALUE.test(value),
+};
+const BLOG_MARGIN_VALUE = {
+  test: (value: string) =>
+    !VIEWPORT_OR_COMMENT.test(value) && SAFE_MARGIN.test(value.trim()),
 };
 const BLOG_STYLES = Object.fromEntries(
   LEGACY_STYLE_PROPERTIES.filter(
     (property) => !LAYOUT_ESCAPE_PROPERTY.test(property),
-  ).map((property) => [property, [RESTRICTED_VALUES[property] ?? STYLE_VALUE]]),
+  ).map((property) => [
+    property,
+    [
+      property.startsWith('margin') && !property.includes('collapse')
+        ? (BLOG_MARGIN_VALUE as RegExp)
+        : (BLOG_STYLE_VALUE as RegExp),
+    ],
+  ]),
 );
 
 /** Embeds a blog post may carry (path-checked, not just host-checked). */
@@ -175,15 +187,8 @@ const EMBED_SOURCE =
   /^https:\/\/(www\.youtube\.com\/embed|www\.youtube-nocookie\.com\/embed|player\.vimeo\.com\/video)\/[\w-]+(\?[\w=&.%-]*)?$/;
 const EMBED_SANDBOX = 'allow-scripts allow-same-origin allow-presentation';
 
-/** Classes the Markdown pipeline and KaTeX emit (KaTeX's from its stylesheet); any other class is the author's and gets `user-`, so it cannot hit the site's stylesheet. Names already in the `user-` namespace (`user-reference`) stay. */
-const PIPELINE_CLASSES = new Set([
-  ...KATEX_CLASSES,
-  ...KATEX_UNSTYLED_CLASSES,
-  'math-error',
-  'spoiler',
-  'table',
-  'h-scrollable-table',
-]);
+/** Every author class gets `user-` so it cannot hit the site's stylesheet; only what the Markdown pipeline itself emits stays (`spoiler`, tables, code languages, user references, already `user-`). KaTeX classes never reach this pass. */
+const PIPELINE_CLASSES = new Set(['spoiler', 'table', 'h-scrollable-table']);
 const isPipelineClass = (name: string) =>
   PIPELINE_CLASSES.has(name) ||
   name.startsWith('user-') ||
@@ -201,35 +206,58 @@ const withoutId = (attributes: readonly string[]) =>
 const BLOG_ALLOWED_ATTRIBUTES = Object.fromEntries(
   Object.entries(
     STATEMENT_OPTIONS.allowedAttributes as Record<string, string[]>,
-  ).map(([tag, attributes]) => [tag, withoutId(attributes)]),
+  )
+    .filter(([tag]) => !KATEX_TAGS.includes(tag))
+    .map(([tag, attributes]) => [tag, withoutId(attributes)]),
 );
+
+/** Attribute of the placeholder element `renderMarkdown` leaves for each formula; its value carries a per-render nonce, so only the renderer can address a slot. */
+export const MATH_SLOT_ATTRIBUTE = 'data-math';
 
 const BLOG_OPTIONS: sanitizeHtml.IOptions = {
   ...STATEMENT_OPTIONS,
+  allowedTags: (STATEMENT_OPTIONS.allowedTags as string[]).filter(
+    (tag) => !KATEX_TAGS.includes(tag),
+  ),
   allowedAttributes: {
     ...BLOG_ALLOWED_ATTRIBUTES,
+    span: [...BLOG_ALLOWED_ATTRIBUTES.span, MATH_SLOT_ATTRIBUTE],
     iframe: [...BLOG_ALLOWED_ATTRIBUTES.iframe, 'sandbox', 'loading'],
   },
   allowedStyles: { '*': BLOG_STYLES },
   transformTags: {
-    '*': (tagName, attributes) => ({
-      tagName,
-      attribs: {
-        ...attributes,
-        ...(attributes.class === undefined
-          ? {}
-          : { class: prefixedClasses(attributes.class) }),
-        ...(tagName === 'iframe'
-          ? { sandbox: EMBED_SANDBOX, loading: 'lazy' }
-          : {}),
-      },
-    }),
+    '*': (tagName, attributes) => {
+      const { allow, ...rest } = attributes;
+      return {
+        tagName,
+        attribs: {
+          ...rest,
+          ...(attributes.class === undefined
+            ? {}
+            : { class: prefixedClasses(attributes.class) }),
+          ...(tagName === 'iframe'
+            ? {
+                sandbox: EMBED_SANDBOX,
+                loading: 'lazy',
+                ...(allow
+                  ?.split(';')
+                  .some((feature) => feature.trim() === 'fullscreen')
+                  ? { allow: 'fullscreen' }
+                  : {}),
+              }
+            : {}),
+          ...(tagName === 'a' && attributes.target !== undefined
+            ? { rel: 'nofollow noopener noreferrer' }
+            : {}),
+        },
+      };
+    },
   },
   exclusiveFilter: (frame) =>
     frame.tag === 'iframe' && !EMBED_SOURCE.test(frame.attribs.src ?? ''),
 };
 
-/** Blog post HTML: the statement allow-list confined to the post's own box (no positioning, id, site classes, foreign or unsandboxed iframes). */
+/** Author HTML of a blog post: the statement allow-list confined to the post's own box (no positioning, overlays, ids, site classes, foreign or unsandboxed iframes). Math is spliced in after this pass. */
 export const sanitizeBlogHtml = (html: string): string =>
   sanitizeHtml(html, BLOG_OPTIONS);
 

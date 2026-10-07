@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import MarkdownIt from 'markdown-it';
 import { isMarkupWithinLimits } from './markup-limits';
 import {
@@ -8,7 +9,11 @@ import {
   renderMath,
 } from './math';
 import { RenderLimitError } from './render-limit.error';
-import { sanitizeBlogHtml, sanitizeStatementHtml } from './sanitizer';
+import {
+  MATH_SLOT_ATTRIBUTE,
+  sanitizeBlogHtml,
+  sanitizeStatementHtml,
+} from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
 import { allowsRawHtml, isSanitizedStyle, RenderStyle } from './styles';
 import { dashesRule } from './typography';
@@ -17,7 +22,29 @@ import { renderUserReference, userReferenceRule } from './user-reference';
 export { renderMath } from './math';
 
 /** markdown-it `env` of one render. */
-type RenderEnv = { budget: MathBudget };
+type RenderEnv = {
+  budget: MathBudget;
+  /** The `blog` style only: formulas wait here (KaTeX HTML is trusted) while the author's HTML is sanitized. */
+  deferredMath?: { nonce: string; formulas: string[] };
+};
+
+/** A slot element standing for the formula; sanitizing leaves it alone and `spliceMath` replaces it. */
+function deferMath(env: RenderEnv, html: string): string {
+  if (!env.deferredMath) return html;
+  const { nonce, formulas } = env.deferredMath;
+  formulas.push(html);
+  return `<span ${MATH_SLOT_ATTRIBUTE}="${nonce}-${formulas.length - 1}"></span>`;
+}
+
+function spliceMath(
+  html: string,
+  { nonce, formulas }: { nonce: string; formulas: string[] },
+): string {
+  return html.replace(
+    new RegExp(`<span ${MATH_SLOT_ATTRIBUTE}="${nonce}-(\\d+)"></span>`, 'g'),
+    (_slot, index: string) => formulas[Number(index)],
+  );
+}
 
 const MAX_HEADER_LEVEL = 6;
 /** Legacy `inc_header`: bare header tags shift by two (capped at h6 instead of producing h7/h8). */
@@ -47,9 +74,15 @@ function createMarkdown(html: boolean): MarkdownIt.MarkdownIt {
     alt: ['paragraph', 'reference', 'blockquote', 'list'],
   });
   markdown.renderer.rules.math_inline = (tokens, index, _options, env) =>
-    renderMath(tokens[index].content, false, (env as RenderEnv).budget);
+    deferMath(
+      env as RenderEnv,
+      renderMath(tokens[index].content, false, (env as RenderEnv).budget),
+    );
   markdown.renderer.rules.math_display = (tokens, index, _options, env) =>
-    renderMath(tokens[index].content, true, (env as RenderEnv).budget);
+    deferMath(
+      env as RenderEnv,
+      renderMath(tokens[index].content, true, (env as RenderEnv).budget),
+    );
   markdown.renderer.rules.user_reference = renderUserReference;
   markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
     const token = tokens[index];
@@ -64,29 +97,13 @@ function createMarkdown(html: boolean): MarkdownIt.MarkdownIt {
 
 const markdowns = { raw: createMarkdown(true), escaped: createMarkdown(false) };
 
-const sanitized = (html: string, style: RenderStyle): string =>
-  style === 'blog'
-    ? sanitizeBlogHtml(html)
-    : isSanitizedStyle(style)
-      ? sanitizeStatementHtml(html)
-      : html;
-
 const MAX_MARKUP_TAGS = 200000;
 const MAX_MARKUP_DEPTH = 500;
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
 
-/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. Throws `RenderLimitError` when the markup is too large or too deeply nested. */
-export function renderMarkdown(text: string, style: RenderStyle): string {
-  const rendered = wrapTables(
-    shiftHeaders(
-      markdowns[allowsRawHtml(style) ? 'raw' : 'escaped'].render(
-        rewriteHtmlSpoilers(text),
-        { budget: createMathBudget() } satisfies RenderEnv,
-      ),
-    ),
-  );
+const assertWithinMarkupLimits = (html: string): void => {
   if (
-    !isMarkupWithinLimits(rendered, {
+    !isMarkupWithinLimits(html, {
       maxTags: MAX_MARKUP_TAGS,
       maxDepth: MAX_MARKUP_DEPTH,
       mode: 'html',
@@ -95,7 +112,36 @@ export function renderMarkdown(text: string, style: RenderStyle): string {
     throw new RenderLimitError(
       'Markup has too many tags or is nested too deep',
     );
-  const html = sanitized(rendered, style);
+};
+
+/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. The `blog` style sanitizes the author's HTML with formulas held aside (KaTeX output is trusted and spliced in afterwards, never sharing the author's sanitizer pass). Throws `RenderLimitError` when the markup is too large or too deeply nested. */
+export function renderMarkdown(text: string, style: RenderStyle): string {
+  const env: RenderEnv = {
+    budget: createMathBudget(),
+    ...(style === 'blog'
+      ? {
+          deferredMath: {
+            nonce: randomBytes(12).toString('hex'),
+            formulas: [],
+          },
+        }
+      : {}),
+  };
+  const rendered = wrapTables(
+    shiftHeaders(
+      markdowns[allowsRawHtml(style) ? 'raw' : 'escaped'].render(
+        rewriteHtmlSpoilers(text),
+        env,
+      ),
+    ),
+  );
+  assertWithinMarkupLimits(rendered);
+  let html: string;
+  if (env.deferredMath) {
+    html = spliceMath(sanitizeBlogHtml(rendered), env.deferredMath);
+    assertWithinMarkupLimits(html);
+  } else
+    html = isSanitizedStyle(style) ? sanitizeStatementHtml(rendered) : rendered;
   if (Buffer.byteLength(html) > MAX_HTML_BYTES)
     throw new RenderLimitError('Rendered HTML is too large');
   return html;
