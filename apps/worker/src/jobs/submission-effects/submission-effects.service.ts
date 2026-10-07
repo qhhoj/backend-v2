@@ -1,15 +1,26 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { REDIS, runCoalesced } from '@libs/common';
+import {
+  contestSubmissionPoints,
+  disqualify,
+  frozenTime,
+  participationStart,
+  rankingCacheKeys,
+  scoreParticipation,
+} from '@libs/contests';
+import { uuidStr } from '@libs/database';
 import { acceptanceRate, userPoints } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
+import { ContestResultsRepository } from './contest-results.repository';
 import { SubmissionEffectsRepository } from './submission-effects.repository';
 
-/** The only place a user's points or a problem's stats are recomputed (graded jobs, the sweep, rescores). Each recompute reads Mongo and `$set`s, serialised per key across processes. */
+/** The only place a user's points, a problem's stats or a contest participation's results are recomputed (graded jobs, the sweep, rescores). Each recompute reads Mongo and `$set`s, serialised per key across processes. */
 @Injectable()
 export class SubmissionEffectsService {
   constructor(
     private readonly repository: SubmissionEffectsRepository,
+    private readonly contestResults: ContestResultsRepository,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -20,7 +31,85 @@ export class SubmissionEffectsService {
     if (problem.isPublic && !problem.isOrganizationPrivate)
       await this.recomputeUser(job.userId);
     await this.recomputeProblem(job.problemId);
-    // Hooks: organisation points (sub-project 5) and contest results (sub-project 4).
+    // Hook: organisation points (sub-project 5).
+    await this.applyContest(job.submissionId);
+  }
+
+  /** Legacy `update_contest`: a contest submission's points from its case totals, then its participation. A problem no longer in the contest keeps its points. */
+  async applyContest(submissionId: string): Promise<void> {
+    const entry = await this.contestResults.findContestSubmission(submissionId);
+    if (!entry) return;
+    const problemId = uuidStr(entry.problem);
+    const [contest, totals, partials] = await Promise.all([
+      this.contestResults.findContest(uuidStr(entry.contest)),
+      this.contestResults.caseTotals([submissionId]),
+      this.contestResults.problemPartials([problemId]),
+    ]);
+    const contestProblem = contest?.problems.find(
+      (candidate) => uuidStr(candidate.problem) === problemId,
+    );
+    const caseTotals = totals.get(submissionId);
+    if (!contest || !contestProblem || !caseTotals) return;
+    await this.contestResults.setContestSubmissionPoints(
+      submissionId,
+      contestSubmissionPoints(
+        caseTotals,
+        contestProblem,
+        contest.formatName,
+        partials.get(problemId) ?? false,
+      ),
+    );
+    await this.recomputeParticipation(uuidStr(entry.participation));
+  }
+
+  /** Legacy `recompute_results` through the contest's format, then the contest's ranking cache is dropped (all four keys). */
+  recomputeParticipation(participationId: string): Promise<void> {
+    return runCoalesced(
+      this.redis,
+      `effects:participation:${participationId}`,
+      async () => {
+        const participation =
+          await this.contestResults.findParticipation(participationId);
+        const contest =
+          participation &&
+          (await this.contestResults.findContest(
+            uuidStr(participation.contest),
+          ));
+        if (!participation || !contest) return;
+        const problemIds = contest.problems.map((entry) =>
+          uuidStr(entry.problem),
+        );
+        const withBatches = contest.formatName === 'ioi16';
+        const [rows, dataPointsOf] = await Promise.all([
+          this.contestResults.scoringRows(participationId, withBatches),
+          withBatches
+            ? this.contestResults.dataPointsOf(problemIds)
+            : Promise.resolve(new Map<string, number>()),
+        ]);
+        const score = scoreParticipation(
+          rows.filter((row) => problemIds.includes(row.problemId)),
+          { name: contest.formatName, config: contest.formatConfig },
+          {
+            start: participationStart(contest, participation),
+            contestStart: contest.startTime,
+            frozenTime: frozenTime(contest),
+            pointsPrecision: contest.pointsPrecision,
+            problems: contest.problems.map((entry) => ({
+              problemId: uuidStr(entry.problem),
+              points: entry.points,
+              dataPoints: dataPointsOf.get(uuidStr(entry.problem)) ?? null,
+            })),
+          },
+        );
+        await this.contestResults.setResults(
+          participationId,
+          participation.isDisqualified ? disqualify(score) : score,
+        );
+        await this.redis.del(
+          ...rankingCacheKeys(uuidStr(participation.contest)),
+        );
+      },
+    );
   }
 
   recomputeUser(userId: string): Promise<void> {

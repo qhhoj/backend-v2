@@ -1,6 +1,12 @@
 import type { UUID } from 'mongodb';
-import { newId, toUuid } from '@libs/database';
-import type { Problem, Submission, User } from '@libs/database';
+import { newId, toUuid, uuidStr } from '@libs/database';
+import type {
+  Contest,
+  ContestParticipation,
+  Problem,
+  Submission,
+  User,
+} from '@libs/database';
 import type { WorkerTest } from './setup';
 
 let users = 0;
@@ -99,4 +105,52 @@ export async function insertGradedRows(
           },
         ),
       );
+}
+
+let contestCount = 0;
+/** A default-format contest running from an hour ago for three hours. */
+export const seedContest = (worker: WorkerTest, extra: Partial<Contest> = {}) =>
+  worker.contests.create({
+    key: `effects_contest_${(contestCount += 1)}`,
+    name: 'Effects contest',
+    startTime: new Date(Date.now() - 3_600_000),
+    endTime: new Date(Date.now() + 7_200_000),
+    ...extra,
+  });
+
+export const seedParticipation = (
+  worker: WorkerTest,
+  contestId: string,
+  userId: string,
+  extra: Partial<ContestParticipation> = {},
+) =>
+  worker.participations.create({
+    contest: contestId,
+    user: userId,
+    realStart: new Date(Date.now() - 3_600_000),
+    ...extra,
+  });
+
+/** A graded contest submission: the submission (AC full marks unless `fields` say otherwise) and its contest row. */
+export async function seedContestSubmission(
+  worker: WorkerTest,
+  participation: { _id: string; contest: string; user: string },
+  problemId: string,
+  fields: Partial<Submission> = {},
+  points = 0,
+) {
+  const submission = await seedGraded(
+    worker,
+    uuidStr(participation.user),
+    problemId,
+    { contest: uuidStr(participation.contest), ...fields },
+  );
+  await worker.contestSubmissions.create({
+    _id: submission._id,
+    participation: participation._id,
+    contest: participation.contest,
+    problem: problemId,
+    points,
+  });
+  return submission;
 }
