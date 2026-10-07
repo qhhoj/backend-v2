@@ -74,6 +74,10 @@ describe('/api/v2 organizations and users', () => {
     const partialProblem = await createProblem(api, catalog, {
       code: 'partial_one',
     });
+    const orgPrivateProblem = await createProblem(api, catalog, {
+      code: 'org_private_one',
+      isOrganizationPrivate: true,
+    });
     const privateProblem = await createProblem(api, catalog, {
       code: 'private_one',
       isPublic: false,
@@ -93,6 +97,7 @@ describe('/api/v2 organizations and users', () => {
     await submit(solvedProblem._id, {});
     await submit(partialProblem._id, { casePoints: 1, caseTotal: 2 });
     await submit(privateProblem._id, {});
+    await submit(orgPrivateProblem._id, {});
     const ended = await createContest(api, {
       key: 'ended_one',
       startTime: hoursFromNow(-30),
@@ -125,15 +130,31 @@ describe('/api/v2 organizations and users', () => {
       score: 50,
       cumtime: 5,
     });
-    await joinParticipation(api, frozen._id, users.alice._id, {
-      score: 300,
-      cumtime: 30,
-      frozenScore: 100,
-      frozenCumtime: 10,
-    });
+    const frozenRow = await joinParticipation(
+      api,
+      frozen._id,
+      users.alice._id,
+      {
+        score: 300,
+        cumtime: 30,
+        frozenScore: 100,
+        frozenCumtime: 10,
+      },
+    );
     await joinParticipation(api, secret._id, users.alice._id, { score: 9 });
     await joinParticipation(api, hiddenBoard._id, users.alice._id, {
       score: 7,
+    });
+    await api.ratings.create({
+      user: users.alice._id,
+      contest: frozen._id,
+      participation: frozenRow._id,
+      contestEndTime: frozen.endTime,
+      rank: 1,
+      rating: 1700,
+      mean: 1710,
+      performance: 1800,
+      lastRated: new Date(),
     });
     await api.ratings.create({
       user: users.alice._id,
@@ -262,6 +283,9 @@ describe('/api/v2 organizations and users', () => {
     expect(asEditor.find((row) => row.key === 'frozen_one')).toMatchObject({
       score: 300,
       cumulative_time: 30,
+      rating: 1700,
+      raw_rating: 1710,
+      performance: 1800,
     });
     expect(
       asEditor.find((row) => row.key === 'hidden_board_one'),
@@ -271,5 +295,20 @@ describe('/api/v2 organizations and users', () => {
       code: 404,
       message: 'page/object not found',
     });
+  });
+
+  it('answers 400 for malformed filters and 404 past the last page', async () => {
+    await body('/api/v2/users?id=not-a-uuid', undefined, 400);
+    await body('/api/v2/users?organization=not-a-uuid', undefined, 400);
+    await body('/api/v2/organizations?id=not-a-uuid', undefined, 400);
+    await body('/api/v2/users?page=0', undefined, 400);
+    await body('/api/v2/organizations?page=0', undefined, 400);
+    await body('/api/v2/users?page=2', undefined, 404);
+    await body('/api/v2/organizations?page=2', undefined, 404);
+  });
+
+  it('details an unlisted user, as legacy does', async () => {
+    const detail = (await body('/api/v2/user/hidden')).data.object;
+    expect(detail).toMatchObject({ username: 'hidden', solved_problems: [] });
   });
 });

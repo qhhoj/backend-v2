@@ -25,8 +25,12 @@ export class UsersRepository {
       : Promise.resolve([]);
   }
 
-  findByUsername(username: string): Promise<UserDocument | null> {
-    return this.users.findOne({ username }).collation(CI).exec();
+  /** `fields` is an optional Mongo projection, for callers that read few fields. */
+  findByUsername(
+    username: string,
+    fields?: Record<string, 1>,
+  ): Promise<UserDocument | null> {
+    return this.users.findOne({ username }, fields).collation(CI).exec();
   }
 
   findByEmail(email: string): Promise<UserDocument | null> {

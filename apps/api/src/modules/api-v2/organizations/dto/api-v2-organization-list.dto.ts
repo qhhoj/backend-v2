@@ -9,10 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { toArray, toBoolean } from '../../../problems/core/dto/transforms';
-import {
-  API_V2_MAX_PAGE,
-  MAX_FILTER_VALUES,
-} from '../../problems/dto/api-v2-problem-list.dto';
+import { API_V2_MAX_PAGE, MAX_FILTER_VALUES } from '../../core/api-v2-filters';
 
 /** Legacy `APIOrganizationList` filters. */
 export class ApiV2OrganizationListDto {

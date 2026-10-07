@@ -24,6 +24,15 @@ import {
 import type { LegacyPage } from '../core/legacy-envelope';
 import { ApiV2UserListDto } from './dto/api-v2-user-list.dto';
 
+const DETAIL_FIELDS: Record<string, 1> = {
+  username: 1,
+  points: 1,
+  performancePoints: 1,
+  problemCount: 1,
+  displayRank: 1,
+  rating: 1,
+  organizations: 1,
+};
 const notFound = () => new AppError('not_found', 404, 'page/object not found');
 
 @Injectable()
@@ -79,7 +88,7 @@ export class ApiV2UsersService {
     username: string,
     now = new Date(),
   ): Promise<Record<string, unknown>> {
-    const user = await this.users.findByUsername(username);
+    const user = await this.users.findByUsername(username, DETAIL_FIELDS);
     if (!user) throw notFound();
     const [solved, organizations, contests] = await Promise.all([
       this.pages.solvedCodes(user._id),
@@ -150,12 +159,12 @@ export class ApiV2UsersService {
     );
     return contests.map((contest) => {
       const row = rows.get(uuidStr(contest._id))!;
-      const standing = standingOf(
-        row,
+      const frozen =
         isFrozen(contest, now) &&
-          !ContestAccess.canEdit(principal, ContestAccess.accessView(contest)),
-      );
-      const rating = ratings.get(uuidStr(row._id));
+        !ContestAccess.canEdit(principal, ContestAccess.accessView(contest));
+      const standing = standingOf(row, frozen);
+      // Ratings follow the live board: a (re-)frozen board must not reveal them.
+      const rating = frozen ? undefined : ratings.get(uuidStr(row._id));
       return {
         key: contest.key,
         score: standing.score,

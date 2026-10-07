@@ -12,7 +12,7 @@ import {
   API_V2_MAX_PAGE,
   FilterStrings,
   MAX_FILTER_VALUES,
-} from '../../problems/dto/api-v2-problem-list.dto';
+} from '../../core/api-v2-filters';
 
 /** Legacy `APIUserList` filters. */
 export class ApiV2UserListDto {
