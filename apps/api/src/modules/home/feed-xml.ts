@@ -5,6 +5,8 @@ export interface FeedChannel {
   link: string;
   selfLink: string;
   description: string;
+  /** Atom requires an author on the feed or on every entry. */
+  author: string;
 }
 
 export interface FeedItem {
@@ -24,8 +26,9 @@ const ENTITIES: Record<string, string> = {
   '"': '&quot;',
 };
 /** Characters XML 1.0 cannot carry at all (the `Char` production). */
-// eslint-disable-next-line no-control-regex -- the control characters are the point
-const NOT_XML = /[^\u0009\u000A\u000D -퟿-�\u{10000}-\u{10FFFF}]/gu;
+const NOT_XML =
+  // eslint-disable-next-line no-control-regex -- the control characters are the point
+  /[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu;
 
 export const escapeXml = (text: string): string =>
   text
@@ -69,7 +72,7 @@ export function atomFeed(
     `${HEADER}<feed xmlns="http://www.w3.org/2005/Atom">${element('title', channel.title)}` +
     `${element('subtitle', channel.description)}<link href="${escapeXml(channel.link)}" rel="alternate"/>` +
     `<link href="${escapeXml(channel.selfLink)}" rel="self"/>${element('id', channel.selfLink)}` +
-    `${element('updated', updated.toISOString())}${entries.join('')}</feed>`
+    `${element('updated', updated.toISOString())}<author>${element('name', channel.author)}</author>${entries.join('')}</feed>`
   );
 }
 

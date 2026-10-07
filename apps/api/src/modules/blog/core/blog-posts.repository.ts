@@ -49,6 +49,20 @@ export class BlogPostsRepository {
       : Promise.resolve([]);
   }
 
+  /** The first `limit` posts of a sort, without the total `page` also counts. */
+  newest(
+    filter: FilterQuery<BlogPost>,
+    sort: Record<string, SortOrder>,
+    limit: number,
+  ): Promise<BlogPost[]> {
+    return this.posts
+      .find(filter, LIST_PROJECTION)
+      .sort(sort)
+      .limit(limit)
+      .lean<BlogPost[]>()
+      .exec();
+  }
+
   async page(
     filter: FilterQuery<BlogPost>,
     sort: Record<string, SortOrder>,

@@ -6,6 +6,7 @@ describe('feed XML', () => {
     link: 'https://oj.example/',
     selfLink: 'https://oj.example/feed/blog/rss/',
     description: 'The latest blog posts',
+    author: 'QHHOJ',
   };
   const items = [
     {
@@ -57,6 +58,7 @@ describe('feed XML', () => {
     const xml = atomFeed(channel, items);
     expect(xml).toContain('<feed xmlns="http://www.w3.org/2005/Atom">');
     expect(xml).toContain('<updated>2026-10-07T10:00:00.000Z</updated>');
+    expect(xml).toContain('<author><name>QHHOJ</name></author>');
     expect(xml).toContain(`<id>urn:uuid:${items[1].id}</id>`);
     expect(xml).toContain(
       '<summary type="html">&lt;p&gt;Old&lt;/p&gt;</summary>',

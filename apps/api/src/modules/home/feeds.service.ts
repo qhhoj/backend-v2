@@ -45,6 +45,7 @@ export class FeedsService {
       link: `${this.env.siteUrl}/`,
       selfLink: `${this.env.siteUrl}/feed/${kind}/${format}/`,
       description: DESCRIPTIONS[kind],
+      author: SITE_NAME,
     };
     const items = await this.items(kind, now);
     const xml =
@@ -57,13 +58,12 @@ export class FeedsService {
     const site = this.env.siteUrl;
     if (kind === 'blog')
       return (
-        await this.posts.page(
+        await this.posts.newest(
           BlogAccess.publishedPersonalFilter(now),
           { publishOn: -1, _id: -1 },
-          1,
           FEED_ITEMS,
         )
-      ).items.map((post) => ({
+      ).map((post) => ({
         id: uuidStr(post._id),
         title: post.title,
         link: `${site}${pagePath('blog', uuidStr(post._id))}`,
