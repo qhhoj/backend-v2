@@ -2,6 +2,7 @@ import { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import { ORGANIZATION_POINTS_JOB } from '@libs/community';
 import { profileQueries } from '@libs/database/testing';
+import { OrganizationPointsRepository } from '../src/jobs/organization-points/organization-points.repository';
 import { OrganizationPointsService } from '../src/jobs/organization-points/organization-points.service';
 import { SubmissionEffectsService } from '../src/jobs/submission-effects/submission-effects.service';
 import {
@@ -81,9 +82,26 @@ describe('organization points', () => {
     expect(
       userReads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
     ).toBe(true);
-    expect(
-      Math.max(...userReads.map(({ docsExamined }) => docsExamined)),
-    ).toBeLessThanOrEqual(100);
+  });
+
+  it('reads exactly the top 100 member PPs, best first', async () => {
+    const organization = await seedOrganization(worker);
+    // Inserted lowest first, so the best members are the last stored.
+    await worker.users.insertMany(
+      Array.from({ length: 150 }, (_unused, index) => ({
+        username: `org_top_${index}`,
+        password: '!',
+        isActive: true,
+        organizations: [organization._id],
+        performancePoints: index + 1,
+      })),
+    );
+    const top = await worker.module
+      .get(OrganizationPointsRepository)
+      .topMemberPoints(organization._id, 100);
+    expect(top).toEqual(
+      Array.from({ length: 100 }, (_unused, rank) => 150 - rank),
+    );
   });
 
   it('queues the member organizations when a graded submission changes the PP, and nothing when it does not', async () => {

@@ -101,7 +101,7 @@ export class SubmissionEffectsRepository {
     return (
       previous && {
         performancePoints: previous.performancePoints,
-        organizations: previous.organizations.map(uuidStr),
+        organizations: (previous.organizations ?? []).map(uuidStr),
       }
     );
   }
