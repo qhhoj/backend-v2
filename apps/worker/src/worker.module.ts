@@ -18,6 +18,7 @@ import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
 import { SubmissionEffectsModule } from './jobs/submission-effects/submission-effects.module';
+import { UserDataModule } from './jobs/user-data/user-data.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SubmissionEffectsModule } from './jobs/submission-effects/submission-ef
     ContestMossModule,
     ContestDataModule,
     OrganizationPointsModule,
+    UserDataModule,
   ],
 })
 export class WorkerModule {}

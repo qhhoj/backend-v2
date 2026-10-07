@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
@@ -10,13 +10,9 @@ import {
 } from '@libs/contests';
 import type { ContestDataJob } from '@libs/contests';
 import { ContestDataRepository } from './contest-data.repository';
-import {
-  CONTEST_DATA_LIMITS,
-  ContestDataError,
-  planEntries,
-  writeDataZip,
-} from './data-zip';
+import { CONTEST_DATA_LIMITS, ContestDataError, planEntries } from './data-zip';
 import type { ContestDataLimits } from './data-zip';
+import { chunkedSources, writeZipInPlace } from '../lazy-zip';
 
 @Injectable()
 export class ContestDataService {
@@ -52,27 +48,21 @@ export class ContestDataService {
         `More than ${this.limits.maxEntries} submissions; narrow the filter`,
       );
     const entries = planEntries(rows);
-    let chunkStart = -1;
-    let chunk = new Map<string, string>();
-    const sourceAt = async (index: number) => {
-      const start = index - (index % this.limits.sourceChunk);
-      if (start !== chunkStart) {
-        chunk = await this.repository.sources(
-          entries
-            .slice(start, start + this.limits.sourceChunk)
-            .map((entry) => entry.submissionId),
-        );
-        chunkStart = start;
-      }
-      return chunk.get(entries[index].submissionId) ?? '';
-    };
-    try {
-      await writeDataZip(entries, sourceAt, temporary, this.limits.maxBytes);
-      await rename(temporary, path);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
+    await writeZipInPlace(
+      entries.map((entry) => entry.name),
+      chunkedSources(
+        entries.map((entry) => entry.submissionId),
+        this.limits.sourceChunk,
+        (ids) => this.repository.sources(ids),
+      ),
+      path,
+      temporary,
+      this.limits.maxBytes,
+      () =>
+        new ContestDataError(
+          `The sources pass ${this.limits.maxBytes} bytes; narrow the filter`,
+        ),
+    );
     return entries.length;
   }
 }

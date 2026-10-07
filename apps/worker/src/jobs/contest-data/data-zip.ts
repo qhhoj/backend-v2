@@ -1,15 +1,7 @@
-import { createWriteStream } from 'node:fs';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import { ZipFile } from 'yazl';
+import { writeLazyZip } from '../lazy-zip';
+import type { ZipLimits } from '../lazy-zip';
 
-export interface ContestDataLimits {
-  /** Total uncompressed source bytes per zip. */
-  maxBytes: number;
-  maxEntries: number;
-  /** Sources fetched per query; the only sources held in memory. */
-  sourceChunk: number;
-}
+export type ContestDataLimits = ZipLimits;
 export const CONTEST_DATA_LIMITS = Symbol('CONTEST_DATA_LIMITS');
 export const DEFAULT_CONTEST_DATA_LIMITS: ContestDataLimits = {
   maxBytes: 512 * 1024 * 1024,
@@ -73,33 +65,21 @@ export function planEntries(rows: readonly DataRow[]): DataEntry[] {
   });
 }
 
-/** yazl asks for each source only when it reaches the entry, so memory stays at one chunk; past `maxBytes` the output is destroyed and the partial file is the caller's to remove. */
-export async function writeDataZip(
+/** Past `maxBytes` of sources the write aborts; the partial file is the caller's to remove. */
+export function writeDataZip(
   entries: readonly DataEntry[],
   sourceAt: (index: number) => Promise<string>,
   path: string,
   maxBytes: number,
 ): Promise<void> {
-  const zip = new ZipFile();
-  const output = zip.outputStream as Readable;
-  const fail = (error: unknown) => output.destroy(error as Error);
-  zip.on('error', fail);
-  let written = 0;
-  entries.forEach((entry, index) =>
-    zip.addReadStreamLazy(entry.name, { compress: true }, (callback) => {
-      sourceAt(index).then((source) => {
-        const content = Buffer.from(source);
-        written += content.length;
-        if (written > maxBytes)
-          return fail(
-            new ContestDataError(
-              `The sources pass ${maxBytes} bytes; narrow the filter`,
-            ),
-          );
-        callback(null, Readable.from([content]));
-      }, fail);
-    }),
+  return writeLazyZip(
+    entries.map((entry) => entry.name),
+    sourceAt,
+    path,
+    maxBytes,
+    () =>
+      new ContestDataError(
+        `The sources pass ${maxBytes} bytes; narrow the filter`,
+      ),
   );
-  zip.end();
-  await pipeline(output, createWriteStream(path, { flags: 'wx' }));
 }
