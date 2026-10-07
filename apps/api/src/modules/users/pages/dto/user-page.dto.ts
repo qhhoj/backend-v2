@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { PP_ENTRIES } from '@libs/judging';
 import { IsTimeZone } from '../../core/dto/is-time-zone';
 
@@ -17,4 +17,8 @@ export class PpBreakdownQueryDto {
 
 export class ActivityQueryDto {
   @IsOptional() @IsTimeZone() timezone?: string;
+}
+
+export class UserCommentsQueryDto {
+  @IsOptional() @IsUUID('7') before?: string;
 }

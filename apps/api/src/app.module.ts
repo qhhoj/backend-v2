@@ -16,6 +16,7 @@ import { OrganizationsApiModule } from './modules/organizations/organizations-ap
 import { ProblemsApiModule } from './modules/problems/problems-api.module';
 import { BlogApiModule } from './modules/blog/blog-api.module';
 import { CommentsApiModule } from './modules/comments/comments-api.module';
+import { HomeApiModule } from './modules/home/home-api.module';
 import { ContributionsModule } from './modules/contributions/contributions.module';
 import { ContestsApiModule } from './modules/contests/contests-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
@@ -44,6 +45,7 @@ import { HealthController } from './health.controller';
     ContributionsModule,
     BlogApiModule,
     CommentsApiModule,
+    HomeApiModule,
     ApiV2Module,
   ],
   controllers: [HealthController],

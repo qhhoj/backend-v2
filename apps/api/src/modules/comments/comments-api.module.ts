@@ -12,6 +12,7 @@ import { CommentPagesService } from './core/comment-pages.service';
 import { CommentsController } from './core/comments.controller';
 import { CommentsRepository } from './core/comments.repository';
 import { CommentsService } from './core/comments.service';
+import { RecentCommentsService } from './core/recent-comments.service';
 import { CommentModerationController } from './moderation/comment-moderation.controller';
 import { CommentModerationService } from './moderation/comment-moderation.service';
 import { CommentPostingController } from './posting/comment-posting.controller';
@@ -43,8 +44,14 @@ import { CommentVotesService } from './votes/comment-votes.service';
     CommentPostingService,
     CommentVotesService,
     CommentModerationService,
+    RecentCommentsService,
     RateLimitService,
   ],
-  exports: [CommentsRepository, CommentPagesService, CommentsService],
+  exports: [
+    CommentsRepository,
+    CommentPagesService,
+    CommentsService,
+    RecentCommentsService,
+  ],
 })
 export class CommentsApiModule {}

@@ -2,11 +2,17 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import type { Paginated } from '@libs/common';
+import type { RecentCommentResponse } from '../../comments/core/dto/recent-comment.response';
+import { RecentCommentsService } from '../../comments/core/recent-comments.service';
 import { BlogPostsService } from '../../blog/core/blog-posts.service';
 import { PostPageQueryDto } from '../../blog/core/dto/post-list.dto';
 import type { PostListItemResponse } from '../../blog/core/dto/post.response';
 import { UsernameParamDto } from '../core/dto/username-params.dto';
-import { ActivityQueryDto, PpBreakdownQueryDto } from './dto/user-page.dto';
+import {
+  ActivityQueryDto,
+  PpBreakdownQueryDto,
+  UserCommentsQueryDto,
+} from './dto/user-page.dto';
 import type {
   ActivityResponse,
   PpEntryResponse,
@@ -22,6 +28,7 @@ export class UserPagesController {
   constructor(
     private readonly pages: UserPagesService,
     private readonly blogPosts: BlogPostsService,
+    private readonly recentComments: RecentCommentsService,
   ) {}
 
   @Get()
@@ -69,5 +76,18 @@ export class UserPagesController {
     @Query() { page }: PostPageQueryDto,
   ): Promise<Paginated<PostListItemResponse>> {
     return this.blogPosts.userPosts(optionalPrincipal(auth), username, page);
+  }
+
+  @Get('comments')
+  comments(
+    @CurrentAuth() auth: AuthContext | undefined,
+    @Param() { username }: UsernameParamDto,
+    @Query() { before }: UserCommentsQueryDto,
+  ): Promise<Paginated<RecentCommentResponse>> {
+    return this.recentComments.userComments(
+      optionalPrincipal(auth),
+      username,
+      before,
+    );
   }
 }

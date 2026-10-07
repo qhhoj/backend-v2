@@ -30,6 +30,23 @@ export class CommentsRepository {
     return this.comments.create(fields);
   }
 
+  /** Newest visible comments (optionally one author's), older than `before`, through `{hidden, _id}` or `{author, hidden, _id}`. */
+  newestVisible(
+    { authorId, before }: { authorId?: string; before?: string | null },
+    limit: number,
+  ): Promise<Comment[]> {
+    return this.comments
+      .find({
+        hidden: false,
+        ...(authorId ? { author: authorId } : {}),
+        ...(before ? { _id: { $lt: before } } : {}),
+      })
+      .sort({ _id: -1 })
+      .limit(limit)
+      .lean<Comment[]>()
+      .exec();
+  }
+
   /** One page of visible roots, newest first, through `{page.type, page.id, hidden, parentId, _id}`. */
   async threads(
     page: CommentPage,
