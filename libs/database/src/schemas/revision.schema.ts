@@ -16,7 +16,8 @@ export class Revision {
     { before: unknown; after: unknown }
   >;
   @Prop({ default: '' }) comment!: string;
+  createdAt!: Date;
 }
 
 export const RevisionSchema = SchemaFactory.createForClass(Revision);
-RevisionSchema.index({ entity: 1, entityId: 1, createdAt: -1 });
+RevisionSchema.index({ entity: 1, entityId: 1, createdAt: -1, _id: -1 });

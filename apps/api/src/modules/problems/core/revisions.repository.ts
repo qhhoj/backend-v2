@@ -17,4 +17,14 @@ export class RevisionsRepository {
   ): Promise<void> {
     await this.revisions.create(entry);
   }
+
+  /** Newest first, through `{entity, entityId, createdAt, _id}`. */
+  list(entity: string, entityId: string, limit = 100): Promise<Revision[]> {
+    return this.revisions
+      .find({ entity, entityId })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean<Revision[]>()
+      .exec();
+  }
 }

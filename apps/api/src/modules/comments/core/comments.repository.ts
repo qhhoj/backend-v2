@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { unique } from '@libs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { HydratedDocument, Model } from 'mongoose';
+import { subtreeFilter } from '@libs/community';
 import type { CommentPage, CommentPageType } from '@libs/community';
 import { Comment, isUuid, toUuid, uuidStr } from '@libs/database';
 
@@ -78,5 +80,37 @@ export class CommentsRepository {
       ])
       .exec();
     return new Map(rows.map((row) => [uuidStr(row._id), row.count]));
+  }
+
+  /** Compare-and-set on the edit count: a concurrent edit makes this return false (409). */
+  async updateBodyIfRevision(
+    id: string,
+    revisions: number,
+    body: string,
+    bodyHtml: string,
+  ): Promise<boolean> {
+    const result = await this.comments
+      .updateOne(
+        { _id: id, revisions },
+        { $set: { body, bodyHtml }, $inc: { revisions: 1 } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /** The comment at `path` and its descendants, through `{path}`; returns their distinct authors. */
+  async setSubtreeHidden(path: string, hidden: boolean): Promise<string[]> {
+    const filter = subtreeFilter(path);
+    await this.comments.updateMany(filter, { $set: { hidden } }).exec();
+    const authors: unknown[] = await this.comments
+      .distinct('author', filter)
+      .exec();
+    return unique(authors.map(uuidStr));
+  }
+
+  async isHidden(id: string): Promise<boolean> {
+    return (
+      (await this.comments.exists({ _id: id, hidden: true }).exec()) !== null
+    );
   }
 }
