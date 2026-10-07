@@ -82,8 +82,10 @@ function organizationFilter(
   now: Date,
 ): FilterQuery<BlogPost> | null {
   const base = { organization: organization.id };
-  if (has(principal, 'judge.edit_all_post')) return base;
-  if (principal && OrganizationAccess.isAdmin(principal, organization))
+  // `visible: $in` lets the `visible`-keyed sticky index serve the sort.
+  if (has(principal, 'judge.edit_all_post'))
+    return { ...base, visible: { $in: [true, false] } };
+  if (principal && OrganizationAccess.canAdminister(principal, organization))
     return { ...base, $or: [{ visible: true }, { authors: principal.userId }] };
   if (OrganizationAccess.isMember(principal, organization.id))
     return { ...base, visible: true, publishOn: { $lte: now } };

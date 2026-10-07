@@ -9,7 +9,6 @@ import type { BlogPost } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
 import { VotesRepository } from '../../contributions/votes.repository';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
-import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
 import { OrganizationSummaryResponse } from '../../organizations/core/dto/organization.response';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
@@ -34,7 +33,6 @@ export class BlogPostsService {
     private readonly votes: VotesRepository,
     private readonly users: UsersRepository,
     private readonly organizations: OrganizationsService,
-    private readonly organizationsRepository: OrganizationsRepository,
   ) {}
 
   /** Legacy `PostList` (organization posts never appear here). */
@@ -59,15 +57,12 @@ export class BlogPostsService {
     principal: Principal | null,
     id: string,
   ): Promise<PostDetailResponse> {
-    const { post, view } = await this.visibility.visiblePost(principal, id);
+    const { post, view, organization } = await this.visibility.visiblePost(
+      principal,
+      id,
+    );
     const [item] = await this.items(principal, [post]);
     const canEdit = BlogAccess.canEdit(principal, view);
-    const organization =
-      view.organizationId === null
-        ? null
-        : (
-            await this.organizationsRepository.findByIds([view.organizationId])
-          )[0];
     return {
       ...item,
       contentHtml: post.contentHtml,
@@ -113,7 +108,7 @@ export class BlogPostsService {
       now,
     );
     return filter
-      ? this.pageOf(principal, filter, NEWEST, page)
+      ? this.pageOf(principal, filter, STICKY_FIRST, page)
       : new Paginated([], { page, pageSize: BLOG_PAGE_SIZE, total: 0 });
   }
 

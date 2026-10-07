@@ -203,9 +203,78 @@ describe('blog reads', () => {
       expect(reads.length).toBeGreaterThan(0);
       for (const read of reads) {
         expect(read.planSummary).toContain('IXSCAN');
-        expect(read.planSummary).not.toContain('SORT');
+        expect(read.hasSortStage).toBe(false);
       }
     }
+  });
+
+  it('lists organization posts sticky first for every kind of viewer', async () => {
+    const { user: boss, session: bossSession } = await person();
+    const { user: member, session: memberSession } = await person();
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_post'],
+    });
+    const organization = await createOrganization(
+      api,
+      { adminIds: [boss._id] },
+      [member._id],
+    );
+    const inOrganization = {
+      organization: organization._id,
+      authors: [member._id],
+    };
+    await createPost(api, {
+      ...inOrganization,
+      title: 'new',
+      publishOn: hourAgo(1),
+    });
+    await createPost(api, {
+      ...inOrganization,
+      title: 'old pinned',
+      sticky: true,
+      publishOn: hourAgo(9),
+    });
+    await createPost(api, {
+      ...inOrganization,
+      title: 'mid',
+      publishOn: hourAgo(5),
+    });
+    const url = organizationUrl(organization.slug, '/posts');
+    for (const session of [memberSession, bossSession, staff])
+      expect(await titles(url, session)).toEqual(['old pinned', 'new', 'mid']);
+  });
+
+  it('shows each viewer their own vote on lists and detail', async () => {
+    const { user: voter, session: voterSession } = await person();
+    const { session: other } = await person();
+    const post = await createPost(api, {
+      authors: [voter._id],
+      globalPost: true,
+    });
+    await api.blogVotes.create({ blog: post._id, voter: voter._id, score: -1 });
+    const listVote = async (session?: TestSession) => {
+      const request = api.http().get('/api/internal/posts');
+      const [item] = dataOf<PostListItemResponse[]>(
+        await (session ? authed(request, session) : request).expect(200),
+      );
+      return item.viewerVote;
+    };
+    const detailVote = async (session?: TestSession) => {
+      const request = api.http().get(postUrl(post._id));
+      return dataOf<PostDetailResponse>(
+        await (session ? authed(request, session) : request).expect(200),
+      ).viewerVote;
+    };
+    expect([
+      await listVote(voterSession),
+      await listVote(other),
+      await listVote(),
+    ]).toEqual([-1, 0, 0]);
+    expect([
+      await detailVote(voterSession),
+      await detailVote(other),
+      await detailVote(),
+    ]).toEqual([-1, 0, 0]);
   });
 
   it('keeps an unlisted organization private to its members while its page stays reachable', async () => {

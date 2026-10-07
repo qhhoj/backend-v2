@@ -41,8 +41,16 @@ BlogPostSchema.index({
   publishOn: -1,
   _id: -1,
 });
-// All posts, the blog feed and an organization's posts, newest first.
+// All posts and the blog feed, newest first.
 BlogPostSchema.index({ organization: 1, visible: 1, publishOn: -1, _id: -1 });
+// An organization's posts, sticky first.
+BlogPostSchema.index({
+  organization: 1,
+  visible: 1,
+  sticky: -1,
+  publishOn: -1,
+  _id: -1,
+});
 // A user's blog tab and their contribution sum.
 BlogPostSchema.index({
   authors: 1,

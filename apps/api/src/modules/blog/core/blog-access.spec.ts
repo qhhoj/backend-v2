@@ -125,7 +125,18 @@ describe('BlogAccess', () => {
     expect(BlogAccess.organizationFilter(editorAll, organization, now)).toEqual(
       {
         organization: 'org',
+        visible: { $in: [true, false] },
       },
     );
+    expect(
+      BlogAccess.organizationFilter(
+        principal('curator', ['judge.edit_all_organization']),
+        organization,
+        now,
+      ),
+    ).toEqual({
+      organization: 'org',
+      $or: [{ visible: true }, { authors: 'curator' }],
+    });
   });
 });
