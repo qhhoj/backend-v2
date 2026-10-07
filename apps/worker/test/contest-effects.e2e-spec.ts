@@ -116,10 +116,46 @@ describe('contest effects', () => {
       }),
     );
     const scored = await participationOf(ioi.participation._id);
-    expect(scored.score).toBe(75);
+    // Legacy IOI stores no times under the default config.
+    expect(scored).toMatchObject({ score: 75, cumtime: 0, tiebreaker: 0 });
     expect(scored.formatData).toEqual({
       [ioi.problem._id]: expect.objectContaining({ points: 75 }) as unknown,
     });
+  });
+
+  it('stores ioi cumtime when the contest config asks for it', async () => {
+    const { problem, participation } = await contestOn(
+      {},
+      { formatName: 'ioi', formatConfig: { cumtime: true } },
+    );
+    await apply(
+      await seedContestSubmission(worker, participation, problem._id),
+    );
+    expect((await participationOf(participation._id)).cumtime).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('times a virtual participation from its own start, not the contest start', async () => {
+    const {
+      problem,
+      contest,
+      participation: live,
+    } = await contestOn({}, { formatName: 'icpc' });
+    const virtual = await seedParticipation(worker, contest._id, newId(), {
+      virtual: 1,
+      realStart: new Date(Date.now() - 600_000),
+    });
+    await apply(await seedContestSubmission(worker, live, problem._id));
+    await apply(await seedContestSubmission(worker, virtual, problem._id));
+    const timeOf = async (id: string) =>
+      (
+        (await participationOf(id)).formatData[problem._id] as {
+          time: number;
+        }
+      ).time;
+    expect(await timeOf(live._id)).toBeCloseTo(3600, -1);
+    expect(await timeOf(virtual._id)).toBeCloseTo(600, -1);
   });
 
   it('is idempotent: a retried job yields the same results', async () => {
