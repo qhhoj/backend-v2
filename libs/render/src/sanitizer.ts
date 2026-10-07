@@ -229,17 +229,17 @@ const prefixedClasses = (classes: string): string =>
 /** Attribute of the placeholder element `renderMarkdown` leaves for each formula; its value carries a per-render nonce, so only the renderer can address a slot. */
 export const MATH_SLOT_ATTRIBUTE = 'data-math';
 
-/** Author HTML only: no MathML (`mpadded`/`mspace` position without CSS; KaTeX's own MathML is spliced in), no svg, no `id` (it would clobber page elements). */
+/** Author HTML only: no MathML (`mpadded`/`mspace` position without CSS; KaTeX's own MathML is spliced in), no svg, no `id` (it would clobber page elements), no `aria-hidden` (KaTeX's is spliced in). Raw-text tags are dropped whole so a formula slot inside never survives as escaped text. */
 const BLOG_OPTIONS: sanitizeHtml.IOptions = {
   ...STATEMENT_OPTIONS,
   allowedTags: LEGACY_TAGS,
   allowedAttributes: {
     ...LEGACY_ATTRIBUTES,
-    '*': ['class', 'style', 'data', 'height', 'aria-hidden'],
-    span: ['title', MATH_SLOT_ATTRIBUTE],
+    '*': ['class', 'style', 'data', 'height'],
+    span: [MATH_SLOT_ATTRIBUTE],
     iframe: [...LEGACY_ATTRIBUTES.iframe, 'sandbox', 'loading'],
   },
-  nonTextTags: ['script', 'style', 'textarea', 'option', 'title'],
+  nonTextTags: ['script', 'style', 'textarea', 'option', 'title', 'xmp'],
   allowedStyles: { '*': BLOG_STYLES },
   transformTags: {
     '*': (tagName, attributes) => {

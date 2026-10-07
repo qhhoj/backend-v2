@@ -181,55 +181,134 @@ describe('blog render style', () => {
     );
   });
 
-  it('drops RCDATA titles instead of leaving escaped slots', () => {
-    expect(blog('<title>$x$</title>y')).not.toContain('data-math');
+  it.each(['title', 'xmp'])(
+    'drops an inline <%s> instead of leaving an escaped slot',
+    (tag) => {
+      const html = blog(`a <${tag}>$x$</${tag}> b`);
+      expect(html).toBe('<p>a  b</p>\n');
+    },
+  );
+
+  it('drops author aria-hidden and span titles', () => {
+    const html = blog(
+      'a <span title="t" aria-hidden="true">y</span>\n\n<div aria-hidden="true">z</div>',
+    );
+    expect(html).toContain('<span>y</span>');
+    expect(html).toContain('<div>z</div>');
+    expect(html).not.toMatch(/aria-hidden|title/);
   });
 });
 
 describe('KaTeX in user-authored styles', () => {
-  const AMPLIFIER = `$\\def\\a#1{${'#1'.repeat(100)}}\\a{\\a{${'x'.repeat(500)}}}$`;
+  /** ~2 s of KaTeX work when not refused, so the timing assertion fails fast instead of hanging. */
+  const AMPLIFIER = `$\\def\\a#1{${'#1'.repeat(20)}}\\a{\\a{${'x'.repeat(100)}}}$`;
 
   it.each(['blog', 'user'] as const)(
     'refuses parametered macros as text in the %s style, fast',
     (style) => {
+      for (const tex of [
+        '$\\def\\a#1{#1}\\a{x}$',
+        '$\\newcommand{\\f}[1]{#1}\\f{x}$',
+        '$\\let\\d\\def \\d\\a#1{#1#1}$',
+        '$\\def\\a#1{\\textcolor{#ff0000}{#1}}$',
+        '$\\newcommand\\f[1]{\\textcolor{#1aa}{x}}\\f{1}$',
+      ])
+        expect(renderMarkdown(tex, style)).toContain('Macros with parameters');
       const started = performance.now();
       const html = renderMarkdown(AMPLIFIER, style);
       expect(performance.now() - started).toBeLessThan(500);
-      expect(html).toContain('math-error');
-      expect(html).not.toContain('katex-html');
       expect(html).toContain('Macros with parameters');
-      expect(
-        renderMarkdown('$\\newcommand{\\f}[1]{#1}\\f{x}$', style),
-      ).toContain('math-error');
-      expect(renderMarkdown('$\\let\\d\\def \\d\\a#1{#1#1}$', style)).toContain(
-        'math-error',
-      );
+      expect(html).not.toContain('katex-html');
+    },
+    15_000,
+  );
+
+  it.each(['blog', 'user'] as const)(
+    'keeps hex colours, plain macros, `\\#`, brackets and intervals working in the %s style',
+    (style) => {
+      for (const tex of [
+        '$\\textcolor{#ff0000}{x}$',
+        '$\\color{#fff} x$',
+        '$\\colorbox{#eee}{y}$',
+        '$\\fcolorbox{#000}{#ffffff80}{z}$',
+        '$\\def\\x{y}\\x \\# 1$',
+        '$\\def\\R{\\mathbb R}\\sqrt[3]{x} \\in [a,b]$',
+        '$\\newcommand{\\f}{x}\\f[a,b]$',
+      ]) {
+        const html = renderMarkdown(tex, style);
+        expect(html).toContain('katex-html');
+        expect(html).not.toContain('math-error');
+      }
     },
   );
 
-  it('keeps plain macros and `\\#` working, and leaves staff styles alone', () => {
-    expect(renderMarkdown('$\\def\\x{y}\\x \\# 1$', 'blog')).toContain(
-      'katex-html',
-    );
+  it('leaves staff styles alone', () => {
     expect(renderMarkdown('$\\def\\a#1{#1}\\a{x}$', 'solution')).toContain(
       'katex-html',
     );
   });
 
-  it('caps sizes at 50em and expansions at 50 for users, not staff', () => {
-    const rule = '$\\rule{60em}{1em}$';
-    expect(renderMarkdown(rule, 'blog')).toContain('width:50em');
-    expect(renderMarkdown(rule, 'blog')).not.toContain('width:60em');
-    expect(renderMarkdown(rule, 'solution')).toContain('width:60em');
-    const expansions = `$\\def\\a{${'\\b'.repeat(30)}}\\def\\b{${'\\c'.repeat(30)}}\\def\\c{x}\\a$`;
-    expect(renderMarkdown(expansions, 'blog')).toContain('math-error');
+  it('bounds macro aliases that hide a parameter in a colour group', () => {
+    const body = '\\textcolor{#1aa}{x}'.repeat(30);
+    let argument = 'x'.repeat(370);
+    for (let level = 0; level < 4; level++) argument = `\\f{${argument}}`;
+    const tex = `$\\let\\d\\newcommand\\d\\f[1]{${body}}${argument}$`;
+    const started = performance.now();
+    expect(tex.length).toBeLessThanOrEqual(1002);
+    renderMarkdown(tex, 'user');
+    // ~300 ms cold, ~40 ms warm (maxExpand stops it); without user limits it runs for seconds.
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  it('shows the remaining formulas as source once the time budget is spent', () => {
+  it.each(['blog', 'user'] as const)(
+    'refuses dimensions beyond ±50em in the %s style, macros included',
+    (style) => {
+      for (const tex of [
+        '$\\raisebox{-9999em}{x}$',
+        '$\\kern{-9999em}$',
+        '$\\rule[-9999em]{1em}{1em}$',
+        '$\\rule{60em}{1em}$',
+        '$\\def\\n{-51}\\kern\\n em$',
+        '$\\hspace{-600pt}$',
+        '$a \\\\[-51em] b$',
+      ])
+        expect(renderMarkdown(tex, style)).toContain('Sizes beyond ±50em');
+      for (const tex of [
+        '$\\raisebox{-50em}{x}$',
+        '$\\kern{-400pt}$',
+        '$\\rule{50em}{1em}$',
+      ])
+        expect(renderMarkdown(tex, style)).toContain('katex-html');
+    },
+  );
+
+  it('keeps large and negative dimensions in staff styles', () => {
+    expect(renderMarkdown('$\\raisebox{-9999em}{x}$', 'solution')).toContain(
+      'vertical-align:-9999em',
+    );
+    expect(renderMarkdown('$\\kern{-9999em}$', 'solution')).toContain(
+      '-9999em',
+    );
+    expect(renderMarkdown('$\\rule{60em}{1em}$', 'solution')).toContain(
+      'width:60em',
+    );
+  });
+
+  it('caps expansions at 50 for users', () => {
+    const expansions = `$\\def\\a{${'\\b'.repeat(30)}}\\def\\b{${'\\c'.repeat(30)}}\\def\\c{x}\\a$`;
+    expect(renderMarkdown(expansions, 'blog')).toContain('math-error');
+    expect(renderMarkdown(expansions, 'solution')).toContain('katex-html');
+  });
+
+  it('reports the time budget once, then shows the remaining formulas as source', () => {
     let now = 0;
     const budget = createMathBudget(true, () => now);
     expect(renderMath('x', false, budget)).toContain('katex');
     now = MAX_USER_MATH_MILLISECONDS + 1;
-    expect(renderMath('y', false, budget)).toBe('$y$');
+    expect(renderMath('y', false, budget)).toBe(
+      '<span class="math-error" title="Formula time limit exceeded">$y$</span>',
+    );
+    expect(budget.limitReported).toBe(true);
+    expect(renderMath('z', false, budget)).toBe('$z$');
   });
 });
