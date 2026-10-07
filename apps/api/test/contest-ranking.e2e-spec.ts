@@ -469,4 +469,43 @@ describe('contest ranking', () => {
       (await ranking(contest.key)).rows.map((row) => row.participationId),
     ).toEqual([...ids].sort());
   });
+
+  it('keeps concurrent cache misses of the live and the virtual board apart', async () => {
+    const contest = await createContest(api, { scoreboardCacheTimeout: 60 });
+    await joinParticipation(api, contest._id, users.alice._id, results(100));
+    await joinParticipation(
+      api,
+      contest._id,
+      users.alice._id,
+      results(200, { virtual: 1 }),
+    );
+    const [plain, withVirtual] = await Promise.all([
+      ranking(contest.key),
+      ranking(contest.key, undefined, '?virtual=true'),
+    ]);
+    expect([plain.rows.length, withVirtual.rows.length]).toEqual([1, 2]);
+  });
+
+  it('drops the cached boards when an editor updates the contest', async () => {
+    const contest = await createContest(api, {
+      scoreboardCacheTimeout: 60,
+      authors: [users.author._id],
+    });
+    const row = await joinParticipation(
+      api,
+      contest._id,
+      users.alice._id,
+      results(100),
+    );
+    expect((await ranking(contest.key)).rows[0].score).toBe(100);
+    await api.participations.updateOne(
+      { _id: row._id },
+      { score: 500, frozenScore: 500 },
+    );
+    expect((await ranking(contest.key)).rows[0].score).toBe(100);
+    await authed(api.http().patch(contestUrl(contest.key)), sessions.author)
+      .send({ scoreboardCacheTimeout: 30 })
+      .expect(200);
+    expect((await ranking(contest.key)).rows[0].score).toBe(500);
+  });
 });

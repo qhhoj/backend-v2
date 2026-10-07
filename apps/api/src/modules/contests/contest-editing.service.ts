@@ -1,15 +1,17 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
+import type Redis from 'ioredis';
 import { hasPermission, sha256, UsersRepository } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { AppError, unique } from '@libs/common';
+import { AppError, REDIS, unique } from '@libs/common';
 import {
   CONTEST_RESCORE_QUEUE,
   enqueueContestRescore,
   FormatConfigError,
   notifyContestRescore,
   parseFormatConfig,
+  purgeRankingCache,
 } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
@@ -86,11 +88,13 @@ const invalid = (field: string, message: string) =>
   new AppError('validation_failed', 400, message, { [field]: [message] });
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left) === JSON.stringify(right);
-/** What every participation's results depend on (legacy admin rescored on these and on the problem inlines). */
+/** What every participation's results depend on (legacy admin rescored on these and on the problem inlines); the times move the freeze window. */
 const scoringOf = (contest: Contest) =>
   JSON.stringify([
     contest.formatName,
     contest.formatConfig,
+    contest.startTime,
+    contest.endTime,
     contest.frozenLastMinutes,
     contest.pointsPrecision,
     contest.problems.map((entry) => [
@@ -112,6 +116,7 @@ export class ContestEditingService {
     private readonly users: UsersRepository,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
   /** Legacy `CreateContest`: the creator becomes an author. */
@@ -150,6 +155,8 @@ export class ContestEditingService {
         'Judge the pending submissions before leaving final_submission',
       );
     const updated = await this.contests.update(contest._id, fields);
+    // Cached boards embed the contest's problems, labels and timeout, not only standings.
+    await purgeRankingCache(this.redis, contest._id);
     if (scoringOf(updated) !== scoringOf(contest))
       void notifyContestRescore(this.rescores, contest._id, this.logger);
     if (

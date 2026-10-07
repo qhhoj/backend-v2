@@ -457,6 +457,18 @@ describe('contest CRUD', () => {
       ).toEqual({ penalty: 20 });
     });
 
+    it('queues a rescore when the contest times move', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      await patch('creator', contest.key, {
+        endTime: new Date(contest.endTime.getTime() + 3_600_000).toISOString(),
+      }).expect(200);
+      expect(
+        (await rescores.getJobs(['waiting'])).map((job) => job.data.contestId),
+      ).toEqual([contest._id]);
+    });
+
     it('answers 409 when leaving final_submission while the contest holds pending submissions', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id],
