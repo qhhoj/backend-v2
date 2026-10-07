@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { strictlyAbove } from '@libs/community';
-import { User } from '@libs/database';
+import { CI, Group, uuidStr, User } from '@libs/database';
 import type { Model } from 'mongoose';
 
 export const MEMBER_SORTS = [
@@ -37,7 +37,10 @@ const MEMBER_PROJECTION = {
 /** Every read and write of `users.organizations` (the membership). Lists go through `{organizations, performancePoints}`; other sorts sort the organization's members in memory. */
 @Injectable()
 export class OrganizationMembersRepository {
-  constructor(@InjectModel(User.name) private readonly users: Model<User>) {}
+  constructor(
+    @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(Group.name) private readonly groups: Model<Group>,
+  ) {}
 
   /** Legacy `OrganizationUsers`: listed members, ties by id. */
   async members(
@@ -90,5 +93,79 @@ export class OrganizationMembersRepository {
         .exists({ _id: userId, organizations: organizationId })
         .exec()) !== null
     );
+  }
+
+  /** Compare-and-set on the whole ordered array: false when the memberships changed since `current` was read, so two parallel joins cannot both pass the cap. */
+  async joinIfUnchanged(
+    userId: string,
+    current: readonly string[],
+    organizationId: string,
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, organizations: [...current] },
+        { $push: { organizations: organizationId } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** Admins become members whatever the open-organization cap (legacy `organization_admin_update` signal). */
+  async addMembers(
+    userIds: readonly string[],
+    organizationId: string,
+  ): Promise<void> {
+    if (userIds.length)
+      await this.users
+        .updateMany(
+          { _id: { $in: userIds } },
+          { $addToSet: { organizations: organizationId } },
+        )
+        .exec();
+  }
+
+  /** False when the user was not a member. */
+  async remove(userId: string, organizationId: string): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, organizations: organizationId },
+        { $pull: { organizations: organizationId } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** Profile edit: a reordering or a subset of `current`, compare-and-set like `joinIfUnchanged`. */
+  async reorderIfUnchanged(
+    userId: string,
+    current: readonly string[],
+    next: readonly string[],
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
+      .updateOne(
+        { _id: userId, organizations: [...current] },
+        { $set: { organizations: [...next] } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** Legacy `CreateOrganization` put admins in the `Org Admin` group; skipped when no such group exists. */
+  async grantGroup(
+    userIds: readonly string[],
+    groupName: string,
+  ): Promise<void> {
+    const group = await this.groups
+      .findOne({ name: groupName }, { _id: 1 })
+      .collation(CI)
+      .lean()
+      .exec();
+    if (group && userIds.length)
+      await this.users
+        .updateMany(
+          { _id: { $in: userIds } },
+          { $addToSet: { groups: uuidStr(group._id) } },
+        )
+        .exec();
   }
 }
