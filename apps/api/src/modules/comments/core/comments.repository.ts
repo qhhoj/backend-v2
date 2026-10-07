@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { unique } from '@libs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import type { HydratedDocument, Model } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import type {
+  ClientSession,
+  Connection,
+  HydratedDocument,
+  Model,
+} from 'mongoose';
 import { subtreeFilter } from '@libs/community';
 import type { CommentPage, CommentPageType } from '@libs/community';
 import { Comment, isUuid, toUuid, uuidStr } from '@libs/database';
@@ -11,6 +16,7 @@ export type CommentDocument = HydratedDocument<Comment>;
 @Injectable()
 export class CommentsRepository {
   constructor(
+    @InjectConnection() private readonly connection: Connection,
     @InjectModel(Comment.name) private readonly comments: Model<Comment>,
   ) {}
 
@@ -88,11 +94,13 @@ export class CommentsRepository {
     revisions: number,
     body: string,
     bodyHtml: string,
+    session?: ClientSession,
   ): Promise<boolean> {
     const result = await this.comments
       .updateOne(
         { _id: id, revisions },
         { $set: { body, bodyHtml }, $inc: { revisions: 1 } },
+        { session },
       )
       .exec();
     return result.modifiedCount === 1;
@@ -106,6 +114,13 @@ export class CommentsRepository {
       .distinct('author', filter)
       .exec();
     return unique(authors.map(uuidStr));
+  }
+
+  /** Writes that must commit together (an edit and its revision row). */
+  inTransaction(
+    work: (session: ClientSession) => Promise<void>,
+  ): Promise<void> {
+    return this.connection.transaction(work).then(() => undefined);
   }
 
   async isHidden(id: string): Promise<boolean> {

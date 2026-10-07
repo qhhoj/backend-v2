@@ -33,6 +33,9 @@ const forbidden = (message: string) => new AppError('forbidden', 403, message);
 /** Legacy `comment` markdown = safe mode: raw HTML shown as text. */
 const COMMENT_STYLE = 'user';
 
+const text = (value: unknown): string =>
+  typeof value === 'string' ? value : '';
+
 @Injectable()
 export class CommentPostingService {
   constructor(
@@ -115,26 +118,32 @@ export class CommentPostingService {
         throw forbidden('Muted users cannot edit comments');
     }
     const bodyHtml = renderField(body, COMMENT_STYLE, 'body');
-    if (
-      !(await this.comments.updateBodyIfRevision(
-        id,
-        comment.revisions,
-        body,
-        bodyHtml,
-      ))
-    )
-      throw new AppError(
-        'conflict',
-        409,
-        'The comment changed meanwhile; reload it',
+    await this.comments.inTransaction(async (session) => {
+      if (
+        !(await this.comments.updateBodyIfRevision(
+          id,
+          comment.revisions,
+          body,
+          bodyHtml,
+          session,
+        ))
+      )
+        throw new AppError(
+          'conflict',
+          409,
+          'The comment changed meanwhile; reload it',
+        );
+      await this.revisions.append(
+        {
+          entity: 'comment',
+          entityId: id,
+          action: 'edit',
+          userId: principal.userId,
+          changes: { body: { before: comment.body, after: body } },
+          comment: 'Edited from site',
+        },
+        session,
       );
-    await this.revisions.append({
-      entity: 'comment',
-      entityId: id,
-      action: 'edit',
-      userId: principal.userId,
-      changes: { body: { before: comment.body, after: body } },
-      comment: 'Edited from site',
     });
     const [response] = await this.reads.respond(principal, [
       (await this.comments.findById(id))!,
@@ -162,8 +171,8 @@ export class CommentPostingService {
     return rows.map((row) => ({
       at: row.createdAt,
       editor: row.userId ? (editors.get(uuidStr(row.userId)) ?? null) : null,
-      before: row.changes.body.before as string,
-      after: row.changes.body.after as string,
+      before: text(row.changes.body?.before),
+      after: text(row.changes.body?.after),
     }));
   }
 

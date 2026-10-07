@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Revision } from '@libs/database';
-import type { Model } from 'mongoose';
+import type { ClientSession, Model } from 'mongoose';
 
 @Injectable()
 export class RevisionsRepository {
@@ -14,8 +14,9 @@ export class RevisionsRepository {
       Revision,
       'entity' | 'entityId' | 'action' | 'userId' | 'changes' | 'comment'
     >,
+    session?: ClientSession,
   ): Promise<void> {
-    await this.revisions.create(entry);
+    await this.revisions.create([entry], { session });
   }
 
   /** Newest first, through `{entity, entityId, createdAt, _id}`. */

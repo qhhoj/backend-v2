@@ -5,6 +5,7 @@ import type { Env } from '@libs/common';
 import { COMMENT_MAX_DEPTH, DISCORD_WEBHOOK_QUEUE } from '@libs/community';
 import type { DiscordWebhookJob } from '@libs/community';
 import { CommentsRepository } from '../src/modules/comments/core/comments.repository';
+import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
 import type { CommentResponse } from '../src/modules/comments/core/dto/comment.response';
 import type { CommentRevisionResponse } from '../src/modules/comments/posting/dto/comment-revision.response';
 import {
@@ -169,6 +170,7 @@ describe('comment posting and editing', () => {
       body: 'x',
     }).expect(404);
     await post(page._id, session, { body: '' }).expect(400);
+    await post(page._id, session, { body: ' \n\t ' }).expect(400);
     await post(page._id, session, { body: 'x'.repeat(8193) }).expect(400);
     await api.commentLocks.create({ page: { type: 'blog', id: page._id } });
     await post(page._id, session, { body: 'x' }).expect(403);
@@ -200,7 +202,7 @@ describe('comment posting and editing', () => {
   it('edits with a revision row per accepted edit, for the author and change_comment only', async () => {
     const { user, session } = await person();
     const { session: other } = await person();
-    const { session: moderator } = await person({
+    const { user: moderatorUser, session: moderator } = await person({
       permissions: ['judge.change_comment'],
     });
     const page = await createPost(api);
@@ -219,6 +221,11 @@ describe('comment posting and editing', () => {
     const history = dataOf<CommentRevisionResponse[]>(
       await api.http().get(commentUrl(comment._id, '/revisions')).expect(200),
     );
+    expect(history[0]).toMatchObject({
+      editor: { id: moderatorUser._id },
+    });
+    expect(history[1].editor).toMatchObject({ id: user._id });
+    expect(new Date(history[0].at) >= new Date(history[1].at)).toBe(true);
     expect(history.map((entry) => [entry.before, entry.after])).toEqual([
       ['*second*', 'moderated'],
       ['first', '*second*'],
@@ -345,6 +352,59 @@ describe('comment posting and editing', () => {
     expect(await api.comments.findById(comment._id).lean()).toMatchObject({
       body: 'c',
       revisions: 2,
+    });
+  });
+
+  it('hides a reply whose parent was hidden while it was written', async () => {
+    const { user, session } = await person();
+    const page = await createPost(api);
+    const parent = await createComment(api, {
+      page: { type: 'blog', id: page._id },
+      author: user._id,
+    });
+    const repository = api.app.get(CommentsRepository);
+    const create = repository.create.bind(repository);
+    const spy = jest
+      .spyOn(CommentsRepository.prototype, 'create')
+      .mockImplementationOnce(async (fields) => {
+        await api.comments.updateOne({ _id: parent._id }, { hidden: true });
+        return create(fields);
+      });
+    try {
+      const reply = dataOf<{ id: string }>(
+        await post(page._id, session, {
+          body: 'racing',
+          parentId: parent._id,
+        }).expect(201),
+      );
+      expect(await api.comments.findById(reply.id).lean()).toMatchObject({
+        hidden: true,
+      });
+      expect(await discord.getWaitingCount()).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('keeps the body unchanged when its revision row cannot be written', async () => {
+    const { user, session } = await person();
+    const page = await createPost(api);
+    const comment = await createComment(api, {
+      page: { type: 'blog', id: page._id },
+      author: user._id,
+      body: 'first',
+    });
+    const spy = jest
+      .spyOn(RevisionsRepository.prototype, 'append')
+      .mockRejectedValueOnce(new Error('revision store down'));
+    try {
+      await edit(comment._id, session, 'lost').expect(500);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await api.comments.findById(comment._id).lean()).toMatchObject({
+      body: 'first',
+      revisions: 0,
     });
   });
 });

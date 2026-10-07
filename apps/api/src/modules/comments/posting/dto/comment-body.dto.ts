@@ -1,8 +1,11 @@
-import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator';
 import { COMMENT_MAX_LENGTH } from '@libs/community';
 
 export class CommentBodyDto {
-  @IsString() @Length(1, COMMENT_MAX_LENGTH) body!: string;
+  @IsString()
+  @Length(1, COMMENT_MAX_LENGTH)
+  @Matches(/\S/, { message: 'body must not be blank' })
+  body!: string;
 }
 
 export class NewCommentDto extends CommentBodyDto {
