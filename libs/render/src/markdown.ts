@@ -10,7 +10,7 @@ import {
 import { RenderLimitError } from './render-limit.error';
 import { sanitizeStatementHtml } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
-import { isSanitizedStyle, RenderStyle } from './styles';
+import { allowsRawHtml, isSanitizedStyle, RenderStyle } from './styles';
 import { dashesRule } from './typography';
 import { renderUserReference, userReferenceRule } from './user-reference';
 
@@ -36,8 +36,8 @@ const wrapTables = (html: string) =>
     )
     .replaceAll('</table>', '</table></div>');
 
-function createMarkdown(): MarkdownIt.MarkdownIt {
-  const markdown = new MarkdownIt({ html: true, typographer: true });
+function createMarkdown(html: boolean): MarkdownIt.MarkdownIt {
+  const markdown = new MarkdownIt({ html, typographer: true });
   markdown.disable('replacements');
   markdown.core.ruler.after('smartquotes', 'dashes', dashesRule);
   markdown.inline.ruler.before('escape', 'math_inline', mathInlineRule);
@@ -62,7 +62,7 @@ function createMarkdown(): MarkdownIt.MarkdownIt {
   return markdown;
 }
 
-const markdown = createMarkdown();
+const markdowns = { raw: createMarkdown(true), escaped: createMarkdown(false) };
 
 const MAX_MARKUP_TAGS = 200000;
 const MAX_MARKUP_DEPTH = 500;
@@ -72,9 +72,10 @@ const MAX_HTML_BYTES = 2 * 1024 * 1024;
 export function renderMarkdown(text: string, style: RenderStyle): string {
   const rendered = wrapTables(
     shiftHeaders(
-      markdown.render(rewriteHtmlSpoilers(text), {
-        budget: createMathBudget(),
-      } satisfies RenderEnv),
+      markdowns[allowsRawHtml(style) ? 'raw' : 'escaped'].render(
+        rewriteHtmlSpoilers(text),
+        { budget: createMathBudget() } satisfies RenderEnv,
+      ),
     ),
   );
   if (

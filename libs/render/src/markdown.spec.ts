@@ -374,3 +374,29 @@ describe('renderMarkdown', () => {
     );
   });
 });
+
+describe('user style', () => {
+  it('escapes raw HTML in the user style', () => {
+    const html = renderMarkdown(
+      '<img src=x onerror=alert(1)> and <b>bold</b>\n\n<script>alert(1)</script>',
+      'user',
+    );
+    expect(html).not.toMatch(/<img|<b>|<script/);
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('still renders Markdown, math and links', () => {
+    const html = renderMarkdown(
+      '**hi** $x^2$ [site](https://example.com)',
+      'user',
+    );
+    expect(html).toContain('<strong>hi</strong>');
+    expect(html).toContain('katex');
+    expect(html).toContain('rel="nofollow noopener"');
+  });
+
+  it('keeps raw HTML in the statement styles', () => {
+    expect(renderMarkdown('<b>bold</b>', 'problem')).toContain('<b>bold</b>');
+  });
+});

@@ -64,6 +64,12 @@
       ],
       "@libs/contests/*": [
         "libs/contests/src/*"
+      ],
+      "@libs/community": [
+        "libs/community/src"
+      ],
+      "@libs/community/*": [
+        "libs/community/src/*"
       ]
     }
   }
