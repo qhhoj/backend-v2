@@ -1,6 +1,6 @@
 import { REDIS } from '@libs/common';
 import type Redis from 'ioredis';
-import { ProblemEvents } from '../src/modules/problems/problem.events';
+import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import {
   authed,
   createProblem,

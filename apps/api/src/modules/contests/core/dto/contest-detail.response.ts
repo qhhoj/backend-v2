@@ -7,7 +7,7 @@ import type {
   LabelStyle,
   ScoreboardVisibility,
 } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 import { ContestListItemResponse } from './contest-list.response';
 
 export class ContestProblemResponse {

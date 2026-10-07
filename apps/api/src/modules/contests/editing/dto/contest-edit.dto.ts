@@ -32,8 +32,8 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { MAX_MARKDOWN_LENGTH } from '../../../problems/dto/limits';
-import { IsTimestamp } from '../../../problems/dto/timestamp';
+import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
+import { IsTimestamp } from '../../../problems/core/dto/timestamp';
 
 export class ContestProblemDto {
   @IsUUID('7') problem!: string;

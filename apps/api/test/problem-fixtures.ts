@@ -9,8 +9,8 @@ import type {
   ProblemTestCase,
   User,
 } from '@libs/database';
-import type { EditorialResponse } from '../src/modules/problems/dto/editorial.response';
-import type { ProblemDetailResponse } from '../src/modules/problems/dto/problem-detail.response';
+import type { EditorialResponse } from '../src/modules/problems/core/dto/editorial.response';
+import type { ProblemDetailResponse } from '../src/modules/problems/core/dto/problem-detail.response';
 import type { Test as SupertestRequest } from 'supertest';
 import { ApiTest, createUser, sessionCookie } from './setup';
 

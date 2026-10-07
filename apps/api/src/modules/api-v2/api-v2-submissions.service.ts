@@ -4,11 +4,11 @@ import type { Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
-import { LanguagesQuerier } from '../problems/languages.querier';
-import { ProblemsRepository } from '../problems/problems.repository';
-import { caseVisibility } from '../submissions/submission-access';
-import { SubmissionsRepository } from '../submissions/submissions.repository';
-import { SubmissionsService } from '../submissions/submissions.service';
+import { LanguagesQuerier } from '../problems/catalog/languages.querier';
+import { ProblemsRepository } from '../problems/core/problems.repository';
+import { caseVisibility } from '../submissions/core/submission-access';
+import { SubmissionsRepository } from '../submissions/core/submissions.repository';
+import { SubmissionsService } from '../submissions/core/submissions.service';
 import { ApiV2SubmissionListDto } from './dto/api-v2-submission-list.dto';
 import { legacyCases } from './legacy-cases';
 import {

@@ -7,7 +7,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { SubmissionsRepository } from '../src/modules/submissions/submissions.repository';
+import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
 import { dataOf, seedSubmission } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';

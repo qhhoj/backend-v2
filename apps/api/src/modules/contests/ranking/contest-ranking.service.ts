@@ -14,7 +14,7 @@ import {
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { ContestParticipation } from '@libs/database';
-import { ProblemsRepository } from '../../problems/problems.repository';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestAccess } from '../core/contest-access';
 import { ContestViewerService } from '../core/contest-viewer.service';
 import type { ContestDocument } from '../core/contests.repository';

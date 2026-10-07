@@ -1,4 +1,4 @@
-import { ProblemMetaResponse } from '../src/modules/problems/dto/problem-meta.response';
+import { ProblemMetaResponse } from '../src/modules/problems/core/dto/problem-meta.response';
 import { Catalog, seedCatalog } from './problem-fixtures';
 import { ApiTest, setupApiTest } from './setup';
 

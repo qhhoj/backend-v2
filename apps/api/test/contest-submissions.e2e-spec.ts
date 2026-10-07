@@ -5,7 +5,7 @@ import {
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
-import type { SubmissionListItemResponse } from '../src/modules/submissions/dto/submission-list.response';
+import type { SubmissionListItemResponse } from '../src/modules/submissions/core/dto/submission-list.response';
 import {
   contestProblem,
   contestUrl,

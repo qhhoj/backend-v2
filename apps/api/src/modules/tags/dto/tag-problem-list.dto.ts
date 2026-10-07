@@ -9,7 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { toArray } from '../../problems/dto/transforms';
+import { toArray } from '../../problems/core/dto/transforms';
 import { TAG_JUDGES } from '../tag-links';
 
 export class TagProblemListQueryDto {

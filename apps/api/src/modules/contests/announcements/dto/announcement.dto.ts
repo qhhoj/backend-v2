@@ -1,5 +1,5 @@
 import { ANNOUNCEMENT_TITLE_MAX } from '@libs/database';
-import { MAX_MARKDOWN_LENGTH } from '../../../problems/dto/limits';
+import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
 import { Type } from 'class-transformer';
 import {
   IsInt,

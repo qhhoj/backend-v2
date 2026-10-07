@@ -1,5 +1,5 @@
 import type { ProblemCell } from '@libs/contests';
-import type { UserSummaryResponse } from '../../../problems/dto/user-summary.response';
+import type { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 
 export class RankingProblemResponse {
   problemId!: string;

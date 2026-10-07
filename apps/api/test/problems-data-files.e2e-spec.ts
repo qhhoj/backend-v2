@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { listZipEntries } from '@libs/problems';
 import { buildZip } from '@libs/problems/testing';
-import { ProblemDataResponse } from '../src/modules/problems/dto/problem-data.response';
-import { ProblemsRepository } from '../src/modules/problems/problems.repository';
+import { ProblemDataResponse } from '../src/modules/problems/data/dto/problem-data.response';
+import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import {
   authed,
   createProblem,

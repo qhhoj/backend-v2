@@ -2,7 +2,7 @@ import { Controller, Get, Param, UseFilters } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RawResponse } from '@libs/common';
-import { ProblemCodeParamDto } from '../problems/dto/problem-params.dto';
+import { ProblemCodeParamDto } from '../problems/core/dto/problem-params.dto';
 import { ApiV2ExceptionFilter } from './api-v2-exception.filter';
 import { ApiV2Query, lenientQueryPipe } from './api-v2-query';
 import { ApiV2ProblemsService } from './api-v2-problems.service';

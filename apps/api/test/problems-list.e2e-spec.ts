@@ -1,5 +1,5 @@
 import { newId } from '@libs/database';
-import { ProblemListItemResponse } from '../src/modules/problems/dto/problem-list.response';
+import { ProblemListItemResponse } from '../src/modules/problems/core/dto/problem-list.response';
 import {
   authed,
   Catalog,

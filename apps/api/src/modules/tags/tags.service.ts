@@ -20,7 +20,7 @@ import {
   TagProblemResponse,
   TagResponse,
 } from './dto/tag.response';
-import { UserSummaryResponse } from '../problems/dto/user-summary.response';
+import { UserSummaryResponse } from '../problems/core/dto/user-summary.response';
 import { TagGroupsQuerier } from './tag-groups.querier';
 import { parseProblemLink } from './tag-links';
 import { TagProblemsRepository } from './tag-problems.repository';

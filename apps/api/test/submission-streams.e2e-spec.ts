@@ -11,7 +11,7 @@ import {
   SubmissionEventsService,
 } from '@libs/judging';
 import type { SubmissionEventType } from '@libs/judging';
-import { SubmissionsService } from '../src/modules/submissions/submissions.service';
+import { SubmissionsService } from '../src/modules/submissions/core/submissions.service';
 import { STREAM_LIMITS } from '../src/modules/events/stream-limits';
 import type { StreamLimits } from '../src/modules/events/stream-limits';
 import {

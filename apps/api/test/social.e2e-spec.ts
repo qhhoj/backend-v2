@@ -1,6 +1,6 @@
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
-import { RegistrationService } from '../src/modules/auth/registration.service';
+import { RegistrationService } from '../src/modules/auth/registration/registration.service';
 import {
   OAUTH_PROVIDERS,
   OAuthProvider,

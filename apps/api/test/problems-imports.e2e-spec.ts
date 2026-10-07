@@ -14,7 +14,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { IMPORT_LIMIT } from '../src/modules/problems/rate-limits';
+import { IMPORT_LIMIT } from '../src/modules/problems/core/rate-limits';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 

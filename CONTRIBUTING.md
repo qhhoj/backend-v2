@@ -51,7 +51,7 @@ tools/legacy/   regenerates the fixtures
 ```
 
 - Flow: `controller -> service -> querier | repository`
-- Size: a module stays flat until about 15 files; past that, group by feature into subfolders (each with the pattern above and its own `dto/`), keeping the `<x>-api.module.ts` at the module root. `contests/` is grouped; `problems/`, `submissions/`, `auth/` are flat for now and follow the same rule when next reorganised
+- Size: a module stays flat until about 15 files; past that, group by feature into subfolders (each with the pattern above and its own `dto/`), keeping the `<x>-api.module.ts` at the module root. Shared helpers (rate-limits, shared DTOs) live in `core/`
 ```
 contests/
   contests-api.module.ts
@@ -62,6 +62,23 @@ contests/
   announcements/   announcements, contest-events (SSE pushes)
   stats/  moss/  data/  submissions/
   editing/         create/update, clone
+problems/
+  problems-api.module.ts
+  core/            list/detail, repository, access, search, events, rescore, revisions, rate-limits, multipart, shared dto
+  catalog/         languages, licenses, groups, types queriers
+  editing/         create/edit, policy, statement (translations, editorial, preview), clone
+  data/            test data (store, upload, lifecycle, write guard)
+  imports/  pdf/  uploads/
+submissions/
+  submissions-api.module.ts
+  core/            list/detail, repository, access, rate-limits
+  create/  actions/  streams/
+auth/
+  auth-api.module.ts
+  core/            login/session/password change, rate-limits
+  registration/  password-reset/  impersonation/
+  social/          flow + OAuth providers
+  two-factor/      second factor, totp, webauthn
 ```
 - File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|handler|spec`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
@@ -85,7 +102,7 @@ contests/
 | Base | `BaseMongoStreamQuerier` | `@InjectModel` |
 
 - Reference: `libs/common/src/querier/base-mongo-stream.querier.ts`, `libs/auth/src/groups/groups.querier.ts`
-- Whole-collection queriers extend `BaseCatalogQuerier` (reference: `apps/api/src/modules/problems/languages.querier.ts`)
+- Whole-collection queriers extend `BaseCatalogQuerier` (reference: `apps/api/src/modules/problems/catalog/languages.querier.ts`)
 - Querier shape: `onModuleInit` -> `resync()` -> `setupMongoStream(model, pipeline, onChange)` -> `forceResyncQuerier(resync, cron)`
 - Streams need a replica set; `DISABLE_MONGODB_STREAM=true` turns them off
 - Queriers never handle deletes (stream only forwards insert/update/replace)
@@ -105,7 +122,7 @@ contests/
 - Query DTOs: `@Type(() => Number)` for numbers; `dto/transforms.ts` (`toArray`, `toBoolean`) for arrays and booleans
 - Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`
 - Multipart routes read `request.parts({ limits: { files: 1, fields: 0, fileSize } })`, check for a single file and the expected fieldname, and never declare `@Body()`; an oversized file is `file_too_large` 413
-- Multipart helpers: `problems/multipart.ts` (`readMultipartFile` buffers, `saveMultipartFile` streams to a path); per-call `limits` override the plugin default
+- Multipart helpers: `problems/core/multipart.ts` (`readMultipartFile` buffers, `saveMultipartFile` streams to a path); per-call `limits` override the plugin default
 - Raw file responses: `@RawResponse()` + `@Res({ passthrough: true })` (the PDF route uses plain `@Res()` to keep its 202)
 - App wiring: `configureApp(app)` + `fastifyAdapter()` from `@libs/common` (used by `main.ts` and tests)
 
@@ -122,7 +139,7 @@ contests/
 - Behind nginx set `TRUST_PROXY` to its address (e.g. the container network CIDR); otherwise every client shares one IP and the per-IP limits (login, streams) become global
 - `@fastify/cookie` is pinned at 11.0.2: 11.1.1+ depends on ESM-only `cookie` 2, which breaks Jest CJS; do not bump
 - New permissions: add the codename to `libs/auth/src/principal/permissions.ts`
-- Account flows live in `apps/api/src/modules/auth/<flow>.controller.ts` + `<flow>.service.ts` + `dto/` (registration, password-reset, totp, webauthn, social, impersonation); add new flows the same way and list their paths in `apps/api/test/openapi.e2e-spec.ts`
+- Account flows live in `apps/api/src/modules/auth/<flow>/<flow>.controller.ts` + `<flow>.service.ts` + `dto/` (registration, password-reset, totp, webauthn, social, impersonation); add new flows the same way and list their paths in `apps/api/test/openapi.e2e-spec.ts`
 - Mail goes through the `MAILER` token (`@libs/common`): SMTP via `SMTP_URL`/`MAIL_FROM` (Mailpit in dev), `InMemoryMailer` in tests; a send failure is `mail_unavailable` 503
 - Uploads go through `StorageService` (`@libs/common`): files live under `MEDIA_ROOT` (a volume nginx serves at `MEDIA_URL`), paths are checked to stay inside it, and callers never pass client-supplied names unsanitised; file type is decided from the bytes
 - Deploy requirement for the nginx `/media` location: send `X-Content-Type-Options: nosniff`; `/media/materials/` uses `default_type application/octet-stream` and `Content-Disposition: attachment`; `/media/images/` and `/media/materials/` add `Content-Security-Policy: sandbox`
@@ -130,7 +147,7 @@ contests/
 - Registration: usernames `^\w+$` (max 30), email unique case-insensitively (checked in code); activation keys are stored as sha256 hashes
 - 2FA enrolment (`totp/enroll`, `webauthn/register/options`) and removing a WebAuthn credential require `currentPassword` and share the `password-confirm` failure budget; WebAuthn registration and login use separate session challenges
 - Password reset also works for active accounts with an unusable (`!`) hash (migrated social-only users): it sets their first password; the token is bound to the stored hash, so it is single-use either way
-- Rate limits for guarded attempts use `RateLimitService.reserve(keys, limit, windowSeconds)`: it hits first, throws `rate_limited` over the limit, and returns a `release()` to call on success (only failures consume budget); all limit/window constants live in `auth/rate-limits.ts`. The password-reset per-email limit (3/hour) is never released, an accepted trade-off
+- Rate limits for guarded attempts use `RateLimitService.reserve(keys, limit, windowSeconds)`: it hits first, throws `rate_limited` over the limit, and returns a `release()` to call on success (only failures consume budget); all limit/window constants live in `auth/core/rate-limits.ts`. The password-reset per-email limit (3/hour) is never released, an accepted trade-off
 - Second factor: TOTP and WebAuthn share one budget (10 failures/900 s, 50/day); completing it sets `lastLogin` and `twoFaPassed`. TOTP secret and scratch codes are encrypted at rest (`encrypt(..., encryptionKey(env.encryptionKey))`). WebAuthn does not require user verification
 - `SessionData` goes through Redis cjson: no integers of 15+ digits (precision loss), no arrays, absent values are `null` (`undefined` is dropped); keep values to strings, booleans, `null` and small numbers
 - Single-use session fields (`pendingTotpSecret`, `webauthnChallenge`) are read only via `SessionService.consume(id, field)`
@@ -147,7 +164,7 @@ contests/
 - `visibleFilter` goes only inside `find`/`count`, never an aggregate
 - Public routes: `@Public()` + `@CurrentAuth()` + `optionalPrincipal(auth)`; invisible or unknown problem -> 404, visible but not editable -> 403
 - Events (`ProblemEvents`): `pointsChanged`, `publicityChanged`, `codeRenamed`, `statementChanged`; listeners run synchronously after the write
-- Rate limits: `problems/rate-limits.ts`
+- Rate limits: `problems/core/rate-limits.ts`
 - Rendering styles: `problem`, `problem-full`, `solution`; one `styleOf` picks the style per problem
 - HTML is rendered and stored at save; reads never render
 - `problem-full` HTML is unsanitized; writing statement text on a full-markup problem needs `judge.problem_full_markup`
@@ -204,7 +221,7 @@ contests/
 - `viewerStatus` (`solved | attempted | null`) on problem list/detail: one aggregate per page (`ViewerStatusRepository`)
 - Events: Redis pub/sub `submission-events` (`SubmissionEventsService`), fire-and-forget (1 s bound, skipped while Redis is not ready), ids and status only, published by whoever writes the status. Bridge: `processing` when the request is sent to the judge, `grading-begin`, `test-case` (at most 4/s per submission), `done`, requeues as `queued`. Api: submit/rejudge -> `queued`, abort of a queued submission and reject -> `done`; bulk rejudge publishes nothing
 - SSE: `GET /api/internal/events/submissions/:id` (detail rules; `state` first, read after the stream is registered; `test-case` only when every case result is visible; `resync` after a lost subscription) and `GET /api/internal/events/submissions` (public feed: public, non-org-private problems, no progress); one subscriber connection per api process
-- SSE layout: `modules/events/` holds the generic `EventStreamHub` (one Redis subscriber, caps, drain/buffer limits, heartbeat, recheck, resubscribe, shutdown) and `sse.ts`; a channel implements `EventChannel` and registers itself with the hub: `submissions/submission-streams.service.ts` (submissions and feed) and `contests/announcements/contest-streams.service.ts` (contest announcements). A new channel = a service like those, a controller and a Redis channel name
+- SSE layout: `modules/events/` holds the generic `EventStreamHub` (one Redis subscriber, caps, drain/buffer limits, heartbeat, recheck, resubscribe, shutdown) and `sse.ts`; a channel implements `EventChannel` and registers itself with the hub: `submissions/streams/submission-streams.service.ts` (submissions and feed) and `contests/announcements/contest-streams.service.ts` (contest announcements). A new channel = a service like those, a controller and a Redis channel name
 - Stream limits (`events/stream-limits.ts`, per api process): 8 per user, 16 per IP, 5000 total, 1000 feed, 2000 contest; a client is dropped when a write stays undrained or the backlog stays above 16 KiB for 2 s in total, or at once above 256 KiB; 15 s heartbeat; access (session, user, detail rules) re-checked every 60 s
 - `/api/v2/submissions` (oldest first; totals only with `user` or `problem`) and `/api/v2/submission/:id` (login, `can_see_detail`; cases follow the problem's case visibility, stricter than legacy)
 

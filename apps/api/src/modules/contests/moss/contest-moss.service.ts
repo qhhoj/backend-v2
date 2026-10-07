@@ -14,7 +14,7 @@ import {
 } from '@libs/contests';
 import type { ContestMossJob } from '@libs/contests';
 import { MOSS_LANGUAGES, uuidStr } from '@libs/database';
-import { ProblemsRepository } from '../../problems/problems.repository';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestMossRepository } from './contest-moss.repository';
 import { ContestsService } from '../core/contests.service';
 import type { ContestMossResponse } from './dto/contest-moss.response';

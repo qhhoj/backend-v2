@@ -6,7 +6,7 @@ import { contestPhase } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
-import { ProblemsRepository } from '../../problems/problems.repository';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestAccess } from './contest-access';
 import { ContestViewerService } from './contest-viewer.service';
 import { ContestsRepository } from './contests.repository';

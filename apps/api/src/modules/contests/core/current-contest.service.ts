@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { contestPhase, hasParticipationEnded } from '@libs/contests';
 import { uuidStr } from '@libs/database';
-import type { ContestScope } from '../../problems/problem-access';
+import type { ContestScope } from '../../problems/core/problem-access';
 import { ContestAccess } from './contest-access';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';

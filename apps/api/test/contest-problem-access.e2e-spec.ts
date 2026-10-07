@@ -1,6 +1,6 @@
 import { generateApiToken } from '@libs/auth';
 import type { SubmissionCase } from '@libs/database';
-import type { ProblemListItemResponse } from '../src/modules/problems/dto/problem-list.response';
+import type { ProblemListItemResponse } from '../src/modules/problems/core/dto/problem-list.response';
 import {
   contestProblem,
   createContest,

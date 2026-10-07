@@ -20,7 +20,7 @@ import { ContestsRepository } from '../contests/core/contests.repository';
 import type { ContestDocument } from '../contests/core/contests.repository';
 import { ParticipationsRepository } from '../contests/participation/participations.repository';
 import { RatingsRepository } from '../contests/rating/ratings.repository';
-import { ProblemsRepository } from '../problems/problems.repository';
+import { ProblemsRepository } from '../problems/core/problems.repository';
 import { ApiV2ContestListDto } from './dto/api-v2-contest-list.dto';
 import { ApiV2ParticipationListDto } from './dto/api-v2-participation-list.dto';
 import {

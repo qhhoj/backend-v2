@@ -1,7 +1,7 @@
 import { Transform } from 'class-transformer';
 import { IsUrl, Length, MaxLength } from 'class-validator';
 
-import { trim } from '../../problems/dto/transforms';
+import { trim } from '../../problems/core/dto/transforms';
 
 export class CreateTagProblemDto {
   @IsUrl({ require_protocol: true }) @MaxLength(200) link!: string;

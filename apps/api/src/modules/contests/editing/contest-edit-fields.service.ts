@@ -5,8 +5,8 @@ import { unique } from '@libs/common';
 import { FormatConfigError, parseFormatConfig } from '@libs/contests';
 import type { Contest, ContestProblem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
-import { ProblemAccess } from '../../problems/problem-access';
-import { ProblemsRepository } from '../../problems/problems.repository';
+import { ProblemAccess } from '../../problems/core/problem-access';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import type {
   ContestProblemDto,

@@ -1,8 +1,8 @@
-import { ProblemsRepository } from '../src/modules/problems/problems.repository';
+import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { ProblemDataResponse } from '../src/modules/problems/dto/problem-data.response';
+import { ProblemDataResponse } from '../src/modules/problems/data/dto/problem-data.response';
 import {
   authed,
   createProblem,

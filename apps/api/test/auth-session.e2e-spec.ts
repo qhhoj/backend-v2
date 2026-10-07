@@ -3,7 +3,7 @@ import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
-import { SessionResponse } from '../src/modules/auth/dto/session.response';
+import { SessionResponse } from '../src/modules/auth/core/dto/session.response';
 
 const sessionOf = (response: { body: unknown }) =>
   (response.body as { data: SessionResponse }).data;

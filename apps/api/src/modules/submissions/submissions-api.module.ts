@@ -7,15 +7,15 @@ import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { EventsModule } from '../events/events.module';
 import { JudgesApiModule } from '../judges/judges-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
-import { SubmissionActionsController } from './submission-actions.controller';
-import { SubmissionActionsService } from './submission-actions.service';
-import { SubmissionCreateController } from './submission-create.controller';
-import { SubmissionCreateService } from './submission-create.service';
-import { SubmissionStreamsController } from './submission-streams.controller';
-import { SubmissionStreamsService } from './submission-streams.service';
-import { SubmissionsController } from './submissions.controller';
-import { SubmissionsRepository } from './submissions.repository';
-import { SubmissionsService } from './submissions.service';
+import { SubmissionActionsController } from './actions/submission-actions.controller';
+import { SubmissionActionsService } from './actions/submission-actions.service';
+import { SubmissionCreateController } from './create/submission-create.controller';
+import { SubmissionCreateService } from './create/submission-create.service';
+import { SubmissionStreamsController } from './streams/submission-streams.controller';
+import { SubmissionStreamsService } from './streams/submission-streams.service';
+import { SubmissionsController } from './core/submissions.controller';
+import { SubmissionsRepository } from './core/submissions.repository';
+import { SubmissionsService } from './core/submissions.service';
 
 @Module({
   imports: [

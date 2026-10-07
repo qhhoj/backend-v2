@@ -1,7 +1,7 @@
 import { standingOf } from '@libs/contests';
 import type { ProblemCell } from '@libs/contests';
 import type { Contest, ContestParticipation } from '@libs/database';
-import { UserSummaryResponse } from '../../../problems/dto/user-summary.response';
+import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 import { ParticipationSummaryResponse } from '../../core/dto/contest-detail.response';
 
 export class ParticipationResponse extends ParticipationSummaryResponse {

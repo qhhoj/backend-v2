@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
-import { toBoolean } from '../../../problems/dto/transforms';
+import { toBoolean } from '../../../problems/core/dto/transforms';
 
 export class RankingQueryDto {
   /** Include virtual participations. */

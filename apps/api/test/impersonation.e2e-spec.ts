@@ -9,7 +9,7 @@ import {
   setupApiTest,
   TEST_ENV,
 } from './setup';
-import { SessionResponse } from '../src/modules/auth/dto/session.response';
+import { SessionResponse } from '../src/modules/auth/core/dto/session.response';
 
 const AUTH = '/api/internal/auth';
 const IMPERSONATE = `${AUTH}/impersonate`;

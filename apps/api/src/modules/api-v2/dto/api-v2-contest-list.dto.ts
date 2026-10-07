@@ -8,7 +8,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { toArray, toBoolean } from '../../problems/dto/transforms';
+import { toArray, toBoolean } from '../../problems/core/dto/transforms';
 import { API_V2_MAX_PAGE, FilterStrings } from './api-v2-problem-list.dto';
 
 /** Legacy `APIContestList` filters. */

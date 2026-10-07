@@ -2,8 +2,8 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import type { Paginated } from '@libs/common';
-import { SubmissionListQueryDto } from '../../submissions/dto/submission-list.dto';
-import { SubmissionListItemResponse } from '../../submissions/dto/submission-list.response';
+import { SubmissionListQueryDto } from '../../submissions/core/dto/submission-list.dto';
+import { SubmissionListItemResponse } from '../../submissions/core/dto/submission-list.response';
 import { ContestSubmissionsService } from './contest-submissions.service';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 

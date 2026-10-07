@@ -5,13 +5,13 @@ import type { Problem } from '@libs/database';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import type { FilterQuery } from 'mongoose';
-import { LanguagesQuerier } from '../problems/languages.querier';
-import { ProblemAccess } from '../problems/problem-access';
-import { ProblemGroupsQuerier } from '../problems/problem-groups.querier';
-import { searchFilter } from '../problems/problem-search';
-import { ProblemTypesQuerier } from '../problems/problem-types.querier';
-import { ProblemsRepository } from '../problems/problems.repository';
-import { ProblemsService } from '../problems/problems.service';
+import { LanguagesQuerier } from '../problems/catalog/languages.querier';
+import { ProblemAccess } from '../problems/core/problem-access';
+import { ProblemGroupsQuerier } from '../problems/catalog/problem-groups.querier';
+import { searchFilter } from '../problems/core/problem-search';
+import { ProblemTypesQuerier } from '../problems/catalog/problem-types.querier';
+import { ProblemsRepository } from '../problems/core/problems.repository';
+import { ProblemsService } from '../problems/core/problems.service';
 import { ApiV2ProblemListDto } from './dto/api-v2-problem-list.dto';
 import {
   API_V2_PAGE_SIZE,

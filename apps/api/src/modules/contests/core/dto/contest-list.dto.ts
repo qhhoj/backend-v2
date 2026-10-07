@@ -13,7 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { toBoolean } from '../../../problems/dto/transforms';
+import { toBoolean } from '../../../problems/core/dto/transforms';
 
 export const CONTEST_PHASES: readonly ContestPhase[] = [
   'upcoming',

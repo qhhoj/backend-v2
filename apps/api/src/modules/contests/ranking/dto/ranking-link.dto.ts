@@ -4,7 +4,7 @@ import {
 } from '@libs/database';
 import type { ContestPublicRankingLink } from '@libs/database';
 import { IsIn, IsInt, IsString, Max, Min, ValidateIf } from 'class-validator';
-import { IsTimestamp } from '../../../problems/dto/timestamp';
+import { IsTimestamp } from '../../../problems/core/dto/timestamp';
 
 export class UpdateRankingLinkDto {
   @IsIn(RANKING_LINK_STATUSES) status!: ContestPublicRankingLink['status'];
