@@ -7,3 +7,8 @@ export * from './formats/default';
 export * from './formats/ioi';
 export * from './formats/icpc';
 export * from './formats/vnoj';
+export * from './formats/ioi16';
+export * from './formats/ultimate';
+export * from './formats/final-submission';
+export * from './formats/registry';
+export * from './first-solves';
