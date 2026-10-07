@@ -173,7 +173,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - The api-v2 module is grouped by feature like the internal modules — one place per feature, same size rule.
 - New organization admins join the `Org Admin` group on update as well as create — legacy granted it on create only; it is never revoked, like legacy.
 - `/api/v2/user` hides contest ratings of re-frozen boards from non-editors — a frozen board must not leak through the rating.
-- One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; `/users/:username/ratings` and `/api/v2/user` both use it. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
+- One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; `/users/:username/ratings` and `/api/v2/user` both use it: `/api/v2/user` drops the boards the viewer cannot see, while the internal route keeps the entry. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
 
 ## Deploy
 
