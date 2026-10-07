@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import type { Principal } from '@libs/auth';
-import { AppError, REDIS, unique } from '@libs/common';
+import { constantTimeEqual, sha256 } from '@libs/auth';
+import { AppError, RateLimitService, REDIS, unique } from '@libs/common';
 import {
   compareStandings,
   competitionRanks,
@@ -20,6 +21,10 @@ import type { ContestDocument } from './contests.repository';
 import { ContestsService } from './contests.service';
 import type { RankingResponse } from './dto/ranking.response';
 import { ParticipationsRepository } from './participations.repository';
+import {
+  ACCESS_CODE_IP_LIMIT,
+  ACCESS_CODE_WINDOW_SECONDS,
+} from './rate-limits';
 
 /** Legacy `ContestRanking`, as JSON (the frontend renders cells from `formatData`). */
 @Injectable()
@@ -32,16 +37,25 @@ export class ContestRankingService {
     private readonly participations: ParticipationsRepository,
     private readonly problems: ProblemsRepository,
     @Inject(REDIS) private readonly redis: Redis,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   async ranking(
     principal: Principal | null,
     key: string,
     withVirtual: boolean,
+    access?: { code: string; ip: string },
     now = new Date(),
   ): Promise<RankingResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
     const view = ContestAccess.accessView(contest);
+    const canEdit = ContestAccess.canEdit(principal, view);
+    // Non-editors only ever see frozen standings during a freeze, their own row included.
+    const frozen = isFrozen(contest, now) && !canEdit;
+    if (access) {
+      await this.assertRankingCode(contest, access);
+      return this.board(contest, withVirtual, frozen, !canEdit);
+    }
     const viewer = await this.viewers.viewerOf(principal, contest, now);
     if (!ContestAccess.canSeeOwnScoreboard(principal, view, now, viewer))
       throw new AppError(
@@ -49,9 +63,6 @@ export class ContestRankingService {
         403,
         'The ranking of this contest is hidden',
       );
-    const canEdit = ContestAccess.canEdit(principal, view);
-    // Non-editors only ever see frozen standings during a freeze, their own row included.
-    const frozen = isFrozen(contest, now) && !canEdit;
     if (!ContestAccess.canSeeFullScoreboard(principal, view, now, viewer))
       return this.build(
         contest,
@@ -59,7 +70,20 @@ export class ContestRankingService {
         frozen,
         false,
       );
-    if (contest.scoreboardCacheTimeout <= 0 || canEdit)
+    return this.board(contest, withVirtual, frozen, !canEdit);
+  }
+
+  /**
+   * Every row, ranked: cached under `rankingCacheKey` for `scoreboardCacheTimeout` seconds when `cacheable` (never for editors).
+   * The public link and the ranking code read the same keys: a non-editor's board does not depend on who asks.
+   */
+  async board(
+    contest: ContestDocument,
+    withVirtual: boolean,
+    frozen: boolean,
+    cacheable: boolean,
+  ): Promise<RankingResponse> {
+    if (contest.scoreboardCacheTimeout <= 0 || !cacheable)
       return this.build(
         contest,
         await this.participations.rankingRows(contest._id, withVirtual),
@@ -101,6 +125,24 @@ export class ContestRankingService {
       contest.scoreboardCacheTimeout,
     );
     return ranking;
+  }
+
+  /** Legacy `ContestPublicRanking`: a plaintext code compared in constant time against the stored hash; wrong codes spend the IP's budget. */
+  private async assertRankingCode(
+    contest: ContestDocument,
+    { code, ip }: { code: string; ip: string },
+  ): Promise<void> {
+    const release = await this.rateLimit.reserve(
+      [`ranking-code:ip:${ip}`],
+      ACCESS_CODE_IP_LIMIT,
+      ACCESS_CODE_WINDOW_SECONDS,
+    );
+    if (
+      contest.rankingAccessCodeHash === null ||
+      !constantTimeEqual(sha256(code), contest.rankingAccessCodeHash)
+    )
+      throw new AppError('forbidden', 403, 'Wrong ranking code');
+    await release();
   }
 
   /**

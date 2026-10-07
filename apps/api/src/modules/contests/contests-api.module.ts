@@ -22,6 +22,9 @@ import { ContestSubmissionsController } from './contest-submissions.controller';
 import { ContestSubmissionsService } from './contest-submissions.service';
 import { ContestsController } from './contests.controller';
 import { ContestsService } from './contests.service';
+import { RankingLinksController } from './ranking-links.controller';
+import { RankingLinksRepository } from './ranking-links.repository';
+import { RankingLinksService } from './ranking-links.service';
 
 @Module({
   imports: [
@@ -43,6 +46,7 @@ import { ContestsService } from './contests.service';
     ContestRatingController,
     ContestSubmissionsController,
     ContestsController,
+    RankingLinksController,
   ],
   providers: [
     ContestsService,
@@ -51,6 +55,8 @@ import { ContestsService } from './contests.service';
     ContestRankingService,
     ContestRatingService,
     ContestSubmissionsService,
+    RankingLinksRepository,
+    RankingLinksService,
     RateLimitService,
   ],
 })

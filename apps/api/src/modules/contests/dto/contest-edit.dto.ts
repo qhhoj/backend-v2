@@ -79,6 +79,8 @@ export class CreateContestDto {
   @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
   /** Stored hashed; an empty string removes it. */
   @IsOptional() @IsString() @MaxLength(255) accessCode?: string;
+  /** Stored hashed; an empty string removes it. */
+  @IsOptional() @IsString() @MaxLength(255) rankingAccessCode?: string;
   @IsOptional() @IsUUID('7', { each: true }) bannedUsers?: string[];
   @IsOptional()
   @Matches(JUDGE_NAME_PATTERN, { each: true })

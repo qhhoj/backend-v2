@@ -246,6 +246,7 @@ export class ContestEditingService {
         throw invalid(field, `${field} cannot be null.`);
     const {
       accessCode,
+      rankingAccessCode,
       problems,
       formatConfig,
       startTime,
@@ -269,6 +270,10 @@ export class ContestEditingService {
       if (value !== undefined) Object.assign(fields, { [field]: value });
     if (accessCode !== undefined)
       fields.accessCodeHash = accessCode ? sha256(accessCode) : null;
+    if (rankingAccessCode !== undefined)
+      fields.rankingAccessCodeHash = rankingAccessCode
+        ? sha256(rankingAccessCode)
+        : null;
     if (problems !== undefined)
       fields.problems = await this.contestProblems(principal, problems);
     if (dto.description !== undefined)
