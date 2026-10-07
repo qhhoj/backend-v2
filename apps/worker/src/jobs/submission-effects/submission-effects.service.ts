@@ -6,7 +6,7 @@ import {
   disqualify,
   frozenTime,
   participationStart,
-  rankingCacheKeys,
+  purgeRankingCache,
   scoreParticipation,
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
@@ -105,9 +105,7 @@ export class SubmissionEffectsService {
           participationId,
           participation.isDisqualified ? disqualify(score) : score,
         );
-        await this.redis.del(
-          ...rankingCacheKeys(uuidStr(participation.contest)),
-        );
+        await purgeRankingCache(this.redis, uuidStr(participation.contest));
       },
     );
   }

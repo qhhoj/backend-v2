@@ -9,6 +9,8 @@ import { ContestEditingController } from './contest-editing.controller';
 import { ContestEditingService } from './contest-editing.service';
 import { ContestParticipationController } from './contest-participation.controller';
 import { ContestParticipationService } from './contest-participation.service';
+import { ContestRankingController } from './contest-ranking.controller';
+import { ContestRankingService } from './contest-ranking.service';
 import { ContestsController } from './contests.controller';
 import { ContestsService } from './contests.service';
 
@@ -23,12 +25,14 @@ import { ContestsService } from './contests.service';
   controllers: [
     ContestEditingController,
     ContestParticipationController,
+    ContestRankingController,
     ContestsController,
   ],
   providers: [
     ContestsService,
     ContestEditingService,
     ContestParticipationService,
+    ContestRankingService,
     RateLimitService,
   ],
 })

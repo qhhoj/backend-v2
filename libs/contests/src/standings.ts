@@ -1,3 +1,4 @@
+import type Redis from 'ioredis';
 import type { ParticipationScore, ProblemCell } from './formats/format';
 
 /** A participation's result fields as stored (the schema keeps cells untyped), so a participation document fits without a cast. */
@@ -100,3 +101,9 @@ export const rankingCacheKeys = (contestId: string): string[] =>
       rankingCacheKey(contestId, withVirtual, frozen),
     ),
   );
+
+/** Every recompute of a contest's participation drops all four boards, the frozen ones included (legacy left those stale). */
+export const purgeRankingCache = (
+  redis: Redis,
+  contestId: string,
+): Promise<number> => redis.del(...rankingCacheKeys(contestId));

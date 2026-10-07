@@ -190,6 +190,20 @@ export class ParticipationsRepository {
     return { items, total };
   }
 
+  /** Live rows, plus virtual ones on request; spectators never (legacy `virtual__gt=SPECTATE`). Sorted by the caller. */
+  rankingRows(
+    contestId: string,
+    withVirtual: boolean,
+  ): Promise<ContestParticipation[]> {
+    return this.participations
+      .find({
+        contest: contestId,
+        virtual: withVirtual ? { $gte: LIVE } : LIVE,
+      })
+      .lean<ContestParticipation[]>()
+      .exec();
+  }
+
   /** Lean usernames for boards of thousands of rows. */
   async usernamesOf(userIds: string[]): Promise<Map<string, string>> {
     const rows = await this.users
