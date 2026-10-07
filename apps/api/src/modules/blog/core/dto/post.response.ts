@@ -17,11 +17,14 @@ export class PostListItemResponse {
   summaryHtml!: string;
   score!: number;
   viewerVote!: VoteScore;
+  /** Visible comments. */
+  commentCount!: number;
 
   static from(
     post: BlogPost,
     authors: UserSummaryResponse[],
     viewerVote: VoteScore,
+    commentCount: number,
   ): PostListItemResponse {
     return {
       id: uuidStr(post._id),
@@ -35,6 +38,7 @@ export class PostListItemResponse {
       summaryHtml: post.summaryHtml || post.contentHtml,
       score: post.score,
       viewerVote,
+      commentCount,
     };
   }
 }

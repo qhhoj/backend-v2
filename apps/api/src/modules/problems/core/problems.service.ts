@@ -126,8 +126,7 @@ export class ProblemsService {
     return ProblemDetailResponse.from(problem, {
       lang,
       canEdit,
-      hasEditorial:
-        scope === null && this.editorialVisible(principal, problem, canEdit),
+      hasEditorial: this.editorialReadable(principal, problem, scope),
       viewerStatus:
         (await this.viewerStatusesOf(principal, [problem._id])).get(
           problem._id,
@@ -149,12 +148,7 @@ export class ProblemsService {
     const problem = await this.visibleUnder(principal, code, scope);
     const canEdit = this.canEdit(principal, problem);
     const { solution } = problem;
-    // Legacy `ProblemSolution` is a 404 for anyone in a contest.
-    if (
-      scope !== null ||
-      !solution ||
-      !this.editorialVisible(principal, problem, canEdit)
-    )
+    if (!solution || !this.editorialReadable(principal, problem, scope))
       throw new AppError('not_found', 404, 'No such editorial');
     const authors = (
       await this.users.findByIds(solution.authors.map(uuidStr))
@@ -198,7 +192,28 @@ export class ProblemsService {
     return problem;
   }
 
-  editorialVisible(
+  /** The one editorial rule (page, detail flag, comments): legacy `ProblemSolution` is a 404 for anyone in a contest, and the problem itself must be visible. */
+  editorialReadable(
+    principal: Principal | null,
+    problem: Problem,
+    scope: ContestScope | null,
+  ): boolean {
+    return (
+      scope === null &&
+      ProblemAccess.canSee(
+        principal,
+        ProblemAccess.accessView(problem),
+        null,
+      ) &&
+      this.editorialVisible(
+        principal,
+        problem,
+        this.canEdit(principal, problem),
+      )
+    );
+  }
+
+  private editorialVisible(
     principal: Principal | null,
     problem: Problem,
     canEdit: boolean,

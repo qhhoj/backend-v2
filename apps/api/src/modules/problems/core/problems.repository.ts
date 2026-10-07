@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, dataVersionIs, Problem, uuidStr } from '@libs/database';
+import { CI, dataVersionIs, isUuid, Problem, uuidStr } from '@libs/database';
 import type { ProblemData, ProblemTranslation } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
@@ -150,7 +150,16 @@ export class ProblemsRepository {
       .exec();
   }
 
-  findByIds(ids: string[]): Promise<ProblemDocument[]> {
-    return this.problems.find({ _id: { $in: ids } }).exec();
+  /** List rows (no statement, editorial body or data); unknown and malformed ids are skipped. */
+  findByIds(ids: readonly string[]): Promise<ProblemDocument[]> {
+    const valid = ids.filter(isUuid);
+    return valid.length
+      ? this.problems.find({ _id: { $in: valid } }, LIST_PROJECTION).exec()
+      : Promise.resolve([]);
+  }
+
+  async idByCode(code: string): Promise<string | null> {
+    const row = await this.problems.findOne({ code }, { _id: 1 }).lean().exec();
+    return row ? uuidStr(row._id) : null;
   }
 }

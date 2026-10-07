@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, Revision, TagProblem } from '@libs/database';
+import { CI, isUuid, Revision, TagProblem, uuidStr } from '@libs/database';
 import type { TagAssignment } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
@@ -16,6 +16,25 @@ export class TagProblemsRepository {
 
   findByCode(code: string): Promise<TagProblemDocument | null> {
     return this.tagProblems.findOne({ code }).collation(CI).exec();
+  }
+
+  findByIds(ids: readonly string[]): Promise<TagProblem[]> {
+    const valid = ids.filter(isUuid);
+    return valid.length
+      ? this.tagProblems
+          .find({ _id: { $in: valid } }, { tags: 0 })
+          .lean<TagProblem[]>()
+          .exec()
+      : Promise.resolve([]);
+  }
+
+  async idByCode(code: string): Promise<string | null> {
+    const row = await this.tagProblems
+      .findOne({ code }, { _id: 1 })
+      .collation(CI)
+      .lean()
+      .exec();
+    return row ? uuidStr(row._id) : null;
   }
 
   async list(

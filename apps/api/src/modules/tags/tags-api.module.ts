@@ -15,6 +15,6 @@ import { TagsService } from './tags.service';
     TagProblemsRepository,
     TagsService,
   ],
-  exports: [TagGroupsQuerier, TagsQuerier],
+  exports: [TagGroupsQuerier, TagsQuerier, TagProblemsRepository],
 })
 export class TagsApiModule {}

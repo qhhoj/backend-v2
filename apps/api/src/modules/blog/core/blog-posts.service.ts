@@ -7,6 +7,7 @@ import type { VoteScore } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { BlogPost } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
+import { CommentsRepository } from '../../comments/core/comments.repository';
 import { VotesRepository } from '../../contributions/votes.repository';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
@@ -33,6 +34,7 @@ export class BlogPostsService {
     private readonly votes: VotesRepository,
     private readonly users: UsersRepository,
     private readonly organizations: OrganizationsService,
+    private readonly comments: CommentsRepository,
   ) {}
 
   /** Legacy `PostList` (organization posts never appear here). */
@@ -131,19 +133,20 @@ export class BlogPostsService {
     });
   }
 
-  /** Authors in one read, the viewer's votes in one indexed read. */
+  /** Authors in one read, the viewer's votes and the comment counts in one indexed read each. */
   async items(
     principal: Principal | null,
     posts: readonly BlogPost[],
   ): Promise<PostListItemResponse[]> {
     const ids = posts.map((post) => uuidStr(post._id));
-    const [authors, viewerVotes] = await Promise.all([
+    const [authors, viewerVotes, commentCounts] = await Promise.all([
       this.users.findByIds(
         unique(posts.flatMap((post) => post.authors.map(uuidStr))),
       ),
       principal
         ? this.votes.viewerVotes('blog', ids, principal.userId)
         : Promise.resolve(new Map<string, VoteScore>()),
+      this.comments.countVisible('blog', ids),
     ]);
     const authorOf = new Map(
       authors.map((user) => [user._id, UserSummaryResponse.from(user)]),
@@ -155,6 +158,7 @@ export class BlogPostsService {
           .map(uuidStr)
           .flatMap((authorId) => authorOf.get(authorId) ?? []),
         viewerVotes.get(uuidStr(post._id)) ?? 0,
+        commentCounts.get(uuidStr(post._id)) ?? 0,
       ),
     );
   }

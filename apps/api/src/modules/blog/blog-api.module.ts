@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
+import { CommentsApiModule } from '../comments/comments-api.module';
 import { DiscordModule } from '../discord/discord.module';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
@@ -18,6 +19,7 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
   imports: [
     AuthModule,
     BlogAccessModule,
+    CommentsApiModule,
     OrganizationsApiModule,
     ContributionsModule,
     DiscordModule,

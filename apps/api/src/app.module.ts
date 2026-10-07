@@ -15,6 +15,7 @@ import { JudgesApiModule } from './modules/judges/judges-api.module';
 import { OrganizationsApiModule } from './modules/organizations/organizations-api.module';
 import { ProblemsApiModule } from './modules/problems/problems-api.module';
 import { BlogApiModule } from './modules/blog/blog-api.module';
+import { CommentsApiModule } from './modules/comments/comments-api.module';
 import { ContributionsModule } from './modules/contributions/contributions.module';
 import { ContestsApiModule } from './modules/contests/contests-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
@@ -42,6 +43,7 @@ import { HealthController } from './health.controller';
     UsersApiModule,
     ContributionsModule,
     BlogApiModule,
+    CommentsApiModule,
     ApiV2Module,
   ],
   controllers: [HealthController],

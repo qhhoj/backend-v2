@@ -35,6 +35,22 @@ export class ContestsRepository {
     return this.contests.findOne({ key }).exec();
   }
 
+  /** List rows (no description); unknown and malformed ids are skipped. */
+  findByIds(ids: readonly string[]): Promise<Contest[]> {
+    const valid = ids.filter(isUuid);
+    return valid.length
+      ? this.contests
+          .find({ _id: { $in: valid } }, LIST_PROJECTION)
+          .lean<Contest[]>()
+          .exec()
+      : Promise.resolve([]);
+  }
+
+  async idByKey(key: string): Promise<string | null> {
+    const row = await this.contests.findOne({ key }, { _id: 1 }).lean().exec();
+    return row ? uuidStr(row._id) : null;
+  }
+
   async setDataPreparedAt(contestId: string, preparedAt: Date): Promise<void> {
     await this.contests
       .updateOne({ _id: contestId }, { $set: { dataPreparedAt: preparedAt } })
