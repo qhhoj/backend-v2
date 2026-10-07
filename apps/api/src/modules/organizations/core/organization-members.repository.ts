@@ -22,6 +22,8 @@ export type MemberRow = Pick<
   | 'problemCount'
   | 'rating'
 >;
+/** Bounds every read by the organization's size: other sorts would otherwise pick a site-wide leaderboard index. */
+const MEMBERSHIP_INDEX = { organizations: 1, performancePoints: -1 };
 const MEMBER_PROJECTION = {
   username: 1,
   usernameDisplayOverride: 1,
@@ -48,6 +50,7 @@ export class OrganizationMembersRepository {
     const [items, total] = await Promise.all([
       this.users
         .find(filter, MEMBER_PROJECTION)
+        .hint(MEMBERSHIP_INDEX)
         .sort({ [sort]: -1, _id: 1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
@@ -65,11 +68,14 @@ export class OrganizationMembersRepository {
     value: number | null,
   ): Promise<number> {
     return this.users
-      .countDocuments({
-        organizations: organizationId,
-        isUnlisted: false,
-        ...strictlyAbove(sort, value),
-      })
+      .countDocuments(
+        {
+          organizations: organizationId,
+          isUnlisted: false,
+          ...strictlyAbove(sort, value),
+        },
+        { hint: MEMBERSHIP_INDEX },
+      )
       .exec();
   }
 

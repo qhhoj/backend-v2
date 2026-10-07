@@ -21,6 +21,7 @@ describe('organizations', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
+    await api.users.init(); // the members read hints an index: wait for its build
     const roles: Array<[string, Partial<User>]> = [
       ['admin', {}],
       ['member', {}],
@@ -150,6 +151,22 @@ describe('organizations', () => {
     await get(organizationUrl('sorted', '/members?sort=password')).expect(400);
   });
 
+  it('lists an unlisted organization to its admin even when not a member', async () => {
+    await createOrganization(api, {
+      slug: 'adminonly',
+      isUnlisted: true,
+      adminIds: [users.outsider._id],
+    });
+    await api.users.updateOne(
+      { _id: users.outsider._id },
+      { $set: { organizations: [] } },
+    );
+    const slugs = dataOf<OrganizationListItemResponse[]>(
+      await get('/api/internal/organizations', sessions.outsider).expect(200),
+    ).map((item) => item.slug);
+    expect(slugs).toContain('adminonly');
+  });
+
   it('reads members through the organizations index', async () => {
     const operations = await profileQueries(api.db, () =>
       get(organizationUrl('ranked', '/members')).expect(200),
@@ -161,5 +178,17 @@ describe('organizations', () => {
     expect(
       userReads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
     ).toBe(true);
+    for (const sort of ['points', 'rating', 'problemCount']) {
+      const sorted = await profileQueries(api.db, () =>
+        get(organizationUrl('ranked', `/members?sort=${sort}`)).expect(200),
+      );
+      const reads = sorted.filter(({ collection }) => collection === 'users');
+      expect(reads.length).toBeGreaterThan(0);
+      expect(
+        reads.every(({ planSummary }) =>
+          planSummary.includes('organizations: 1, performancePoints: -1'),
+        ),
+      ).toBe(true);
+    }
   });
 });

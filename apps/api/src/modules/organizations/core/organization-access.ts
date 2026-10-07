@@ -40,14 +40,19 @@ const canList = (
   isMember(principal, organization.id) ||
   canAdminister(principal, organization);
 
-/** Mongo filter with `canList`'s semantics (admins are members, so membership covers them). */
+/** Mongo filter with `canList`'s semantics (an admin counts even when not a member). */
 const listFilter = (principal: Principal | null): FilterQuery<Organization> =>
   editsAll(principal)
     ? {}
     : {
         $or: [
           { isUnlisted: false },
-          ...(principal ? [{ _id: { $in: principal.organizationIds } }] : []),
+          ...(principal
+            ? [
+                { _id: { $in: principal.organizationIds } },
+                { adminIds: principal.userId },
+              ]
+            : []),
         ],
       };
 
