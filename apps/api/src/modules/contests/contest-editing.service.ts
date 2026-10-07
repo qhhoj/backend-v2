@@ -31,6 +31,7 @@ import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../problems/problem-access';
 import { ProblemsRepository } from '../problems/problems.repository';
 import { ContestsRepository } from './contests.repository';
+import { RatingsRepository } from './ratings.repository';
 import type { ContestDocument } from './contests.repository';
 import { ContestsService } from './contests.service';
 import type { ContestDetailResponse } from './dto/contest-detail.response';
@@ -128,6 +129,7 @@ export class ContestEditingService {
 
   constructor(
     private readonly contests: ContestsRepository,
+    private readonly ratings: RatingsRepository,
     private readonly contestsService: ContestsService,
     private readonly problems: ProblemsRepository,
     private readonly users: UsersRepository,
@@ -246,7 +248,7 @@ export class ContestEditingService {
     // The worker re-rates from the earlier of the stored and the new end.
     if (
       updated.endTime.getTime() !== contest.endTime.getTime() &&
-      (await this.contests.hasRatings(contest._id))
+      (await this.ratings.hasRatings(contest._id))
     )
       await notifyContestRating(this.ratingQueue, contest._id, this.logger);
     if (

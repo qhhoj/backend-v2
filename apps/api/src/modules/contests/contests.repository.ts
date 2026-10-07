@@ -8,7 +8,6 @@ import {
   ContestParticipation,
   ContestSubmission,
   isUuid,
-  Rating,
   Submission,
   uuidStr,
 } from '@libs/database';
@@ -30,13 +29,7 @@ export class ContestsRepository {
     private readonly contestSubmissions: Model<ContestSubmission>,
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
-    @InjectModel(Rating.name) private readonly ratings: Model<Rating>,
   ) {}
-
-  /** Through the `{contest, user}` index. */
-  async hasRatings(contestId: string): Promise<boolean> {
-    return (await this.ratings.exists({ contest: contestId })) !== null;
-  }
 
   findByKey(key: string): Promise<ContestDocument | null> {
     return this.contests.findOne({ key }).exec();
@@ -87,6 +80,11 @@ export class ContestsRepository {
       )
       .lean<Contest[]>()
       .exec();
+  }
+
+  /** Lean rows (descriptions excluded) of every match, for a bounded join like the participation list's contests. */
+  findAll(filter: FilterQuery<Contest>): Promise<Contest[]> {
+    return this.contests.find(filter, LIST_PROJECTION).lean<Contest[]>().exec();
   }
 
   /** List rows never carry the description. */

@@ -1,0 +1,30 @@
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
+import { toArray, toBoolean } from '../../problems/dto/transforms';
+import { API_V2_MAX_PAGE, FilterStrings } from './api-v2-problem-list.dto';
+
+/** Legacy `APIContestList` filters. */
+export class ApiV2ContestListDto {
+  @IsOptional() @Transform(toBoolean) @IsBoolean() is_rated?: boolean;
+  @FilterStrings() key?: string[];
+  @FilterStrings() tag?: string[];
+  @IsOptional()
+  @Transform(toArray)
+  @ArrayMaxSize(100)
+  @IsUUID('7', { each: true })
+  organization?: string[];
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(API_V2_MAX_PAGE)
+  page = 1;
+}

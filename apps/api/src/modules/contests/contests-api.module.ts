@@ -39,6 +39,7 @@ import { ContestsService } from './contests.service';
 import { OfficialRankingController } from './official-ranking.controller';
 import { OfficialRankingService } from './official-ranking.service';
 import { OfficialRankingsRepository } from './official-rankings.repository';
+import { RatingsRepository } from './ratings.repository';
 import { RankingLinksController } from './ranking-links.controller';
 import { RankingLinksRepository } from './ranking-links.repository';
 import { RankingLinksService } from './ranking-links.service';
@@ -92,6 +93,8 @@ import { RankingLinksService } from './ranking-links.service';
     RankingLinksRepository,
     RankingLinksService,
     RateLimitService,
+    RatingsRepository,
   ],
+  exports: [RatingsRepository],
 })
 export class ContestsApiModule {}

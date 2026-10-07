@@ -242,6 +242,25 @@ export class ParticipationsRepository {
     return { items, total };
   }
 
+  /** Legacy `APIContestParticipationList` pages: counted, by id. */
+  async legacyPage(
+    filter: FilterQuery<ContestParticipation>,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: ContestParticipation[]; total: number }> {
+    const [items, total] = await Promise.all([
+      this.participations
+        .find(filter, { formatData: 0, frozenFormatData: 0 })
+        .sort({ _id: 1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean<ContestParticipation[]>()
+        .exec(),
+      this.participations.countDocuments(filter).exec(),
+    ]);
+    return { items, total };
+  }
+
   /** Live rows, plus virtual ones on request; spectators never (legacy `virtual__gt=SPECTATE`). Sorted by the caller. */
   rankingRows(
     contestId: string,
