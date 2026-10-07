@@ -1,5 +1,9 @@
 import { renderMarkdown, renderMath } from './markdown';
-import { createMathBudget, MAX_USER_MATH_MILLISECONDS } from './math';
+import {
+  createMathBudget,
+  formulaRefusal,
+  MAX_USER_MATH_MILLISECONDS,
+} from './math';
 
 const blog = (text: string) => renderMarkdown(text, 'blog');
 const MATH_BATTERY = [
@@ -200,11 +204,15 @@ describe('blog render style', () => {
 });
 
 describe('KaTeX in user-authored styles', () => {
-  /** ~2 s of KaTeX work when not refused, so the timing assertion fails fast instead of hanging. */
+  /** ~2 s of KaTeX work when not refused. */
   const AMPLIFIER = `$\\def\\a#1{${'#1'.repeat(20)}}\\a{\\a{${'x'.repeat(100)}}}$`;
+  /** 48 expansions of an 850-letter `\\def`: no parameter, 43k parse-tree objects, seconds of KaTeX build. */
+  const WIDE_DEF = `$\\def\\a{${'x'.repeat(850)}}${'\\a'.repeat(48)}$`;
+  /** 25 expansions: just past the 20k-object cap, ~0.3 s of KaTeX build. */
+  const OVER_CAP = `$\\def\\a{${'x'.repeat(850)}}${'\\a'.repeat(25)}$`;
 
   it.each(['blog', 'user'] as const)(
-    'refuses parametered macros as text in the %s style, fast',
+    'refuses parametered macros as text in the %s style',
     (style) => {
       for (const tex of [
         '$\\def\\a#1{#1}\\a{x}$',
@@ -214,9 +222,7 @@ describe('KaTeX in user-authored styles', () => {
         '$\\newcommand\\f[1]{\\textcolor{#1aa}{x}}\\f{1}$',
       ])
         expect(renderMarkdown(tex, style)).toContain('Macros with parameters');
-      const started = performance.now();
       const html = renderMarkdown(AMPLIFIER, style);
-      expect(performance.now() - started).toBeLessThan(500);
       expect(html).toContain('Macros with parameters');
       expect(html).not.toContain('katex-html');
     },
@@ -248,16 +254,109 @@ describe('KaTeX in user-authored styles', () => {
     );
   });
 
-  it('bounds macro aliases that hide a parameter in a colour group', () => {
-    const body = '\\textcolor{#1aa}{x}'.repeat(30);
-    let argument = 'x'.repeat(370);
-    for (let level = 0; level < 4; level++) argument = `\\f{${argument}}`;
-    const tex = `$\\let\\d\\newcommand\\d\\f[1]{${body}}${argument}$`;
-    const started = performance.now();
-    expect(tex.length).toBeLessThanOrEqual(1002);
-    renderMarkdown(tex, 'user');
-    // ~300 ms cold, ~40 ms warm (maxExpand stops it); without user limits it runs for seconds.
-    expect(performance.now() - started).toBeLessThan(1000);
+  it.each(['blog', 'user'] as const)(
+    'refuses a parameter hidden in a hex-like group outside a colour command in the %s style',
+    (style) => {
+      const groups = '{#1aa}'.repeat(47);
+      for (const tex of [
+        `$\\let\\d\\newcommand\\d\\f[1]{${groups}}\\f{\\f{X}}$`,
+        '$\\def\\n{\\newcommand}\\n\\f[1]{\\sqrt{#1aa}}\\f{y}$',
+        '$\\def\\n{\\newcommand}\\n\\f[1]{{#1aa}}\\f{\\f{y}}$',
+        '$\\let\\d\\newcommand\\d\\f[1]{\\textcolor{red}{#1aa}}\\f{y}$',
+      ])
+        expect(renderMarkdown(tex, style)).toContain('Macros with parameters');
+    },
+  );
+
+  it.each(['blog', 'user'] as const)(
+    'refuses formulas whose parse tree is too large in the %s style',
+    (style) => {
+      for (const tex of [WIDE_DEF, OVER_CAP]) {
+        const html = renderMarkdown(tex, style);
+        expect(html).toContain('Formula too large');
+        expect(html).not.toContain('katex-html');
+      }
+      const cell = `\\begin{array}{${'c'.repeat(10)}}${'a&'.repeat(9)}a\\\\${'a&'.repeat(9)}a\\end{array}`;
+      for (const tex of [
+        `$$\\begin{array}{c}${Array(150).fill('a').join('\\\\')}\\end{array}$$`,
+        `$\\def\\X{${cell}}${'\\X'.repeat(48)}$`,
+        `$${'x^{y_{z}}'.repeat(110)}$`,
+      ]) {
+        const rendered = renderMarkdown(tex, style);
+        expect(rendered).toContain('katex-html');
+        expect(rendered).not.toContain('math-error');
+      }
+    },
+  );
+
+  it('keeps large formulas in staff styles', () => {
+    expect(renderMarkdown(OVER_CAP, 'solution')).toContain('katex-html');
+  });
+
+  it('refuses a parse tree with too many objects without walking all of it', () => {
+    let visited = 0;
+    /** A million-object tree whose children are built only when read. */
+    const lazyNode = (depth: number): object => ({
+      get children() {
+        visited++;
+        return depth === 0
+          ? []
+          : Array.from({ length: 10 }, () => lazyNode(depth - 1));
+      },
+    });
+    const tree = lazyNode(6);
+    expect(formulaRefusal(tree)).toBe('Formula too large');
+    expect(visited).toBeLessThan(25_000);
+  });
+
+  it('treats an unknown unit as beyond the size limit', () => {
+    expect(formulaRefusal({ number: 1, unit: 'zz' })).toContain('Sizes beyond');
+    expect(formulaRefusal({ number: 0, unit: 'zz' })).toContain('Sizes beyond');
+    expect(formulaRefusal({ number: 1, unit: 'em' })).toBeUndefined();
+  });
+
+  it.each(['blog', 'user'] as const)(
+    'refuses an \\arraystretch beyond 50 in the %s style',
+    (style) => {
+      expect(
+        renderMarkdown(
+          '$\\def\\arraystretch{51}\\begin{array}{c}a\\\\b\\end{array}$',
+          style,
+        ),
+      ).toContain('Sizes beyond ±50em');
+      for (const tex of [
+        '$\\def\\arraystretch{2}\\begin{array}{c}a\\\\b\\end{array}$',
+        '$\\begin{smallmatrix}a\\\\b\\end{smallmatrix}$',
+      ])
+        expect(renderMarkdown(tex, style)).toContain('katex-html');
+    },
+  );
+
+  it('titles internal KaTeX failures generically', () => {
+    expect(
+      renderMarkdown('$\\newcommand\\f[1]{{#9ff}}\\f{x}$', 'solution'),
+    ).toBe(
+      '<p><span class="math-error" title="Invalid formula">$\\newcommand\\f[1]{{#9ff}}\\f{x}$</span></p>\n',
+    );
+  });
+
+  it('renders a 200k-character field of worst-case formulas in bounded time', () => {
+    const worst = [
+      WIDE_DEF,
+      `$\\def\\a{${'x'.repeat(800)}}${'\\a'.repeat(24)}$`,
+      `$\\def\\a{${'\\sqrt{x}'.repeat(100)}}${'\\a'.repeat(48)}$`,
+      `$\\let\\d\\newcommand\\d\\f[1]{${'{#1aa}'.repeat(47)}}\\f{\\f{X}}$`,
+      AMPLIFIER,
+    ];
+    let field = '';
+    for (let index = 0; field.length < 200_000; index++)
+      field += `${worst[index % worst.length]}\n\n`;
+    for (const style of ['blog', 'user'] as const) {
+      const started = performance.now();
+      const html = renderMarkdown(field, style);
+      expect(performance.now() - started).toBeLessThan(2000);
+      expect(html).toMatch(/Formula (time )?limit exceeded/);
+    }
   });
 
   it.each(['blog', 'user'] as const)(
@@ -271,12 +370,16 @@ describe('KaTeX in user-authored styles', () => {
         '$\\def\\n{-51}\\kern\\n em$',
         '$\\hspace{-600pt}$',
         '$a \\\\[-51em] b$',
+        '$\\mskip 901mu$',
+        '$\\kern{117ex}$',
       ])
         expect(renderMarkdown(tex, style)).toContain('Sizes beyond ±50em');
       for (const tex of [
         '$\\raisebox{-50em}{x}$',
         '$\\kern{-400pt}$',
         '$\\rule{50em}{1em}$',
+        '$\\mskip 900mu$',
+        '$\\kern{116ex}$',
       ])
         expect(renderMarkdown(tex, style)).toContain('katex-html');
     },

@@ -38,6 +38,7 @@ export const MAX_MATH_OUTPUT_BYTES = 1.5 * 1024 * 1024;
 export const MAX_USER_MATH_MILLISECONDS = 500;
 const USER_MAX_EXPAND = 50;
 const USER_MAX_SIZE = 50;
+const SIZE_REFUSAL = `Sizes beyond ±${USER_MAX_SIZE}em are not allowed here`;
 export const createMathBudget = (
   userAuthored = false,
   clock: () => number = () => performance.now(),
@@ -55,13 +56,14 @@ const sourceOf = (tex: string, displayMode: boolean) =>
 const mathError = (tex: string, displayMode: boolean, message: string) =>
   `<span class="math-error" title="${escapeHtml(truncate(message))}">${escapeHtml(sourceOf(tex, displayMode))}</span>`;
 
-/** KaTeX's colour argument (`\\textcolor{#ff0000}`); blanked before looking for parameters. */
-const HEX_COLOR_GROUP = /\{#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})\}/gi;
+/** A colour command with its `{#hex}` arguments (KaTeX's colour regex); blanked before looking for parameters, so a `#` anywhere else is still one. */
+const HEX_COLOR_COMMAND =
+  /\\(?:textcolor|color|colorbox|fcolorbox)\s*(?:\{#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})\}\s*){1,2}/gi;
 /** Any other unescaped `#` is a macro parameter in KaTeX; a macro that repeats its argument multiplies the output per expansion. `[` right after a `\\newcommand`-family name is an argument count. */
 const PARAMETER_MACRO =
   /(?<!\\)#|\\(?:(?:re)?newcommand|providecommand)\s*(?:\{\s*)?\\[A-Za-z@]+\s*(?:\}\s*)?\[/;
 const definesParameterMacro = (tex: string) =>
-  PARAMETER_MACRO.test(tex.replace(HEX_COLOR_GROUP, '{}'));
+  PARAMETER_MACRO.test(tex.replace(HEX_COLOR_COMMAND, '\\textcolor{}'));
 
 /** KaTeX's points per absolute unit (`katex/src/units.ts`); 10pt is 1em. */
 const POINTS_PER_UNIT: Record<string, number> = {
@@ -87,16 +89,37 @@ type Measurement = { number: number; unit: string };
 const isMeasurement = (node: object): node is Measurement =>
   typeof (node as Measurement).number === 'number' &&
   typeof (node as Measurement).unit === 'string';
+/** An unknown unit is infinitely large, so the size check fails closed. */
 const emsOf = ({ number, unit }: Measurement) =>
-  number * (EMS_PER_RELATIVE_UNIT[unit] ?? POINTS_PER_UNIT[unit] / 10);
-/** True when a parse tree holds a dimension beyond ±`limit` em (KaTeX's `maxSize` clamps only positive sizes). */
-const hasDimensionBeyond = (node: unknown, limit: number): boolean => {
-  if (typeof node !== 'object' || node === null) return false;
-  if (isMeasurement(node)) return Math.abs(emsOf(node)) > limit;
-  return Object.entries(node).some(
-    ([key, child]) => key !== 'loc' && hasDimensionBeyond(child, limit),
-  );
+  number *
+  (EMS_PER_RELATIVE_UNIT[unit] ?? (POINTS_PER_UNIT[unit] ?? Infinity) / 10);
+/**
+ * Parse-tree objects (`loc` excluded) a user formula may have. Bounds KaTeX's build cost whatever macros produced the tree;
+ * build time grows faster than linearly (adjacent symbols), measured warm on katex 0.19.0:
+ * largest legitimate formulas at the 1000-char source cap ≤ 2k objects (2-column array 1929, 1000 letters 1001, 150-row array 1058),
+ * a `\def`'d 20-cell array used 48 times 5761; just under the cap `x` × 19k is ~250 ms (550 ms cold), `\sqrt{x}` × 5000 ~350 ms and a 6 MB string (then refused by the output cap);
+ * `x` × 38k (48 expansions of a 900-letter `\def`) took 1.4–2.7 s.
+ */
+export const MAX_USER_FORMULA_NODES = 20_000;
+type TreeWalk = { nodes: number };
+/** Why a user formula's parse tree is refused (too many objects, a dimension or `\arraystretch` beyond ±`USER_MAX_SIZE`), or undefined; stops at the first breach. */
+const refusalIn = (node: unknown, walk: TreeWalk): string | undefined => {
+  if (typeof node !== 'object' || node === null) return undefined;
+  if (++walk.nodes > MAX_USER_FORMULA_NODES) return 'Formula too large';
+  if (isMeasurement(node) && !(Math.abs(emsOf(node)) <= USER_MAX_SIZE))
+    return SIZE_REFUSAL;
+  for (const [key, child] of Object.entries(node)) {
+    if (key === 'loc') continue;
+    // KaTeX reads `\arraystretch` as a plain number (rows grow by `stretch - 1` em); `\arraycolsep` and `\jot` are fixed.
+    if (key === 'arraystretch' && !((child as number) <= USER_MAX_SIZE))
+      return SIZE_REFUSAL;
+    const refusal = refusalIn(child, walk);
+    if (refusal) return refusal;
+  }
+  return undefined;
 };
+/** Why a user formula's parse tree is refused, or undefined. */
+export const formulaRefusal = (tree: unknown) => refusalIn(tree, { nodes: 0 });
 /** KaTeX's parse tree, macros expanded: an internal export, safe because `katex` is pinned to an exact version. */
 const parseTree = (
   katex as unknown as {
@@ -154,15 +177,8 @@ export function renderMath(
     ...(userAuthored ? { maxExpand: USER_MAX_EXPAND } : {}),
   };
   try {
-    if (
-      userAuthored &&
-      hasDimensionBeyond(parseTree(tex, options), USER_MAX_SIZE)
-    )
-      return mathError(
-        tex,
-        displayMode,
-        `Sizes beyond ±${USER_MAX_SIZE}em are not allowed here`,
-      );
+    const refusal = userAuthored && formulaRefusal(parseTree(tex, options));
+    if (refusal) return mathError(tex, displayMode, refusal);
     const html = katex.renderToString(tex, options);
     if (budget) {
       if (budget.outputBytes + html.length > MAX_MATH_OUTPUT_BYTES) {
@@ -181,7 +197,7 @@ export function renderMath(
     return mathError(
       tex,
       displayMode,
-      error instanceof Error ? error.message : String(error),
+      error instanceof katex.ParseError ? error.message : 'Invalid formula',
     );
   }
 }
