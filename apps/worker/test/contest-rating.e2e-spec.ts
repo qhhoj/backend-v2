@@ -12,6 +12,7 @@ import { newId, uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
 import { ContestRatingRepository } from '../src/jobs/contest-rating/contest-rating.repository';
+import { ContestRescoreService } from '../src/jobs/contest-rescore/contest-rescore.service';
 import { ContestRatingService } from '../src/jobs/contest-rating/contest-rating.service';
 import {
   seedContest,
@@ -30,6 +31,7 @@ const daysAgo = (days: number): Date => minutesAgo(days * 24 * 60);
 describe('contest rating', () => {
   let worker: WorkerTest;
   let ratings: ContestRatingService;
+  let rescores: ContestRescoreService;
   let problemId: string;
   const queueOf = () =>
     worker.module.get<Queue<ContestRatingJob>>(
@@ -53,8 +55,21 @@ describe('contest rating', () => {
       score,
       ...extra,
     });
-    await seedContestSubmission(worker, participation, problemId);
+    await seedContestSubmission(worker, participation, problemId, {}, score);
     return participation;
+  };
+  /** What an edit of a contest's end triggers: its rescore, whose follow-up re-rates; resolves once the rating queue is idle. */
+  const rescoreAndRerate = async (contestId: string) => {
+    await rescores.rescore(contestId);
+    await waitUntil(async () => {
+      const counts = await queueOf().getJobCounts(
+        'waiting',
+        'active',
+        'delayed',
+      );
+      return counts.waiting + counts.active + counts.delayed === 0;
+    });
+    expect(await queueOf().getFailedCount()).toBe(0);
   };
   const ratingRows = async (contestId: string) =>
     (await worker.ratings.find({ contest: contestId }).lean()).map((row) => ({
@@ -71,6 +86,7 @@ describe('contest rating', () => {
   beforeAll(async () => {
     worker = await setupWorkerTest();
     ratings = worker.module.get(ContestRatingService);
+    rescores = worker.module.get(ContestRescoreService);
     problemId = (await seedProblem(worker))._id;
   });
   afterAll(() => worker.teardown());
@@ -341,7 +357,7 @@ describe('contest rating', () => {
     await waitUntil(async () => (await worker.ratings.countDocuments()) === 4);
     const moved = daysAgo(1);
     await worker.contests.updateOne({ _id: contest._id }, { endTime: moved });
-    await enqueueContestRating(queueOf(), contest._id);
+    await rescoreAndRerate(contest._id);
     await waitUntil(
       async () =>
         (await worker.ratings.find({ contest: contest._id }).lean()).every(
@@ -501,7 +517,7 @@ describe('contest rating', () => {
       (second.endTime.getTime() + third.endTime.getTime()) / 2,
     );
     await worker.contests.updateOne({ _id: first._id }, { endTime: movedEnd });
-    await ratings.rateFrom(first._id);
+    await rescoreAndRerate(first._id);
     const afterMove = await allRatings();
     expect(afterMove.filter((row) => row.contest === first._id)).toHaveLength(
       3,
@@ -514,7 +530,7 @@ describe('contest rating', () => {
     await ratings.rateFrom(first._id);
     const movedEnd = new Date(first.endTime.getTime() - 86_400_000);
     await worker.contests.updateOne({ _id: third._id }, { endTime: movedEnd });
-    await ratings.rateFrom(third._id);
+    await rescoreAndRerate(third._id);
     const afterMove = await allRatings();
     expect(afterMove.filter((row) => row.contest === third._id)).toHaveLength(
       3,
@@ -542,7 +558,7 @@ describe('contest rating', () => {
       { _id: first._id },
       { endTime: new Date(Date.now() + 3_600_000) },
     );
-    await ratings.rateFrom(first._id);
+    await rescoreAndRerate(first._id);
     expect(await worker.ratings.countDocuments({ contest: first._id })).toBe(0);
     expect(await worker.ratings.countDocuments()).toBe(6);
     expect(await allRatings()).toEqual(await reRatedFromScratch(second._id));

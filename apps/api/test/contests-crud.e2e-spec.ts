@@ -475,7 +475,7 @@ describe('contest CRUD', () => {
       ).toEqual([contest._id]);
     });
 
-    it('queues a rating when the end moves on a contest that has ratings, and only then', async () => {
+    it('leaves the re-rating of a moved end to the rescore: the edit queues a rescore and no rating itself', async () => {
       const rated = await createContest(api, { authors: [users.creator._id] });
       const unrated = await createContest(api, {
         authors: [users.creator._id],
@@ -495,12 +495,13 @@ describe('contest CRUD', () => {
         endTime: new Date(contest.endTime.getTime() + 3_600_000).toISOString(),
       });
       await patch('creator', unrated.key, later(unrated)).expect(200);
-      await patch('creator', rated.key, { name: 'Renamed' }).expect(200);
-      expect(await ratingQueue.getJobs(['waiting'])).toHaveLength(0);
       await patch('creator', rated.key, later(rated)).expect(200);
+      expect(await ratingQueue.getJobs(['waiting'])).toHaveLength(0);
       expect(
-        (await ratingQueue.getJobs(['waiting'])).map((job) => job.data),
-      ).toEqual([{ contestId: rated._id }]);
+        (await rescores.getJobs(['waiting']))
+          .map((job) => job.data.contestId)
+          .sort(),
+      ).toEqual([unrated._id, rated._id].sort());
     });
 
     it('answers 409 when leaving final_submission while the contest holds pending submissions', async () => {

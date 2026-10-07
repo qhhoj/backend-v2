@@ -229,7 +229,11 @@ export class ApiV2ContestsService {
   ): Promise<Array<Record<string, unknown>>> {
     const rows = (await this.participations.rankingRows(contest._id, false))
       .map((row) => ({ row, standing: standingOf(row, frozen) }))
-      .sort((left, right) => compareStandings(left.standing, right.standing));
+      .sort(
+        (left, right) =>
+          compareStandings(left.standing, right.standing) ||
+          uuidStr(left.row._id).localeCompare(uuidStr(right.row._id)),
+      );
     const userIds = unique(rows.map(({ row }) => uuidStr(row.user)));
     const [usernames, newRatings, oldRatings] = await Promise.all([
       this.participations.usernamesOf(userIds),

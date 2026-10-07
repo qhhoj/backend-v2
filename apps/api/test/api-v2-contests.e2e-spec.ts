@@ -272,6 +272,22 @@ describe('/api/v2 contests and participations', () => {
       );
   });
 
+  it('orders tied rankings by participation id, whatever order the rows were stored in', async () => {
+    const tied = await createContest(api, {
+      startTime: hoursFromNow(-6),
+      endTime: hoursFromNow(-4),
+    });
+    const [lowerId, higherId] = [newId(), newId()].sort((left, right) =>
+      left.localeCompare(right),
+    );
+    // Stored higher id first: the database's natural order is the wrong one.
+    await joinParticipation(api, tied._id, users.bob._id, { _id: higherId });
+    await joinParticipation(api, tied._id, users.alice._id, { _id: lowerId });
+    const rows = (await bodyOf(get(`/api/v2/contest/${tied.key}`))).data.object
+      .rankings;
+    expect(rows.map((row: Row) => row.user)).toEqual(['alice', 'bob']);
+  });
+
   it('shows non-editors only frozen standings in contest detail and participations, editors the live ones', async () => {
     const anonymous = (await bodyOf(get(`/api/v2/contest/${frozen.key}`))).data
       .object;

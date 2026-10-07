@@ -67,12 +67,7 @@ export class ContestMossService {
 
   async run(principal: Principal, key: string): Promise<QueuedResponse> {
     const contest = await this.mossContest(principal, key);
-    if (await this.queue.getJob(mossJobId(contest._id)))
-      throw new AppError(
-        'conflict',
-        409,
-        'MOSS is already running for this contest',
-      );
+    await this.refuseWhileRunning(contest._id);
     await this.queue.add(
       CONTEST_MOSS_JOB,
       { contestId: contest._id },
@@ -83,7 +78,18 @@ export class ContestMossService {
 
   async clear(principal: Principal, key: string): Promise<void> {
     const contest = await this.mossContest(principal, key);
+    // A running job rewrites the rows when it finishes: clearing now would bring them back.
+    await this.refuseWhileRunning(contest._id);
     await this.mossRows.deleteByContest(contest._id);
+  }
+
+  private async refuseWhileRunning(contestId: string): Promise<void> {
+    if (await this.queue.getJob(mossJobId(contestId)))
+      throw new AppError(
+        'conflict',
+        409,
+        'MOSS is already running for this contest',
+      );
   }
 
   /** Legacy `ContestMossMixin`: off without a key (404), then edit rights and `judge.moss_contest` (403). */

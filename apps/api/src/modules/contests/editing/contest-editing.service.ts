@@ -6,11 +6,9 @@ import type { Principal } from '@libs/auth';
 import { AppError, REDIS, unique } from '@libs/common';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_QUEUE,
   contestPhase,
   enqueueContestRescore,
-  notifyContestRating,
   notifyContestRescore,
   purgeRankingCache,
   requestFinalJudge,
@@ -18,14 +16,12 @@ import {
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
-  ContestRatingJob,
   ContestRescoreJob,
   FinalJudgeTarget,
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import { ContestsRepository } from '../core/contests.repository';
-import { RatingsRepository } from '../rating/ratings.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import type { ContestDetailResponse } from '../core/dto/contest-detail.response';
@@ -70,15 +66,12 @@ export class ContestEditingService {
 
   constructor(
     private readonly contests: ContestsRepository,
-    private readonly ratings: RatingsRepository,
     private readonly contestsService: ContestsService,
     private readonly editFields: ContestEditFields,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
     @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
     private readonly finalJudges: Queue<ContestFinalJudgeJob>,
-    @InjectQueue(CONTEST_RATING_QUEUE)
-    private readonly ratingQueue: Queue<ContestRatingJob>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -183,14 +176,9 @@ export class ContestEditingService {
       finalJudgeTarget(updated),
       this.logger,
     );
+    // `endTime` is part of the scoring: the rescore's follow-up re-rates a contest that has ratings.
     if (scoringOf(updated) !== scoringOf(contest))
       void notifyContestRescore(this.rescores, contest._id, this.logger);
-    // The worker re-rates from the earlier of the stored and the new end.
-    if (
-      updated.endTime.getTime() !== contest.endTime.getTime() &&
-      (await this.ratings.hasRatings(contest._id))
-    )
-      await notifyContestRating(this.ratingQueue, contest._id, this.logger);
     if (
       fields.lockedAfter !== undefined &&
       !sameJson(fields.lockedAfter, contest.lockedAfter)

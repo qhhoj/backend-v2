@@ -148,6 +148,29 @@ describe('contest MOSS routes', () => {
     );
   });
 
+  it('answers 409 to a clear while the MOSS job exists and keeps the rows', async () => {
+    const problem = await createProblem(api, catalog, { code: 'mossd' });
+    const contest = await createContest(api, {
+      authors: [users.mossEditor._id],
+    });
+    await api.contestMoss.create({
+      contest: contest._id,
+      problem: problem._id,
+      language: 'C++',
+      submissionCount: 2,
+      url: MOSS_URL,
+    });
+    await moss('post', contest.key, 'mossEditor').expect(202);
+    await moss('delete', contest.key, 'mossEditor')
+      .expect(409)
+      .expect(errorCode('conflict'));
+    expect(await api.contestMoss.countDocuments({ contest: contest._id })).toBe(
+      1,
+    );
+    await mossQueue.obliterate({ force: true });
+    await moss('delete', contest.key, 'mossEditor').expect(204);
+  });
+
   it('keeps the results of other contests when clearing', async () => {
     const problem = await createProblem(api, catalog, { code: 'mossc' });
     const [cleared, kept] = [
