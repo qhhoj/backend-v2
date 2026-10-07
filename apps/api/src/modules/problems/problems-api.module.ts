@@ -5,6 +5,7 @@ import { RateLimitService } from '@libs/common';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import { PDF_QUEUE, POLYGON_QUEUE } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
+import { DiscordModule } from '../discord/discord.module';
 import { LanguagesQuerier } from './catalog/languages.querier';
 import { LicensesQuerier } from './catalog/licenses.querier';
 import { ProblemGroupsQuerier } from './catalog/problem-groups.querier';
@@ -48,6 +49,7 @@ const repositories = [
 @Module({
   imports: [
     ContestAccessModule,
+    DiscordModule,
     AuthModule,
     BullModule.registerQueue(
       { name: PDF_QUEUE },

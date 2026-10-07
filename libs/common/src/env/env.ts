@@ -49,6 +49,8 @@ export interface Env {
   userDataRoot: string | null;
   /** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: non-superusers cannot edit their `about` or `firstName` (5b: blog edits and comments). */
   officialContestMode: boolean;
+  /** `DISCORD_WEBHOOK_URLS`: legacy event name (or `default`) to webhook URL; empty disables the webhooks. Secrets: never logged or put in job data. */
+  discordWebhookUrls: Readonly<Record<string, string>>;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
     google: OAuthClient | null;
@@ -120,6 +122,29 @@ export function loadEnv(
       problems.push(`${name} must be ${min}-65535`);
     return value;
   };
+  /** `event=url` pairs separated by commas; errors never echo a URL (they are secrets). */
+  const webhooks = (name: string): Record<string, string> => {
+    const urls: Record<string, string> = {};
+    for (const pair of (source[name] ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)) {
+      const separator = pair.indexOf('=');
+      const event = pair.slice(0, Math.max(separator, 0)).trim();
+      const url = pair.slice(separator + 1).trim();
+      if (
+        separator < 1 ||
+        !/^(default|on_[a-z_]+)$/.test(event) ||
+        !/^https?:\/\/\S+$/.test(url) ||
+        event in urls
+      )
+        problems.push(
+          `${name} must be event=url pairs: default or on_<event>, each once, with http(s) URLs`,
+        );
+      else urls[event] = url;
+    }
+    return urls;
+  };
   const env: Env = {
     mongoUrl: required('MONGO_URL'),
     redisUrl: required('REDIS_URL'),
@@ -153,6 +178,7 @@ export function loadEnv(
     contestDataRoot: source.CONTEST_DATA_ROOT || null,
     userDataRoot: source.USER_DATA_ROOT || null,
     officialContestMode: flag('OFFICIAL_CONTEST_MODE', false),
+    discordWebhookUrls: webhooks('DISCORD_WEBHOOK_URLS'),
     oauth: {
       google: oauthClient('GOOGLE'),
       facebook: oauthClient('FACEBOOK'),

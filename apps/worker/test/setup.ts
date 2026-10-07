@@ -62,6 +62,7 @@ export async function setupWorkerTest({
     CONTEST_DATA_ROOT: roots.contestDataRoot,
     USER_DATA_ROOT: roots.userDataRoot,
     OFFICIAL_CONTEST_MODE: 'false',
+    DISCORD_WEBHOOK_URLS: '',
     MOSS_API_KEY: '',
     ...env,
   });

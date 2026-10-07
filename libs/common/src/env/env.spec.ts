@@ -42,8 +42,33 @@ describe('loadEnv', () => {
       contestDataRoot: null,
       userDataRoot: null,
       officialContestMode: false,
+      discordWebhookUrls: {},
       oauth: { google: null, facebook: null, github: null },
     }));
+  it('reads Discord webhooks as event=url pairs and never echoes a URL in errors', () => {
+    expect(loadEnv({ ...valid }).discordWebhookUrls).toEqual({});
+    expect(
+      loadEnv({
+        ...valid,
+        DISCORD_WEBHOOK_URLS:
+          'default=https://discord.com/api/webhooks/1/a, on_new_comment=https://discord.com/api/webhooks/2/b',
+      }).discordWebhookUrls,
+    ).toEqual({
+      default: 'https://discord.com/api/webhooks/1/a',
+      on_new_comment: 'https://discord.com/api/webhooks/2/b',
+    });
+    for (const bad of [
+      'https://discord.com/api/webhooks/9/secret',
+      'comment=https://discord.com/api/webhooks/9/secret',
+      'default=ftp://discord.com/api/webhooks/9/secret',
+      'default=https://a/9/secret,default=https://b/9/secret',
+    ]) {
+      const attempt = () => loadEnv({ ...valid, DISCORD_WEBHOOK_URLS: bad });
+      expect(attempt).toThrow(/DISCORD_WEBHOOK_URLS/);
+      expect(attempt).not.toThrow(/secret/);
+    }
+  });
+
   it('reads the optional user data root and official contest mode', () => {
     expect(loadEnv({ ...valid }).userDataRoot).toBeNull();
     expect(loadEnv({ ...valid, USER_DATA_ROOT: '' }).userDataRoot).toBeNull();

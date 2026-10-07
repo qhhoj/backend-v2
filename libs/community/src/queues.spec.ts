@@ -6,11 +6,13 @@ import IORedis from 'ioredis';
 import type Redis from 'ioredis';
 import {
   clearOrganizationPointsPending,
+  DISCORD_WEBHOOK_JOB,
+  notifyDiscord,
   notifyOrganizationPoints,
   ORGANIZATION_POINTS_JOB,
   ORGANIZATION_POINTS_QUEUE,
 } from './queues';
-import type { OrganizationPointsJob } from './queues';
+import type { DiscordWebhookJob, OrganizationPointsJob } from './queues';
 
 describe('notifyOrganizationPoints', () => {
   let queue: Queue<OrganizationPointsJob>;
@@ -89,5 +91,46 @@ describe('notifyOrganizationPoints', () => {
     expect(
       await redis.exists(`organization-points:pending:${organizationId}`),
     ).toBe(0);
+  });
+});
+
+describe('notifyDiscord', () => {
+  it('enqueues a Discord job with retries and swallows a failing queue', async () => {
+    const added: unknown[] = [];
+    const error = jest.fn();
+    const logger = { error } as unknown as Logger;
+    const job = {
+      event: 'on_new_comment' as const,
+      message: { title: 'T', description: 'D', author: null },
+    };
+    await notifyDiscord(
+      {
+        add: (...args: unknown[]) => (added.push(args), Promise.resolve()),
+      } as unknown as Queue<DiscordWebhookJob>,
+      job,
+      logger,
+    );
+    expect(added).toEqual([
+      [
+        DISCORD_WEBHOOK_JOB,
+        job,
+        expect.objectContaining({
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 10_000 },
+        }),
+      ],
+    ]);
+    await expect(
+      notifyDiscord(
+        {
+          add: () => Promise.reject(new Error('redis down')),
+        } as unknown as Queue<DiscordWebhookJob>,
+        job,
+        logger,
+      ),
+    ).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('on_new_comment'),
+    );
   });
 });

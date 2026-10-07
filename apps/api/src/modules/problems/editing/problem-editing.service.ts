@@ -3,7 +3,9 @@ import type { AuthContext } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
+import { excerpt } from '@libs/community';
 import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
+import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
 import { LanguagesQuerier } from '../catalog/languages.querier';
@@ -34,6 +36,7 @@ export class ProblemEditingService {
     private readonly languages: LanguagesQuerier,
     private readonly events: ProblemEvents,
     private readonly dataFiles: ProblemDataFilesService,
+    private readonly discord: DiscordWebhooksService,
   ) {}
 
   async create(
@@ -72,7 +75,33 @@ export class ProblemEditingService {
       changes: fieldDiff({}, withoutRenderedHtml(problem.toJSON())),
       comment: 'Created on site',
     });
+    if (mode === 'suggest' || problem.isOrganizationPrivate)
+      await this.announce(problem, mode, principal.username);
     return this.problems.detail(principal, problem.code, 'en');
+  }
+
+  /** Legacy `on_new_problem` (organization problems) and `on_new_suggested_problem`. The author is the creator: the suggester in suggest mode, a curator otherwise (legacy: `suggester or authors.first()`). */
+  private announce(
+    problem: Problem,
+    mode: 'create' | 'suggest',
+    username: string,
+  ): Promise<void> {
+    const suggested = mode === 'suggest';
+    const url = this.discord.link(`/problem/${problem.code}`);
+    return this.discord.notify(
+      suggested ? 'on_new_suggested_problem' : 'on_new_problem',
+      {
+        title: `New ${suggested ? 'suggested' : 'organization'} problem ${url}`,
+        description: [
+          `Title: ${problem.name}`,
+          `Statement: ${excerpt(problem.description ?? '', 100)}...`,
+          `Time limit: ${problem.timeLimit}`,
+          `Memory limit (MB): ${problem.memoryLimit / 1024}`,
+          `Points: ${problem.points}`,
+        ].join('\n'),
+        author: this.discord.author(username),
+      },
+    );
   }
 
   async edit(

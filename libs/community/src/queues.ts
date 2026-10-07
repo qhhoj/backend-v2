@@ -2,6 +2,7 @@ import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { JOB_RETENTION, withinTimeout } from '@libs/judging';
+import type { DiscordEvent, DiscordMessage } from './discord';
 
 export const COMMUNITY_ENQUEUE_TIMEOUT_MS = 1000;
 
@@ -90,3 +91,33 @@ export const oneJobPerUser = (userId: string) => ({
   removeOnComplete: true,
   removeOnFail: true,
 });
+
+export const DISCORD_WEBHOOK_QUEUE = 'discord-webhook';
+export const DISCORD_WEBHOOK_JOB = 'send';
+/** The worker resolves the URL from its own env: the webhook URL (a secret) never enters job data or logs. */
+export interface DiscordWebhookJob {
+  event: DiscordEvent;
+  message: DiscordMessage;
+}
+
+/** Fire-and-forget like the other community enqueues: a Redis outage loses the message (logged), never the write that caused it. */
+export async function notifyDiscord(
+  queue: Queue<DiscordWebhookJob>,
+  job: DiscordWebhookJob,
+  logger: Logger,
+): Promise<void> {
+  try {
+    await withinTimeout(
+      queue.add(DISCORD_WEBHOOK_JOB, job, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 10_000 },
+        ...JOB_RETENTION,
+      }),
+      COMMUNITY_ENQUEUE_TIMEOUT_MS,
+    );
+  } catch (error) {
+    logger.error(
+      `Discord ${job.event} not enqueued: ${(error as Error).message}`,
+    );
+  }
+}

@@ -86,6 +86,7 @@ export async function setupApiTest({
     CONTEST_DATA_ROOT: contestDataRoot,
     USER_DATA_ROOT: userDataRoot,
     OFFICIAL_CONTEST_MODE: 'false',
+    DISCORD_WEBHOOK_URLS: '',
     MOSS_API_KEY: '',
     ...env,
   });
