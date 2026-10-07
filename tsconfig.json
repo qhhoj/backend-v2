@@ -58,6 +58,12 @@
       ],
       "@libs/judging/*": [
         "libs/judging/src/*"
+      ],
+      "@libs/contests": [
+        "libs/contests/src"
+      ],
+      "@libs/contests/*": [
+        "libs/contests/src/*"
       ]
     }
   }

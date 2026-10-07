@@ -97,6 +97,15 @@
         "tsConfigPath": "libs/judging/tsconfig.lib.json"
       }
     },
+    "contests": {
+      "type": "library",
+      "root": "libs/contests",
+      "entryFile": "index",
+      "sourceRoot": "libs/contests/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/contests/tsconfig.lib.json"
+      }
+    },
     "bridge": {
       "type": "application",
       "root": "apps/bridge",

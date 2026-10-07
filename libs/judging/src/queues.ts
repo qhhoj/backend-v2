@@ -2,7 +2,7 @@ import type { Queue } from 'bullmq';
 import { uuidStr } from '@libs/database';
 
 /** Finished jobs are dropped at once; failed ones stay a week for inspection. */
-const JOB_RETENTION = {
+export const JOB_RETENTION = {
   removeOnComplete: true,
   removeOnFail: { age: 7 * 24 * 60 * 60 },
 };
