@@ -16,7 +16,7 @@ export const DEFAULT_CONTEST_DATA_LIMITS: ContestDataLimits = {
   maxEntries: 50_000,
   sourceChunk: 100,
 };
-/** Shown to the editor through the job log; never holds a source. */
+/** A failed job is dropped, so the status returns to `none`; the message reaches only the worker log and never holds a source. */
 export class ContestDataError extends Error {}
 
 export interface DataRow {

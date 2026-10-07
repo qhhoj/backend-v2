@@ -11,8 +11,8 @@ describe('contest data paths', () => {
   it('builds paths inside the root from a contest id only', () => {
     const id = newId();
     expect(contestDataPath('/srv/data', id)).toBe(`/srv/data/${id}.zip`);
-    expect(contestDataTempPath('/srv/data', id)).toBe(
-      `/srv/data/${id}.zip.tmp`,
+    expect(contestDataTempPath('/srv/data', id, 'run1')).toBe(
+      `/srv/data/${id}.zip.run1.tmp`,
     );
     expect(() => contestDataPath('/srv/data', '../etc/passwd')).toThrow();
   });

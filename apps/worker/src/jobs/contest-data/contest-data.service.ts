@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import { Inject, Injectable } from '@nestjs/common';
 import { ENV } from '@libs/common';
@@ -36,13 +37,10 @@ export class ContestDataService {
       throw new ContestDataError('Contest data download is not configured');
     const [path, temporary] = [
       contestDataPath(root, contestId),
-      contestDataTempPath(root, contestId),
+      contestDataTempPath(root, contestId, randomUUID()),
     ];
     await mkdir(root, { recursive: true });
-    await Promise.all([
-      rm(path, { force: true }),
-      rm(temporary, { force: true }),
-    ]);
+    await rm(path, { force: true });
     const contest = await this.repository.findContest(contestId);
     if (!contest) return 0;
     const problems = contest.problems

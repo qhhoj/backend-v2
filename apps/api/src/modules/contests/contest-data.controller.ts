@@ -1,4 +1,3 @@
-import { createReadStream } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import {
   Body,
@@ -56,6 +55,6 @@ export class ContestDataController {
       .type('application/zip')
       .header('Content-Disposition', `attachment; filename="${file.filename}"`)
       .header('X-Content-Type-Options', 'nosniff');
-    return createReadStream(file.path);
+    return file.stream;
   }
 }

@@ -1,3 +1,6 @@
+import { createReadStream } from 'node:fs';
+import type { ReadStream } from 'node:fs';
+import { once } from 'node:events';
 import { stat } from 'node:fs/promises';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
@@ -91,20 +94,21 @@ export class ContestDataService {
     return { queued: true };
   }
 
+  /** Opened here, so a zip that vanishes (a prepare starting) is a 404, never a failed response. */
   async download(
     principal: Principal,
     key: string,
     now = new Date(),
-  ): Promise<{ path: string; filename: string }> {
+  ): Promise<{ stream: ReadStream; filename: string }> {
     const { contest, root } = await this.dataContest(principal, key, now);
-    const path = contestDataPath(root, contest._id);
-    const exists = await stat(path).then(
-      () => true,
-      () => false,
-    );
-    if (!exists)
+    const stream = createReadStream(contestDataPath(root, contest._id));
+    try {
+      await once(stream, 'open');
+    } catch {
+      stream.destroy();
       throw new AppError('not_found', 404, 'No data has been prepared');
-    return { path, filename: `${contest.key}-data.zip` };
+    }
+    return { stream, filename: `${contest.key}-data.zip` };
   }
 
   /** Legacy `ContestDataMixin`: off without a root (404), editors only (403), ended only (409). */

@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { contestDataPath, contestDataTempPath, SPECTATE } from '@libs/contests';
+import { contestDataPath, SPECTATE } from '@libs/contests';
 import type { Contest, Language, Problem } from '@libs/database';
 import { ContestDataRepository } from '../src/jobs/contest-data/contest-data.repository';
 import { ContestDataService } from '../src/jobs/contest-data/contest-data.service';
@@ -95,13 +95,14 @@ describe('contest data zip', () => {
       await join_('dave', VIRTUAL),
       await join_('carol', SPECTATE),
     ];
-    await submit(alice, sum, { result: 'AC', points: 100 }, 'int best() {}');
+    // The lower score goes in first: only the points order puts the AC at the top.
     aliceWrong = await submit(
       alice,
       sum,
       { result: 'WA', points: 40 },
       'int wa() {}',
     );
+    await submit(alice, sum, { result: 'AC', points: 100 }, 'int best() {}');
     await submit(bob, sum, { result: 'AC', points: 70 }, 'int bob() {}');
     await submit(alice, max, { result: 'AC', points: 100 }, 'int max() {}');
     await submit(dave, sum, { result: 'AC', points: 100 }, 'int virtual() {}');
@@ -126,9 +127,7 @@ describe('contest data zip', () => {
       [`alice/$History/sum_${aliceWrong._id}.cpp`]: 'int wa() {}',
       'bob/sum.cpp': 'int bob() {}',
     });
-    expect(
-      existsSync(contestDataTempPath(worker.contestDataRoot, contest._id)),
-    ).toBe(false);
+    expect(readdirSync(worker.contestDataRoot)).toEqual([`${contest._id}.zip`]);
   });
 
   it('filters on the submission result and keeps every result when none is given', async () => {

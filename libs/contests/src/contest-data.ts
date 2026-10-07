@@ -11,8 +11,12 @@ const fileName = (contestId: string) => {
 /** The id is the only variable part, so the path never leaves the root. */
 export const contestDataPath = (root: string, contestId: string) =>
   join(root, fileName(contestId));
-export const contestDataTempPath = (root: string, contestId: string) =>
-  `${contestDataPath(root, contestId)}.tmp`;
+/** One name per run, so a run that lost its lock never renames or removes another run's file. */
+export const contestDataTempPath = (
+  root: string,
+  contestId: string,
+  runId: string,
+) => `${contestDataPath(root, contestId)}.${runId}.tmp`;
 
 export const canPrepareData = (
   preparedAt: Date | null,
