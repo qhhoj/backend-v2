@@ -11,6 +11,25 @@ import type { MossFile, MossServer } from './moss-client';
 /** Per batch; files past it are left out (MOSS itself rejects huge uploads). */
 export const MOSS_MAX_BATCH_BYTES = 64 * 1024 * 1024;
 
+/** Files in rank order until the byte cap; one that does not fit is skipped and smaller later ones still go in. */
+export function batchFiles(
+  sources: MossSource[],
+  siteUrl: string,
+  maxBytes = MOSS_MAX_BATCH_BYTES,
+): MossFile[] {
+  const files: MossFile[] = [];
+  let bytes = 0;
+  for (const { submissionId, username, source } of sources) {
+    const content = Buffer.from(
+      `// ${siteUrl}/submission/${submissionId}\n${source}`,
+    );
+    if (bytes + content.length > maxBytes) continue;
+    bytes += content.length;
+    files.push({ name: username.replace(/[^\w.-]/g, '_') || '_', content });
+  }
+  return files;
+}
+
 @Injectable()
 export class ContestMossService {
   constructor(
@@ -57,16 +76,6 @@ export class ContestMossService {
   }
 
   private filesOf(sources: MossSource[]): MossFile[] {
-    const files: MossFile[] = [];
-    let bytes = 0;
-    for (const { submissionId, username, source } of sources) {
-      const content = Buffer.from(
-        `// ${this.env.siteUrl}/submission/${submissionId}\n${source}`,
-      );
-      if (bytes + content.length > MOSS_MAX_BATCH_BYTES) break;
-      bytes += content.length;
-      files.push({ name: username.replace(/[^\w.-]/g, '_') || '_', content });
-    }
-    return files;
+    return batchFiles(sources, this.env.siteUrl);
   }
 }

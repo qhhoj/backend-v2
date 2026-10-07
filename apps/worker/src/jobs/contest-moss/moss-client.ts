@@ -91,11 +91,19 @@ export async function submitToMoss(
   const timedOut = () => socket.destroy(new MossError('MOSS timed out'));
   socket.setTimeout(server.timeoutMs, timedOut);
   const deadline = setTimeout(timedOut, server.batchTimeoutMs);
+  // Settles every wait below when the server closes without an error (a FIN during backpressure emits no `drain`).
+  const closed = new Promise<never>((_resolve, reject) =>
+    socket.once('close', () =>
+      reject(new MossError('MOSS closed the connection')),
+    ),
+  );
+  closed.catch(() => undefined);
   const write = async (chunk: string | Buffer) => {
-    if (!socket.write(chunk)) await once(socket, 'drain');
+    if (!socket.write(chunk))
+      await Promise.race([once(socket, 'drain'), closed]);
   };
   try {
-    await once(socket, 'connect');
+    await Promise.race([once(socket, 'connect'), closed]);
     await write(
       `moss ${userId}\ndirectory 0\nX 0\nmaxmatches 10\nshow 100\nlanguage ${language}\n`,
     );

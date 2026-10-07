@@ -91,3 +91,16 @@ export function startDripFeedMoss(intervalMs = 20) {
     socket.on('close', () => clearInterval(drip));
   });
 }
+
+/** Answers `yes` to the language, then closes cleanly (FIN) at the first upload byte. */
+export function startClosingMoss() {
+  return listen((socket) => {
+    socket.on('error', () => undefined);
+    let answered = false;
+    socket.on('data', () => {
+      if (answered) return;
+      answered = true;
+      socket.write('yes\n', () => socket.end());
+    });
+  });
+}

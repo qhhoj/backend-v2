@@ -1,5 +1,9 @@
 import { waitUntil } from '@libs/common/testing';
-import { startDripFeedMoss, startFakeMoss } from '../../../test/fake-moss';
+import {
+  startClosingMoss,
+  startDripFeedMoss,
+  startFakeMoss,
+} from '../../../test/fake-moss';
 import { MossError, submitToMoss } from './moss-client';
 import type { MossFile, MossServer } from './moss-client';
 
@@ -104,6 +108,25 @@ describe('submitToMoss', () => {
       expect(Date.now() - started).toBeLessThan(1500);
     } finally {
       await dripping.close();
+    }
+  });
+
+  it('fails promptly when the server closes cleanly while a large file is uploading', async () => {
+    const closing = await startClosingMoss();
+    try {
+      const started = Date.now();
+      const error = await failureOf(
+        submitToMoss(
+          serverAt(closing.port, { timeoutMs: 5000, batchTimeoutMs: 5000 }),
+          request([
+            { name: 'big', content: Buffer.alloc(32 * 1024 * 1024, 'a') },
+          ]),
+        ),
+      );
+      expect(error).toBeInstanceOf(MossError);
+      expect(Date.now() - started).toBeLessThan(2500);
+    } finally {
+      await closing.close();
     }
   });
 

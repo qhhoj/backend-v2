@@ -6,6 +6,7 @@ import {
   CONTEST_MOSS_JOB,
   CONTEST_MOSS_QUEUE,
   mossJobId,
+  SPECTATE,
   oneJobPerContest,
 } from '@libs/contests';
 import type { ContestMossJob } from '@libs/contests';
@@ -25,7 +26,6 @@ import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
 const RESULT_URL = 'http://moss.stanford.edu/results/1/2345';
-const SPECTATE = -1;
 const VIRTUAL = 1;
 
 describe('contest MOSS', () => {
