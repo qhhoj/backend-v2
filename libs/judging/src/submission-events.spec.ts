@@ -39,7 +39,7 @@ describe('submission events', () => {
     }),
     JSON.stringify({
       ...submissionEvent(subject(), 'done', 'D'),
-      status: 'PD',
+      status: 'XX',
     }),
     JSON.stringify({ ...submissionEvent(subject(), 'done', 'D'), userId: '1' }),
     JSON.stringify({

@@ -8,6 +8,9 @@ import { hashPassword, SessionService } from '@libs/auth';
 import { MAILER, REDIS } from '@libs/common';
 import { createTestApp, InMemoryMailer, TEST_ENV } from '@libs/common/testing';
 import {
+  Contest,
+  ContestParticipation,
+  ContestSubmission,
   Group,
   Judge,
   Language,
@@ -107,6 +110,13 @@ export async function setupApiTest({
     ),
     submissionSources: readyApp.get<Model<SubmissionSource>>(
       getModelToken(SubmissionSource.name),
+    ),
+    contests: readyApp.get<Model<Contest>>(getModelToken(Contest.name)),
+    participations: readyApp.get<Model<ContestParticipation>>(
+      getModelToken(ContestParticipation.name),
+    ),
+    contestSubmissions: readyApp.get<Model<ContestSubmission>>(
+      getModelToken(ContestSubmission.name),
     ),
     /** Streams are disabled in tests; call after inserting catalog rows. */
     resyncCatalog: async () => {

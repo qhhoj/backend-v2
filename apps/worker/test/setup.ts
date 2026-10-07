@@ -8,6 +8,9 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { TEST_ENV, TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
+  Contest,
+  ContestParticipation,
+  ContestSubmission,
   Language,
   Problem,
   ProblemGroup,
@@ -99,6 +102,13 @@ export async function setupWorkerTest({
       getModelToken(ProblemGroup.name),
     ),
     submissions: ready.get<Model<Submission>>(getModelToken(Submission.name)),
+    contests: ready.get<Model<Contest>>(getModelToken(Contest.name)),
+    participations: ready.get<Model<ContestParticipation>>(
+      getModelToken(ContestParticipation.name),
+    ),
+    contestSubmissions: ready.get<Model<ContestSubmission>>(
+      getModelToken(ContestSubmission.name),
+    ),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
     teardown: async () => {

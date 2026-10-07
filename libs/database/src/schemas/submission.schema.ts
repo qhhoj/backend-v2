@@ -12,6 +12,8 @@ export const SUBMISSION_STATUSES = [
   'IE',
   'CE',
   'AB',
+  /** FSO: stored while its contest runs, requeued at the end (`contest-final-judge`). */
+  'PD',
 ] as const;
 export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 /** Waiting for or under judgement: these count towards the unfinished-submission limit and are never re-queued twice. */
@@ -119,7 +121,7 @@ export class Submission {
   @Prop({ type: Date, default: null }) judgedDate!: Date | null;
   @Prop({ type: Date, default: null }) rejudgedDate!: Date | null;
   @Prop({ type: Date, default: null }) lockedAfter!: Date | null;
-  /** Filled by sub-project 4. */
+  /** The contest it was submitted in (legacy `contest_object`); its row in `contestSubmissions` holds the participation. */
   @Prop({ type: UUID, default: null }) contest!: string | null;
   /** Judge disconnects survived while in flight; the second one is an internal error. */
   @Prop({ default: 0 }) requeueCount!: number;
@@ -144,3 +146,6 @@ SubmissionSchema.index({ date: -1 });
 SubmissionSchema.index({ judgedDate: 1 });
 // Problem stats count a problem's rows of listed users without reading documents.
 SubmissionSchema.index({ problem: 1, user: 1 });
+// The contest submission list sorts one contest's rows by `-_id`; FSO judging finds contests with pending rows and reads each one's in id order.
+SubmissionSchema.index({ contest: 1, _id: -1 });
+SubmissionSchema.index({ status: 1, contest: 1, _id: 1 });

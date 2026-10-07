@@ -57,7 +57,8 @@ export class User {
   @Prop({ default: true }) allowTagging!: boolean;
   @Prop({ type: Number, default: null }) rating!: number | null;
   @Prop({ default: '' }) userScript!: string;
-  @Prop({ type: UUID, default: null }) currentContestId!: string | null;
+  /** The participation the user is in (legacy `current_contest`); cleared lazily once it ended or its contest became invisible. */
+  @Prop({ type: UUID, default: null }) currentParticipation!: string | null;
   @Prop({ default: 'auto' }) mathEngine!: string;
   @Prop({ default: false }) isTotpEnabled!: boolean;
   @Prop({ default: false }) isWebauthnEnabled!: boolean;

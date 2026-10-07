@@ -1,5 +1,14 @@
 import { ModelDefinition } from '@nestjs/mongoose';
 import { ActivationKey, ActivationKeySchema } from './activation-key.schema';
+import { Contest, ContestSchema } from './contest.schema';
+import {
+  ContestParticipation,
+  ContestParticipationSchema,
+} from './contest-participation.schema';
+import {
+  ContestSubmission,
+  ContestSubmissionSchema,
+} from './contest-submission.schema';
 import { Group, GroupSchema } from './group.schema';
 import { Judge, JudgeSchema } from './judge.schema';
 import { Language, LanguageSchema } from './language.schema';
@@ -19,6 +28,9 @@ import { Tag, TagSchema } from './tag.schema';
 import { User, UserSchema } from './user.schema';
 
 export * from './activation-key.schema';
+export * from './contest-participation.schema';
+export * from './contest-submission.schema';
+export * from './contest.schema';
 export * from './group.schema';
 export * from './judge.schema';
 export * from './language.schema';
@@ -36,6 +48,9 @@ export * from './tag.schema';
 export * from './user.schema';
 export const SCHEMAS: ModelDefinition[] = [
   { name: ActivationKey.name, schema: ActivationKeySchema },
+  { name: Contest.name, schema: ContestSchema },
+  { name: ContestParticipation.name, schema: ContestParticipationSchema },
+  { name: ContestSubmission.name, schema: ContestSubmissionSchema },
   { name: Group.name, schema: GroupSchema },
   { name: Judge.name, schema: JudgeSchema },
   { name: Language.name, schema: LanguageSchema },

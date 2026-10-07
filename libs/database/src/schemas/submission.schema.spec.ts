@@ -58,7 +58,7 @@ describe('Submission schemas', () => {
     expect(submission.date.getTime()).toBeLessThanOrEqual(Date.now());
   });
   it.each([
-    [{ status: 'PD' }],
+    [{ status: 'XX' }],
     [{ result: 'XX' }],
     [{ priority: 4 }],
     [{ cases: [{ ...acceptedCase, status: 'RJ' }] }],

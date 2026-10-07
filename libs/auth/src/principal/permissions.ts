@@ -16,6 +16,7 @@ export const PERMISSIONS = [
   'judge.import_polygon_package',
   'judge.add_tagproblem',
   'judge.see_private_solution',
+  'judge.add_contest',
   'judge.see_private_contest',
   'judge.edit_own_contest',
   'judge.edit_all_contest',
