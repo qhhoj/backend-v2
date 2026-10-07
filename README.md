@@ -54,7 +54,7 @@ apps/api       HTTP: /api/internal (SPA), /api/v2 (legacy shapes), SSE streams
 apps/bridge    judge TCP server, dispatch queue, grading
 apps/worker    BullMQ jobs
 apps/migrator  MariaDB -> MongoDB backfill/verify CLI
-libs/          common, database, auth, render, problems, judging, contests
+libs/          common, database, auth, render, problems, judging, contests, community
 ```
 
 ### Submission flow
@@ -80,6 +80,8 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | `contest-rating` | Elo-MMR rating run |
 | `contest-moss` | MOSS plagiarism run |
 | `contest-data` | contest data zip |
+| `organization-points` | organization PP and member counts |
+| `user-data` | user data export zips, hourly expiry sweep |
 | `pdf-render` | statement PDFs (Playwright) |
 | `polygon-import` | Polygon package import |
 
@@ -90,6 +92,8 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | An HTTP endpoint | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `api-v2/`, `tags/`, `judges/` use their own module file) |
 | Who can see/edit a problem or contest | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts` |
 | A contest scoring format | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts` |
+| Who can see/administer an organization | `modules/organizations/core/organization-access.ts` |
+| Org PP, ranks, interaction gate | `libs/community/src` |
 | Rating | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating` |
 | Points, PP, problem stats | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects` |
 | Judge protocol, dispatch, grading | `apps/bridge/src/{protocol,dispatch,judges,submissions}` |

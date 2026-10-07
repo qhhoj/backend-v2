@@ -22,7 +22,7 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data)
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data, organization-points, user-data)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier, `runCoalesced`
@@ -31,12 +31,13 @@ libs/
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
   contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
+  community/  org PP, ranks, interaction gate, time zones, user-data paths, queue contracts (`queues.ts`: organization-points, user-data)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
 
-- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging`, `@libs/contests` (and `@libs/<name>/*`) -> `libs/<name>/src`
+- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging`, `@libs/contests`, `@libs/community` (and `@libs/<name>/*`) -> `libs/<name>/src`
 - Import from the alias root (`@libs/database`) except `/testing` entry points
 - Each lib exports through `libs/<name>/src/index.ts`; add new files there
 
@@ -81,6 +82,18 @@ auth/
   registration/  password-reset/  impersonation/
   social/          flow + OAuth providers
   two-factor/      second factor, totp, webauthn
+organizations/
+  organizations-api.module.ts
+  core/            access rules, repositories (organizations, members, requests), points refresh, rate-limits, dto
+  editing/  membership/  requests/
+users/
+  users-api.module.ts
+  core/            listed-users, rate-limits, shared dto (username param, time zone)
+  pages/  leaderboards/  profile/  moderation/  data/
+api-v2/            legacy shapes, grouped like the features
+  api-v2.module.ts
+  core/            envelope, exception filter, query and filter helpers
+  contests/  problems/  submissions/  organizations/  users/
 ```
 - File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|store|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|handler|oauth-provider|spec`
 - A class is named after its file: `<Name><Role>` in `<name>.<role>.ts` (`ContestEditFieldsService` in `contest-edit-fields.service.ts`), so a `*.service.ts` class always ends in `Service`
@@ -89,7 +102,7 @@ auth/
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-moss`, `contest-data`)
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-moss`, `contest-data`) and `libs/community/src/queues.ts` (`organization-points`, `user-data`)
 - `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
@@ -168,7 +181,7 @@ auth/
 - Public routes: `@Public()` + `@CurrentAuth()` + `optionalPrincipal(auth)`; invisible or unknown problem -> 404, visible but not editable -> 403
 - Events (`ProblemEvents`): `pointsChanged`, `publicityChanged`, `codeRenamed`, `statementChanged`; listeners run synchronously after the write
 - Rate limits: `problems/core/rate-limits.ts`
-- Rendering styles: `problem`, `problem-full`, `solution`; one `styleOf` picks the style per problem
+- Rendering styles: `problem`, `problem-full`, `solution`, `user` (raw HTML escaped; profile and organization `about`); one `styleOf` picks the style per problem
 - HTML is rendered and stored at save; reads never render
 - `problem-full` HTML is unsanitized; writing statement text on a full-markup problem needs `judge.problem_full_markup`
 - Markdown is capped at 200000 chars (`MAX_MARKDOWN_LENGTH`); render budgets per render: 2000 formulas of at most 1000 chars and 1.5 MB of KaTeX output (excess stays as source text), 200000 opening tags, nesting depth 500, 2 MB of HTML; past the tag, depth or HTML limit `renderMarkdown` throws `RenderLimitError` -> 400 `validation_failed` on the rendered field
@@ -260,6 +273,23 @@ auth/
 - Clone: `POST /contests/:key/clone` (`judge.clone_contest` + edit rights on the source), hidden, cloner as only author
 - `/api/v2/contests|contest/:key|participations`: legacy shapes; participations use `ContestAccess.scoreboardFilter` like contest detail, so hidden boards list no scores to non-editors (stricter than legacy) and standings are frozen for non-editors
 
+## Organizations and users
+
+- Membership is `users.organizations` (ordered; the first is the displayed one); every write goes through `OrganizationMembersRepository` (compare-and-set on the array for joins and reorders); admins are members, cannot leave or be kicked
+- Rules live in `OrganizationAccess` (`organizations/core/organization-access.ts`): `canAdminister` (admin or `judge.edit_all_organization`, also on join requests), `canList`/`listFilter` (unlisted ones enumerated only to members and `edit_all_organization`); an unlisted organization's page, members and request form stay reachable by slug
+- Join: open organizations only, at most 3 open ones per user; private ones take requests (one pending per user and organization, 5 per hour per user); approvals check membership and `slots` against a live count under `withRedisLock('organization-requests:<id>')`; decisions record `decidedBy`/`decidedAt`
+- Create (`judge.add_organization`): unlisted until staff lists it, `shortName = slug[:20]`, creator always admin; at most 3 admin roles per user unless `judge.spam_organization`; new admins join the `Org Admin` group when it exists; `isUnlisted`, `slots`, `shortName` need `judge.edit_all_organization`
+- PATCH bodies go through `RefuseNullFieldsPipe` with a per-DTO nullable allowlist: `null` on any other field is 400, never stored
+- Org PP and `memberCount` are written only by the `organization-points` job, queued by membership changes and by `recomputeUser` when a member's PP changed; enqueues coalesce per organization through a Redis NX pending flag; a failed enqueue is logged and lost until the next change
+- `about` (users and organizations) renders at save in the `user` style (raw HTML escaped); editing it needs >= 5 solved or staff, not muted, and is locked for non-superusers when `OFFICIAL_CONTEST_MODE=true`; other profile settings stay editable while muted; `firstName` (<= 30) is blocked in official-contest mode
+- Leaderboards (`/users`, `/contributors`, `/users/:username/rank`) count listed, active users (`LISTED_USERS`); ties share a rank and pages continue it; reads `.hint()` the `{isUnlisted, isActive, <field>, _id}` indexes, which must exist (see Env and deploy)
+- `/users/:username/pp-breakdown` is its own paged route; the first `PP_ENTRIES` rows are cached 600 s per user (`user-pp:<userId>`), so a newly private problem can show for up to 600 s
+- Heatmap: last 365 days per day in `?timezone=`, else the viewer's zone, else UTC (`$dateToString` with the zone; a zone Mongo rejects falls back to UTC), cached 10 minutes per user and zone
+- Ban (`judge.ban_user`, never yourself or a superuser): compare-and-set on `banReason`, unlisted, inactive, every session destroyed; the reserved automatic cheating reason cannot be used; unban reverses
+- User data: `USER_DATA_ROOT` (unset -> 404, muted -> 404); 3 prepares per user per day, one per 24 h while a fresh zip exists (`canPrepare`); zip (profile whitelist, own submissions with sources and `info.json`) kept 7 days, removed by the hourly sweep
+- `/api/v2/organizations|users|user/:username`: legacy shapes, counted pages; unlisted organizations hidden like `canList`; contest ratings of frozen boards are `null` for non-editors
+- Tests: `setupApiTest` exposes `organizations`, `organizationRequests`, `userDataRoot`; `setupWorkerTest` exposes `organizations`, `userDataRoot`
+
 ## Data conventions
 
 - `tagGroups`/`tags` are querier-backed; `tagProblems` is a repository
@@ -334,6 +364,9 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart
 - `MOSS_API_KEY` goes on the api and the worker; without it on the api every MOSS route answers 404
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
+- `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`
+- `OFFICIAL_CONTEST_MODE=true` locks profile `about` and `firstName` for non-superusers
+- The `.hint()` queries (organization members, leaderboards, submissions) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`)
 - The worker needs outbound TCP to `moss.stanford.edu:7690` when `MOSS_API_KEY` is set
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
 - Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); exactly one instance

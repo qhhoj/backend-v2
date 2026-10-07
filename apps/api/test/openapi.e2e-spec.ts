@@ -178,4 +178,41 @@ describe('OpenAPI document', () => {
       ]),
     );
   });
+
+  it('lists the organization and user endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/organizations',
+        '/api/internal/organizations/{slug}',
+        '/api/internal/organizations/{slug}/members',
+        '/api/internal/organizations/{slug}/join',
+        '/api/internal/organizations/{slug}/leave',
+        '/api/internal/organizations/{slug}/kick',
+        '/api/internal/organizations/{slug}/requests',
+        '/api/internal/organizations/{slug}/requests/{id}',
+        '/api/internal/organizations/{slug}/requests/{id}/decide',
+        '/api/internal/users',
+        '/api/internal/contributors',
+        '/api/internal/users/{username}',
+        '/api/internal/users/{username}/ratings',
+        '/api/internal/users/{username}/solved',
+        '/api/internal/users/{username}/pp-breakdown',
+        '/api/internal/users/{username}/activity',
+        '/api/internal/users/{username}/rank',
+        '/api/internal/users/{username}/ban',
+        '/api/internal/users/{username}/unban',
+        '/api/internal/profile',
+        '/api/internal/profile/data',
+        '/api/internal/profile/data/download',
+        '/api/v2/organizations',
+        '/api/v2/users',
+        '/api/v2/user/{username}',
+      ]),
+    );
+  });
 });

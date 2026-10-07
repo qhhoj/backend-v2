@@ -105,7 +105,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Effects, sweep and rescore processors start only after the submission indexes exist (`startAfterIndexes`) — hinted queries throw before the index is built.
 - User points: best per problem over public non-org-private problems, PP = sum of 0.98514^rank * points over the first 300 plus 0.05 per solved — legacy `calculate_points`; solved is AC with `casePoints >= caseTotal`.
 - Problem stats exclude unlisted users; an AC counts only when `points >= problem.points` — legacy `update_stats`.
-- Org PP is deferred to the organizations sub-project.
+- Org PP and member counts are recomputed by the `organization-points` job (coalesced per organization), queued by membership changes and by user-points recomputes that move a member's PP — one writer, like user points.
 - Rescore is queue-driven (`problem-rescore`), not an in-process event — the worker cannot reach the API's `ProblemEvents`; writes filter on the case totals read, so a rejudge that finished meanwhile keeps its points.
 - Rescore uses `submissionPoints` (round after the ratio times points, as at grading end) — legacy rounded the ratio first; one rounding rule everywhere.
 - `viewerStatus` is computed per page with one aggregate, not cached — no cache invalidation to get wrong.
@@ -149,9 +149,33 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Announcements are rendered at save and pushed as ids over Redis `contest-events` and the shared SSE hub — one streaming stack for submissions and contests.
 - Clarifications dropped (no rows in production).
 
+## Organizations and users
+
+- Membership stays `users.organizations` (ordered array, no membership collection) — legacy has no role or join date; the principal already carries it.
+- Planned (migrator deferred): migrated `about` (users and organizations) must be rendered into `aboutHtml` on backfill, and `organizations.memberCount`/`performancePoints` recomputed — reads never render and the job writes the counts.
+- Unlisted organizations are kept out of every enumeration but stay reachable by slug — legacy leaked them through select2, `/api/v2` and the sitemap; a private unlisted organization is joined through its link.
+- Joins and profile reorders are compare-and-set on the membership array; approvals run under a per-organization Redis lock against a live member count — parallel requests cannot pass the open-organization cap or `slots`.
+- Profile edit can only reorder or leave organizations — legacy let users self-join private organizations through the profile form.
+- `edit_all_organization` decides join requests and `spam_organization` lifts the admin cap — legacy ignored the first and its permission typo made the second superuser-only.
+- `about` renders in a `user` style that escapes raw HTML — legacy `safe_mode = 'escape'`.
+- PATCH bodies refuse `null` outside a per-DTO allowlist (`RefuseNullFieldsPipe`) — `null` used to be stored or crash.
+- Org-points enqueues coalesce through a Redis NX pending flag per organization — a burst of joins costs one recompute.
+- A failed org-points enqueue is logged and lost until the next membership or PP change — a Redis outage must not fail the write, like `submission-graded` but without a sweep.
+- Hinted leaderboard and member reads need their indexes built before serving — `.hint()` throws on a missing index, so deploy runs `autoIndex` or `syncIndexes` first.
+- Leaderboard ranks follow the sorted field and continue across pages — legacy keyed every board on PP and restarted at the page offset.
+- PP breakdown is its own paged route (the spec had one `/solved`) — it is cached per user for 600 s, so a problem that just turned private can show up to 600 s.
+- The heatmap uses the viewer's zone like legacy; the spec's "user's timezone" reads as the viewer — and buckets days with Mongo's time-zone support, where legacy used `utcoffset().seconds`, wrong for negative offsets.
+- Muted users may edit profile settings except `about` — muting silences public text, not account settings.
+- `firstName` is editable (<= 30) and blocked in official-contest mode — legacy parity with `about`.
+- A ban cannot use the automatic cheating reason — that reason is reserved for automatic contest-cheating bans.
+- Join requests are limited (5 per hour per user) — legacy had no limit.
+- User data zips live 7 days outside `MEDIA_ROOT` (and apart from `CONTEST_DATA_ROOT`), at most 3 prepares per user per day, served by the api — legacy kept them forever in a cache directory.
+- The api-v2 module is grouped by feature like the internal modules — one place per feature, same size rule.
+- `/api/v2/user` hides contest ratings of re-frozen boards from non-editors — a frozen board must not leak through the rating.
+
 ## Deploy
 
 - Worker image needs pandoc >= 3, util-linux `prlimit` and Chromium; plan about 2 GB of memory per job of concurrency — PDF and Polygon conversions are memory hungry.
-- API and worker mount the same `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` and `CONTEST_DATA_ROOT`; `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` are not checked against `MEDIA_ROOT` at boot, only `CONTEST_DATA_ROOT` is; none of the last three may sit under it — it is served publicly.
+- API and worker mount the same `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT` and `USER_DATA_ROOT`; `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` are not checked against `MEDIA_ROOT` at boot, only `CONTEST_DATA_ROOT` and `USER_DATA_ROOT` are; none of the four data roots may sit under it, and `USER_DATA_ROOT` and `CONTEST_DATA_ROOT` must not overlap — it is served publicly.
 - nginx: `proxy_buffering off` and a long `proxy_read_timeout` on `/api/internal/events/`; set `TRUST_PROXY` to nginx's address — streams need it, per-IP limits are meaningless otherwise.
 - Docker Compose stack: apps, MongoDB replica set, Redis, nginx; one bridge instance; all sessions are invalidated once at cutover.
