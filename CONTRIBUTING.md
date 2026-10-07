@@ -276,16 +276,16 @@ api-v2/            legacy shapes, grouped like the features
 ## Organizations and users
 
 - Membership is `users.organizations` (ordered; the first is the displayed one); every write goes through `OrganizationMembersRepository` (compare-and-set on the array for joins and reorders); admins are members, cannot leave or be kicked
-- Rules live in `OrganizationAccess` (`organizations/core/organization-access.ts`): `canAdminister` (admin or `judge.edit_all_organization`, also on join requests), `canList`/`listFilter` (unlisted ones enumerated only to members and `edit_all_organization`); an unlisted organization's page, members and request form stay reachable by slug
+- Rules live in `OrganizationAccess` (`organizations/core/organization-access.ts`): `canAdminister` (admin or `judge.edit_all_organization`, also on join requests), `canList`/`listFilter` (unlisted ones enumerated only to members, admins and `edit_all_organization`); an unlisted organization's page, members and request form stay reachable by slug
 - Join: open organizations only, at most 3 open ones per user; private ones take requests (one pending per user and organization, 5 per hour per user); approvals check membership and `slots` against a live count under `withRedisLock('organization-requests:<id>')`; decisions record `decidedBy`/`decidedAt`
 - Create (`judge.add_organization`): unlisted until staff lists it, `shortName = slug[:20]`, creator always admin; at most 3 admin roles per user unless `judge.spam_organization`; new admins join the `Org Admin` group when it exists; `isUnlisted`, `slots`, `shortName` need `judge.edit_all_organization`
 - PATCH bodies go through `RefuseNullFieldsPipe` with a per-DTO nullable allowlist: `null` on any other field is 400, never stored
 - Org PP and `memberCount` are written only by the `organization-points` job, queued by membership changes and by `recomputeUser` when a member's PP changed; enqueues coalesce per organization through a Redis NX pending flag; a failed enqueue is logged and lost until the next change
-- `about` (users and organizations) renders at save in the `user` style (raw HTML escaped); editing it needs >= 5 solved or staff, not muted, and is locked for non-superusers when `OFFICIAL_CONTEST_MODE=true`; other profile settings stay editable while muted; `firstName` (<= 30) is blocked in official-contest mode
-- Leaderboards (`/users`, `/contributors`, `/users/:username/rank`) count listed, active users (`LISTED_USERS`); ties share a rank and pages continue it; reads `.hint()` the `{isUnlisted, isActive, <field>, _id}` indexes, which must exist (see Env and deploy)
+- `about` (users and organizations) renders at save in the `user` style (raw HTML escaped); editing a profile `about` needs >= 5 solved, staff or superuser, and not muted (an organization `about` needs only `canAdminister`); both are locked for non-superusers when `OFFICIAL_CONTEST_MODE=true`; other profile settings stay editable while muted; `firstName` (<= 30) is blocked in official-contest mode
+- Leaderboards (`/users`, `/contributors`, `/users/:username/rank`) count listed, active users (`LISTED_USERS`); ties share a rank and pages continue it; rely on the `{isUnlisted, isActive, <field>, _id}` indexes, which the query planner picks (no `.hint()`), so they must exist (see Env and deploy)
 - `/users/:username/pp-breakdown` is its own paged route; the first `PP_ENTRIES` rows are cached 600 s per user (`user-pp:<userId>`), so a newly private problem can show for up to 600 s
 - Heatmap: last 365 days per day in `?timezone=`, else the viewer's zone, else UTC (`$dateToString` with the zone; a zone Mongo rejects falls back to UTC), cached 10 minutes per user and zone
-- Ban (`judge.ban_user`, never yourself or a superuser): compare-and-set on `banReason`, unlisted, inactive, every session destroyed; the reserved automatic cheating reason cannot be used; unban reverses
+- Ban (`judge.ban_user`, never yourself or a superuser): compare-and-set on `banReason`, unlisted, inactive, every session destroyed; the reserved automatic cheating reason cannot be used; unban restores rank `user`, listed and active whatever the user had before (legacy)
 - User data: `USER_DATA_ROOT` (unset -> 404, muted -> 404); 3 prepares per user per day, one per 24 h while a fresh zip exists (`canPrepare`); zip (profile whitelist, own submissions with sources and `info.json`) kept 7 days, removed by the hourly sweep
 - `/api/v2/organizations|users|user/:username`: legacy shapes, counted pages; unlisted organizations hidden like `canList`; contest ratings of frozen boards are `null` for non-editors
 - Tests: `setupApiTest` exposes `organizations`, `organizationRequests`, `userDataRoot`; `setupWorkerTest` exposes `organizations`, `userDataRoot`
@@ -366,7 +366,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
 - `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`
 - `OFFICIAL_CONTEST_MODE=true` locks profile `about` and `firstName` for non-superusers
-- The `.hint()` queries (organization members, leaderboards, submissions) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`)
+- The `.hint()` queries (organization members, submissions) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`); the leaderboards are not hinted but are only fast with theirs
 - The worker needs outbound TCP to `moss.stanford.edu:7690` when `MOSS_API_KEY` is set
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
 - Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); exactly one instance

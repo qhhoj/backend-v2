@@ -161,7 +161,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - PATCH bodies refuse `null` outside a per-DTO allowlist (`RefuseNullFieldsPipe`) — `null` used to be stored or crash.
 - Org-points enqueues coalesce through a Redis NX pending flag per organization — a burst of joins costs one recompute.
 - A failed org-points enqueue is logged and lost until the next membership or PP change — a Redis outage must not fail the write, like `submission-graded` but without a sweep.
-- Hinted leaderboard and member reads need their indexes built before serving — `.hint()` throws on a missing index, so deploy runs `autoIndex` or `syncIndexes` first.
+- Hinted organization member and submission reads need their indexes built before serving — `.hint()` throws on a missing index, so deploy runs `autoIndex` or `syncIndexes` first; leaderboards rely on the index the planner picks, with no `.hint()`.
 - Leaderboard ranks follow the sorted field and continue across pages — legacy keyed every board on PP and restarted at the page offset.
 - PP breakdown is its own paged route (the spec had one `/solved`) — it is cached per user for 600 s, so a problem that just turned private can show up to 600 s.
 - The heatmap uses the viewer's zone like legacy; the spec's "user's timezone" reads as the viewer — and buckets days with Mongo's time-zone support, where legacy used `utcoffset().seconds`, wrong for negative offsets.
@@ -171,6 +171,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Join requests are limited (5 per hour per user) — legacy had no limit.
 - User data zips live 7 days outside `MEDIA_ROOT` (and apart from `CONTEST_DATA_ROOT`), at most 3 prepares per user per day, served by the api — legacy kept them forever in a cache directory.
 - The api-v2 module is grouped by feature like the internal modules — one place per feature, same size rule.
+- New organization admins join the `Org Admin` group on update as well as create — legacy granted it on create only; it is never revoked, like legacy.
 - `/api/v2/user` hides contest ratings of re-frozen boards from non-editors — a frozen board must not leak through the rating.
 - One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; `/users/:username/ratings` and `/api/v2/user` both use it. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
 

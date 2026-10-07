@@ -47,7 +47,7 @@ export interface Env {
   contestDataRoot: string | null;
   /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
   userDataRoot: string | null;
-  /** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: non-superusers cannot edit their `about` (5b: blog edits and comments). */
+  /** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: non-superusers cannot edit their `about` or `firstName` (5b: blog edits and comments). */
   officialContestMode: boolean;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
