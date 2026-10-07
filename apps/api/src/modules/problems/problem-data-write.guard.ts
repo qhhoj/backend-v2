@@ -3,18 +3,18 @@ import type { AuthContext } from '@libs/auth';
 import { AppError } from '@libs/common';
 import type { FastifyRequest } from 'fastify';
 import { maxTestcasesFor } from './dto/limits';
-import { ProblemDataService } from './problem-data.service';
+import { ProblemDataStore } from './problem-data.store';
 
 /** Runs before the validation pipe, so a caller who may not write (or sends too many cases) never costs a validation pass over thousands of rows. The service repeats these checks as the authority. */
 @Injectable()
 export class ProblemDataWriteGuard implements CanActivate {
-  constructor(private readonly data: ProblemDataService) {}
+  constructor(private readonly store: ProblemDataStore) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const { principal } = request.auth as AuthContext;
     const { code } = request.params as { code: string };
-    await this.data.writableProblem(principal, code);
+    await this.store.writableProblem(principal, code);
     const cases = (request.body as { cases?: unknown } | undefined)?.cases;
     const limit = maxTestcasesFor(principal);
     if (!Array.isArray(cases) || cases.length > limit)

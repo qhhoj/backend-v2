@@ -16,11 +16,17 @@ import { RenderPreviewDto } from './dto/render-preview.dto';
 import { PutTranslationDto, TranslationParamsDto } from './dto/translation.dto';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from './dto/problem-detail.response';
+import { ProblemCloneService } from './problem-clone.service';
 import { ProblemEditingService } from './problem-editing.service';
+import { ProblemStatementEditingService } from './problem-statement-editing.service';
 
 @Controller('api/internal/problems')
 export class ProblemEditingController {
-  constructor(private readonly editing: ProblemEditingService) {}
+  constructor(
+    private readonly editing: ProblemEditingService,
+    private readonly statements: ProblemStatementEditingService,
+    private readonly clones: ProblemCloneService,
+  ) {}
 
   @RequirePermission('judge.add_problem')
   @Post()
@@ -56,7 +62,7 @@ export class ProblemEditingController {
     @Param() { code, lang }: TranslationParamsDto,
     @Body() body: PutTranslationDto,
   ): Promise<void> {
-    return this.editing.putTranslation(auth, code, lang, body);
+    return this.statements.putTranslation(auth, code, lang, body);
   }
 
   @Put(':code/editorial')
@@ -66,7 +72,7 @@ export class ProblemEditingController {
     @Param() { code }: ProblemCodeParamDto,
     @Body() body: PutEditorialDto,
   ): Promise<void> {
-    return this.editing.putEditorial(auth, code, body);
+    return this.statements.putEditorial(auth, code, body);
   }
 
   @RequirePermission('judge.clone_problem')
@@ -76,7 +82,7 @@ export class ProblemEditingController {
     @Param() { code }: ProblemCodeParamDto,
     @Body() body: CloneProblemDto,
   ): Promise<ProblemDetailResponse> {
-    return this.editing.clone(auth, code, body);
+    return this.clones.clone(auth, code, body);
   }
 
   @RequirePermission('judge.edit_own_problem')
@@ -86,6 +92,6 @@ export class ProblemEditingController {
     @CurrentAuth() auth: AuthContext,
     @Body() body: RenderPreviewDto,
   ): Promise<{ html: string }> {
-    return this.editing.preview(auth, body);
+    return this.statements.preview(auth, body);
   }
 }

@@ -16,7 +16,7 @@ import {
 import { sanitizeSvg } from '@libs/render';
 import { readMultipartFile, rejectFile } from './multipart';
 import type { UploadedFile } from './multipart';
-import { ProblemEditingService } from './problem-editing.service';
+import { ProblemEditPolicy } from './problem-edit-policy.service';
 import { ProblemEvents } from './problem.events';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
@@ -48,7 +48,7 @@ export class ProblemUploadsService {
   constructor(
     private readonly storage: StorageService,
     private readonly rateLimit: RateLimitService,
-    private readonly editing: ProblemEditingService,
+    private readonly policy: ProblemEditPolicy,
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly events: ProblemEvents,
@@ -79,7 +79,7 @@ export class ProblemUploadsService {
     code: string,
     request: FastifyRequest,
   ): Promise<{ url: string }> {
-    const problem = await this.editing.editableProblem(auth.principal, code);
+    const problem = await this.policy.editableProblem(auth.principal, code);
     const { content } = await this.readUpload(
       auth,
       request,
@@ -101,7 +101,7 @@ export class ProblemUploadsService {
     code: string,
     request: FastifyRequest,
   ): Promise<{ url: string }> {
-    const problem = await this.editing.editableProblem(auth.principal, code);
+    const problem = await this.policy.editableProblem(auth.principal, code);
     const { filename, content } = await this.readUpload(
       auth,
       request,

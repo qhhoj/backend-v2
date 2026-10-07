@@ -2,7 +2,7 @@ import { ProblemSchema } from '@libs/database';
 import {
   CLONE_COPIED_FIELDS,
   CLONE_RESET_FIELDS,
-} from './problem-editing.service';
+} from './problem-clone.service';
 
 describe('clone field coverage', () => {
   it('decides every schema path as copied or reset', () => {

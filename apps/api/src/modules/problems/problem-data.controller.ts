@@ -28,10 +28,14 @@ import { ProblemDataResponse } from './dto/problem-data.response';
 import { ProblemCodeParamDto } from './dto/problem-params.dto';
 import { ProblemDataWriteGuard } from './problem-data-write.guard';
 import { ProblemDataService } from './problem-data.service';
+import { ProblemDataUploadService } from './problem-data-upload.service';
 
 @Controller('api/internal/problems')
 export class ProblemDataController {
-  constructor(private readonly data: ProblemDataService) {}
+  constructor(
+    private readonly data: ProblemDataService,
+    private readonly uploads: ProblemDataUploadService,
+  ) {}
 
   @Get(':code/data')
   get(
@@ -70,7 +74,7 @@ export class ProblemDataController {
     @Param() { code }: ProblemCodeParamDto,
     @Req() request: FastifyRequest,
   ): Promise<ProblemDataResponse> {
-    return this.data.uploadArchive(auth, code, request);
+    return this.uploads.uploadArchive(auth, code, request);
   }
 
   @Post(':code/data/files/:kind')
@@ -79,7 +83,7 @@ export class ProblemDataController {
     @Param() { code, kind }: DataSourceKindParamDto,
     @Req() request: FastifyRequest,
   ): Promise<ProblemDataResponse> {
-    return this.data.uploadSource(auth, code, kind, request);
+    return this.uploads.uploadSource(auth, code, kind, request);
   }
 
   @Delete(':code/data/files/:kind')

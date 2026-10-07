@@ -20,8 +20,8 @@ import { maxTestcasesFor } from './dto/limits';
 import { ImportJobResponse } from './dto/import-job.response';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { rejectFile, saveMultipartFile } from './multipart';
-import { ProblemDataService } from './problem-data.service';
-import { ProblemEditingService } from './problem-editing.service';
+import { ProblemDataStore } from './problem-data.store';
+import { ProblemEditPolicy } from './problem-edit-policy.service';
 import { ProblemsRepository } from './problems.repository';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from './rate-limits';
 
@@ -34,8 +34,8 @@ const GENERIC_FAILURE = 'Import failed';
 @Injectable()
 export class ProblemImportsService {
   constructor(
-    private readonly editing: ProblemEditingService,
-    private readonly data: ProblemDataService,
+    private readonly policy: ProblemEditPolicy,
+    private readonly store: ProblemDataStore,
     private readonly repository: ProblemsRepository,
     private readonly dataFiles: ProblemDataFilesService,
     private readonly rateLimit: RateLimitService,
@@ -50,7 +50,7 @@ export class ProblemImportsService {
     request: FastifyRequest,
   ): Promise<{ jobId: string }> {
     const job = await this.resolveJob(auth, query);
-    await this.editing.assertReferences(query);
+    await this.policy.assertReferences(query);
     await this.rateLimit.reserve(
       [`import:user:${auth.principal.userId}`],
       IMPORT_LIMIT,
@@ -117,7 +117,7 @@ export class ProblemImportsService {
       maxCases: maxTestcasesFor(principal),
     };
     if (query.mode === 'update') {
-      const problem = await this.data.writableProblem(principal, query.code);
+      const problem = await this.store.writableProblem(principal, query.code);
       if (
         problem.isFullMarkup &&
         !hasPermission(principal, 'judge.problem_full_markup')

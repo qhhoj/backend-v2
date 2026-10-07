@@ -10,9 +10,15 @@ import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';
 import { ProblemTypesQuerier } from './problem-types.querier';
 import { ProblemDataController } from './problem-data.controller';
+import { ProblemDataLifecycle } from './problem-data-lifecycle.service';
 import { ProblemDataService } from './problem-data.service';
+import { ProblemDataStore } from './problem-data.store';
+import { ProblemDataUploadService } from './problem-data-upload.service';
 import { ProblemEditingController } from './problem-editing.controller';
 import { ProblemEditingService } from './problem-editing.service';
+import { ProblemEditPolicy } from './problem-edit-policy.service';
+import { ProblemCloneService } from './problem-clone.service';
+import { ProblemStatementEditingService } from './problem-statement-editing.service';
 import { ProblemImportsController } from './problem-imports.controller';
 import { ProblemImportsService } from './problem-imports.service';
 import { ProblemPdfController } from './problem-pdf.controller';
@@ -61,9 +67,15 @@ const repositories = [
     ...queriers,
     ...repositories,
     ProblemsService,
+    ProblemEditPolicy,
     ProblemEditingService,
+    ProblemStatementEditingService,
+    ProblemCloneService,
     ProblemUploadsService,
+    ProblemDataStore,
     ProblemDataService,
+    ProblemDataUploadService,
+    ProblemDataLifecycle,
     ProblemImportsService,
     ProblemPdfService,
     ProblemRescoreEnqueuer,
