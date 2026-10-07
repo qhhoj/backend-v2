@@ -124,15 +124,16 @@ describe('a contest across the api, the bridge and the worker', () => {
       .useValue(FAST_TIMINGS)
       .compile();
     await bridge.init();
+    worker = await Test.createTestingModule({
+      imports: [WorkerModule],
+    }).compile();
+    await worker.init();
+    // Online only now: a stall while the worker boots would otherwise idle the judge out.
     judge = await FakeJudge.online(bridge.get(JudgeServerService).port(), {
       name: 'judge-flow',
       key: KEY,
       problems: ['xflow'],
     });
-    worker = await Test.createTestingModule({
-      imports: [WorkerModule],
-    }).compile();
-    await worker.init();
     rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
   });
   afterAll(async () => {

@@ -249,6 +249,11 @@ describe('judging across the api and the bridge', () => {
         testcaseResultVisibility: 'A',
       });
       await api.judges.create({ name: 'judge-y', authKeyHash: sha256(KEY) });
+      worker = await Test.createTestingModule({
+        imports: [WorkerModule],
+      }).compile();
+      await worker.init();
+      // Online only now: a stall while the worker boots would otherwise idle the judge out.
       solverJudge = await FakeJudge.online(
         bridge.get(JudgeServerService).port(),
         {
@@ -257,10 +262,6 @@ describe('judging across the api and the bridge', () => {
           problems: ['xflow'],
         },
       );
-      worker = await Test.createTestingModule({
-        imports: [WorkerModule],
-      }).compile();
-      await worker.init();
     });
     afterAll(async () => {
       await solverJudge?.close();
