@@ -14,6 +14,8 @@ export interface ProfiledOperation {
   docsExamined: number;
   /** Index entries read; a regex that cannot bound its scan shows here, not in `docsExamined`. */
   keysExamined: number;
+  /** True when the server sorted in memory (`planSummary` lists only index scans, never a SORT stage). */
+  hasSortStage: boolean;
 }
 
 /** Runs `work` with the database profiler on and returns every operation the server saw: index assertions observe what Mongo did, not the query text. */
@@ -44,5 +46,6 @@ export async function profileQueries(
     planSummary: String(entry.planSummary ?? ''),
     docsExamined: Number(entry.docsExamined ?? 0),
     keysExamined: Number(entry.keysExamined ?? 0),
+    hasSortStage: Boolean(entry.hasSortStage),
   }));
 }

@@ -227,7 +227,7 @@ describe('Community schemas', () => {
     );
     const read = operations.find((entry) => entry.operation === 'query')!;
     expect(read.planSummary).toMatch(/^IXSCAN/);
-    expect(read.planSummary).not.toContain('SORT');
+    expect(read.hasSortStage).toBe(false);
     expect(read.docsExamined).toBeLessThanOrEqual(11);
   });
 });

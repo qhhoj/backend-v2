@@ -250,7 +250,7 @@ describe('blog reads', () => {
       expect(reads.length).toBeGreaterThan(0);
       for (const read of reads) {
         expect(read.planSummary).toContain('IXSCAN');
-        expect(read.planSummary).not.toContain('SORT');
+        expect(read.hasSortStage).toBe(false);
         expect(read.docsExamined).toBeLessThanOrEqual(11);
         expect(read.keysExamined).toBeLessThanOrEqual(11);
       }
