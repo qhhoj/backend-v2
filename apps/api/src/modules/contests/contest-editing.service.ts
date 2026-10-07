@@ -6,6 +6,7 @@ import type { Permission, Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import {
   CONTEST_RESCORE_QUEUE,
+  enqueueContestRescore,
   FormatConfigError,
   notifyContestRescore,
   parseFormatConfig,
@@ -21,6 +22,7 @@ import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
 import { ContestsService } from './contests.service';
 import type { ContestDetailResponse } from './dto/contest-detail.response';
+import type { QueuedResponse } from './dto/queued.response';
 import type {
   ContestProblemDto,
   CreateContestDto,
@@ -134,9 +136,7 @@ export class ContestEditingService {
     key: string,
     dto: UpdateContestDto,
   ): Promise<ContestDetailResponse> {
-    const contest = await this.contestsService.visibleContest(principal, key);
-    if (!ContestAccess.canEdit(principal, ContestAccess.accessView(contest)))
-      throw new AppError('forbidden', 403, 'You cannot edit this contest');
+    const contest = await this.editableContest(principal, key);
     const fields = await this.toFields(principal, dto, contest);
     if (
       contest.formatName === 'final_submission' &&
@@ -158,6 +158,23 @@ export class ContestEditingService {
     )
       await this.contests.propagateLock(contest._id, fields.lockedAfter);
     return this.contestsService.detail(principal, key);
+  }
+
+  /** An editor's manual rescore (legacy admin action). */
+  async rescore(principal: Principal, key: string): Promise<QueuedResponse> {
+    const contest = await this.editableContest(principal, key);
+    await enqueueContestRescore(this.rescores, contest._id);
+    return { queued: true };
+  }
+
+  private async editableContest(
+    principal: Principal,
+    key: string,
+  ): Promise<ContestDocument> {
+    const contest = await this.contestsService.visibleContest(principal, key);
+    if (!ContestAccess.canEdit(principal, ContestAccess.accessView(contest)))
+      throw new AppError('forbidden', 403, 'You cannot edit this contest');
+    return contest;
   }
 
   /** The DTO as stored fields, checked against `current` (null on create). */

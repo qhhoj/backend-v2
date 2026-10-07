@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { Submission } from '@libs/database';
+import { Contest, Submission, uuidStr } from '@libs/database';
 
 /** Writes per `bulkWrite`. */
 export const RESCORE_CHUNK = 1000;
@@ -19,7 +19,17 @@ export class ProblemRescoreRepository {
   constructor(
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
+    @InjectModel(Contest.name) private readonly contests: Model<Contest>,
   ) {}
+
+  /** Contests whose problems include it (`problems.problem` index). */
+  async contestsListing(problemId: string): Promise<string[]> {
+    return (
+      await this.contests
+        .distinct('_id', { 'problems.problem': problemId })
+        .exec()
+    ).map(uuidStr);
+  }
 
   /** Graded rows of the problem, oldest first, through a cursor (`{ problem, status, _id }` index): a problem's history is never held in memory. Compile errors, internal errors and aborts keep their points; rejected submissions stay at 0 (legacy `reject`). */
   gradedRows(problemId: string) {

@@ -1,4 +1,8 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
+import type { Queue } from 'bullmq';
+import { CONTEST_RESCORE_QUEUE, enqueueContestRescore } from '@libs/contests';
+import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { submissionPoints } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
@@ -18,6 +22,8 @@ export class ProblemRescoreService {
     private readonly repository: ProblemRescoreRepository,
     private readonly effectsRepository: SubmissionEffectsRepository,
     private readonly effects: SubmissionEffectsService,
+    @InjectQueue(CONTEST_RESCORE_QUEUE)
+    private readonly contestRescores: Queue<ContestRescoreJob>,
   ) {}
 
   /** Legacy `rescore_problem` with 2a's rounding (`submissionPoints`): each graded submission's points from its case totals and the problem's current points and partial flag, written in chunks; then every user with a graded submission (their points also follow the problem's publicity) and the problem's stats. A second run writes nothing. */
@@ -62,6 +68,9 @@ export class ProblemRescoreService {
           .map((userId) => this.effects.recomputeUser(userId)),
       );
     await this.effects.recomputeProblem(problemId);
+    // Legacy `rescore_problem` called `update_contest` per submission: contest points follow the problem's partial flag. Queued after the problem's writes, so a contest rescore reads them; an enqueue failure fails the job (logged, retried).
+    for (const contestId of await this.repository.contestsListing(problemId))
+      await enqueueContestRescore(this.contestRescores, contestId);
     return { rescored, users: users.length };
   }
 }

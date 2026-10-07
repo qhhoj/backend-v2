@@ -7,6 +7,7 @@ import {
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
+import { ContestRescoreModule } from './jobs/contest-rescore/contest-rescore.module';
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
@@ -26,6 +27,7 @@ import { SubmissionEffectsModule } from './jobs/submission-effects/submission-ef
     SubmissionEffectsModule,
     EffectsSweepModule,
     ProblemRescoreModule,
+    ContestRescoreModule,
   ],
 })
 export class WorkerModule {}

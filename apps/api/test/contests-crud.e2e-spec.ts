@@ -409,6 +409,27 @@ describe('contest CRUD', () => {
       await patch('codeless', contest.key, { accessCode: '' }).expect(200);
     });
 
+    it("queues a rescore on an editor's request only", async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      await authed(
+        api.http().post(contestUrl(contest.key, '/rescore')),
+        sessions.plain,
+      ).expect(403);
+      expect(
+        dataOf<{ queued: boolean }>(
+          await authed(
+            api.http().post(contestUrl(contest.key, '/rescore')),
+            sessions.creator,
+          ).expect(202),
+        ),
+      ).toEqual({ queued: true });
+      expect(
+        (await rescores.getJobs(['waiting'])).map((job) => job.data.contestId),
+      ).toEqual([contest._id]);
+    });
+
     it('queues a rescore only when scoring changes', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id],
