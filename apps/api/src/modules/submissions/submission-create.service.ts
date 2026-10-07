@@ -42,6 +42,8 @@ interface ContestPlan {
   maxSubmissions: number | null;
   /** A running FSO contest: stored PD, judged at its end. */
   finalOnly: boolean;
+  /** Any FSO contest, running or not (legacy `in_fso_contest`): its submissions skip the unfinished limit. */
+  isFinalFormat: boolean;
 }
 
 /** Legacy `ProblemSubmit.form_valid`; inside a current contest that lists the problem the submission is a contest submission (priority 0, lock, pretests, `maxSubmissions`, FSO pending). */
@@ -118,7 +120,7 @@ export class SubmissionCreateService {
         );
       if (
         !spams &&
-        !plan?.finalOnly &&
+        !plan?.isFinalFormat &&
         (await this.submissions.countUnfinished(principal.userId)) >=
           UNFINISHED_LIMIT
       )
@@ -163,9 +165,8 @@ export class SubmissionCreateService {
     if (!current || !entry) return null;
     const { contest, participation } = current;
     const isPretest = contest.runPretestsOnly && entry.isPretested;
-    const finalOnly =
-      contest.formatName === 'final_submission' &&
-      contestPhase(contest, now) !== 'ended';
+    const isFinalFormat = contest.formatName === 'final_submission';
+    const finalOnly = isFinalFormat && contestPhase(contest, now) !== 'ended';
     return {
       fields: {
         priority: SUBMISSION_PRIORITY.contest,
@@ -183,6 +184,7 @@ export class SubmissionCreateService {
       },
       maxSubmissions: entry.maxSubmissions,
       finalOnly,
+      isFinalFormat,
     };
   }
 

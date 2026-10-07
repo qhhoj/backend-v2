@@ -56,6 +56,7 @@ describe('submitting inside a contest', () => {
       ['bob', {}],
       ['carol', {}],
       ['dave', {}],
+      ['erin', {}],
       ['spammer', { permissions: ['judge.spam_submission'] }],
     ];
     for (const [name, extra] of roles) {
@@ -86,7 +87,9 @@ describe('submitting inside a contest', () => {
       isPretested: true,
       lockedAfter,
     });
-    expect((await api.submissions.findById(id).lean())!.contest).toBeTruthy();
+    expect(uuidStr((await api.submissions.findById(id).lean())!.contest!)).toBe(
+      contest._id,
+    );
     expect(await api.contestSubmissions.findById(id).lean()).toMatchObject({
       points: 0,
       isPretest: true,
@@ -215,5 +218,59 @@ describe('submitting inside a contest', () => {
     expect((await bridgeCommands(api)).map((command) => command.type)).toEqual([
       'judge',
     ]);
+  });
+
+  it('judges on pretests only when the contest runs pretests only and the problem has them', async () => {
+    const withPretests = await createProblem(api, catalog, {
+      code: 'pt_with',
+      isPublic: false,
+    });
+    const without = await createProblem(api, catalog, {
+      code: 'pt_without',
+      isPublic: false,
+    });
+    const problems = [
+      contestProblem(withPretests._id, 0, { isPretested: true }),
+      contestProblem(without._id, 1, { isPretested: false }),
+    ];
+    const pretestsContest = await createContest(api, {
+      runPretestsOnly: true,
+      problems,
+    });
+    await enter('spammer', pretestsContest._id);
+    const flags = async (code: string) => {
+      const id = idOf(await submit('spammer', code).expect(201));
+      await api.submissions.updateOne({ _id: id }, { status: 'D' });
+      return [
+        (await api.submissions.findById(id).lean())!.isPretested,
+        (await api.contestSubmissions.findById(id).lean())!.isPretest,
+      ];
+    };
+    expect(await flags('pt_with')).toEqual([true, true]);
+    expect(await flags('pt_without')).toEqual([false, false]);
+    const fullContest = await createContest(api, {
+      runPretestsOnly: false,
+      problems,
+    });
+    await enter('spammer', fullContest._id);
+    expect(await flags('pt_with')).toEqual([false, false]);
+  });
+
+  it('lets an FSO contestant submit while holding the unfinished limit of queued submissions', async () => {
+    await createProblem(api, catalog, { code: 'fso_outside' });
+    const inside = await createProblem(api, catalog, {
+      code: 'fso_inside',
+      isPublic: false,
+    });
+    await submit('erin', 'fso_outside').expect(201);
+    await submit('erin', 'fso_outside').expect(201);
+    await submit('erin', 'fso_outside').expect(429);
+    const contest = await createContest(api, {
+      formatName: 'final_submission',
+      problems: [contestProblem(inside._id, 0)],
+    });
+    await enter('erin', contest._id);
+    const id = idOf(await submit('erin', 'fso_inside').expect(201));
+    expect((await api.submissions.findById(id).lean())!.status).toBe('PD');
   });
 });

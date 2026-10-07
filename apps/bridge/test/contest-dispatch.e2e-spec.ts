@@ -222,4 +222,44 @@ describe('contest submissions in the bridge', () => {
       attemptNo: 1,
     });
   });
+
+  it('bans judges for a spectator like a live participant', async () => {
+    const { problem, contest, participation, banned } = await contestWith();
+    const spectating = await participation(-1);
+    const { _id: id } = await seedContestSubmission(bridge, catalog, {
+      contest: contest._id,
+      participation: spectating._id,
+      problem: problem._id,
+    });
+    const judge = new RecordingJudge(banned, [problem.code]);
+    await dispatch().register(judge);
+    await enqueue(id);
+    expect(sentTo(judge)).toEqual([]);
+  });
+
+  it('judges on pretests only when the contest runs them and the problem has them', async () => {
+    const { problem, contest, participation } = await contestWith({
+      runPretestsOnly: true,
+      bannedJudges: [],
+      problems: [],
+    });
+    await bridge.contests.updateOne(
+      { _id: contest._id },
+      {
+        problems: [
+          { problem: problem._id, points: 100, order: 0, isPretested: false },
+        ],
+      },
+    );
+    const live = await participation(0);
+    const { _id: id } = await seedContestSubmission(bridge, catalog, {
+      contest: contest._id,
+      participation: live._id,
+      problem: problem._id,
+    });
+    const judge = new RecordingJudge(`nopre${codes}`, [problem.code]);
+    await dispatch().register(judge);
+    await enqueue(id);
+    expect(judge.received[0]).toMatchObject({ pretestsOnly: false });
+  });
 });
