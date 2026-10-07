@@ -79,6 +79,11 @@ describe('parseOfficialRanking', () => {
       `Username,Full Name,X,Points\n${'a'.repeat(201)},A,x,1`,
     ],
     ['an empty file', ''],
+    [
+      'a control character in the header',
+      'Username,Full Name,X,Points,P\u0007\na,A,x,1,1',
+    ],
+    ['a CR-only file', 'Username,Full Name,X,Points\ra,A,x,1'],
   ])('rejects %s', (_case, text) => {
     expect(() => parseOfficialRanking(text)).toThrow(CsvRankingError);
   });

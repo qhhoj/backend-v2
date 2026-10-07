@@ -13,7 +13,7 @@ const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
-/** Fields of every record; quoted fields may hold commas, quotes ("") and newlines. */
+/** Fields of every record; quoted fields may hold commas and quotes (""); a newline is lexed but later refused as a control character. */
 function records(text: string): string[][] {
   const result: string[][] = [];
   let record: string[] = [];
@@ -84,6 +84,8 @@ export function parseOfficialRanking(csv: string): {
     csv.charCodeAt(0) === BYTE_ORDER_MARK ? csv.slice(1) : csv,
   );
   if (!header) throw new CsvRankingError('The CSV is empty');
+  if (header.some((cell) => CONTROL.test(cell)))
+    throw new CsvRankingError('The header holds a control character');
   const column = (name: string) => {
     const position = header.indexOf(name);
     if (position < 0) throw new CsvRankingError(`Missing the ${name} column`);
