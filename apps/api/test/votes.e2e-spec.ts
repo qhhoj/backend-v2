@@ -3,6 +3,7 @@ import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
 import { CONTRIBUTION_POINTS_QUEUE } from '@libs/community';
 import type { ContributionPointsJob, VoteScore } from '@libs/community';
+import { waitUntil } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import { VotesService } from '../src/modules/contributions/votes.service';
@@ -188,9 +189,48 @@ describe('vote ledger', () => {
     api.app
       .get(ProblemEvents)
       .emit('publicityChanged', newId(), suggester.userId);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    const waitingUsers = async () =>
+      (await queue.getJobs(['waiting'])).map((job) => job.data.userId).sort();
+    await waitUntil(
+      async () =>
+        JSON.stringify(await waitingUsers()) ===
+        JSON.stringify([author.userId, suggester.userId].sort()),
+    );
+  });
+
+  it('queues nothing for a refused vote or a problem without suggester', async () => {
+    const author = await person();
+    const comment = await createComment(api, {
+      page: { type: 'blog', id: (await createPost(api))._id },
+      author: author.userId,
+    });
+    await expect(
+      castOn(author, comment._id, author.userId, 1),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      castOn(await person({ mute: true }), comment._id, author.userId, 1),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      castOn(await person(), newId(), author.userId, 1),
+    ).rejects.toMatchObject({ status: 404 });
+    const events = api.app.get(ProblemEvents);
+    events.emit('publicityChanged', newId(), null);
+    const marker = (await person()).userId;
+    events.emit('publicityChanged', newId(), marker);
+    await waitUntil(async () => (await queue.getWaitingCount()) > 0);
     expect(
-      (await queue.getJobs(['waiting'])).map((job) => job.data.userId).sort(),
-    ).toEqual([author.userId, suggester.userId].sort());
+      (await queue.getJobs(['waiting'])).map((job) => job.data.userId),
+    ).toEqual([marker]);
+  });
+
+  it('answers 401 for a voter deleted while signed in', async () => {
+    const author = await person();
+    const comment = await createComment(api, {
+      page: { type: 'blog', id: (await createPost(api))._id },
+      author: author.userId,
+    });
+    await expect(
+      castOn({ ...author, userId: newId() }, comment._id, author.userId, 1),
+    ).rejects.toMatchObject({ status: 401 });
   });
 });

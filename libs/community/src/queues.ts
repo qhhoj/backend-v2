@@ -34,6 +34,7 @@ interface FlaggedJob<Data> {
 
 /** At most one waiting job per id: a Redis flag set here and cleared when the job starts (a `jobId` would also drop adds during a running recompute, leaving it stale). Duplicate ids collapse too. Never rethrown: the write that caused it is committed; a lost recompute waits for the next change (logged). */
 async function enqueueFlagged<Data>(
+  // Untyped: BullMQ's `addBulk` job-name typing rejects `Queue<Data>` with a plain string name.
   queue: Queue,
   redis: Redis,
   ids: readonly string[],
