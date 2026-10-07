@@ -3,7 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 import { AppError, isDuplicateKey } from '@libs/common';
 import { LIVE } from '@libs/contests';
-import { ContestParticipation, isUuid, User, uuidStr } from '@libs/database';
+import {
+  Contest,
+  ContestParticipation,
+  isUuid,
+  User,
+  uuidStr,
+} from '@libs/database';
 import { VIRTUAL_JOIN_ATTEMPTS } from './rate-limits';
 
 export type ParticipationDocument = HydratedDocument<ContestParticipation>;
@@ -14,6 +20,7 @@ export class ParticipationsRepository {
     @InjectModel(ContestParticipation.name)
     private readonly participations: Model<ContestParticipation>,
     @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(Contest.name) private readonly contests: Model<Contest>,
   ) {}
 
   findById(id: string): Promise<ParticipationDocument | null> {
@@ -78,6 +85,41 @@ export class ParticipationsRepository {
         { $set: { currentParticipation: null } },
       )
       .exec();
+  }
+
+  async setDisqualified(
+    id: string,
+    disqualified: boolean,
+  ): Promise<ParticipationDocument> {
+    return (await this.participations
+      .findByIdAndUpdate(
+        id,
+        { $set: { isDisqualified: disqualified } },
+        { new: true },
+      )
+      .exec())!;
+  }
+
+  /** Legacy `check_ban` count: the user's disqualified participations in contests that are not organisation-private. */
+  async countOpenDisqualifications(userId: string): Promise<number> {
+    const rows = await this.participations
+      .find({ user: userId, isDisqualified: true }, { contest: 1 })
+      .lean();
+    if (!rows.length) return 0;
+    const open = new Set(
+      (
+        await this.contests
+          .find(
+            {
+              _id: { $in: rows.map((row) => row.contest) },
+              isOrganizationPrivate: false,
+            },
+            { _id: 1 },
+          )
+          .lean()
+      ).map((contest) => uuidStr(contest._id)),
+    );
+    return rows.filter((row) => open.has(uuidStr(row.contest))).length;
   }
 
   /** Live or spectating: the unique index makes concurrent joins meet on one row. */

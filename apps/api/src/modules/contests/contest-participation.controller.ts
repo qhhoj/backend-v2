@@ -17,7 +17,9 @@ import { ParticipationSummaryResponse } from './dto/contest-detail.response';
 import { ContestKeyParamDto } from './dto/contest-params.dto';
 import {
   AccessCodeDto,
+  DisqualifyDto,
   ParticipationListQueryDto,
+  ParticipationParamsDto,
 } from './dto/participation.dto';
 import {
   CurrentParticipationResponse,
@@ -67,6 +69,15 @@ export class ContestParticipationController {
     @Param() { key }: ContestKeyParamDto,
   ): Promise<void> {
     return this.participation.leave(auth.principal, key);
+  }
+
+  @Post(':key/participations/:id/disqualify')
+  disqualify(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key, id }: ParticipationParamsDto,
+    @Body() { disqualified }: DisqualifyDto,
+  ): Promise<ParticipationSummaryResponse> {
+    return this.participation.disqualify(auth.principal, key, id, disqualified);
   }
 
   @Get(':key/participations')

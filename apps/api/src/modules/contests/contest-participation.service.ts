@@ -1,16 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
+import type Redis from 'ioredis';
 import { constantTimeEqual, sha256, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated, RateLimitService } from '@libs/common';
 import {
+  AppError,
+  ENV,
+  Paginated,
+  RateLimitService,
+  REDIS,
+} from '@libs/common';
+import type { Env } from '@libs/common';
+import {
+  CONTEST_RESCORE_QUEUE,
   contestPhase,
   hasParticipationEnded,
   isFrozen,
   isRegistrationOpen,
   LIVE,
+  notifyContestRescore,
+  purgeRankingCache,
   requiresRegistration,
   SPECTATE,
 } from '@libs/contests';
+import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { ContestParticipation } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
@@ -33,12 +47,18 @@ import {
   ACCESS_CODE_WINDOW_SECONDS,
 } from './rate-limits';
 
+/** Legacy `VNOJ_CONTEST_CHEATING_BAN_MESSAGE`. */
+export const CONTEST_CHEATING_BAN_REASON =
+  'Banned for multiple cheating offenses during contests';
+
 const conflict = (message: string) => new AppError('conflict', 409, message);
 const forbidden = (message: string) => new AppError('forbidden', 403, message);
 
 /** Legacy `ContestRegister`, `ContestJoin`, `ContestLeave` and `ContestParticipationList`. */
 @Injectable()
 export class ContestParticipationService {
+  private readonly logger = new Logger(ContestParticipationService.name);
+
   constructor(
     private readonly contestsService: ContestsService,
     private readonly contests: ContestsRepository,
@@ -46,6 +66,10 @@ export class ContestParticipationService {
     private readonly currentContest: CurrentContestService,
     private readonly users: UsersRepository,
     private readonly rateLimit: RateLimitService,
+    @InjectQueue(CONTEST_RESCORE_QUEUE)
+    private readonly rescores: Queue<ContestRescoreJob>,
+    @Inject(REDIS) private readonly redis: Redis,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async register(
@@ -153,6 +177,59 @@ export class ContestParticipationService {
     );
     await this.refreshCounts(contest._id);
     return ParticipationSummaryResponse.from(participation, contest);
+  }
+
+  /** Legacy `set_disqualified`, with an explicit value instead of a toggle: rescored at -9999 (or back) by the worker, banned from (or allowed back into) the contest and moved out of it, then the cheating ban. */
+  async disqualify(
+    principal: Principal,
+    key: string,
+    participationId: string,
+    disqualified: boolean,
+  ): Promise<ParticipationSummaryResponse> {
+    const contest = await this.contestsService.visibleContest(principal, key);
+    if (!ContestAccess.canEdit(principal, ContestAccess.accessView(contest)))
+      throw forbidden('You cannot edit this contest.');
+    const participation =
+      await this.participationRows.findById(participationId);
+    if (!participation || uuidStr(participation.contest) !== contest._id)
+      throw new AppError('not_found', 404, 'No such participation');
+    const userId = uuidStr(participation.user);
+    const updated = await this.participationRows.setDisqualified(
+      participation._id,
+      disqualified,
+    );
+    await this.contests.setBanned(contest._id, userId, disqualified);
+    if (disqualified)
+      await this.participationRows.clearCurrent(userId, participation._id);
+    await purgeRankingCache(this.redis, contest._id);
+    void notifyContestRescore(this.rescores, contest._id, this.logger);
+    if (!contest.isOrganizationPrivate) await this.checkCheatingBan(userId);
+    return ParticipationSummaryResponse.from(updated, contest);
+  }
+
+  /** Legacy `check_ban`, off unless `CONTEST_BAN_AFTER_DISQUALIFICATIONS` is set: at the threshold the account is banned (and unlisted, and signed out: `isActive` is what the session guard checks); below it, only this ban is lifted. */
+  private async checkCheatingBan(userId: string): Promise<void> {
+    const limit = this.env.contestBanAfterDisqualifications;
+    if (!limit) return;
+    const [count, user] = await Promise.all([
+      this.participationRows.countOpenDisqualifications(userId),
+      this.users.findById(userId),
+    ]);
+    if (!user) return;
+    if (count >= limit && user.banReason === null)
+      await this.users.update(userId, {
+        banReason: CONTEST_CHEATING_BAN_REASON,
+        displayRank: 'banned',
+        isUnlisted: true,
+        isActive: false,
+      });
+    else if (count < limit && user.banReason === CONTEST_CHEATING_BAN_REASON)
+      await this.users.update(userId, {
+        banReason: null,
+        displayRank: 'user',
+        isUnlisted: false,
+        isActive: true,
+      });
   }
 
   async leave(principal: Principal, key: string): Promise<void> {

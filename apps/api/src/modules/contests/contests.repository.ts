@@ -34,6 +34,21 @@ export class ContestsRepository {
     return this.contests.findOne({ key }).exec();
   }
 
+  async setBanned(
+    contestId: string,
+    userId: string,
+    banned: boolean,
+  ): Promise<void> {
+    await this.contests
+      .updateOne(
+        { _id: contestId },
+        banned
+          ? { $addToSet: { bannedUsers: userId } }
+          : { $pull: { bannedUsers: userId } },
+      )
+      .exec();
+  }
+
   findById(id: string): Promise<ContestDocument | null> {
     return isUuid(id)
       ? this.contests.findById(id).exec()

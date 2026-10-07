@@ -31,11 +31,22 @@ describe('loadEnv', () => {
       pdfRenderTimeoutMs: 30000,
       pdfMaxBytes: 52428800,
       pdfConcurrency: 2,
+      contestBanAfterDisqualifications: 0,
       judgeBridgePort: 9999,
       judgeBridgeHost: '0.0.0.0',
       mediaUrl: '/media',
       oauth: { google: null, facebook: null, github: null },
     }));
+  it('reads the disqualification ban threshold', () => {
+    expect(
+      loadEnv({ ...valid, CONTEST_BAN_AFTER_DISQUALIFICATIONS: '3' })
+        .contestBanAfterDisqualifications,
+    ).toBe(3);
+    for (const bad of ['-1', '1.5', 'x'])
+      expect(() =>
+        loadEnv({ ...valid, CONTEST_BAN_AFTER_DISQUALIFICATIONS: bad }),
+      ).toThrow('CONTEST_BAN_AFTER_DISQUALIFICATIONS');
+  });
   it('enables an oauth provider only with both client id and secret', () =>
     expect(
       loadEnv({

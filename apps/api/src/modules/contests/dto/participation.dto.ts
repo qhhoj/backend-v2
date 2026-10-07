@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -17,4 +18,14 @@ export class ParticipationListQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 50;
   /** Username; others than the viewer need edit rights. */
   @IsOptional() @IsString() @MaxLength(30) user?: string;
+}
+
+export class DisqualifyDto {
+  @IsBoolean() disqualified!: boolean;
+}
+
+/** Unvalidated shape: a malformed id is a 404. */
+export class ParticipationParamsDto {
+  @IsString() key!: string;
+  @IsString() id!: string;
 }

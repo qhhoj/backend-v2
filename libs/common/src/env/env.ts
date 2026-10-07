@@ -32,6 +32,8 @@ export interface Env {
   pdfMaxBytes: number;
   /** Worker: PDF renders running at once. */
   pdfConcurrency: number;
+  /** Disqualifications (in contests that are not organisation-private) that ban an account; 0 turns the ban off. */
+  contestBanAfterDisqualifications: number;
   /** Bridge: judges connect to this TCP port (DMOJ judge protocol); 0 picks a free port (tests). */
   judgeBridgePort: number;
   /** Bridge: interface the judge port listens on. */
@@ -93,6 +95,12 @@ export function loadEnv(
       problems.push(`${name} must be a positive integer`);
     return value;
   };
+  const nonNegativeInteger = (name: string, fallback: number): number => {
+    const value = Number(source[name] ?? fallback);
+    if (!Number.isInteger(value) || value < 0)
+      problems.push(`${name} must be a non-negative integer`);
+    return value;
+  };
   /** Blank counts as unset; `min` 0 allows "any free port". */
   const portNumber = (name: string, fallback: number, min: number): number => {
     const raw = source[name]?.trim();
@@ -124,6 +132,10 @@ export function loadEnv(
     pdfRenderTimeoutMs: positiveInteger('PDF_RENDER_TIMEOUT_MS', 30_000),
     pdfMaxBytes: positiveInteger('PDF_MAX_BYTES', 52_428_800),
     pdfConcurrency: positiveInteger('PDF_CONCURRENCY', 2),
+    contestBanAfterDisqualifications: nonNegativeInteger(
+      'CONTEST_BAN_AFTER_DISQUALIFICATIONS',
+      0,
+    ),
     judgeBridgePort: portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
     judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
     oauth: {
