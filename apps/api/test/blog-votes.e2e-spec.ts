@@ -1,9 +1,9 @@
 import type { PostDetailResponse } from '../src/modules/blog/core/dto/post.response';
 import type { VoteResponse } from '../src/modules/contributions/dto/vote.response';
-import { createPost, postUrl, writer } from './community-fixtures';
+import { createPost, postUrl, signedInWriter } from './community-fixtures';
 import { clearRateLimits } from './contest-fixtures';
 import { createOrganization } from './organization-fixtures';
-import { authed, loginAs } from './problem-fixtures';
+import { authed } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -12,10 +12,8 @@ import type { ApiTest } from './setup';
 describe('blog votes', () => {
   let api: ApiTest;
   let userCount = 0;
-  const person = async (extra = {}) => {
-    const user = await writer(api, `postvoter${(userCount += 1)}`, extra);
-    return { user, session: await loginAs(api, user._id) };
-  };
+  const person = (extra = {}) =>
+    signedInWriter(api, `postvoter${(userCount += 1)}`, extra);
   const vote = (id: string, session: TestSession, score: number) =>
     authed(api.http().put(postUrl(id, '/vote')), session).send({ score });
 
@@ -62,7 +60,12 @@ describe('blog votes', () => {
     await vote(organizationPost._id, outsider, 1)
       .expect(404)
       .expect(errorCode('not_found'));
+    const scheduled = await createPost(api, {
+      authors: [author._id],
+      publishOn: new Date(Date.now() + 3_600_000),
+    });
     await vote(draft._id, outsider, 1).expect(404);
+    await vote(scheduled._id, outsider, 1).expect(404);
     await vote('nope', outsider, 1).expect(404);
     await vote(organizationPost._id, memberSession, 1).expect(200);
     expect(
@@ -84,5 +87,16 @@ describe('blog votes', () => {
     })
       .send({ score: 1 })
       .expect(401);
+  });
+
+  it('answers 429 over the shared 60/min vote limit', async () => {
+    const { user: author } = await person();
+    const { session } = await person();
+    const post = await createPost(api, { authors: [author._id] });
+    for (let index = 0; index < 60; index += 1)
+      await vote(post._id, session, index % 2 ? 1 : -1).expect(200);
+    await vote(post._id, session, 1)
+      .expect(429)
+      .expect(errorCode('rate_limited'));
   });
 });
