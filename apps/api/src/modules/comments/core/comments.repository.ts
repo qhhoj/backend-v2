@@ -77,6 +77,6 @@ export class CommentsRepository {
         { $group: { _id: '$page.id', count: { $sum: 1 } } },
       ])
       .exec();
-    return new Map(rows.map((row) => [uuidStr(row._id as string), row.count]));
+    return new Map(rows.map((row) => [uuidStr(row._id), row.count]));
   }
 }

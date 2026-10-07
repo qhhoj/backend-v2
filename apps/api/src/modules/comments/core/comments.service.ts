@@ -101,8 +101,7 @@ export class CommentsService {
     { allowHidden }: { allowHidden: boolean },
   ): Promise<{ comment: CommentDocument; info: PageInfo }> {
     const comment = await this.comments.findById(id);
-    const moderates =
-      principal !== null && hasPermission(principal, 'judge.change_comment');
+    const moderates = this.moderates(principal);
     const page = comment && {
       type: comment.page.type,
       id: uuidStr(comment.page.id),
@@ -134,8 +133,7 @@ export class CommentsService {
     const authorOf = new Map(
       authors.map((user) => [user._id, UserSummaryResponse.from(user)]),
     );
-    const moderates =
-      principal !== null && hasPermission(principal, 'judge.change_comment');
+    const moderates = this.moderates(principal);
     return comments.map((comment) => {
       const authorId = uuidStr(comment.author);
       return CommentResponse.from(
@@ -160,6 +158,12 @@ export class CommentsService {
   /** A contest problem's thread is hidden from its contestants (legacy showed the clarifications area instead), unless they hold `override_comment_lock`. A plain lock keeps the thread readable. */
   hidesThread(principal: Principal | null, info: PageInfo): boolean {
     return info.contestLocked && !this.overridesLock(principal);
+  }
+
+  private moderates(principal: Principal | null): boolean {
+    return (
+      principal !== null && hasPermission(principal, 'judge.change_comment')
+    );
   }
 
   private overridesLock(principal: Principal | null): boolean {
