@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { loadEnv } from './env';
 import { validEnv } from './env.fixture';
 
@@ -65,6 +68,25 @@ describe('loadEnv', () => {
     expect(withRoot('/srv/media/..cache')).toThrow(/CONTEST_DATA_ROOT/);
     expect(withRoot('/srv/media')).toThrow(/CONTEST_DATA_ROOT/);
     expect(withRoot('/srv/media-data')).not.toThrow();
+  });
+  it('refuses a contest data root that reaches MEDIA_ROOT through a symlink', () => {
+    const base = mkdtempSync(join(tmpdir(), 'qhhoj-env-'));
+    try {
+      mkdirSync(join(base, 'media/data'), { recursive: true });
+      symlinkSync(join(base, 'media/data'), join(base, 'link'));
+      const withRoot = (root: string) => () =>
+        loadEnv({
+          ...valid,
+          MEDIA_ROOT: join(base, 'media'),
+          CONTEST_DATA_ROOT: root,
+        });
+      expect(withRoot(join(base, 'link'))).toThrow(/CONTEST_DATA_ROOT/);
+      // Not yet created below the link.
+      expect(withRoot(join(base, 'link/new'))).toThrow(/CONTEST_DATA_ROOT/);
+      expect(withRoot(join(base, 'elsewhere'))).not.toThrow();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
   it('reads the disqualification ban threshold', () => {
     expect(

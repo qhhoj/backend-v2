@@ -10,7 +10,7 @@ export const ANNOUNCEMENT_TITLE_MAX = 100;
 export class ContestAnnouncement {
   @IdProp() _id!: string;
   @Prop({ type: UUID, required: true }) contest!: string;
-  @Prop({ required: true, minlength: 1, maxlength: ANNOUNCEMENT_TITLE_MAX })
+  @Prop({ required: true, maxlength: ANNOUNCEMENT_TITLE_MAX })
   title!: string;
   @Prop({ default: '' }) description!: string;
   @Prop({ default: '' }) descriptionHtml!: string;

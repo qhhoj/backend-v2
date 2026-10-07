@@ -1,4 +1,5 @@
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 export interface OAuthClient {
   clientId: string;
@@ -160,11 +161,21 @@ export function loadEnv(
     problems.push('TOKEN_SECRET must be at least 32 chars');
   if (!LOG_LEVELS.includes(env.logLevel))
     problems.push(`LOG_LEVEL must be one of ${LOG_LEVELS.join('|')}`);
+  /** Symlinks followed, as nginx does; a root not created yet resolves through its nearest existing ancestor. A bind mount overlapping at the host level is not detected. */
+  const realPath = (path: string): string => {
+    try {
+      return realpathSync(path);
+    } catch {
+      const parent = dirname(resolve(path));
+      return parent === resolve(path)
+        ? parent
+        : join(realPath(parent), resolve(path).slice(parent.length + 1));
+    }
+  };
   const inside = (child: string, parent: string) => {
-    const relation = relative(resolve(parent), resolve(child));
+    const relation = relative(realPath(parent), realPath(child));
     // `..cache` is a child; only a leading `..` segment leaves the parent.
-    const [head] = relation.split(sep);
-    return relation === '' || (head !== '..' && !isAbsolute(relation));
+    return relation.split(sep)[0] !== '..' && !isAbsolute(relation);
   };
   if (
     env.contestDataRoot &&

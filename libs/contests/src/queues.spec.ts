@@ -152,7 +152,7 @@ describe('contest extras queues', () => {
     await ratingQueue.close();
   });
 
-  it('keeps one MOSS or data job per contest, dropped once it ends', async () => {
+  it('dedupes MOSS and data jobs by contest id; one attempt, removed on completion and failure', async () => {
     const contestId = newId();
     await mossQueue.add(
       CONTEST_MOSS_JOB,

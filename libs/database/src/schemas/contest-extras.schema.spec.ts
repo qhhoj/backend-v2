@@ -4,6 +4,7 @@ import { startMongo } from '../testing';
 import { newId } from '../uuid';
 import { ContestSchema } from './contest.schema';
 import { ContestAnnouncementSchema } from './contest-announcement.schema';
+import { ContestOfficialRankingSchema } from './contest-official-ranking.schema';
 import { ContestMossSchema } from './contest-moss.schema';
 import { ContestPublicRankingLinkSchema } from './contest-public-ranking-link.schema';
 import { RatingSchema } from './rating.schema';
@@ -19,6 +20,10 @@ describe('Contest extras schemas', () => {
   const Links = mongoose.model(
     'ContestPublicRankingLinkSchemaSpec',
     ContestPublicRankingLinkSchema,
+  );
+  const Rankings = mongoose.model(
+    'ContestOfficialRankingSchemaSpec',
+    ContestOfficialRankingSchema,
   );
   const Contests = mongoose.model('ContestExtrasSchemaSpec', ContestSchema);
 
@@ -56,6 +61,48 @@ describe('Contest extras schemas', () => {
     await expect(
       Ratings.create({ ...fields(), participation: first.participation }),
     ).rejects.toThrow(/duplicate key/);
+  });
+
+  it('indexes ratings for history reads and range deletes', async () => {
+    const keys = (await Ratings.listIndexes()).map((index: { key: object }) =>
+      JSON.stringify(index.key),
+    );
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        '{"user":1,"contestEndTime":-1}',
+        '{"contestEndTime":1}',
+      ]),
+    );
+  });
+
+  it('rejects a rank below 1, a zero expiry amount and an overlong official ranking name', async () => {
+    await expect(
+      Ratings.create({
+        user: newId(),
+        contest: newId(),
+        participation: newId(),
+        contestEndTime: new Date(),
+        rank: 0.5,
+        rating: 1,
+        mean: 1,
+        performance: 1,
+        lastRated: new Date(),
+      }),
+    ).rejects.toThrow(/rank/);
+    await expect(
+      Links.create({
+        contest: newId(),
+        token: 'D'.repeat(18),
+        regeneratedAt: new Date(),
+        expiryAmount: 0,
+      }),
+    ).rejects.toThrow(/expiryAmount/);
+    await expect(
+      Rankings.create({
+        _id: newId(),
+        rows: [{ username: 'u'.repeat(201), scores: [], totalScore: 0 }],
+      }),
+    ).rejects.toThrow(/username/);
   });
 
   it('accepts only the five MOSS languages and one row per contest, problem and language', async () => {
