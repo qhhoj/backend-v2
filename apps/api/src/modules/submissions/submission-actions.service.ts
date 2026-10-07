@@ -102,6 +102,12 @@ export class SubmissionActionsService {
     this.assertManagesProblem(principal, problem, 'judge.rejudge_submission');
     if (isLocked(submission))
       throw new AppError('conflict', 409, 'The submission is locked');
+    if (submission.status === 'PD')
+      throw new AppError(
+        'conflict',
+        409,
+        'Pending final-submission rows are judged when the contest ends',
+      );
     if (
       !(await this.submissions.resetForJudging(
         [id],

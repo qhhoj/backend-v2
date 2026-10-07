@@ -180,11 +180,14 @@ export class SubmissionsRepository {
     return modifiedCount === 1;
   }
 
-  /** Back to QU at `priority` with every result cleared (`requeueUpdate`), except while a judge holds it (P/G). Returns how many were reset. */
+  /** Back to QU at `priority` with every result cleared (`requeueUpdate`), except while a judge holds it (P/G) or it awaits its contest's end (PD). Returns how many were reset. */
   async resetForJudging(ids: string[], priority: number): Promise<number> {
     const { modifiedCount } = await this.submissions
       .updateMany(
-        { _id: { $in: ids }, status: { $nin: [...IN_FLIGHT_STATUSES] } },
+        {
+          _id: { $in: ids },
+          status: { $nin: [...IN_FLIGHT_STATUSES, 'PD'] },
+        },
         requeueUpdate(priority),
       )
       .exec();

@@ -10,6 +10,9 @@ import {
 import { gradedJobOf, requeueUpdate } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 
+/** Pending rows an editor rejected stay rejected: final judging never requeues them. */
+const JUDGEABLE_PENDING = { status: 'PD', result: { $ne: 'RJ' } } as const;
+
 export type FinalJudgeContest = Pick<
   Contest,
   'formatName' | 'formatConfig' | 'startTime' | 'endTime'
@@ -37,7 +40,9 @@ export class ContestFinalJudgeRepository {
 
   /** Contests holding pending rows (`{status, contest, _id}` index). */
   async pendingContestIds(): Promise<string[]> {
-    return (await this.submissions.distinct('contest', { status: 'PD' }).exec())
+    return (
+      await this.submissions.distinct('contest', JUDGEABLE_PENDING).exec()
+    )
       .filter((id) => id !== null)
       .map(uuidStr);
   }
@@ -49,7 +54,7 @@ export class ContestFinalJudgeRepository {
   ): Promise<SubmissionGradedJob[]> {
     const rows = await this.submissions
       .find(
-        { status: 'PD', contest: contestId },
+        { ...JUDGEABLE_PENDING, contest: contestId },
         { _id: 1, user: 1, problem: 1 },
       )
       .sort({ _id: 1 })
@@ -62,7 +67,7 @@ export class ContestFinalJudgeRepository {
   async requeue(ids: string[]): Promise<void> {
     await this.submissions
       .updateMany(
-        { _id: { $in: ids }, status: 'PD' },
+        { _id: { $in: ids }, ...JUDGEABLE_PENDING },
         requeueUpdate(SUBMISSION_PRIORITY.batchRejudge),
       )
       .exec();

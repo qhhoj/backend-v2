@@ -6,6 +6,7 @@ import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
   finalJudgeJobId,
+  requestFinalJudge,
   rescheduleFinalJudge,
 } from '@libs/contests';
 import type { ContestFinalJudgeJob, FinalJudgeTarget } from '@libs/contests';
@@ -155,6 +156,37 @@ describe('FSO final judging', () => {
     ]);
     expect(await service.judgeFinal(manualOnly._id, true)).toBe(2);
     expect(await statusesOf(waiting.ids)).toEqual(['QU', 'QU']);
+  });
+
+  it('leaves a rejected pending submission rejected', async () => {
+    const contest = await fsoContest();
+    const { ids, problem, participation } = await pending(contest, 2);
+    const rejected = await seedContestSubmission(
+      worker,
+      participation,
+      problem._id,
+      { status: 'PD', result: 'RJ', points: 0 },
+    );
+    expect(await service.sweep()).toBe(2);
+    expect(await service.judgeFinal(contest._id, true)).toBe(0);
+    expect(
+      await worker.submissions.findById(rejected._id).lean(),
+    ).toMatchObject({ status: 'PD', result: 'RJ' });
+    expect((await commandedIds()).sort()).toEqual([...ids].sort());
+  });
+
+  it("runs an editor's queued request through the processor, whatever autoJudge says", async () => {
+    const queue = worker.module.get<Queue<ContestFinalJudgeJob>>(
+      getQueueToken(CONTEST_FINAL_JUDGE_QUEUE),
+    );
+    const contest = await fsoContest({ formatConfig: { autoJudge: false } });
+    const { ids } = await pending(contest, 2);
+    await requestFinalJudge(queue, contest._id);
+    await waitUntil(
+      async () => (await commandedIds()).length === ids.length,
+      10_000,
+    );
+    expect(await statusesOf(ids)).toEqual(['QU', 'QU']);
   });
 
   it('follows an endTime edit and ignores the stale job', async () => {

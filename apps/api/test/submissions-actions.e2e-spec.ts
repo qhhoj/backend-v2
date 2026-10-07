@@ -235,6 +235,15 @@ describe('submission actions', () => {
       expect((await row(id)).status).toBe('D');
     });
 
+    it('refuses rejudging a pending final-submission row: it waits for the contest to end', async () => {
+      const id = await seed({ status: 'PD', result: null });
+      await post('manager', `${SUBMISSIONS}/${id}/rejudge`)
+        .expect(409)
+        .expect(errorCode('conflict'));
+      expect((await row(id)).status).toBe('PD');
+      expect(await bridgeCommands(api)).toEqual([]);
+    });
+
     it('rejects a finished submission: RJ, no points, cases cleared, graded', async () => {
       const id = await seed({
         points: 100,

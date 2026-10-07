@@ -55,12 +55,12 @@ export class ContestFinalJudgeService {
         ) {
           const ids = rows.map((row) => row.submissionId);
           await this.repository.requeue(ids);
+          await this.commands.judge(ids);
           await Promise.all(
             rows.map((row) =>
               this.events.publish(submissionEvent(row, 'queued', 'QU')),
             ),
           );
-          await this.commands.judge(ids);
           requeued += ids.length;
         }
       },
