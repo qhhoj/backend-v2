@@ -20,7 +20,7 @@
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating)
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier, `runCoalesced`
@@ -28,7 +28,7 @@ libs/
   auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
-  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating), one module per format in `formats/` (registry in `formats/registry.ts`)
+  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
@@ -57,7 +57,7 @@ tools/legacy/   regenerates the fixtures
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`)
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-moss`, `contest-data`)
 - `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
@@ -214,6 +214,19 @@ tools/legacy/   regenerates the fixtures
 - Legacy migration (migrator requirement): `formatConfig` keys `last_score_altering` -> `lastScoreAltering`, `auto_judge` -> `autoJudge`, `LSO` -> `lso`; drop `cumtime` on `final_submission`; format name `Ultimate` -> `ultimate`; Lua label scripts become `labelStyle`
 - Deviations from legacy: `ultimate` takes the latest row (no double count on equal dates), writes its tiebreaker and rounds its score; FSO final judging requeues `PD` rows only; no fifth ranking sort key (`-submission_count`); frozen results never reach non-editors through `/api/v2` (legacy leaked them)
 
+## Contest extras
+
+- Rating: `POST /contests/:key/rate` (`judge.contest_rating` + edit rights, ended contest) queues `contest-rating` (global concurrency 1); the job deletes every rating from the earliest of the target's end, its stored ratings' end and any moved contest's end, re-rates every rated contest from there in end order, then refreshes `users.rating`; `libs/contests/src/rating/elo-mmr.ts` is the legacy Python ported line for line
+- Elo-MMR goldens: `python3 -I tools/legacy/elo_mmr_goldens.py <online-judge>/judge/ratings.py libs/contests/src/rating/elo-mmr.goldens.json`; generated, never hand-edited
+- Public ranking: links (`/contests/:key/ranking-link`, `/public-rankings/:token`, 18-char tokens, misses limited per IP) and the ranking code (`?code=`); both serve `ContestRankingService.board`, frozen while frozen
+- Official ranking: CMS CSV parsed at write (`official-ranking.ts`: 1 MiB, 10 000 rows, 105 columns) or a URL
+- Announcements: rendered at save; pushed as ids on Redis `contest-events` to `GET /api/internal/events/contests/:key` (the one SSE hub, `contestTotal` cap, shared with the other contest events); pushes limited per contest
+- Stats: `GET /contests/:key/stats`, gated by `canSeeFullSubmissionList` (never during a freeze for non-editors)
+- MOSS: `MOSS_API_KEY` (unset -> 404); one run per contest (`jobId`), results replaced only after every batch succeeded; the client settles when the server closes the socket; the key never leaves the worker's env
+- Data: `CONTEST_DATA_ROOT` (unset -> 404); one prepare per contest per 24 h unless the zip is missing; zip written to a per-run temp name, streamed with lazily fetched sources, capped in bytes and entries; download streamed by the api
+- Clone: `POST /contests/:key/clone` (`judge.clone_contest`), hidden, cloner as only author
+- `/api/v2/contests|contest/:key|participations`: legacy shapes; participations use `ContestAccess.scoreboardFilter` like contest detail, so hidden boards list no scores to non-editors (stricter than legacy) and standings are frozen for non-editors
+
 ## Data conventions
 
 - `tagGroups`/`tags` are querier-backed; `tagProblems` is a repository
@@ -286,6 +299,8 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env); the migrator reads only `MONGO_URL` and `LEGACY_*`
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly)
+- `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
+- The worker needs outbound TCP to `moss.stanford.edu:7690` when `MOSS_API_KEY` is set
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
 - Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); exactly one instance
 - The bridge port must be reachable only from judge hosts (firewall)

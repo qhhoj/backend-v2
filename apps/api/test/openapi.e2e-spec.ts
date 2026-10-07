@@ -149,4 +149,33 @@ describe('OpenAPI document', () => {
       ]),
     );
   });
+
+  it('lists the contest extras', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/contests/{key}/rate',
+        '/api/internal/contests/{key}/ranking-link',
+        '/api/internal/contests/{key}/ranking-link/regenerate',
+        '/api/internal/public-rankings/{token}',
+        '/api/internal/contests/{key}/official-ranking',
+        '/api/internal/contests/{key}/announcements',
+        '/api/internal/contests/{key}/announcements/{id}',
+        '/api/internal/contests/{key}/announcements/{id}/resend',
+        '/api/internal/events/contests/{key}',
+        '/api/internal/contests/{key}/stats',
+        '/api/internal/contests/{key}/moss',
+        '/api/internal/contests/{key}/data',
+        '/api/internal/contests/{key}/data/download',
+        '/api/internal/contests/{key}/clone',
+        '/api/v2/contests',
+        '/api/v2/contest/{key}',
+        '/api/v2/participations',
+      ]),
+    );
+  });
 });

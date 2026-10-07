@@ -10,6 +10,8 @@ Points, stats and rescores run in the worker; submission status streams to brows
 
 Contests: seven scoring formats, live and frozen rankings, virtual participation and final-submission judging.
 
+Ratings, MOSS and contest data run in the worker; announcements stream over SSE.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
 
 Design docs live in `docs/superpowers/specs/`.
