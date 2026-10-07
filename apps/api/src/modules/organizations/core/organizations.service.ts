@@ -4,6 +4,7 @@ import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
 import { competitionRanks } from '@libs/community';
 import { uuidStr } from '@libs/database';
+import type { Organization } from '@libs/database';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { MemberResponse } from './dto/member.response';
 import {
@@ -73,6 +74,28 @@ export class OrganizationsService {
       ),
       { page, pageSize, total },
     );
+  }
+
+  /** A user's organizations in their order, without the unlisted ones the viewer may not see enumerated. */
+  async listedFor(
+    principal: Principal | null,
+    organizationIds: readonly string[],
+  ): Promise<Organization[]> {
+    const byId = new Map(
+      (await this.organizations.findByIds(organizationIds)).map(
+        (organization) => [uuidStr(organization._id), organization],
+      ),
+    );
+    return organizationIds.flatMap((id) => {
+      const organization = byId.get(id);
+      return organization &&
+        OrganizationAccess.canList(
+          principal,
+          OrganizationAccess.accessView(organization),
+        )
+        ? [organization]
+        : [];
+    });
   }
 
   async detail(

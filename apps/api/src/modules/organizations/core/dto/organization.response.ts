@@ -26,6 +26,22 @@ export class OrganizationListItemResponse {
   }
 }
 
+export class OrganizationSummaryResponse {
+  id!: string;
+  slug!: string;
+  name!: string;
+  shortName!: string;
+
+  static from(organization: Organization): OrganizationSummaryResponse {
+    return {
+      id: uuidStr(organization._id),
+      slug: organization.slug,
+      name: organization.name,
+      shortName: organization.shortName,
+    };
+  }
+}
+
 export class OrganizationViewerResponse {
   isMember!: boolean;
   canAdminister!: boolean;

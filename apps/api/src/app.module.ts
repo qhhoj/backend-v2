@@ -17,6 +17,7 @@ import { ProblemsApiModule } from './modules/problems/problems-api.module';
 import { ContestsApiModule } from './modules/contests/contests-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
+import { UsersApiModule } from './modules/users/users-api.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -36,6 +37,7 @@ import { HealthController } from './health.controller';
     SubmissionsApiModule,
     ContestsApiModule,
     OrganizationsApiModule,
+    UsersApiModule,
     ApiV2Module,
   ],
   controllers: [HealthController],
