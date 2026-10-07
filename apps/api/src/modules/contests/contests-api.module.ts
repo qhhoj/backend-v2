@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import {
+  CONTEST_DATA_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_MOSS_QUEUE,
   CONTEST_RATING_QUEUE,
@@ -14,6 +15,8 @@ import { ContestAccessModule } from './contest-access.module';
 import { AnnouncementsRepository } from './announcements.repository';
 import { ContestAnnouncementsController } from './contest-announcements.controller';
 import { ContestAnnouncementsService } from './contest-announcements.service';
+import { ContestDataController } from './contest-data.controller';
+import { ContestDataService } from './contest-data.service';
 import { ContestEditingController } from './contest-editing.controller';
 import { ContestEditingService } from './contest-editing.service';
 import { ContestEventsService } from './contest-events.service';
@@ -51,11 +54,13 @@ import { RankingLinksService } from './ranking-links.service';
       { name: CONTEST_FINAL_JUDGE_QUEUE },
       { name: CONTEST_RATING_QUEUE },
       { name: CONTEST_MOSS_QUEUE },
+      { name: CONTEST_DATA_QUEUE },
     ),
   ],
   // Fastify matches a static segment (Task 7's `current`) before `:key`, whatever the controller order.
   controllers: [
     ContestAnnouncementsController,
+    ContestDataController,
     ContestEditingController,
     ContestMossController,
     ContestParticipationController,
@@ -70,6 +75,7 @@ import { RankingLinksService } from './ranking-links.service';
   providers: [
     AnnouncementsRepository,
     ContestAnnouncementsService,
+    ContestDataService,
     ContestEventsService,
     ContestMossRepository,
     ContestMossService,

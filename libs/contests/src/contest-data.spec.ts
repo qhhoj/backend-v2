@@ -3,6 +3,8 @@ import {
   canPrepareData,
   contestDataPath,
   contestDataTempPath,
+  matchesGlob,
+  PROBLEM_GLOB_PATTERN,
 } from './contest-data';
 
 describe('contest data paths', () => {
@@ -31,4 +33,40 @@ describe('contest data paths', () => {
       true,
     );
   });
+});
+
+describe('matchesGlob', () => {
+  it.each([
+    ['*', 'anything', true],
+    ['sum*', 'sum_2', true],
+    ['sum*', 'asum', false],
+    ['?b', 'ab', true],
+    ['?b', 'abb', false],
+    ['a*b*c', 'a_x_b_y_c', true],
+    ['a*b*c', 'a_x_c_y_b', false],
+    ['a**c', 'abc', true],
+  ])('%s against %s is %s', (glob, code, expected) =>
+    expect(matchesGlob(glob, code)).toBe(expected),
+  );
+
+  it('stays linear on a pathological glob', () => {
+    const started = Date.now();
+    expect(matchesGlob(`${'*a'.repeat(49)}b`, 'a'.repeat(32))).toBe(false);
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+});
+
+describe('PROBLEM_GLOB_PATTERN', () => {
+  it.each([
+    ['sum_*', true],
+    ['a?c', true],
+    ['*', true],
+    ['../x', false],
+    ['Sum', false],
+    ['a[bc]', false],
+    ['', false],
+    ['a'.repeat(101), false],
+  ])('%s is accepted: %s', (glob, accepted) =>
+    expect(PROBLEM_GLOB_PATTERN.test(glob)).toBe(accepted),
+  );
 });

@@ -7,6 +7,7 @@ import {
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
+import { ContestDataModule } from './jobs/contest-data/contest-data.module';
 import { ContestFinalJudgeModule } from './jobs/contest-final-judge/contest-final-judge.module';
 import { ContestRatingModule } from './jobs/contest-rating/contest-rating.module';
 import { ContestMossModule } from './jobs/contest-moss/contest-moss.module';
@@ -34,6 +35,7 @@ import { SubmissionEffectsModule } from './jobs/submission-effects/submission-ef
     ContestFinalJudgeModule,
     ContestRatingModule,
     ContestMossModule,
+    ContestDataModule,
   ],
 })
 export class WorkerModule {}

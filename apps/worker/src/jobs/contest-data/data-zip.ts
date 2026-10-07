@@ -1,0 +1,105 @@
+import { createWriteStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { ZipFile } from 'yazl';
+
+export interface ContestDataLimits {
+  /** Total uncompressed source bytes per zip. */
+  maxBytes: number;
+  maxEntries: number;
+  /** Sources fetched per query; the only sources held in memory. */
+  sourceChunk: number;
+}
+export const CONTEST_DATA_LIMITS = Symbol('CONTEST_DATA_LIMITS');
+export const DEFAULT_CONTEST_DATA_LIMITS: ContestDataLimits = {
+  maxBytes: 512 * 1024 * 1024,
+  maxEntries: 50_000,
+  sourceChunk: 100,
+};
+/** Shown to the editor through the job log; never holds a source. */
+export class ContestDataError extends Error {}
+
+export interface DataRow {
+  submissionId: string;
+  userId: string;
+  username: string;
+  code: string;
+  extension: string;
+}
+export interface DataEntry {
+  submissionId: string;
+  name: string;
+}
+
+const SEGMENT_LENGTH = 64;
+/** One path segment: letters, digits, `_ . -` (Unicode letters kept), never empty, `.` or `..`. */
+export function safeSegment(name: string): string {
+  const cleaned = name
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{N}_.-]/gu, '_')
+    .slice(0, SEGMENT_LENGTH);
+  return /^\.*$/.test(cleaned)
+    ? '_'.repeat(Math.max(1, cleaned.length))
+    : cleaned;
+}
+
+/** Legacy layout; rows best first. Problem codes are already `[a-z0-9_]`. */
+export function planEntries(rows: readonly DataRow[]): DataEntry[] {
+  const folders = new Map<string, string>();
+  const taken = new Set<string>();
+  const folderOf = (userId: string, username: string) => {
+    const known = folders.get(userId);
+    if (known) return known;
+    const base = safeSegment(username);
+    let folder = base;
+    for (let suffix = 2; taken.has(folder); suffix += 1)
+      folder = `${base}_${suffix}`;
+    taken.add(folder);
+    folders.set(userId, folder);
+    return folder;
+  };
+  const exported = new Set<string>();
+  return rows.map(({ submissionId, userId, username, code, extension }) => {
+    const folder = folderOf(userId, username);
+    const suffix = extension.replace(/[^A-Za-z0-9]/g, '') || 'txt';
+    const first = !exported.has(`${userId}/${code}`);
+    exported.add(`${userId}/${code}`);
+    return {
+      submissionId,
+      name: first
+        ? `${folder}/${code}.${suffix}`
+        : `${folder}/$History/${code}_${submissionId}.${suffix}`,
+    };
+  });
+}
+
+/** yazl asks for each source only when it reaches the entry, so memory stays at one chunk; past `maxBytes` the output is destroyed and the partial file is the caller's to remove. */
+export async function writeDataZip(
+  entries: readonly DataEntry[],
+  sourceAt: (index: number) => Promise<string>,
+  path: string,
+  maxBytes: number,
+): Promise<void> {
+  const zip = new ZipFile();
+  const output = zip.outputStream as Readable;
+  const fail = (error: unknown) => output.destroy(error as Error);
+  zip.on('error', fail);
+  let written = 0;
+  entries.forEach((entry, index) =>
+    zip.addReadStreamLazy(entry.name, { compress: true }, (callback) => {
+      sourceAt(index).then((source) => {
+        const content = Buffer.from(source);
+        written += content.length;
+        if (written > maxBytes)
+          return fail(
+            new ContestDataError(
+              `The sources pass ${maxBytes} bytes; narrow the filter`,
+            ),
+          );
+        callback(null, Readable.from([content]));
+      }, fail);
+    }),
+  );
+  zip.end();
+  await pipeline(output, createWriteStream(path, { flags: 'wx' }));
+}
