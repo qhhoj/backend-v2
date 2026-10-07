@@ -1,3 +1,5 @@
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
 import type {
   Contest,
   ContestParticipation,
@@ -61,3 +63,10 @@ export const makeCurrent = (
 
 export const contestUrl = (key: string, suffix = '') =>
   `/api/internal/contests/${key}${suffix}`;
+
+/** Rate-limit counters are global per Redis db: a test that counts attempts starts from zero. */
+export const clearRateLimits = async (api: ApiTest): Promise<void> => {
+  const redis = api.app.get<Redis>(REDIS);
+  const keys = await redis.keys('rate:*');
+  if (keys.length) await redis.del(...keys);
+};

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
+import { CurrentContestService } from './current-contest.service';
 import { ContestViewerService } from './contest-viewer.service';
 import { ContestsRepository } from './contests.repository';
 import { ParticipationsRepository } from './participations.repository';
@@ -11,7 +12,13 @@ import { ParticipationsRepository } from './participations.repository';
     ContestsRepository,
     ParticipationsRepository,
     ContestViewerService,
+    CurrentContestService,
   ],
-  exports: [ContestsRepository, ParticipationsRepository, ContestViewerService],
+  exports: [
+    ContestsRepository,
+    ParticipationsRepository,
+    ContestViewerService,
+    CurrentContestService,
+  ],
 })
 export class ContestAccessModule {}

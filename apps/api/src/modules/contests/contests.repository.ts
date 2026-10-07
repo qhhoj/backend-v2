@@ -118,4 +118,11 @@ export class ContestsRepository {
     }
     await flush();
   }
+
+  async setCounts(
+    contestId: string,
+    counts: { userCount: number; virtualCount: number },
+  ): Promise<void> {
+    await this.contests.updateOne({ _id: contestId }, { $set: counts }).exec();
+  }
 }

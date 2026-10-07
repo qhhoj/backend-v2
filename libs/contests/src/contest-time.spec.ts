@@ -3,8 +3,10 @@ import {
   frozenTime,
   hasParticipationEnded,
   isFrozen,
+  isRegistrationOpen,
   participationEnd,
   participationStart,
+  requiresRegistration,
 } from './contest-time';
 import type { ContestTimes, ParticipationTimes } from './contest-time';
 
@@ -138,4 +140,26 @@ describe('freeze (legacy is_frozen)', () => {
       ),
     ).toBe(false);
   });
+});
+
+describe('registration (legacy require_registration / can_register)', () => {
+  const window = (
+    registrationStart: Date | null,
+    registrationEnd: Date | null,
+  ) => ({ registrationStart, registrationEnd });
+  it('is required as soon as either bound is set', () => {
+    expect(requiresRegistration(window(null, null))).toBe(false);
+    expect(requiresRegistration(window(null, after(-hour)))).toBe(true);
+    expect(requiresRegistration(window(after(-2 * hour), null))).toBe(true);
+  });
+  it.each([
+    [window(null, null), START, false],
+    [window(after(-2 * hour), after(-hour)), after(-1.5 * hour), true],
+    [window(after(-2 * hour), after(-hour)), after(-2 * hour - 1), false],
+    [window(after(-2 * hour), after(-hour)), after(-hour + 1), false],
+    [window(null, after(-hour)), after(-10 * hour), true],
+    [window(after(-2 * hour), null), after(4 * hour), true],
+  ])('is open for %p at %p: %p', (bounds, now, open) =>
+    expect(isRegistrationOpen(bounds, now)).toBe(open),
+  );
 });

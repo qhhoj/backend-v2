@@ -1,0 +1,391 @@
+import { sha256 } from '@libs/auth';
+import { uuidStr } from '@libs/database';
+import type { User } from '@libs/database';
+import type {
+  ContestDetailResponse,
+  ParticipationSummaryResponse,
+} from '../src/modules/contests/dto/contest-detail.response';
+import type {
+  CurrentParticipationResponse,
+  ParticipationResponse,
+} from '../src/modules/contests/dto/participation.response';
+import {
+  clearRateLimits,
+  contestUrl,
+  createContest,
+  hoursFromNow,
+  joinParticipation,
+  makeCurrent,
+} from './contest-fixtures';
+import { authed, createUserWith, loginAs } from './problem-fixtures';
+import type { TestSession } from './problem-fixtures';
+import { dataOf } from './submission-fixtures';
+import { errorCode, setupApiTest } from './setup';
+import type { ApiTest } from './setup';
+
+describe('contest participation', () => {
+  let api: ApiTest;
+  const sessions: Record<string, TestSession> = {};
+  const users: Record<string, { _id: string }> = {};
+  const post = (who: string, key: string, action: string, body: object = {}) =>
+    authed(api.http().post(contestUrl(key, `/${action}`)), sessions[who]).send(
+      body,
+    );
+  const pointerOf = async (who: string) => {
+    const pointer = (await api.users.findById(users[who]._id).lean())!
+      .currentParticipation;
+    return pointer ? uuidStr(pointer) : null;
+  };
+  const participationsOf = (contestId: string, who: string) =>
+    api.participations
+      .find({ contest: contestId, user: users[who]._id })
+      .sort({ virtual: 1 })
+      .lean();
+  const newUser = async (name: string, extra: Partial<User> = {}) => {
+    users[name] = await createUserWith(api, name, extra);
+    sessions[name] = await loginAs(api, users[name]._id);
+  };
+
+  beforeAll(async () => {
+    api = await setupApiTest();
+    for (const name of [
+      'alice',
+      'bob',
+      'carol',
+      'dave',
+      'erin',
+      'frank',
+      'author',
+    ])
+      await newUser(
+        name,
+        name === 'author' ? { permissions: ['judge.edit_own_contest'] } : {},
+      );
+    await newUser('root', { isSuperuser: true });
+  });
+  afterAll(() => api.teardown());
+  beforeEach(() => clearRateLimits(api));
+
+  describe('join', () => {
+    it('joins a running contest live, makes it current and counts the user', async () => {
+      const contest = await createContest(api);
+      const joined = dataOf<ParticipationSummaryResponse>(
+        await post('alice', contest.key, 'join').expect(201),
+      );
+      expect(joined).toMatchObject({ virtual: 0, isRegistered: false });
+      expect(await pointerOf('alice')).toBe(joined.id);
+      expect((await api.contests.findById(contest._id).lean())!.userCount).toBe(
+        1,
+      );
+      // Joining again re-enters the same participation.
+      expect(
+        dataOf<ParticipationSummaryResponse>(
+          await post('alice', contest.key, 'join').expect(201),
+        ).id,
+      ).toBe(joined.id);
+    });
+
+    it('creates one live participation for concurrent joins and numbers concurrent virtual joins 1..n', async () => {
+      const running = await createContest(api);
+      const responses = await Promise.all(
+        Array.from({ length: 5 }, () => post('bob', running.key, 'join')),
+      );
+      expect(responses.map((response) => response.status)).toEqual([
+        201, 201, 201, 201, 201,
+      ]);
+      expect(await participationsOf(running._id, 'bob')).toHaveLength(1);
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      const virtuals = await Promise.all(
+        Array.from({ length: 5 }, () => post('bob', ended.key, 'join')),
+      );
+      expect(virtuals.map((response) => response.status)).toEqual([
+        201, 201, 201, 201, 201,
+      ]);
+      const numbers = (await participationsOf(ended._id, 'bob')).map(
+        (row) => row.virtual,
+      );
+      expect(new Set(numbers).size).toBe(5);
+      expect(numbers.every((number) => number >= 1)).toBe(true);
+    });
+
+    it('refuses a virtual join when virtual joining is disallowed', async () => {
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+        disallowVirtual: true,
+      });
+      await post('alice', ended.key, 'join')
+        .expect(409)
+        .expect(errorCode('conflict'));
+    });
+
+    it('lets only editors and testers in before the start, as spectators', async () => {
+      const upcoming = await createContest(api, {
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+        authors: [users.author._id],
+      });
+      await post('alice', upcoming.key, 'join').expect(409);
+      expect(
+        dataOf<ParticipationSummaryResponse>(
+          await post('author', upcoming.key, 'join').expect(201),
+        ).virtual,
+      ).toBe(-1);
+    });
+
+    it('keeps banned users out, superusers excepted', async () => {
+      const contest = await createContest(api, {
+        bannedUsers: [users.carol._id, users.root._id],
+      });
+      await post('carol', contest.key, 'join')
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await post('root', contest.key, 'join').expect(201);
+    });
+
+    it('moves a live participant whose time ran out to spectating', async () => {
+      const contest = await createContest(api, { timeLimit: 600 });
+      await joinParticipation(api, contest._id, users.dave._id, {
+        realStart: hoursFromNow(-0.5),
+      });
+      expect(
+        dataOf<ParticipationSummaryResponse>(
+          await post('dave', contest.key, 'join').expect(201),
+        ).virtual,
+      ).toBe(-1);
+    });
+  });
+
+  describe('access codes', () => {
+    it('needs the right code, except for editors, and never spends budget on a missing code', async () => {
+      const contest = await createContest(api, {
+        accessCodeHash: sha256('opensesame'),
+        authors: [users.author._id],
+      });
+      for (let attempt = 0; attempt < 12; attempt += 1)
+        await post('alice', contest.key, 'join').expect(403);
+      await post('alice', contest.key, 'join', { accessCode: 'wrong' })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await post('alice', contest.key, 'join', {
+        accessCode: 'opensesame',
+      }).expect(201);
+      await post('author', contest.key, 'join').expect(201);
+    });
+
+    it('limits guesses per user, even when the right code comes next', async () => {
+      const contest = await createContest(api, {
+        accessCodeHash: sha256('opensesame'),
+      });
+      for (let attempt = 0; attempt < 10; attempt += 1)
+        await post('erin', contest.key, 'join', {
+          accessCode: `guess${attempt}`,
+        }).expect(403);
+      await post('erin', contest.key, 'join', { accessCode: 'opensesame' })
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+    });
+
+    it('limits guesses per IP across users', async () => {
+      const contest = await createContest(api, {
+        accessCodeHash: sha256('opensesame'),
+      });
+      for (const who of ['alice', 'bob', 'carol'])
+        for (let attempt = 0; attempt < 10; attempt += 1)
+          await post(who, contest.key, 'join', {
+            accessCode: `guess${attempt}`,
+          }).expect(403);
+      await post('frank', contest.key, 'join', { accessCode: 'guess' }).expect(
+        429,
+      );
+    });
+
+    it('never charges a right code', async () => {
+      const contest = await createContest(api, {
+        accessCodeHash: sha256('opensesame'),
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      for (let attempt = 0; attempt < 9; attempt += 1)
+        await post('frank', contest.key, 'join', { accessCode: 'nope' }).expect(
+          403,
+        );
+      for (let attempt = 0; attempt < 3; attempt += 1)
+        await post('frank', contest.key, 'join', {
+          accessCode: 'opensesame',
+        }).expect(201);
+      // The tenth failure is still allowed, the eleventh attempt is not.
+      await post('frank', contest.key, 'join', { accessCode: 'nope' }).expect(
+        403,
+      );
+      await post('frank', contest.key, 'join', {
+        accessCode: 'opensesame',
+      }).expect(429);
+    });
+  });
+
+  describe('register', () => {
+    it('registers inside the window, once, and joining later starts the clock', async () => {
+      const contest = await createContest(api, {
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+        registrationStart: hoursFromNow(-1),
+        registrationEnd: hoursFromNow(0.5),
+      });
+      const registered = dataOf<ParticipationSummaryResponse>(
+        await post('alice', contest.key, 'register').expect(201),
+      );
+      expect(registered).toMatchObject({ virtual: 0, isRegistered: true });
+      expect(new Date(registered.endTime)).toEqual(contest.endTime);
+      await post('alice', contest.key, 'register')
+        .expect(409)
+        .expect(errorCode('conflict'));
+      expect((await api.contests.findById(contest._id).lean())!.userCount).toBe(
+        1,
+      );
+      await api.contests.updateOne(
+        { _id: contest._id },
+        {
+          startTime: hoursFromNow(-0.1),
+          registrationStart: hoursFromNow(-2),
+          registrationEnd: hoursFromNow(-1),
+        },
+      );
+      const joined = dataOf<ParticipationSummaryResponse>(
+        await post('alice', contest.key, 'join').expect(201),
+      );
+      expect(joined).toMatchObject({ id: registered.id, isRegistered: false });
+      expect(Date.now() - new Date(joined.realStart).getTime()).toBeLessThan(
+        60_000,
+      );
+      // Registration closed: an unregistered user cannot join.
+      await post('bob', contest.key, 'join')
+        .expect(409)
+        .expect(errorCode('conflict'));
+    });
+
+    it.each([
+      ['not required', {}, 'alice'],
+      [
+        'closed',
+        {
+          registrationStart: hoursFromNow(-3),
+          registrationEnd: hoursFromNow(-2),
+        },
+        'alice',
+      ],
+      ['an editor', { registrationEnd: hoursFromNow(0.5) }, 'author'],
+    ])('refuses a registration that is %s', async (_case, fields, who) => {
+      const contest = await createContest(api, {
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+        authors: [users.author._id],
+        ...fields,
+      });
+      await post(who, contest.key, 'register').expect(409);
+    });
+  });
+
+  describe('leave and current', () => {
+    it('leaves only the current contest', async () => {
+      const contest = await createContest(api);
+      const other = await createContest(api);
+      await post('carol', contest.key, 'join').expect(201);
+      await post('carol', other.key, 'leave').expect(404);
+      await post('carol', contest.key, 'leave').expect(204);
+      expect(await pointerOf('carol')).toBeNull();
+    });
+
+    it('reports the current participation and clears it once it ended or became invisible', async () => {
+      const current = () =>
+        authed(api.http().get('/api/internal/contests/current'), sessions.dave);
+      const contest = await createContest(api);
+      await post('dave', contest.key, 'join').expect(201);
+      expect(
+        dataOf<CurrentParticipationResponse>(await current().expect(200)),
+      ).toMatchObject({
+        contest: { key: contest.key },
+        participation: { virtual: 0 },
+      });
+      await api.contests.updateOne({ _id: contest._id }, { isVisible: false });
+      expect(
+        dataOf<CurrentParticipationResponse | null>(
+          await current().expect(200),
+        ),
+      ).toBeNull();
+      expect(await pointerOf('dave')).toBeNull();
+      const short = await createContest(api, { timeLimit: 60 });
+      const participation = await joinParticipation(
+        api,
+        short._id,
+        users.dave._id,
+        { realStart: hoursFromNow(-1) },
+      );
+      await makeCurrent(api, users.dave._id, participation._id);
+      // Even before a read clears the pointer, an ended participation is not "in the contest".
+      expect(
+        dataOf<ContestDetailResponse>(
+          await authed(
+            api.http().get(contestUrl(short.key)),
+            sessions.dave,
+          ).expect(200),
+        ).viewer.inContest,
+      ).toBe(false);
+      expect(
+        dataOf<CurrentParticipationResponse | null>(
+          await current().expect(200),
+        ),
+      ).toBeNull();
+      expect(await pointerOf('dave')).toBeNull();
+    });
+  });
+
+  describe('participations', () => {
+    it('lists a user their own participations and an editor everyone, frozen for non-editors during a freeze', async () => {
+      const contest = await createContest(api, {
+        formatName: 'icpc',
+        frozenLastMinutes: 120,
+        authors: [users.author._id],
+      });
+      const results = {
+        score: 300,
+        cumtime: 50,
+        tiebreaker: 9,
+        frozenScore: 100,
+        frozenCumtime: 20,
+        frozenTiebreaker: 4,
+        formatData: { P: { points: 300 } },
+        frozenFormatData: { P: { points: 100 } },
+      };
+      await joinParticipation(api, contest._id, users.alice._id, results);
+      await joinParticipation(api, contest._id, users.bob._id, results);
+      const list = async (who: string, query = '') =>
+        dataOf<ParticipationResponse[]>(
+          await authed(
+            api.http().get(contestUrl(contest.key, `/participations${query}`)),
+            sessions[who],
+          ).expect(200),
+        );
+      const own = await list('alice');
+      expect(own.map((row) => row.user.username)).toEqual(['alice']);
+      expect(own[0]).toMatchObject({ score: 100, cumtime: 20, tiebreaker: 4 });
+      expect(own[0].cells).toEqual({ P: { points: 100 } });
+      await authed(
+        api.http().get(contestUrl(contest.key, '/participations?user=bob')),
+        sessions.alice,
+      ).expect(403);
+      const all = await list('author');
+      expect(all.map((row) => row.user.username).sort()).toEqual([
+        'alice',
+        'bob',
+      ]);
+      expect(all[0].score).toBe(300);
+      expect(
+        (await list('author', '?user=bob')).map((row) => row.user.username),
+      ).toEqual(['bob']);
+    });
+  });
+});

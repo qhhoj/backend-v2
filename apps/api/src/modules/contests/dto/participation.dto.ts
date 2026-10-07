@@ -1,0 +1,20 @@
+import { Type } from 'class-transformer';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+
+export class AccessCodeDto {
+  @IsOptional() @IsString() @MaxLength(255) accessCode?: string;
+}
+
+export class ParticipationListQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 50;
+  /** Username; others than the viewer need edit rights. */
+  @IsOptional() @IsString() @MaxLength(30) user?: string;
+}

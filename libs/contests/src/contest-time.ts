@@ -82,3 +82,21 @@ export const isFrozen = (contest: ContestTimes, now: Date): boolean => {
   const from = frozenTime(contest);
   return from !== null && now >= from;
 };
+
+export interface RegistrationWindow {
+  registrationStart: Date | null;
+  registrationEnd: Date | null;
+}
+
+/** Legacy `require_registration`. */
+export const requiresRegistration = (window: RegistrationWindow): boolean =>
+  window.registrationStart !== null || window.registrationEnd !== null;
+
+/** Legacy `can_register`: inside both bounds (inclusive). */
+export const isRegistrationOpen = (
+  window: RegistrationWindow,
+  now: Date,
+): boolean =>
+  requiresRegistration(window) &&
+  (window.registrationStart === null || now >= window.registrationStart) &&
+  (window.registrationEnd === null || now <= window.registrationEnd);
