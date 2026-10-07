@@ -28,6 +28,11 @@ import { dataOf } from './submission-fixtures';
 import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
+const UUID_PATTERN = /[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g;
+// Scans response text for leaked numbers; ids are dropped since their digits can match by chance.
+const textWithoutIds = (value: unknown) =>
+  JSON.stringify(value).replace(UUID_PATTERN, '');
+
 describe('contest ranking', () => {
   let api: ApiTest;
   let redis: Redis;
@@ -355,7 +360,7 @@ describe('contest ranking', () => {
       for (const query of ['', '?virtual=true']) {
         const board = await ranking(open.key, who, query);
         expect(board.frozen).toBe(true);
-        const text = JSON.stringify(board);
+        const text = textWithoutIds(board);
         for (const leak of ['777.25', '31337', '900', '901'])
           expect(text).not.toContain(leak);
       }
@@ -378,7 +383,7 @@ describe('contest ranking', () => {
       frozen: true,
       rows: [{ score: 1, cumtime: 0, tiebreaker: 0, cells: frozenCell }],
     });
-    expect(JSON.stringify(mine)).not.toMatch(/777\.25|31337|900/);
+    expect(textWithoutIds(mine)).not.toMatch(/777\.25|31337|900/);
   });
 
   it('keeps the freeze after the contest ended', async () => {
@@ -397,7 +402,7 @@ describe('contest ranking', () => {
     );
     const board = await ranking(ended.key);
     expect(board).toMatchObject({ frozen: true, rows: [{ score: 100 }] });
-    expect(JSON.stringify(board)).not.toContain('4242');
+    expect(textWithoutIds(board)).not.toContain('4242');
     expect((await ranking(ended.key, 'author')).rows).toHaveLength(1);
   });
 
