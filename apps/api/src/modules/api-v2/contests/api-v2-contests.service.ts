@@ -14,13 +14,13 @@ import {
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest, ContestParticipation } from '@libs/database';
-import { ContestAccess } from '../contests/core/contest-access';
-import { ContestViewerService } from '../contests/core/contest-viewer.service';
-import { ContestsRepository } from '../contests/core/contests.repository';
-import type { ContestDocument } from '../contests/core/contests.repository';
-import { ParticipationsRepository } from '../contests/core/participations.repository';
-import { RatingsRepository } from '../contests/rating/ratings.repository';
-import { ProblemsRepository } from '../problems/core/problems.repository';
+import { ContestAccess } from '../../contests/core/contest-access';
+import { ContestViewerService } from '../../contests/core/contest-viewer.service';
+import { ContestsRepository } from '../../contests/core/contests.repository';
+import type { ContestDocument } from '../../contests/core/contests.repository';
+import { ParticipationsRepository } from '../../contests/core/participations.repository';
+import { RatingsRepository } from '../../contests/rating/ratings.repository';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ApiV2ContestListDto } from './dto/api-v2-contest-list.dto';
 import { ApiV2ParticipationListDto } from './dto/api-v2-participation-list.dto';
 import {
@@ -28,8 +28,8 @@ import {
   isoformat,
   legacyPage,
   legacyTotalPages,
-} from './legacy-envelope';
-import type { LegacyPage } from './legacy-envelope';
+} from '../core/legacy-envelope';
+import type { LegacyPage } from '../core/legacy-envelope';
 
 const notFound = () => new AppError('not_found', 404, 'page/object not found');
 

@@ -4,12 +4,12 @@ import { ContestsApiModule } from '../contests/contests-api.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
-import { ApiV2ContestsController } from './api-v2-contests.controller';
-import { ApiV2ContestsService } from './api-v2-contests.service';
-import { ApiV2ProblemsController } from './api-v2-problems.controller';
-import { ApiV2ProblemsService } from './api-v2-problems.service';
-import { ApiV2SubmissionsController } from './api-v2-submissions.controller';
-import { ApiV2SubmissionsService } from './api-v2-submissions.service';
+import { ApiV2ContestsController } from './contests/api-v2-contests.controller';
+import { ApiV2ContestsService } from './contests/api-v2-contests.service';
+import { ApiV2ProblemsController } from './problems/api-v2-problems.controller';
+import { ApiV2ProblemsService } from './problems/api-v2-problems.service';
+import { ApiV2SubmissionsController } from './submissions/api-v2-submissions.controller';
+import { ApiV2SubmissionsService } from './submissions/api-v2-submissions.service';
 
 @Module({
   imports: [

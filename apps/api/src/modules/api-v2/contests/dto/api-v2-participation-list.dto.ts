@@ -8,8 +8,8 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { toBoolean } from '../../problems/core/dto/transforms';
-import { API_V2_MAX_PAGE } from './api-v2-problem-list.dto';
+import { toBoolean } from '../../../problems/core/dto/transforms';
+import { API_V2_MAX_PAGE } from '../../problems/dto/api-v2-problem-list.dto';
 
 /** Basic filters read one value; a repeated key takes the last, like Django's `QueryDict.get`. */
 const lastValue = ({ value }: { value: unknown }): unknown =>

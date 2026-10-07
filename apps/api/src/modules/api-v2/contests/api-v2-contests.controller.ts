@@ -2,13 +2,13 @@ import { Controller, Get, Param, UseFilters } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RawResponse } from '@libs/common';
-import { ContestKeyParamDto } from '../contests/core/dto/contest-params.dto';
+import { ContestKeyParamDto } from '../../contests/core/dto/contest-params.dto';
 import { ApiV2ContestsService } from './api-v2-contests.service';
-import { ApiV2ExceptionFilter } from './api-v2-exception.filter';
-import { ApiV2Query, lenientQueryPipe } from './api-v2-query';
+import { ApiV2ExceptionFilter } from '../core/api-v2-exception.filter';
+import { ApiV2Query, lenientQueryPipe } from '../core/api-v2-query';
 import { ApiV2ContestListDto } from './dto/api-v2-contest-list.dto';
 import { ApiV2ParticipationListDto } from './dto/api-v2-participation-list.dto';
-import { legacyEnvelope } from './legacy-envelope';
+import { legacyEnvelope } from '../core/legacy-envelope';
 
 @Public()
 @RawResponse()

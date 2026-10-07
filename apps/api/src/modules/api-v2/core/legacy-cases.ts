@@ -1,5 +1,5 @@
 import type { SubmissionCase } from '@libs/database';
-import type { CaseVisibility } from '../submissions/core/submission-access';
+import type { CaseVisibility } from '../../submissions/core/submission-access';
 
 export interface LegacyCase {
   type: 'case';

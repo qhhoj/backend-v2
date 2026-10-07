@@ -4,21 +4,21 @@ import type { Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
-import { LanguagesQuerier } from '../problems/catalog/languages.querier';
-import { ProblemsRepository } from '../problems/core/problems.repository';
-import { caseVisibility } from '../submissions/core/submission-access';
-import { SubmissionsRepository } from '../submissions/core/submissions.repository';
-import { SubmissionsService } from '../submissions/core/submissions.service';
+import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
+import { caseVisibility } from '../../submissions/core/submission-access';
+import { SubmissionsRepository } from '../../submissions/core/submissions.repository';
+import { SubmissionsService } from '../../submissions/core/submissions.service';
 import { ApiV2SubmissionListDto } from './dto/api-v2-submission-list.dto';
-import { legacyCases } from './legacy-cases';
+import { legacyCases } from '../core/legacy-cases';
 import {
   API_V2_PAGE_SIZE,
   isoformat,
   legacyInfinitePage,
   legacyPage,
   legacyTotalPages,
-} from './legacy-envelope';
-import type { LegacyInfinitePage, LegacyPage } from './legacy-envelope';
+} from '../core/legacy-envelope';
+import type { LegacyInfinitePage, LegacyPage } from '../core/legacy-envelope';
 
 const notFound = () => new AppError('not_found', 404, 'page/object not found');
 

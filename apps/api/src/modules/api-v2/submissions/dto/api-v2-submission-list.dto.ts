@@ -7,7 +7,10 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { API_V2_MAX_PAGE, FilterStrings } from './api-v2-problem-list.dto';
+import {
+  API_V2_MAX_PAGE,
+  FilterStrings,
+} from '../../problems/dto/api-v2-problem-list.dto';
 
 /** Legacy `APISubmissionList` filters; `id` is not offered (ids are UUIDs) and, like every unknown key, ignored. */
 export class ApiV2SubmissionListDto {

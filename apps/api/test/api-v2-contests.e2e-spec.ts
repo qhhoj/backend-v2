@@ -4,7 +4,7 @@ import type { UUID } from 'mongodb';
 import { newId, toUuid } from '@libs/database';
 import type { Contest } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
-import { isoformat } from '../src/modules/api-v2/legacy-envelope';
+import { isoformat } from '../src/modules/api-v2/core/legacy-envelope';
 import {
   contestProblem,
   createContest,

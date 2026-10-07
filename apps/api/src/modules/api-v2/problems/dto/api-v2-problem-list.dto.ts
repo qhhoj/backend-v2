@@ -11,7 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { toArray, toBoolean } from '../../problems/core/dto/transforms';
+import { toArray, toBoolean } from '../../../problems/core/dto/transforms';
 
 export const API_V2_MAX_PAGE = 10000;
 const MAX_FILTER_VALUES = 100;

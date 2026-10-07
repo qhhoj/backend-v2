@@ -5,20 +5,20 @@ import type { Problem } from '@libs/database';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import type { FilterQuery } from 'mongoose';
-import { LanguagesQuerier } from '../problems/catalog/languages.querier';
-import { ProblemAccess } from '../problems/core/problem-access';
-import { ProblemGroupsQuerier } from '../problems/catalog/problem-groups.querier';
-import { searchFilter } from '../problems/core/problem-search';
-import { ProblemTypesQuerier } from '../problems/catalog/problem-types.querier';
-import { ProblemsRepository } from '../problems/core/problems.repository';
-import { ProblemsService } from '../problems/core/problems.service';
+import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
+import { ProblemAccess } from '../../problems/core/problem-access';
+import { ProblemGroupsQuerier } from '../../problems/catalog/problem-groups.querier';
+import { searchFilter } from '../../problems/core/problem-search';
+import { ProblemTypesQuerier } from '../../problems/catalog/problem-types.querier';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
+import { ProblemsService } from '../../problems/core/problems.service';
 import { ApiV2ProblemListDto } from './dto/api-v2-problem-list.dto';
 import {
   API_V2_PAGE_SIZE,
   legacyPage,
   legacyTotalPages,
-} from './legacy-envelope';
-import type { LegacyPage } from './legacy-envelope';
+} from '../core/legacy-envelope';
+import type { LegacyPage } from '../core/legacy-envelope';
 
 /** Legacy matches names case-insensitively, like `code`. */
 const idsNamed = (
