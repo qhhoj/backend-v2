@@ -1,1 +1,2 @@
 libs/render/src/fixtures
+libs/contests/src/rating/elo-mmr.goldens.json

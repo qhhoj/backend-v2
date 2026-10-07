@@ -14,3 +14,4 @@ export * from './formats/ultimate';
 export * from './formats/final-submission';
 export * from './formats/registry';
 export * from './first-solves';
+export * from './rating/elo-mmr';
