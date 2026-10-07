@@ -30,7 +30,7 @@ export class LeaderboardsService {
       this.leaderboards.page(field, page, pageSize),
       this.leaderboards.count(),
     ]);
-    const values = rows.map((row) => row[field]);
+    const values = rows.map((row) => row[field] ?? null);
     const firstRank = rows.length
       ? (await this.leaderboards.countAbove(field, values[0])) + 1
       : 1;
@@ -71,7 +71,7 @@ export class LeaderboardsService {
         404,
         'That user is not on the leaderboard',
       );
-    const value = user[field];
+    const value = user[field] ?? null;
     const [above, tiedBefore] = await Promise.all([
       this.leaderboards.countAbove(field, value),
       this.leaderboards.countTiedBefore(field, value, user._id),

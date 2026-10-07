@@ -1,5 +1,8 @@
 import { profileQueries } from '@libs/database/testing';
-import type { LeaderboardEntryResponse } from '../src/modules/users/leaderboards/dto/leaderboard.response';
+import type {
+  LeaderboardEntryResponse,
+  RankResponse,
+} from '../src/modules/users/leaderboards/dto/leaderboard.response';
 import { createOrganization } from './organization-fixtures';
 import { createUserWith } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
@@ -39,6 +42,11 @@ describe('leaderboards', () => {
         problemCount: Math.round(performancePoints / 10),
         organizations: username === 'bao' ? [unlisted._id, listed._id] : [],
       });
+    // Legacy documents may lack the field: missing and null must tie.
+    await api.users.collection.updateOne(
+      { username: 'gia' },
+      { $unset: { rating: '' } },
+    );
     await createUserWith(api, 'zz_unlisted', {
       rating: 3000,
       performancePoints: 999,
@@ -137,6 +145,23 @@ describe('leaderboards', () => {
     ).toMatchObject({ rank: 6 });
     expect((await rankOf('em')).data).toMatchObject({ rank: 5 });
     await api.http().get('/api/internal/users/zz_unlisted/rank').expect(404);
+    await api.http().get('/api/internal/users/zz_inactive/rank').expect(404);
+    await api.http().get('/api/internal/users/nobody/rank').expect(404);
+  });
+
+  it('puts a missing rating and a null rating on the same rank', async () => {
+    const rows = await board('/api/internal/users');
+    expect(
+      rows
+        .filter((row) => row.rating === null || row.rating === undefined)
+        .map((row) => row.rank),
+    ).toEqual([5, 5]);
+  });
+
+  it('rejects out-of-range paging and unknown rank sorts', async () => {
+    for (const query of ['page=0', 'pageSize=101', 'pageSize=0', 'sort=bogus'])
+      await api.http().get(`/api/internal/users?${query}`).expect(400);
+    await api.http().get('/api/internal/users/ana/rank?sort=bogus').expect(400);
   });
 
   it('reads the board through the leaderboard indexes', async () => {
@@ -150,5 +175,43 @@ describe('leaderboards', () => {
     expect(
       Math.max(...reads.map(({ docsExamined }) => docsExamined)),
     ).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('rank lookup across pages', () => {
+  let api: ApiTest;
+
+  beforeAll(async () => {
+    api = await setupApiTest();
+    await api.users.insertMany(
+      Array.from({ length: 150 }, (_unused, index) => ({
+        username: `tied${String(index).padStart(3, '0')}`,
+        email: `tied${index}@example.com`,
+        password: 'x',
+        isActive: true,
+        rating: 1000,
+      })),
+    );
+  });
+  afterAll(() => api.teardown());
+
+  it('sends every tied user to the board page that lists them, in id order', async () => {
+    const boardPage = async (page: number) =>
+      dataOf<LeaderboardEntryResponse[]>(
+        await api.http().get(`/api/internal/users?page=${page}`).expect(200),
+      );
+    const listing = [...(await boardPage(1)), ...(await boardPage(2))];
+    expect(listing).toHaveLength(150);
+    for (const position of [0, 49, 99, 100, 149]) {
+      const response = await api
+        .http()
+        .get(`/api/internal/users/${listing[position].username}/rank`)
+        .expect(200);
+      expect(dataOf<RankResponse>(response)).toEqual({
+        rank: 1,
+        page: position < 100 ? 1 : 2,
+        pageSize: 100,
+      });
+    }
   });
 });
