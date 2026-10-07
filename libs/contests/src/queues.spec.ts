@@ -10,10 +10,11 @@ import type { ContestRescoreJob } from './queues';
 
 describe('notifyContestRescore', () => {
   let queue: Queue<ContestRescoreJob>;
-  beforeAll(() => {
+  beforeAll(async () => {
     queue = new Queue(CONTEST_RESCORE_QUEUE, {
       connection: { url: TEST_REDIS_URL },
     });
+    await queue.obliterate({ force: true });
   });
   afterAll(async () => {
     await queue.obliterate({ force: true });
@@ -29,6 +30,10 @@ describe('notifyContestRescore', () => {
       [CONTEST_RESCORE_JOB, { contestId: 'c1' }],
     ]);
     expect(jobs.every((job) => job.opts.attempts === 3)).toBe(true);
+    expect(jobs[0].opts).toMatchObject({
+      backoff: { type: 'exponential', delay: 10_000 },
+      removeOnComplete: true,
+    });
   });
 
   it('logs instead of throwing when Redis does not answer', async () => {

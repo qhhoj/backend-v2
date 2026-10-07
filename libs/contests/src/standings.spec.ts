@@ -74,6 +74,24 @@ describe('compareStandings and competitionRanks (legacy order and ranker)', () =
     expect(competitionRanks(sorted)).toEqual([1, 2, 3, 3, 5, 6]);
   });
 
+  it('ties only rows equal in score, cumtime and tiebreaker', () => {
+    const board = (score: number, cumtime: number, tiebreaker: number) => ({
+      isDisqualified: false,
+      score,
+      cumtime,
+      tiebreaker,
+    });
+    expect(
+      competitionRanks([
+        board(9, 1, 1),
+        board(9, 1, 2),
+        board(9, 2, 2),
+        board(8, 2, 2),
+        board(8, 2, 2),
+      ]),
+    ).toEqual([1, 2, 3, 4, 4]);
+  });
+
   it('ranks an empty board as empty', () =>
     expect(competitionRanks([])).toEqual([]));
 });

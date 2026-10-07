@@ -39,10 +39,31 @@ describe('default (legacy DefaultContestFormat)', () => {
     });
   });
 
+  it('scores rows the same whatever order they arrive in', () =>
+    expect(defaultFormat.score(rows().reverse(), {}, context())).toEqual(
+      defaultFormat.score(rows(), {}, context()),
+    ));
+
   it('clamps a negative cumtime to 0', () =>
     expect(
       defaultFormat.score([row('C', -10, 10)], {}, context()).cumtime,
     ).toBe(0));
+
+  it.each([
+    [2.5, 0, 2],
+    [3.5, 0, 4],
+    [0.125, 2, 0.12],
+  ])(
+    'rounds the tie %p at %p digits half to even',
+    (points, pointsPrecision, score) =>
+      expect(
+        defaultFormat.score(
+          [row('A', 1, points)],
+          {},
+          context({ pointsPrecision }),
+        ).score,
+      ).toBe(score),
+  );
 
   it.each([
     [3, 66.667],
@@ -92,6 +113,72 @@ describe('ioi (legacy LegacyIOIContestFormat, "IOI (pre-2016)")', () => {
       B: { points: 0, time: 0 },
       C: { points: 10, time: -600 },
     });
+  });
+
+  it('scores rows the same whatever order they arrive in', () =>
+    expect(
+      ioiFormat.score(
+        rows().reverse(),
+        { cumtime: true, lastScoreAltering: true },
+        context(),
+      ),
+    ).toEqual(
+      ioiFormat.score(
+        rows(),
+        { cumtime: true, lastScoreAltering: true },
+        context(),
+      ),
+    ));
+
+  it('times a problem at its earliest best and the tiebreaker at the latest of those times', () => {
+    const score = ioiFormat.score(
+      [
+        row('A', 10, 50),
+        row('A', 50, 100),
+        row('A', 60, 100),
+        row('D', 12, 40),
+      ],
+      { cumtime: false, lastScoreAltering: true },
+      context(),
+    );
+    expect(score.formatData).toEqual({
+      A: { points: 100, time: 3000 },
+      D: { points: 40, time: 720 },
+    });
+    expect(score.tiebreaker).toBe(3000);
+  });
+
+  it.each([
+    [2.5, 0, 2],
+    [0.125, 2, 0.12],
+  ])(
+    'rounds the tie %p at %p digits half to even',
+    (points, pointsPrecision, score) =>
+      expect(
+        ioiFormat.score(
+          [row('A', 1, points)],
+          { cumtime: false, lastScoreAltering: false },
+          context({ pointsPrecision }),
+        ).score,
+      ).toBe(score),
+  );
+
+  it('clamps a negative cumtime to 0', () =>
+    expect(
+      ioiFormat.score(
+        [row('C', -10, 10)],
+        { cumtime: true, lastScoreAltering: false },
+        context(),
+      ).cumtime,
+    ).toBe(0));
+
+  it('rejects inherited keys as unknown', () => {
+    expect(() =>
+      ioiFormat.parseConfig(JSON.parse('{"__proto__": {}}')),
+    ).toThrow(FormatConfigError);
+    expect(() => ioiFormat.parseConfig({ toString: 1 })).toThrow(
+      'unknown config key "toString"',
+    );
   });
 
   it('fills defaults and validates keys and types', () => {

@@ -78,7 +78,7 @@ export function parseKnownConfig<Config extends FormatConfig>(
     throw new FormatConfigError('expects no config or an object');
   const config: FormatConfig = { ...defaults };
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (!(key in defaults))
+    if (!Object.hasOwn(defaults, key))
       throw new FormatConfigError(`unknown config key "${key}"`);
     if (typeof value !== typeof defaults[key])
       throw new FormatConfigError(`invalid type for config key "${key}"`);

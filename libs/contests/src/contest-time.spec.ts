@@ -71,6 +71,13 @@ describe('participation window (legacy start / end_time)', () => {
       after(5 * hour),
     ],
     [
+      'spectating, no time limit: the contest window',
+      contest(),
+      participation({ virtual: -1 }),
+      START,
+      after(5 * hour),
+    ],
+    [
       'spectating: the contest window',
       contest({ timeLimit: 3600 }),
       participation({ virtual: -1 }),
