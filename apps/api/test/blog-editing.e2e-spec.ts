@@ -8,7 +8,7 @@ import {
   DISCORD_WEBHOOK_QUEUE,
 } from '@libs/community';
 import type { ContributionPointsJob, DiscordWebhookJob } from '@libs/community';
-import { uuidStr } from '@libs/database';
+import { newId, uuidStr } from '@libs/database';
 import type { PostDetailResponse } from '../src/modules/blog/core/dto/post.response';
 import {
   createComment,
@@ -155,6 +155,16 @@ describe('blog editing', () => {
       403,
     );
     await create(admin.session, { organization: 'no_such_org' }).expect(404);
+    const mutedAdmin = await person({
+      mute: true,
+      permissions: ['judge.edit_organization_post'],
+    });
+    const mutedOrganization = await createOrganization(api, {
+      adminIds: [mutedAdmin.user._id],
+    });
+    await create(mutedAdmin.session, {
+      organization: mutedOrganization.slug,
+    }).expect(403);
     expect(await discord.getJobCounts('waiting')).toMatchObject({ waiting: 0 });
   });
 
@@ -205,9 +215,10 @@ describe('blog editing', () => {
     const authorsChange = (await api.revisions
       .findOne({ entityId: post._id, 'changes.authors': { $exists: true } })
       .lean())!;
-    expect(JSON.stringify(authorsChange.changes.authors)).toContain(
-      coauthor._id,
-    );
+    expect(authorsChange.changes.authors).toEqual({
+      before: [user._id],
+      after: [coauthor._id],
+    });
     expect(
       (await api.blogPosts.findById(post._id).lean())!.authors.map(uuidStr),
     ).toEqual([coauthor._id]);
@@ -217,6 +228,49 @@ describe('blog editing', () => {
       visible: false,
     });
     await patch(draft._id, stranger, { title: 'x' }).expect(404);
+  });
+
+  it('refuses edits in official contest mode and to muted authors, and unknown author ids', async () => {
+    const env = api.app.get<Env>(ENV);
+    const { user, session } = await person();
+    const { session: root } = await person({ isSuperuser: true });
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_post'],
+    });
+    const post = await createPost(api, { authors: [user._id], title: 'Kept' });
+    env.officialContestMode = true;
+    try {
+      await patch(post._id, session, { title: 'Locked' }).expect(403);
+      expect((await api.blogPosts.findById(post._id).lean())!.title).toBe(
+        'Kept',
+      );
+      await patch(post._id, root, { title: 'Root' }).expect(200);
+    } finally {
+      env.officialContestMode = false;
+    }
+    const { user: muted, session: mutedSession } = await person({ mute: true });
+    const mutedPost = await createPost(api, { authors: [muted._id] });
+    await patch(mutedPost._id, mutedSession, { title: 'x' }).expect(403);
+    await patch(post._id, staff, { authorIds: [newId()] })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+  });
+
+  it('edits only the fields sent, so a summary edit never rewrites content', async () => {
+    const { user, session } = await person();
+    const post = await createPost(api, { authors: [user._id], content: 'old' });
+    await api.blogPosts.updateOne(
+      { _id: post._id },
+      { content: 'concurrent', contentHtml: '<p>concurrent</p>' },
+    );
+    const edited = dataOf<PostDetailResponse>(
+      await patch(post._id, session, { summary: '*short*' }).expect(200),
+    );
+    expect(edited).toMatchObject({
+      content: 'concurrent',
+      contentHtml: '<p>concurrent</p>',
+    });
+    expect(edited.summaryHtml).toContain('<em>short</em>');
   });
 
   it('deletes with delete_blogpost, taking comments, votes and the lock along and recomputing their authors', async () => {

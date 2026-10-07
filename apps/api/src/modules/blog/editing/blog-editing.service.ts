@@ -102,7 +102,8 @@ export class BlogEditingService {
       sticky: dto.sticky ?? false,
       publishOn: dto.publishOn ? new Date(dto.publishOn) : now,
       ogImage: dto.ogImage ?? '',
-      ...this.rendered(dto.content, dto.summary ?? ''),
+      ...this.renderedContent(dto.content),
+      ...this.renderedSummary(dto.summary ?? ''),
     });
     await this.revisions.append({
       entity: 'blogPost',
@@ -136,11 +137,10 @@ export class BlogEditingService {
     const { authorIds, content, summary, publishOn, ...fields } = dto;
     const changes: Partial<BlogPost> = { ...fields };
     if (publishOn !== undefined) changes.publishOn = new Date(publishOn);
-    if (content !== undefined || summary !== undefined)
-      Object.assign(
-        changes,
-        this.rendered(content ?? post.content, summary ?? post.summary),
-      );
+    if (content !== undefined)
+      Object.assign(changes, this.renderedContent(content));
+    if (summary !== undefined)
+      Object.assign(changes, this.renderedSummary(summary));
     if (authorIds !== undefined) {
       this.require(
         principal,
@@ -228,10 +228,15 @@ export class BlogEditingService {
       throw forbidden('Blog posts are locked during the official contest');
   }
 
-  private rendered(content: string, summary: string) {
+  private renderedContent(content: string) {
     return {
       content,
       contentHtml: renderField(content, POST_STYLE, 'content'),
+    };
+  }
+
+  private renderedSummary(summary: string) {
+    return {
       summary,
       summaryHtml: summary ? renderField(summary, POST_STYLE, 'summary') : '',
     };
