@@ -104,3 +104,7 @@ export function rejectConfig(raw: unknown): Record<string, never> {
     return {};
   throw new FormatConfigError('expects no config');
 }
+
+/** Config validator for non-negative whole numbers (penalties). */
+export const isNonNegativeInteger = (value: number | boolean): boolean =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;

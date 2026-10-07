@@ -1,6 +1,7 @@
 import type { ContestFormat, ProblemCell } from './format';
 import {
   bestOf,
+  isNonNegativeInteger,
   isTry,
   parseKnownConfig,
   roundScore,
@@ -13,9 +14,6 @@ export interface IcpcConfig {
   /** Minutes per try before the first best submission. */
   penalty: number;
 }
-
-const isPenalty = (value: number | boolean) =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
 interface Totals {
   minutes: number;
@@ -33,7 +31,11 @@ const emptyTotals = (): Totals => ({
 /** Legacy `ICPCContestFormat`: whole minutes from the start to each problem's first best submission, plus `penalty` minutes per earlier try (IE/CE/no result excluded); the tiebreaker is the last solve. Frozen totals leave out problems whose deciding submission came after the freeze. */
 export const icpcFormat: ContestFormat<IcpcConfig> = {
   parseConfig: (raw) =>
-    parseKnownConfig<IcpcConfig>(raw, { penalty: 20 }, { penalty: isPenalty }),
+    parseKnownConfig<IcpcConfig>(
+      raw,
+      { penalty: 20 },
+      { penalty: isNonNegativeInteger },
+    ),
   score(rows, config, context) {
     const frozenAt = context.frozenTime;
     const live = emptyTotals();

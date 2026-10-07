@@ -6,6 +6,7 @@ import type {
 } from './format';
 import {
   bestOf,
+  isNonNegativeInteger,
   isTry,
   parseKnownConfig,
   roundScore,
@@ -22,9 +23,6 @@ export interface VnojConfig {
   lso: boolean;
 }
 
-const isPenalty = (value: number | boolean) =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 0;
-
 interface Totals {
   score: number;
   cumtime: number;
@@ -39,7 +37,6 @@ function vnojTotals(
   context: ScoringContext,
   frozenAt: Date | null,
 ): Totals {
-  const allRows = rowsByProblem(rows);
   const counted = (scored: ScoringRow) =>
     frozenAt === null || scored.date < frozenAt;
   let cumtime = 0;
@@ -50,15 +47,14 @@ function vnojTotals(
   for (const [problemId, problemRows] of rowsByProblem(rows.filter(counted))) {
     const best = bestOf(problemRows);
     const time = secondsSince(context.start, best.date);
-    const tried = allRows.get(problemId)!.filter(isTry);
+    const tried = problemRows.filter(isTry);
     let previous = 0;
     if (config.penalty) {
-      const tries = tried.filter(counted);
       if (best.points) {
         previous =
-          tries.filter((scored) => scored.date <= best.date).length - 1;
+          tried.filter((scored) => scored.date <= best.date).length - 1;
         penalty += previous * config.penalty * 60;
-      } else previous = tries.length;
+      } else previous = tried.length;
     }
     if (best.points) {
       cumtime += time;
@@ -85,7 +81,7 @@ export const vnojFormat: ContestFormat<VnojConfig> = {
     parseKnownConfig<VnojConfig>(
       raw,
       { penalty: 5, lso: false },
-      { penalty: isPenalty },
+      { penalty: isNonNegativeInteger },
     ),
   score(rows, config, context) {
     const live = vnojTotals(rows, config, context, null);

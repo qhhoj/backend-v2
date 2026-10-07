@@ -135,6 +135,27 @@ describe('icpc (legacy ICPCContestFormat)', () => {
       expect(score).toMatchObject({ tiebreaker: 90, cumtime: 130 });
     });
 
+    it('takes the tiebreaker from the latest solve, not the last problem iterated', () => {
+      const lateSolveFirst = [
+        row('A', 5, 0),
+        row('A', 90, 100),
+        row('B', 10, 100),
+      ];
+      expect(
+        icpcFormat.score(lateSolveFirst, { penalty: 20 }, frozenContext()),
+      ).toMatchObject({ cumtime: 120, tiebreaker: 90, frozenTiebreaker: 90 });
+    });
+
+    it('floors a negative non-whole minute downwards', () =>
+      // -9m59s floors to -10 (truncating gives -9): -10 + 30.
+      expect(
+        icpcFormat.score(
+          [{ ...row('A', 0, 100), date: at(-10, 1) }, row('B', 30, 100)],
+          { penalty: 20 },
+          context(),
+        ).cumtime,
+      ).toBe(20));
+
     it('floors seconds into whole minutes', () => {
       const score = icpcFormat.score(
         [{ ...row('A', 0, 100), date: at(59, 59) }],
@@ -229,9 +250,8 @@ describe('icpc (legacy ICPCContestFormat)', () => {
 
   it('clamps a negative cumtime to 0', () =>
     expect(
-      icpcFormat.score([row('A', -10, 100)], { penalty: 20 }, context())
-        .cumtime,
-    ).toBe(0));
+      icpcFormat.score([row('A', -10, 100)], { penalty: 20 }, context()),
+    ).toMatchObject({ cumtime: 0, frozenCumtime: 0 }));
 
   it.each([
     { penalty: -1 },
@@ -371,10 +391,46 @@ describe('vnoj (legacy VNOJContestFormat)', () => {
       ).toMatchObject({ cumtime: 1800, tiebreaker: 1800 });
     });
 
-    it('clamps a negative cumtime to 0', () =>
+    it('clamps a negative cumtime to 0, live and frozen', () =>
       expect(
-        vnojFormat.score([row('A', -10, 100)], config, context()).cumtime,
-      ).toBe(0));
+        vnojFormat.score([row('A', -10, 100)], config, frozenContext()),
+      ).toMatchObject({ cumtime: 0, frozenCumtime: 0 }));
+
+    it('takes the tiebreaker from the latest solve, not the last problem iterated', () => {
+      const lateSolveFirst = [
+        row('A', 5, 0),
+        row('A', 90, 100),
+        row('B', 10, 100),
+      ];
+      expect(
+        vnojFormat.score(lateSolveFirst, config, frozenContext()),
+      ).toMatchObject({
+        cumtime: 6300,
+        tiebreaker: 5400,
+        frozenTiebreaker: 5400,
+      });
+      expect(
+        vnojFormat.score(
+          lateSolveFirst,
+          { penalty: 5, lso: true },
+          frozenContext(),
+        ).cumtime,
+      ).toBe(5700);
+    });
+
+    it('keeps fractional seconds', () => {
+      const score = vnojFormat.score(
+        [{ ...row('A', 0, 100), date: new Date(at(25, 30).getTime() + 500) }],
+        config,
+        frozenContext(),
+      );
+      expect(score).toMatchObject({
+        cumtime: 1530.5,
+        tiebreaker: 1530.5,
+        frozenCumtime: 1530.5,
+      });
+      expect(score.formatData.A).toMatchObject({ time: 1530.5 });
+    });
   });
 
   describe('freeze boundary', () => {
