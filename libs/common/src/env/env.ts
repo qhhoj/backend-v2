@@ -41,7 +41,7 @@ export interface Env {
   judgeBridgePort: number;
   /** Bridge: interface the judge port listens on. */
   judgeBridgeHost: string;
-  /** Worker: MOSS user id; null disables MOSS (routes 404). Never logged. */
+  /** MOSS user id: set on the api (gates the routes, 404 without it) and the worker (runs the job); null disables MOSS. Never in job data or logs. */
   mossApiKey: string | null;
   /** Contest data zips, shared by the api (serves) and the worker (writes); null disables data download. Not under MEDIA_ROOT (served publicly). */
   contestDataRoot: string | null;

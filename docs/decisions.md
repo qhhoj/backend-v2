@@ -18,7 +18,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `fastify` pinned to one copy — a duplicate copy breaks type identity with `@nestjs/platform-fastify`.
 - `TRUST_PROXY` is `false` or an address list, never `true` or a hop count — per-IP rate limits would trust spoofed forwarded headers.
 - Env is validated at boot — fail fast instead of a half-working process.
-- `@nestjs/schedule` 6, `bullmq` 5.81.5, `@nestjs/bullmq` 11.0.5, `@fastify/cookie` 11.0.2, `sanitize-html` 2.17.5 pinned — newer majors are ESM-only and break Jest CJS and Nest 11.
+- `@nestjs/schedule` 6.x, `bullmq` 5.81.5, `@nestjs/bullmq` 11.0.5, `@fastify/cookie` 11.0.2, `sanitize-html` 2.17.5 pinned — newer majors are ESM-only and break Jest CJS and Nest 11 (`@nestjs/schedule` follows `^6.1.3`, the rest are exact).
 - Passwords: verify Django `pbkdf2_sha256`/`pbkdf2_sha1` of any iteration count, rehash to 870000 on login — existing users log in with old passwords.
 - Django's common-password list dropped; Have I Been Pwned range check instead — the HIBP list covers it; a pwned hit forces a password change.
 - Login verifies the password before revealing a ban — the old site leaked ban state to anyone who knew a username.
@@ -32,7 +32,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - An invalid Bearer token is 401 even on `@Public` routes — fail closed.
 - TOTP and WebAuthn share one failure budget — a second factor cannot be brute-forced by alternating methods.
 - TOTP rejects steps at or before `lastTotpTimecode` — a code cannot be replayed.
-- TOTP secrets and scratch codes are AES-256-GCM encrypted at rest; the migrator decrypts the legacy Fernet format — a database leak does not leak second factors.
+- TOTP secrets and scratch codes are AES-256-GCM encrypted at rest; the migrator will decrypt the legacy Fernet format (planned, migrator deferred) — a database leak does not leak second factors.
 - 2FA enrolment and credential removal need `currentPassword` and are blocked while impersonating — a hijacked session cannot add its own second factor.
 - Password change writes with optimistic concurrency (409) and rejects the same password — a race cannot overwrite a freshly changed password.
 - Registration creates an inactive user plus a hashed activation key; no resend endpoint — not needed.
@@ -47,9 +47,9 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 
 - Backfill is incremental and re-runnable: stable `migrationIdMap`, upsert by `_id`, `--fresh` to empty — a full backfill runs ahead of time, delta catch-up and a short final run at the switch.
 - `verify` rebuilds the expected document from source rows and deep-compares — counts alone miss field drift.
-- Migrated stale-pending accounts must be marked before the reclaim job runs — otherwise legacy admin-deactivated accounts get deleted.
-- Migrated submissions need `casePoints`/`caseTotal`, and a full recompute follows the backfill — schema defaults make 0/0 rows look solved.
-- Contest `formatConfig` keys are camelCased on migration, `cumtime` dropped on `final_submission`, `Ultimate` lowercased, Lua label scripts become `labelStyle` — the v2 schema rejects the legacy spellings.
+- Planned (migrator deferred): migrated stale-pending accounts must be marked before the reclaim job runs — otherwise legacy admin-deactivated accounts get deleted.
+- Planned (migrator deferred): migrated submissions need `casePoints`/`caseTotal`, and a full recompute follows the backfill — schema defaults make 0/0 rows look solved.
+- Planned (migrator deferred): contest `formatConfig` keys are camelCased on migration, `cumtime` dropped on `final_submission`, `Ultimate` lowercased, Lua label scripts become `labelStyle` — the v2 schema rejects the legacy spellings.
 - The migrator never loads `Env` — it needs only `MONGO_URL` and `LEGACY_*`.
 
 ## Problems
@@ -138,19 +138,19 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Freeze applies to `icpc` and `vnoj` only, stays after the end (editors set `frozenLastMinutes` to 0 to unfreeze), and non-editors only ever see `frozen*` fields, also through `/api/v2` and participations — legacy `/api/v2` leaked live standings.
 - Hidden scoreboards list no scores to non-editors in `/api/v2` participations — stricter than legacy, consistent with the freeze stance.
 - Disqualify sets score -9999, bans the user from the contest, clears the current pointer, queues a rescore and re-rates when ratings exist; auto-ban after N disqualifications is off by default (`CONTEST_BAN_AFTER_DISQUALIFICATIONS`), lifts by compare-and-set on the ban reason, reconciled from the final `isDisqualified` — concurrent opposite requests converge and a manual ban is never lifted.
-- Rating is Elo-MMR ported line for line (goldens generated from the legacy Python), triggered manually by an editor, one job at a time; it deletes and re-rates from the earliest affected end time in one Mongo transaction — a re-rate after any contest edit keeps later contests consistent.
-- `contest-rescore` of a contest that has ratings enqueues `contest-rating` — covers disqualification and scoring edits (broader than legacy).
+- Rating is Elo-MMR ported line for line (goldens generated from the legacy Python), queued by an editor or by the rescore of a contest that has ratings, one job at a time; it deletes and re-rates from the earliest affected end time in one Mongo transaction — a re-rate after any contest edit keeps later contests consistent.
+- `contest-rescore` of a contest that has ratings enqueues `contest-rating` — the single trigger after disqualifications and scoring or end-time edits (broader than legacy); an end-time edit queues no rating itself, and the rating run's start moves earlier until it covers contests whose end moved.
 - Rating is never computed from a frozen board: `POST /rate` answers 409 while the contest is frozen, the worker skips a target frozen at run time (logged), and `/api/v2` rankings return `old_rating`/`new_rating` null on a frozen board — ratings follow live standings and would reveal the hidden winner.
-- MOSS: the key lives only in the worker env, never in job data or logs; one run per contest; results replaced only after every batch succeeds; per-batch wall-clock deadline plus idle timeout — a drip-feeding server cannot hang the job.
+- MOSS: `MOSS_API_KEY` is set on the api (it gates the routes) and the worker (it runs the job), never in job data or logs; clearing results answers 409 while the job exists; one run per contest; results replaced only after every batch succeeds; per-batch wall-clock deadline plus idle timeout — a drip-feeding server cannot hang the job.
 - Contest data download: zip written to a per-run temp name, sources fetched lazily, capped in bytes and entries, prepared at most once per 24 h unless the zip is missing; the root is outside `MEDIA_ROOT` — the zip is served by the API, never directly.
 - Public ranking links use 18-char tokens with per-IP miss limits; both links and ranking codes serve the same `board` — frozen while frozen.
-- Official ranking CSV is parsed at write with fixed size, row and column caps; the route's body limit is raised only for it.
+- Official ranking CSV is parsed at write with fixed size, row and column caps; the body limit is raised only on that route (and the problem data upload route).
 - Announcements are rendered at save and pushed as ids over Redis `contest-events` and the shared SSE hub — one streaming stack for submissions and contests.
 - Clarifications dropped (no rows in production).
 
 ## Deploy
 
 - Worker image needs pandoc >= 3, util-linux `prlimit` and Chromium; plan about 2 GB of memory per job of concurrency — PDF and Polygon conversions are memory hungry.
-- API and worker mount the same `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` and `CONTEST_DATA_ROOT`; none of the last three sits under `MEDIA_ROOT` — it is served publicly.
+- API and worker mount the same `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` and `CONTEST_DATA_ROOT`; `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` are not checked against `MEDIA_ROOT` at boot, only `CONTEST_DATA_ROOT` is; none of the last three may sit under it — it is served publicly.
 - nginx: `proxy_buffering off` and a long `proxy_read_timeout` on `/api/internal/events/`; set `TRUST_PROXY` to nginx's address — streams need it, per-IP limits are meaningless otherwise.
 - Docker Compose stack: apps, MongoDB replica set, Redis, nginx; one bridge instance; all sessions are invalidated once at cutover.

@@ -66,7 +66,7 @@ libs/          common, database, auth, render, problems, judging, contests
 5. The worker's **effects** (`submission-effects`) recompute user points/PP, problem stats and, for contest submissions, the participation and ranking. A sweep repairs lost jobs.
 6. The api serves **SSE** from the Redis events (`/api/internal/events/submissions/:id`, the public feed and `/events/contests/:key`).
 
-Contests add a participation and a contest submission on step 1; `final_submission` contests hold submissions as `PD` until the end.
+Inside a current contest, step 1 also adds a contest submission to the viewer's participation (joining creates it); `final_submission` contests hold submissions as `PD` until the end.
 
 ### Jobs (`apps/worker/src/jobs`)
 
@@ -87,9 +87,9 @@ Contests add a participation and a contest submission on step 1; `final_submissi
 
 | To change | Look in |
 |---|---|
-| An HTTP endpoint | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` |
+| An HTTP endpoint | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `api-v2/`, `tags/`, `judges/` use their own module file) |
 | Who can see/edit a problem or contest | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts` |
-| A contest scoring format | `libs/contests/src/formats/<name>.ts` and `registry.ts` |
+| A contest scoring format | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts` |
 | Rating | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating` |
 | Points, PP, problem stats | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects` |
 | Judge protocol, dispatch, grading | `apps/bridge/src/{protocol,dispatch,judges,submissions}` |
