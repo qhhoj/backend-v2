@@ -25,9 +25,10 @@ export class RatingHistoryEntryResponse {
   contestKey!: string | null;
   contestName!: string | null;
   endTime!: Date;
-  rating!: number;
-  rank!: number;
-  performance!: number;
+  /** Rating, rank and performance are null while the viewer may not read the contest's board (hidden or frozen). */
+  rating!: number | null;
+  rank!: number | null;
+  performance!: number | null;
 }
 
 export class SolvedProblemResponse {

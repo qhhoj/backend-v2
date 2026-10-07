@@ -142,8 +142,22 @@ describe('/api/v2 organizations and users', () => {
       },
     );
     await joinParticipation(api, secret._id, users.alice._id, { score: 9 });
-    await joinParticipation(api, hiddenBoard._id, users.alice._id, {
-      score: 7,
+    const hiddenRow = await joinParticipation(
+      api,
+      hiddenBoard._id,
+      users.alice._id,
+      { score: 7 },
+    );
+    await api.ratings.create({
+      user: users.alice._id,
+      contest: hiddenBoard._id,
+      participation: hiddenRow._id,
+      contestEndTime: hiddenBoard.endTime,
+      rank: 3,
+      rating: 1550,
+      mean: 1555,
+      performance: 1650,
+      lastRated: new Date(),
     });
     await api.ratings.create({
       user: users.alice._id,
@@ -289,7 +303,7 @@ describe('/api/v2 organizations and users', () => {
     });
     expect(
       asEditor.find((row) => row.key === 'hidden_board_one'),
-    ).toMatchObject({ score: 7 });
+    ).toMatchObject({ score: 7, rating: 1550, performance: 1650 });
     const missing = await body('/api/v2/user/nobody', undefined, 404);
     expect(missing.error).toEqual({
       code: 404,

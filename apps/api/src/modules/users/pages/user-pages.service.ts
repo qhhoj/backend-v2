@@ -24,6 +24,21 @@ import { UserPagesRepository } from './user-pages.repository';
 
 const ACTIVITY_DAYS = 365;
 const CACHE_SECONDS = 600;
+/** Min, max and count over the ratings the viewer may read. */
+const summarize = (
+  history: Array<{ rating: { rating: number }; readable: boolean }>,
+): UserPageResponse['ratingSummary'] => {
+  const values = history
+    .filter((entry) => entry.readable)
+    .map((entry) => entry.rating.rating);
+  return values.length
+    ? {
+        min: Math.min(...values),
+        max: Math.max(...values),
+        contests: values.length,
+      }
+    : null;
+};
 const notFound = () => new AppError('not_found', 404, 'No such user');
 
 @Injectable()
@@ -48,23 +63,17 @@ export class UserPagesService {
   async page(
     principal: Principal | null,
     username: string,
+    now = new Date(),
   ): Promise<UserPageResponse> {
     const user = await this.userOf(username);
-    const [above, ratingAbove, ratingSummary, organizations] =
-      await Promise.all([
-        this.leaderboards.countAbove(
-          'performancePoints',
-          user.performancePoints,
-        ),
-        user.rating === null
-          ? Promise.resolve(null)
-          : this.leaderboards.countAbove('rating', user.rating),
-        this.pages.ratingSummary(user._id),
-        this.organizations.listedFor(
-          principal,
-          user.organizations.map(uuidStr),
-        ),
-      ]);
+    const [above, ratingAbove, history, organizations] = await Promise.all([
+      this.leaderboards.countAbove('performancePoints', user.performancePoints),
+      user.rating === null
+        ? Promise.resolve(null)
+        : this.leaderboards.countAbove('rating', user.rating),
+      this.readableHistory(principal, user._id, now),
+      this.organizations.listedFor(principal, user.organizations.map(uuidStr)),
+    ]);
     return {
       id: user._id,
       username: user.username,
@@ -78,7 +87,7 @@ export class UserPagesService {
       rating: user.rating,
       rank: above + 1,
       ratingRank: ratingAbove === null ? null : ratingAbove + 1,
-      ratingSummary,
+      ratingSummary: summarize(history),
       organizations: organizations.map((organization) =>
         OrganizationSummaryResponse.from(organization),
       ),
@@ -86,24 +95,39 @@ export class UserPagesService {
     };
   }
 
-  /** Every rating of the user (legacy); names only for contests the viewer may see. */
+  /** Every rating of the user (legacy); names only for contests the viewer may see, results only for boards they may read. */
   async ratings(
     principal: Principal | null,
     username: string,
+    now = new Date(),
   ): Promise<RatingHistoryEntryResponse[]> {
     const user = await this.userOf(username);
-    const history = await this.pages.ratingHistory(
-      user._id,
-      ContestAccess.visibleFilter(principal),
-    );
-    return history.map(({ rating, contest }) => ({
+    const history = await this.readableHistory(principal, user._id, now);
+    return history.map(({ rating, contest, readable }) => ({
       contestKey: contest?.key ?? null,
       contestName: contest?.name ?? null,
       endTime: rating.contestEndTime,
-      rating: rating.rating,
-      rank: rating.rank,
-      performance: rating.performance,
+      rating: readable ? rating.rating : null,
+      rank: readable ? rating.rank : null,
+      performance: readable ? rating.performance : null,
     }));
+  }
+
+  /** Each rating with its contest (null when the viewer may not see it) and whether the viewer may read the contest's board. */
+  private async readableHistory(
+    principal: Principal | null,
+    userId: string,
+    now: Date,
+  ) {
+    const history = await this.pages.ratingHistory(userId);
+    return history.map(({ rating, contest }) => {
+      const view = contest && ContestAccess.accessView(contest);
+      return {
+        rating,
+        contest: view && ContestAccess.canSee(principal, view) ? contest : null,
+        readable: !!view && ContestAccess.boardReadable(principal, view, now),
+      };
+    });
   }
 
   async solved(username: string): Promise<SolvedResponse> {

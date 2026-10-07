@@ -3,7 +3,7 @@ import type { FilterQuery } from 'mongoose';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
-import { isFrozen, standingOf } from '@libs/contests';
+import { standingOf } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import { ContestAccess } from '../../contests/core/contest-access';
@@ -148,23 +148,32 @@ export class ApiV2UsersService {
       await this.contests.findAll({
         $and: [
           ContestAccess.visibleFilter(principal),
-          ContestAccess.scoreboardFilter(principal, now),
           { _id: { $in: [...rows.keys()] } },
           { endTime: { $lt: now } },
         ],
       })
-    ).sort((left, right) => left.endTime.getTime() - right.endTime.getTime());
+    )
+      .filter((contest) =>
+        ContestAccess.boardVisible(
+          principal,
+          ContestAccess.accessView(contest),
+          now,
+        ),
+      )
+      .sort((left, right) => left.endTime.getTime() - right.endTime.getTime());
     const ratings = await this.ratings.byParticipation(
       contests.map((contest) => uuidStr(rows.get(uuidStr(contest._id))!._id)),
     );
     return contests.map((contest) => {
       const row = rows.get(uuidStr(contest._id))!;
-      const frozen =
-        isFrozen(contest, now) &&
-        !ContestAccess.canEdit(principal, ContestAccess.accessView(contest));
-      const standing = standingOf(row, frozen);
+      const readable = ContestAccess.boardReadable(
+        principal,
+        ContestAccess.accessView(contest),
+        now,
+      );
+      const standing = standingOf(row, !readable);
       // Ratings follow the live board: a (re-)frozen board must not reveal them.
-      const rating = frozen ? undefined : ratings.get(uuidStr(row._id));
+      const rating = readable ? ratings.get(uuidStr(row._id)) : undefined;
       return {
         key: contest.key,
         score: standing.score,

@@ -172,6 +172,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - User data zips live 7 days outside `MEDIA_ROOT` (and apart from `CONTEST_DATA_ROOT`), at most 3 prepares per user per day, served by the api — legacy kept them forever in a cache directory.
 - The api-v2 module is grouped by feature like the internal modules — one place per feature, same size rule.
 - `/api/v2/user` hides contest ratings of re-frozen boards from non-editors — a frozen board must not leak through the rating.
+- One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; `/users/:username/ratings` and `/api/v2/user` both use it. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
 
 ## Deploy
 

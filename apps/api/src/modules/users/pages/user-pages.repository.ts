@@ -10,7 +10,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import { ANY_SOLVED } from '@libs/judging';
-import type { FilterQuery, Model } from 'mongoose';
+import type { Model } from 'mongoose';
 
 /** Mongo's `$dateToString` rejects a zone its tzdata lacks (ICU may know it). */
 const UNKNOWN_TIME_ZONE_CODE = 40485;
@@ -57,35 +57,10 @@ export class UserPagesRepository {
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
   ) {}
 
-  async ratingSummary(
-    userId: string,
-  ): Promise<{ min: number; max: number; contests: number } | null> {
-    const [row] = await this.ratings.aggregate<{
-      min: number;
-      max: number;
-      contests: number;
-    }>([
-      { $match: { user: toUuid(userId) } },
-      {
-        $group: {
-          _id: null,
-          min: { $min: '$rating' },
-          max: { $max: '$rating' },
-          contests: { $sum: 1 },
-        },
-      },
-      { $project: { _id: 0, min: 1, max: 1, contests: 1 } },
-    ]);
-    return row ?? null;
-  }
-
-  /** Oldest first through `{user, contestEndTime, contest}`; a contest outside `contestFilter` comes back as null. */
+  /** Oldest first through `{user, contestEndTime, contest}`, with what `ContestAccess` reads to tell what a viewer may see of each contest. */
   async ratingHistory(
     userId: string,
-    contestFilter: FilterQuery<Contest>,
-  ): Promise<
-    Array<{ rating: Rating; contest: Pick<Contest, 'key' | 'name'> | null }>
-  > {
+  ): Promise<Array<{ rating: Rating; contest: Contest | null }>> {
     const ratings = await this.ratings
       .find({ user: userId })
       .sort({ contestEndTime: 1, contest: 1 })
@@ -95,15 +70,28 @@ export class UserPagesRepository {
       (
         await this.contests
           .find(
+            { _id: { $in: ratings.map((row) => uuidStr(row.contest)) } },
             {
-              $and: [
-                { _id: { $in: ratings.map((row) => uuidStr(row.contest)) } },
-                contestFilter,
-              ],
+              key: 1,
+              name: 1,
+              startTime: 1,
+              endTime: 1,
+              timeLimit: 1,
+              frozenLastMinutes: 1,
+              formatName: 1,
+              isVisible: 1,
+              isPrivate: 1,
+              isOrganizationPrivate: 1,
+              organizations: 1,
+              privateContestants: 1,
+              authors: 1,
+              curators: 1,
+              testers: 1,
+              viewContestScoreboard: 1,
+              scoreboardVisibility: 1,
             },
-            { key: 1, name: 1 },
           )
-          .lean()
+          .lean<Contest[]>()
           .exec()
       ).map((contest) => [uuidStr(contest._id), contest]),
     );

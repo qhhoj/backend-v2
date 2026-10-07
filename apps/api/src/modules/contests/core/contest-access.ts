@@ -158,6 +158,38 @@ function scoreboardFilter(
   };
 }
 
+/** `scoreboardFilter`'s semantics for one contest. */
+function boardVisible(
+  principal: Principal | null,
+  contest: ContestAccessView,
+  now: Date,
+): boolean {
+  if (seesEveryContest(principal)) return true;
+  if (
+    principal &&
+    (isEditor(principal, contest) ||
+      contest.viewContestScoreboard.includes(principal.userId))
+  )
+    return true;
+  const { scoreboardVisibility } = contest;
+  if (scoreboardVisibility === 'V') return contest.startTime <= now;
+  if (scoreboardVisibility === 'C' || scoreboardVisibility === 'P')
+    return contest.endTime < now;
+  return false;
+}
+
+/** Whether the viewer may read results derived from the board (ranks, performances, ratings): visible to them and not frozen for them. */
+function boardReadable(
+  principal: Principal | null,
+  contest: ContestAccessView,
+  now: Date,
+): boolean {
+  return (
+    boardVisible(principal, contest, now) &&
+    !(isFrozen(contest, now) && !canEdit(principal, contest))
+  );
+}
+
 /** Legacy `show_scoreboard`. */
 function showScoreboard(contest: ContestAccessView, now: Date): boolean {
   const phase = contestPhase(contest, now);
@@ -216,6 +248,8 @@ export const ContestAccess = {
   canSee,
   visibleFilter,
   scoreboardFilter,
+  boardVisible,
+  boardReadable,
   showScoreboard,
   canSeeFullScoreboard,
   canSeeOwnScoreboard,

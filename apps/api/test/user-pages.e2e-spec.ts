@@ -227,6 +227,76 @@ describe('user pages', () => {
     ).toMatchObject({ contestName: null });
   });
 
+  it('nulls rank, performance and rating of hidden and re-frozen boards for viewers who may not read them', async () => {
+    const rated = await createUserWith(api, 'rated_boards', { rating: 1600 });
+    const author = await createUserWith(api, 'board_author', {
+      permissions: ['judge.edit_own_contest'],
+    });
+    const rate = (contest: { _id: string; endTime: Date }, rating: number) =>
+      api.ratings.create({
+        user: rated._id,
+        contest: contest._id,
+        participation: newId(),
+        contestEndTime: contest.endTime,
+        rank: 4,
+        rating,
+        mean: rating,
+        performance: rating + 100,
+        lastRated: new Date(),
+      });
+    const open = await createContest(api, {
+      name: 'Open board',
+      startTime: hoursFromNow(-60),
+      endTime: hoursFromNow(-58),
+    });
+    const hidden = await createContest(api, {
+      name: 'Hidden board',
+      scoreboardVisibility: 'H',
+      authors: [author._id],
+      startTime: hoursFromNow(-40),
+      endTime: hoursFromNow(-38),
+    });
+    const refrozen = await createContest(api, {
+      name: 'Refrozen board',
+      formatName: 'icpc',
+      authors: [author._id],
+      startTime: hoursFromNow(-20),
+      endTime: hoursFromNow(-1),
+      frozenLastMinutes: 600,
+    });
+    await rate(open, 1200);
+    await rate(hidden, 1900);
+    await rate(refrozen, 2100);
+    const results = async (session?: TestSession) =>
+      dataOf<RatingHistoryEntryResponse[]>(
+        await get('/api/internal/users/rated_boards/ratings', session).expect(
+          200,
+        ),
+      ).map((row) => [row.contestName, row.rating, row.rank, row.performance]);
+    const summary = async (session?: TestSession) =>
+      dataOf<UserPageResponse>(
+        await get('/api/internal/users/rated_boards', session).expect(200),
+      ).ratingSummary;
+
+    expect(await results()).toEqual([
+      ['Open board', 1200, 4, 1300],
+      ['Hidden board', null, null, null],
+      ['Refrozen board', null, null, null],
+    ]);
+    expect(await summary()).toEqual({ min: 1200, max: 1200, contests: 1 });
+    const authorSession = await loginAs(api, author._id);
+    expect(await results(authorSession)).toEqual([
+      ['Open board', 1200, 4, 1300],
+      ['Hidden board', 1900, 4, 2000],
+      ['Refrozen board', 2100, 4, 2200],
+    ]);
+    expect(await summary(authorSession)).toEqual({
+      min: 1200,
+      max: 2100,
+      contests: 3,
+    });
+  });
+
   it('groups the best points per public problem and breaks the PP down like legacy', async () => {
     const solver = await createUserWith(api, 'solver', {});
     const first = await createProblem(api, catalog, {
