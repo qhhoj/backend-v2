@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { USER_DATA_QUEUE } from '@libs/community';
 import { RateLimitService } from '@libs/common';
+import { BlogApiModule } from '../blog/blog-api.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { UserDataController } from './data/user-data.controller';
@@ -21,6 +22,7 @@ import { UserPagesService } from './pages/user-pages.service';
 @Module({
   imports: [
     AuthModule,
+    BlogApiModule,
     OrganizationsApiModule,
     ProblemsApiModule,
     BullModule.registerQueue({ name: USER_DATA_QUEUE }),

@@ -2,6 +2,9 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import type { Paginated } from '@libs/common';
+import { BlogPostsService } from '../../blog/core/blog-posts.service';
+import { PostPageQueryDto } from '../../blog/core/dto/post-list.dto';
+import type { PostListItemResponse } from '../../blog/core/dto/post.response';
 import { UsernameParamDto } from '../core/dto/username-params.dto';
 import { ActivityQueryDto, PpBreakdownQueryDto } from './dto/user-page.dto';
 import type {
@@ -16,7 +19,10 @@ import { UserPagesService } from './user-pages.service';
 @Public()
 @Controller('api/internal/users/:username')
 export class UserPagesController {
-  constructor(private readonly pages: UserPagesService) {}
+  constructor(
+    private readonly pages: UserPagesService,
+    private readonly blogPosts: BlogPostsService,
+  ) {}
 
   @Get()
   page(
@@ -54,5 +60,14 @@ export class UserPagesController {
     @Query() query: ActivityQueryDto,
   ): Promise<ActivityResponse> {
     return this.pages.activity(optionalPrincipal(auth), username, query);
+  }
+
+  @Get('blog')
+  blog(
+    @CurrentAuth() auth: AuthContext | undefined,
+    @Param() { username }: UsernameParamDto,
+    @Query() { page }: PostPageQueryDto,
+  ): Promise<Paginated<PostListItemResponse>> {
+    return this.blogPosts.userPosts(optionalPrincipal(auth), username, page);
   }
 }
