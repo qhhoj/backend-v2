@@ -2,7 +2,7 @@ import { finalSubmissionFormat } from './final-submission';
 import { FormatConfigError } from './format';
 import type { FormatName } from './format';
 import { batchMinima, dataPoints, ioi16Format } from './ioi16';
-import { FORMATS, parseFormatConfig, scoreParticipation } from './registry';
+import { parseFormatConfig, scoreParticipation } from './registry';
 import { at, context, row } from './scoring-fixtures';
 import { ultimateFormat } from './ultimate';
 
@@ -96,6 +96,9 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
     expect(score(0, 1.4)).toBe(4); // 3.5 -> 4
   });
 
+  it('hides solve times by default', () =>
+    expect(ioi16Format.parseConfig(null)).toEqual({ cumtime: false }));
+
   it('shows solve times only with cumtime, all of them zero', () => {
     expect(
       ioi16Format.firstSolveTime({ points: 1, time: 0 }, { cumtime: false }),
@@ -184,6 +187,20 @@ describe('ultimate (legacy UltimateContestFormat, fixed)', () => {
     ).toBe(2);
   });
 
+  it('takes the tiebreaker from the latest solve even when an earlier-iterated problem owns it', () =>
+    expect(
+      ultimateFormat.score(
+        [row('A', 5, 0), row('A', 90, 100), row('B', 10, 100)],
+        {},
+        context(),
+      ),
+    ).toMatchObject({ cumtime: 6000, tiebreaker: 5400 }));
+
+  it('clamps a negative cumtime to zero', () =>
+    expect(
+      ultimateFormat.score([row('A', -10, 100)], {}, context()),
+    ).toMatchObject({ cumtime: 0, tiebreaker: 0 }));
+
   it('shows every solve time to first solves', () =>
     expect(ultimateFormat.firstSolveTime({ points: 1, time: 7 }, {})).toBe(7));
 
@@ -264,6 +281,15 @@ describe('final_submission (legacy FinalSubmissionContestFormat)', () => {
     ).toBe(2);
   });
 
+  it('scores a submission still queued or running, only pending ones being ignored', () =>
+    expect(
+      finalSubmissionFormat.score(
+        [row('A', 10, 100), row('A', 20, 0, { status: 'QU', result: null })],
+        { autoJudge: true },
+        context(),
+      ),
+    ).toMatchObject({ score: 0, formatData: { A: { points: 0 } } }));
+
   it('judges automatically unless configured not to', () => {
     expect(finalSubmissionFormat.parseConfig(null)).toEqual({
       autoJudge: true,
@@ -306,15 +332,30 @@ describe('registry', () => {
     ).toThrow(FormatConfigError);
   });
 
-  it('maps every format name to a module that scores an empty participation as zero', () => {
-    for (const name of Object.keys(FORMATS) as FormatName[])
-      expect(
-        scoreParticipation([], { name, config: null }, context()),
-      ).toMatchObject({
-        score: 0,
-        cumtime: 0,
-        tiebreaker: 0,
-        formatData: {},
-      });
-  });
+  it.each([
+    ['default', 100, 1800, 1800],
+    ['ioi', 100, 0, 600],
+    ['ioi16', 100, 0, 0],
+    ['icpc', 100, 10, 600],
+    ['vnoj', 100, 600, 600],
+    ['ultimate', 0, 0, 0],
+    ['final_submission', 50, 0, 0],
+  ] as [FormatName, number, number, number][])(
+    'binds %s to its own module (score %d, cumtime %d, cell time %d)',
+    (name, score, cumtime, time) => {
+      const rows = [
+        row('A', 10, 100, { batchPoints: { '1': 10 } }),
+        row('A', 20, 50),
+        row('A', 30, 0, { status: 'PD', result: null }),
+      ];
+      const problems = [{ problemId: 'A', points: 100, dataPoints: 10 }];
+      const scored = scoreParticipation(
+        rows,
+        { name, config: null },
+        context({ problems }),
+      );
+      expect(scored).toMatchObject({ score, cumtime });
+      expect(scored.formatData).toMatchObject({ A: { time } });
+    },
+  );
 });

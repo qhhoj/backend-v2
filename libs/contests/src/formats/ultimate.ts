@@ -7,7 +7,7 @@ import {
   unfrozen,
 } from './shared';
 
-/** Legacy `UltimateContestFormat`: each problem's last submission counts, timed from the contest start (legacy, also for virtual rows). Fixed: the tiebreaker is written (legacy wrote `tiebreak`) and the score is rounded. */
+/** Legacy `UltimateContestFormat`: each problem's last submission counts, timed from the contest start (legacy, also for virtual rows). Recorded deviation: legacy double counted score and cumtime for two submissions with the exact same date; v2 takes the one latest row. Fixed: the tiebreaker is written (legacy wrote `tiebreak`) and the score is rounded. */
 export const ultimateFormat: ContestFormat<Record<string, never>> = {
   parseConfig: rejectConfig,
   score(rows, _config, context) {
