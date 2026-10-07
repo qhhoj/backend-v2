@@ -2,6 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
+import { UsersRepository } from '@libs/auth';
 import { CONTEST_RESCORE_QUEUE, rankingCacheKey } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
@@ -160,5 +161,99 @@ describe('disqualification', () => {
       201,
     );
     expect((await userOf(repeat._id)).banReason).toBe('Spam');
+  });
+
+  it('leaves a manual ban alone when the lift finds it replaced between the read and the write', async () => {
+    const repeat = await createUserWith(api, 'cas_cheater');
+    const contests = await Promise.all(
+      [1, 2].map(() => createContest(api, { authors: [editorId] })),
+    );
+    const rows = await Promise.all(
+      contests.map(async (contest) => ({
+        key: contest.key,
+        id: (await joinParticipation(api, contest._id, repeat._id))._id,
+      })),
+    );
+    for (const row of rows) await disqualify(row.key, row.id, true).expect(201);
+    const banned = await userOf(repeat._id);
+    expect(banned.banReason).toBe(CONTEST_CHEATING_BAN_REASON);
+    const users = api.app.get(UsersRepository);
+    const findById = users.findById.bind(users);
+    jest
+      .spyOn(users, 'findById')
+      .mockImplementation(async (id: string) =>
+        id === repeat._id ? (banned as never) : findById(id),
+      );
+    await api.users.updateOne({ _id: repeat._id }, { banReason: 'Spam' });
+    await disqualify(rows[0].key, rows[0].id, false).expect(201);
+    jest.restoreAllMocks();
+    expect(await userOf(repeat._id)).toMatchObject({
+      banReason: 'Spam',
+      isActive: false,
+    });
+  });
+
+  it('keeps the contest ban equal to the final disqualified state under concurrent opposite requests', async () => {
+    const contest = await createContest(api, { authors: [editorId] });
+    const user = await createUserWith(api, 'racer');
+    const participation = await joinParticipation(api, contest._id, user._id);
+    for (let round = 0; round < 15; round += 1) {
+      await Promise.all(
+        [true, false, true, false].map((value) =>
+          disqualify(contest.key, participation._id, value),
+        ),
+      );
+      const row = (await api.participations
+        .findById(participation._id)
+        .lean())!;
+      const banned = (await api.contests
+        .findById(contest._id)
+        .lean())!.bannedUsers.map(uuidStr);
+      expect(banned.includes(user._id)).toBe(row.isDisqualified);
+    }
+  });
+});
+
+describe('disqualification with the account ban off (default)', () => {
+  let api: ApiTest;
+  beforeAll(async () => {
+    delete process.env.CONTEST_BAN_AFTER_DISQUALIFICATIONS;
+    api = await setupApiTest();
+  });
+  afterAll(() => api.teardown());
+
+  it('never bans the account, however many disqualifications', async () => {
+    const editorId = (
+      await createUserWith(api, 'off_editor', {
+        permissions: ['judge.edit_own_contest'],
+      })
+    )._id;
+    const editor = await loginAs(api, editorId);
+    const cheater = await createUserWith(api, 'off_cheater');
+    for (let count = 0; count < 3; count += 1) {
+      const contest = await createContest(api, { authors: [editorId] });
+      const participation = await joinParticipation(
+        api,
+        contest._id,
+        cheater._id,
+      );
+      await authed(
+        api
+          .http()
+          .post(
+            contestUrl(
+              contest.key,
+              `/participations/${participation._id}/disqualify`,
+            ),
+          ),
+        editor,
+      )
+        .send({ disqualified: true })
+        .expect(201);
+    }
+    expect(await api.users.findById(cheater._id).lean()).toMatchObject({
+      banReason: null,
+      isActive: true,
+    });
   });
 });

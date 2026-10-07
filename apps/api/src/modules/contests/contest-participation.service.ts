@@ -194,12 +194,21 @@ export class ContestParticipationService {
     if (!participation || uuidStr(participation.contest) !== contest._id)
       throw new AppError('not_found', 404, 'No such participation');
     const userId = uuidStr(participation.user);
-    const updated = await this.participationRows.setDisqualified(
+    let updated = await this.participationRows.setDisqualified(
       participation._id,
       disqualified,
     );
-    await this.contests.setBanned(contest._id, userId, disqualified);
-    if (disqualified)
+    // Concurrent opposite requests: write the ban from the row's state, and repeat until a re-read agrees.
+    for (
+      let written: boolean | null = null;
+      written !== updated.isDisqualified;
+    ) {
+      written = updated.isDisqualified;
+      await this.contests.setBanned(contest._id, userId, written);
+      updated =
+        (await this.participationRows.findById(participation._id)) ?? updated;
+    }
+    if (updated.isDisqualified)
       await this.participationRows.clearCurrent(userId, participation._id);
     await purgeRankingCache(this.redis, contest._id);
     void notifyContestRescore(this.rescores, contest._id, this.logger);
@@ -217,14 +226,14 @@ export class ContestParticipationService {
     ]);
     if (!user) return;
     if (count >= limit && user.banReason === null)
-      await this.users.update(userId, {
+      await this.users.updateIfBanReason(userId, null, {
         banReason: CONTEST_CHEATING_BAN_REASON,
         displayRank: 'banned',
         isUnlisted: true,
         isActive: false,
       });
     else if (count < limit && user.banReason === CONTEST_CHEATING_BAN_REASON)
-      await this.users.update(userId, {
+      await this.users.updateIfBanReason(userId, CONTEST_CHEATING_BAN_REASON, {
         banReason: null,
         displayRank: 'user',
         isUnlisted: false,
