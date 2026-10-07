@@ -51,16 +51,19 @@ describe('loadEnv', () => {
       loadEnv({
         ...valid,
         DISCORD_WEBHOOK_URLS:
-          'default=https://discord.com/api/webhooks/1/a, on_new_comment=https://discord.com/api/webhooks/2/b',
+          'default=https://discord.com/api/webhooks/1/a, on_new_comment=https://discord.com/api/webhooks/2/b,on_new_blogpost=http://127.0.0.1:9/c',
       }).discordWebhookUrls,
     ).toEqual({
       default: 'https://discord.com/api/webhooks/1/a',
       on_new_comment: 'https://discord.com/api/webhooks/2/b',
+      on_new_blogpost: 'http://127.0.0.1:9/c',
     });
     for (const bad of [
       'https://discord.com/api/webhooks/9/secret',
       'comment=https://discord.com/api/webhooks/9/secret',
       'default=ftp://discord.com/api/webhooks/9/secret',
+      'default=https://[bad/secret',
+      'default=http://discord.com/api/webhooks/9/secret',
       'default=https://a/9/secret,default=https://b/9/secret',
     ]) {
       const attempt = () => loadEnv({ ...valid, DISCORD_WEBHOOK_URLS: bad });

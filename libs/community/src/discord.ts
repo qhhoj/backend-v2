@@ -34,6 +34,7 @@ export const discordPayload = (message: DiscordMessage) => ({
       ...(message.author ? { author: message.author } : {}),
     },
   ],
+  allowed_mentions: { parse: [] as string[] },
 });
 
 /** First `length` code points (legacy Python `text[:length]`). */

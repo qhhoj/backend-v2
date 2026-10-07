@@ -80,7 +80,7 @@ export class ProblemEditingService {
     return this.problems.detail(principal, problem.code, 'en');
   }
 
-  /** Legacy `on_new_problem` (organization problems) and `on_new_suggested_problem`. The author is the creator: the suggester in suggest mode, a curator otherwise (legacy: `suggester or authors.first()`). */
+  /** Legacy `on_new_problem` (organization problems) and `on_new_suggested_problem`. The author is the creator: the suggester in suggest mode, a curator otherwise (legacy: `suggester or authors.first()`). Legacy's trailing `Organizations:` line is omitted on purpose (less exposure). */
   private announce(
     problem: Problem,
     mode: 'create' | 'suggest',
@@ -94,7 +94,7 @@ export class ProblemEditingService {
         title: `New ${suggested ? 'suggested' : 'organization'} problem ${url}`,
         description: [
           `Title: ${problem.name}`,
-          `Statement: ${excerpt(problem.description ?? '', 100)}...`,
+          `Statement: ${excerpt(problem.description ?? '', 100)}...\n`,
           `Time limit: ${problem.timeLimit}`,
           `Memory limit (MB): ${problem.memoryLimit / 1024}`,
           `Points: ${problem.points}`,

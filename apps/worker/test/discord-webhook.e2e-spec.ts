@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { getQueueToken } from '@nestjs/bullmq';
+import { UnrecoverableError } from 'bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import { DISCORD_WEBHOOK_JOB, DISCORD_WEBHOOK_QUEUE } from '@libs/community';
@@ -31,7 +32,9 @@ describe('discord webhook job', () => {
       request.on('data', (chunk: Buffer) => (body += chunk.toString()));
       request.on('end', () => {
         received.push({ path: request.url ?? '', body: JSON.parse(body) });
-        response.statusCode = status;
+        response.statusCode = request.url === '/redirect' ? 302 : status;
+        if (request.url === '/redirect')
+          response.setHeader('location', `${base}/elsewhere`);
         response.end();
       });
     });
@@ -41,7 +44,7 @@ describe('discord webhook job', () => {
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     worker = await setupWorkerTest({
       env: {
-        DISCORD_WEBHOOK_URLS: `default=${base}/default,on_new_blogpost=${base}/blog`,
+        DISCORD_WEBHOOK_URLS: `default=${base}/default,on_new_blogpost=${base}/blog,on_new_problem=${base}/redirect,on_new_ticket=http://127.0.0.1:1/secret-path`,
       },
     });
   });
@@ -73,6 +76,7 @@ describe('discord webhook job', () => {
               author: job.message.author,
             },
           ],
+          allowed_mentions: { parse: [] },
         },
       },
       expect.objectContaining({ path: '/blog' }),
@@ -85,6 +89,34 @@ describe('discord webhook job', () => {
     const failure = service.send(job);
     await expect(failure).rejects.toThrow(/500/);
     await expect(failure).rejects.not.toThrow(new RegExp(base));
+  });
+
+  it('does not retry a refused payload or dead webhook, but retries 429', async () => {
+    const service = worker.module.get(DiscordWebhookService);
+    status = 400;
+    await expect(service.send(job)).rejects.toBeInstanceOf(UnrecoverableError);
+    status = 404;
+    await expect(service.send(job)).rejects.toBeInstanceOf(UnrecoverableError);
+    status = 429;
+    const rateLimited = await service.send(job).catch((error: Error) => error);
+    expect(rateLimited).toBeInstanceOf(Error);
+    expect(rateLimited).not.toBeInstanceOf(UnrecoverableError);
+  });
+
+  it('never carries the URL in an unreachable-host error and refuses redirects', async () => {
+    const service = worker.module.get(DiscordWebhookService);
+    const unreachable = await service
+      .send({ ...job, event: 'on_new_ticket' })
+      .catch((error: Error) => error);
+    expect(unreachable).toBeInstanceOf(Error);
+    expect((unreachable as Error).message).toMatch(/unreachable/);
+    expect((unreachable as Error).message).not.toMatch(
+      /secret-path|127\.0\.0\.1/,
+    );
+    await expect(
+      service.send({ ...job, event: 'on_new_problem' }),
+    ).rejects.toThrow(/unreachable/);
+    expect(received.map((entry) => entry.path)).toEqual(['/redirect']);
   });
 
   it('sends queued jobs', async () => {

@@ -122,6 +122,15 @@ export function loadEnv(
       problems.push(`${name} must be ${min}-65535`);
     return value;
   };
+  /** A parseable URL, https unless it targets this machine (the token travels in the URL). */
+  const isWebhookUrl = (url: string): boolean => {
+    if (!URL.canParse(url)) return false;
+    const { protocol, hostname } = new URL(url);
+    return (
+      protocol === 'https:' ||
+      (protocol === 'http:' && ['localhost', '127.0.0.1'].includes(hostname))
+    );
+  };
   /** `event=url` pairs separated by commas; errors never echo a URL (they are secrets). */
   const webhooks = (name: string): Record<string, string> => {
     const urls: Record<string, string> = {};
@@ -135,11 +144,11 @@ export function loadEnv(
       if (
         separator < 1 ||
         !/^(default|on_[a-z_]+)$/.test(event) ||
-        !/^https?:\/\/\S+$/.test(url) ||
+        !isWebhookUrl(url) ||
         event in urls
       )
         problems.push(
-          `${name} must be event=url pairs: default or on_<event>, each once, with http(s) URLs`,
+          `${name} must be event=url pairs: default or on_<event>, each once, with https URLs`,
         );
       else urls[event] = url;
     }

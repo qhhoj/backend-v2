@@ -24,6 +24,7 @@ describe('discord rules', () => {
           author: { name: 'alice', url: 'https://site/user/alice' },
         },
       ],
+      allowed_mentions: { parse: [] },
     });
     expect(
       discordPayload({ title: 'T', description: 'D', author: null }).embeds[0],
