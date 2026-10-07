@@ -1,5 +1,7 @@
 import { Queue } from 'bullmq';
+import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
+import type Redis from 'ioredis';
 import { ORGANIZATION_POINTS_JOB } from '@libs/community';
 import { profileQueries } from '@libs/database/testing';
 import { OrganizationPointsRepository } from '../src/jobs/organization-points/organization-points.repository';
@@ -145,6 +147,15 @@ describe('organization points', () => {
     } finally {
       added.mockRestore();
     }
+  });
+
+  it('clears the pending flag when a recompute starts, so a later change queues another', async () => {
+    const organization = await seedOrganization(worker);
+    const redis = worker.module.get<Redis>(REDIS);
+    const flag = `organization-points:pending:${organization._id}`;
+    await redis.set(flag, '1');
+    await service.recompute(organization._id);
+    expect(await redis.exists(flag)).toBe(0);
   });
 
   it('leaves a deleted organization alone', async () => {

@@ -1,6 +1,7 @@
 import { Body, Controller, Param, Patch, Post } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { RefuseNullFieldsPipe } from '@libs/common';
 import { OrganizationSlugParamDto } from '../core/dto/organization-params.dto';
 import type { OrganizationDetailResponse } from '../core/dto/organization.response';
 import {
@@ -26,7 +27,7 @@ export class OrganizationEditingController {
   update(
     @CurrentAuth() auth: AuthContext,
     @Param() { slug }: OrganizationSlugParamDto,
-    @Body() body: UpdateOrganizationDto,
+    @Body(new RefuseNullFieldsPipe(['slots'])) body: UpdateOrganizationDto,
   ): Promise<OrganizationDetailResponse> {
     return this.editing.update(auth.principal, slug, body);
   }

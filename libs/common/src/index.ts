@@ -4,6 +4,7 @@ export * from './errors/document-too-large';
 export * from './errors/duplicate-key';
 export * from './filters/exception.filter';
 export * from './interceptors/response.interceptor';
+export * from './pipes/refuse-null-fields.pipe';
 export * from './pipes/validation.pipe';
 export * from './bootstrap';
 export * from './env/env';

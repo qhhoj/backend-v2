@@ -1,7 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { REDIS, runCoalesced } from '@libs/common';
-import { ORGANIZATION_PP_ENTRIES, organizationPoints } from '@libs/community';
+import {
+  clearOrganizationPointsPending,
+  ORGANIZATION_PP_ENTRIES,
+  organizationPoints,
+} from '@libs/community';
 import { OrganizationPointsRepository } from './organization-points.repository';
 
 /** Legacy `Organization.on_user_changes`: the only writer of an organization's `performancePoints` and `memberCount`. Reads Mongo and `$set`s, serialised per organization across processes; bursts collapse. */
@@ -12,7 +16,9 @@ export class OrganizationPointsService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  recompute(organizationId: string): Promise<void> {
+  /** Clears the pending flag first: a change from now on queues a job that runs after this one. */
+  async recompute(organizationId: string): Promise<void> {
+    await clearOrganizationPointsPending(this.redis, organizationId);
     return runCoalesced(
       this.redis,
       `effects:organization:${organizationId}`,

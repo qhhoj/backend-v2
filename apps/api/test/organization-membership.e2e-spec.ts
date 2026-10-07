@@ -1,6 +1,9 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { REDIS } from '@libs/common';
+import type Redis from 'ioredis';
 import type { Queue } from 'bullmq';
 import {
+  clearOrganizationPointsPending,
   ORGANIZATION_POINTS_JOB,
   ORGANIZATION_POINTS_QUEUE,
 } from '@libs/community';
@@ -42,7 +45,12 @@ describe('organization editing and membership', () => {
     api = await setupApiTest();
     queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
   });
-  beforeEach(() => queue.drain());
+  beforeEach(async () => {
+    await queue.drain();
+    const redis = api.app.get<Redis>(REDIS);
+    const pending = await redis.keys('organization-points:pending:*');
+    if (pending.length) await redis.del(...pending);
+  });
   afterAll(() => api.teardown());
 
   it('creates an unlisted organization with the creator as admin, member and Org Admin', async () => {
@@ -170,6 +178,64 @@ describe('organization editing and membership', () => {
     }).expect(404);
   });
 
+  it('refuses null on every field but slots and leaves the row unchanged', async () => {
+    const { user: owner, session } = await person();
+    const organization = await createOrganization(api, {
+      adminIds: [owner._id],
+      about: 'kept',
+    });
+    const response = await patch(organizationUrl(organization.slug), session, {
+      name: null,
+      slug: null,
+      about: null,
+      isOpen: null,
+    }).expect(400);
+    expect(
+      Object.keys(
+        (response.body as { error: { fields: object } }).error.fields,
+      ).sort(),
+    ).toEqual(['about', 'isOpen', 'name', 'slug']);
+    expect(
+      await api.organizations.findById(organization._id).lean(),
+    ).toMatchObject({
+      slug: organization.slug,
+      name: organization.name,
+      about: 'kept',
+      isOpen: true,
+    });
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_organization'],
+    });
+    await patch(organizationUrl(organization.slug), staff, {
+      slots: null,
+    }).expect(200);
+  });
+
+  it('renames a slug: taken in any case is 400, a case change of its own is 200', async () => {
+    const { user: owner, session } = await person();
+    await createOrganization(api, { slug: 'rename-beta' });
+    const organization = await createOrganization(api, {
+      adminIds: [owner._id],
+      slug: 'rename-alpha',
+    });
+    const response = await patch(organizationUrl('rename-alpha'), session, {
+      slug: 'RENAME-BETA',
+    }).expect(400);
+    expect(
+      (response.body as { error: { fields: Record<string, string[]> } }).error
+        .fields.slug,
+    ).toBeDefined();
+    const renamed = dataOf<OrganizationDetailResponse>(
+      await patch(organizationUrl('rename-alpha'), session, {
+        slug: 'Rename-Alpha',
+      }).expect(200),
+    );
+    expect(renamed.slug).toBe('Rename-Alpha');
+    expect(
+      (await api.organizations.findById(organization._id).lean())!.slug,
+    ).toBe('Rename-Alpha');
+  });
+
   it('makes new admins members past the open-organization cap and keeps removed ones as members', async () => {
     const { user: owner, session: ownerSession } = await person();
     const { user: newcomer } = await person();
@@ -282,11 +348,22 @@ describe('organization editing and membership', () => {
     await post(organizationUrl(organization.slug, '/kick'), staff, {
       userId: third._id,
     }).expect(204);
-    expect(await queuedFor()).toEqual([
+    // Leave, kick and kick collapse into the one waiting job.
+    expect(await queuedFor()).toEqual([organization._id]);
+    // The worker clears the flag when it starts, so a change meanwhile queues the next recompute.
+    await clearOrganizationPointsPending(
+      api.app.get<Redis>(REDIS),
       organization._id,
-      organization._id,
-      organization._id,
-    ]);
+    );
+    const { user: fourth } = await person();
+    await api.users.updateOne(
+      { _id: fourth._id },
+      { $push: { organizations: organization._id } },
+    );
+    await post(organizationUrl(organization.slug, '/kick'), staff, {
+      userId: fourth._id,
+    }).expect(204);
+    expect(await queuedFor()).toEqual([organization._id, organization._id]);
   });
 
   it('gives exactly one of eight parallel creates the last admin role', async () => {

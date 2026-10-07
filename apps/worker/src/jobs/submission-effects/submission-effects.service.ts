@@ -128,6 +128,7 @@ export class SubmissionEffectsService {
       if (previous && previous.performancePoints !== points.performancePoints)
         await notifyOrganizationPoints(
           this.organizationPoints,
+          this.redis,
           previous.organizations,
           this.logger,
         );
