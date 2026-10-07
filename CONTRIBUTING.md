@@ -1,5 +1,7 @@
 # Contributing
 
+Why things are the way they are: [docs/decisions.md](docs/decisions.md).
+
 ## Stack
 
 - Node 22, TypeScript 5 (`tsconfig.json`, CI uses Node 22)
