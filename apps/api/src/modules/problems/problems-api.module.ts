@@ -26,7 +26,7 @@ import { ProblemPdfService } from './pdf/problem-pdf.service';
 import { ProblemUploadsController } from './uploads/problem-uploads.controller';
 import { ProblemUploadsService } from './uploads/problem-uploads.service';
 import { ProblemEvents } from './core/problem.events';
-import { ProblemRescoreEnqueuer } from './core/problem-rescore.service';
+import { ProblemRescoreEnqueuerService } from './core/problem-rescore.service';
 import { ProblemsRepository } from './core/problems.repository';
 import { ProblemsController } from './core/problems.controller';
 import { ProblemsService } from './core/problems.service';
@@ -78,7 +78,7 @@ const repositories = [
     ProblemDataLifecycleService,
     ProblemImportsService,
     ProblemPdfService,
-    ProblemRescoreEnqueuer,
+    ProblemRescoreEnqueuerService,
     ProblemEvents,
     RateLimitService,
   ],

@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { CONTEST_EVENTS_CHANNEL, parseContestEvent } from '@libs/contests';
-import { EventStreamHub } from '../../events/event-stream-hub.service';
+import { EventStreamHubService } from '../../events/event-stream-hub.service';
 import type {
   EventChannel,
   OpenStream,
@@ -28,7 +28,7 @@ export class ContestStreamsService implements EventChannel {
   private open = 0;
 
   constructor(
-    private readonly hub: EventStreamHub,
+    private readonly hub: EventStreamHubService,
     @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
     private readonly contestViewers: ContestViewerService,
     private readonly contests: ContestsRepository,

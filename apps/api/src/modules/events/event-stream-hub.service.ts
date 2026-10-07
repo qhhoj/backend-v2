@@ -41,8 +41,8 @@ const decrement = (counts: Map<string, number>, key: string) => {
 
 /** Live events over SSE: one Redis subscriber per api process fans every channel out to its streams. The hub caps open streams per user, per IP and in total, drops clients that stop reading, sends heartbeats and re-authorises every `recheckMs`. */
 @Injectable()
-export class EventStreamHub implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(EventStreamHub.name);
+export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(EventStreamHubService.name);
   private readonly channels = new Map<string, EventChannel>();
   private readonly streams = new Set<OpenStream>();
   private subscriber: Redis | null = null;

@@ -6,7 +6,7 @@ import { AppError } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { parseSubmissionEvent, SUBMISSION_EVENTS_CHANNEL } from '@libs/judging';
 import type { SubmissionEvent } from '@libs/judging';
-import { EventStreamHub } from '../../events/event-stream-hub.service';
+import { EventStreamHubService } from '../../events/event-stream-hub.service';
 import type {
   EventChannel,
   OpenStream,
@@ -59,7 +59,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
   private feedQueue: Promise<void> = Promise.resolve();
 
   constructor(
-    private readonly hub: EventStreamHub,
+    private readonly hub: EventStreamHubService,
     @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
     private readonly submissions: SubmissionsService,
     private readonly submissionRows: SubmissionsRepository,
