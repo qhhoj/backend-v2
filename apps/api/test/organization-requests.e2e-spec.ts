@@ -7,7 +7,6 @@ import type { User } from '@libs/database';
 import type { OrganizationDetailResponse } from '../src/modules/organizations/core/dto/organization.response';
 import type { OrganizationRequestResponse } from '../src/modules/organizations/requests/dto/organization-request.response';
 import { clearRateLimits } from './contest-fixtures';
-import { OrganizationPointsService } from '../src/modules/organizations/core/organization-points.service';
 import { createOrganization, organizationUrl } from './organization-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
@@ -16,7 +15,6 @@ import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 describe('organization join requests', () => {
-  afterEach(() => jest.restoreAllMocks());
   let api: ApiTest;
   let queue: Queue<OrganizationPointsJob>;
   let userCount = 0;
@@ -293,26 +291,6 @@ describe('organization join requests', () => {
     const pending = await request(organization.slug, (await person()).session);
     await api.organizations.updateOne({ _id: organization._id }, { slots: 1 });
     await decide(organization.slug, pending.id, ownerSession, 'A').expect(409);
-  });
-
-  it('records an approval and answers 200 when the points refresh fails', async () => {
-    const { user: owner, session: ownerSession } = await person();
-    const { user, session } = await person();
-    const organization = await createOrganization(api, {
-      isOpen: false,
-      adminIds: [owner._id],
-    });
-    const created = await request(organization.slug, session);
-    jest
-      .spyOn(api.app.get(OrganizationPointsService), 'refresh')
-      .mockRejectedValueOnce(new Error('redis down'));
-    const approved = dataOf<OrganizationRequestResponse>(
-      await decide(organization.slug, created.id, ownerSession, 'A').expect(
-        200,
-      ),
-    );
-    expect(approved.state).toBe('A');
-    expect(await membershipsOf(user._id)).toEqual([organization._id]);
   });
 
   it('lets edit_all_organization list and read, and keeps other organizations admins out', async () => {

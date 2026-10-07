@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { unique } from '@libs/common';
 import type { Model } from 'mongoose';
 import {
   Language,
@@ -49,8 +50,6 @@ const PROFILE_FIELDS = {
   displayRank: 1,
   organizations: 1,
 } as const;
-
-const unique = (values: string[]) => [...new Set(values)];
 
 @Injectable()
 export class UserDataRepository {

@@ -8,6 +8,7 @@ import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { ContestDocument } from '../core/contests.repository';
+import { NULLABLE_CONTEST_FIELDS } from './dto/contest-edit.dto';
 import type {
   ContestProblemDto,
   UpdateContestDto,
@@ -18,14 +19,6 @@ import {
   CREATE_BASELINE,
 } from './contest-edit-rules';
 
-const NULLABLE_FIELDS: ReadonlyArray<keyof UpdateContestDto> = [
-  'timeLimit',
-  'registrationStart',
-  'registrationEnd',
-  'lockedAfter',
-  'ratingFloor',
-  'ratingCeiling',
-];
 const USER_FIELDS = [
   'authors',
   'curators',
@@ -52,7 +45,7 @@ export class ContestEditFieldsService {
     for (const [field, value] of Object.entries(dto))
       if (
         value === null &&
-        !NULLABLE_FIELDS.includes(field as keyof UpdateContestDto)
+        !NULLABLE_CONTEST_FIELDS.includes(field as keyof UpdateContestDto)
       )
         throw invalidField(field, `${field} cannot be null.`);
     const {

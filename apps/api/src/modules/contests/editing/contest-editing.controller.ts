@@ -5,19 +5,13 @@ import { RefuseNullFieldsPipe } from '@libs/common';
 import { ContestEditingService } from './contest-editing.service';
 import { ContestDetailResponse } from '../core/dto/contest-detail.response';
 import { CloneContestDto } from './dto/contest-clone.dto';
-import { CreateContestDto, UpdateContestDto } from './dto/contest-edit.dto';
+import {
+  CreateContestDto,
+  NULLABLE_CONTEST_FIELDS,
+  UpdateContestDto,
+} from './dto/contest-edit.dto';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import { QueuedResponse } from '../core/dto/queued.response';
-
-/** The `UpdateContestDto` fields typed `| null`; every other one refuses null. */
-const NULLABLE_CONTEST_FIELDS = [
-  'timeLimit',
-  'registrationStart',
-  'registrationEnd',
-  'lockedAfter',
-  'ratingFloor',
-  'ratingCeiling',
-];
 
 @Controller('api/internal/contests')
 export class ContestEditingController {

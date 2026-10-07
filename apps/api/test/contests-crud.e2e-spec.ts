@@ -412,6 +412,29 @@ describe('contest CRUD', () => {
       await patch('creator', contest.key, { timeLimit: null }).expect(200);
     });
 
+    it('refuses null partial and isPretested inside problems on create and update', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      for (const field of ['partial', 'isPretested'])
+        for (const response of [
+          create('creator', {
+            problems: [
+              { problem: problems.open._id, points: 5, [field]: null },
+            ],
+          }),
+          patch('creator', contest.key, {
+            problems: [
+              { problem: problems.open._id, points: 5, [field]: null },
+            ],
+          }),
+        ])
+          await response.expect(400).expect(errorCode('validation_failed'));
+      await patch('creator', contest.key, {
+        problems: [{ problem: problems.open._id, points: 5 }],
+      }).expect(200);
+    });
+
     it('keeps the request order of problems and gates the access code on its permission', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id, users.codeless._id],

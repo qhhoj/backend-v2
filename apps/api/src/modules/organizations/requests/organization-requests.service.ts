@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
@@ -37,8 +37,6 @@ const PAGE_SIZE = 50;
 
 @Injectable()
 export class OrganizationRequestsService {
-  private readonly logger = new Logger(OrganizationRequestsService.name);
-
   constructor(
     private readonly organizationsService: OrganizationsService,
     private readonly requests: OrganizationRequestsRepository,
@@ -186,13 +184,7 @@ export class OrganizationRequestsService {
       await this.members.addMembers([userId], organization._id);
     }
     await this.finish(id, 'A', principal.userId, now);
-    try {
-      await this.points.refresh([organization._id]);
-    } catch (error) {
-      this.logger.error(
-        `Points refresh of ${organization._id} failed: ${(error as Error).message}`,
-      );
-    }
+    await this.points.refresh([organization._id]);
   }
 
   private async finish(

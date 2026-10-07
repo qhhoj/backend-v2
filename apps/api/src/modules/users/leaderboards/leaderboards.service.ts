@@ -4,6 +4,7 @@ import { AppError, Paginated, unique } from '@libs/common';
 import { competitionRanks } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { LeaderboardField } from '@libs/database';
+import { OrganizationAccess } from '../../organizations/core/organization-access';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { LEADERBOARD_PAGE_SIZE } from './dto/leaderboard.dto';
 import {
@@ -41,7 +42,12 @@ export class LeaderboardsService {
           unique(rows.flatMap((row) => row.organizations.map(uuidStr))),
         )
       )
-        .filter((organization) => !organization.isUnlisted)
+        .filter((organization) =>
+          OrganizationAccess.canList(
+            null,
+            OrganizationAccess.accessView(organization),
+          ),
+        )
         .map((organization) => [uuidStr(organization._id), organization]),
     );
     return new Paginated(

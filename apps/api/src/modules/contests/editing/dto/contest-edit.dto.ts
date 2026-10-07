@@ -30,6 +30,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
@@ -38,8 +39,12 @@ import { IsTimestamp } from '../../../problems/core/dto/timestamp';
 export class ContestProblemDto {
   @IsUUID('7') problem!: string;
   @IsInt() @Min(0) @Max(PROBLEM_LIMITS.points.max) points!: number;
-  @IsOptional() @IsBoolean() partial?: boolean;
-  @IsOptional() @IsBoolean() isPretested?: boolean;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  partial?: boolean;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  isPretested?: boolean;
   @IsOptional() @IsInt() @Min(0) outputPrefixOverride?: number | null;
   @IsOptional() @IsInt() @Min(1) maxSubmissions?: number | null;
 }
@@ -121,3 +126,13 @@ export class CreateContestDto {
 export class UpdateContestDto extends PartialType(
   OmitType(CreateContestDto, ['key'] as const),
 ) {}
+
+/** The `UpdateContestDto` fields typed `| null`; every other one refuses null. */
+export const NULLABLE_CONTEST_FIELDS: ReadonlyArray<keyof UpdateContestDto> = [
+  'timeLimit',
+  'registrationStart',
+  'registrationEnd',
+  'lockedAfter',
+  'ratingFloor',
+  'ratingCeiling',
+];

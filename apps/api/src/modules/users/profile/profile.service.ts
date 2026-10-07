@@ -9,6 +9,7 @@ import type { User } from '@libs/database';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
 import { OrganizationMembersRepository } from '../../organizations/core/organization-members.repository';
 import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
+import { OrganizationsService } from '../../organizations/core/organizations.service';
 import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { OrganizationSummaryResponse } from '../../organizations/core/dto/organization.response';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
@@ -25,6 +26,7 @@ export class ProfileService {
     @Inject(ENV) private readonly env: Env,
     private readonly users: UsersRepository,
     private readonly organizations: OrganizationsRepository,
+    private readonly organizationsService: OrganizationsService,
     private readonly members: OrganizationMembersRepository,
     private readonly points: OrganizationPointsService,
     private readonly languages: LanguagesQuerier,
@@ -130,12 +132,9 @@ export class ProfileService {
     user: UserDocument,
     principal: Principal,
   ): Promise<ProfileResponse> {
-    const ids = user.organizations.map(uuidStr);
-    const byId = new Map(
-      (await this.organizations.findByIds(ids)).map((organization) => [
-        uuidStr(organization._id),
-        organization,
-      ]),
+    const organizations = await this.organizationsService.listedFor(
+      principal,
+      user.organizations.map(uuidStr),
     );
     return {
       about: user.about ?? '',
@@ -149,21 +148,14 @@ export class ProfileService {
       userScript: user.userScript,
       badges: user.badges.map(uuidStr),
       displayBadgeId: user.displayBadgeId && uuidStr(user.displayBadgeId),
-      organizations: ids.flatMap((id) => {
-        const organization = byId.get(id);
-        return organization
-          ? [
-              {
-                ...OrganizationSummaryResponse.from(organization),
-                isOpen: organization.isOpen,
-                isAdmin: OrganizationAccess.isAdmin(
-                  principal,
-                  OrganizationAccess.accessView(organization),
-                ),
-              },
-            ]
-          : [];
-      }),
+      organizations: organizations.map((organization) => ({
+        ...OrganizationSummaryResponse.from(organization),
+        isOpen: organization.isOpen,
+        isAdmin: OrganizationAccess.isAdmin(
+          principal,
+          OrganizationAccess.accessView(organization),
+        ),
+      })),
     };
   }
 }
