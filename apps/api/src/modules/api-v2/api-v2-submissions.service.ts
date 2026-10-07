@@ -105,12 +105,16 @@ export class ApiV2SubmissionsService {
           .map((language) => language._id)
       : undefined;
     if (languageIds && !languageIds.length) return null;
-    return this.submissions.filterFor(principal, {
-      user: query.user,
-      problem: query.problem,
-      language: languageIds,
-      result: query.result,
-    });
+    return this.submissions.filterFor(
+      principal,
+      {
+        user: query.user,
+        problem: query.problem,
+        language: languageIds,
+        result: query.result,
+      },
+      null,
+    );
   }
 
   private async rows(

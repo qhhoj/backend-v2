@@ -10,7 +10,9 @@ import { ProblemDetailResponse } from './dto/problem-detail.response';
 import { UserSummaryResponse } from './dto/user-summary.response';
 import { ProblemListQueryDto } from './dto/problem-list.dto';
 import { ProblemListItemResponse } from './dto/problem-list.response';
+import { CurrentContestService } from '../contests/current-contest.service';
 import { ProblemAccess } from './problem-access';
+import type { ContestScope } from './problem-access';
 import {
   isEditorialPublished,
   listSort,
@@ -47,6 +49,7 @@ export class ProblemsService {
     private readonly repository: ProblemsRepository,
     private readonly users: UsersRepository,
     private readonly viewerStatuses: ViewerStatusRepository,
+    private readonly currentContest: CurrentContestService,
   ) {}
 
   meta(): ProblemMetaResponse {
@@ -75,7 +78,7 @@ export class ProblemsService {
     query: ProblemListQueryDto,
   ): Promise<Paginated<ProblemListItemResponse>> {
     const { items, total } = await this.repository.list(
-      this.listFilter(principal, query),
+      await this.listFilter(principal, query),
       listSort(query.sort),
       query.page,
       query.pageSize,
@@ -156,12 +159,32 @@ export class ProblemsService {
     principal: Principal | null,
     code: string,
   ): Promise<ProblemDocument> {
+    return this.visibleUnder(
+      principal,
+      code,
+      await this.currentContest.scopeOf(principal),
+    );
+  }
+
+  /** `/api/v2` ignores the viewer's current contest (legacy `skip_contest_problem_check`). */
+  visibleProblemOutsideContest(
+    principal: Principal | null,
+    code: string,
+  ): Promise<ProblemDocument> {
+    return this.visibleUnder(principal, code, null);
+  }
+
+  private async visibleUnder(
+    principal: Principal | null,
+    code: string,
+    scope: ContestScope | null,
+  ): Promise<ProblemDocument> {
     const problem = PROBLEM_CODE_PATTERN.test(code)
       ? await this.repository.findByCode(code)
       : null;
     if (
       !problem ||
-      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem))
+      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem), scope)
     )
       throw new AppError('not_found', 404, 'No such problem');
     return problem;
@@ -196,12 +219,15 @@ export class ProblemsService {
     return ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem));
   }
 
-  private listFilter(
+  private async listFilter(
     principal: Principal | null,
     query: ProblemListQueryDto,
-  ): FilterQuery<Problem> {
+  ): Promise<FilterQuery<Problem>> {
     const clauses: FilterQuery<Problem>[] = [
-      ProblemAccess.visibleFilter(principal),
+      ProblemAccess.visibleFilter(
+        principal,
+        await this.currentContest.scopeOf(principal),
+      ),
     ];
     if (query.visibility !== 'all')
       clauses.push({ isPublic: query.visibility === 'public' });

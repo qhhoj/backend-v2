@@ -54,7 +54,7 @@ export interface CaseVisibility {
   output: boolean;
 }
 
-/** Legacy status page: superusers and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, and 2a has no contests). */
+/** Legacy status page: superusers and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, `inContest`). */
 export function caseVisibility(
   principal: Principal,
   problem: {
@@ -63,6 +63,7 @@ export function caseVisibility(
     allowViewFeedback: boolean;
   },
   canEdit: boolean,
+  inContest = false,
 ): CaseVisibility {
   return {
     cases:
@@ -72,7 +73,10 @@ export function caseVisibility(
           ? 'batches'
           : 'none',
     feedback: principal.isSuperuser || canEdit || problem.allowViewFeedback,
-    output: canEdit || problem.testcaseVisibility !== 'O',
+    output:
+      canEdit ||
+      problem.testcaseVisibility === 'A' ||
+      (problem.testcaseVisibility === 'C' && !inContest),
   };
 }
 

@@ -1,3 +1,4 @@
+import { ContestAccessModule } from '../contests/contest-access.module';
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
@@ -40,6 +41,7 @@ const repositories = [
 
 @Module({
   imports: [
+    ContestAccessModule,
     AuthModule,
     BullModule.registerQueue(
       { name: PDF_QUEUE },

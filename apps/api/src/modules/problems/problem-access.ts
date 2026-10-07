@@ -3,6 +3,7 @@ import { Problem, uuidStr } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
 
 export interface ProblemAccessView {
+  id: string;
   isPublic: boolean;
   isOrganizationPrivate: boolean;
   organizations: string[];
@@ -15,6 +16,7 @@ export interface ProblemAccessView {
 /** Plain-string view of a problem document (UUID arrays on hydrated documents are buffers under `.map`). */
 function accessView(problem: Problem): ProblemAccessView {
   return {
+    id: uuidStr(problem._id),
     isPublic: problem.isPublic,
     isOrganizationPrivate: problem.isOrganizationPrivate,
     organizations: (problem.organizations ?? []).map(uuidStr),
@@ -53,10 +55,21 @@ function canEdit(
   return isEditor(principal, problem);
 }
 
+/** The viewer's current contest (`CurrentContestService.scopeOf`): before it starts every problem is hidden; once started its problems are visible whatever their publicity (legacy `is_accessible_by` step 1). */
+export interface ContestScope {
+  started: boolean;
+  problemIds: readonly string[];
+}
+
 function canSee(
   principal: Principal | null,
   problem: ProblemAccessView,
+  scope: ContestScope | null,
 ): boolean {
+  if (scope) {
+    if (!scope.started) return false;
+    if (scope.problemIds.includes(problem.id)) return true;
+  }
   const has = (permission: Permission) =>
     principal !== null && hasPermission(principal, permission);
   // A public problem is never "suggesting", so the spec's "public & not suggesting" is just `isPublic`.
@@ -82,8 +95,7 @@ function canSee(
   return problem.testers.includes(principal.userId);
 }
 
-/** Mongo filter with exactly `canSee`'s semantics, for lists. */
-function visibleFilter(principal: Principal | null): FilterQuery<Problem> {
+function ownVisibleFilter(principal: Principal | null): FilterQuery<Problem> {
   if (!principal) return { isPublic: true, isOrganizationPrivate: false };
   const has = (permission: Permission) => hasPermission(principal, permission);
   const editOwn = has('judge.edit_own_problem');
@@ -114,6 +126,19 @@ function visibleFilter(principal: Principal | null): FilterQuery<Problem> {
   if (has('judge.suggest_new_problem'))
     clauses.push({ isPublic: false, suggester: { $ne: null } });
   return { $or: clauses };
+}
+
+/** Mongo filter with exactly `canSee`'s semantics, for lists. */
+function visibleFilter(
+  principal: Principal | null,
+  scope: ContestScope | null,
+): FilterQuery<Problem> {
+  const own = ownVisibleFilter(principal);
+  if (!scope) return own;
+  if (!scope.started) return { _id: { $in: [] } };
+  return Object.keys(own).length
+    ? { $or: [{ _id: { $in: [...scope.problemIds] } }, own] }
+    : own;
 }
 
 export const ProblemAccess = { accessView, canSee, canEdit, visibleFilter };

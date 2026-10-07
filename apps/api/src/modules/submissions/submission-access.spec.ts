@@ -20,6 +20,7 @@ const viewer = (extra: Partial<Principal> = {}): Principal => ({
 const problem = (
   extra: Partial<SubmissionProblemView> = {},
 ): SubmissionProblemView => ({
+  id: 'p-own',
   isPublic: true,
   isOrganizationPrivate: false,
   organizations: [],
@@ -195,16 +196,24 @@ describe('caseVisibility', () => {
     ).toBe(true);
   });
   it.each([
-    ['A', false, true],
-    ['C', false, true],
-    ['O', false, false],
-    ['O', true, true],
+    ['A', false, false, true],
+    ['C', false, false, true],
+    ['O', false, false, false],
+    ['O', true, false, true],
+    ['A', false, true, true],
+    ['C', false, true, false],
+    ['C', true, true, true],
+    ['O', false, true, false],
   ])(
-    'testcaseVisibility %s, editor %s: output shown %s',
-    (testcaseVisibility, canEdit, expected) =>
+    'testcaseVisibility %s, editor %s, in a contest %s: output shown %s',
+    (testcaseVisibility, canEdit, inContest, expected) =>
       expect(
-        caseVisibility(viewer(), { ...shown, testcaseVisibility }, canEdit)
-          .output,
+        caseVisibility(
+          viewer(),
+          { ...shown, testcaseVisibility },
+          canEdit,
+          inContest,
+        ).output,
       ).toBe(expected),
   );
 });

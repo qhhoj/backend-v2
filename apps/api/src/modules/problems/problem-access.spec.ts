@@ -6,11 +6,21 @@ import {
   type Permission,
   type Principal,
 } from '@libs/auth';
-import { DatabaseModule, newId, Problem, toUuid } from '@libs/database';
+import {
+  DatabaseModule,
+  newId,
+  Problem,
+  toUuid,
+  uuidStr,
+} from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import type { Model } from 'mongoose';
 import type { MongoMemoryReplSet } from 'mongodb-memory-server';
-import { ProblemAccess, ProblemAccessView } from './problem-access';
+import {
+  ProblemAccess,
+  ProblemAccessView,
+  type ContestScope,
+} from './problem-access';
 
 const USER = newId();
 const OTHER = newId();
@@ -30,6 +40,7 @@ const principalWith = (
 const view = (
   overrides: Partial<ProblemAccessView> = {},
 ): ProblemAccessView => ({
+  id: 'p-own',
   isPublic: true,
   isOrganizationPrivate: false,
   organizations: [],
@@ -170,7 +181,7 @@ describe('ProblemAccess.canSee', () => {
     ],
     ['superuser sees everything', 'superuser', view({ isPublic: false }), true],
   ])('%s', (_name, who, problem, expected) =>
-    expect(ProblemAccess.canSee(PRINCIPALS[who], problem)).toBe(expected),
+    expect(ProblemAccess.canSee(PRINCIPALS[who], problem, null)).toBe(expected),
   );
 });
 
@@ -225,6 +236,50 @@ describe('ProblemAccess.canEdit', () => {
     ['superuser', 'superuser', view({ isPublic: false }), true],
   ])('%s', (_name, who, problem, expected) =>
     expect(ProblemAccess.canEdit(PRINCIPALS[who], problem)).toBe(expected),
+  );
+});
+
+describe('ProblemAccess with a current contest (legacy is_accessible_by step 1)', () => {
+  const started: ContestScope = { started: true, problemIds: ['p-contest'] };
+  const notStarted: ContestScope = {
+    started: false,
+    problemIds: ['p-contest'],
+  };
+  it.each([
+    [
+      "shows the contest's private problem",
+      started,
+      view({ id: 'p-contest', isPublic: false }),
+      true,
+    ],
+    [
+      "never shows another contest's private problem",
+      started,
+      view({ id: 'p-other', isPublic: false }),
+      false,
+    ],
+    [
+      'still shows a public problem outside the contest',
+      started,
+      view({ id: 'p-public' }),
+      true,
+    ],
+    [
+      'hides every problem before the contest starts',
+      notStarted,
+      view({ id: 'p-public' }),
+      false,
+    ],
+    [
+      "hides even the contest's problem before it starts",
+      notStarted,
+      view({ id: 'p-contest', isPublic: false }),
+      false,
+    ],
+  ])('%s', (_case, scope, problem, expected) =>
+    expect(ProblemAccess.canSee(PRINCIPALS.plain, problem, scope)).toBe(
+      expected,
+    ),
   );
 });
 
@@ -285,9 +340,10 @@ describe('ProblemAccess.visibleFilter', () => {
   it('accessView of every stored document (hydrated and lean) equals the generated view', async () => {
     for (const { code, view: expectedView } of generated) {
       const hydrated = await problems.findOne({ code });
-      expect(ProblemAccess.accessView(hydrated!)).toEqual(expectedView);
+      const storedView = { ...expectedView, id: uuidStr(hydrated!._id) };
+      expect(ProblemAccess.accessView(hydrated!)).toEqual(storedView);
       const lean = await problems.findOne({ code }).lean();
-      expect(ProblemAccess.accessView(lean!)).toEqual(expectedView);
+      expect(ProblemAccess.accessView(lean!)).toEqual(storedView);
     }
   });
 
@@ -320,7 +376,7 @@ describe('ProblemAccess.visibleFilter', () => {
   ])('matches canSee for %s', async (_who, principal) => {
     const expected = generated
       .filter(({ view: problemView }) =>
-        ProblemAccess.canSee(principal, problemView),
+        ProblemAccess.canSee(principal, problemView, null),
       )
       .map(({ code }) => code)
       .sort();
@@ -329,7 +385,7 @@ describe('ProblemAccess.visibleFilter', () => {
         .find({
           $and: [
             { code: { $in: generated.map(({ code }) => code) } },
-            ProblemAccess.visibleFilter(principal),
+            ProblemAccess.visibleFilter(principal, null),
           ],
         })
         .lean()
@@ -338,6 +394,47 @@ describe('ProblemAccess.visibleFilter', () => {
       .sort();
     expect(actual).toEqual(expected);
     expect(expected.length).toBeGreaterThan(0);
+  });
+
+  it('matches canSee under a contest scope, started or not', async () => {
+    const codes = generated.map(({ code }) => code);
+    const privateCodes = generated
+      .filter(({ view: problemView }) => !problemView.isPublic)
+      .map(({ code }) => code);
+    const contestProblem = (await problems
+      .findOne({ code: privateCodes[0] })
+      .lean())!;
+    const scopes: ContestScope[] = [
+      { started: true, problemIds: [uuidStr(contestProblem._id)] },
+      { started: false, problemIds: [uuidStr(contestProblem._id)] },
+    ];
+    for (const scope of scopes)
+      for (const principal of Object.values(PRINCIPALS)) {
+        const all = await problems.find({ code: { $in: codes } }).lean();
+        const expected = all
+          .filter((problem) =>
+            ProblemAccess.canSee(
+              principal,
+              ProblemAccess.accessView(problem),
+              scope,
+            ),
+          )
+          .map((problem) => problem.code)
+          .sort();
+        const actual = (
+          await problems
+            .find({
+              $and: [
+                { code: { $in: codes } },
+                ProblemAccess.visibleFilter(principal, scope),
+              ],
+            })
+            .lean()
+        )
+          .map((problem) => problem.code)
+          .sort();
+        expect(actual).toEqual(expected);
+      }
   });
 
   it('treats a raw document lacking suggester and arrays as having none', async () => {
@@ -359,7 +456,10 @@ describe('ProblemAccess.visibleFilter', () => {
     try {
       const lean = (await problems.findOne({ code: 'rawdoc' }).lean())!;
       const problemView = ProblemAccess.accessView(lean);
-      expect(problemView).toEqual(view({ isPublic: false }));
+      expect(problemView).toEqual({
+        ...view({ isPublic: false }),
+        id: uuidStr(lean._id),
+      });
       for (const principal of Object.values(PRINCIPALS)) {
         const visible =
           (
@@ -367,12 +467,14 @@ describe('ProblemAccess.visibleFilter', () => {
               .find({
                 $and: [
                   { code: 'rawdoc' },
-                  ProblemAccess.visibleFilter(principal),
+                  ProblemAccess.visibleFilter(principal, null),
                 ],
               })
               .lean()
           ).length === 1;
-        expect(visible).toBe(ProblemAccess.canSee(principal, problemView));
+        expect(visible).toBe(
+          ProblemAccess.canSee(principal, problemView, null),
+        );
       }
     } finally {
       await problems.deleteOne({ code: 'rawdoc' });

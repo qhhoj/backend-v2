@@ -1,0 +1,239 @@
+import { generateApiToken } from '@libs/auth';
+import type { ProblemListItemResponse } from '../src/modules/problems/dto/problem-list.response';
+import {
+  contestProblem,
+  createContest,
+  hoursFromNow,
+  joinParticipation,
+  makeCurrent,
+} from './contest-fixtures';
+import {
+  authed,
+  createProblem,
+  createUserWith,
+  loginAs,
+  seedCatalog,
+} from './problem-fixtures';
+import type { Catalog, TestSession } from './problem-fixtures';
+import { dataOf, seedSubmission } from './submission-fixtures';
+import { setupApiTest, TEST_ENV } from './setup';
+import type { ApiTest } from './setup';
+
+describe('contest-only problem access', () => {
+  let api: ApiTest;
+  let catalog: Catalog;
+  let session: TestSession;
+  let userId: string;
+  let apiToken: string;
+  const problem = (code: string) =>
+    authed(api.http().get(`/api/internal/problems/${code}`), session);
+  const listedCodes = async () =>
+    dataOf<ProblemListItemResponse[]>(
+      await authed(
+        api.http().get('/api/internal/problems?visibility=all&pageSize=100'),
+        session,
+      ).expect(200),
+    ).map((item) => item.code);
+  const enter = async (
+    contestId: string,
+    extra: Parameters<typeof joinParticipation>[3] = {},
+  ) => {
+    const participation = await joinParticipation(
+      api,
+      contestId,
+      userId,
+      extra,
+    );
+    await makeCurrent(api, userId, participation._id);
+    return participation;
+  };
+  const submit = (code: string) =>
+    authed(
+      api.http().post(`/api/internal/problems/${code}/submit`),
+      session,
+    ).send({ language: catalog.languages.cpp, source: 'int main() {}' });
+  const v2 = (path: string) =>
+    api.http().get(`/api/v2${path}`).set('Authorization', `Bearer ${apiToken}`);
+
+  beforeAll(async () => {
+    api = await setupApiTest();
+    catalog = await seedCatalog(api);
+    await api.problems.init();
+    userId = (await createUserWith(api, 'contestant'))._id;
+    session = await loginAs(api, userId);
+    const issued = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
+    apiToken = issued.token;
+    await api.users.updateOne({ _id: userId }, { apiTokenHash: issued.hash });
+  });
+  afterAll(() => api.teardown());
+
+  it("shows the current contest's private problems, in detail, list and submission list, and nothing of another contest", async () => {
+    const mine = await createProblem(api, catalog, {
+      code: 'mine',
+      isPublic: false,
+    });
+    const theirs = await createProblem(api, catalog, {
+      code: 'theirs',
+      isPublic: false,
+    });
+    await createProblem(api, catalog, { code: 'everyone' });
+    const contest = await createContest(api, {
+      problems: [contestProblem(mine._id, 0)],
+    });
+    await createContest(api, { problems: [contestProblem(theirs._id, 0)] });
+    await problem('mine').expect(404);
+    await enter(contest._id);
+    await problem('mine').expect(200);
+    await problem('everyone').expect(200);
+    await problem('theirs').expect(404);
+    expect(await listedCodes()).toEqual(
+      expect.arrayContaining(['mine', 'everyone']),
+    );
+    expect(await listedCodes()).not.toContain('theirs');
+    const own = await seedSubmission(api, {
+      user: userId,
+      problem: mine._id,
+      language: catalog.languages.cpp,
+    });
+    const submissions = await authed(
+      api.http().get('/api/internal/submissions?problem=mine'),
+      session,
+    ).expect(200);
+    expect(dataOf<unknown[]>(submissions)).toHaveLength(1);
+    await authed(
+      api.http().get(`/api/internal/submissions/${own._id}`),
+      session,
+    ).expect(200);
+    await submit('mine').expect(201);
+    await submit('theirs').expect(404);
+  });
+
+  it('hides every problem before the current contest starts', async () => {
+    await createProblem(api, catalog, { code: 'public_one' });
+    const upcoming = await createContest(api, {
+      startTime: hoursFromNow(1),
+      endTime: hoursFromNow(2),
+    });
+    await enter(upcoming._id);
+    await problem('public_one').expect(404);
+    await submit('public_one').expect(404);
+    expect(await listedCodes()).toEqual([]);
+  });
+
+  it("never grants another contest's private problem, and loses the contest's own once the user leaves", async () => {
+    const own = await createProblem(api, catalog, {
+      code: 'own_private',
+      isPublic: false,
+    });
+    const foreign = await createProblem(api, catalog, {
+      code: 'foreign_private',
+      isPublic: false,
+    });
+    const contest = await createContest(api, {
+      problems: [contestProblem(own._id, 0)],
+    });
+    await createContest(api, { problems: [contestProblem(foreign._id, 0)] });
+    const stored = await seedSubmission(api, {
+      user: userId,
+      problem: own._id,
+      language: catalog.languages.cpp,
+    });
+    await enter(contest._id);
+    await problem('foreign_private').expect(404);
+    await authed(
+      api.http().get(`/api/internal/submissions/${stored._id}`),
+      session,
+    ).expect(200);
+    await authed(
+      api.http().post(`/api/internal/contests/${contest.key}/leave`),
+      session,
+    ).expect(204);
+    await problem('own_private').expect(404);
+    await authed(
+      api.http().get(`/api/internal/submissions/${stored._id}`),
+      session,
+    ).expect(404);
+  });
+
+  it('loses access once the participation ended (cleared lazily)', async () => {
+    const timed = await createProblem(api, catalog, {
+      code: 'timed_private',
+      isPublic: false,
+    });
+    const contest = await createContest(api, {
+      timeLimit: 60,
+      problems: [contestProblem(timed._id, 0)],
+    });
+    const participation = await enter(contest._id);
+    await problem('timed_private').expect(200);
+    await api.participations.updateOne(
+      { _id: participation._id },
+      { realStart: hoursFromNow(-1) },
+    );
+    await problem('timed_private').expect(404);
+    expect(
+      (await api.users.findById(userId).lean())!.currentParticipation,
+    ).toBeNull();
+  });
+
+  it("does not grant a contest's problems through a participation that is not the current one", async () => {
+    const kept = await createProblem(api, catalog, {
+      code: 'kept_private',
+      isPublic: false,
+    });
+    const other = await createProblem(api, catalog, {
+      code: 'other_private',
+      isPublic: false,
+    });
+    const current = await createContest(api, {
+      problems: [contestProblem(kept._id, 0)],
+    });
+    const dormant = await createContest(api, {
+      problems: [contestProblem(other._id, 0)],
+    });
+    await joinParticipation(api, dormant._id, userId);
+    await enter(current._id);
+    await problem('kept_private').expect(200);
+    await problem('other_private').expect(404);
+  });
+
+  it('grants nothing once the current contest is no longer visible to the user', async () => {
+    const hidden = await createProblem(api, catalog, {
+      code: 'hidden_private',
+      isPublic: false,
+    });
+    const contest = await createContest(api, {
+      problems: [contestProblem(hidden._id, 0)],
+    });
+    await enter(contest._id);
+    await problem('hidden_private').expect(200);
+    await api.contests.updateOne({ _id: contest._id }, { isVisible: false });
+    await problem('hidden_private').expect(404);
+  });
+
+  it('treats a spectate participation like legacy: the contest problems are granted', async () => {
+    const watched = await createProblem(api, catalog, {
+      code: 'watched_private',
+      isPublic: false,
+    });
+    const contest = await createContest(api, {
+      problems: [contestProblem(watched._id, 0)],
+    });
+    await enter(contest._id, { virtual: -1 });
+    await problem('watched_private').expect(200);
+  });
+
+  it('never opens /api/v2 problem endpoints to contest-only problems (legacy skips the contest check)', async () => {
+    const quiet = await createProblem(api, catalog, {
+      code: 'quiet_private',
+      isPublic: false,
+    });
+    const contest = await createContest(api, {
+      problems: [contestProblem(quiet._id, 0)],
+    });
+    await enter(contest._id);
+    await v2('/problem/quiet_private').expect(404);
+    const listed = await v2('/problems').expect(200);
+    expect(JSON.stringify(listed.body)).not.toContain('quiet_private');
+  });
+});

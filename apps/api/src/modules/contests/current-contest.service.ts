@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { hasParticipationEnded } from '@libs/contests';
+import { contestPhase, hasParticipationEnded } from '@libs/contests';
 import { uuidStr } from '@libs/database';
+import type { ContestScope } from '../problems/problem-access';
 import { ContestAccess } from './contest-access';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
@@ -43,5 +44,21 @@ export class CurrentContestService {
       return null;
     }
     return { participation, contest };
+  }
+
+  /** What the user's current contest does to problem access (`ProblemAccess`); null outside a contest. */
+  async scopeOf(
+    principal: Principal | null,
+    now = new Date(),
+  ): Promise<ContestScope | null> {
+    const current = await this.current(principal, now);
+    return (
+      current && {
+        started: contestPhase(current.contest, now) !== 'upcoming',
+        problemIds: current.contest.problems.map((entry) =>
+          uuidStr(entry.problem),
+        ),
+      }
+    );
   }
 }

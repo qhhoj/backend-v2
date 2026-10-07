@@ -47,7 +47,8 @@ export class ApiV2ProblemsService {
     query: ApiV2ProblemListDto,
   ): Promise<LegacyPage<Record<string, unknown>>> {
     const clauses: FilterQuery<Problem>[] = [
-      ProblemAccess.visibleFilter(principal),
+      // Legacy `get_visible_problems` ignores the viewer's current contest.
+      ProblemAccess.visibleFilter(principal, null),
     ];
     if (query.partial !== undefined) clauses.push({ partial: query.partial });
     if (query.code) clauses.push({ code: { $in: query.code } });
@@ -84,7 +85,7 @@ export class ApiV2ProblemsService {
     principal: Principal | null,
     code: string,
   ): Promise<Record<string, unknown>> {
-    const problem = await this.problems.visibleProblem(
+    const problem = await this.problems.visibleProblemOutsideContest(
       principal,
       code.toLowerCase(),
     );

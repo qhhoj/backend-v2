@@ -1,3 +1,4 @@
+import { ContestAccessModule } from '../contests/contest-access.module';
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
@@ -18,6 +19,7 @@ import { SubmissionsService } from './submissions.service';
 
 @Module({
   imports: [
+    ContestAccessModule,
     AuthModule,
     ProblemsApiModule,
     JudgesApiModule,

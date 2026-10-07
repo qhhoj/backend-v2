@@ -332,7 +332,11 @@ export class ContestEditingService {
       const problem = found.get(id);
       if (
         !problem ||
-        !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem))
+        !ProblemAccess.canSee(
+          principal,
+          ProblemAccess.accessView(problem),
+          null,
+        )
       )
         throw invalid('problems', 'Unknown problem.');
     }

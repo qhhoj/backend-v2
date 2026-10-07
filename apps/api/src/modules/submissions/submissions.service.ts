@@ -5,8 +5,10 @@ import { AppError, Paginated, unique } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { CurrentContestService } from '../contests/current-contest.service';
 import { LanguagesQuerier } from '../problems/languages.querier';
 import { ProblemAccess } from '../problems/problem-access';
+import type { ContestScope } from '../problems/problem-access';
 import { ProblemsRepository } from '../problems/problems.repository';
 import type { ProblemDocument } from '../problems/problems.repository';
 import {
@@ -38,6 +40,7 @@ export class SubmissionsService {
     private readonly problems: ProblemsRepository,
     private readonly users: UsersRepository,
     private readonly languages: LanguagesQuerier,
+    private readonly currentContest: CurrentContestService,
   ) {}
 
   /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see. */
@@ -51,7 +54,11 @@ export class SubmissionsService {
         [staffOnly]: [STAFF_ONLY_MESSAGE],
       });
     const meta = { page: query.page, pageSize: query.pageSize };
-    const filter = await this.filterFor(principal, query);
+    const filter = await this.filterFor(
+      principal,
+      query,
+      await this.currentContest.scopeOf(principal),
+    );
     if (!filter) return new Paginated([], { ...meta, total: 0 });
     const { items, total } = await this.submissions.list(
       filter,
@@ -88,7 +95,12 @@ export class SubmissionsService {
   ): Promise<SubmissionDetailResponse> {
     const viewed = await this.viewable(principal, id);
     const { problem, canEdit } = viewed;
-    const visibility = caseVisibility(principal, problem, canEdit);
+    const visibility = caseVisibility(
+      principal,
+      problem,
+      canEdit,
+      (await this.currentContest.scopeOf(principal)) !== null,
+    );
     // Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them.
     const submission =
       visibility.cases === 'none'
@@ -144,7 +156,11 @@ export class SubmissionsService {
     if (
       !submission ||
       !problem ||
-      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem))
+      !ProblemAccess.canSee(
+        principal,
+        ProblemAccess.accessView(problem),
+        await this.currentContest.scopeOf(principal),
+      )
     )
       throw new AppError('not_found', 404, 'No such submission');
     return { submission, problem };
@@ -184,10 +200,11 @@ export class SubmissionsService {
     return { submission, problem, canEdit };
   }
 
-  /** Null when nothing can match (unknown user, invisible problem); the `/api/internal` list and `/api/v2` share it. */
+  /** Null when nothing can match (unknown user, invisible problem); the `/api/internal` list and `/api/v2` share it, `/api/v2` with no contest scope (legacy `get_visible_problems`). */
   async filterFor(
     principal: Principal | null,
     filters: SubmissionFilters,
+    scope: ContestScope | null,
   ): Promise<FilterQuery<Submission> | null> {
     const clauses: FilterQuery<Submission>[] = [];
     if (filters.problem !== undefined) {
@@ -196,12 +213,16 @@ export class SubmissionsService {
         : null;
       if (
         !problem ||
-        !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem))
+        !ProblemAccess.canSee(
+          principal,
+          ProblemAccess.accessView(problem),
+          scope,
+        )
       )
         return null;
       clauses.push({ problem: problem._id });
     } else {
-      const visible = ProblemAccess.visibleFilter(principal);
+      const visible = ProblemAccess.visibleFilter(principal, scope);
       if (Object.keys(visible).length)
         clauses.push({
           problem: { $in: await this.problems.visibleIds(visible) },
