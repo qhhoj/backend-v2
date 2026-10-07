@@ -1,7 +1,12 @@
 import mongoose from 'mongoose';
 import type { MongoMemoryReplSet } from 'mongodb-memory-server';
-import { startMongo } from '../testing';
+import { profileQueries, startMongo } from '../testing';
 import { newId } from '../uuid';
+import { BlogPostSchema } from './blog-post.schema';
+import { BlogVoteSchema } from './blog-vote.schema';
+import { CommentLockSchema } from './comment-lock.schema';
+import { CommentVoteSchema } from './comment-vote.schema';
+import { CommentSchema } from './comment.schema';
 import { OrganizationSchema } from './organization.schema';
 import { OrganizationRequestSchema } from './organization-request.schema';
 
@@ -16,11 +21,28 @@ describe('Community schemas', () => {
     OrganizationRequestSchema,
   );
 
+  const Posts = mongoose.model('BlogPostSchemaSpec', BlogPostSchema);
+  const PostVotes = mongoose.model('BlogVoteSchemaSpec', BlogVoteSchema);
+  const Comments = mongoose.model('CommentSchemaSpec', CommentSchema);
+  const CommentVotes = mongoose.model(
+    'CommentVoteSchemaSpec',
+    CommentVoteSchema,
+  );
+  const Locks = mongoose.model('CommentLockSchemaSpec', CommentLockSchema);
+
   beforeAll(async () => {
     replSet = await startMongo();
     await mongoose.connect(replSet.getUri());
     await Promise.all(
-      [Organizations, Requests].map((model) => model.syncIndexes()),
+      [
+        Organizations,
+        Requests,
+        Posts,
+        PostVotes,
+        Comments,
+        CommentVotes,
+        Locks,
+      ].map((model) => model.syncIndexes()),
     );
   });
   afterAll(async () => {
@@ -80,5 +102,128 @@ describe('Community schemas', () => {
     await expect(
       Requests.create({ organization: newId(), user: newId(), reason: '' }),
     ).rejects.toThrow(/reason/);
+  });
+
+  it('keeps one vote per voter and target, worth +1 or -1', async () => {
+    const [blog, comment, voter] = [newId(), newId(), newId()];
+    await PostVotes.create({ blog, voter, score: 1 });
+    await expect(PostVotes.create({ blog, voter, score: -1 })).rejects.toThrow(
+      /duplicate key/,
+    );
+    await CommentVotes.create({ comment, voter, score: -1 });
+    await expect(
+      CommentVotes.create({ comment, voter, score: 1 }),
+    ).rejects.toThrow(/duplicate key/);
+    await expect(
+      CommentVotes.create({ comment: newId(), voter, score: 2 }),
+    ).rejects.toThrow(/score/);
+    await expect(
+      PostVotes.create({ blog: newId(), voter, score: 0 }),
+    ).rejects.toThrow(/score/);
+  });
+
+  it('keeps one lock per page', async () => {
+    const page = { type: 'problem', id: newId() };
+    await Locks.create({ page });
+    await expect(Locks.create({ page })).rejects.toThrow(/duplicate key/);
+    await expect(
+      Locks.create({ page: { ...page, type: 'contest' } }),
+    ).resolves.toBeDefined();
+  });
+
+  it('bounds comment bodies and page types', async () => {
+    const fields = {
+      page: { type: 'blog', id: newId() },
+      author: newId(),
+      threadId: newId(),
+      path: 'x',
+    };
+    await expect(
+      Comments.create({ ...fields, body: 'x'.repeat(8192) }),
+    ).resolves.toBeDefined();
+    await expect(
+      Comments.create({ ...fields, body: 'x'.repeat(8193) }),
+    ).rejects.toThrow(/body/);
+    await expect(Comments.create({ ...fields, body: '' })).rejects.toThrow(
+      /body/,
+    );
+    await expect(
+      Comments.create({
+        ...fields,
+        page: { type: 'ticket', id: newId() },
+        body: 'x',
+      }),
+    ).rejects.toThrow(/type/);
+  });
+
+  it('creates unpublished personal posts by default and bounds the title', async () => {
+    const post = await Posts.create({
+      title: 'Hello',
+      slug: 'alice',
+      publishOn: new Date(),
+      content: 'Hi',
+    });
+    expect(post.toObject()).toMatchObject({
+      visible: false,
+      sticky: false,
+      globalPost: false,
+      organization: null,
+      score: 0,
+    });
+    await expect(
+      Posts.create({
+        title: 'x'.repeat(101),
+        slug: 'a',
+        publishOn: new Date(),
+        content: 'Hi',
+      }),
+    ).rejects.toThrow(/title/);
+  });
+
+  it('reads a subtree by an index-bounded prefix, not the whole path index', async () => {
+    const [root, sibling] = [newId(), newId()];
+    const fields = { page: { type: 'blog', id: newId() }, author: newId() };
+    const docs = [root, ...Array.from({ length: 30 }, () => sibling)].map(
+      (head, index) => ({
+        ...fields,
+        threadId: head,
+        path: `${head}/${index}`,
+        body: 'x',
+      }),
+    );
+    await Comments.insertMany([
+      { ...fields, threadId: root, path: root, body: 'x' },
+      ...docs,
+    ]);
+    const pathFilter = {
+      $or: [{ path: root }, { path: new RegExp(`^${root}/`) }],
+    };
+    const operations = await profileQueries(mongoose.connection.db!, () =>
+      Comments.find(pathFilter).hint({ path: 1 }).exec(),
+    );
+    const read = operations.find((entry) => entry.operation === 'query')!;
+    expect(read.keysExamined).toBeLessThanOrEqual(3);
+  });
+
+  it('serves a post list sorted by publish date and id from one index', async () => {
+    await Posts.insertMany(
+      Array.from({ length: 25 }, (_, index) => ({
+        title: 'T',
+        slug: 's',
+        publishOn: new Date(1_700_000_000_000 + index),
+        content: 'c',
+        visible: true,
+      })),
+    );
+    const operations = await profileQueries(mongoose.connection.db!, () =>
+      Posts.find({ organization: null, visible: true })
+        .sort({ publishOn: -1, _id: -1 })
+        .limit(10)
+        .exec(),
+    );
+    const read = operations.find((entry) => entry.operation === 'query')!;
+    expect(read.planSummary).toMatch(/^IXSCAN/);
+    expect(read.planSummary).not.toContain('SORT');
+    expect(read.docsExamined).toBeLessThanOrEqual(11);
   });
 });

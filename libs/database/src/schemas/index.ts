@@ -1,5 +1,10 @@
 import { ModelDefinition } from '@nestjs/mongoose';
 import { ActivationKey, ActivationKeySchema } from './activation-key.schema';
+import { BlogPost, BlogPostSchema } from './blog-post.schema';
+import { BlogVote, BlogVoteSchema } from './blog-vote.schema';
+import { CommentLock, CommentLockSchema } from './comment-lock.schema';
+import { CommentVote, CommentVoteSchema } from './comment-vote.schema';
+import { Comment, CommentSchema } from './comment.schema';
 import { Contest, ContestSchema } from './contest.schema';
 import {
   ContestParticipation,
@@ -47,6 +52,11 @@ import { Tag, TagSchema } from './tag.schema';
 import { User, UserSchema } from './user.schema';
 
 export * from './activation-key.schema';
+export * from './blog-post.schema';
+export * from './blog-vote.schema';
+export * from './comment-lock.schema';
+export * from './comment-vote.schema';
+export * from './comment.schema';
 export * from './contest-announcement.schema';
 export * from './contest-moss.schema';
 export * from './contest-official-ranking.schema';
@@ -81,6 +91,11 @@ export const SCHEMAS: ModelDefinition[] = [
     name: ContestPublicRankingLink.name,
     schema: ContestPublicRankingLinkSchema,
   },
+  { name: BlogPost.name, schema: BlogPostSchema },
+  { name: BlogVote.name, schema: BlogVoteSchema },
+  { name: CommentLock.name, schema: CommentLockSchema },
+  { name: CommentVote.name, schema: CommentVoteSchema },
+  { name: Comment.name, schema: CommentSchema },
   { name: Contest.name, schema: ContestSchema },
   { name: ContestParticipation.name, schema: ContestParticipationSchema },
   { name: ContestSubmission.name, schema: ContestSubmissionSchema },

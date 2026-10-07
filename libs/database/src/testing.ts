@@ -12,6 +12,8 @@ export interface ProfiledOperation {
   /** `COLLSCAN` means no index was used. */
   planSummary: string;
   docsExamined: number;
+  /** Index entries read; a regex that cannot bound its scan shows here, not in `docsExamined`. */
+  keysExamined: number;
 }
 
 /** Runs `work` with the database profiler on and returns every operation the server saw: index assertions observe what Mongo did, not the query text. */
@@ -41,5 +43,6 @@ export async function profileQueries(
     operation: String(entry.op),
     planSummary: String(entry.planSummary ?? ''),
     docsExamined: Number(entry.docsExamined ?? 0),
+    keysExamined: Number(entry.keysExamined ?? 0),
   }));
 }

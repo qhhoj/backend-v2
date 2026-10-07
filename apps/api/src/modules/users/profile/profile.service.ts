@@ -3,7 +3,11 @@ import type { Principal, UserDocument } from '@libs/auth';
 import { UsersRepository } from '@libs/auth';
 import { AppError, ENV } from '@libs/common';
 import type { Env } from '@libs/common';
-import { canInteract, INTERACT_MIN_PROBLEM_COUNT } from '@libs/community';
+import {
+  canInteract,
+  INTERACT_MIN_PROBLEM_COUNT,
+  officialContestLocks,
+} from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
@@ -88,7 +92,7 @@ export class ProfileService {
 
   /** Legacy removed `about` and `first_name` from the form in official contest mode; superusers still edit. */
   private refuseInOfficialContest(principal: Principal): void {
-    if (this.env.officialContestMode && !principal.isSuperuser)
+    if (officialContestLocks(this.env.officialContestMode, principal))
       throw new AppError(
         'forbidden',
         403,

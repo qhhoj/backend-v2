@@ -19,6 +19,11 @@ import {
   Judge,
   Language,
   License,
+  BlogPost,
+  BlogVote,
+  Comment,
+  CommentLock,
+  CommentVote,
   Organization,
   OrganizationRequest,
   Problem,
@@ -157,6 +162,15 @@ export async function setupApiTest({
     ),
     organizationRequests: readyApp.get<Model<OrganizationRequest>>(
       getModelToken(OrganizationRequest.name),
+    ),
+    blogPosts: readyApp.get<Model<BlogPost>>(getModelToken(BlogPost.name)),
+    blogVotes: readyApp.get<Model<BlogVote>>(getModelToken(BlogVote.name)),
+    comments: readyApp.get<Model<Comment>>(getModelToken(Comment.name)),
+    commentVotes: readyApp.get<Model<CommentVote>>(
+      getModelToken(CommentVote.name),
+    ),
+    commentLocks: readyApp.get<Model<CommentLock>>(
+      getModelToken(CommentLock.name),
     ),
     db: readyApp.get<Connection>(getConnectionToken()).db!,
     /** Streams are disabled in tests; call after inserting catalog rows. */

@@ -15,6 +15,8 @@ import {
   ContestParticipation,
   ContestSubmission,
   Language,
+  BlogPost,
+  Comment,
   Organization,
   Problem,
   ProblemGroup,
@@ -134,6 +136,8 @@ export async function setupWorkerTest({
     organizations: ready.get<Model<Organization>>(
       getModelToken(Organization.name),
     ),
+    blogPosts: ready.get<Model<BlogPost>>(getModelToken(BlogPost.name)),
+    comments: ready.get<Model<Comment>>(getModelToken(Comment.name)),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
     teardown: async () => {

@@ -4,3 +4,7 @@ export * from './interaction';
 export * from './time-zones';
 export * from './user-data';
 export * from './queues';
+export * from './comments';
+export * from './blog-posts';
+export * from './contribution';
+export * from './votes';
