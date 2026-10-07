@@ -10,6 +10,8 @@ import { BlogPostsController } from './core/blog-posts.controller';
 import { BlogPostsService } from './core/blog-posts.service';
 import { BlogEditingController } from './editing/blog-editing.controller';
 import { BlogEditingService } from './editing/blog-editing.service';
+import { BlogVotesController } from './votes/blog-votes.controller';
+import { BlogVotesService } from './votes/blog-votes.service';
 import { OrganizationPostsController } from './core/organization-posts.controller';
 
 @Module({
@@ -25,8 +27,14 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
     BlogPostsController,
     OrganizationPostsController,
     BlogEditingController,
+    BlogVotesController,
   ],
-  providers: [BlogPostsService, BlogEditingService, RateLimitService],
+  providers: [
+    BlogPostsService,
+    BlogEditingService,
+    BlogVotesService,
+    RateLimitService,
+  ],
   exports: [BlogPostsService],
 })
 export class BlogApiModule {}
