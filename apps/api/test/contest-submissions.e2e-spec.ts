@@ -6,7 +6,6 @@ import {
   SubmissionEventsService,
 } from '@libs/judging';
 import type { SubmissionListItemResponse } from '../src/modules/submissions/dto/submission-list.response';
-import { SubmissionStreamsService } from '../src/modules/submissions/submission-streams.service';
 import {
   contestProblem,
   contestUrl,
@@ -23,7 +22,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { openStream } from './sse-client';
+import { openStream, streamsOf } from './sse-client';
 import type { SseClient } from './sse-client';
 import { dataOf, seedSubmission } from './submission-fixtures';
 import { setupApiTest } from './setup';
@@ -385,7 +384,7 @@ describe('contest submissions and the freeze', () => {
 
   it('keeps verdicts out of the public feed', async () => {
     const { bobId } = await frozenScene('feed_frozen_p');
-    const streams = api.app.get(SubmissionStreamsService);
+    const streams = streamsOf(api);
     const feed = await openStream(api, EVENTS);
     opened.push(feed);
     await waitUntil(() => streams.openCounts().feed === 1);

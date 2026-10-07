@@ -12,9 +12,8 @@ import {
 } from '@libs/judging';
 import type { SubmissionEventType } from '@libs/judging';
 import { SubmissionsService } from '../src/modules/submissions/submissions.service';
-import { STREAM_LIMITS } from '../src/modules/submissions/rate-limits';
-import type { StreamLimits } from '../src/modules/submissions/rate-limits';
-import { SubmissionStreamsService } from '../src/modules/submissions/submission-streams.service';
+import { STREAM_LIMITS } from '../src/modules/events/stream-limits';
+import type { StreamLimits } from '../src/modules/events/stream-limits';
 import {
   createProblem,
   createUserWith,
@@ -22,7 +21,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { openStream } from './sse-client';
+import { openStream, streamsOf } from './sse-client';
 import type { SseClient } from './sse-client';
 import { seedSubmission } from './submission-fixtures';
 import { setupApiTest } from './setup';
@@ -43,7 +42,7 @@ const LIMITS: StreamLimits = {
 describe('submission event streams', () => {
   let api: ApiTest;
   let catalog: Catalog;
-  let streams: SubmissionStreamsService;
+  let streams: ReturnType<typeof streamsOf>;
   const sessions: Record<string, TestSession> = {};
   const ids: Record<string, string> = {};
   const problems: Record<string, string> = {};
@@ -85,7 +84,7 @@ describe('submission event streams', () => {
       overrides: [{ provide: STREAM_LIMITS, useValue: LIMITS }],
     });
     catalog = await seedCatalog(api);
-    streams = api.app.get(SubmissionStreamsService);
+    streams = streamsOf(api);
     for (const [name, extra] of [
       ['owner', {}],
       ['other', {}],

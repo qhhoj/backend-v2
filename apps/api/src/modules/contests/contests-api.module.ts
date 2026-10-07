@@ -9,6 +9,7 @@ import {
   CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_QUEUE,
 } from '@libs/contests';
+import { EventsModule } from '../events/events.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './core/contest-access.module';
@@ -20,6 +21,8 @@ import { ContestDataService } from './data/contest-data.service';
 import { ContestEditingController } from './editing/contest-editing.controller';
 import { ContestEditingService } from './editing/contest-editing.service';
 import { ContestEventsService } from './announcements/contest-events.service';
+import { ContestStreamsController } from './announcements/contest-streams.controller';
+import { ContestStreamsService } from './announcements/contest-streams.service';
 import { ContestMossController } from './moss/contest-moss.controller';
 import { ContestMossRepository } from './moss/contest-moss.repository';
 import { ContestMossService } from './moss/contest-moss.service';
@@ -48,6 +51,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
   imports: [
     AuthModule,
     ContestAccessModule,
+    EventsModule,
     ProblemsApiModule,
     SubmissionsApiModule,
     BullModule.registerQueue(
@@ -68,6 +72,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestRankingController,
     ContestRatingController,
     ContestStatsController,
+    ContestStreamsController,
     ContestSubmissionsController,
     ContestsController,
     OfficialRankingController,
@@ -78,6 +83,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestAnnouncementsService,
     ContestDataService,
     ContestEventsService,
+    ContestStreamsService,
     ContestMossRepository,
     ContestMossService,
     ContestsService,

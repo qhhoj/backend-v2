@@ -1,24 +1,21 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import type { OnModuleInit } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import Redis from 'ioredis';
-import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, ENV } from '@libs/common';
-import type { Env } from '@libs/common';
-import { CONTEST_EVENTS_CHANNEL, parseContestEvent } from '@libs/contests';
+import { AppError } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { parseSubmissionEvent, SUBMISSION_EVENTS_CHANNEL } from '@libs/judging';
 import type { SubmissionEvent } from '@libs/judging';
-import { ContestAccess } from '../contests/core/contest-access';
-import { ContestViewerService } from '../contests/core/contest-viewer.service';
-import { ContestsRepository } from '../contests/core/contests.repository';
+import { EventStreamHub } from '../events/event-stream-hub.service';
+import type {
+  EventChannel,
+  OpenStream,
+} from '../events/event-stream-hub.service';
+import { sseFrame } from '../events/sse';
+import { STREAM_LIMITS } from '../events/stream-limits';
+import type { StreamLimits } from '../events/stream-limits';
 import { ProblemEvents } from '../problems/problem.events';
 import { ProblemsRepository } from '../problems/problems.repository';
-import { STREAM_LIMITS } from './rate-limits';
-import type { StreamLimits } from './rate-limits';
-import { HEARTBEAT_FRAME, openEventStream, sseFrame } from './sse';
-import type { EventStream } from './sse';
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionState } from './submissions.repository';
 import { SubmissionsService } from './submissions.service';
@@ -27,24 +24,12 @@ import { SubmissionsService } from './submissions.service';
 const FEED_PROBLEM_TTL_MS = 30_000;
 const FEED_PROBLEM_CACHE_SIZE = 10_000;
 
-interface OpenStream {
-  stream: EventStream;
-  /** Null on the public feed and on contest streams. */
+interface SubmissionStream extends OpenStream {
+  /** Null on the public feed. */
   submissionId: string | null;
-  /** Set on contest streams. */
-  contestId: string | null;
-  auth: AuthContext | null;
-  /** Submission streams: test-case progress only when the viewer sees every case result. */
+  /** Test-case progress only when the viewer sees every case result. */
   caseEvents: boolean;
 }
-
-const increment = (counts: Map<string, number>, key: string) =>
-  counts.set(key, (counts.get(key) ?? 0) + 1);
-const decrement = (counts: Map<string, number>, key: string) => {
-  const left = (counts.get(key) ?? 0) - 1;
-  if (left > 0) counts.set(key, left);
-  else counts.delete(key);
-};
 
 /** What a stream starts with, so a page that reconnects never misses the end. */
 const stateOf = (submission: SubmissionState, caseEvents: boolean) => ({
@@ -58,100 +43,38 @@ const stateOf = (submission: SubmissionState, caseEvents: boolean) => ({
   currentTestcase: caseEvents ? submission.currentTestcase : null,
 });
 
-/** Live submission events over SSE: one Redis subscription per api process fans `submission-events` out to the open streams, capped per user, per IP and in total, dropped when they stop reading, and re-authorised every `recheckMs`. */
+/** The `submission-events` channel: one stream per watched submission and the public feed. */
 @Injectable()
-export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
+export class SubmissionStreamsService implements EventChannel, OnModuleInit {
+  readonly name = 'submission';
+  readonly redisChannel = SUBMISSION_EVENTS_CHANNEL;
   private readonly logger = new Logger(SubmissionStreamsService.name);
-  private subscriber: Redis | null = null;
-  /** Whether the Redis subscription is confirmed; false from the moment the connection drops. */
-  private subscribed = false;
-  private subscriptionLost = false;
-  private readonly bySubmission = new Map<string, Set<OpenStream>>();
-  private readonly byContest = new Map<string, Set<OpenStream>>();
-  private contestStreams = 0;
-  private readonly feed = new Set<OpenStream>();
-  private readonly perUser = new Map<string, number>();
-  private readonly perIp = new Map<string, number>();
-  private total = 0;
+  private readonly bySubmission = new Map<string, Set<SubmissionStream>>();
+  private readonly feed = new Set<SubmissionStream>();
   private readonly feedProblems = new Map<
     string,
     { eligible: boolean; expiresAt: number }
   >();
   /** Feed deliveries run one after another, so a cache miss never reorders events. */
   private feedQueue: Promise<void> = Promise.resolve();
-  private heartbeatTimer?: NodeJS.Timeout;
-  private recheckTimer?: NodeJS.Timeout;
-  private rechecking = false;
 
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    private readonly hub: EventStreamHub,
     @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
     private readonly submissions: SubmissionsService,
     private readonly submissionRows: SubmissionsRepository,
     private readonly problems: ProblemsRepository,
     private readonly problemEvents: ProblemEvents,
-    private readonly sessions: SessionService,
-    private readonly users: UsersRepository,
-    private readonly principals: PrincipalService,
-    private readonly contestViewers: ContestViewerService,
-    private readonly contests: ContestsRepository,
-  ) {}
+  ) {
+    hub.register(this);
+  }
 
-  /** Subscribe mode blocks its connection, so the subscriber is never the shared client. ioredis reconnects; once the subscription is confirmed again, open streams are told to `resync`, because events published meanwhile are lost. */
-  async onModuleInit(): Promise<void> {
-    const subscriber = new Redis(this.env.redisUrl, {
-      maxRetriesPerRequest: null,
-    });
-    subscriber.on('error', (error: Error) =>
-      this.logger.error(`Submission events subscription: ${error.message}`),
-    );
-    subscriber.on('message', (channel: string, raw: string) =>
-      channel === CONTEST_EVENTS_CHANNEL
-        ? this.deliverContest(raw)
-        : this.deliver(raw),
-    );
-    subscriber.on('close', () => {
-      if (this.subscribed) this.subscriptionLost = true;
-      this.subscribed = false;
-    });
-    subscriber.on('ready', () => void this.confirmResubscription(subscriber));
-    this.subscriber = subscriber;
-    await subscriber.subscribe(
-      SUBMISSION_EVENTS_CHANNEL,
-      CONTEST_EVENTS_CHANNEL,
-    );
-    this.subscribed = true;
+  onModuleInit(): void {
     // `pointsChanged` also covers the organisation-private flag.
     for (const name of ['publicityChanged', 'pointsChanged'] as const)
       this.problemEvents.on(name, (problemId) =>
         this.feedProblems.delete(problemId),
       );
-    this.heartbeatTimer = setInterval(
-      () => this.broadcast(HEARTBEAT_FRAME),
-      this.limits.heartbeatMs,
-    );
-    this.recheckTimer = setInterval(
-      () => void this.recheck(),
-      this.limits.recheckMs,
-    );
-  }
-
-  /** Open streams would keep the HTTP server from closing. Safe to call twice. */
-  async onModuleDestroy(): Promise<void> {
-    clearInterval(this.heartbeatTimer);
-    clearInterval(this.recheckTimer);
-    const streams = this.allStreams();
-    for (const entry of streams) entry.stream.close();
-    await Promise.all(streams.map((entry) => entry.stream.closed));
-    const { subscriber } = this;
-    this.subscriber = null;
-    this.subscribed = false;
-    subscriber?.removeAllListeners('message');
-    await subscriber?.quit().catch(() => subscriber.disconnect());
-  }
-
-  isSubscribed(): boolean {
-    return this.subscribed;
   }
 
   /** The caps first (429: refused clients skip the detail lookups), then the detail rules (404, 403), then the stream. `state` is read after the stream is registered, so an event published during the lookups is either in it or delivered after it; it may follow an event that already reached the stream, and clients treat the latest status as current. */
@@ -161,19 +84,21 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> {
-    const release = this.reserve(request.ip, auth.principal.userId);
-    let entry: OpenStream;
+    const release = this.hub.reserve(request.ip, auth.principal.userId);
+    let entry: SubmissionStream;
     try {
       const { submission, caseEvents } = await this.submissions.streamAccess(
         auth.principal,
         submissionId,
       );
-      entry = this.open(reply, release, {
-        submissionId: uuidStr(submission._id),
-        contestId: null,
-        auth,
-        caseEvents,
-      });
+      entry = this.register(
+        this.hub.open(reply, release, {
+          channel: this,
+          auth,
+          submissionId: uuidStr(submission._id),
+          caseEvents,
+        }),
+      );
     } catch (error) {
       release();
       throw error;
@@ -190,164 +115,31 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Caps first (the contest cap, then IP/user/total), then visibility (404), then the stream. Nothing is sent until an event: the page fetches the list itself on (re)connect. */
-  async openContest(
-    auth: AuthContext | null,
-    key: string,
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
-    if (this.contestStreams >= this.limits.contestTotal)
-      throw new AppError('rate_limited', 429, 'Too many open event streams');
-    const release = this.reserve(request.ip, auth?.principal.userId ?? null);
-    try {
-      const contest = await this.contestViewers.visibleContest(
-        auth?.principal ?? null,
-        key,
-      );
-      this.open(reply, release, {
-        submissionId: null,
-        contestId: contest._id,
-        auth,
-        caseEvents: false,
-      });
-    } catch (error) {
-      release();
-      throw error;
-    }
-  }
-
   openFeed(request: FastifyRequest, reply: FastifyReply): void {
     if (this.feed.size >= this.limits.feedTotal)
       throw new AppError('rate_limited', 429, 'Too many open event streams');
-    const release = this.reserve(request.ip, null);
+    const release = this.hub.reserve(request.ip, null);
     try {
-      this.open(reply, release, {
-        submissionId: null,
-        contestId: null,
-        auth: null,
-        caseEvents: false,
-      });
+      this.register(
+        this.hub.open(reply, release, {
+          channel: this,
+          auth: null,
+          submissionId: null,
+          caseEvents: false,
+        }),
+      );
     } catch (error) {
       release();
       throw error;
     }
   }
 
-  /** Everything is zero (one subscriber listener) once every client left. */
   openCounts() {
-    return {
-      total: this.total,
-      users: this.perUser.size,
-      ips: this.perIp.size,
-      submissions: this.bySubmission.size,
-      feed: this.feed.size,
-      contests: this.contestStreams,
-      subscriberListeners: this.subscriber?.listenerCount('message') ?? 0,
-    };
-  }
-
-  /** Takes over the reply; `release` (from `reserve`) runs once when the stream closes. If this throws, the caller still owns `release`. */
-  private open(
-    reply: FastifyReply,
-    release: () => void,
-    fields: Omit<OpenStream, 'stream'>,
-  ): OpenStream {
-    const entry: OpenStream = {
-      stream: openEventStream(reply, this.limits.maxBufferedBytes),
-      ...fields,
-    };
-    if (entry.contestId !== null) {
-      const listeners =
-        this.byContest.get(entry.contestId) ?? new Set<OpenStream>();
-      listeners.add(entry);
-      this.byContest.set(entry.contestId, listeners);
-      this.contestStreams += 1;
-    } else if (entry.submissionId === null) this.feed.add(entry);
-    else {
-      const listeners =
-        this.bySubmission.get(entry.submissionId) ?? new Set<OpenStream>();
-      listeners.add(entry);
-      this.bySubmission.set(entry.submissionId, listeners);
-    }
-    void entry.stream.closed.then(() => {
-      this.forget(entry);
-      release();
-    });
-    return entry;
-  }
-
-  /** Throws 429 before anything is written; the returned release is idempotent. */
-  private reserve(ip: string, userId: string | null): () => void {
-    if (
-      this.total >= this.limits.total ||
-      (this.perIp.get(ip) ?? 0) >= this.limits.perIp ||
-      (userId !== null &&
-        (this.perUser.get(userId) ?? 0) >= this.limits.perUser)
-    )
-      throw new AppError('rate_limited', 429, 'Too many open event streams');
-    this.total += 1;
-    increment(this.perIp, ip);
-    if (userId !== null) increment(this.perUser, userId);
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      this.total -= 1;
-      decrement(this.perIp, ip);
-      if (userId !== null) decrement(this.perUser, userId);
-    };
-  }
-
-  /** After a reconnect the subscription is confirmed (the reply to `subscribe`) before clients are told to refetch, or an event could still slip between their refetch and it. */
-  private async confirmResubscription(subscriber: Redis): Promise<void> {
-    if (!this.subscriptionLost) return;
-    try {
-      await subscriber.subscribe(
-        SUBMISSION_EVENTS_CHANNEL,
-        CONTEST_EVENTS_CHANNEL,
-      );
-    } catch (error) {
-      this.logger.error(`Resubscribing failed: ${(error as Error).message}`);
-      return;
-    }
-    this.subscribed = true;
-    this.subscriptionLost = false;
-    this.broadcast(sseFrame('resync', {}));
-  }
-
-  private forget(entry: OpenStream): void {
-    if (entry.contestId !== null) {
-      const listeners = this.byContest.get(entry.contestId);
-      listeners?.delete(entry);
-      if (listeners?.size === 0) this.byContest.delete(entry.contestId);
-      this.contestStreams -= 1;
-      return;
-    }
-    if (entry.submissionId === null) {
-      this.feed.delete(entry);
-      return;
-    }
-    const listeners = this.bySubmission.get(entry.submissionId);
-    listeners?.delete(entry);
-    if (listeners?.size === 0) this.bySubmission.delete(entry.submissionId);
-  }
-
-  /** A snapshot: closing a stream removes it later, never during the loop. */
-  private allStreams(): OpenStream[] {
-    return [
-      ...this.feed,
-      ...[...this.byContest.values()].flatMap((listeners) => [...listeners]),
-      ...[...this.bySubmission.values()].flatMap((listeners) => [...listeners]),
-    ];
-  }
-
-  private broadcast(frame: string): void {
-    for (const entry of this.allStreams()) entry.stream.send(frame);
+    return { submissions: this.bySubmission.size, feed: this.feed.size };
   }
 
   /** One frame per event, written to every matching stream: viewers of the submission get every event (progress only with `caseEvents`); the feed gets ids and status of public, non-organisation-private problems, without progress. */
-  private deliver(raw: string): void {
+  deliver(raw: string): void {
     const event = parseSubmissionEvent(raw);
     if (!event) return;
     const frame = sseFrame(event.type, event);
@@ -358,15 +150,38 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
       this.feedQueue = this.feedQueue.then(() => this.deliverToFeed(event));
   }
 
-  private deliverContest(raw: string): void {
-    const event = parseContestEvent(raw);
-    if (!event) return;
-    const frame = sseFrame(event.type, {
-      contestId: event.contestId,
-      announcementId: event.announcementId,
-    });
-    for (const entry of this.byContest.get(event.contestId) ?? [])
-      entry.stream.send(frame);
+  forget(entry: SubmissionStream): void {
+    if (entry.submissionId === null) {
+      this.feed.delete(entry);
+      return;
+    }
+    const listeners = this.bySubmission.get(entry.submissionId);
+    listeners?.delete(entry);
+    if (listeners?.size === 0) this.bySubmission.delete(entry.submissionId);
+  }
+
+  /** The detail rules again; a 403/404 closes the stream (the hub), an infrastructure error keeps it (logged) until the next tick. The feed has no rules. */
+  async recheck(
+    entry: SubmissionStream,
+    principal: Principal | null,
+  ): Promise<void> {
+    if (entry.submissionId === null) return;
+    if (!principal) return entry.stream.close();
+    entry.caseEvents = (
+      await this.submissions.streamAccess(principal, entry.submissionId)
+    ).caseEvents;
+  }
+
+  private register(entry: SubmissionStream): SubmissionStream {
+    if (entry.submissionId === null) this.feed.add(entry);
+    else {
+      const listeners =
+        this.bySubmission.get(entry.submissionId) ??
+        new Set<SubmissionStream>();
+      listeners.add(entry);
+      this.bySubmission.set(entry.submissionId, listeners);
+    }
+    return entry;
   }
 
   private async deliverToFeed(event: SubmissionEvent): Promise<void> {
@@ -402,74 +217,5 @@ export class SubmissionStreamsService implements OnModuleInit, OnModuleDestroy {
       expiresAt: Date.now() + FEED_PROBLEM_TTL_MS,
     });
     return eligible;
-  }
-
-  /** Every `recheckMs`: the guard's checks again, then the detail rules; a viewer who lost either is disconnected. A tick still running when the next fires is skipped. */
-  private async recheck(): Promise<void> {
-    if (this.rechecking) return;
-    this.rechecking = true;
-    try {
-      for (const entry of this.allStreams())
-        if (entry.contestId !== null)
-          await this.reauthorizeContest(entry, entry.contestId);
-        else if (entry.submissionId !== null)
-          await this.reauthorize(entry, entry.submissionId);
-    } finally {
-      this.rechecking = false;
-    }
-  }
-
-  /** A 403/404 now closes the stream; an infrastructure error keeps it (logged) until the next tick. */
-  private async reauthorize(
-    entry: OpenStream,
-    submissionId: string,
-  ): Promise<void> {
-    try {
-      const principal = entry.auth && (await this.currentPrincipal(entry.auth));
-      if (!principal) return entry.stream.close();
-      entry.caseEvents = (
-        await this.submissions.streamAccess(principal, submissionId)
-      ).caseEvents;
-    } catch (error) {
-      if (error instanceof AppError) entry.stream.close();
-      else
-        this.logger.error(
-          `Re-checking a submission stream failed: ${(error as Error).message}`,
-        );
-    }
-  }
-
-  /** A contest stream closes once its session ends or the contest is no longer visible to the viewer (anonymous: to anyone). */
-  private async reauthorizeContest(
-    entry: OpenStream,
-    contestId: string,
-  ): Promise<void> {
-    try {
-      const principal = entry.auth && (await this.currentPrincipal(entry.auth));
-      if (entry.auth && !principal) return entry.stream.close();
-      const contest = await this.contests.findById(contestId);
-      if (
-        !contest ||
-        !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
-      )
-        entry.stream.close();
-    } catch (error) {
-      this.logger.error(
-        `Re-checking a contest stream failed: ${(error as Error).message}`,
-      );
-    }
-  }
-
-  /** The session still exists (logout, password change and impersonation end destroy it), the user is still active, and an API token was not regenerated. */
-  private async currentPrincipal(auth: AuthContext): Promise<Principal | null> {
-    if (auth.sessionId !== null && !(await this.sessions.get(auth.sessionId)))
-      return null;
-    const user = await this.users.findById(auth.user._id);
-    if (
-      !user?.isActive ||
-      (auth.viaToken && user.apiTokenHash !== auth.user.apiTokenHash)
-    )
-      return null;
-    return this.principals.build(user);
   }
 }

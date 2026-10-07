@@ -7,12 +7,11 @@ import type { AnnouncementResponse } from '../src/modules/contests/announcements
 import {
   DEFAULT_STREAM_LIMITS,
   STREAM_LIMITS,
-} from '../src/modules/submissions/rate-limits';
-import { SubmissionStreamsService } from '../src/modules/submissions/submission-streams.service';
+} from '../src/modules/events/stream-limits';
 import { clearRateLimits, contestUrl, createContest } from './contest-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
-import { openStream } from './sse-client';
+import { openStream, streamsOf } from './sse-client';
 import type { SseClient } from './sse-client';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -20,7 +19,7 @@ import type { ApiTest } from './setup';
 
 describe('contest announcements', () => {
   let api: ApiTest;
-  let streams: SubmissionStreamsService;
+  let streams: ReturnType<typeof streamsOf>;
   const sessions: Record<string, TestSession> = {};
   const users: Record<string, { _id: string }> = {};
   const opened: SseClient[] = [];
@@ -65,7 +64,7 @@ describe('contest announcements', () => {
         },
       ],
     });
-    streams = api.app.get(SubmissionStreamsService);
+    streams = streamsOf(api);
     const roles: Array<[string, Partial<User>]> = [
       ['editor', { permissions: ['judge.edit_own_contest'] }],
       ['plain', {}],
