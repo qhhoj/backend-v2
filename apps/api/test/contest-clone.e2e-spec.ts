@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { sha256 } from '@libs/auth';
@@ -56,6 +57,7 @@ describe('contest clone', () => {
   beforeEach(() => finalJudges.obliterate({ force: true }));
 
   it('clones a contest hidden, with its problems and settings, the cloner as the only author', async () => {
+    const organizationId = randomUUID();
     const source = await createContest(api, {
       authors: [users.cloner._id, users.other._id],
       curators: [users.other._id],
@@ -67,6 +69,11 @@ describe('contest clone', () => {
       formatName: 'icpc',
       formatConfig: { penalty: 10 },
       accessCodeHash: sha256('code'),
+      rankingAccessCodeHash: sha256('ranking'),
+      rateExclude: [users.other._id],
+      bannedJudges: ['judge-a'],
+      organizations: [organizationId],
+      privateContestants: [users.other._id],
       lockedAfter: hoursFromNow(1),
       userCount: 5,
       virtualCount: 2,
@@ -96,8 +103,13 @@ describe('contest clone', () => {
       formatName: 'icpc',
       formatConfig: { penalty: 10 },
       accessCodeHash: sha256('code'),
+      rankingAccessCodeHash: sha256('ranking'),
       tags: ['dp'],
+      rateExclude: [],
+      bannedJudges: [],
     });
+    expect(stored.organizations.map(uuidStr)).toEqual([organizationId]);
+    expect(stored.privateContestants.map(uuidStr)).toEqual([users.other._id]);
     expect(uuidStr(stored._id)).not.toBe(source._id);
     expect(
       [stored.authors, stored.curators, stored.testers, stored.bannedUsers].map(
@@ -139,7 +151,9 @@ describe('contest clone', () => {
     await clone('cloner', source.key, { key: 'current' })
       .expect(400)
       .expect(errorCode('validation_failed'));
-    await clone('cloner', source.key, { key: 'Bad-Key' }).expect(400);
+    await clone('cloner', source.key, { key: 'Bad-Key' })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
     expect(await api.contests.countDocuments({ key: /^x_/ })).toBe(0);
   });
 
