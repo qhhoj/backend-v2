@@ -220,8 +220,10 @@ describe('POST /api/internal/problems/:code/submit', () => {
     const statuses = (
       await Promise.all(Array.from({ length: 6 }, () => submit('alice')))
     ).map((response) => response.status);
-    expect(statuses.filter((status) => status === 201)).toHaveLength(1);
-    expect(statuses.filter((status) => status === 409)).toHaveLength(5);
+    // Losers get 409 from the lock, or 429 when they take the lock after the winner inserted.
+    expect(
+      statuses.filter((status) => status !== 409 && status !== 429),
+    ).toEqual([201]);
     expect(
       await api.submissions.countDocuments({ user: users.alice._id }),
     ).toBe(2);
