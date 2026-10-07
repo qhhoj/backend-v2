@@ -267,6 +267,20 @@ describe('contest submissions and the freeze', () => {
     );
   });
 
+  it('keeps the list of a private contest to its contestants', async () => {
+    const { contest, aliceId, bobId } = await frozenScene('private_contest_p', {
+      ...endedUnfrozen,
+      isPrivate: true,
+      privateContestants: [users.alice._id],
+    });
+    const list = contestUrl(contest.key, '/submissions');
+    await get(list).expect(404);
+    await get(list, 'bob').expect(404);
+    expect(idsOf(await get(list, 'alice').expect(200)).sort()).toEqual(
+      [aliceId, bobId].sort(),
+    );
+  });
+
   it.each([
     [
       'a running unfrozen contest that hides its list',
