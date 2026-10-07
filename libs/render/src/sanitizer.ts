@@ -1,4 +1,5 @@
 import sanitizeHtml from 'sanitize-html';
+import { KATEX_CLASSES, KATEX_UNSTYLED_CLASSES } from './katex-classes';
 import {
   LEGACY_STYLE_PROPERTIES,
   MATHML_ATTRIBUTES,
@@ -151,6 +152,86 @@ const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
   ],
   parser: { lowerCaseAttributeNames: false },
 };
+
+/** Style properties that let a post escape its own box (overlays, clickjacking). `top`/`left` stay only as KaTeX's small em offsets, `position` only in flow. */
+const LAYOUT_ESCAPE_PROPERTY =
+  /^(-\w+-)?(z-index|right|bottom|inset.*|transform.*)$/;
+/** `position` stays only as `relative` (KaTeX positions large operators with it); it cannot leave the post's box. */
+const IN_FLOW_POSITION = /^(relative|static)$/;
+const KATEX_OFFSET = /^-?\d{1,3}(\.\d+)?em$/;
+const RESTRICTED_VALUES: Record<string, RegExp> = {
+  position: IN_FLOW_POSITION,
+  top: KATEX_OFFSET,
+  left: KATEX_OFFSET,
+};
+const BLOG_STYLES = Object.fromEntries(
+  LEGACY_STYLE_PROPERTIES.filter(
+    (property) => !LAYOUT_ESCAPE_PROPERTY.test(property),
+  ).map((property) => [property, [RESTRICTED_VALUES[property] ?? STYLE_VALUE]]),
+);
+
+/** Embeds a blog post may carry (path-checked, not just host-checked). */
+const EMBED_SOURCE =
+  /^https:\/\/(www\.youtube\.com\/embed|www\.youtube-nocookie\.com\/embed|player\.vimeo\.com\/video)\/[\w-]+(\?[\w=&.%-]*)?$/;
+const EMBED_SANDBOX = 'allow-scripts allow-same-origin allow-presentation';
+
+/** Classes the Markdown pipeline and KaTeX emit (KaTeX's from its stylesheet); any other class is the author's and gets `user-`, so it cannot hit the site's stylesheet. Names already in the `user-` namespace (`user-reference`) stay. */
+const PIPELINE_CLASSES = new Set([
+  ...KATEX_CLASSES,
+  ...KATEX_UNSTYLED_CLASSES,
+  'math-error',
+  'spoiler',
+  'table',
+  'h-scrollable-table',
+]);
+const isPipelineClass = (name: string) =>
+  PIPELINE_CLASSES.has(name) ||
+  name.startsWith('user-') ||
+  name.startsWith('language-');
+const prefixedClasses = (classes: string): string =>
+  classes
+    .split(/\s+/)
+    .filter((name) => /^[\w-]+$/.test(name))
+    .map((name) => (isPipelineClass(name) ? name : `user-${name}`))
+    .join(' ');
+
+/** Legacy `id`s would clobber page elements (`id="navbar"`, `__proto__`); the blog drops them everywhere. */
+const withoutId = (attributes: readonly string[]) =>
+  attributes.filter((name) => name !== 'id');
+const BLOG_ALLOWED_ATTRIBUTES = Object.fromEntries(
+  Object.entries(
+    STATEMENT_OPTIONS.allowedAttributes as Record<string, string[]>,
+  ).map(([tag, attributes]) => [tag, withoutId(attributes)]),
+);
+
+const BLOG_OPTIONS: sanitizeHtml.IOptions = {
+  ...STATEMENT_OPTIONS,
+  allowedAttributes: {
+    ...BLOG_ALLOWED_ATTRIBUTES,
+    iframe: [...BLOG_ALLOWED_ATTRIBUTES.iframe, 'sandbox', 'loading'],
+  },
+  allowedStyles: { '*': BLOG_STYLES },
+  transformTags: {
+    '*': (tagName, attributes) => ({
+      tagName,
+      attribs: {
+        ...attributes,
+        ...(attributes.class === undefined
+          ? {}
+          : { class: prefixedClasses(attributes.class) }),
+        ...(tagName === 'iframe'
+          ? { sandbox: EMBED_SANDBOX, loading: 'lazy' }
+          : {}),
+      },
+    }),
+  },
+  exclusiveFilter: (frame) =>
+    frame.tag === 'iframe' && !EMBED_SOURCE.test(frame.attribs.src ?? ''),
+};
+
+/** Blog post HTML: the statement allow-list confined to the post's own box (no positioning, id, site classes, foreign or unsandboxed iframes). */
+export const sanitizeBlogHtml = (html: string): string =>
+  sanitizeHtml(html, BLOG_OPTIONS);
 
 /** Statement/editorial HTML for the sanitized styles: the legacy bleach allow-list plus KaTeX output. */
 export const sanitizeStatementHtml = (html: string): string =>

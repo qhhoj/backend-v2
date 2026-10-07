@@ -8,7 +8,7 @@ import {
   renderMath,
 } from './math';
 import { RenderLimitError } from './render-limit.error';
-import { sanitizeStatementHtml } from './sanitizer';
+import { sanitizeBlogHtml, sanitizeStatementHtml } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
 import { allowsRawHtml, isSanitizedStyle, RenderStyle } from './styles';
 import { dashesRule } from './typography';
@@ -64,6 +64,13 @@ function createMarkdown(html: boolean): MarkdownIt.MarkdownIt {
 
 const markdowns = { raw: createMarkdown(true), escaped: createMarkdown(false) };
 
+const sanitized = (html: string, style: RenderStyle): string =>
+  style === 'blog'
+    ? sanitizeBlogHtml(html)
+    : isSanitizedStyle(style)
+      ? sanitizeStatementHtml(html)
+      : html;
+
 const MAX_MARKUP_TAGS = 200000;
 const MAX_MARKUP_DEPTH = 500;
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
@@ -88,9 +95,7 @@ export function renderMarkdown(text: string, style: RenderStyle): string {
     throw new RenderLimitError(
       'Markup has too many tags or is nested too deep',
     );
-  const html = isSanitizedStyle(style)
-    ? sanitizeStatementHtml(rendered)
-    : rendered;
+  const html = sanitized(rendered, style);
   if (Buffer.byteLength(html) > MAX_HTML_BYTES)
     throw new RenderLimitError('Rendered HTML is too large');
   return html;

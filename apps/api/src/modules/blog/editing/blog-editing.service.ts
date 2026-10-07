@@ -46,8 +46,8 @@ const revisionView = (post: Partial<BlogPost>) =>
       (field) => [field, post[field]],
     ),
   );
-/** Legacy `blog` markdown = the staff-editable sanitizing style, the same as editorials. */
-const POST_STYLE = 'solution';
+/** User-authored posts: the `blog` style confines their layout (editorials use `solution`). */
+const POST_STYLE = 'blog';
 
 @Injectable()
 export class BlogEditingService {
