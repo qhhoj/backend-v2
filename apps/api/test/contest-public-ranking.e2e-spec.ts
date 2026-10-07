@@ -141,14 +141,20 @@ describe('contest public ranking', () => {
       expiresAt: hoursFromNow(-1).toISOString(),
     });
     const expired = await missBody(link.token);
+    const hiddenContest = await createContest(api, {
+      scoreboardVisibility: 'H',
+      authors: [users.editor._id],
+    });
+    const hiddenLink = await createLink(hiddenContest.key);
+    const hidden = await missBody(hiddenLink.token);
     expect(
       new Set(
-        [unknown, malformed, privateLink, expired].map((body) =>
+        [unknown, malformed, privateLink, expired, hidden].map((body) =>
           JSON.stringify(body),
         ),
       ).size,
     ).toBe(1);
-    for (let miss = 4; miss < RANKING_TOKEN_MISS_LIMIT; miss += 1)
+    for (let miss = 5; miss < RANKING_TOKEN_MISS_LIMIT; miss += 1)
       await api
         .http()
         .get(publicUrl('B'.repeat(18)))
@@ -166,15 +172,6 @@ describe('contest public ranking', () => {
     const link = await createLink(contest.key);
     for (let hit = 0; hit < RANKING_TOKEN_MISS_LIMIT + 5; hit += 1)
       await api.http().get(publicUrl(link.token)).expect(200);
-  });
-
-  it('answers 404 through a link while the scoreboard is hidden', async () => {
-    const contest = await createContest(api, {
-      scoreboardVisibility: 'H',
-      authors: [users.editor._id],
-    });
-    const link = await createLink(contest.key);
-    await api.http().get(publicUrl(link.token)).expect(404);
   });
 
   it('applies expiry settings: days count from regeneration, a link stays valid until then', async () => {
@@ -248,6 +245,38 @@ describe('contest public ranking', () => {
     expect(
       (await api.contests.findById(contest._id).lean())!.rankingAccessCodeHash,
     ).toBeNull();
+  });
+
+  it('never serves editors a cached board', async () => {
+    await clearRateLimits(api);
+    const contest = await createContest(api, {
+      scoreboardCacheTimeout: 60,
+      authors: [users.editor._id],
+    });
+    await authed(api.http().patch(contestUrl(contest.key)), sessions.editor)
+      .send({ rankingAccessCode: 'cache-code' })
+      .expect(200);
+    const participation = await joinParticipation(
+      api,
+      contest._id,
+      users.alice._id,
+      { score: 1, frozenScore: 1 },
+    );
+    const scoreSeen = async (path: string, who?: string) => {
+      const request = api.http().get(contestUrl(contest.key, path));
+      const board = dataOf<RankingResponse>(
+        await (who ? authed(request, sessions[who]) : request).expect(200),
+      );
+      return board.rows[0].score;
+    };
+    expect(await scoreSeen('/ranking?code=cache-code')).toBe(1);
+    await api.participations.updateOne(
+      { _id: participation._id },
+      { score: 5, frozenScore: 5 },
+    );
+    expect(await scoreSeen('/ranking?code=cache-code')).toBe(1);
+    expect(await scoreSeen('/ranking?code=cache-code', 'editor')).toBe(5);
+    expect(await scoreSeen('/ranking', 'editor')).toBe(5);
   });
 
   it('refuses any code on a contest without a ranking code', async () => {
