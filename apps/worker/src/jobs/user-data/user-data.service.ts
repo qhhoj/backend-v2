@@ -12,6 +12,11 @@ import {
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
 import type { ZipLimits } from '../lazy-zip';
 import { UserDataRepository } from './user-data.repository';
+import type {
+  UserDataComment,
+  UserDataPost,
+  UserDataSubmission,
+} from './user-data.repository';
 
 export type UserDataLimits = ZipLimits;
 export const USER_DATA_LIMITS = Symbol('USER_DATA_LIMITS');
@@ -30,6 +35,51 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const ZIP_FILE = new RegExp(`^${UUID}\\.zip$`);
 const TEMP_FILE = new RegExp(`^${UUID}\\.zip\\.[^/]+\\.tmp$`);
 
+const submissionInfo = (submissions: UserDataSubmission[]) =>
+  Object.fromEntries(
+    submissions.map((row) => [
+      row.id,
+      {
+        problem: row.problem,
+        date: row.date.toISOString(),
+        time: row.time,
+        memory: row.memory,
+        language: row.language,
+        status: row.status,
+        result: row.result,
+        case_points: row.casePoints,
+        case_total: row.caseTotal,
+      },
+    ]),
+  );
+
+const commentInfo = (comments: UserDataComment[]) =>
+  Object.fromEntries(
+    comments.map((comment) => [
+      comment.id,
+      {
+        date: comment.date.toISOString(),
+        page: comment.page,
+        score: comment.score,
+        hidden: comment.hidden,
+      },
+    ]),
+  );
+
+const postInfo = (posts: UserDataPost[]) =>
+  Object.fromEntries(
+    posts.map((post) => [
+      post.id,
+      {
+        title: post.title,
+        publish_on: post.publishOn.toISOString(),
+        visible: post.visible,
+        organization: post.organization,
+        score: post.score,
+      },
+    ]),
+  );
+
 @Injectable()
 export class UserDataService {
   constructor(
@@ -38,7 +88,7 @@ export class UserDataService {
     @Inject(USER_DATA_LIMITS) private readonly limits: UserDataLimits,
   ) {}
 
-  /** Legacy `prepare_user_data` plus the profile (5b adds comments and blog posts). The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
+  /** Legacy `prepare_user_data` plus the profile, own comments (hidden included) and blog posts. The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
   async prepare(userId: string): Promise<number> {
     const root = this.root();
     const [path, temporary] = [
@@ -53,43 +103,40 @@ export class UserDataService {
       userId,
       this.limits.maxEntries + 1,
     );
-    if (submissions.length > this.limits.maxEntries)
-      throw new UserDataError(
-        `More than ${this.limits.maxEntries} submissions`,
+    const [comments, posts] = await Promise.all([
+      this.repository.commentsOf(userId, this.limits.maxEntries + 1),
+      this.repository.postsOf(userId, this.limits.maxEntries + 1),
+    ]);
+    const texts: Array<[name: string, text: string]> = [
+      ['profile.json', json(profile)],
+    ];
+    if (submissions.length)
+      texts.push(['submissions/info.json', json(submissionInfo(submissions))]);
+    if (comments.length)
+      texts.push(
+        ['comments/info.json', json(commentInfo(comments))],
+        ...comments.map((comment): [string, string] => [
+          `comments/${comment.id}.txt`,
+          comment.body,
+        ]),
       );
-    const documents = [
-      json(profile),
-      ...(submissions.length
-        ? [
-            json(
-              Object.fromEntries(
-                submissions.map((row) => [
-                  row.id,
-                  {
-                    problem: row.problem,
-                    date: row.date.toISOString(),
-                    time: row.time,
-                    memory: row.memory,
-                    language: row.language,
-                    status: row.status,
-                    result: row.result,
-                    case_points: row.casePoints,
-                    case_total: row.caseTotal,
-                  },
-                ]),
-              ),
-            ),
-          ]
-        : []),
-    ];
-    const names = [
-      'profile.json',
-      ...(submissions.length ? ['submissions/info.json'] : []),
-      ...submissions.map(
-        (row) =>
-          `submissions/${row.id}.${row.extension.replace(/[^A-Za-z0-9]/g, '') || 'txt'}`,
-      ),
-    ];
+    if (posts.length)
+      texts.push(
+        ['posts/info.json', json(postInfo(posts))],
+        ...posts.map((post): [string, string] => [
+          `posts/${post.id}.md`,
+          post.summary
+            ? `${post.content}\n\n---\n\n${post.summary}`
+            : post.content,
+        ]),
+      );
+    const sourceNames = submissions.map(
+      (row) =>
+        `submissions/${row.id}.${row.extension.replace(/[^A-Za-z0-9]/g, '') || 'txt'}`,
+    );
+    const names = [...texts.map(([name]) => name), ...sourceNames];
+    if (names.length > this.limits.maxEntries)
+      throw new UserDataError(`More than ${this.limits.maxEntries} entries`);
     const sourceAt = chunkedSources(
       submissions.map((row) => row.id),
       this.limits.sourceChunk,
@@ -98,9 +145,7 @@ export class UserDataService {
     await writeZipInPlace(
       names,
       async (index) =>
-        index < documents.length
-          ? documents[index]
-          : sourceAt(index - documents.length),
+        index < texts.length ? texts[index][1] : sourceAt(index - texts.length),
       path,
       temporary,
       this.limits.maxBytes,
