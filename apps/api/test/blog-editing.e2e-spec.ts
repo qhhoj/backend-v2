@@ -261,15 +261,18 @@ describe('blog editing', () => {
     const post = await createPost(api, { authors: [user._id], content: 'old' });
     await api.blogPosts.updateOne(
       { _id: post._id },
-      { content: 'concurrent', contentHtml: '<p>concurrent</p>' },
+      { content: 'concurrent', contentHtml: '<p>SENTINEL</p>' },
     );
     const edited = dataOf<PostDetailResponse>(
       await patch(post._id, session, { summary: '*short*' }).expect(200),
     );
     expect(edited).toMatchObject({
       content: 'concurrent',
-      contentHtml: '<p>concurrent</p>',
+      contentHtml: '<p>SENTINEL</p>',
     });
+    expect((await api.blogPosts.findById(post._id).lean())!.contentHtml).toBe(
+      '<p>SENTINEL</p>',
+    );
     expect(edited.summaryHtml).toContain('<em>short</em>');
   });
 
