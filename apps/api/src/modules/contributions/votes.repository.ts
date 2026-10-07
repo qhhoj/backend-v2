@@ -131,7 +131,6 @@ export class VotesRepository {
     const { votes, field } = this.ledger(target);
     const rows = await votes
       .find({ [field]: targetId }, { voter: 1, score: 1 })
-      .sort({ _id: 1 })
       .lean()
       .exec();
     return rows.map((row) => ({ voter: uuidStr(row.voter), score: row.score }));

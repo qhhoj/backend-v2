@@ -17,7 +17,7 @@ import {
 import type { CommentDetailResponse } from '../core/dto/comment.response';
 import { CommentModerationService } from './comment-moderation.service';
 import type { CommentVoteEntryResponse } from './dto/comment-vote-entry.response';
-import { HideCommentDto } from './dto/hide.dto';
+import { HideCommentDto } from './dto/hide-comment.dto';
 
 @RequirePermission('judge.change_comment')
 @Controller('api/internal/comments')

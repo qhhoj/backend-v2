@@ -89,6 +89,9 @@ describe('comment votes and moderation', () => {
       author: author._id,
     });
     await vote(onDraft._id, session, 1).expect(404);
+    await api.commentLocks.create({ page: { type: 'blog', id: page._id } });
+    await vote(comment._id, session, 1).expect(200);
+    await api.commentLocks.deleteMany({ 'page.id': page._id });
     const env = api.app.get<Env>(ENV);
     env.officialContestMode = true;
     try {
