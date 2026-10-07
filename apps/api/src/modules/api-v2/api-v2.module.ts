@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { ContestsApiModule } from '../contests/contests-api.module';
-import { ContestAccessModule } from '../contests/contest-access.module';
+import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ApiV2ContestsController } from './api-v2-contests.controller';

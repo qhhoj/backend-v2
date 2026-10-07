@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { CONTEST_MOSS_QUEUE } from '@libs/contests';
 import type { ContestMossJob } from '@libs/contests';
-import type { ContestMossResponse } from '../src/modules/contests/dto/contest-moss.response';
+import type { ContestMossResponse } from '../src/modules/contests/moss/dto/contest-moss.response';
 import { contestProblem, contestUrl, createContest } from './contest-fixtures';
 import {
   authed,

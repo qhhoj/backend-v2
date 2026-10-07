@@ -21,7 +21,7 @@ import type { Catalog, TestSession } from '../../api/test/problem-fixtures';
 import { dataOf } from '../../api/test/submission-fixtures';
 import { setupApiTest } from '../../api/test/setup';
 import type { ApiTest } from '../../api/test/setup';
-import type { RankingResponse } from '../../api/src/modules/contests/dto/ranking.response';
+import type { RankingResponse } from '../../api/src/modules/contests/ranking/dto/ranking.response';
 import { WorkerModule } from '../../worker/src/worker.module';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';

@@ -2,7 +2,7 @@ import { Controller, Get, Param, UseFilters } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RawResponse } from '@libs/common';
-import { ContestKeyParamDto } from '../contests/dto/contest-params.dto';
+import { ContestKeyParamDto } from '../contests/core/dto/contest-params.dto';
 import { ApiV2ContestsService } from './api-v2-contests.service';
 import { ApiV2ExceptionFilter } from './api-v2-exception.filter';
 import { ApiV2Query, lenientQueryPipe } from './api-v2-query';

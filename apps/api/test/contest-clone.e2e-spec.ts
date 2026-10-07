@@ -5,7 +5,7 @@ import { sha256 } from '@libs/auth';
 import { CONTEST_FINAL_JUDGE_QUEUE, finalJudgeJobId } from '@libs/contests';
 import type { ContestFinalJudgeJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
-import type { ContestDetailResponse } from '../src/modules/contests/dto/contest-detail.response';
+import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 import {
   contestProblem,
   contestUrl,

@@ -1,0 +1,23 @@
+import { Controller, Get, Param, Query } from '@nestjs/common';
+import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
+import type { AuthContext } from '@libs/auth';
+import type { Paginated } from '@libs/common';
+import { SubmissionListQueryDto } from '../../submissions/dto/submission-list.dto';
+import { SubmissionListItemResponse } from '../../submissions/dto/submission-list.response';
+import { ContestSubmissionsService } from './contest-submissions.service';
+import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
+
+@Controller('api/internal/contests')
+export class ContestSubmissionsController {
+  constructor(private readonly submissions: ContestSubmissionsService) {}
+
+  @Public()
+  @Get(':key/submissions')
+  list(
+    @Param() { key }: ContestKeyParamDto,
+    @Query() query: SubmissionListQueryDto,
+    @CurrentAuth() auth: AuthContext | undefined,
+  ): Promise<Paginated<SubmissionListItemResponse>> {
+    return this.submissions.list(optionalPrincipal(auth), key, query);
+  }
+}

@@ -4,7 +4,7 @@ import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import { PDF_QUEUE, POLYGON_QUEUE } from '@libs/problems';
-import { ContestAccessModule } from '../contests/contest-access.module';
+import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { LanguagesQuerier } from './languages.querier';
 import { LicensesQuerier } from './licenses.querier';
 import { ProblemGroupsQuerier } from './problem-groups.querier';

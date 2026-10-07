@@ -14,12 +14,12 @@ import {
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest, ContestParticipation } from '@libs/database';
-import { ContestAccess } from '../contests/contest-access';
-import { ContestViewerService } from '../contests/contest-viewer.service';
-import { ContestsRepository } from '../contests/contests.repository';
-import type { ContestDocument } from '../contests/contests.repository';
-import { ParticipationsRepository } from '../contests/participations.repository';
-import { RatingsRepository } from '../contests/ratings.repository';
+import { ContestAccess } from '../contests/core/contest-access';
+import { ContestViewerService } from '../contests/core/contest-viewer.service';
+import { ContestsRepository } from '../contests/core/contests.repository';
+import type { ContestDocument } from '../contests/core/contests.repository';
+import { ParticipationsRepository } from '../contests/participation/participations.repository';
+import { RatingsRepository } from '../contests/rating/ratings.repository';
 import { ProblemsRepository } from '../problems/problems.repository';
 import { ApiV2ContestListDto } from './dto/api-v2-contest-list.dto';
 import { ApiV2ParticipationListDto } from './dto/api-v2-participation-list.dto';

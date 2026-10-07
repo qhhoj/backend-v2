@@ -7,7 +7,7 @@ import { rankingCacheKeys } from '@libs/contests';
 import { newId, toUuid } from '@libs/database';
 import type { ContestParticipation, User } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
-import type { RankingResponse } from '../src/modules/contests/dto/ranking.response';
+import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
 import {
   contestProblem,
   contestUrl,

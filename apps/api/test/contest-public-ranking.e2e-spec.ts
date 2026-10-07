@@ -3,12 +3,12 @@ import type { User } from '@libs/database';
 import {
   ACCESS_CODE_IP_LIMIT,
   RANKING_TOKEN_MISS_LIMIT,
-} from '../src/modules/contests/rate-limits';
-import type { RankingResponse } from '../src/modules/contests/dto/ranking.response';
+} from '../src/modules/contests/core/rate-limits';
+import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
 import type {
   PublicRankingResponse,
   RankingLinkResponse,
-} from '../src/modules/contests/dto/ranking-link.response';
+} from '../src/modules/contests/ranking/dto/ranking-link.response';
 import {
   clearRateLimits,
   contestUrl,

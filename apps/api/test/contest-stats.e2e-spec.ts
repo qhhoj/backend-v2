@@ -4,7 +4,7 @@ import { newId, toUuid } from '@libs/database';
 import type { UUID } from 'mongodb';
 import type { SubmissionResult, User } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
-import type { ContestStatsResponse } from '../src/modules/contests/dto/contest-stats.response';
+import type { ContestStatsResponse } from '../src/modules/contests/stats/dto/contest-stats.response';
 import {
   contestProblem,
   contestUrl,

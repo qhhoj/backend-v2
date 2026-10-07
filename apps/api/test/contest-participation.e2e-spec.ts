@@ -2,16 +2,16 @@ import type Redis from 'ioredis';
 import { sha256 } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import { ParticipationsRepository } from '../src/modules/contests/participations.repository';
+import { ParticipationsRepository } from '../src/modules/contests/participation/participations.repository';
 import type { User } from '@libs/database';
 import type {
   ContestDetailResponse,
   ParticipationSummaryResponse,
-} from '../src/modules/contests/dto/contest-detail.response';
+} from '../src/modules/contests/core/dto/contest-detail.response';
 import type {
   CurrentParticipationResponse,
   ParticipationResponse,
-} from '../src/modules/contests/dto/participation.response';
+} from '../src/modules/contests/participation/dto/participation.response';
 import {
   clearRateLimits,
   contestUrl,

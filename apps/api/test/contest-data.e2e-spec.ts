@@ -7,7 +7,7 @@ import {
   contestDataPath,
 } from '@libs/contests';
 import type { ContestDataJob } from '@libs/contests';
-import type { ContestDataStatusResponse } from '../src/modules/contests/dto/contest-data.dto';
+import type { ContestDataStatusResponse } from '../src/modules/contests/data/dto/contest-data.dto';
 import { contestUrl, createContest, hoursFromNow } from './contest-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';

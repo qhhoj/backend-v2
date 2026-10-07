@@ -2,8 +2,8 @@ import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import type { User } from '@libs/database';
-import { ANNOUNCEMENT_PUSH_LIMIT } from '../src/modules/contests/rate-limits';
-import type { AnnouncementResponse } from '../src/modules/contests/dto/announcement.response';
+import { ANNOUNCEMENT_PUSH_LIMIT } from '../src/modules/contests/core/rate-limits';
+import type { AnnouncementResponse } from '../src/modules/contests/announcements/dto/announcement.response';
 import {
   DEFAULT_STREAM_LIMITS,
   STREAM_LIMITS,

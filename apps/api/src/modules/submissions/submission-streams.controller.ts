@@ -2,7 +2,7 @@ import { Controller, Get, Param, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CurrentAuth, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ContestKeyParamDto } from '../contests/dto/contest-params.dto';
+import { ContestKeyParamDto } from '../contests/core/dto/contest-params.dto';
 import { SubmissionIdParamDto } from './dto/submission-params.dto';
 import { SubmissionStreamsService } from './submission-streams.service';
 

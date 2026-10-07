@@ -10,8 +10,8 @@ import {
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
-import { CurrentContestService } from '../contests/current-contest.service';
-import type { CurrentParticipation } from '../contests/current-contest.service';
+import { CurrentContestService } from '../contests/core/current-contest.service';
+import type { CurrentParticipation } from '../contests/core/current-contest.service';
 import { JudgesRepository } from '../judges/judges.repository';
 import { LanguagesQuerier } from '../problems/languages.querier';
 import { ProblemAccess } from '../problems/problem-access';

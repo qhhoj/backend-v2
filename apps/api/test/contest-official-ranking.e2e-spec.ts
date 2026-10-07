@@ -1,5 +1,5 @@
 import type { User } from '@libs/database';
-import type { OfficialRankingResponse } from '../src/modules/contests/dto/official-ranking.dto';
+import type { OfficialRankingResponse } from '../src/modules/contests/ranking/dto/official-ranking.dto';
 import { contestUrl, createContest } from './contest-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';

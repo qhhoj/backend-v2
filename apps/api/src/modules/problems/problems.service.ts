@@ -5,7 +5,7 @@ import { AppError, Paginated } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
-import { CurrentContestService } from '../contests/current-contest.service';
+import { CurrentContestService } from '../contests/core/current-contest.service';
 import { EditorialResponse } from './dto/editorial.response';
 import { ProblemDetailResponse } from './dto/problem-detail.response';
 import { UserSummaryResponse } from './dto/user-summary.response';

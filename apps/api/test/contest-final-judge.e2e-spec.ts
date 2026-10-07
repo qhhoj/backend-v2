@@ -3,7 +3,7 @@ import type { Queue } from 'bullmq';
 import { CONTEST_FINAL_JUDGE_QUEUE, finalJudgeJobId } from '@libs/contests';
 import type { ContestFinalJudgeJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
-import type { ContestDetailResponse } from '../src/modules/contests/dto/contest-detail.response';
+import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 import { contestUrl, createContest, hoursFromNow } from './contest-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';

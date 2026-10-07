@@ -4,8 +4,8 @@ import { CONTEST_RATING_QUEUE, CONTEST_RESCORE_QUEUE } from '@libs/contests';
 import type { ContestRatingJob, ContestRescoreJob } from '@libs/contests';
 import { newId } from '@libs/database';
 import type { User } from '@libs/database';
-import type { ContestDetailResponse } from '../src/modules/contests/dto/contest-detail.response';
-import type { ContestListItemResponse } from '../src/modules/contests/dto/contest-list.response';
+import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
+import type { ContestListItemResponse } from '../src/modules/contests/core/dto/contest-list.response';
 import {
   contestProblem,
   contestUrl,
