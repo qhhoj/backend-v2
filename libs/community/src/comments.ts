@@ -57,7 +57,7 @@ export const canReplyAfter = (
   moderates: boolean,
 ): boolean =>
   moderates ||
-  now.getTime() - parentCreatedAt.getTime() <= COMMENT_REPLY_WINDOW_MS;
+  now.getTime() - parentCreatedAt.getTime() < COMMENT_REPLY_WINDOW_MS;
 
 export const isCollapsed = (score: number): boolean =>
   score <= COMMENT_COLLAPSE_SCORE;

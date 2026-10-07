@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import type { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { subtreeFilter } from '@libs/community';
 import { profileQueries, startMongo } from '../testing';
 import { newId } from '../uuid';
 import { BlogPostSchema } from './blog-post.schema';
@@ -193,21 +194,24 @@ describe('Community schemas', () => {
     );
     await Comments.insertMany([
       { ...fields, threadId: root, path: root, body: 'x' },
+      { ...fields, threadId: root, path: `${root}/child`, body: 'x' },
+      { ...fields, threadId: root, path: `${root}x`, body: 'x' },
       ...docs,
     ]);
-    const pathFilter = {
-      $or: [{ path: root }, { path: new RegExp(`^${root}/`) }],
-    };
     const operations = await profileQueries(mongoose.connection.db!, () =>
-      Comments.find(pathFilter).hint({ path: 1 }).exec(),
+      Comments.find(subtreeFilter(root)).hint({ path: 1 }).exec(),
     );
     const read = operations.find((entry) => entry.operation === 'query')!;
-    expect(read.keysExamined).toBeLessThanOrEqual(3);
+    expect(read.keysExamined).toBeLessThanOrEqual(4);
+    const paths = (await Comments.find(subtreeFilter(root))).map(
+      (comment) => comment.path,
+    );
+    expect(paths.sort()).toEqual([root, `${root}/0`, `${root}/child`]);
   });
 
   it('serves a post list sorted by publish date and id from one index', async () => {
     await Posts.insertMany(
-      Array.from({ length: 25 }, (_, index) => ({
+      Array.from({ length: 25 }, (unused, index) => ({
         title: 'T',
         slug: 's',
         publishOn: new Date(1_700_000_000_000 + index),

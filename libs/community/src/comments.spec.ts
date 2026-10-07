@@ -37,11 +37,14 @@ describe('comment rules', () => {
     expect(descendants.path.test(root)).toBe(false);
   });
 
-  it('allows replies within 365 days, older ones only to moderators', () => {
+  it('allows replies before 365 days (exactly 365 refuses), older ones only to moderators', () => {
     const created = new Date('2025-01-01T00:00:00Z');
     const edge = new Date(created.getTime() + COMMENT_REPLY_WINDOW_MS);
     const past = new Date(edge.getTime() + 1);
-    expect(canReplyAfter(created, edge, false)).toBe(true);
+    expect(canReplyAfter(created, new Date(edge.getTime() - 1), false)).toBe(
+      true,
+    );
+    expect(canReplyAfter(created, edge, false)).toBe(false);
     expect(canReplyAfter(created, past, false)).toBe(false);
     expect(canReplyAfter(created, past, true)).toBe(true);
   });
