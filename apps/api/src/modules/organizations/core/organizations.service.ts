@@ -16,6 +16,7 @@ import {
 } from './dto/organization.response';
 import { OrganizationAccess } from './organization-access';
 import { OrganizationMembersRepository } from './organization-members.repository';
+import { OrganizationRequestsRepository } from './organization-requests.repository';
 import { OrganizationsRepository } from './organizations.repository';
 import type { OrganizationDocument } from './organizations.repository';
 
@@ -27,6 +28,7 @@ export class OrganizationsService {
     private readonly organizations: OrganizationsRepository,
     private readonly members: OrganizationMembersRepository,
     private readonly users: UsersRepository,
+    private readonly requests: OrganizationRequestsRepository,
   ) {}
 
   /** Legacy `PublicOrganizationMixin`: any organization by slug, unlisted ones included (they are only kept out of enumerations). */
@@ -84,6 +86,9 @@ export class OrganizationsService {
     const view = OrganizationAccess.accessView(organization);
     const canAdminister = OrganizationAccess.canAdminister(principal, view);
     const admins = await this.users.findByIds(view.adminIds);
+    const pendingRequestId = principal
+      ? await this.requests.pendingIdOf(view.id, principal.userId)
+      : null;
     return {
       ...OrganizationListItemResponse.from(organization),
       aboutHtml: organization.aboutHtml,
@@ -100,7 +105,7 @@ export class OrganizationsService {
       viewer: principal && {
         isMember: OrganizationAccess.isMember(principal, view.id),
         canAdminister,
-        pendingRequestId: null,
+        pendingRequestId,
       },
     };
   }
