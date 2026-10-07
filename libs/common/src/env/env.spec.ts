@@ -40,8 +40,41 @@ describe('loadEnv', () => {
       mediaUrl: '/media',
       mossApiKey: null,
       contestDataRoot: null,
+      userDataRoot: null,
+      officialContestMode: false,
       oauth: { google: null, facebook: null, github: null },
     }));
+  it('reads the optional user data root and official contest mode', () => {
+    expect(loadEnv({ ...valid }).userDataRoot).toBeNull();
+    expect(loadEnv({ ...valid, USER_DATA_ROOT: '' }).userDataRoot).toBeNull();
+    expect(
+      loadEnv({ ...valid, USER_DATA_ROOT: '/srv/user-data' }).userDataRoot,
+    ).toBe('/srv/user-data');
+    expect(
+      loadEnv({ ...valid, OFFICIAL_CONTEST_MODE: 'true' }).officialContestMode,
+    ).toBe(true);
+    expect(() => loadEnv({ ...valid, OFFICIAL_CONTEST_MODE: 'yes' })).toThrow(
+      /OFFICIAL_CONTEST_MODE/,
+    );
+  });
+
+  it('refuses a user data root inside MEDIA_ROOT', () => {
+    expect(() =>
+      loadEnv({
+        ...valid,
+        MEDIA_ROOT: '/srv/media',
+        USER_DATA_ROOT: '/srv/media/users',
+      }),
+    ).toThrow(/USER_DATA_ROOT/);
+    expect(() =>
+      loadEnv({
+        ...valid,
+        MEDIA_ROOT: '/srv/media',
+        USER_DATA_ROOT: '/srv/user-data',
+      }),
+    ).not.toThrow();
+  });
+
   it('reads the optional MOSS key and contest data root, blank meaning off', () => {
     expect(loadEnv({ ...valid }).mossApiKey).toBeNull();
     expect(loadEnv({ ...valid, MOSS_API_KEY: '' }).mossApiKey).toBeNull();

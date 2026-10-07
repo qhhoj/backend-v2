@@ -22,6 +22,11 @@ import {
   ContestPublicRankingLink,
   ContestPublicRankingLinkSchema,
 } from './contest-public-ranking-link.schema';
+import {
+  OrganizationRequest,
+  OrganizationRequestSchema,
+} from './organization-request.schema';
+import { Organization, OrganizationSchema } from './organization.schema';
 import { Rating, RatingSchema } from './rating.schema';
 import { Group, GroupSchema } from './group.schema';
 import { Judge, JudgeSchema } from './judge.schema';
@@ -53,6 +58,8 @@ export * from './group.schema';
 export * from './judge.schema';
 export * from './language.schema';
 export * from './license.schema';
+export * from './organization-request.schema';
+export * from './organization.schema';
 export * from './problem-data.schema';
 export * from './problem-group.schema';
 export * from './problem-type.schema';
@@ -81,6 +88,8 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: Judge.name, schema: JudgeSchema },
   { name: Language.name, schema: LanguageSchema },
   { name: License.name, schema: LicenseSchema },
+  { name: OrganizationRequest.name, schema: OrganizationRequestSchema },
+  { name: Organization.name, schema: OrganizationSchema },
   { name: ProblemGroup.name, schema: ProblemGroupSchema },
   { name: Problem.name, schema: ProblemSchema },
   { name: ProblemType.name, schema: ProblemTypeSchema },

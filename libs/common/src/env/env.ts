@@ -45,6 +45,10 @@ export interface Env {
   mossApiKey: string | null;
   /** Contest data zips, shared by the api (serves) and the worker (writes); null disables data download. Not under MEDIA_ROOT (served publicly). */
   contestDataRoot: string | null;
+  /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
+  userDataRoot: string | null;
+  /** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: non-superusers cannot edit their `about` (5b: blog edits and comments). */
+  officialContestMode: boolean;
   /** A provider is null (login disabled) unless both its client id and secret are set. */
   oauth: {
     google: OAuthClient | null;
@@ -147,6 +151,8 @@ export function loadEnv(
     judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
     mossApiKey: source.MOSS_API_KEY || null,
     contestDataRoot: source.CONTEST_DATA_ROOT || null,
+    userDataRoot: source.USER_DATA_ROOT || null,
+    officialContestMode: flag('OFFICIAL_CONTEST_MODE', false),
     oauth: {
       google: oauthClient('GOOGLE'),
       facebook: oauthClient('FACEBOOK'),
@@ -183,6 +189,12 @@ export function loadEnv(
     inside(env.contestDataRoot, env.mediaRoot)
   )
     problems.push('CONTEST_DATA_ROOT must not be inside MEDIA_ROOT');
+  if (
+    env.userDataRoot &&
+    env.mediaRoot &&
+    inside(env.userDataRoot, env.mediaRoot)
+  )
+    problems.push('USER_DATA_ROOT must not be inside MEDIA_ROOT');
   if (problems.length)
     throw new Error(`Invalid environment: ${problems.join('; ')}`);
   return env;

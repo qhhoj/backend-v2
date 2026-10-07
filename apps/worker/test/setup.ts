@@ -14,6 +14,7 @@ import {
   ContestParticipation,
   ContestSubmission,
   Language,
+  Organization,
   Problem,
   ProblemGroup,
   ProblemType,
@@ -48,6 +49,7 @@ export async function setupWorkerTest({
     problemDataRoot: temporaryDirectory('qhhoj-problem-data-'),
     pdfCacheRoot: temporaryDirectory('qhhoj-pdf-cache-'),
     contestDataRoot: temporaryDirectory('qhhoj-contest-data-'),
+    userDataRoot: temporaryDirectory('qhhoj-user-data-'),
   };
   Object.assign(process.env, TEST_ENV, {
     MONGO_URL: replSet.getUri('qhhoj'),
@@ -55,6 +57,8 @@ export async function setupWorkerTest({
     PROBLEM_DATA_ROOT: roots.problemDataRoot,
     PDF_CACHE_ROOT: roots.pdfCacheRoot,
     CONTEST_DATA_ROOT: roots.contestDataRoot,
+    USER_DATA_ROOT: roots.userDataRoot,
+    OFFICIAL_CONTEST_MODE: 'false',
     MOSS_API_KEY: '',
     ...env,
   });
@@ -124,6 +128,9 @@ export async function setupWorkerTest({
     ),
     ratings: ready.get<Model<Rating>>(getModelToken(Rating.name)),
     contestMoss: ready.get<Model<ContestMoss>>(getModelToken(ContestMoss.name)),
+    organizations: ready.get<Model<Organization>>(
+      getModelToken(Organization.name),
+    ),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
     teardown: async () => {

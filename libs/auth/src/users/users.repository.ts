@@ -95,15 +95,16 @@ export class UsersRepository {
     return matchedCount === 1;
   }
 
-  /** Compare-and-set on the ban reason: a ban set meanwhile is never overwritten or cleared. */
+  /** Compare-and-set on the ban reason: a ban set meanwhile is never overwritten or cleared; false when the reason was no longer `expectedReason`. */
   async updateIfBanReason(
     id: string,
     expectedReason: string | null,
     changes: Partial<User>,
-  ): Promise<void> {
-    await this.users
+  ): Promise<boolean> {
+    const { matchedCount } = await this.users
       .updateOne({ _id: id, banReason: expectedReason }, { $set: changes })
       .exec();
+    return matchedCount === 1;
   }
 
   async update(id: string, changes: Partial<User>): Promise<void> {

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Type } from '@nestjs/common';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { hashPassword, SessionService } from '@libs/auth';
 import { MAILER, REDIS } from '@libs/common';
@@ -19,6 +19,8 @@ import {
   Judge,
   Language,
   License,
+  Organization,
+  OrganizationRequest,
   Problem,
   ProblemGroup,
   ProblemType,
@@ -33,7 +35,7 @@ import {
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
 import Redis from 'ioredis';
-import { Model } from 'mongoose';
+import type { Connection, Model } from 'mongoose';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { LanguagesQuerier } from '../src/modules/problems/catalog/languages.querier';
@@ -62,16 +64,23 @@ export async function setupApiTest({
   const problemDataRoot = mkdtempSync(join(tmpdir(), 'qhhoj-problem-data-'));
   const pdfCacheRoot = mkdtempSync(join(tmpdir(), 'qhhoj-pdf-cache-'));
   const contestDataRoot = mkdtempSync(join(tmpdir(), 'qhhoj-contest-data-'));
+  const userDataRoot = mkdtempSync(join(tmpdir(), 'qhhoj-user-data-'));
   const removeRoots = () =>
-    [mediaRoot, problemDataRoot, pdfCacheRoot, contestDataRoot].forEach(
-      (root) => rmSync(root, { recursive: true, force: true }),
-    );
+    [
+      mediaRoot,
+      problemDataRoot,
+      pdfCacheRoot,
+      contestDataRoot,
+      userDataRoot,
+    ].forEach((root) => rmSync(root, { recursive: true, force: true }));
   Object.assign(process.env, TEST_ENV, {
     MONGO_URL: replSet.getUri('qhhoj'),
     MEDIA_ROOT: mediaRoot,
     PROBLEM_DATA_ROOT: problemDataRoot,
     PDF_CACHE_ROOT: pdfCacheRoot,
     CONTEST_DATA_ROOT: contestDataRoot,
+    USER_DATA_ROOT: userDataRoot,
+    OFFICIAL_CONTEST_MODE: 'false',
     MOSS_API_KEY: '',
     ...env,
   });
@@ -143,6 +152,13 @@ export async function setupApiTest({
     officialRankings: readyApp.get<Model<ContestOfficialRanking>>(
       getModelToken(ContestOfficialRanking.name),
     ),
+    organizations: readyApp.get<Model<Organization>>(
+      getModelToken(Organization.name),
+    ),
+    organizationRequests: readyApp.get<Model<OrganizationRequest>>(
+      getModelToken(OrganizationRequest.name),
+    ),
+    db: readyApp.get<Connection>(getConnectionToken()).db!,
     /** Streams are disabled in tests; call after inserting catalog rows. */
     resyncCatalog: async () => {
       await Promise.all(
@@ -160,6 +176,7 @@ export async function setupApiTest({
     problemDataRoot,
     pdfCacheRoot,
     contestDataRoot,
+    userDataRoot,
     sessions: readyApp.get(SessionService),
     mailer,
     teardown: async () => {

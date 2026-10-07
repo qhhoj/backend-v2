@@ -131,7 +131,7 @@ export class Submission {
 }
 
 export const SubmissionSchema = SchemaFactory.createForClass(Submission);
-// Lists sort by `-_id` (UUIDv7 is time-ordered), so the `_id` indexes replace the spec's `{user, date}` and `{problem, date}`; `{date}` stays for date-range reports.
+// Lists sort by `-_id` (UUIDv7 is time-ordered), so the `_id` indexes replace `{problem, date}` and serve `{user, date}` lists, and `{date}` stays for date-range reports; the heatmap keeps its own `{user, date}`.
 SubmissionSchema.index({ user: 1, _id: -1 });
 SubmissionSchema.index({ problem: 1, _id: -1 });
 // Filtered lists count by `problem $in` plus one more field (result, language, status): these keep that count index-only.
@@ -142,6 +142,8 @@ SubmissionSchema.index({ user: 1, status: 1 });
 SubmissionSchema.index({ user: 1, problem: 1, result: 1 });
 SubmissionSchema.index({ status: 1, priority: 1, _id: 1 });
 SubmissionSchema.index({ date: -1 });
+// The user's submission heatmap (a date window per user; migrated ids do not follow dates).
+SubmissionSchema.index({ user: 1, date: -1 });
 // The effects sweep reads the users and problems graded in its window.
 SubmissionSchema.index({ judgedDate: 1 });
 // Problem stats count a problem's rows of listed users without reading documents.

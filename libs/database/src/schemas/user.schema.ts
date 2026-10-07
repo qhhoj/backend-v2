@@ -36,6 +36,8 @@ export class User {
   @Prop({ type: [UUID], default: [] }) groups!: string[];
   @Prop({ type: [String], default: [] }) permissions!: string[];
   @Prop({ type: String, default: null }) about!: string | null;
+  /** `about` rendered at save in the `user` style. */
+  @Prop({ default: '' }) aboutHtml!: string;
   @Prop({ default: 'America/Toronto' }) timezone!: string;
   @Prop({ type: UUID, default: null }) languageId!: string | null;
   @Prop({ default: 0 }) points!: number;
@@ -103,3 +105,16 @@ UserSchema.index(
   { isUnlisted: 1 },
   { partialFilterExpression: { isUnlisted: true } },
 );
+// Leaderboards and ranks: listed, active users by one field, ties by id (legacy `order_by(order, 'id')`).
+export const LEADERBOARD_FIELDS = [
+  'performancePoints',
+  'points',
+  'problemCount',
+  'rating',
+  'contributionPoints',
+] as const;
+export type LeaderboardField = (typeof LEADERBOARD_FIELDS)[number];
+for (const field of LEADERBOARD_FIELDS)
+  UserSchema.index({ isUnlisted: 1, isActive: 1, [field]: -1, _id: 1 });
+// Organization points (top 100 by PP), member counts and member lists.
+UserSchema.index({ organizations: 1, performancePoints: -1 });
