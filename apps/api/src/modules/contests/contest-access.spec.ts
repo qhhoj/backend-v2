@@ -293,6 +293,38 @@ describe('scoreboards (legacy show_scoreboard, can_see_*_scoreboard)', () => {
       true,
     ],
     [
+      'P running: a participant still in it sees only their row',
+      'plain',
+      view({ scoreboardVisibility: 'P' }),
+      inContest,
+      false,
+      true,
+    ],
+    [
+      'P running: anonymous sees nothing',
+      'anonymous',
+      view({ scoreboardVisibility: 'P' }),
+      NO_FACTS,
+      false,
+      false,
+    ],
+    [
+      'H: anonymous sees nothing',
+      'anonymous',
+      view({ scoreboardVisibility: 'H' }),
+      NO_FACTS,
+      false,
+      false,
+    ],
+    [
+      'H: a tester sees no more than a contestant',
+      'plain',
+      view({ scoreboardVisibility: 'H', testers: [USER] }),
+      NO_FACTS,
+      false,
+      false,
+    ],
+    [
       'C running: a finished participant still sees only their row',
       'plain',
       view({ scoreboardVisibility: 'C' }),
@@ -336,6 +368,24 @@ describe('ContestAccess.canSeeFullSubmissionList (legacy can_see_full_submission
       'frozen and ended: still no',
       'plain',
       view({ ...frozen, startTime: hours(-5), endTime: hours(-1) }),
+      false,
+    ],
+    [
+      'anonymous, running, list shown: yes',
+      'anonymous',
+      view({ showSubmissionList: true }),
+      true,
+    ],
+    [
+      'anonymous, frozen: no',
+      'anonymous',
+      view({ ...frozen, showSubmissionList: true }),
+      false,
+    ],
+    [
+      'frozen: a tester no',
+      'plain',
+      view({ ...frozen, showSubmissionList: true, testers: [USER] }),
       false,
     ],
     [
@@ -411,6 +461,28 @@ describe('ContestAccess.visibleFilter', () => {
   afterAll(async () => {
     await testingModule.close();
     await replSet.stop();
+  });
+
+  it('accessView reads a stored document back as its view', async () => {
+    const stored = view({
+      isVisible: false,
+      isPrivate: true,
+      isOrganizationPrivate: true,
+      organizations: [ORG],
+      privateContestants: [USER, OTHER],
+      authors: [USER],
+      curators: [OTHER],
+      testers: [ORG],
+      viewContestScoreboard: [OTHER, USER],
+      scoreboardVisibility: 'H',
+      showSubmissionList: true,
+      timeLimit: 3600,
+      frozenLastMinutes: 30,
+      formatName: 'icpc',
+    });
+    await contests.create({ ...stored, key: 'access_view', name: 'av' });
+    const document = await contests.findOne({ key: 'access_view' });
+    expect(ContestAccess.accessView(document!)).toEqual(stored);
   });
 
   it.each(Object.keys(PRINCIPALS))(
