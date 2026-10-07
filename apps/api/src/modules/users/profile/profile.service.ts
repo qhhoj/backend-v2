@@ -43,15 +43,15 @@ export class ProfileService {
     dto: UpdateProfileDto,
   ): Promise<ProfileResponse> {
     const user = (await this.users.findById(principal.userId))!;
-    const { about, organizations, ...fields } = dto;
+    const { about, firstName, organizations, ...fields } = dto;
     const changes: Partial<User> = { ...fields };
+    const trimmedFirstName = firstName?.trim();
+    if (trimmedFirstName !== undefined && trimmedFirstName !== user.firstName) {
+      this.refuseInOfficialContest(principal);
+      changes.firstName = trimmedFirstName;
+    }
     if (about !== undefined && about !== (user.about ?? '')) {
-      if (this.env.officialContestMode && !principal.isSuperuser)
-        throw new AppError(
-          'forbidden',
-          403,
-          'Profiles are locked during the official contest',
-        );
+      this.refuseInOfficialContest(principal);
       if (!canInteract(user))
         throw new AppError(
           'forbidden',
@@ -82,6 +82,16 @@ export class ProfileService {
       (await this.users.findById(principal.userId))!,
       principal,
     );
+  }
+
+  /** Legacy removed `about` and `first_name` from the form in official contest mode; superusers still edit. */
+  private refuseInOfficialContest(principal: Principal): void {
+    if (this.env.officialContestMode && !principal.isSuperuser)
+      throw new AppError(
+        'forbidden',
+        403,
+        'Profiles are locked during the official contest',
+      );
   }
 
   private async reorder(
@@ -130,6 +140,7 @@ export class ProfileService {
     return {
       about: user.about ?? '',
       aboutHtml: user.aboutHtml,
+      firstName: user.firstName,
       timezone: user.timezone,
       languageId: user.languageId && uuidStr(user.languageId),
       aceTheme: user.aceTheme,

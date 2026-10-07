@@ -1,3 +1,6 @@
+import { Queue as BullQueue } from 'bullmq';
+import { ORGANIZATION_POINTS_JOB } from '@libs/community';
+import type { OrganizationPointsJob } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import type { ProfileResponse } from '../src/modules/users/profile/dto/profile.response';
@@ -57,6 +60,15 @@ describe('profile', () => {
     await newcomer
       .patch({ about: 'kept', timezone: 'Asia/Ho_Chi_Minh' })
       .expect(200);
+  });
+
+  it('trims the full name, caps it at 30 characters and returns it', async () => {
+    const { patch } = await person();
+    const profile = dataOf<ProfileResponse>(
+      await patch({ firstName: '  Ada  ' }).expect(200),
+    );
+    expect(profile.firstName).toBe('Ada');
+    await patch({ firstName: 'x'.repeat(31) }).expect(400);
   });
 
   it('validates the time zone, language, themes and badge', async () => {
@@ -131,7 +143,17 @@ describe('profile', () => {
       ],
     }).expect(400);
     await patch({ organizations: [second._id, first._id] }).expect(409);
-    await patch({ organizations: [third._id] }).expect(200);
+    const addBulk = jest.spyOn(BullQueue.prototype, 'addBulk');
+    try {
+      await patch({ organizations: [third._id] }).expect(200);
+      const queued = addBulk.mock.calls
+        .flatMap(([jobs]) => jobs)
+        .filter((job) => job.name === ORGANIZATION_POINTS_JOB)
+        .map((job) => (job.data as OrganizationPointsJob).organizationId);
+      expect(queued.sort()).toEqual([first._id, second._id].sort());
+    } finally {
+      addBulk.mockRestore();
+    }
     expect(
       (await api.users.findById(user._id).lean())!.organizations.map(uuidStr),
     ).toEqual([third._id]);

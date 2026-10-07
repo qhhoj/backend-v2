@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SessionService, UsersRepository } from '@libs/auth';
 import type { Principal, UserDocument } from '@libs/auth';
 import { AppError } from '@libs/common';
+import { CONTEST_CHEATING_BAN_REASON } from '../../contests/participation/contest-participation.service';
 
 @Injectable()
 export class UserModerationService {
@@ -16,6 +17,10 @@ export class UserModerationService {
     username: string,
     reason: string,
   ): Promise<void> {
+    if (reason === CONTEST_CHEATING_BAN_REASON)
+      throw new AppError('validation_failed', 400, 'Reserved ban reason', {
+        reason: ['Reserved for automatic contest-cheating bans.'],
+      });
     const user = await this.target(principal, username);
     if (
       !(await this.users.updateIfBanReason(user._id, null, {
@@ -29,7 +34,7 @@ export class UserModerationService {
     await this.sessions.destroyAllForUser(user._id);
   }
 
-  /** Legacy `Profile.unban_user`. */
+  /** Legacy `Profile.unban_user`: restores rank `user`, listed and active whatever the user was before the ban. */
   async unban(principal: Principal, username: string): Promise<void> {
     const user = await this.target(principal, username);
     if (

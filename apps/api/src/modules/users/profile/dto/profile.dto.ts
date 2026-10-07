@@ -51,12 +51,18 @@ export const SITE_THEMES = ['auto', 'light', 'dark'] as const;
 export const MATH_ENGINES = ['tex', 'svg', 'mml', 'jax', 'auto'] as const;
 /** Legacy `user_script` max_length. */
 export const USER_SCRIPT_MAX_LENGTH = 65_536;
+/** Legacy `first_name` max_length. */
+export const FIRST_NAME_MAX_LENGTH = 30;
 /** The only profile field a PATCH may set to `null` (shows no badge). */
 export const NULLABLE_PROFILE_FIELDS = ['displayBadgeId'];
 
 /** Legacy `ProfileForm` fields; every one optional. */
 export class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(ABOUT_MAX_LENGTH) about?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(FIRST_NAME_MAX_LENGTH)
+  firstName?: string;
   @IsOptional() @IsTimeZone() timezone?: string;
   @IsOptional() @IsUUID('7') languageId?: string;
   @IsOptional() @IsIn(ACE_THEMES) aceTheme?: string;

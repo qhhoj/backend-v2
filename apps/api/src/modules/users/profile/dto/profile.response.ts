@@ -12,6 +12,7 @@ export class ProfileOrganizationResponse implements OrganizationSummaryResponse 
 export class ProfileResponse {
   about!: string;
   aboutHtml!: string;
+  firstName!: string;
   timezone!: string;
   languageId!: string | null;
   aceTheme!: string;

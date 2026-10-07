@@ -1,3 +1,4 @@
+import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/contests/participation/contest-participation.service';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
@@ -73,6 +74,9 @@ describe('ban and unban', () => {
     await authed(api.http().post('/api/internal/users/root/ban'), session)
       .send({ reason: 'x' })
       .expect(403);
+    await authed(api.http().post('/api/internal/users/nobody/ban'), session)
+      .send({ reason: CONTEST_CHEATING_BAN_REASON })
+      .expect(400);
     await authed(api.http().post('/api/internal/users/nobody/ban'), session)
       .send({ reason: 'x' })
       .expect(404);
