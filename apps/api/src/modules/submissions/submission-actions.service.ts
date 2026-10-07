@@ -34,7 +34,7 @@ import { SubmissionsService } from './submissions.service';
 const isLocked = (submission: Submission): boolean =>
   submission.lockedAfter !== null && submission.lockedAfter < new Date();
 
-/** Legacy `apply_submission_filter` for one problem; submissions a judge holds are never reset. */
+/** Legacy `apply_submission_filter` for one problem; submissions a judge holds are never reset, and pending final-submission rows belong to contest judging. */
 function bulkFilter(
   problemId: string,
   dto: BulkRejudgeDto,
@@ -45,7 +45,7 @@ function bulkFilter(
   };
   return {
     problem: problemId,
-    status: { $nin: [...IN_FLIGHT_STATUSES] },
+    status: { $nin: [...IN_FLIGHT_STATUSES, 'PD'] },
     ...(Object.keys(idRange).length ? { _id: idRange } : {}),
     ...(dto.languages?.length ? { language: { $in: dto.languages } } : {}),
     ...(dto.results?.length ? { result: { $in: dto.results } } : {}),

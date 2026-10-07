@@ -16,7 +16,7 @@ import {
   UNFINISHED_STATUSES,
   uuidStr,
 } from '@libs/database';
-import { JUDGE_COMMAND_BATCH } from '@libs/judging';
+import { JUDGE_COMMAND_BATCH, requeueUpdate } from '@libs/judging';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 const STATE_FIELDS = {
@@ -180,32 +180,12 @@ export class SubmissionsRepository {
     return modifiedCount === 1;
   }
 
-  /** Legacy `judge_submission`: back to QU at `priority` with every result cleared, except while a judge holds it (P/G). The requeue allowance is restored: a rejudge is a fresh attempt. Returns how many were reset. */
+  /** Back to QU at `priority` with every result cleared (`requeueUpdate`), except while a judge holds it (P/G). Returns how many were reset. */
   async resetForJudging(ids: string[], priority: number): Promise<number> {
     const { modifiedCount } = await this.submissions
       .updateMany(
         { _id: { $in: ids }, status: { $nin: [...IN_FLIGHT_STATUSES] } },
-        {
-          $set: {
-            status: 'QU',
-            result: null,
-            time: null,
-            memory: null,
-            points: null,
-            casePoints: 0,
-            caseTotal: 0,
-            error: null,
-            cases: [],
-            currentTestcase: 0,
-            batch: false,
-            isPretested: false,
-            judgedOn: null,
-            judgedDate: null,
-            rejudgedDate: new Date(),
-            priority,
-            requeueCount: 0,
-          },
-        },
+        requeueUpdate(priority),
       )
       .exec();
     return modifiedCount;

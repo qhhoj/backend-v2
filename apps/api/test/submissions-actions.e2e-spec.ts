@@ -391,6 +391,21 @@ describe('submission actions', () => {
       expect((await row(running)).status).toBe('G');
     });
 
+    it('leaves pending final-submission rows to contest judging', async () => {
+      const pending = await seed({ status: 'PD', result: null });
+      const finished = await seed();
+      expect(dataOf(await bulk('manager', {}).expect(200))).toEqual({
+        count: 1,
+      });
+      expect((await row(pending)).status).toBe('PD');
+      expect((await row(finished)).status).toBe('QU');
+      expect(
+        (await bridgeCommands(api)).flatMap((command) =>
+          command.type === 'judge' ? command.submissionIds : [],
+        ),
+      ).toEqual([finished]);
+    });
+
     it('rejects the nil and max UUIDs, which Mongoose cannot cast, with 400', async () => {
       for (const unusable of [NIL_UUID, MAX_UUID]) {
         for (const body of [

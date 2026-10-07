@@ -6,14 +6,22 @@ import { hasPermission, sha256, UsersRepository } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
 import { AppError, REDIS, unique } from '@libs/common';
 import {
+  CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_RESCORE_QUEUE,
+  contestPhase,
   enqueueContestRescore,
   FormatConfigError,
   notifyContestRescore,
   parseFormatConfig,
   purgeRankingCache,
+  requestFinalJudge,
+  rescheduleFinalJudge,
 } from '@libs/contests';
-import type { ContestRescoreJob } from '@libs/contests';
+import type {
+  ContestFinalJudgeJob,
+  ContestRescoreJob,
+  FinalJudgeTarget,
+} from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest, ContestProblem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
@@ -105,6 +113,13 @@ const scoringOf = (contest: Contest) =>
     ]),
   ]);
 
+const finalJudgeTarget = (contest: Contest): FinalJudgeTarget => ({
+  id: uuidStr(contest._id),
+  endTime: contest.endTime,
+  formatName: contest.formatName,
+  formatConfig: contest.formatConfig,
+});
+
 @Injectable()
 export class ContestEditingService {
   private readonly logger = new Logger(ContestEditingService.name);
@@ -116,6 +131,8 @@ export class ContestEditingService {
     private readonly users: UsersRepository,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
+    @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
+    private readonly finalJudges: Queue<ContestFinalJudgeJob>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -132,6 +149,12 @@ export class ContestEditingService {
       key: dto.key,
       authors: unique([...(fields.authors ?? []), principal.userId]),
     });
+    await rescheduleFinalJudge(
+      this.finalJudges,
+      null,
+      finalJudgeTarget(contest),
+      this.logger,
+    );
     return this.contestsService.detail(principal, contest.key);
   }
 
@@ -157,6 +180,12 @@ export class ContestEditingService {
     const updated = await this.contests.update(contest._id, fields);
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
+    await rescheduleFinalJudge(
+      this.finalJudges,
+      finalJudgeTarget(contest),
+      finalJudgeTarget(updated),
+      this.logger,
+    );
     if (scoringOf(updated) !== scoringOf(contest))
       void notifyContestRescore(this.rescores, contest._id, this.logger);
     if (
@@ -171,6 +200,25 @@ export class ContestEditingService {
   async rescore(principal: Principal, key: string): Promise<QueuedResponse> {
     const contest = await this.editableContest(principal, key);
     await enqueueContestRescore(this.rescores, contest._id);
+    return { queued: true };
+  }
+
+  /** Legacy admin "judge final submissions": an ended FSO contest only (judging pending rows of a running one would end the format's point). */
+  async judgeFinal(
+    principal: Principal,
+    key: string,
+    now = new Date(),
+  ): Promise<QueuedResponse> {
+    const contest = await this.editableContest(principal, key);
+    if (contest.formatName !== 'final_submission')
+      throw new AppError(
+        'conflict',
+        409,
+        'Only final-submission contests are judged at the end',
+      );
+    if (contestPhase(contest, now) !== 'ended')
+      throw new AppError('conflict', 409, 'The contest has not ended');
+    await requestFinalJudge(this.finalJudges, contest._id);
     return { queued: true };
   }
 

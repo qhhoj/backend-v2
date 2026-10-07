@@ -37,4 +37,13 @@ export class ContestEditingController {
   ): Promise<QueuedResponse> {
     return this.editing.rescore(auth.principal, key);
   }
+
+  @Post(':key/judge-final')
+  @HttpCode(202)
+  judgeFinal(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key }: ContestKeyParamDto,
+  ): Promise<QueuedResponse> {
+    return this.editing.judgeFinal(auth.principal, key);
+  }
 }

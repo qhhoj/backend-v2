@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { TEST_ENV, TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
+import { CONTEST_FINAL_JUDGE_QUEUE } from '@libs/contests';
 import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
   Contest,
@@ -71,16 +72,19 @@ export async function setupWorkerTest({
     testingModule = await builder.compile();
     await testingModule.init();
     if (!seedBeforeBoot) {
-      // The boot-time sweep must finish before the flush, or it fails on its vanished job and races the tests.
-      const sweepQueue = testingModule.get<Queue>(
-        getQueueToken(EFFECTS_SWEEP_QUEUE),
+      // Boot-time sweeps must finish before the flush, or they fail on their vanished jobs and race the tests.
+      const sweepQueues = [EFFECTS_SWEEP_QUEUE, CONTEST_FINAL_JUDGE_QUEUE].map(
+        (name) => testingModule!.get<Queue>(getQueueToken(name)),
       );
       await waitUntil(async () => {
-        const { active, waiting } = await sweepQueue.getJobCounts(
-          'active',
-          'waiting',
-        );
-        return active + waiting === 0;
+        for (const queue of sweepQueues) {
+          const { active, waiting } = await queue.getJobCounts(
+            'active',
+            'waiting',
+          );
+          if (active + waiting) return false;
+        }
+        return true;
       });
       await flushRedis();
     }

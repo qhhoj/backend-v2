@@ -2,7 +2,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
-import { CONTEST_RESCORE_QUEUE } from '@libs/contests';
+import {
+  CONTEST_FINAL_JUDGE_QUEUE,
+  CONTEST_RESCORE_QUEUE,
+} from '@libs/contests';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './contest-access.module';
@@ -23,7 +26,10 @@ import { ContestsService } from './contests.service';
     ContestAccessModule,
     ProblemsApiModule,
     SubmissionsApiModule,
-    BullModule.registerQueue({ name: CONTEST_RESCORE_QUEUE }),
+    BullModule.registerQueue(
+      { name: CONTEST_RESCORE_QUEUE },
+      { name: CONTEST_FINAL_JUDGE_QUEUE },
+    ),
   ],
   // Fastify matches a static segment (Task 7's `current`) before `:key`, whatever the controller order.
   controllers: [

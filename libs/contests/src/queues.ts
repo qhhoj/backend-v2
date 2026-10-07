@@ -1,6 +1,8 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { JOB_RETENTION, withinTimeout } from '@libs/judging';
+import { finalSubmissionFormat } from './formats/final-submission';
+import type { FormatName } from './formats/format';
 
 export const CONTEST_RESCORE_QUEUE = 'contest-rescore';
 export const CONTEST_RESCORE_JOB = 'rescore';
@@ -44,3 +46,87 @@ export async function notifyContestRescore(
     );
   }
 }
+
+export const CONTEST_FINAL_JUDGE_QUEUE = 'contest-final-judge';
+export const CONTEST_FINAL_JUDGE_JOB = 'judge-final';
+export const CONTEST_FINAL_JUDGE_SWEEP_JOB = 'sweep';
+export const CONTEST_FINAL_JUDGE_SCHEDULER = 'contest-final-judge-every-minute';
+export const FINAL_JUDGE_SWEEP_MS = 60_000;
+
+/** Judge an FSO contest's pending submissions; `manual`: an editor's request, which ignores `autoJudge`. */
+export interface ContestFinalJudgeJob {
+  contestId: string;
+  manual: boolean;
+}
+
+/** One delayed job per contest and end time (BullMQ ids cannot contain `:`). */
+export const finalJudgeJobId = (contestId: string, endTime: Date): string =>
+  `final-judge-${contestId}-${endTime.getTime()}`;
+
+export interface FinalJudgeTarget {
+  id: string;
+  endTime: Date;
+  formatName: FormatName;
+  formatConfig: unknown;
+}
+
+/** FSO contests judged automatically when they end. */
+export const judgesAtEnd = (contest: FinalJudgeTarget): boolean =>
+  contest.formatName === 'final_submission' &&
+  finalSubmissionFormat.parseConfig(contest.formatConfig).autoJudge;
+
+const FINAL_JUDGE_OPTIONS = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 10_000 },
+  ...JOB_RETENTION,
+};
+
+/** After a create or an edit: the previous end's job goes, the new end's comes (delay 0 once past). Never throws: the sweep judges any ended contest whose job was lost. */
+export async function rescheduleFinalJudge(
+  queue: Queue<ContestFinalJudgeJob>,
+  previous: FinalJudgeTarget | null,
+  next: FinalJudgeTarget,
+  logger: Logger,
+  now = Date.now(),
+): Promise<void> {
+  const unchanged =
+    previous !== null &&
+    judgesAtEnd(previous) &&
+    judgesAtEnd(next) &&
+    previous.endTime.getTime() === next.endTime.getTime();
+  if (unchanged) return;
+  try {
+    await withinTimeout(
+      (async () => {
+        if (previous && judgesAtEnd(previous))
+          await queue.remove(finalJudgeJobId(previous.id, previous.endTime));
+        if (judgesAtEnd(next))
+          await queue.add(
+            CONTEST_FINAL_JUDGE_JOB,
+            { contestId: next.id, manual: false },
+            {
+              jobId: finalJudgeJobId(next.id, next.endTime),
+              delay: Math.max(0, next.endTime.getTime() - now),
+              ...FINAL_JUDGE_OPTIONS,
+            },
+          );
+      })(),
+      CONTEST_ENQUEUE_TIMEOUT_MS,
+    );
+  } catch (error) {
+    logger.error(
+      `Final judging of contest ${next.id} not scheduled: ${(error as Error).message}`,
+    );
+  }
+}
+
+export const requestFinalJudge = async (
+  queue: Queue<ContestFinalJudgeJob>,
+  contestId: string,
+): Promise<void> => {
+  await queue.add(
+    CONTEST_FINAL_JUDGE_JOB,
+    { contestId, manual: true },
+    FINAL_JUDGE_OPTIONS,
+  );
+};

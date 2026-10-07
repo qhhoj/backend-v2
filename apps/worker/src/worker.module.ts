@@ -7,6 +7,7 @@ import {
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
+import { ContestFinalJudgeModule } from './jobs/contest-final-judge/contest-final-judge.module';
 import { ContestRescoreModule } from './jobs/contest-rescore/contest-rescore.module';
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
@@ -28,6 +29,7 @@ import { SubmissionEffectsModule } from './jobs/submission-effects/submission-ef
     EffectsSweepModule,
     ProblemRescoreModule,
     ContestRescoreModule,
+    ContestFinalJudgeModule,
   ],
 })
 export class WorkerModule {}
