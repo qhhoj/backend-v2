@@ -19,6 +19,7 @@ import {
   ProblemType,
   Rating,
   Submission,
+  SubmissionSource,
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
@@ -111,6 +112,9 @@ export async function setupWorkerTest({
       getModelToken(ProblemGroup.name),
     ),
     submissions: ready.get<Model<Submission>>(getModelToken(Submission.name)),
+    submissionSources: ready.get<Model<SubmissionSource>>(
+      getModelToken(SubmissionSource.name),
+    ),
     contests: ready.get<Model<Contest>>(getModelToken(Contest.name)),
     participations: ready.get<Model<ContestParticipation>>(
       getModelToken(ContestParticipation.name),
