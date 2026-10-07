@@ -150,8 +150,21 @@ describe('detailAccess', () => {
       'denied',
     ],
   ] as const)('%s → %s', (_label, principal, view, canEdit, expected) =>
-    expect(detailAccess(principal, 'owner', view, canEdit)).toBe(expected),
+    expect(detailAccess(principal, 'owner', view, canEdit, false)).toBe(
+      expected,
+    ),
   );
+
+  it('grants contest editors any submission of their contest', () =>
+    expect(
+      detailAccess(
+        viewer(),
+        'owner',
+        problem({ submissionSourceVisibility: 'O' }),
+        false,
+        true,
+      ),
+    ).toBe('granted'));
 });
 
 describe('caseVisibility', () => {

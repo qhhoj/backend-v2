@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, HydratedDocument, Model, SortOrder } from 'mongoose';
 import { AppError, isDuplicateKey } from '@libs/common';
-import { LIVE } from '@libs/contests';
+import { FREEZE_FORMATS, LIVE } from '@libs/contests';
 import {
   Contest,
   ContestParticipation,
@@ -38,6 +38,26 @@ export class ContestsRepository {
     return isUuid(id)
       ? this.contests.findById(id).exec()
       : Promise.resolve(null);
+  }
+
+  /** Contests that can hide a submission list now: not ended, a scoreboard other than V, or a freezing format with a freeze (which outlives the end). Ended, always-visible boards (most contests) are never read. */
+  candidatesHidingSubmissions(now: Date): Promise<Contest[]> {
+    return this.contests
+      .find(
+        {
+          $or: [
+            { endTime: { $gte: now } },
+            { scoreboardVisibility: { $ne: 'V' } },
+            {
+              formatName: { $in: FREEZE_FORMATS },
+              frozenLastMinutes: { $gt: 0 },
+            },
+          ],
+        },
+        { description: 0, descriptionHtml: 0, problems: 0 },
+      )
+      .lean<Contest[]>()
+      .exec();
   }
 
   /** List rows never carry the description. */

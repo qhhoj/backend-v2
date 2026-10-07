@@ -5,6 +5,10 @@ import { AppError, Paginated, unique } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { hasPermission } from '@libs/auth';
+import { ContestAccess } from '../contests/contest-access';
+import { ContestViewerService } from '../contests/contest-viewer.service';
+import { ContestsRepository } from '../contests/contests.repository';
 import { CurrentContestService } from '../contests/current-contest.service';
 import { LanguagesQuerier } from '../problems/languages.querier';
 import { ProblemAccess } from '../problems/problem-access';
@@ -41,6 +45,8 @@ export class SubmissionsService {
     private readonly users: UsersRepository,
     private readonly languages: LanguagesQuerier,
     private readonly currentContest: CurrentContestService,
+    private readonly viewers: ContestViewerService,
+    private readonly contests: ContestsRepository,
   ) {}
 
   /** The viewer's current contest, resolved once per request and passed to `visible`, `viewable` and `filterFor`. */
@@ -48,10 +54,11 @@ export class SubmissionsService {
     return this.currentContest.scopeOf(principal);
   }
 
-  /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see. */
+  /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see; `restrict` narrows it further (a contest's list). */
   async list(
     principal: Principal | null,
     query: SubmissionListQueryDto,
+    restrict: FilterQuery<Submission> = {},
   ): Promise<Paginated<SubmissionListItemResponse>> {
     const staffOnly = staffOnlyFilter(principal, query);
     if (staffOnly)
@@ -66,7 +73,7 @@ export class SubmissionsService {
     );
     if (!filter) return new Paginated([], { ...meta, total: 0 });
     const { items, total } = await this.submissions.list(
-      filter,
+      Object.keys(restrict).length ? { $and: [filter, restrict] } : filter,
       query.page,
       query.pageSize,
     );
@@ -180,7 +187,7 @@ export class SubmissionsService {
     return { submission, problem };
   }
 
-  /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in. */
+  /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in; another user's contest submission also needs the contest's full submission list (never during a freeze), unless the viewer edits the contest or the problem or sees every submission. */
   async viewable(
     principal: Principal,
     id: string,
@@ -193,14 +200,24 @@ export class SubmissionsService {
     const { submission, problem } = await this.visible(principal, id, scope);
     const view = ProblemAccess.accessView(problem);
     const canEdit = ProblemAccess.canEdit(principal, view);
+    const ownerId = uuidStr(submission.user);
+    const contest = submission.contest
+      ? await this.contests.findById(uuidStr(submission.contest))
+      : null;
+    const contestView = contest && ContestAccess.accessView(contest);
+    const contestEditor =
+      contestView !== null &&
+      (ContestAccess.isEditor(principal, contestView) ||
+        hasPermission(principal, 'judge.edit_all_contest'));
     const access = detailAccess(
       principal,
-      uuidStr(submission.user),
+      ownerId,
       {
         ...view,
         submissionSourceVisibility: problem.submissionSourceVisibility,
       },
       canEdit,
+      contestEditor,
     );
     const allowed =
       access === 'granted' ||
@@ -212,10 +229,33 @@ export class SubmissionsService {
         )));
     if (!allowed)
       throw new AppError('forbidden', 403, 'You cannot see this submission');
+    if (
+      contest &&
+      contestView &&
+      ownerId !== principal.userId &&
+      !canEdit &&
+      !contestEditor &&
+      !hasPermission(principal, 'judge.view_all_submission')
+    ) {
+      const now = new Date();
+      if (
+        !ContestAccess.canSeeFullSubmissionList(
+          principal,
+          contestView,
+          now,
+          await this.viewers.viewerOf(principal, contest, now),
+        )
+      )
+        throw new AppError(
+          'forbidden',
+          403,
+          'You cannot see this submission yet',
+        );
+    }
     return { submission, problem, canEdit };
   }
 
-  /** Null when nothing can match (unknown user, invisible problem); the `/api/internal` list and `/api/v2` share it, `/api/v2` with no contest scope (legacy `get_visible_problems`). */
+  /** Null when nothing can match (unknown user, invisible problem); other users' submissions of contests whose list the viewer may not see (a freeze, which outlives the contest) are left out; the `/api/internal` list and `/api/v2` share it, `/api/v2` with no contest scope (legacy `get_visible_problems`). */
   async filterFor(
     principal: Principal | null,
     filters: SubmissionFilters,
@@ -254,6 +294,16 @@ export class SubmissionsService {
       clauses.push({ result: { $in: filters.result } });
     if (filters.status?.length)
       clauses.push({ status: { $in: filters.status } });
+    const hidden = await this.viewers.hiddenSubmissionContests(
+      principal,
+      new Date(),
+    );
+    if (hidden.length)
+      clauses.push(
+        principal
+          ? { $or: [{ contest: { $nin: hidden } }, { user: principal.userId }] }
+          : { contest: { $nin: hidden } },
+      );
     return clauses.length ? { $and: clauses } : {};
   }
 }

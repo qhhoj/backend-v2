@@ -32,6 +32,16 @@ export class ParticipationsRepository {
       .exec();
   }
 
+  liveOf(
+    userId: string,
+    contestIds: string[],
+  ): Promise<ContestParticipation[]> {
+    return this.participations
+      .find({ user: userId, contest: { $in: contestIds }, virtual: LIVE })
+      .lean<ContestParticipation[]>()
+      .exec();
+  }
+
   /** The participation `users.currentParticipation` points at, null when none (or gone). */
   async findCurrentOf(userId: string): Promise<ParticipationDocument | null> {
     const user = await this.users

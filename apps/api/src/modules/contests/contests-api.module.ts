@@ -4,6 +4,7 @@ import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { CONTEST_RESCORE_QUEUE } from '@libs/contests';
 import { ProblemsApiModule } from '../problems/problems-api.module';
+import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './contest-access.module';
 import { ContestEditingController } from './contest-editing.controller';
 import { ContestEditingService } from './contest-editing.service';
@@ -11,6 +12,8 @@ import { ContestParticipationController } from './contest-participation.controll
 import { ContestParticipationService } from './contest-participation.service';
 import { ContestRankingController } from './contest-ranking.controller';
 import { ContestRankingService } from './contest-ranking.service';
+import { ContestSubmissionsController } from './contest-submissions.controller';
+import { ContestSubmissionsService } from './contest-submissions.service';
 import { ContestsController } from './contests.controller';
 import { ContestsService } from './contests.service';
 
@@ -19,6 +22,7 @@ import { ContestsService } from './contests.service';
     AuthModule,
     ContestAccessModule,
     ProblemsApiModule,
+    SubmissionsApiModule,
     BullModule.registerQueue({ name: CONTEST_RESCORE_QUEUE }),
   ],
   // Fastify matches a static segment (Task 7's `current`) before `:key`, whatever the controller order.
@@ -26,6 +30,7 @@ import { ContestsService } from './contests.service';
     ContestEditingController,
     ContestParticipationController,
     ContestRankingController,
+    ContestSubmissionsController,
     ContestsController,
   ],
   providers: [
@@ -33,6 +38,7 @@ import { ContestsService } from './contests.service';
     ContestEditingService,
     ContestParticipationService,
     ContestRankingService,
+    ContestSubmissionsService,
     RateLimitService,
   ],
 })

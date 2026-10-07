@@ -21,14 +21,19 @@ export interface SubmissionProblemView extends ProblemAccessView {
   submissionSourceVisibility: string;
 }
 
-/** Legacy `Submission.can_see_detail` (contest editors arrive with sub-project 4). `if-solved`: granted once the viewer has an AC worth the problem's full points. */
+/** Legacy `Submission.can_see_detail`; contest editors see every submission of their contest. `if-solved`: granted once the viewer has an AC worth the problem's full points. */
 export function detailAccess(
   principal: Principal,
   ownerId: string,
   problem: SubmissionProblemView,
   canEdit: boolean,
+  contestEditor: boolean,
 ): DetailAccess {
-  if (canEdit || hasPermission(principal, 'judge.view_all_submission'))
+  if (
+    canEdit ||
+    contestEditor ||
+    hasPermission(principal, 'judge.view_all_submission')
+  )
     return 'granted';
   if (
     !problem.isPublic &&
