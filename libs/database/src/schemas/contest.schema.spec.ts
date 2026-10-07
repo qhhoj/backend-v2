@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
 import { newId } from '../uuid';
-import { ContestSchema } from './contest.schema';
+import { ContestSchema, MAX_CONTEST_PROBLEMS } from './contest.schema';
 import { ContestParticipationSchema } from './contest-participation.schema';
 import { ContestSubmissionSchema } from './contest-submission.schema';
 import { SubmissionSchema } from './submission.schema';
@@ -87,10 +87,54 @@ describe('Contest schemas', () => {
     [{ scoreboardVisibility: 'X' }, /scoreboardVisibility/],
     [{ pointsPrecision: 11 }, /pointsPrecision/],
     [{ tags: ['Bad Tag'] }, /tags/],
+    [{ timeLimit: 0 }, /timeLimit/],
+    [{ accessCodeHash: 'letmein' }, /accessCodeHash/],
+    [{ rankingAccessCodeHash: 'letmein' }, /rankingAccessCodeHash/],
+    [{ formatConfig: null }, /formatConfig/],
+    [{ formatConfig: 'abc' }, /formatConfig/],
+    [{ problems: [{ problem: newId(), points: -1, order: 0 }] }, /points/],
   ])('rejects %p', async (fields, field) => {
     await expect(
       Contests.create({ key: newKey(), name: 'C', ...window(), ...fields }),
     ).rejects.toThrow(field);
+  });
+
+  it('rejects a problem listed twice in a contest', async () => {
+    const problem = newId();
+    await expect(
+      Contests.create({
+        key: newKey(),
+        name: 'C',
+        ...window(),
+        problems: [
+          { problem, points: 100, order: 0 },
+          { problem, points: 50, order: 1 },
+        ],
+      }),
+    ).rejects.toThrow(/problems/);
+  });
+
+  it('caps a contest at MAX_CONTEST_PROBLEMS problems', async () => {
+    const problems = (count: number) =>
+      Array.from({ length: count }, (unused, order) => ({
+        problem: newId(),
+        points: 1,
+        order,
+      }));
+    await Contests.create({
+      key: newKey(),
+      name: 'Full',
+      ...window(),
+      problems: problems(MAX_CONTEST_PROBLEMS),
+    });
+    await expect(
+      Contests.create({
+        key: newKey(),
+        name: 'Over',
+        ...window(),
+        problems: problems(MAX_CONTEST_PROBLEMS + 1),
+      }),
+    ).rejects.toThrow(/problems/);
   });
 
   it('allows one participation per contest, user and virtual number', async () => {
@@ -121,6 +165,20 @@ describe('Contest schemas', () => {
       isDisqualified: false,
       isRegistered: false,
     });
+  });
+
+  it.each([
+    [{ formatData: [] }, /formatData/],
+    [{ frozenFormatData: null }, /frozenFormatData/],
+  ])('rejects %p', async (fields, field) => {
+    await expect(
+      Participations.create({
+        contest: newId(),
+        user: newId(),
+        realStart: new Date(),
+        ...fields,
+      }),
+    ).rejects.toThrow(field);
   });
 
   it('keys a contest submission by its submission id', async () => {

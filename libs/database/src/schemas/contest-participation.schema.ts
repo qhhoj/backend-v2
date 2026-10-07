@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
-import { baseSchemaOptions, IdProp } from '../schema';
+import { baseSchemaOptions, IdProp, PLAIN_OBJECT } from '../schema';
 
 const UUID = MongooseSchema.Types.UUID;
 const Mixed = MongooseSchema.Types.Mixed;
@@ -26,15 +26,11 @@ export class ContestParticipation {
   @Prop({ default: 0 }) frozenCumtime!: number;
   @Prop({ default: 0 }) frozenTiebreaker!: number;
   /** Per problem id, the format's cell (`ProblemCell`, `@libs/contests`). */
-  @Prop({ type: Mixed, default: () => ({}) }) formatData!: Record<
-    string,
-    unknown
-  >;
+  @Prop({ type: Mixed, default: () => ({}), validate: PLAIN_OBJECT })
+  formatData!: Record<string, unknown>;
   /** The cells a frozen board shows. */
-  @Prop({ type: Mixed, default: () => ({}) }) frozenFormatData!: Record<
-    string,
-    unknown
-  >;
+  @Prop({ type: Mixed, default: () => ({}), validate: PLAIN_OBJECT })
+  frozenFormatData!: Record<string, unknown>;
   @Prop({ default: false }) isDisqualified!: boolean;
   /** Registered and not joined yet (legacy: `real_start` 1970-01-01). */
   @Prop({ default: false }) isRegistered!: boolean;

@@ -23,3 +23,10 @@ export const IdProp = () => Prop({ type: Schema.Types.UUID, default: newId });
 
 export const ciIndex = (schema: Schema, field: string, unique = true) =>
   schema.index({ [field]: 1 }, { unique, collation: CI });
+
+/** For `Mixed` props typed as a record: rejects null, arrays and scalars. */
+export const PLAIN_OBJECT = {
+  validator: (value: unknown) =>
+    typeof value === 'object' && value !== null && !Array.isArray(value),
+  message: '{PATH} must be an object',
+};

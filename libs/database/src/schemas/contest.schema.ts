@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
-import { baseSchemaOptions, IdProp } from '../schema';
+import { baseSchemaOptions, IdProp, PLAIN_OBJECT } from '../schema';
+import { uuidStr } from '../uuid';
 
 const UUID = MongooseSchema.Types.UUID;
 const Mixed = MongooseSchema.Types.Mixed;
@@ -24,6 +25,8 @@ export type LabelStyle = (typeof LABEL_STYLES)[number];
 export const SCOREBOARD_VISIBILITIES = ['V', 'H', 'C', 'P'] as const;
 export type ScoreboardVisibility = (typeof SCOREBOARD_VISIBILITIES)[number];
 export const MAX_POINTS_PRECISION = 10;
+export const MAX_CONTEST_PROBLEMS = 100;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 @Schema({ _id: false })
 export class ContestProblem {
@@ -78,12 +81,14 @@ export class Contest {
   @Prop({ default: false }) isOrganizationPrivate!: boolean;
   @Prop({ type: [UUID], default: [] }) organizations!: string[];
   /** sha256 hex of the access code; null: no code. */
-  @Prop({ type: String, default: null }) accessCodeHash!: string | null;
+  @Prop({ type: String, default: null, match: SHA256_HEX }) accessCodeHash!:
+    string | null;
   @Prop({ type: [UUID], default: [] }) bannedUsers!: string[];
   /** Judge names (judges are never renamed; commands and dispatch use names). */
   @Prop({ type: [String], default: [] }) bannedJudges!: string[];
   /** sha256 hex; checked by the public ranking links (4b). */
-  @Prop({ type: String, default: null }) rankingAccessCodeHash!: string | null;
+  @Prop({ type: String, default: null, match: SHA256_HEX })
+  rankingAccessCodeHash!: string | null;
   @Prop({ type: String, default: 'V', enum: SCOREBOARD_VISIBILITIES })
   scoreboardVisibility!: ScoreboardVisibility;
   @Prop({ type: [UUID], default: [] }) viewContestScoreboard!: string[];
@@ -107,14 +112,29 @@ export class Contest {
   @Prop({ type: String, default: 'default', enum: CONTEST_FORMAT_NAMES })
   formatName!: ContestFormatName;
   /** Validated by the format's `parseConfig` (`@libs/contests`) before every write. */
-  @Prop({ type: Mixed, default: () => ({}) }) formatConfig!: Record<
-    string,
-    unknown
-  >;
+  @Prop({ type: Mixed, default: () => ({}), validate: PLAIN_OBJECT })
+  formatConfig!: Record<string, unknown>;
   /** Live participations (registrations included); recomputed, never incremented. */
   @Prop({ default: 0 }) userCount!: number;
   @Prop({ default: 0 }) virtualCount!: number;
-  @Prop({ type: [ContestProblemSchema], default: [] })
+  @Prop({
+    type: [ContestProblemSchema],
+    default: [],
+    validate: [
+      {
+        validator: (problems: ContestProblem[]) =>
+          problems.length <= MAX_CONTEST_PROBLEMS,
+        message: `at most ${MAX_CONTEST_PROBLEMS} problems`,
+      },
+      {
+        // Array validators see BSON UUIDs, not strings.
+        validator: (problems: ContestProblem[]) =>
+          new Set(problems.map(({ problem }) => uuidStr(problem))).size ===
+          problems.length,
+        message: 'a problem may appear once',
+      },
+    ],
+  })
   problems!: ContestProblem[];
 }
 
