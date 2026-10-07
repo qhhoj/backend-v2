@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { FilterQuery } from 'mongoose';
-import { hasPermission, UsersRepository } from '@libs/auth';
+import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import {
@@ -132,7 +132,7 @@ export class ApiV2ContestsService {
     };
   }
 
-  /** Legacy `APIContestParticipationList`: spectators never, only contests whose scoreboard the viewer may read. */
+  /** Legacy `APIContestParticipationList`: spectators never, only contests whose scoreboard the viewer may read (the rule the detail's `rankings` follow). */
   async participationList(
     principal: Principal | null,
     query: ApiV2ParticipationListDto,
@@ -150,13 +150,19 @@ export class ApiV2ContestsService {
     const contests = await this.contests.findAll({
       $and: [
         ContestAccess.visibleFilter(principal),
-        this.readableScoreboards(principal, now),
+        ContestAccess.scoreboardFilter(principal, now),
         ...(query.contest ? [{ key: query.contest }] : []),
       ],
     });
     const filter: FilterQuery<ContestParticipation> = {
       contest: { $in: contests.map((contest) => uuidStr(contest._id)) },
-      virtual: query.virtual_participation_number ?? { $gte: 0 },
+      // Legacy's `virtual__gte=0` stays on top of the filter: `-1` matches nothing.
+      virtual: {
+        $gte: 0,
+        ...(query.virtual_participation_number === undefined
+          ? {}
+          : { $eq: query.virtual_participation_number }),
+      },
       ...(query.is_disqualified === undefined
         ? {}
         : { isDisqualified: query.is_disqualified }),
@@ -212,26 +218,6 @@ export class ApiV2ContestsService {
       is_rated: contest.isRated,
       rate_all: contest.isRated && contest.rateAll,
       tags: contest.tags,
-    };
-  }
-
-  /** Legacy `APIContestParticipationList`'s scoreboard condition. */
-  private readableScoreboards(
-    principal: Principal | null,
-    now: Date,
-  ): FilterQuery<Contest> {
-    if (principal && hasPermission(principal, 'judge.see_private_contest'))
-      return {};
-    const own =
-      principal && hasPermission(principal, 'judge.edit_own_contest')
-        ? [{ authors: principal.userId }, { curators: principal.userId }]
-        : [];
-    return {
-      $or: [
-        { endTime: { $lt: now } },
-        ...own,
-        ...(principal ? [{ viewContestScoreboard: principal.userId }] : []),
-      ],
     };
   }
 

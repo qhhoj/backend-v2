@@ -82,9 +82,21 @@ export class ContestsRepository {
       .exec();
   }
 
-  /** Lean rows (descriptions excluded) of every match, for a bounded join like the participation list's contests. */
+  /** Lean rows of every match with what the participation list reads: times, format, `canEdit`'s authors and curators. */
   findAll(filter: FilterQuery<Contest>): Promise<Contest[]> {
-    return this.contests.find(filter, LIST_PROJECTION).lean<Contest[]>().exec();
+    return this.contests
+      .find(filter, {
+        key: 1,
+        startTime: 1,
+        endTime: 1,
+        timeLimit: 1,
+        frozenLastMinutes: 1,
+        formatName: 1,
+        authors: 1,
+        curators: 1,
+      })
+      .lean<Contest[]>()
+      .exec();
   }
 
   /** List rows never carry the description. */

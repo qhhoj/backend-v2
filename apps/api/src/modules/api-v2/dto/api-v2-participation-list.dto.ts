@@ -6,7 +6,6 @@ import {
   IsString,
   Matches,
   Max,
-  MaxLength,
   Min,
 } from 'class-validator';
 import { toBoolean } from '../../problems/dto/transforms';
@@ -18,18 +17,16 @@ const lastValue = ({ value }: { value: unknown }): unknown =>
 
 /** Legacy `APIContestParticipationList` filters. */
 export class ApiV2ParticipationListDto {
-  /** Contest key. */
+  /** Contest key; an over-long one matches nothing, as in legacy. */
   @IsOptional()
   @Transform(lastValue)
   @IsString()
-  @MaxLength(32)
   @Matches(/^[^\0]*$/)
   contest?: string;
   /** Username. */
   @IsOptional()
   @Transform(lastValue)
   @IsString()
-  @MaxLength(30)
   @Matches(/^[^\0]*$/)
   user?: string;
   @IsOptional()
@@ -40,7 +37,7 @@ export class ApiV2ParticipationListDto {
   @Transform(lastValue)
   @Type(() => Number)
   @IsInt()
-  @Min(0)
+  @Min(-1)
   virtual_participation_number?: number;
   @IsOptional()
   @Type(() => Number)

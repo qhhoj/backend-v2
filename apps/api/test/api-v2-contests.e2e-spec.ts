@@ -10,6 +10,7 @@ import {
   createContest,
   hoursFromNow,
   joinParticipation,
+  makeCurrent,
 } from './contest-fixtures';
 import {
   authed,
@@ -34,12 +35,18 @@ describe('/api/v2 contests and participations', () => {
   const sessions: Record<string, TestSession> = {};
   const users: Record<string, { _id: string }> = {};
   let problemId: string;
+  let otherProblemId: string;
   let rated: Contest;
   let privateContest: Contest;
   let ended: Contest;
   let future: Contest;
   let frozen: Contest;
   let running: Contest;
+  let hiddenBoard: Contest;
+  let configured: Contest;
+  let pretested: Contest;
+  let unrated: Contest;
+  const organizationId = newId();
   const frozenCell = { points: 100, time: 10, tries: 1 };
   const liveCell = { points: 300, time: 30, tries: 2 };
   const get = (url: string) => api.http().get(url);
@@ -60,6 +67,7 @@ describe('/api/v2 contests and participations', () => {
       sessions[name] = await loginAs(api, users[name]._id);
     }
     problemId = (await createProblem(api, catalog, { code: 'one' }))._id;
+    otherProblemId = (await createProblem(api, catalog, { code: 'two' }))._id;
     const entry = [contestProblem(problemId, 0)];
 
     rated = await createContest(api, {
@@ -139,9 +147,48 @@ describe('/api/v2 contests and participations', () => {
     });
 
     running = await createContest(api, {
+      scoreboardVisibility: 'C',
       viewContestScoreboard: [users.viewer._id],
+      authors: [users.editor._id],
+      problems: [contestProblem(problemId, 0, { isPretested: true })],
     });
-    await joinParticipation(api, running._id, users.alice._id);
+    const runningAlice = await joinParticipation(
+      api,
+      running._id,
+      users.alice._id,
+    );
+    await makeCurrent(api, users.alice._id, runningAlice._id);
+
+    hiddenBoard = await createContest(api, {
+      scoreboardVisibility: 'H',
+      startTime: hoursFromNow(-6),
+      endTime: hoursFromNow(-4),
+      authors: [users.editor._id],
+    });
+    await joinParticipation(api, hiddenBoard._id, users.alice._id, {
+      score: 50,
+    });
+
+    unrated = await createContest(api, { rateAll: true });
+    pretested = await createContest(api, {
+      startTime: hoursFromNow(-6),
+      endTime: hoursFromNow(-4),
+      runPretestsOnly: true,
+      problems: [
+        contestProblem(problemId, 0, { isPretested: true, maxSubmissions: 3 }),
+        contestProblem(otherProblemId, 1, { isPretested: false }),
+      ],
+    });
+    configured = await createContest(api, {
+      tags: ['dp', 'ioi'],
+      ratingFloor: 1000,
+      ratingCeiling: 2000,
+      scoreboardVisibility: 'C',
+      isPrivate: true,
+      isOrganizationPrivate: true,
+      organizations: [organizationId],
+      authors: [users.editor._id],
+    });
   });
   afterAll(() => api.teardown());
 
@@ -292,6 +339,107 @@ describe('/api/v2 contests and participations', () => {
       (await bodyOf(get('/api/v2/participations?user=nobody'))).data.objects,
     ).toEqual([]);
     await get('/api/v2/participations?user=nobody&page=2').expect(404);
+  });
+
+  it('shows the problems of a running contest to its participants and editors, not to outsiders', async () => {
+    const problemsOf = async (who?: string) => {
+      const request = get(`/api/v2/contest/${running.key}`);
+      return (await bodyOf(who ? authed(request, sessions[who]) : request)).data
+        .object.problems;
+    };
+    expect(await problemsOf('alice')).toEqual([
+      expect.objectContaining({ code: 'one', label: '1' }),
+    ]);
+    expect(await problemsOf('editor')).toHaveLength(1);
+    expect(await problemsOf('bob')).toEqual([]);
+    expect(await problemsOf()).toEqual([]);
+  });
+
+  it('lists the participations of a running contest to its author', async () => {
+    const url = `/api/v2/participations?contest=${running.key}`;
+    const asEditor = await bodyOf(authed(get(url), sessions.editor));
+    expect(asEditor.data.objects.map((row) => row.user)).toEqual(['alice']);
+    const asOutsider = await bodyOf(authed(get(url), sessions.bob));
+    expect(asOutsider.data.objects).toEqual([]);
+  });
+
+  it('shows the flags, bounds and tags of a contest in its detail', async () => {
+    const detail = (
+      await bodyOf(
+        authed(get(`/api/v2/contest/${configured.key}`), sessions.editor),
+      )
+    ).data.object;
+    expect(detail).toMatchObject({
+      tags: ['dp', 'ioi'],
+      rating_floor: 1000,
+      rating_ceiling: 2000,
+      hidden_scoreboard: true,
+      scoreboard_visibility: 'C',
+      is_private: true,
+      is_organization_private: true,
+      organizations: [organizationId],
+      has_rating: false,
+    });
+    const open = (await bodyOf(get(`/api/v2/contest/${ended.key}`))).data
+      .object;
+    expect(open).toMatchObject({
+      hidden_scoreboard: false,
+      organizations: [],
+      rating_floor: null,
+      rating_ceiling: null,
+    });
+    const pretestedProblems = (
+      await bodyOf(get(`/api/v2/contest/${pretested.key}`))
+    ).data.object.problems as Row[];
+    expect(
+      pretestedProblems.map((problem) => [
+        problem.is_pretested,
+        problem.max_submissions,
+      ]),
+    ).toEqual([
+      [true, 3],
+      [false, null],
+    ]);
+    const runningProblems = (
+      await bodyOf(
+        authed(get(`/api/v2/contest/${running.key}`), sessions.editor),
+      )
+    ).data.object.problems as Row[];
+    // Pretested problems count only in a contest that runs pretests only.
+    expect(runningProblems[0].is_pretested).toBe(false);
+  });
+
+  it('reports rate_all only for rated contests', async () => {
+    const [object] = (await bodyOf(get(`/api/v2/contests?key=${unrated.key}`)))
+      .data.objects;
+    expect(object).toMatchObject({ is_rated: false, rate_all: false });
+  });
+
+  it('hides participations wherever the contest hides its rankings', async () => {
+    const url = `/api/v2/participations?contest=${hiddenBoard.key}`;
+    const detailUrl = `/api/v2/contest/${hiddenBoard.key}`;
+    expect((await bodyOf(get(url))).data.objects).toEqual([]);
+    expect((await bodyOf(get(detailUrl))).data.object.rankings).toEqual([]);
+    expect((await bodyOf(authed(get(url), sessions.bob))).data.objects).toEqual(
+      [],
+    );
+    const asEditor = await bodyOf(authed(get(url), sessions.editor));
+    expect(asEditor.data.objects.map((row) => row.score)).toEqual([50]);
+    expect(
+      (await bodyOf(authed(get(detailUrl), sessions.editor))).data.object
+        .rankings,
+    ).toHaveLength(1);
+  });
+
+  it('answers legacy-valid but unmatched filters with an empty page', async () => {
+    for (const query of [
+      'virtual_participation_number=-1',
+      `user=${'x'.repeat(40)}`,
+      `contest=${'x'.repeat(40)}`,
+    ])
+      expect(
+        (await bodyOf(get(`/api/v2/participations?${query}`))).data.objects,
+      ).toEqual([]);
   });
 
   it('pages 12k participations through indexes', async () => {
