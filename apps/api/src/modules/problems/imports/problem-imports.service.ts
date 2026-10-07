@@ -21,7 +21,7 @@ import { ImportJobResponse } from './dto/import-job.response';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { rejectFile, saveMultipartFile } from '../core/multipart';
 import { ProblemDataStore } from '../data/problem-data.store';
-import { ProblemEditPolicy } from '../editing/problem-edit-policy.service';
+import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from '../core/rate-limits';
 
@@ -34,7 +34,7 @@ const GENERIC_FAILURE = 'Import failed';
 @Injectable()
 export class ProblemImportsService {
   constructor(
-    private readonly policy: ProblemEditPolicy,
+    private readonly policy: ProblemEditPolicyService,
     private readonly store: ProblemDataStore,
     private readonly repository: ProblemsRepository,
     private readonly dataFiles: ProblemDataFilesService,

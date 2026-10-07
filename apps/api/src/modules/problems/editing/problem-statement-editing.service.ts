@@ -1,14 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
-import { RateLimitService, unique } from '@libs/common';
+import { RateLimitService, sameJson, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import { PutEditorialDto } from './dto/editorial.dto';
 import { RenderPreviewDto } from './dto/render-preview.dto';
 import { PutTranslationDto } from './dto/translation.dto';
-import { sameJson } from './problem-edit-fields';
 import { renderField, styleOf } from './problem-markup';
-import { ProblemEditPolicy } from './problem-edit-policy.service';
+import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import { ProblemEvents } from '../core/problem.events';
 import { ProblemsRepository } from '../core/problems.repository';
 import {
@@ -23,7 +22,7 @@ export class ProblemStatementEditingService {
   constructor(
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
-    private readonly policy: ProblemEditPolicy,
+    private readonly policy: ProblemEditPolicyService,
     private readonly events: ProblemEvents,
     private readonly rateLimit: RateLimitService,
   ) {}

@@ -39,8 +39,8 @@ import {
   CurrentParticipationResponse,
   ParticipationResponse,
 } from './dto/participation.response';
-import { ParticipationsRepository } from './participations.repository';
-import type { ParticipationDocument } from './participations.repository';
+import { ParticipationsRepository } from '../core/participations.repository';
+import type { ParticipationDocument } from '../core/participations.repository';
 import {
   ACCESS_CODE_IP_LIMIT,
   ACCESS_CODE_USER_LIMIT,

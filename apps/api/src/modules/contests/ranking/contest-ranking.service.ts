@@ -20,7 +20,7 @@ import { ContestViewerService } from '../core/contest-viewer.service';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import type { RankingResponse } from './dto/ranking.response';
-import { ParticipationsRepository } from '../participation/participations.repository';
+import { ParticipationsRepository } from '../core/participations.repository';
 import {
   ACCESS_CODE_IP_LIMIT,
   ACCESS_CODE_WINDOW_SECONDS,

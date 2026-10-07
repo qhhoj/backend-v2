@@ -34,7 +34,7 @@ export class ProblemPdfService {
   ) {}
 
   /**
-   * Cached file, or a render job (one per problem and language). A completed job is removed so a later request can enqueue again; a failed one is kept for `PDF_FAIL_WINDOW_SECONDS`, answering 503 with Retry-After instead of an endless 202. A statement change or rename removes it earlier (`ProblemDataService`).
+   * Cached file, or a render job (one per problem and language). A completed job is removed so a later request can enqueue again; a failed one is kept for `PDF_FAIL_WINDOW_SECONDS`, answering 503 with Retry-After instead of an endless 202. A statement change or rename removes it earlier (`ProblemDataLifecycleService`).
    * `enqueue: false` (HEAD) only peeks at the cache: no job, no rate-limit budget.
    */
   async locate(

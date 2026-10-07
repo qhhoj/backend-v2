@@ -13,9 +13,6 @@ const ID_ARRAY_FIELDS: ReadonlyArray<keyof UpdateProblemDto> = [
   'allowedLanguages',
 ];
 
-export const sameJson = (left: unknown, right: unknown) =>
-  JSON.stringify(left) === JSON.stringify(right);
-
 /** Id and limit lists are sets: order never counts as a change. */
 export const comparable = (value: unknown) =>
   Array.isArray(value)

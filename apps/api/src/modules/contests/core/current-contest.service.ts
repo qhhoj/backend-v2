@@ -6,8 +6,8 @@ import type { ContestScope } from '../../problems/core/problem-access';
 import { ContestAccess } from './contest-access';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
-import { ParticipationsRepository } from '../participation/participations.repository';
-import type { ParticipationDocument } from '../participation/participations.repository';
+import { ParticipationsRepository } from './participations.repository';
+import type { ParticipationDocument } from './participations.repository';
 
 export interface CurrentParticipation {
   participation: ParticipationDocument;

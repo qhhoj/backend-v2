@@ -3,7 +3,7 @@ import { AuthModule } from '@libs/auth';
 import { CurrentContestService } from './current-contest.service';
 import { ContestViewerService } from './contest-viewer.service';
 import { ContestsRepository } from './contests.repository';
-import { ParticipationsRepository } from '../participation/participations.repository';
+import { ParticipationsRepository } from './participations.repository';
 
 /** Contest reads every api module needs (problems for contest-only access, submissions for freeze-safe lists); depends only on the global `DatabaseModule`, so it never closes a module cycle. */
 @Module({

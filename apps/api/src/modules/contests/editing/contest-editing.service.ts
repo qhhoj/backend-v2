@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import type { Principal } from '@libs/auth';
-import { AppError, REDIS, unique } from '@libs/common';
+import { AppError, invalidField, REDIS, sameJson, unique } from '@libs/common';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_RESCORE_QUEUE,
@@ -30,8 +30,7 @@ import type {
   CreateContestDto,
   UpdateContestDto,
 } from './dto/contest-edit.dto';
-import { ContestEditFields } from './contest-edit-fields.service';
-import { invalidField, sameJson } from './contest-edit-rules';
+import { ContestEditFieldsService } from './contest-edit-fields.service';
 
 /** `GET /contests/current` shadows a contest with this key. */
 export const RESERVED_CONTEST_KEYS: readonly string[] = ['current'];
@@ -67,7 +66,7 @@ export class ContestEditingService {
   constructor(
     private readonly contests: ContestsRepository,
     private readonly contestsService: ContestsService,
-    private readonly editFields: ContestEditFields,
+    private readonly editFields: ContestEditFieldsService,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
     @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)

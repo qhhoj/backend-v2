@@ -7,7 +7,7 @@ import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
 import { LanguagesQuerier } from '../catalog/languages.querier';
-import { ProblemEditPolicy } from './problem-edit-policy.service';
+import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import {
   toFields,
   withCodeTaken,
@@ -30,7 +30,7 @@ export class ProblemEditingService {
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly problems: ProblemsService,
-    private readonly policy: ProblemEditPolicy,
+    private readonly policy: ProblemEditPolicyService,
     private readonly languages: LanguagesQuerier,
     private readonly events: ProblemEvents,
     private readonly dataFiles: ProblemDataFilesService,

@@ -1,18 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, invalidField } from '@libs/common';
 import type { DataFileKind } from '@libs/database';
 import { ProblemDataFilesService } from '@libs/problems';
 import { PutProblemDataDto } from './dto/problem-data.dto';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { MAX_CASE_ARGS_BYTES, maxTestcasesFor } from '../core/dto/limits';
-import { ProblemEditPolicy } from '../editing/problem-edit-policy.service';
-import { invalidField, ProblemDataStore } from './problem-data.store';
+import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
+import { ProblemDataStore } from './problem-data.store';
 
 @Injectable()
 export class ProblemDataService {
   constructor(
-    private readonly policy: ProblemEditPolicy,
+    private readonly policy: ProblemEditPolicyService,
     private readonly store: ProblemDataStore,
     private readonly dataFiles: ProblemDataFilesService,
   ) {}

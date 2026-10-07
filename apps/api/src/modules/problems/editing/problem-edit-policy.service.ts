@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { AppError, unique } from '@libs/common';
+import { AppError, sameJson, unique } from '@libs/common';
 import type { Problem } from '@libs/database';
 import type {
   CreateProblemDto,
@@ -9,7 +9,7 @@ import type {
 } from './dto/problem-edit.dto';
 import { LanguagesQuerier } from '../catalog/languages.querier';
 import { LicensesQuerier } from '../catalog/licenses.querier';
-import { comparable, sameJson } from './problem-edit-fields';
+import { comparable } from './problem-edit-fields';
 import { ProblemAccess } from '../core/problem-access';
 import { ProblemGroupsQuerier } from '../catalog/problem-groups.querier';
 import { ProblemTypesQuerier } from '../catalog/problem-types.querier';
@@ -56,7 +56,7 @@ const CREATE_BASELINE: Partial<Record<keyof CreateProblemDto, unknown>> = {
 
 /** Who may edit a problem and which fields and references a request may set. */
 @Injectable()
-export class ProblemEditPolicy {
+export class ProblemEditPolicyService {
   constructor(
     private readonly problems: ProblemsService,
     private readonly users: UsersRepository,

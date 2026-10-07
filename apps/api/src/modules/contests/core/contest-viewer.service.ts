@@ -13,8 +13,8 @@ import { ContestAccess, NO_FACTS } from './contest-access';
 import type { ViewerFacts } from './contest-access';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
-import { ParticipationsRepository } from '../participation/participations.repository';
-import type { ParticipationDocument } from '../participation/participations.repository';
+import { ParticipationsRepository } from './participations.repository';
+import type { ParticipationDocument } from './participations.repository';
 
 export interface ContestViewer extends ViewerFacts {
   live: ParticipationDocument | null;

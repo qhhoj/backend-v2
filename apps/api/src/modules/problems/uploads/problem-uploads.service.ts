@@ -16,7 +16,7 @@ import {
 import { sanitizeSvg } from '@libs/render';
 import { readMultipartFile, rejectFile } from '../core/multipart';
 import type { UploadedFile } from '../core/multipart';
-import { ProblemEditPolicy } from '../editing/problem-edit-policy.service';
+import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemEvents } from '../core/problem.events';
 import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
@@ -48,7 +48,7 @@ export class ProblemUploadsService {
   constructor(
     private readonly storage: StorageService,
     private readonly rateLimit: RateLimitService,
-    private readonly policy: ProblemEditPolicy,
+    private readonly policy: ProblemEditPolicyService,
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly events: ProblemEvents,

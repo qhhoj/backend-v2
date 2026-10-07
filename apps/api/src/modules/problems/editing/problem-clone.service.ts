@@ -4,7 +4,7 @@ import type { Problem } from '@libs/database';
 import { fieldDiff } from '@libs/problems';
 import { CloneProblemDto } from './dto/clone.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
-import { ProblemEditPolicy } from './problem-edit-policy.service';
+import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import { withCodeTaken, withoutRenderedHtml } from './problem-edit-fields';
 import { ProblemsRepository } from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
@@ -67,7 +67,7 @@ export class ProblemCloneService {
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly problems: ProblemsService,
-    private readonly policy: ProblemEditPolicy,
+    private readonly policy: ProblemEditPolicyService,
   ) {}
 
   async clone(

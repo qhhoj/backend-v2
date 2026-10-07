@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, isDocumentTooLarge } from '@libs/common';
+import { AppError, invalidField, isDocumentTooLarge } from '@libs/common';
 import { emptyProblemData } from '@libs/database';
 import type { Problem, ProblemData } from '@libs/database';
 import {
@@ -14,19 +14,16 @@ import {
 } from '@libs/problems';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { maxTestcasesFor } from '../core/dto/limits';
-import { ProblemEditPolicy } from '../editing/problem-edit-policy.service';
+import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
 import { RevisionsRepository } from '../core/revisions.repository';
-
-export const invalidField = (field: string, message: string) =>
-  new AppError('validation_failed', 400, message, { [field]: [message] });
 
 /** Access checks, compile-and-persist and the response shape shared by the data and upload services. */
 @Injectable()
 export class ProblemDataStore {
   constructor(
-    private readonly policy: ProblemEditPolicy,
+    private readonly policy: ProblemEditPolicyService,
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly dataFiles: ProblemDataFilesService,

@@ -14,8 +14,8 @@ import { ProblemEvents } from '../core/problem.events';
 import { ProblemsRepository } from '../core/problems.repository';
 
 @Injectable()
-export class ProblemDataLifecycle implements OnModuleInit {
-  private readonly logger = new Logger(ProblemDataLifecycle.name);
+export class ProblemDataLifecycleService implements OnModuleInit {
+  private readonly logger = new Logger(ProblemDataLifecycleService.name);
 
   constructor(
     private readonly repository: ProblemsRepository,

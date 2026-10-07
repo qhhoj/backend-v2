@@ -2,7 +2,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, RateLimitService, REDIS, withRedisLock } from '@libs/common';
+import {
+  AppError,
+  invalidField,
+  RateLimitService,
+  REDIS,
+  withRedisLock,
+} from '@libs/common';
 import { contestPhase, LIVE } from '@libs/contests';
 import { SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import {
@@ -31,9 +37,6 @@ import type {
   NewContestSubmission,
   NewSubmission,
 } from '../core/submissions.repository';
-
-const invalidField = (field: string, message: string) =>
-  new AppError('validation_failed', 400, message, { [field]: [message] });
 
 /** How a submission inside the current contest is stored. */
 interface ContestPlan {

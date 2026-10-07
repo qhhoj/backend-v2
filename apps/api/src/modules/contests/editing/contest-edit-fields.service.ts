@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { sha256, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { unique } from '@libs/common';
+import { invalidField, unique } from '@libs/common';
 import { FormatConfigError, parseFormatConfig } from '@libs/contests';
 import type { Contest, ContestProblem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
@@ -16,7 +16,6 @@ import {
   assertGates,
   assertWindow,
   CREATE_BASELINE,
-  invalidField,
 } from './contest-edit-rules';
 
 const NULLABLE_FIELDS: ReadonlyArray<keyof UpdateContestDto> = [
@@ -38,7 +37,7 @@ const USER_FIELDS = [
 ] as const;
 
 @Injectable()
-export class ContestEditFields {
+export class ContestEditFieldsService {
   constructor(
     private readonly problems: ProblemsRepository,
     private readonly users: UsersRepository,

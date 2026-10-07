@@ -1,4 +1,5 @@
 export * from './errors/app.error';
+export * from './errors/invalid-field';
 export * from './errors/document-too-large';
 export * from './errors/duplicate-key';
 export * from './filters/exception.filter';
@@ -24,3 +25,4 @@ export * from './log-levels';
 export * from './redis/redis-lock';
 export * from './redis/redis-coalesce';
 export * from './collections/unique';
+export * from './collections/same-json';

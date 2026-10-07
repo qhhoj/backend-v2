@@ -1,6 +1,6 @@
 import { hasPermission } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, invalidField, sameJson } from '@libs/common';
 import type { Contest } from '@libs/database';
 
 /** Legacy `VNOJ_CONTEST_DURATION_LIMIT`, in whole days (`timedelta.days`). */
@@ -36,11 +36,6 @@ export const CREATE_BASELINE: Partial<Record<keyof Contest, unknown>> = {
   organizations: [],
   isVisible: false,
 };
-
-export const invalidField = (field: string, message: string) =>
-  new AppError('validation_failed', 400, message, { [field]: [message] });
-export const sameJson = (left: unknown, right: unknown) =>
-  JSON.stringify(left) === JSON.stringify(right);
 
 /** Legacy `Contest.clean` and `ContestForm.clean`. */
 export function assertWindow(principal: Principal, contest: Contest): void {

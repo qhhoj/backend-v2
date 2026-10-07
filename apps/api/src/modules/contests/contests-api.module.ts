@@ -19,7 +19,7 @@ import { ContestAnnouncementsService } from './announcements/contest-announcemen
 import { ContestDataController } from './data/contest-data.controller';
 import { ContestDataService } from './data/contest-data.service';
 import { ContestEditingController } from './editing/contest-editing.controller';
-import { ContestEditFields } from './editing/contest-edit-fields.service';
+import { ContestEditFieldsService } from './editing/contest-edit-fields.service';
 import { ContestEditingService } from './editing/contest-editing.service';
 import { ContestEventsService } from './announcements/contest-events.service';
 import { ContestStreamsController } from './announcements/contest-streams.controller';
@@ -88,7 +88,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestMossRepository,
     ContestMossService,
     ContestsService,
-    ContestEditFields,
+    ContestEditFieldsService,
     ContestEditingService,
     ContestParticipationService,
     ContestRankingService,

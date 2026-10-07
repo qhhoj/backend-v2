@@ -10,13 +10,13 @@ import { LicensesQuerier } from './catalog/licenses.querier';
 import { ProblemGroupsQuerier } from './catalog/problem-groups.querier';
 import { ProblemTypesQuerier } from './catalog/problem-types.querier';
 import { ProblemDataController } from './data/problem-data.controller';
-import { ProblemDataLifecycle } from './data/problem-data-lifecycle.service';
+import { ProblemDataLifecycleService } from './data/problem-data-lifecycle.service';
 import { ProblemDataService } from './data/problem-data.service';
 import { ProblemDataStore } from './data/problem-data.store';
 import { ProblemDataUploadService } from './data/problem-data-upload.service';
 import { ProblemEditingController } from './editing/problem-editing.controller';
 import { ProblemEditingService } from './editing/problem-editing.service';
-import { ProblemEditPolicy } from './editing/problem-edit-policy.service';
+import { ProblemEditPolicyService } from './editing/problem-edit-policy.service';
 import { ProblemCloneService } from './editing/problem-clone.service';
 import { ProblemStatementEditingService } from './editing/problem-statement-editing.service';
 import { ProblemImportsController } from './imports/problem-imports.controller';
@@ -67,7 +67,7 @@ const repositories = [
     ...queriers,
     ...repositories,
     ProblemsService,
-    ProblemEditPolicy,
+    ProblemEditPolicyService,
     ProblemEditingService,
     ProblemStatementEditingService,
     ProblemCloneService,
@@ -75,7 +75,7 @@ const repositories = [
     ProblemDataStore,
     ProblemDataService,
     ProblemDataUploadService,
-    ProblemDataLifecycle,
+    ProblemDataLifecycleService,
     ProblemImportsService,
     ProblemPdfService,
     ProblemRescoreEnqueuer,
