@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
@@ -30,10 +30,15 @@ import {
 import { OrganizationRequestResponse } from './dto/organization-request.response';
 
 const conflict = (message: string) => new AppError('conflict', 409, message);
+const DUPLICATE_MESSAGE =
+  'You already have a pending request to join this organization';
+const DECIDED_MESSAGE = 'This request has already been decided';
 const PAGE_SIZE = 50;
 
 @Injectable()
 export class OrganizationRequestsService {
+  private readonly logger = new Logger(OrganizationRequestsService.name);
+
   constructor(
     private readonly organizationsService: OrganizationsService,
     private readonly requests: OrganizationRequestsRepository,
@@ -55,6 +60,8 @@ export class OrganizationRequestsService {
       throw conflict('This organization is open; join it directly');
     if (await this.members.isMember(principal.userId, organization._id))
       throw conflict('You are already in this organization');
+    if (await this.requests.pendingIdOf(organization._id, principal.userId))
+      throw conflict(DUPLICATE_MESSAGE);
     const release = await this.rateLimits.reserve(
       [`organization-request:user:${principal.userId}`],
       JOIN_REQUEST_LIMIT,
@@ -74,9 +81,7 @@ export class OrganizationRequestsService {
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
       await release();
-      throw conflict(
-        'You already have a pending request to join this organization',
-      );
+      throw conflict(DUPLICATE_MESSAGE);
     }
   }
 
@@ -131,7 +136,7 @@ export class OrganizationRequestsService {
     return this.respond(request, organization.slug);
   }
 
-  /** Legacy approval formset, one request at a time: approvals check membership and `slots` against the live count under the organization's lock. */
+  /** Legacy approval formset, one request at a time. A rejection is a compare-and-set; an approval runs under the organization's lock. */
   async decide(
     principal: Principal,
     slug: string,
@@ -144,36 +149,60 @@ export class OrganizationRequestsService {
       slug,
     );
     const { request } = await this.requestOf(slug, id);
-    return withRedisLock(
-      this.redis,
-      `organization-requests:${organization._id}`,
-      APPROVAL_LOCK_SECONDS,
-      'Another decision is being made; try again',
-      async () => {
-        const userId = uuidStr(request.user);
-        if (state === 'A') {
-          if (await this.members.isMember(userId, organization._id))
-            throw conflict('That user is already a member');
-          if (
-            organization.slots !== null &&
-            (await this.members.countMembers(organization._id)) >=
-              organization.slots
-          )
-            throw conflict('The organization is full');
-          // Pending check before membership: a decided request never adds a member.
-          if ((await this.requests.findById(id))?.state !== 'P')
-            throw conflict('This request has already been decided');
-          await this.members.addMembers([userId], organization._id);
-        }
-        if (!(await this.requests.decide(id, state, principal.userId, now)))
-          throw conflict('This request has already been decided');
-        if (state === 'A') await this.points.refresh([organization._id]);
-        return this.respond(
-          (await this.requests.findById(id))!,
-          organization.slug,
-        );
-      },
-    );
+    if (state === 'R') {
+      await this.finish(id, 'R', principal.userId, now);
+    } else {
+      await withRedisLock(
+        this.redis,
+        `organization-requests:${organization._id}`,
+        APPROVAL_LOCK_SECONDS,
+        'Another decision is being made; try again',
+        () => this.approve(principal, slug, request, now),
+      );
+    }
+    return this.respond((await this.requests.findById(id))!, organization.slug);
+  }
+
+  /** Checks membership and `slots` (re-read, so a concurrent edit counts) against the live count. A member whose request is still pending is a retry of a half-done approval: only the decision is recorded. */
+  private async approve(
+    principal: Principal,
+    slug: string,
+    request: OrganizationRequest,
+    now: Date,
+  ): Promise<void> {
+    const id = uuidStr(request._id);
+    const userId = uuidStr(request.user);
+    const organization = await this.organizationsService.bySlug(slug);
+    // A decided request never adds a member.
+    if ((await this.requests.findById(id))?.state !== 'P')
+      throw conflict(DECIDED_MESSAGE);
+    if (!(await this.members.isMember(userId, organization._id))) {
+      if (
+        organization.slots !== null &&
+        (await this.members.countMembers(organization._id)) >=
+          organization.slots
+      )
+        throw conflict('The organization is full');
+      await this.members.addMembers([userId], organization._id);
+    }
+    await this.finish(id, 'A', principal.userId, now);
+    try {
+      await this.points.refresh([organization._id]);
+    } catch (error) {
+      this.logger.error(
+        `Points refresh of ${organization._id} failed: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async finish(
+    id: string,
+    state: 'A' | 'R',
+    decidedBy: string,
+    decidedAt: Date,
+  ): Promise<void> {
+    if (!(await this.requests.decide(id, state, decidedBy, decidedAt)))
+      throw conflict(DECIDED_MESSAGE);
   }
 
   private async requestOf(slug: string, id: string) {

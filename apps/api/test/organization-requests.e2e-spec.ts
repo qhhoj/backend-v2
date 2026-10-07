@@ -7,6 +7,7 @@ import type { User } from '@libs/database';
 import type { OrganizationDetailResponse } from '../src/modules/organizations/core/dto/organization.response';
 import type { OrganizationRequestResponse } from '../src/modules/organizations/requests/dto/organization-request.response';
 import { clearRateLimits } from './contest-fixtures';
+import { OrganizationPointsService } from '../src/modules/organizations/core/organization-points.service';
 import { createOrganization, organizationUrl } from './organization-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
@@ -15,6 +16,7 @@ import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 describe('organization join requests', () => {
+  afterEach(() => jest.restoreAllMocks());
   let api: ApiTest;
   let queue: Queue<OrganizationPointsJob>;
   let userCount = 0;
@@ -184,10 +186,12 @@ describe('organization join requests', () => {
       { _id: joined._id },
       { $push: { organizations: unlimited._id } },
     );
-    await decide(unlimited.slug, already.id, ownerSession, 'A').expect(409);
-    expect(
-      (await api.organizationRequests.findById(already.id).lean())!.state,
-    ).toBe('P');
+    // A member whose request is still pending: a retried approval just records the decision.
+    const retried = dataOf<OrganizationRequestResponse>(
+      await decide(unlimited.slug, already.id, ownerSession, 'A').expect(200),
+    );
+    expect(retried.state).toBe('A');
+    expect(await membershipsOf(joined._id)).toEqual([unlimited._id]);
   });
 
   it('never approves past slots under parallel decisions', async () => {
@@ -253,5 +257,139 @@ describe('organization join requests', () => {
     await decide(organization.slug, created.id, ownerSession, 'R').expect(200);
     await decide(organization.slug, created.id, ownerSession, 'A').expect(409);
     expect(await membershipsOf(user._id)).toEqual([]);
+  });
+
+  it('answers a duplicate with 409 even when the hourly limit is used up', async () => {
+    const { session } = await person();
+    const organizations = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        createOrganization(api, { isOpen: false }),
+      ),
+    );
+    for (const organization of organizations)
+      await request(organization.slug, session);
+    await post(organizationUrl(organizations[0].slug, '/requests'), session, {
+      reason: 'again',
+    }).expect(409);
+  });
+
+  it('rejects in parallel without the approval lock, and rereads slots under it', async () => {
+    const { user: owner, session: ownerSession } = await person();
+    const organization = await createOrganization(api, {
+      isOpen: false,
+      adminIds: [owner._id],
+    });
+    const requests = [];
+    for (let index = 0; index < 6; index++)
+      requests.push(await request(organization.slug, (await person()).session));
+    const statuses = (
+      await Promise.all(
+        requests.map((row) =>
+          decide(organization.slug, row.id, ownerSession, 'R'),
+        ),
+      )
+    ).map((response) => response.status);
+    expect(statuses).toEqual(requests.map(() => 200));
+    const pending = await request(organization.slug, (await person()).session);
+    await api.organizations.updateOne({ _id: organization._id }, { slots: 1 });
+    await decide(organization.slug, pending.id, ownerSession, 'A').expect(409);
+  });
+
+  it('records an approval and answers 200 when the points refresh fails', async () => {
+    const { user: owner, session: ownerSession } = await person();
+    const { user, session } = await person();
+    const organization = await createOrganization(api, {
+      isOpen: false,
+      adminIds: [owner._id],
+    });
+    const created = await request(organization.slug, session);
+    jest
+      .spyOn(api.app.get(OrganizationPointsService), 'refresh')
+      .mockRejectedValueOnce(new Error('redis down'));
+    const approved = dataOf<OrganizationRequestResponse>(
+      await decide(organization.slug, created.id, ownerSession, 'A').expect(
+        200,
+      ),
+    );
+    expect(approved.state).toBe('A');
+    expect(await membershipsOf(user._id)).toEqual([organization._id]);
+  });
+
+  it('lets edit_all_organization list and read, and keeps other organizations admins out', async () => {
+    const { user: ownerA } = await person();
+    const { session: ownerBSession, user: ownerB } = await person();
+    const { session: staffSession } = await person({
+      permissions: ['judge.edit_all_organization'],
+    });
+    const { session } = await person();
+    const organizationA = await createOrganization(api, {
+      isOpen: false,
+      adminIds: [ownerA._id],
+    });
+    const organizationB = await createOrganization(api, {
+      isOpen: false,
+      adminIds: [ownerB._id],
+    });
+    const created = await request(organizationA.slug, session);
+    expect(
+      dataOf<OrganizationRequestResponse[]>(
+        await get(
+          organizationUrl(organizationA.slug, '/requests'),
+          staffSession,
+        ).expect(200),
+      ).map((row) => row.id),
+    ).toEqual([created.id]);
+    await get(
+      organizationUrl(organizationA.slug, `/requests/${created.id}`),
+      staffSession,
+    ).expect(200);
+    await get(
+      organizationUrl(organizationA.slug, '/requests'),
+      ownerBSession,
+    ).expect(403);
+    await get(
+      organizationUrl(organizationA.slug, `/requests/${created.id}`),
+      ownerBSession,
+    ).expect(403);
+    await decide(organizationA.slug, created.id, ownerBSession, 'R').expect(
+      403,
+    );
+    await get(
+      organizationUrl(organizationB.slug, `/requests/${created.id}`),
+      ownerBSession,
+    ).expect(404);
+    await decide(organizationB.slug, created.id, ownerBSession, 'R').expect(
+      404,
+    );
+  });
+
+  it('answers 400 for malformed list, decide and create input', async () => {
+    const { user: owner, session: ownerSession } = await person();
+    const organization = await createOrganization(api, {
+      isOpen: false,
+      adminIds: [owner._id],
+    });
+    const created = await request(organization.slug, (await person()).session);
+    await get(
+      organizationUrl(organization.slug, '/requests?state=X'),
+      ownerSession,
+    ).expect(400);
+    await get(
+      organizationUrl(organization.slug, '/requests?page=abc'),
+      ownerSession,
+    ).expect(400);
+    await decide(
+      organization.slug,
+      created.id,
+      ownerSession,
+      'P' as 'A',
+    ).expect(400);
+    const { session } = await person();
+    await post(organizationUrl(organization.slug, '/requests'), session, {
+      reason: 'x'.repeat(4097),
+    }).expect(400);
+    await post(organizationUrl(organization.slug, '/requests'), session, {
+      reason: '   ',
+    }).expect(400);
   });
 });
