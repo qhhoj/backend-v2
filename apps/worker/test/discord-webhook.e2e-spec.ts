@@ -2,11 +2,13 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { getQueueToken } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
 import { UnrecoverableError } from 'bullmq';
 import type { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import { DISCORD_WEBHOOK_JOB, DISCORD_WEBHOOK_QUEUE } from '@libs/community';
 import type { DiscordWebhookJob } from '@libs/community';
+import { DiscordWebhookProcessor } from '../src/jobs/discord-webhook/discord-webhook.processor';
 import { DiscordWebhookService } from '../src/jobs/discord-webhook/discord-webhook.service';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
@@ -117,6 +119,35 @@ describe('discord webhook job', () => {
       service.send({ ...job, event: 'on_new_problem' }),
     ).rejects.toThrow(/unreachable/);
     expect(received.map((entry) => entry.path)).toEqual(['/redirect']);
+  });
+
+  it('keeps the URL out of the thrown and logged error when fetch rejects with it', async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation((url) =>
+        Promise.reject(new Error(`Failed to parse URL from ${String(url)}`)),
+      );
+    const logSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    try {
+      const failure = (await worker.module
+        .get(DiscordWebhookService)
+        .send(job)
+        .catch((error: Error) => error)) as Error;
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${base}/default`,
+        expect.anything(),
+      );
+      worker.module
+        .get(DiscordWebhookProcessor)
+        .onFailed({ data: job } as never, failure);
+      expect(failure.message).toMatch(/unreachable/);
+      expect(failure.message).not.toContain(base);
+      expect(String(logSpy.mock.calls)).not.toContain(base);
+      expect(logSpy).toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      logSpy.mockRestore();
+    }
   });
 
   it('sends queued jobs', async () => {
