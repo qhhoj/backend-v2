@@ -149,6 +149,11 @@ describe('contest ranking', () => {
     const withVirtual = await ranking(contest.key, undefined, '?virtual=true');
     expect(namesOf(withVirtual)).toHaveLength(5);
     expect(withVirtual.rows[0]).toMatchObject({ virtual: 1, score: 400 });
+    // The virtual row (time 10) is counted but never credited with the first solve.
+    expect(withVirtual.problems[0]).toMatchObject({
+      firstSolve: alice._id,
+      acceptedCount: 3,
+    });
     expect(namesOf(withVirtual)).not.toContain('erin');
   });
 
@@ -233,7 +238,7 @@ describe('contest ranking', () => {
     ]);
   });
 
-  it('serves a cached board until a recompute purges it, and caches nothing with a zero timeout', async () => {
+  it('serves a cached board until its keys are purged, and caches nothing with a zero timeout', async () => {
     const db = api.app.get<Connection>(getConnectionToken()).db!;
     const cached = await createContest(api, { scoreboardCacheTimeout: 60 });
     const row = await joinParticipation(
@@ -407,5 +412,61 @@ describe('contest ranking', () => {
     expect((await ranking(contest.key)).rows.map((row) => row.rank)).toEqual([
       1, 1, 1, 1,
     ]);
+  });
+
+  it('never serves a live-only board to ?virtual=true or the reverse, whichever is cached first', async () => {
+    const contest = await createContest(api, { scoreboardCacheTimeout: 60 });
+    await joinParticipation(api, contest._id, users.alice._id, results(100));
+    await joinParticipation(
+      api,
+      contest._id,
+      users.alice._id,
+      results(200, { virtual: 1 }),
+    );
+    const sizes = async (queries: string[]) => {
+      const lengths: number[] = [];
+      for (const query of queries)
+        lengths.push(
+          (await ranking(contest.key, undefined, query)).rows.length,
+        );
+      return lengths;
+    };
+    expect(await sizes(['', '?virtual=true'])).toEqual([1, 2]);
+    await redis.del(...rankingCacheKeys(contest._id));
+    expect(await sizes(['?virtual=true', ''])).toEqual([2, 1]);
+    expect(await redis.exists(...rankingCacheKeys(contest._id))).toBe(2);
+  });
+
+  it('builds a missed board once for concurrent requests', async () => {
+    const db = api.app.get<Connection>(getConnectionToken()).db!;
+    const contest = await createContest(api, { scoreboardCacheTimeout: 60 });
+    await joinParticipation(api, contest._id, users.alice._id, results(100));
+    const queries = await profileQueries(db, () =>
+      Promise.all(Array.from({ length: 8 }, () => ranking(contest.key))),
+    );
+    expect(
+      queries.filter(
+        ({ collection }) => collection === 'contestParticipations',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('orders tied rows by participation id whatever the insertion order', async () => {
+    const contest = await createContest(api);
+    const ids = [
+      '00000000-0000-4000-8000-000000000003',
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000002',
+    ];
+    for (const [index, id] of ids.entries())
+      await joinParticipation(
+        api,
+        contest._id,
+        users[['alice', 'bob', 'carol'][index]]._id,
+        { ...results(100), _id: id },
+      );
+    expect(
+      (await ranking(contest.key)).rows.map((row) => row.participationId),
+    ).toEqual([...ids].sort());
   });
 });

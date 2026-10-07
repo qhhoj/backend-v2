@@ -24,6 +24,8 @@ import { ParticipationsRepository } from './participations.repository';
 /** Legacy `ContestRanking`, as JSON (the frontend renders cells from `formatData`). */
 @Injectable()
 export class ContestRankingService {
+  private readonly builds = new Map<string, Promise<RankingResponse>>();
+
   constructor(
     private readonly contestsService: ContestsService,
     private readonly viewers: ContestViewerService,
@@ -57,9 +59,34 @@ export class ContestRankingService {
         frozen,
         false,
       );
-    const cacheable = contest.scoreboardCacheTimeout > 0 && !canEdit;
+    if (contest.scoreboardCacheTimeout <= 0 || canEdit)
+      return this.build(
+        contest,
+        await this.participations.rankingRows(contest._id, withVirtual),
+        frozen,
+        true,
+      );
     const cacheKey = rankingCacheKey(contest._id, withVirtual, frozen);
-    const hit = cacheable ? await this.redis.get(cacheKey) : null;
+    const inFlight = this.builds.get(cacheKey);
+    if (inFlight) return inFlight;
+    const build = this.cachedBoard(
+      contest,
+      cacheKey,
+      withVirtual,
+      frozen,
+    ).finally(() => this.builds.delete(cacheKey));
+    this.builds.set(cacheKey, build);
+    return build;
+  }
+
+  /** Redis hit, or one build and write; concurrent misses on a key share this call (`builds`). */
+  private async cachedBoard(
+    contest: ContestDocument,
+    cacheKey: string,
+    withVirtual: boolean,
+    frozen: boolean,
+  ): Promise<RankingResponse> {
+    const hit = await this.redis.get(cacheKey);
     if (hit) return JSON.parse(hit) as RankingResponse;
     const ranking = await this.build(
       contest,
@@ -67,13 +94,12 @@ export class ContestRankingService {
       frozen,
       true,
     );
-    if (cacheable)
-      await this.redis.set(
-        cacheKey,
-        JSON.stringify(ranking),
-        'EX',
-        contest.scoreboardCacheTimeout,
-      );
+    await this.redis.set(
+      cacheKey,
+      JSON.stringify(ranking),
+      'EX',
+      contest.scoreboardCacheTimeout,
+    );
     return ranking;
   }
 
