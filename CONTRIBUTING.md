@@ -20,7 +20,7 @@
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore)
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier, `runCoalesced`
@@ -28,12 +28,13 @@ libs/
   auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
+  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge), one module per format in `formats/` (registry in `formats/registry.ts`)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
 
-- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging` (and `@libs/<name>/*`) -> `libs/<name>/src`
+- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging`, `@libs/contests` (and `@libs/<name>/*`) -> `libs/<name>/src`
 - Import from the alias root (`@libs/database`) except `/testing` entry points
 - Each lib exports through `libs/<name>/src/index.ts`; add new files there
 
@@ -56,7 +57,7 @@ tools/legacy/   regenerates the fixtures
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`)
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`)
 - `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
@@ -165,7 +166,7 @@ tools/legacy/   regenerates the fixtures
 ## Judging
 
 - Collections: `submissions` (`cases` is `select: false`, at most 10000), `submissionSources` (`_id` = submission id, at most 65536 code points, counted by `codePointLength`), `judges` (`authKeyHash` = sha256 of the key; online fields written only by the bridge)
-- Statuses QU P G D IE CE AB; results add AC WA TLE MLE OLE IR RTE SC RJ; priorities 0 contest, 1 normal, 2 rejudge, 3 batch rejudge, FIFO by id within one
+- Statuses QU P G D IE CE AB, and PD (final-submission contest rows: stored, not sent to a judge, requeued at priority 3 when the contest ends); results add AC WA TLE MLE OLE IR RTE SC RJ; priorities 0 contest, 1 normal, 2 rejudge, 3 batch rejudge, FIFO by id within one
 - Queue truth is Mongo: queued = `status QU`; the bridge claims QU -> P before sending; every judge packet's write filters `{ _id, judgedOn, status }`
 - API -> bridge: Redis stream `bridge:commands` (`judge`, `abort`, `disconnect-judge`, `disable-judge`), fire-and-forget via `BridgeCommandsService`; a lost `judge` command waits for the bridge's resync (`resyncMs`, 30 s), which also reconciles connected judges with Mongo (blocked, rotated key, `isDisabled`); `abort` is best-effort, the user aborts again
 - Bridge -> effects: one `submission-graded` BullMQ job per finished (D/CE/IE/AB) or rejected submission, enqueued through `notifyGraded` (1 s bound, a failure is logged and skipped, in the bridge and the api)
@@ -193,6 +194,25 @@ tools/legacy/   regenerates the fixtures
 - SSE: `GET /api/internal/events/submissions/:id` (detail rules; `state` first, read after the stream is registered; `test-case` only when every case result is visible; `resync` after a lost subscription) and `GET /api/internal/events/submissions` (public feed: public, non-org-private problems, no progress); one subscriber connection per api process
 - Stream limits (`submissions/rate-limits.ts`, per api process): 8 per user, 16 per IP, 5000 total, 1000 feed; a client is dropped when a write stays undrained or the backlog stays above 16 KiB for 2 s in total, or at once above 256 KiB; 15 s heartbeat; access (session, user, detail rules) re-checked every 60 s
 - `/api/v2/submissions` (oldest first; totals only with `user` or `problem`) and `/api/v2/submission/:id` (login, `can_see_detail`; cases follow the problem's case visibility, stricter than legacy)
+
+## Contests
+
+- Layout: `apps/api/src/modules/contests/` (`/api/internal/contests`), formats and ranking helpers in `libs/contests`, worker jobs `contest-rescore` and `contest-final-judge`
+- Collections: `contests` (problems embedded, `accessCodeHash` sha256, `bannedJudges` judge names), `contestParticipations` (`virtual`: 0 live, -1 spectate, n virtual; `isRegistered` until the first join; live and frozen results), `contestSubmissions` (`_id` = submission id, points scaled to the contest problem); `users.currentParticipation`
+- Rules live in `ContestAccess` (`contest-access.ts`): `canSee`, `canEdit`, `visibleFilter`, scoreboard and `canSeeFullSubmissionList` checks; viewer facts come from `ContestViewerService`; invisible or unknown contest -> 404 (also a malformed key), state conflicts -> 409
+- Current participation is checked on read (`CurrentContestService.current`): ended or invisible contest -> pointer cleared (compare-and-set). Its scope feeds `ProblemAccess.canSee/visibleFilter`: before the start every problem is hidden, after it the contest's problems are visible. `/api/v2` applies no contest scope (legacy parity)
+- Formats: a `ContestFormat` (`parseConfig`, `score`, `firstSolveTime`) in `libs/contests/src/formats/<name>.ts`, registered in `FORMATS` (`registry.ts`); names `default ioi ioi16 icpc vnoj ultimate final_submission`; scored through `scoreParticipation(rows, { name, config }, context)`; configs are camelCase, validated on every write (400 `formatConfig`); `labelStyle` (`numeric|alpha`) replaces legacy Lua label scripts
+- Freeze (`icpc`, `vnoj` only): absolute, contest end - `frozenLastMinutes`, and it stays after the end; an editor unfreezes by setting `frozenLastMinutes` to 0. Non-editors get only frozen fields and cells (`standingOf`, never mixed with live ones) in rankings and participations, own row included; editors always see live data
+- Submit inside a current contest that lists the problem: priority 0, `lockedAfter` for live participations, pretests flag, `maxSubmissions` (IE and PD excluded) checked under the per-user lock; FSO submissions skip the unfinished limit; a running FSO contest stores `PD`: no bridge command, no event. The bridge reads banned judges, pretests and `in-contest` from Mongo at load and claim
+- Effects: `SubmissionEffectsService.applyContest` rescales the contest submission (`contestSubmissionPoints`), `recomputeParticipation` (coalesced per participation) rewrites results and drops the four ranking keys
+- Rescore: `contest-rescore {contestId}` (no `jobId`, one at a time) runs on `POST /:key/rescore`, disqualifications, problem rescores, and contest edits that change `scoringOf` (editing service): format, format config, `startTime`, `endTime`, `frozenLastMinutes`, `pointsPrecision`, or the problems' id, points, partial or order. Every edit purges the ranking keys; other edits do not rescore
+- Ranking (`GET /:key/ranking`): one indexed read of the contest's rows, sorted in memory (`compareStandings`, competition ranks 1, 1, 3; ties in participation id order), cached per `{withVirtual, frozen}` for `scoreboardCacheTimeout` s with single-flight builds per api process; editors, own-row boards (viewer may not see the full board) and a 0 timeout bypass the cache
+- Submission lists: `GET /:key/submissions` filters by contest and shows everyone's rows only when `canSeeFullSubmissionList` (never during a freeze unless editor), else the viewer's own (403 for another `user`). Other users' submissions of contests whose full list the viewer may not see leave `/api/internal/submissions`, `/api/v2/submissions` and the detail (403)
+- FSO (`final_submission`): delayed job `final-judge-<contest>-<endTime ms>` rescheduled on create and edit, one-minute sweep over contests holding `PD` rows, `POST /:key/judge-final` (ended FSO contests only, else 409; ignores `autoJudge`); each run is serialised per contest, requeues each `PD` row once at priority 3 and skips rows rejected with `RJ`; a single rejudge of a `PD` row is 409; leaving `final_submission` while rows are `PD` is 409
+- Access codes (`contests/rate-limits.ts`): wrong codes 10 per user and 30 per IP per 10 min on join and register (a missing code and a right one cost nothing); editors skip the code; virtual numbering retried up to 10 times
+- Disqualify (`POST /:key/participations/:id/disqualify`, `{ disqualified }`): scores -9999 (frozen fields too), bans or unbans the user from the contest, clears the current pointer, queues a rescore. `CONTEST_BAN_AFTER_DISQUALIFICATIONS` (0 = off) bans the account (`isActive` false, `isUnlisted`) at that many disqualifications outside organisation-private contests; lifting uses compare-and-set on the ban reason
+- Legacy migration (migrator requirement): `formatConfig` keys `last_score_altering` -> `lastScoreAltering`, `auto_judge` -> `autoJudge`, `LSO` -> `lso`; drop `cumtime` on `final_submission`; format name `Ultimate` -> `ultimate`; Lua label scripts become `labelStyle`
+- Deviations from legacy: `ultimate` takes the latest row (no double count on equal dates), writes its tiebreaker and rounds its score; FSO final judging requeues `PD` rows only; no fifth ranking sort key (`-submission_count`); the `/api/v2` freeze fix comes in 4b
 
 ## Data conventions
 

@@ -125,4 +125,28 @@ describe('OpenAPI document', () => {
       ]),
     );
   });
+
+  it('lists the contest endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/contests',
+        '/api/internal/contests/current',
+        '/api/internal/contests/{key}',
+        '/api/internal/contests/{key}/register',
+        '/api/internal/contests/{key}/join',
+        '/api/internal/contests/{key}/leave',
+        '/api/internal/contests/{key}/participations',
+        '/api/internal/contests/{key}/participations/{id}/disqualify',
+        '/api/internal/contests/{key}/ranking',
+        '/api/internal/contests/{key}/submissions',
+        '/api/internal/contests/{key}/rescore',
+        '/api/internal/contests/{key}/judge-final',
+      ]),
+    );
+  });
 });
