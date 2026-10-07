@@ -1,3 +1,4 @@
+import { AppError } from '@libs/common';
 import { newId } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
 import type {
@@ -7,6 +8,7 @@ import type {
   SolvedResponse,
   UserPageResponse,
 } from '../src/modules/users/pages/dto/user-page.response';
+import { UserPagesRepository } from '../src/modules/users/pages/user-pages.repository';
 import { createContest, hoursFromNow } from './contest-fixtures';
 import { createOrganization } from './organization-fixtures';
 import {
@@ -384,5 +386,43 @@ describe('user pages', () => {
         ).days,
       ),
     ).toEqual([2]);
+  });
+
+  it('rejects a zone Mongo does not know with a 400 on timezone', async () => {
+    const repository = api.app.get(UserPagesRepository);
+    await expect(
+      repository.activity(newId(), new Date(0), 'Mars/Base'),
+    ).rejects.toMatchObject({
+      status: 400,
+      fields: { timezone: [expect.any(String)] },
+    });
+  });
+
+  it("falls back to UTC when the viewer's stored zone is rejected by Mongo, but not for an asked one", async () => {
+    const stored = await createUserWith(api, 'zone_stored', {
+      timezone: 'Asia/Tokyo',
+    });
+    const viewer = await loginAs(api, stored._id);
+    const rejection = () =>
+      new AppError('validation_failed', 400, 'Unknown time zone', {
+        timezone: ['x'],
+      });
+    const spy = jest
+      .spyOn(UserPagesRepository.prototype, 'activity')
+      .mockRejectedValueOnce(rejection());
+    try {
+      expect(
+        dataOf<ActivityResponse>(
+          await get('/api/internal/users/active/activity', viewer).expect(200),
+        ).timezone,
+      ).toBe('UTC');
+      spy.mockRejectedValueOnce(rejection());
+      await get(
+        '/api/internal/users/active/activity?timezone=Asia%2FSeoul',
+        viewer,
+      ).expect(400);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

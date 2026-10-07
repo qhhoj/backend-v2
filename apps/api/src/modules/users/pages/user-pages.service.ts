@@ -153,15 +153,30 @@ export class UserPagesService {
     now = new Date(),
   ): Promise<ActivityResponse> {
     const user = await this.userOf(username);
+    if (query.timezone) return this.activityIn(user._id, query.timezone, now);
+    // A stored zone Mongo cannot use must not break the viewer's pages: fall back to UTC.
+    const stored = await this.viewerZone(principal);
+    try {
+      return await this.activityIn(user._id, stored, now);
+    } catch (error) {
+      if (!(error instanceof AppError) || error.status !== 400) throw error;
+      return this.activityIn(user._id, 'UTC', now);
+    }
+  }
+
+  private async activityIn(
+    userId: string,
+    timezone: string,
+    now: Date,
+  ): Promise<ActivityResponse> {
     // Echo the asked spelling; the aggregate and the cache key use ICU's canonical ID (unknown zones are already a 400, mis-cased ones never reach Mongo).
-    const timezone = query.timezone ?? (await this.viewerZone(principal));
     const zone = canonicalTimeZone(timezone)!;
-    const key = `user-activity:${user._id}:${zone}`;
+    const key = `user-activity:${userId}:${zone}`;
     const cached = await this.redis.get(key);
     if (cached)
       return { ...(JSON.parse(cached) as ActivityResponse), timezone };
     const since = new Date(now.getTime() - ACTIVITY_DAYS * 86_400_000);
-    const rows = await this.pages.activity(user._id, since, zone);
+    const rows = await this.pages.activity(userId, since, zone);
     const response: ActivityResponse = {
       timezone,
       since: since.toISOString(),
