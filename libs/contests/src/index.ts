@@ -5,3 +5,5 @@ export * from './queues';
 export * from './formats/format';
 export * from './formats/default';
 export * from './formats/ioi';
+export * from './formats/icpc';
+export * from './formats/vnoj';
