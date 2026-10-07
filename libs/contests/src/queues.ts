@@ -154,6 +154,24 @@ export const enqueueContestRating = async (
   );
 };
 
+/** Never rethrown: the edit is committed; the ratings wait for the next rate request (logged). */
+export async function notifyContestRating(
+  queue: Queue<ContestRatingJob>,
+  contestId: string,
+  logger: Logger,
+): Promise<void> {
+  try {
+    await withinTimeout(
+      enqueueContestRating(queue, contestId),
+      CONTEST_ENQUEUE_TIMEOUT_MS,
+    );
+  } catch (error) {
+    logger.error(
+      `Rating of contest ${contestId} not enqueued: ${(error as Error).message}`,
+    );
+  }
+}
+
 export const CONTEST_MOSS_QUEUE = 'contest-moss';
 export const CONTEST_MOSS_JOB = 'moss';
 /** The MOSS key is read by the worker from its env, never carried here. */

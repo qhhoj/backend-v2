@@ -79,6 +79,20 @@ export class ContestRatingRepository {
     return row ? ratable(row) : null;
   }
 
+  /** The earliest `contestEndTime` stored for the contest (its end before an edit), null without ratings. Through the `{contest, user}` index. */
+  async earliestRatingEnd(
+    contestId: string,
+    session: ClientSession,
+  ): Promise<Date | null> {
+    const row = await this.ratings
+      .findOne({ contest: contestId }, { contestEndTime: 1 })
+      .sort({ contestEndTime: 1 })
+      .session(session)
+      .lean<{ contestEndTime: Date }>()
+      .exec();
+    return row?.contestEndTime ?? null;
+  }
+
   /** Rated contests ending in `[endTime, now]`, in end order (`endTime` index). */
   async ratedContestsFrom(
     endTime: Date,

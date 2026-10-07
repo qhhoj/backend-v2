@@ -1,7 +1,12 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
-import { CONTEST_RATING_QUEUE, enqueueContestRating } from '@libs/contests';
+import {
+  CONTEST_RATING_QUEUE,
+  enqueueContestRating,
+  MEAN_INIT,
+  recalculateRatings,
+} from '@libs/contests';
 import type { ContestRatingJob } from '@libs/contests';
 import { newId, uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
@@ -315,6 +320,186 @@ describe('contest rating', () => {
     expect(await worker.ratings.countDocuments({ contest: contest._id })).toBe(
       2,
     );
+  });
+
+  /** Every rating as comparable rows, whatever the insertion order. */
+  const allRatings = async () =>
+    (await worker.ratings.find().lean())
+      .map((row) => ({
+        contest: uuidStr(row.contest),
+        user: uuidStr(row.user),
+        contestEndTime: row.contestEndTime.getTime(),
+        rank: row.rank,
+        rating: row.rating,
+        mean: row.mean,
+        performance: row.performance,
+      }))
+      .sort(
+        (left, right) =>
+          left.contest.localeCompare(right.contest) ||
+          left.user.localeCompare(right.user),
+      );
+  /** Three rated contests over three users with different standings in each. */
+  const seedStandingsChain = async (prefix: string) => {
+    const users = await newUsers(
+      `${prefix}_alice`,
+      `${prefix}_bob`,
+      `${prefix}_carol`,
+    );
+    const contests = [
+      await ratedContest(daysAgo(6)),
+      await ratedContest(daysAgo(5)),
+      await ratedContest(daysAgo(4)),
+    ];
+    const scores = [
+      [30, 20, 10],
+      [10, 30, 20],
+      [20, 10, 30],
+    ];
+    for (const [index, contest] of contests.entries())
+      for (const [position, user] of users.entries())
+        await join(contest._id, user._id, scores[index][position]);
+    return contests;
+  };
+  const reRatedFromScratch = async (firstContestId: string) => {
+    await worker.ratings.deleteMany({});
+    await ratings.rateFrom(firstContestId);
+    return allRatings();
+  };
+
+  it('rates a chain exactly as the formula does on the standings and the previous rows', async () => {
+    const [alice, bob] = await newUsers('formula_alice', 'formula_bob');
+    const chain = [
+      await ratedContest(daysAgo(4)),
+      await ratedContest(daysAgo(3)),
+      await ratedContest(daysAgo(2)),
+    ];
+    const scores = [
+      [20, 10],
+      [10, 20],
+      [20, 10],
+    ];
+    for (const [index, contest] of chain.entries()) {
+      await join(contest._id, alice._id, scores[index][0]);
+      await join(contest._id, bob._id, scores[index][1]);
+    }
+
+    await ratings.rateFrom(chain[0]._id);
+
+    const expected: Array<
+      Array<ReturnType<typeof recalculateRatings>[number]>
+    > = [];
+    let previous: Array<ReturnType<typeof recalculateRatings>[number]> = [];
+    const performances: number[][] = [[], []];
+    for (const contestScores of scores) {
+      const ranks = contestScores.map((score) =>
+        score === Math.max(...contestScores) ? 1 : 2,
+      );
+      const outputs = recalculateRatings(
+        ranks.map((rank, index) => ({
+          rank,
+          mean: previous[index]?.mean ?? MEAN_INIT,
+          history: [...performances[index]].reverse(),
+        })),
+      );
+      outputs.forEach((output, index) =>
+        performances[index].push(output.performance),
+      );
+      expected.push(outputs);
+      previous = outputs;
+    }
+    for (const [index, contest] of chain.entries())
+      for (const [position, user] of [alice, bob].entries()) {
+        const row = await worker.ratings
+          .findOne({ contest: contest._id, user: user._id })
+          .lean();
+        expect({
+          rating: row!.rating,
+          mean: row!.mean,
+          performance: row!.performance,
+        }).toEqual(expected[index][position]);
+      }
+  });
+
+  it('ranks equal scores with different cumtimes apart and equal cumtimes together', async () => {
+    const [fast, slow, tiedOne, tiedTwo] = await newUsers(
+      'cum_fast',
+      'cum_slow',
+      'cum_tied_one',
+      'cum_tied_two',
+    );
+    const contest = await ratedContest(minutesAgo(10));
+    await join(contest._id, slow._id, 100, { cumtime: 500 });
+    await join(contest._id, fast._id, 100, { cumtime: 100 });
+    await join(contest._id, tiedOne._id, 50, { cumtime: 700 });
+    await join(contest._id, tiedTwo._id, 50, { cumtime: 700 });
+    await ratings.rateFrom(contest._id);
+    expect(
+      Object.fromEntries(
+        (await ratingRows(contest._id)).map((row) => [row.user, row.rank]),
+      ),
+    ).toEqual({
+      [fast._id]: 1,
+      [slow._id]: 2,
+      [tiedOne._id]: 3.5,
+      [tiedTwo._id]: 3.5,
+    });
+  });
+
+  it('does not rate a rated contest that has not ended yet', async () => {
+    const [alice] = await newUsers('future_alice');
+    const ended = await ratedContest(daysAgo(1));
+    const running = await ratedContest(new Date(Date.now() + 3_600_000));
+    await join(ended._id, alice._id, 10);
+    await join(running._id, alice._id, 10);
+    expect(await ratings.rateFrom(ended._id)).toEqual({
+      contests: 1,
+      ratings: 1,
+    });
+    expect(await worker.ratings.countDocuments({ contest: running._id })).toBe(
+      0,
+    );
+  });
+
+  it('re-rates the contests between the old and new end when a contest moves later', async () => {
+    const [first, second, third] = await seedStandingsChain('later');
+    await ratings.rateFrom(first._id);
+    const movedEnd = new Date(
+      (second.endTime.getTime() + third.endTime.getTime()) / 2,
+    );
+    await worker.contests.updateOne({ _id: first._id }, { endTime: movedEnd });
+    await ratings.rateFrom(first._id);
+    const afterMove = await allRatings();
+    expect(afterMove.filter((row) => row.contest === first._id)).toHaveLength(
+      3,
+    );
+    expect(afterMove).toEqual(await reRatedFromScratch(second._id));
+  });
+
+  it('keeps and re-rates a contest that moves earlier than the target it was rated from', async () => {
+    const [first, , third] = await seedStandingsChain('earlier');
+    await ratings.rateFrom(first._id);
+    const movedEnd = new Date(first.endTime.getTime() - 86_400_000);
+    await worker.contests.updateOne({ _id: third._id }, { endTime: movedEnd });
+    await ratings.rateFrom(third._id);
+    const afterMove = await allRatings();
+    expect(afterMove.filter((row) => row.contest === third._id)).toHaveLength(
+      3,
+    );
+    expect(afterMove).toEqual(await reRatedFromScratch(third._id));
+  });
+
+  it('drops the ratings of a rated contest that was extended into the future', async () => {
+    const [first, second] = await seedStandingsChain('extended');
+    await ratings.rateFrom(first._id);
+    await worker.contests.updateOne(
+      { _id: first._id },
+      { endTime: new Date(Date.now() + 3_600_000) },
+    );
+    await ratings.rateFrom(first._id);
+    expect(await worker.ratings.countDocuments({ contest: first._id })).toBe(0);
+    expect(await worker.ratings.countDocuments()).toBe(6);
+    expect(await allRatings()).toEqual(await reRatedFromScratch(second._id));
   });
 
   it('rates a chain of 30 contests of 40 users through indexes', async () => {

@@ -1,7 +1,8 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { CONTEST_RESCORE_QUEUE } from '@libs/contests';
-import type { ContestRescoreJob } from '@libs/contests';
+import { CONTEST_RATING_QUEUE, CONTEST_RESCORE_QUEUE } from '@libs/contests';
+import type { ContestRatingJob, ContestRescoreJob } from '@libs/contests';
+import { newId } from '@libs/database';
 import type { User } from '@libs/database';
 import type { ContestDetailResponse } from '../src/modules/contests/dto/contest-detail.response';
 import type { ContestListItemResponse } from '../src/modules/contests/dto/contest-list.response';
@@ -31,6 +32,7 @@ describe('contest CRUD', () => {
   let api: ApiTest;
   let catalog: Catalog;
   let rescores: Queue<ContestRescoreJob>;
+  let ratingQueue: Queue<ContestRatingJob>;
   const sessions: Record<string, TestSession> = {};
   const users: Record<string, { _id: string }> = {};
   const problems: Record<string, { _id: string }> = {};
@@ -60,6 +62,7 @@ describe('contest CRUD', () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
     rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
+    ratingQueue = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
     const roles: Array<[string, Partial<User>]> = [
       [
         'creator',
@@ -97,7 +100,10 @@ describe('contest CRUD', () => {
     });
   });
   afterAll(() => api.teardown());
-  beforeEach(() => rescores.obliterate({ force: true }));
+  beforeEach(async () => {
+    await rescores.obliterate({ force: true });
+    await ratingQueue.obliterate({ force: true });
+  });
 
   describe('create', () => {
     it('needs judge.add_contest', () =>
@@ -467,6 +473,34 @@ describe('contest CRUD', () => {
       expect(
         (await rescores.getJobs(['waiting'])).map((job) => job.data.contestId),
       ).toEqual([contest._id]);
+    });
+
+    it('queues a rating when the end moves on a contest that has ratings, and only then', async () => {
+      const rated = await createContest(api, { authors: [users.creator._id] });
+      const unrated = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      await api.ratings.create({
+        user: users.plain._id,
+        contest: rated._id,
+        participation: newId(),
+        contestEndTime: rated.endTime,
+        rank: 1,
+        rating: 1500,
+        mean: 1500,
+        performance: 1500,
+        lastRated: new Date(),
+      });
+      const later = (contest: { endTime: Date }) => ({
+        endTime: new Date(contest.endTime.getTime() + 3_600_000).toISOString(),
+      });
+      await patch('creator', unrated.key, later(unrated)).expect(200);
+      await patch('creator', rated.key, { name: 'Renamed' }).expect(200);
+      expect(await ratingQueue.getJobs(['waiting'])).toHaveLength(0);
+      await patch('creator', rated.key, later(rated)).expect(200);
+      expect(
+        (await ratingQueue.getJobs(['waiting'])).map((job) => job.data),
+      ).toEqual([{ contestId: rated._id }]);
     });
 
     it('answers 409 when leaving final_submission while the contest holds pending submissions', async () => {

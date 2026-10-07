@@ -7,10 +7,12 @@ import type { Permission, Principal } from '@libs/auth';
 import { AppError, REDIS, unique } from '@libs/common';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
+  CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_QUEUE,
   contestPhase,
   enqueueContestRescore,
   FormatConfigError,
+  notifyContestRating,
   notifyContestRescore,
   parseFormatConfig,
   purgeRankingCache,
@@ -19,6 +21,7 @@ import {
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
+  ContestRatingJob,
   ContestRescoreJob,
   FinalJudgeTarget,
 } from '@libs/contests';
@@ -132,6 +135,8 @@ export class ContestEditingService {
     private readonly rescores: Queue<ContestRescoreJob>,
     @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
     private readonly finalJudges: Queue<ContestFinalJudgeJob>,
+    @InjectQueue(CONTEST_RATING_QUEUE)
+    private readonly ratingQueue: Queue<ContestRatingJob>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -187,6 +192,12 @@ export class ContestEditingService {
     );
     if (scoringOf(updated) !== scoringOf(contest))
       void notifyContestRescore(this.rescores, contest._id, this.logger);
+    // The worker re-rates from the earlier of the stored and the new end.
+    if (
+      updated.endTime.getTime() !== contest.endTime.getTime() &&
+      (await this.contests.hasRatings(contest._id))
+    )
+      await notifyContestRating(this.ratingQueue, contest._id, this.logger);
     if (
       fields.lockedAfter !== undefined &&
       !sameJson(fields.lockedAfter, contest.lockedAfter)
