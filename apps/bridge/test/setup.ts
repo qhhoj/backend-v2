@@ -8,6 +8,9 @@ import Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { TEST_ENV, TEST_REDIS_URL } from '@libs/common/testing';
 import {
+  Contest,
+  ContestParticipation,
+  ContestSubmission,
   Judge,
   Language,
   Problem,
@@ -96,6 +99,15 @@ export async function setupBridgeTest({
     },
     get users() {
       return model<User>(User.name);
+    },
+    get contests() {
+      return model<Contest>(Contest.name);
+    },
+    get participations() {
+      return model<ContestParticipation>(ContestParticipation.name);
+    },
+    get contestSubmissions() {
+      return model<ContestSubmission>(ContestSubmission.name);
     },
     get graded() {
       return graded();

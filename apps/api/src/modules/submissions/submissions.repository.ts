@@ -7,6 +7,7 @@ import type {
   Model,
 } from 'mongoose';
 import {
+  ContestSubmission,
   IN_FLIGHT_STATUSES,
   isUuid,
   newId,
@@ -31,6 +32,18 @@ export type SubmissionState = Pick<
   '_id' | keyof typeof STATE_FIELDS
 >;
 
+export type NewSubmission = Pick<Submission, 'user' | 'problem' | 'language'> &
+  Partial<
+    Pick<
+      Submission,
+      'status' | 'priority' | 'contest' | 'lockedAfter' | 'isPretested'
+    >
+  >;
+export type NewContestSubmission = Pick<
+  ContestSubmission,
+  'participation' | 'contest' | 'problem' | 'isPretest'
+>;
+
 @Injectable()
 export class SubmissionsRepository {
   constructor(
@@ -39,20 +52,42 @@ export class SubmissionsRepository {
     private readonly submissions: Model<Submission>,
     @InjectModel(SubmissionSource.name)
     private readonly sources: Model<SubmissionSource>,
+    @InjectModel(ContestSubmission.name)
+    private readonly contestSubmissions: Model<ContestSubmission>,
   ) {}
 
-  /** The row and its source in one transaction, so the bridge never claims a submission without a source. */
+  /** The row, its source and (in a contest) its contest row in one transaction, so the bridge never claims a submission without a source and effects never miss its participation. */
   async create(
-    fields: Pick<Submission, 'user' | 'problem' | 'language'>,
+    fields: NewSubmission,
     source: string,
+    contestEntry: NewContestSubmission | null = null,
   ): Promise<string> {
     const id = newId();
     await this.connection.transaction(async (session) => {
       // `create` with a session takes an array.
       await this.sources.create([{ _id: id, source }], { session });
       await this.submissions.create([{ _id: id, ...fields }], { session });
+      if (contestEntry)
+        await this.contestSubmissions.create([{ _id: id, ...contestEntry }], {
+          session,
+        });
     });
     return id;
+  }
+
+  /** Legacy `get_contest_submission_count`: the participation's submissions to the problem, IE and PD excluded. */
+  async countContestAttempts(
+    participationId: string,
+    problemId: string,
+  ): Promise<number> {
+    const ids = await this.contestSubmissions
+      .distinct('_id', { participation: participationId, problem: problemId })
+      .exec();
+    return ids.length
+      ? this.submissions
+          .countDocuments({ _id: { $in: ids }, status: { $nin: ['IE', 'PD'] } })
+          .exec()
+      : 0;
   }
 
   /** Legacy: rejudged submissions do not count against the user. */

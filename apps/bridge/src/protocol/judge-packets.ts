@@ -300,7 +300,7 @@ export interface SubmissionRequest {
   timeLimit: number;
   memoryLimit: number;
   shortCircuit: boolean;
-  /** Contest hooks (sub-project 4): always false / null in 2a. */
+  /** Contest submissions only: the pretests flag and the participation's `virtual` (`SubmissionsRepository.claim`). */
   pretestsOnly: boolean;
   inContest: number | null;
   attemptNo: number;

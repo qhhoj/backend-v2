@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { unique } from '@libs/common';
+import { LIVE } from '@libs/contests';
 import {
+  Contest,
+  ContestParticipation,
+  ContestSubmission,
   IN_FLIGHT_STATUSES,
   Language,
   Problem,
@@ -43,6 +47,16 @@ export const REQUEUE_RESET = {
 
 const IN_FLIGHT = { $in: [...IN_FLIGHT_STATUSES] };
 
+/** What a contest submission adds to dispatch and to the judge's request. */
+export interface ContestMeta {
+  /** The participation's number: 0 live, -1 spectate, n virtual (`in-contest`). */
+  virtual: number;
+  /** Live and spectating rows only (legacy `judge_submission`). */
+  bannedJudges: string[];
+  /** The contest's current `runPretestsOnly` and the problem's `isPretested` (legacy recomputed it on every judge, so a rejudge after the contest runs every test). */
+  pretestsOnly: boolean;
+}
+
 /** Every write a judge packet causes filters on the submission's judge and status, so stale, duplicate or replayed packets change nothing. */
 @Injectable()
 export class SubmissionsRepository {
@@ -55,6 +69,11 @@ export class SubmissionsRepository {
     private readonly sources: Model<SubmissionSource>,
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
     @InjectModel(Language.name) private readonly languages: Model<Language>,
+    @InjectModel(Contest.name) private readonly contests: Model<Contest>,
+    @InjectModel(ContestParticipation.name)
+    private readonly participations: Model<ContestParticipation>,
+    @InjectModel(ContestSubmission.name)
+    private readonly contestSubmissions: Model<ContestSubmission>,
   ) {}
 
   /** Queued submissions (all, or those of `ids`) in dispatch order, with the codes judges know: a mirror is judged under its root's code. A row whose problem or language is gone is skipped. */
@@ -62,7 +81,7 @@ export class SubmissionsRepository {
     const rows = await this.submissions
       .find(
         { status: 'QU', ...(ids && { _id: { $in: ids } }) },
-        { problem: 1, language: 1, priority: 1 },
+        { problem: 1, language: 1, priority: 1, contest: 1 },
       )
       .sort({ priority: 1, _id: 1 })
       .lean();
@@ -99,6 +118,9 @@ export class SubmissionsRepository {
     const keyOf = new Map(
       languages.map((language) => [uuidStr(language._id), language.key]),
     );
+    const metaOf = await this.contestMetaOf(
+      rows.filter((row) => row.contest).map((row) => uuidStr(row._id)),
+    );
     return rows.flatMap((row) => {
       const problemCode = judgedCodeOf.get(uuidStr(row.problem));
       const languageKey = keyOf.get(uuidStr(row.language));
@@ -110,10 +132,111 @@ export class SubmissionsRepository {
               languageKey,
               priority: row.priority,
               judgeName: null,
-              bannedJudges: [],
+              bannedJudges: metaOf.get(uuidStr(row._id))?.bannedJudges ?? [],
             },
           ]
         : [];
+    });
+  }
+
+  /** Contest meta of the given submissions that are contest submissions; read in three batched queries. */
+  private async contestMetaOf(
+    submissionIds: string[],
+  ): Promise<Map<string, ContestMeta>> {
+    if (!submissionIds.length) return new Map();
+    const entries = await this.contestSubmissions
+      .find(
+        { _id: { $in: submissionIds } },
+        { participation: 1, contest: 1, problem: 1 },
+      )
+      .lean();
+    if (!entries.length) return new Map();
+    const [participations, contests] = await Promise.all([
+      this.participations
+        .find(
+          {
+            _id: {
+              $in: unique(entries.map((entry) => uuidStr(entry.participation))),
+            },
+          },
+          { virtual: 1 },
+        )
+        .lean(),
+      this.contests
+        .find(
+          {
+            _id: {
+              $in: unique(entries.map((entry) => uuidStr(entry.contest))),
+            },
+          },
+          { bannedJudges: 1, runPretestsOnly: 1, problems: 1 },
+        )
+        .lean(),
+    ]);
+    const virtualOf = new Map(
+      participations.map((participation) => [
+        uuidStr(participation._id),
+        participation.virtual,
+      ]),
+    );
+    const contestOf = new Map(
+      contests.map((contest) => [uuidStr(contest._id), contest]),
+    );
+    return new Map(
+      entries.flatMap((entry): Array<[string, ContestMeta]> => {
+        const contest = contestOf.get(uuidStr(entry.contest));
+        const virtual = virtualOf.get(uuidStr(entry.participation));
+        if (!contest || virtual === undefined) return [];
+        const problem = contest.problems.find(
+          (candidate) => uuidStr(candidate.problem) === uuidStr(entry.problem),
+        );
+        return [
+          [
+            uuidStr(entry._id),
+            {
+              virtual,
+              bannedJudges: virtual <= LIVE ? contest.bannedJudges : [],
+              pretestsOnly:
+                contest.runPretestsOnly && (problem?.isPretested ?? false),
+            },
+          ],
+        ];
+      }),
+    );
+  }
+
+  /** Earlier attempts at the problem by the same user: within the participation for a contest submission (legacy), else outside contests; CE and IE do not count. */
+  private async countEarlierAttempts(submission: {
+    _id: string;
+    user: string;
+    problem: string;
+    contest?: string | null;
+    date: Date;
+  }): Promise<number> {
+    const earlier = {
+      date: { $lt: submission.date },
+      status: { $nin: ['CE', 'IE'] },
+    };
+    if (!submission.contest)
+      return this.submissions.countDocuments({
+        user: submission.user,
+        problem: submission.problem,
+        contest: null,
+        ...earlier,
+      });
+    const entry = await this.contestSubmissions
+      .findById(submission._id, { participation: 1 })
+      .lean();
+    if (!entry) return 0;
+    const siblings = await this.contestSubmissions
+      .distinct('_id', {
+        participation: uuidStr(entry.participation),
+        problem: submission.problem,
+      })
+      .exec();
+    return this.submissions.countDocuments({
+      _id: { $in: siblings },
+      ...earlier,
     });
   }
 
@@ -128,12 +251,12 @@ export class SubmissionsRepository {
         { $set: { status: 'P', judgedOn: judgeName } },
         {
           new: true,
-          projection: { user: 1, problem: 1, language: 1, date: 1 },
+          projection: { user: 1, problem: 1, language: 1, date: 1, contest: 1 },
         },
       )
       .lean();
     if (!submission) return null;
-    const [problem, source, earlierAttempts] = await Promise.all([
+    const [problem, source, earlierAttempts, metaOf] = await Promise.all([
       this.problems
         .findById(submission.problem, {
           timeLimit: 1,
@@ -143,13 +266,10 @@ export class SubmissionsRepository {
         })
         .lean(),
       this.sources.findById(queued.id).lean(),
-      this.submissions.countDocuments({
-        user: submission.user,
-        problem: submission.problem,
-        contest: null,
-        date: { $lt: submission.date },
-        status: { $nin: ['CE', 'IE'] },
-      }),
+      this.countEarlierAttempts(submission),
+      submission.contest
+        ? this.contestMetaOf([queued.id])
+        : Promise.resolve(new Map<string, ContestMeta>()),
     ]);
     if (!problem || !source) {
       this.logger.error(`Submission ${queued.id} lost its problem or source`);
@@ -173,8 +293,8 @@ export class SubmissionsRepository {
       timeLimit: limit?.timeLimit ?? problem.timeLimit,
       memoryLimit: limit?.memoryLimit ?? problem.memoryLimit,
       shortCircuit: !problem.partial,
-      pretestsOnly: false,
-      inContest: null,
+      pretestsOnly: metaOf.get(queued.id)?.pretestsOnly ?? false,
+      inContest: metaOf.get(queued.id)?.virtual ?? null,
       attemptNo: earlierAttempts + 1,
       userId: uuidStr(submission.user),
       fileOnly: false,

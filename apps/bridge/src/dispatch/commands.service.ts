@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
-import { ENV } from '@libs/common';
+import { ENV, unique } from '@libs/common';
 import type { Env } from '@libs/common';
 import { BRIDGE_COMMANDS_STREAM, parseBridgeCommand } from '@libs/judging';
 import type { BridgeCommand } from '@libs/judging';
@@ -146,7 +146,10 @@ export class CommandsService {
           queued.map((submission) => ({
             ...submission,
             judgeName: command.judgeName,
-            bannedJudges: command.bannedJudges,
+            bannedJudges: unique([
+              ...submission.bannedJudges,
+              ...command.bannedJudges,
+            ]),
           })),
         );
       }

@@ -70,6 +70,36 @@ export async function seedSubmission(
   return submission;
 }
 
+/** A contest submission as the api writes it: the submission (with its contest) and its contest row. */
+export async function seedContestSubmission(
+  test: BridgeTest,
+  catalog: BridgeCatalog,
+  {
+    contest,
+    participation,
+    problem,
+    ...fields
+  }: Partial<Submission> & {
+    contest: string;
+    participation: string;
+    problem: string;
+  },
+) {
+  const submission = await seedSubmission(test, catalog, {
+    problem,
+    contest,
+    priority: 0,
+    ...fields,
+  });
+  await test.contestSubmissions.create({
+    _id: submission._id,
+    participation,
+    contest,
+    problem,
+  });
+  return submission;
+}
+
 export const seedJudge = (
   test: BridgeTest,
   name: string,

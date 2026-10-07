@@ -9,7 +9,7 @@ export interface QueuedSubmission {
   priority: number;
   /** Only this judge may take it, even while disabled (submit with `judgeId`). */
   judgeName: string | null;
-  /** Contest hook (sub-project 4): judges that must not see it. */
+  /** Judges that must not see it: a live or spectating contest submission's contest bans (from Mongo) plus any the command adds. */
   bannedJudges: string[];
 }
 
