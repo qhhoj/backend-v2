@@ -102,11 +102,13 @@ export function classifyUserAgent(userAgent: string): {
   };
 }
 
-const FORMULA_START = /^[=+\-@\t\r]/;
-/** One CSV cell: a leading `= + - @` or control character gets a `'` (spreadsheets would run it as a formula), then RFC 4180 quoting. */
+/** Leading whitespace (some importers trim cells first) then `= + - @`, or a leading tab or CR. */
+const FORMULA_START = /^\s*[=+\-@]|^[\t\r]/;
+/** One CSV cell: a text cell starting with a formula character gets a `'` (spreadsheets would run it as a formula), then RFC 4180 quoting. Numbers are written as they are. */
 export const csvCell = (value: string | number | null): string => {
   const text = value === null ? '' : String(value);
-  const safe = FORMULA_START.test(text) ? `'${text}` : text;
+  const guarded = typeof value === 'string' && FORMULA_START.test(text);
+  const safe = guarded ? `'${text}` : text;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 };
 export const csvLine = (cells: Array<string | number | null>): string =>

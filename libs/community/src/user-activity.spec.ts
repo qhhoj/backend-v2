@@ -37,6 +37,8 @@ describe('user activity rules', () => {
       '/api/internal/problems',
       '/api/internal/admin/settings',
       '/api/internal/site/pages',
+      '/api/internal/sitemap',
+      '/api/internal/auth/me2',
     ])
       expect(isTrackedPath(path)).toBe(true);
   });
@@ -121,6 +123,19 @@ describe('user activity rules', () => {
     it('neutralises spreadsheet formulas', () => {
       for (const cell of ['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\tx'])
         expect(csvCell(cell).replace(/^"/, '').startsWith("'")).toBe(true);
+    });
+    it('neutralises formulas behind leading whitespace', () => {
+      expect(csvCell('=1+1')).toBe("'=1+1");
+      expect(csvCell(' =1')).toBe("' =1");
+      expect(csvCell(' =1')).toBe("' =1");
+      expect(csvCell('\n=1')).toBe(`"'\n=1"`);
+      expect(csvCell('\r=1')).toBe(`"'\r=1"`);
+      expect(csvCell('\t=1')).toBe("'\t=1");
+      expect(csvCell('@x')).toBe("'@x");
+    });
+    it('leaves plain text and numbers unchanged', () => {
+      expect(csvCell('plain')).toBe('plain');
+      expect(csvCell(-5)).toBe('-5');
     });
     it('ends lines with CRLF', () => {
       expect(csvLine(['a', 'b'])).toBe('a,b\r\n');
