@@ -281,6 +281,8 @@ describe('OpenAPI document', () => {
       // Server-sent event streams (text/event-stream), not JSON.
       'GET /api/internal/events/submissions 200',
       'GET /api/internal/events/submissions/{id} 200',
+      'GET /api/internal/events/tickets 200',
+      'GET /api/internal/events/tickets/{id} 200',
       'GET /api/internal/events/contests/{key} 200',
     ]);
 

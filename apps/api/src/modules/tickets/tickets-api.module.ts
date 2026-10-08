@@ -4,6 +4,7 @@ import { RateLimitService } from '@libs/common';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { DiscordModule } from '../discord/discord.module';
+import { EventsModule } from '../events/events.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { TicketGateService } from './core/ticket-gate.service';
 import { TicketContextService } from './core/ticket-context.service';
@@ -18,6 +19,8 @@ import { TicketCreationService } from './posting/ticket-creation.service';
 import { TicketMessagesController } from './posting/ticket-messages.controller';
 import { TicketMessagesService } from './posting/ticket-messages.service';
 import { TicketEventsService } from './streams/ticket-events.service';
+import { TicketStreamsController } from './streams/ticket-streams.controller';
+import { TicketStreamsService } from './streams/ticket-streams.service';
 
 @Module({
   imports: [
@@ -25,6 +28,7 @@ import { TicketEventsService } from './streams/ticket-events.service';
     ContestAccessModule,
     ContributionsModule,
     DiscordModule,
+    EventsModule,
     ProblemsApiModule,
   ],
   controllers: [
@@ -32,6 +36,7 @@ import { TicketEventsService } from './streams/ticket-events.service';
     TicketCreationController,
     TicketMessagesController,
     TicketUpdatesController,
+    TicketStreamsController,
   ],
   providers: [
     TicketsRepository,
@@ -41,6 +46,7 @@ import { TicketEventsService } from './streams/ticket-events.service';
     RateLimitService,
     TicketGateService,
     TicketEventsService,
+    TicketStreamsService,
     TicketCreationService,
     TicketMessagesService,
     TicketUpdatesService,

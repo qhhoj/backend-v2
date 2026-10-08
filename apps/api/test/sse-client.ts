@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { EventStreamHubService } from '../src/modules/events/event-stream-hub.service';
 import { ContestStreamsService } from '../src/modules/contests/announcements/contest-streams.service';
 import { SubmissionStreamsService } from '../src/modules/submissions/streams/submission-streams.service';
+import { TicketStreamsService } from '../src/modules/tickets/streams/ticket-streams.service';
 import type { ApiTest } from './setup';
 
 /** Open stream counts of the hub and both channels, and whether Redis confirmed the subscription. */
@@ -10,11 +11,13 @@ export const streamsOf = ({ app }: ApiTest) => {
   const hub = app.get(EventStreamHubService);
   const submissions = app.get(SubmissionStreamsService);
   const contests = app.get(ContestStreamsService);
+  const tickets = app.get(TicketStreamsService);
   return {
     openCounts: () => ({
       ...hub.openCounts(),
       ...submissions.openCounts(),
       ...contests.openCounts(),
+      ...tickets.openCounts(),
     }),
     isSubscribed: () => hub.isSubscribed(),
     onModuleDestroy: () => hub.onModuleDestroy(),
