@@ -149,6 +149,7 @@ export class SubmissionsService {
         visibility,
         showError: canEdit || submission.status !== 'IE',
         totalCases,
+        lockedAfter: canEdit ? submission.lockedAfter : null,
         actions: this.actionsFor(principal, submission, canEdit),
       },
     );

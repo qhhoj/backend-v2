@@ -59,7 +59,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   judgedOn!: string | null;
   judgedDate!: Date | null;
   rejudgedDate!: Date | null;
-  /** Rejudging is refused after this time; null when the submission never locks. */
+  /** Rejudging is refused after this time. Editors only (the contest's lock setting is staff data); null for everyone else and when the submission never locks. */
   lockedAfter!: Date | null;
   viewer!: SubmissionViewerResponse;
   /** Every case when the problem shows them (`testcaseResultVisibility` A) or to superusers. */
@@ -76,11 +76,13 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       visibility,
       showError,
       totalCases,
+      lockedAfter,
       actions,
     }: {
       visibility: CaseVisibility;
       showError: boolean;
       totalCases: number | null;
+      lockedAfter: Date | null;
       actions: SubmissionActions;
     },
   ): SubmissionDetailResponse {
@@ -92,8 +94,12 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       judgedOn: submission.judgedOn,
       judgedDate: submission.judgedDate,
       rejudgedDate: submission.rejudgedDate,
-      lockedAfter: submission.lockedAfter,
-      viewer: actions,
+      lockedAfter,
+      viewer: {
+        canAbort: actions.canAbort,
+        canRejudge: actions.canRejudge,
+        canReject: actions.canReject,
+      },
       cases:
         visibility.cases === 'all'
           ? submission.cases.map((testCase) =>

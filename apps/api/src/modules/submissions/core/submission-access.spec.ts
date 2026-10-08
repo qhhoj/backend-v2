@@ -407,6 +407,12 @@ describe('submissionActions', () => {
       expected: { canAbort: true, canRejudge: false, canReject: false },
     },
     {
+      label: 'holding the permissions without edit rights allows nothing',
+      principal: withPermissions(...EDITOR_PERMISSIONS),
+      facts: actionFacts({ canEditProblem: false, status: 'D' }),
+      expected: { canAbort: false, canRejudge: false, canReject: false },
+    },
+    {
       label: 'an editor without the action permissions may do nothing',
       principal: withPermissions('judge.edit_own_problem'),
       facts: actionFacts({ canEditProblem: true }),

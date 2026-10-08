@@ -62,6 +62,16 @@ describe('submission detail action flags', () => {
       ['owner', {}],
       ['outsider', {}],
       [
+        'permitted',
+        {
+          permissions: [
+            'judge.edit_own_problem',
+            'judge.rejudge_submission',
+            'judge.reject_submission',
+          ],
+        },
+      ],
+      [
         'manager',
         {
           permissions: [
@@ -114,6 +124,23 @@ describe('submission detail action flags', () => {
     });
     expect(body.lockedAfter).toBeNull();
     await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
+  });
+
+  it('tells holders of the permissions without edit rights that no action applies', async () => {
+    const id = await seed({ user: ids.permitted });
+    const body = await detailOf('permitted', id);
+    expect(body.viewer).toEqual(NO_ACTIONS);
+    expect(body.lockedAfter).toBeNull();
+    await post('permitted', `${SUBMISSIONS}/${id}/reject`).expect(403);
+  });
+
+  it('shows the lock time to editors only: the owner of a locked submission sees null', async () => {
+    const lockedAfter = new Date(Date.now() - 1000);
+    const id = await seed({ status: 'QU', result: null, lockedAfter });
+    expect((await detailOf('owner', id)).lockedAfter).toBeNull();
+    expect((await detailOf('manager', id)).lockedAfter).toBe(
+      lockedAfter.toISOString(),
+    );
   });
 
   it('echoes the lock time and withholds rejudging from a locked submission, which answers 409', async () => {
