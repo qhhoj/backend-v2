@@ -87,7 +87,10 @@ export class SubmissionsRepository {
   }
 
   /** Null for malformed ids too. `cases` (up to 10000 rows) only when asked for. */
-  findById(id: string, withCases = false): Promise<SubmissionDocument | null> {
+  findById(
+    id: string,
+    { withCases = false }: { withCases?: boolean } = {},
+  ): Promise<SubmissionDocument | null> {
     if (!isUuid(id)) return Promise.resolve(null);
     const query = this.submissions.findById(id);
     return (withCases ? query.select('+cases') : query).exec();

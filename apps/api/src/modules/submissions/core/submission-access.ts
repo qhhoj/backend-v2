@@ -21,17 +21,28 @@ export interface SubmissionProblemView extends ProblemAccessView {
   submissionSourceVisibility: string;
 }
 
+export interface DetailAccessFacts {
+  ownerId: string;
+  problem: SubmissionProblemView;
+  canEdit: boolean;
+  /** Edits the submission's contest (or every contest). */
+  isContestEditor: boolean;
+}
+
+/** A problem's `F` follows the site setting. */
+const sourceVisibilityOf = (problem: SubmissionProblemView): string =>
+  problem.submissionSourceVisibility === 'F'
+    ? SITE_SOURCE_VISIBILITY
+    : problem.submissionSourceVisibility;
+
 /** Legacy `Submission.can_see_detail`; contest editors see every submission of their contest. `if-solved`: granted once the viewer has an AC worth the problem's full points. */
 export function detailAccess(
   principal: Principal,
-  ownerId: string,
-  problem: SubmissionProblemView,
-  canEdit: boolean,
-  contestEditor: boolean,
+  { ownerId, problem, canEdit, isContestEditor }: DetailAccessFacts,
 ): DetailAccess {
   if (
     canEdit ||
-    contestEditor ||
+    isContestEditor ||
     hasPermission(principal, 'judge.view_all_submission')
   )
     return 'granted';
@@ -42,10 +53,7 @@ export function detailAccess(
   )
     return 'granted';
   if (ownerId === principal.userId) return 'granted';
-  const visibility =
-    problem.submissionSourceVisibility === 'F'
-      ? SITE_SOURCE_VISIBILITY
-      : problem.submissionSourceVisibility;
+  const visibility = sourceVisibilityOf(problem);
   const isTester = problem.testers.includes(principal.userId);
   if (visibility === 'A' || (visibility === 'O' && isTester)) return 'granted';
   return visibility === 'S' && (problem.isPublic || isTester)
@@ -59,7 +67,7 @@ export interface CaseVisibility {
   output: boolean;
 }
 
-/** Legacy status page: superusers and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, `inContest`). */
+/** Legacy status page: superusers and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, `isInContest`). */
 export function caseVisibility(
   principal: Principal,
   problem: {
@@ -67,8 +75,7 @@ export function caseVisibility(
     testcaseVisibility: string;
     allowViewFeedback: boolean;
   },
-  canEdit: boolean,
-  inContest: boolean,
+  { canEdit, isInContest }: { canEdit: boolean; isInContest: boolean },
 ): CaseVisibility {
   return {
     cases:
@@ -81,7 +88,7 @@ export function caseVisibility(
     output:
       canEdit ||
       problem.testcaseVisibility === 'A' ||
-      (problem.testcaseVisibility === 'C' && !inContest),
+      (problem.testcaseVisibility === 'C' && !isInContest),
   };
 }
 

@@ -48,14 +48,14 @@ export class ApiV2SubmissionsService {
       const items = filter
         ? await this.repository.findPage(filter, skip, API_V2_PAGE_SIZE)
         : [];
-      return legacyPage(await this.rows(items), query.page, total);
+      return legacyPage(await this.legacyRows(items), query.page, total);
     }
     const items = filter
       ? await this.repository.findPage(filter, skip, API_V2_PAGE_SIZE + 1)
       : [];
     if (query.page > 1 && !items.length) throw notFound();
     return legacyInfinitePage(
-      await this.rows(items.slice(0, API_V2_PAGE_SIZE)),
+      await this.legacyRows(items.slice(0, API_V2_PAGE_SIZE)),
       query.page,
       items.length > API_V2_PAGE_SIZE,
     );
@@ -72,11 +72,15 @@ export class ApiV2SubmissionsService {
       id,
       null,
     );
-    const shown = caseVisibility(principal, problem, canEdit, false).cases;
+    const shown = caseVisibility(principal, problem, {
+      canEdit,
+      isInContest: false,
+    }).cases;
     const withCases =
       shown === 'none'
         ? submission
-        : ((await this.repository.findById(id, true)) ?? submission);
+        : ((await this.repository.findById(id, { withCases: true })) ??
+          submission);
     const [owner] = await this.users.findByIds([uuidStr(submission.user)]);
     return {
       id: uuidStr(submission._id),
@@ -119,7 +123,8 @@ export class ApiV2SubmissionsService {
     );
   }
 
-  private async rows(
+  /** The legacy list row per submission; one user and problem lookup per page. */
+  private async legacyRows(
     items: Submission[],
   ): Promise<Array<Record<string, unknown>>> {
     const [users, problems] = await Promise.all([

@@ -9,6 +9,7 @@ import { hasPermission } from '@libs/auth';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestViewerService } from '../../contests/core/contest-viewer.service';
 import { ContestsRepository } from '../../contests/core/contests.repository';
+import type { ContestDocument } from '../../contests/core/contests.repository';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { ProblemAccess } from '../../problems/core/problem-access';
@@ -26,6 +27,7 @@ import {
   detailAccess,
   staffOnlyFilter,
 } from './submission-access';
+import type { DetailAccess } from './submission-access';
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
@@ -36,6 +38,17 @@ export type SubmissionFilters = Pick<
 > & { result?: readonly string[]; status?: readonly string[] };
 
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
+
+/** `$in` clauses for the filters that match stored values directly. */
+const valueClauses = (
+  filters: SubmissionFilters,
+): FilterQuery<Submission>[] => [
+  ...(filters.language?.length
+    ? [{ language: { $in: filters.language } }]
+    : []),
+  ...(filters.result?.length ? [{ result: { $in: filters.result } }] : []),
+  ...(filters.status?.length ? [{ status: { $in: filters.status } }] : []),
+];
 
 @Injectable()
 export class SubmissionsService {
@@ -109,17 +122,16 @@ export class SubmissionsService {
     const scope = await this.viewerScope(principal);
     const viewed = await this.viewable(principal, id, scope);
     const { problem, canEdit } = viewed;
-    const visibility = caseVisibility(
-      principal,
-      problem,
+    const visibility = caseVisibility(principal, problem, {
       canEdit,
-      scope !== null,
-    );
+      isInContest: scope !== null,
+    });
     // Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them.
     const submission =
       visibility.cases === 'none'
         ? viewed.submission
-        : ((await this.submissions.findById(id, true)) ?? viewed.submission);
+        : ((await this.submissions.findById(id, { withCases: true })) ??
+          viewed.submission);
     const totalCases =
       visibility.cases === 'none'
         ? null
@@ -154,8 +166,10 @@ export class SubmissionsService {
     return {
       submission,
       caseEvents:
-        caseVisibility(principal, problem, canEdit, scope !== null).cases ===
-        'all',
+        caseVisibility(principal, problem, {
+          canEdit,
+          isInContest: scope !== null,
+        }).cases === 'all',
     };
   }
 
@@ -210,58 +224,98 @@ export class SubmissionsService {
     const contest = submission.contest
       ? await this.contests.findById(uuidStr(submission.contest))
       : null;
-    const contestView = contest && ContestAccess.accessView(contest);
-    const contestEditor =
-      contestView !== null &&
-      (ContestAccess.isEditor(principal, contestView) ||
-        hasPermission(principal, 'judge.edit_all_contest'));
-    const access = detailAccess(
-      principal,
+    const isContestEditor =
+      contest !== null && this.editsContest(principal, contest);
+    const access = detailAccess(principal, {
       ownerId,
-      {
+      problem: {
         ...view,
         submissionSourceVisibility: problem.submissionSourceVisibility,
       },
       canEdit,
-      contestEditor,
-    );
-    const contestListClosed =
-      contest !== null &&
-      contestView !== null &&
-      ownerId !== principal.userId &&
-      !canEdit &&
-      !contestEditor &&
-      !hasPermission(principal, 'judge.view_all_submission') &&
-      !ContestAccess.canSeeFullSubmissionList(
-        principal,
-        contestView,
-        new Date(),
-        await this.viewers.viewerOf(principal, contest, new Date()),
-      );
-    const allowed =
-      access === 'granted' ||
-      (access === 'if-solved' &&
-        (await this.submissions.hasSolved(
-          principal.userId,
-          problem._id,
-          problem.points,
-        )));
-    // Solving would not help while the contest list is closed, so that reason wins over `solve_first`.
-    if (contestListClosed && access !== 'denied')
+      isContestEditor,
+    });
+    // Solving would not help while the contest list is closed, so that reason wins over `solve_first`; a denied viewer hears `hidden` either way.
+    if (
+      access !== 'denied' &&
+      (await this.isContestListClosed(principal, {
+        contest,
+        ownerId,
+        canEdit,
+        isContestEditor,
+      }))
+    )
       throw new AppError(
         'contest_running',
         403,
         'You cannot see this submission yet',
       );
-    if (!allowed)
-      throw access === 'if-solved'
-        ? new AppError(
-            'solve_first',
-            403,
-            'Solve this problem to see this submission',
-          )
-        : new AppError('hidden', 403, 'You cannot see this submission');
+    await this.assertDetailAllowed(principal, access, problem);
     return { submission, problem, canEdit };
+  }
+
+  private editsContest(
+    principal: Principal,
+    contest: ContestDocument,
+  ): boolean {
+    return (
+      ContestAccess.isEditor(principal, ContestAccess.accessView(contest)) ||
+      hasPermission(principal, 'judge.edit_all_contest')
+    );
+  }
+
+  /** Another user's contest submission stays closed until the contest's full list is open to this viewer. */
+  private async isContestListClosed(
+    principal: Principal,
+    {
+      contest,
+      ownerId,
+      canEdit,
+      isContestEditor,
+    }: {
+      contest: ContestDocument | null;
+      ownerId: string;
+      canEdit: boolean;
+      isContestEditor: boolean;
+    },
+  ): Promise<boolean> {
+    if (
+      contest === null ||
+      ownerId === principal.userId ||
+      canEdit ||
+      isContestEditor ||
+      hasPermission(principal, 'judge.view_all_submission')
+    )
+      return false;
+    const now = new Date();
+    return !ContestAccess.canSeeFullSubmissionList(
+      principal,
+      ContestAccess.accessView(contest),
+      now,
+      await this.viewers.viewerOf(principal, contest, now),
+    );
+  }
+
+  private async assertDetailAllowed(
+    principal: Principal,
+    access: DetailAccess,
+    problem: ProblemDocument,
+  ): Promise<void> {
+    if (access === 'granted') return;
+    if (access === 'denied')
+      throw new AppError('hidden', 403, 'You cannot see this submission');
+    if (
+      !(await this.submissions.hasSolved(
+        principal.userId,
+        problem._id,
+        problem.points,
+      ))
+    )
+      throw new AppError(
+        'solve_first',
+        403,
+        'Solve this problem to see this submission',
+      );
   }
 
   /** Null when nothing can match (unknown user, invisible problem); other users' submissions of contests whose list the viewer may not see (a freeze, which outlives the contest) are left out; the `/api/internal` list and `/api/v2` share it, `/api/v2` with no contest scope (legacy `get_visible_problems`). */
@@ -271,51 +325,80 @@ export class SubmissionsService {
     scope: ContestScope | null,
     contestId?: string,
   ): Promise<FilterQuery<Submission> | null> {
-    const clauses: FilterQuery<Submission>[] =
-      contestId === undefined ? [] : [{ contest: contestId }];
-    if (filters.problem !== undefined) {
-      const problem = PROBLEM_CODE_PATTERN.test(filters.problem)
-        ? await this.problems.findByCode(filters.problem)
-        : null;
-      if (
-        !problem ||
-        (contestId === undefined &&
-          !ProblemAccess.canSee(
-            principal,
-            ProblemAccess.accessView(problem),
-            scope,
-          ))
-      )
-        return null;
-      clauses.push({ problem: problem._id });
-    } else if (contestId === undefined) {
-      const visible = ProblemAccess.visibleFilter(principal, scope);
-      if (Object.keys(visible).length)
-        clauses.push({
-          problem: { $in: await this.problems.visibleIds(visible) },
-        });
-    }
-    if (filters.user !== undefined) {
-      const user = await this.users.findByUsername(filters.user);
-      if (!user) return null;
-      clauses.push({ user: user._id });
-    }
-    if (filters.language?.length)
-      clauses.push({ language: { $in: filters.language } });
-    if (filters.result?.length)
-      clauses.push({ result: { $in: filters.result } });
-    if (filters.status?.length)
-      clauses.push({ status: { $in: filters.status } });
+    const problemClauses = await this.problemClauses(
+      principal,
+      filters.problem,
+      scope,
+      contestId,
+    );
+    if (!problemClauses) return null;
+    const userClauses = await this.userClauses(filters.user);
+    if (!userClauses) return null;
+    const clauses: FilterQuery<Submission>[] = [
+      ...(contestId === undefined ? [] : [{ contest: contestId }]),
+      ...problemClauses,
+      ...userClauses,
+      ...valueClauses(filters),
+      ...(await this.hiddenContestClauses(principal)),
+    ];
+    return clauses.length ? { $and: clauses } : {};
+  }
+
+  /** The named problem (null when unknown or, outside a contest, invisible), else outside a contest the viewer's visible problems. */
+  private async problemClauses(
+    principal: Principal | null,
+    problemCode: string | undefined,
+    scope: ContestScope | null,
+    contestId: string | undefined,
+  ): Promise<FilterQuery<Submission>[] | null> {
+    if (problemCode === undefined)
+      return contestId === undefined
+        ? this.visibleProblemClauses(principal, scope)
+        : [];
+    const problem = PROBLEM_CODE_PATTERN.test(problemCode)
+      ? await this.problems.findByCode(problemCode)
+      : null;
+    if (!problem) return null;
+    if (
+      contestId === undefined &&
+      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem), scope)
+    )
+      return null;
+    return [{ problem: problem._id }];
+  }
+
+  private async visibleProblemClauses(
+    principal: Principal | null,
+    scope: ContestScope | null,
+  ): Promise<FilterQuery<Submission>[]> {
+    const visible = ProblemAccess.visibleFilter(principal, scope);
+    return Object.keys(visible).length
+      ? [{ problem: { $in: await this.problems.visibleIds(visible) } }]
+      : [];
+  }
+
+  private async userClauses(
+    username: string | undefined,
+  ): Promise<FilterQuery<Submission>[] | null> {
+    if (username === undefined) return [];
+    const user = await this.users.findByUsername(username);
+    return user ? [{ user: user._id }] : null;
+  }
+
+  /** Other users' submissions of contests whose list the viewer may not see; the viewer's own stay. */
+  private async hiddenContestClauses(
+    principal: Principal | null,
+  ): Promise<FilterQuery<Submission>[]> {
     const hidden = await this.viewers.hiddenSubmissionContests(
       principal,
       new Date(),
     );
-    if (hidden.length)
-      clauses.push(
-        principal
-          ? { $or: [{ contest: { $nin: hidden } }, { user: principal.userId }] }
-          : { contest: { $nin: hidden } },
-      );
-    return clauses.length ? { $and: clauses } : {};
+    if (!hidden.length) return [];
+    const outsideHidden = { contest: { $nin: hidden } };
+    return [
+      principal
+        ? { $or: [outsideHidden, { user: principal.userId }] }
+        : outsideHidden,
+    ];
   }
 }

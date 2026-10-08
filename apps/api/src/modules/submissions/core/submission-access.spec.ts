@@ -50,120 +50,130 @@ const testCase = (
 
 describe('detailAccess', () => {
   it.each([
-    [
-      'the owner',
-      viewer({ userId: 'owner' }),
-      problem({ submissionSourceVisibility: 'O' }),
-      false,
-      'granted',
-    ],
-    [
-      'an editor',
-      viewer(),
-      problem({ submissionSourceVisibility: 'O' }),
-      true,
-      'granted',
-    ],
-    [
-      'judge.view_all_submission',
-      viewer({ permissions: new Set(['judge.view_all_submission']) }),
-      problem({ submissionSourceVisibility: 'O' }),
-      false,
-      'granted',
-    ],
-    [
-      'a superuser',
-      viewer({ isSuperuser: true }),
-      problem({ submissionSourceVisibility: 'O' }),
-      false,
-      'granted',
-    ],
-    [
-      'a reviewer of a suggested problem',
-      viewer({ permissions: new Set(['judge.suggest_new_problem']) }),
-      problem({
+    {
+      label: 'the owner',
+      principal: viewer({ userId: 'owner' }),
+      view: problem({ submissionSourceVisibility: 'O' }),
+      canEdit: false,
+      expected: 'granted',
+    },
+    {
+      label: 'an editor',
+      principal: viewer(),
+      view: problem({ submissionSourceVisibility: 'O' }),
+      canEdit: true,
+      expected: 'granted',
+    },
+    {
+      label: 'judge.view_all_submission',
+      principal: viewer({
+        permissions: new Set(['judge.view_all_submission']),
+      }),
+      view: problem({ submissionSourceVisibility: 'O' }),
+      canEdit: false,
+      expected: 'granted',
+    },
+    {
+      label: 'a superuser',
+      principal: viewer({ isSuperuser: true }),
+      view: problem({ submissionSourceVisibility: 'O' }),
+      canEdit: false,
+      expected: 'granted',
+    },
+    {
+      label: 'a reviewer of a suggested problem',
+      principal: viewer({
+        permissions: new Set(['judge.suggest_new_problem']),
+      }),
+      view: problem({
         isPublic: false,
         suggester: 'someone',
         submissionSourceVisibility: 'O',
       }),
-      false,
-      'granted',
-    ],
-    [
-      'a reviewer of a public problem that has a suggester',
-      viewer({ permissions: new Set(['judge.suggest_new_problem']) }),
-      problem({ suggester: 'someone', submissionSourceVisibility: 'O' }),
-      false,
-      'denied',
-    ],
-    [
-      'anyone when A',
-      viewer(),
-      problem({ submissionSourceVisibility: 'A' }),
-      false,
-      'granted',
-    ],
-    [
-      'anyone who solved it when S',
-      viewer(),
-      problem({ submissionSourceVisibility: 'S' }),
-      false,
-      'if-solved',
-    ],
-    [
-      'F, following the site default all-solved',
-      viewer(),
-      problem(),
-      false,
-      'if-solved',
-    ],
-    [
-      'nobody on a private problem when S',
-      viewer(),
-      problem({ isPublic: false, submissionSourceVisibility: 'S' }),
-      false,
-      'denied',
-    ],
-    [
-      'a tester of a private problem when S',
-      viewer(),
-      problem({
+      canEdit: false,
+      expected: 'granted',
+    },
+    {
+      label: 'a reviewer of a public problem that has a suggester',
+      principal: viewer({
+        permissions: new Set(['judge.suggest_new_problem']),
+      }),
+      view: problem({ suggester: 'someone', submissionSourceVisibility: 'O' }),
+      canEdit: false,
+      expected: 'denied',
+    },
+    {
+      label: 'anyone when A',
+      principal: viewer(),
+      view: problem({ submissionSourceVisibility: 'A' }),
+      canEdit: false,
+      expected: 'granted',
+    },
+    {
+      label: 'anyone who solved it when S',
+      principal: viewer(),
+      view: problem({ submissionSourceVisibility: 'S' }),
+      canEdit: false,
+      expected: 'if-solved',
+    },
+    {
+      label: 'F, following the site default all-solved',
+      principal: viewer(),
+      view: problem(),
+      canEdit: false,
+      expected: 'if-solved',
+    },
+    {
+      label: 'nobody on a private problem when S',
+      principal: viewer(),
+      view: problem({ isPublic: false, submissionSourceVisibility: 'S' }),
+      canEdit: false,
+      expected: 'denied',
+    },
+    {
+      label: 'a tester of a private problem when S',
+      principal: viewer(),
+      view: problem({
         isPublic: false,
         testers: ['viewer'],
         submissionSourceVisibility: 'S',
       }),
-      false,
-      'if-solved',
-    ],
-    [
-      'a tester when O',
-      viewer(),
-      problem({ testers: ['viewer'], submissionSourceVisibility: 'O' }),
-      false,
-      'granted',
-    ],
-    [
-      'anyone else when O',
-      viewer(),
-      problem({ submissionSourceVisibility: 'O' }),
-      false,
-      'denied',
-    ],
-  ] as const)('%s → %s', (_label, principal, view, canEdit, expected) =>
-    expect(detailAccess(principal, 'owner', view, canEdit, false)).toBe(
-      expected,
-    ),
+      canEdit: false,
+      expected: 'if-solved',
+    },
+    {
+      label: 'a tester when O',
+      principal: viewer(),
+      view: problem({ testers: ['viewer'], submissionSourceVisibility: 'O' }),
+      canEdit: false,
+      expected: 'granted',
+    },
+    {
+      label: 'anyone else when O',
+      principal: viewer(),
+      view: problem({ submissionSourceVisibility: 'O' }),
+      canEdit: false,
+      expected: 'denied',
+    },
+  ])('$label → $expected', ({ principal, view, canEdit, expected }) =>
+    expect(
+      detailAccess(principal, {
+        ownerId: 'owner',
+        problem: view,
+        canEdit,
+        isContestEditor: false,
+      }),
+    ).toBe(expected),
   );
 
   it('grants contest editors any submission of their contest', () =>
     expect(
-      detailAccess(
-        viewer(),
-        'owner',
-        problem({ submissionSourceVisibility: 'O' }),
-        false,
-        true,
-      ),
+      detailAccess(viewer(), {
+        ownerId: 'owner',
+        problem: problem({ submissionSourceVisibility: 'O' }),
+        canEdit: false,
+        isContestEditor: true,
+      }),
     ).toBe('granted'));
 });
 
@@ -174,45 +184,52 @@ describe('caseVisibility', () => {
     allowViewFeedback: false,
   };
   it('shows cases, batches or nothing by testcaseResultVisibility, everything to superusers', () => {
-    expect(caseVisibility(viewer(), shown, false, false).cases).toBe('all');
+    expect(
+      caseVisibility(viewer(), shown, { canEdit: false, isInContest: false })
+        .cases,
+    ).toBe('all');
     expect(
       caseVisibility(
         viewer(),
         { ...shown, testcaseResultVisibility: 'B' },
-        false,
-        false,
+        { canEdit: false, isInContest: false },
       ).cases,
     ).toBe('batches');
     expect(
       caseVisibility(
         viewer(),
         { ...shown, testcaseResultVisibility: 'S' },
-        false,
-        false,
+        { canEdit: false, isInContest: false },
       ).cases,
     ).toBe('none');
     expect(
       caseVisibility(
         viewer({ isSuperuser: true }),
         { ...shown, testcaseResultVisibility: 'S' },
-        false,
-        false,
+        { canEdit: false, isInContest: false },
       ).cases,
     ).toBe('all');
   });
   it('shows feedback to superusers, editors or when allowed', () => {
-    expect(caseVisibility(viewer(), shown, false, false).feedback).toBe(false);
-    expect(caseVisibility(viewer(), shown, true, false).feedback).toBe(true);
     expect(
-      caseVisibility(viewer({ isSuperuser: true }), shown, false, false)
+      caseVisibility(viewer(), shown, { canEdit: false, isInContest: false })
         .feedback,
+    ).toBe(false);
+    expect(
+      caseVisibility(viewer(), shown, { canEdit: true, isInContest: false })
+        .feedback,
+    ).toBe(true);
+    expect(
+      caseVisibility(viewer({ isSuperuser: true }), shown, {
+        canEdit: false,
+        isInContest: false,
+      }).feedback,
     ).toBe(true);
     expect(
       caseVisibility(
         viewer(),
         { ...shown, allowViewFeedback: true },
-        false,
-        false,
+        { canEdit: false, isInContest: false },
       ).feedback,
     ).toBe(true);
   });
@@ -232,8 +249,7 @@ describe('caseVisibility', () => {
         caseVisibility(
           viewer(),
           { ...shown, testcaseVisibility },
-          canEdit,
-          inContest,
+          { canEdit, isInContest: inContest },
         ).output,
       ).toBe(expected),
   );

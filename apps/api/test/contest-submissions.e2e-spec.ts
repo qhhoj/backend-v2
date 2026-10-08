@@ -54,6 +54,7 @@ describe('contest submissions and the freeze', () => {
       ['author', { permissions: ['judge.edit_own_contest'] }],
       ['staff', { permissions: ['judge.view_all_submission'] }],
       ['problemAuthor', { permissions: ['judge.edit_own_problem'] }],
+      ['allContests', { permissions: ['judge.edit_all_contest'] }],
     ];
     for (const [name, extra] of roles) {
       users[name] = await createUserWith(api, name, extra);
@@ -204,6 +205,16 @@ describe('contest submissions and the freeze', () => {
         ).expect(200),
       ),
     ).not.toContain(aliceId);
+  });
+
+  it('opens a frozen contest submission by id to an edit_all_contest holder who is no author', async () => {
+    // Source visibility O: only the contest-editor path can open it for this viewer.
+    const { bobId } = await frozenScene(
+      'frozen_all',
+      {},
+      { submissionSourceVisibility: 'O' },
+    );
+    await get(`/api/internal/submissions/${bobId}`, 'allContests').expect(200);
   });
 
   it('keeps an ended icpc contest frozen until an editor unfreezes it', async () => {
