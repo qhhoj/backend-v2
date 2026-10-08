@@ -86,6 +86,11 @@ export async function setupWorkerTest({
     await seedBeforeBoot?.(replSet.getUri('qhhoj'));
     testingModule = await builder.compile();
     await testingModule.init();
+    // Queries that `.hint()` an index fail until its build finishes.
+    const connection = testingModule.get<Connection>(getConnectionToken());
+    await Promise.all(
+      Object.values(connection.models).map((model) => model.init()),
+    );
     if (!seedBeforeBoot) {
       // Boot-time sweeps must finish before the flush, or they fail on their vanished jobs and race the tests.
       const sweepQueues = [

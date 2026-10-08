@@ -30,7 +30,6 @@ describe('GET /api/internal/problems', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
-    await api.problems.init();
     authorUser = await createUserWith(api, 'author', {
       permissions: ['judge.edit_own_problem'],
     });

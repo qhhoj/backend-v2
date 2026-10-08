@@ -21,7 +21,6 @@ describe('organizations', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
-    await api.users.init(); // the members read hints an index: wait for its build
     const roles: Array<[string, Partial<User>]> = [
       ['admin', {}],
       ['member', {}],

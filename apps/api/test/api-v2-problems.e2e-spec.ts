@@ -34,7 +34,6 @@ describe('/api/v2 problems', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
-    await api.problems.init();
     const author = await createUserWith(api, 'author');
     authorId = author._id;
     const issued = generateApiToken(authorId, TEST_ENV.TOKEN_SECRET);

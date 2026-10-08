@@ -66,7 +66,6 @@ describe('contest-only problem access', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
-    await api.problems.init();
     userId = (await createUserWith(api, 'contestant'))._id;
     session = await loginAs(api, userId);
     const issued = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);

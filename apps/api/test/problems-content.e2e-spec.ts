@@ -28,7 +28,6 @@ describe('translations, editorial, clone and preview', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
-    await api.problems.init();
     editorId = (
       await createUserWith(api, 'editor', {
         permissions: ['judge.edit_own_problem'],

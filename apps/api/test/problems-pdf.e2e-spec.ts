@@ -54,7 +54,6 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     catalog = await seedCatalog(api);
     queue = api.app.get(getQueueToken(PDF_QUEUE));
     redis = api.app.get<Redis>(REDIS);
-    await api.problems.init();
     const editorUser = await createUserWith(api, 'editor', {
       permissions: ['judge.edit_own_problem'],
     });

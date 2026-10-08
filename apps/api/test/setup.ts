@@ -101,6 +101,11 @@ export async function setupApiTest({
     );
     await app.listen(0, '127.0.0.1');
     await app.get<Redis>(REDIS).flushdb();
+    // Queries that `.hint()` an index fail until its build finishes.
+    const connection = app.get<Connection>(getConnectionToken());
+    await Promise.all(
+      Object.values(connection.models).map((model) => model.init()),
+    );
   } catch (error) {
     try {
       await app?.close();

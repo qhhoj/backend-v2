@@ -29,7 +29,6 @@ describe('problem create, suggest and edit', () => {
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
-    await api.problems.init();
     setterId = (
       await createUserWith(api, 'setter', {
         permissions: ['judge.add_problem', 'judge.edit_own_problem'],
