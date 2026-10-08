@@ -57,6 +57,7 @@ tools/legacy/   regenerates the fixtures
 
 - Flow: `controller -> service -> querier | repository`
 - Size: a module stays flat until about 15 files; past that, group by feature into subfolders (each with the pattern above and its own `dto/`), keeping the `<x>-api.module.ts` at the module root. Shared helpers (rate-limits, shared DTOs) live in `core/`
+
 ```
 contests/
   contests-api.module.ts
@@ -110,6 +111,7 @@ api-v2/            legacy shapes, grouped like the features
   core/            envelope, exception filter, query and filter helpers
   contests/  problems/  submissions/  organizations/  users/
 ```
+
 - File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|store|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|handler|oauth-provider|spec`
 - A class is named after its file: `<Name><Role>` in `<name>.<role>.ts` (`ContestEditFieldsService` in `contest-edit-fields.service.ts`), so a `*.service.ts` class always ends in `Service`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
@@ -125,12 +127,12 @@ api-v2/            legacy shapes, grouped like the features
 
 ## Querier vs repository
 
-| | Querier | Repository |
-|---|---|---|
-| Data | small, simple, read often, never deleted | everything else |
-| Storage | in-memory copy | Mongoose queries |
-| Freshness | change stream + cron resync | always live |
-| Base | `BaseMongoStreamQuerier` | `@InjectModel` |
+|           | Querier                                  | Repository       |
+| --------- | ---------------------------------------- | ---------------- |
+| Data      | small, simple, read often, never deleted | everything else  |
+| Storage   | in-memory copy                           | Mongoose queries |
+| Freshness | change stream + cron resync              | always live      |
+| Base      | `BaseMongoStreamQuerier`                 | `@InjectModel`   |
 
 - Reference: `libs/common/src/querier/base-mongo-stream.querier.ts`, `libs/auth/src/groups/groups.querier.ts`
 - Whole-collection queriers extend `BaseCatalogQuerier` (reference: `apps/api/src/modules/problems/catalog/languages.querier.ts`)
@@ -147,22 +149,22 @@ api-v2/            legacy shapes, grouped like the features
 - Write: only `SettingsService.set(key, patch, actorId)` (one transaction: combine, validate, seal, upsert, revision); over HTTP `GET /api/internal/admin/settings`, `PATCH /api/internal/admin/settings/:key` with `{ value }`, `GET .../:key/revisions`, all needing `judge.change_settings` (grant it to superusers only, it can point the server at outbound URLs). `null` is refused: clear with `{}` (webhooks), `''` (URLs, SMTP) or `enabled: false`
 - A stored value that cannot be read (corrupt row, rotated `ENCRYPTION_KEY`) falls back to the default and the process keeps booting
 - Secrets (`mail.smtpUrl`, `discord.webhooks`, each `clientSecret`) are returned by `GET` as `{ set: true }` only, stored sealed, redacted in revisions (`changedFields` names what changed); never log or echo a value, and a `SettingError` message never contains the input
-- URL settings must be https; `http` is accepted for `localhost`/`127.0.0.1` outside production; in production `localhost` and literal loopback/private/link-local IPs are refused (`isSafeUrl`)
+- Webhook and pwned URLs must be https (`isSafeUrl`); `http` is accepted for `localhost`/`127.0.0.1` outside production; in production `localhost` and literal loopback/private/link-local IPs are refused. `mail.smtpUrl` is not guarded: it may point at an internal relay by design (accepted residual, like hostnames that resolve to internal addresses)
 - Tests: `api.setSetting(key, value)` / `worker.setSetting(key, value)` on the harnesses; unit specs build `fakeSettings({ key: value })` from `@libs/settings/testing`; the api harness switches the pwned-password check off (`auth.pwnedApiUrl` is `''`)
 
 ## HTTP conventions
 
-| Case | Return / throw | Wire format |
-|---|---|---|
-| Single | value | `{ data }` |
-| List | `new Paginated(items, meta)` | `{ data, meta }` |
-| Legacy shape | `@RawResponse()` on handler/class | body as returned |
-| Error | `throw new AppError(code, status, message, fields?, headers?, extra?)` | `{ error: { code, message, fields?, issues?, ...extra } }` |
+| Case         | Return / throw                                                         | Wire format                                                |
+| ------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Single       | value                                                                  | `{ data }`                                                 |
+| List         | `new Paginated(items, meta)`                                           | `{ data, meta }`                                           |
+| Legacy shape | `@RawResponse()` on handler/class                                      | body as returned                                           |
+| Error        | `throw new AppError(code, status, message, fields?, headers?, extra?)` | `{ error: { code, message, fields?, issues?, ...extra } }` |
 
 - Wrapping/unwrapping lives in `libs/common/src/interceptors/response.interceptor.ts`; errors in `filters/exception.filter.ts`
 - Nest `HttpException` < 500 maps to codes `unauthorized|forbidden|not_found|rate_limited|http_error`; anything else is `internal_error`
 - Validation: DTO classes + class-validator; global pipe is whitelist + forbid unknown + transform, failure -> `validation_failed` (400) with `fields` (messages per field, unchanged) and `issues`
-- `issues: [{ field, code, message }]` is the machine-readable twin of `fields`, built from one list by `ValidationFailedError` (or derived by `AppError` when `fields` is given, code `invalid`); codes are snake_case: the failing constraint name (`max_length`, `is_in`), or `context: { code: '...' }` on the class-validator decorator (`username_invalid_characters`, `email_invalid`), or the code a service gives (`invalidField(field, message, code)`, `ValidationFailedError`): `username_taken`, `email_taken`, `password_pwned`, `organization_unavailable`, `language_unknown`, `language_takes_file`, `language_takes_text`, `file_upload_disabled`, `language_extension_invalid`, `file_wrong_extension`; nested DTO fields use dotted names (`appearance.glass`)
+- `issues: [{ field, code, message }]` is the machine-readable twin of `fields`, built from one list by `ValidationFailedError` (or derived by `AppError` when `fields` is given, code `invalid`); codes are snake_case: the failing constraint name (`max_length`, `is_in`), or `context: { code: '...' }` on the class-validator decorator (`username_invalid_characters`, `email_invalid`), or the code a service gives (`invalidField(field, message, code)`, `ValidationFailedError`): `username_taken`, `email_taken`, `password_pwned`, `organization_unavailable`, `language_unknown`, `language_takes_file`, `language_takes_text`, `file_upload_disabled`, `language_extension_invalid`, `file_wrong_extension`, `scratch_project_invalid`, `must_not_be_null` (a PATCH field that may not be null), `password_incorrect`, `password_unchanged`; nested DTO fields use dotted names (`appearance.glass`)
 - `extra` (6th `AppError` argument) is merged into the error object next to `code` and `message`, never overriding them; `BannedError` (login) uses it for `banReason`
 - Query DTOs: `@Type(() => Number)` for numbers; `dto/transforms.ts` (`toArray`, `toBoolean`) for arrays and booleans
 - Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`
@@ -408,21 +410,21 @@ Add a job:
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `npm test` | Jest, runs in band |
-| `npm run format` | Prettier write on `apps/` and `libs/` |
-| `npm run lint` | ESLint (+ Prettier) on `apps/` and `libs/` |
-| `npm run test:openapi` | the OpenAPI coverage spec with the swagger plugin (see OpenAPI) |
-| `npm run seed:e2e` | idempotent dev/e2e seed (see Seed script) |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run build` | build `api` |
-| `npx nest build migrator` | build migrator |
-| `npx nest build worker` | build worker |
-| `npx nest build bridge` | build bridge |
-| `npx nest start api` | run the API |
-| `npx nest start bridge` | run the bridge |
-| `npx nest start worker` | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
+| Command                   | Purpose                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `npm test`                | Jest, runs in band                                                            |
+| `npm run format`          | Prettier write on `apps/` and `libs/`                                         |
+| `npm run lint`            | ESLint (+ Prettier) on `apps/` and `libs/`                                    |
+| `npm run test:openapi`    | the OpenAPI coverage spec with the swagger plugin (see OpenAPI)               |
+| `npm run seed:e2e`        | idempotent dev/e2e seed (see Seed script)                                     |
+| `npm run typecheck`       | `tsc --noEmit`                                                                |
+| `npm run build`           | build `api`                                                                   |
+| `npx nest build migrator` | build migrator                                                                |
+| `npx nest build worker`   | build worker                                                                  |
+| `npx nest build bridge`   | build bridge                                                                  |
+| `npx nest start api`      | run the API                                                                   |
+| `npx nest start bridge`   | run the bridge                                                                |
+| `npx nest start worker`   | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
 
 CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
@@ -435,10 +437,10 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
 - `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`
 - The `contest.officialMode` setting (on) locks profile `about` and `firstName`, comment pages, posting, comment votes and blog writing for non-superusers
-- Moved to admin settings (see Runtime settings; `GET /api/internal/admin/settings`, `PATCH .../<key>`, needs `judge.change_settings`): `site.timeZone` (new), `mail.smtpUrl`, `mail.from`, `auth.google`, `auth.facebook`, `auth.github` (social login), `auth.pwnedApiUrl`, `discord.webhooks`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `contest.officialMode`, `contest.banAfterDisqualifications`. Boot logs one `removedEnvInUse` warning naming any of their old variables still set (`REMOVED_ENV` in `libs/common/src/env/removed-env.ts`) and ignores them (no env fallback); the values are never logged
-- Mail locally: `docker compose up -d mailpit`, then either `npm run seed:e2e` (sets `mail.smtpUrl` to `smtp://localhost:1025` when no row exists) or, as a user with `judge.change_settings`, `PATCH /api/internal/admin/settings/mail.smtpUrl` with `{"value":"smtp://localhost:1025"}`; until `mail.smtpUrl` is set, registration and every other mail send answer 503 `mail_unavailable`
+- Moved to admin settings (see Runtime settings; `GET /api/internal/admin/settings`, `PATCH .../<key>`, needs `judge.change_settings`): `site.timeZone` (new), `mail.smtpUrl`, `mail.from`, `auth.google`, `auth.facebook`, `auth.github` (social login), `auth.pwnedApiUrl`, `discord.webhooks`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `contest.officialMode`, `contest.banAfterDisqualifications`. Boot logs one warning (`Ignoring X, Y: these are admin settings now ...`) naming any of their old variables still set (`REMOVED_ENV` in `libs/common/src/env/removed-env.ts`) and ignores them (no env fallback); the values are never logged
+- Mail locally: `docker compose up -d mailpit`, then either `npm run seed:e2e` (sets `mail.smtpUrl` to `smtp://localhost:1025` when no row exists) or, as a user with `judge.change_settings`, `PATCH /api/internal/admin/settings/mail.smtpUrl` with `{"value":"smtp://localhost:1025"}`; until `mail.smtpUrl` is set, registration answers 503 `mail_unavailable`; password reset and activation resend answer 204 and the mail is lost (logged)
 - `discord.webhooks` (api and worker): a map of `default` or `on_<event>` keys (`on_new_comment`, `on_new_blogpost`, `on_new_problem`, `on_new_suggested_problem`, `on_new_ticket`, `on_new_ticket_message`) to https URLs (http only for `localhost`/`127.0.0.1` outside production, see Runtime settings); empty sends nothing; the worker needs outbound HTTPS to Discord
-- nginx: serve `MEDIA_URL` with `X-Content-Type-Options: nosniff` (file submissions are user bytes stored under their language's extension)
+- nginx: serve `/media/submission_file/` with `Content-Disposition: attachment`, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` (file submissions are user bytes stored under their language's extension, which may be `html`, `svg` or `xml`; `nosniff` alone does not stop those). Judges must reach `SITE_URL` + `MEDIA_URL` over HTTP(S): the bridge sends the absolute file URL
 - nginx: map the legacy `/feed/<blog|comment|problems>/<rss|atom>/` to `/api/internal/feeds/<blog|comments|problems>/<rss|atom>`
 - The `.hint()` queries (organization members, submissions, comment threads) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`); the leaderboards are not hinted but are only fast with theirs
 - The worker needs outbound TCP to `moss.stanford.edu:7690` when `MOSS_API_KEY` is set

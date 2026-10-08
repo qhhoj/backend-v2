@@ -17,7 +17,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Pino through Fastify's own logger instead of `nestjs-pino` — fewer dependencies, same JSON output with request ids.
 - `fastify` pinned to one copy — a duplicate copy breaks type identity with `@nestjs/platform-fastify`.
 - `TRUST_PROXY` is `false` or an address list, never `true` or a hop count — per-IP rate limits would trust spoofed forwarded headers.
-- Env is validated at boot — fail fast instead of a half-working process; a variable that became a setting only logs one `removedEnvInUse` warning (names, never values) and is ignored — an old `.env` must not stop a deploy or keep a stale value alive.
+- Env is validated at boot — fail fast instead of a half-working process; a variable that became a setting only logs one warning (names, never values) and is ignored — an old `.env` must not stop a deploy or keep a stale value alive.
 - `@nestjs/schedule` 6.x, `bullmq` 5.81.5, `@nestjs/bullmq` 11.0.5, `@fastify/cookie` 11.0.2, `sanitize-html` 2.17.5 pinned — newer majors are ESM-only and break Jest CJS and Nest 11 (`@nestjs/schedule` follows `^6.1.3`, the rest are exact).
 - Passwords: verify Django `pbkdf2_sha256`/`pbkdf2_sha1` of any iteration count, rehash to 870000 on login — existing users log in with old passwords.
 - Django's common-password list dropped; Have I Been Pwned range check instead — the HIBP list covers it; a pwned hit forces a password change.
@@ -35,7 +35,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - TOTP secrets and scratch codes are AES-256-GCM encrypted at rest; the migrator will decrypt the legacy Fernet format (planned, migrator deferred) — a database leak does not leak second factors.
 - 2FA enrolment and credential removal need `currentPassword` and are blocked while impersonating — a hijacked session cannot add its own second factor.
 - Password change writes with optimistic concurrency (409) and rejects the same password — a race cannot overwrite a freshly changed password.
-- Registration creates an inactive user plus a hashed activation key; `POST /auth/activate/resend` replaces the keys of a pending account and always answers 204 — a lost mail needs a way out without an account-existence oracle.
+- Registration creates an inactive user plus a hashed activation key; `POST /auth/activate/resend` replaces the keys of a pending account and always answers 204 — a lost mail needs a way out, and resend adds no account-existence oracle (`POST /auth/register` still answers `email_taken`, limited to 5 per hour per IP).
 - Password reset tokens are bound to the stored hash and `lastLogin` — single use without a token table; it also lets migrated social-only users set a first password.
 - Social login state is bound to the browser by a cookie and the signup continuation by a second cookie — a stolen link cannot finish another browser's signup.
 - Impersonation: active superusers only, never onto a superuser or nested, and the guard rechecks the impersonator on every request — rights loss ends the session at once.
