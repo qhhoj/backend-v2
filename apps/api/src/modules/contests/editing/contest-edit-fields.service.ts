@@ -61,6 +61,30 @@ function datesOf(
   return dates;
 }
 
+/** Request fields that are stored under another name, converted, or looked up first. */
+const NOT_STORED_AS_SENT: ReadonlyArray<string> = [
+  ...DATE_FIELDS,
+  'accessCode',
+  'rankingAccessCode',
+  'problems',
+  'formatConfig',
+];
+
+/** The request's plain fields, its dates and its code hashes; nothing that needs a lookup. */
+function fieldsWithoutLookups(dto: UpdateContestDto): Partial<Contest> {
+  const plain = Object.entries(dto).filter(
+    ([field]) => !NOT_STORED_AS_SENT.includes(field),
+  );
+  return {
+    ...Object.fromEntries(plain),
+    ...datesOf(dto),
+    ...accessCodeHashes(dto),
+  };
+}
+
+const hashOrNull = (code: string): string | null =>
+  code ? sha256(code) : null;
+
 /** Plaintext codes are never stored; an empty code clears the hash. */
 function accessCodeHashes({
   accessCode,
@@ -72,14 +96,10 @@ function accessCodeHashes({
   return {
     ...(accessCode === undefined
       ? {}
-      : { accessCodeHash: accessCode ? sha256(accessCode) : null }),
+      : { accessCodeHash: hashOrNull(accessCode) }),
     ...(rankingAccessCode === undefined
       ? {}
-      : {
-          rankingAccessCodeHash: rankingAccessCode
-            ? sha256(rankingAccessCode)
-            : null,
-        }),
+      : { rankingAccessCodeHash: hashOrNull(rankingAccessCode) }),
   };
 }
 
@@ -115,35 +135,14 @@ export class ContestEditFieldsService {
     current: ContestDocument | null,
   ): Promise<Partial<Contest>> {
     assertNoForbiddenNulls(dto);
-    const {
-      accessCode,
-      rankingAccessCode,
-      problems,
-      formatConfig,
-      startTime,
-      endTime,
-      registrationStart,
-      registrationEnd,
-      lockedAfter,
-      ...plain
-    } = dto;
-    const fields: Partial<Contest> = {
-      ...plain,
-      ...datesOf({
-        startTime,
-        endTime,
-        registrationStart,
-        registrationEnd,
-        lockedAfter,
-      }),
-      ...accessCodeHashes({ accessCode, rankingAccessCode }),
-    };
-    if (problems !== undefined)
-      fields.problems = await this.contestProblems(principal, problems);
+    const fields = fieldsWithoutLookups(dto);
+    if (dto.problems !== undefined)
+      fields.problems = await this.contestProblems(principal, dto.problems);
     if (dto.description !== undefined)
       fields.descriptionHtml = this.render(dto.description);
     const isFormatEdited =
-      formatConfig !== undefined || dto.formatName !== undefined;
+      dto.formatConfig !== undefined || dto.formatName !== undefined;
+    // Relies on the schema's `formatConfig` default only for the no-format create; any edit of the format resolves it here.
     if (!current || isFormatEdited)
       fields.formatConfig = resolveFormatConfig(dto, current);
     const merged = { ...(current?.toObject() ?? {}), ...fields } as Contest;

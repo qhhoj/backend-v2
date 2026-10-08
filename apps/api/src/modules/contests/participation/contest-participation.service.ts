@@ -48,13 +48,13 @@ export const CONTEST_CHEATING_BAN_REASON =
 const conflict = (message: string) => new AppError('conflict', 409, message);
 const forbidden = (message: string) => new AppError('forbidden', 403, message);
 
-/** Legacy `ContestRegister`, `ContestJoin`, `ContestLeave` and `ContestParticipationList`. */
 /** What a register or join request brings besides the contest: the access code it typed and its address (rate limits). */
 export interface JoinCredentials {
   accessCode: string | undefined;
   ip: string;
 }
 
+/** Legacy `ContestRegister`, `ContestJoin`, `ContestLeave` and `ContestParticipationList`. */
 @Injectable()
 export class ContestParticipationService {
   private readonly logger = new Logger(ContestParticipationService.name);

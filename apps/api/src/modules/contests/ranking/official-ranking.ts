@@ -15,24 +15,31 @@ const CONTROL = /[\u0000-\u001f\u007f]/;
 
 /** Fields of every record; quoted fields may hold commas and quotes (""); a newline is lexed but later refused as a control character. */
 class CsvRecordReader {
-  private readonly records: string[][] = [];
+  private readonly finishedRecords: string[][] = [];
   private record: string[] = [];
   private field = '';
   private isQuoted = false;
 
-  read(text: string): string[][] {
+  private constructor() {}
+
+  /** A reader holds the state of one text, so it is built per call. */
+  static readAll(text: string): string[][] {
+    return new CsvRecordReader().read(text);
+  }
+
+  private read(text: string): string[][] {
     let index = 0;
     while (index < text.length)
       index += this.isQuoted
-        ? this.readQuoted(text, index)
-        : this.readPlain(text, index);
+        ? this.consumeQuoted(text, index)
+        : this.consumePlain(text, index);
     if (this.isQuoted) throw new CsvRankingError('Unterminated quoted field');
     if (this.field !== '' || this.record.length) this.endRecord();
-    return this.records;
+    return this.finishedRecords;
   }
 
-  /** Characters consumed inside quotes: `""` is one quote, a lone `"` closes the quotes. */
-  private readQuoted(text: string, index: number): number {
+  /** Returns how many characters it consumed (the length). Inside quotes: `""` is one quote, a lone `"` closes the quotes. */
+  private consumeQuoted(text: string, index: number): number {
     const char = text[index];
     if (char !== '"') {
       this.field += char;
@@ -46,8 +53,8 @@ class CsvRecordReader {
     return 1;
   }
 
-  /** Characters consumed outside quotes: `"` opens an empty field's quotes, `,` ends a field, LF or CRLF ends a record. */
-  private readPlain(text: string, index: number): number {
+  /** Returns how many characters it consumed (the length). Outside quotes: `"` opens an empty field's quotes, `,` ends a field, LF or CRLF ends a record. */
+  private consumePlain(text: string, index: number): number {
     const char = text[index];
     if (char === '"' && this.field === '') {
       this.isQuoted = true;
@@ -89,16 +96,14 @@ class CsvRecordReader {
       throw new CsvRankingError(
         `More than ${OFFICIAL_RANKING_LIMITS.columns} columns`,
       );
-    if (this.records.length > OFFICIAL_RANKING_LIMITS.rows)
+    if (this.finishedRecords.length > OFFICIAL_RANKING_LIMITS.rows)
       throw new CsvRankingError(
         `More than ${OFFICIAL_RANKING_LIMITS.rows} rows`,
       );
-    this.records.push(this.record);
+    this.finishedRecords.push(this.record);
     this.record = [];
   }
 }
-
-const records = (text: string): string[][] => new CsvRecordReader().read(text);
 
 const number = (value: string, what: string): number => {
   const trimmed = value.trim();
@@ -116,7 +121,7 @@ export function parseOfficialRanking(csv: string): {
 } {
   if (Buffer.byteLength(csv) > OFFICIAL_RANKING_LIMITS.bytes)
     throw new CsvRankingError('The CSV is larger than 1 MiB');
-  const [header, ...lines] = records(
+  const [header, ...lines] = CsvRecordReader.readAll(
     csv.charCodeAt(0) === BYTE_ORDER_MARK ? csv.slice(1) : csv,
   );
   if (!header) throw new CsvRankingError('The CSV is empty');
