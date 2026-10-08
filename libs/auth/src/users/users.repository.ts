@@ -7,6 +7,7 @@ import {
   User,
   WebauthnCredential,
 } from '@libs/database';
+import { AppError } from '@libs/common';
 import { HydratedDocument, Model } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
@@ -17,6 +18,13 @@ export class UsersRepository {
 
   async findById(id: string): Promise<UserDocument | null> {
     return isUuid(id) ? this.users.findById(id).exec() : null;
+  }
+
+  /** The signed-in user's row; a session outliving its user answers 401. */
+  async signedIn(principal: { userId: string }): Promise<UserDocument> {
+    const user = await this.findById(principal.userId);
+    if (!user) throw new AppError('unauthorized', 401, 'Login required');
+    return user;
   }
 
   findByIds(ids: string[]): Promise<UserDocument[]> {

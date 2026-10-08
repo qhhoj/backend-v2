@@ -62,10 +62,20 @@ export class BlogVisibilityService {
     organization: Organization | null;
   }> {
     const post = await this.posts.findById(id);
-    const { views, organizations } = await this.describe(post ? [post] : []);
-    const view = post && views.get(uuidStr(post._id));
-    if (!post || !view || !BlogAccess.canSee(principal, view, now))
+    const described = post && (await this.described(post));
+    if (!described || !BlogAccess.canSee(principal, described.view, now))
       throw new AppError('not_found', 404, 'No such post');
+    return described;
+  }
+
+  /** A post with its access view and organization, whoever may see it (for the writer's own response). */
+  async described(post: BlogPostDocument): Promise<{
+    post: BlogPostDocument;
+    view: BlogAccessView;
+    organization: Organization | null;
+  }> {
+    const { views, organizations } = await this.describe([post]);
+    const view = views.get(uuidStr(post._id))!;
     return {
       post,
       view,

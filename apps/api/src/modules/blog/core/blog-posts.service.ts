@@ -15,6 +15,7 @@ import { OrganizationSummaryResponse } from '../../organizations/core/dto/organi
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { BlogAccess } from './blog-access';
 import { BlogPostsRepository } from './blog-posts.repository';
+import type { BlogPostDocument } from './blog-posts.repository';
 import { BlogVisibilityService } from './blog-visibility.service';
 import type { PostListQueryDto } from './dto/post-list.dto';
 import { PostDetailResponse, PostListItemResponse } from './dto/post.response';
@@ -59,10 +60,28 @@ export class BlogPostsService {
     principal: Principal | null,
     id: string,
   ): Promise<PostDetailResponse> {
-    const { post, view, organization } = await this.visibility.visiblePost(
+    return this.present(
       principal,
-      id,
+      await this.visibility.visiblePost(principal, id),
     );
+  }
+
+  /** The response to the writer of a post they may not be able to read back (an `edit_all_organization` holder who is not its admin). */
+  async createdPost(
+    principal: Principal,
+    post: BlogPostDocument,
+  ): Promise<PostDetailResponse> {
+    return this.present(principal, await this.visibility.described(post));
+  }
+
+  private async present(
+    principal: Principal | null,
+    {
+      post,
+      view,
+      organization,
+    }: Awaited<ReturnType<BlogVisibilityService['described']>>,
+  ): Promise<PostDetailResponse> {
     const [item] = await this.items(principal, [post]);
     const canEdit = BlogAccess.canEdit(principal, view);
     return {

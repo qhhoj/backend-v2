@@ -27,7 +27,7 @@ export class CommentModerationService {
     private readonly contributions: ContributionPointsService,
   ) {}
 
-  /** Legacy `comment_hide` (and the admin `unhide_comment`), on the whole subtree; the authors' points are recomputed. A comment under a hidden parent cannot be unhidden alone. */
+  /** Legacy `comment_hide` (and the admin `unhide_comment`), on the subtree (unhide restores only what that comment hid); the authors' points are recomputed. A comment under a hidden parent cannot be unhidden alone. */
   async setHidden(
     principal: Principal,
     id: string,
@@ -40,15 +40,14 @@ export class CommentModerationService {
     if (
       !hidden &&
       comment.parentId &&
-      (await this.repository.isHidden(comment.parentId))
+      (await this.repository.hiddenBy(comment.parentId))
     )
       throw new AppError('conflict', 409, 'Unhide its parent first');
-    const authors = await this.repository.setSubtreeHidden(
-      comment.path,
-      hidden,
-    );
+    const authors = await (hidden
+      ? this.repository.hideSubtree(comment.path, uuidStr(comment._id))
+      : this.repository.unhideSubtree(comment.path, uuidStr(comment._id)));
     await this.contributions.refresh(authors);
-    return this.comments.detail(principal, uuidStr(comment._id));
+    return this.comments.detail(principal, id);
   }
 
   /** Legacy `CommentVotesAjax`. */

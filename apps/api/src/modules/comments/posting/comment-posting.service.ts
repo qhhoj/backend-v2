@@ -60,7 +60,7 @@ export class CommentPostingService {
     const info = await this.pages.resolve(principal, type, key);
     if (await this.reads.isLocked(principal, info))
       throw forbidden('Comments on this page are locked');
-    if (!canInteract((await this.users.findById(principal.userId))!))
+    if (!canInteract(await this.users.signedIn(principal)))
       throw forbidden(
         `Solve at least ${INTERACT_MIN_PROBLEM_COUNT} problems and stay unmuted to comment`,
       );
@@ -91,8 +91,10 @@ export class CommentPostingService {
       throw error;
     }
     // A hide of the parent's subtree that ran meanwhile may have missed this row: follow the parent.
-    if (parent && (await this.comments.isHidden(uuidStr(parent._id)))) {
-      await this.comments.setSubtreeHidden(comment.path, true);
+    const hiddenBy =
+      parent && (await this.comments.hiddenBy(uuidStr(parent._id)));
+    if (hiddenBy) {
+      await this.comments.hideSubtree(comment.path, hiddenBy);
       comment.hidden = true;
     }
     if (info.isPublic && !comment.hidden)
@@ -114,7 +116,7 @@ export class CommentPostingService {
     if (!hasPermission(principal, 'judge.change_comment')) {
       if (uuidStr(comment.author) !== principal.userId)
         throw forbidden('You can only edit your own comments');
-      if ((await this.users.findById(principal.userId))!.mute)
+      if ((await this.users.signedIn(principal)).mute)
         throw forbidden('Muted users cannot edit comments');
     }
     const bodyHtml = renderField(body, COMMENT_STYLE, 'body');

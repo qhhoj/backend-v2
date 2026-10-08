@@ -74,7 +74,7 @@ export class BlogEditingService {
     now = new Date(),
   ): Promise<PostDetailResponse> {
     this.refuseInOfficialContest(principal);
-    const writer = (await this.users.findById(principal.userId))!;
+    const writer = await this.users.signedIn(principal);
     const organization =
       dto.organization === undefined
         ? null
@@ -82,7 +82,7 @@ export class BlogEditingService {
     if (organization) {
       if (
         writer.mute ||
-        !OrganizationAccess.isAdmin(
+        !OrganizationAccess.canAdminister(
           principal,
           OrganizationAccess.accessView(organization),
         ) ||
@@ -123,7 +123,7 @@ export class BlogEditingService {
       BlogAccess.isPublished(BlogAccess.accessView(post), now)
     )
       await this.announce(post, principal.username);
-    return this.reads.detail(principal, post._id);
+    return this.reads.createdPost(principal, post);
   }
 
   /** Legacy `BlogPostEdit` (plus the summary, image and authors legacy left to the admin site). */
@@ -136,7 +136,7 @@ export class BlogEditingService {
     const { post, view } = await this.visibility.visiblePost(principal, id);
     if (!BlogAccess.canEdit(principal, view))
       throw forbidden('You cannot edit this post');
-    if ((await this.users.findById(principal.userId))!.mute)
+    if ((await this.users.signedIn(principal)).mute)
       throw forbidden('Muted users cannot edit posts');
     this.assertFlags(principal, dto, post);
     await this.reserveWrite(principal);

@@ -39,6 +39,8 @@ export class Comment {
   /** Sum of the votes; moved only inside a vote's transaction. */
   @Prop({ default: 0 }) score!: number;
   @Prop({ default: false }) hidden!: boolean;
+  /** The comment whose hide hid this one (itself for a direct hide, an ancestor for a subtree hide); null while visible. Unhiding a comment clears only the rows it hid. Legacy hidden comments migrate with `hiddenBy` = their own id. */
+  @Prop({ type: UUID, default: null }) hiddenBy!: string | null;
   /** Edits so far; the compare-and-set token of an edit. */
   @Prop({ default: 0, min: 0 }) revisions!: number;
   createdAt!: Date;

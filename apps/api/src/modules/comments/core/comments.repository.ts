@@ -123,12 +123,31 @@ export class CommentsRepository {
     return result.modifiedCount === 1;
   }
 
-  /** The comment at `path` and its descendants, through `{path}`; returns their distinct authors. */
-  async setSubtreeHidden(path: string, hidden: boolean): Promise<string[]> {
-    const filter = subtreeFilter(path);
-    await this.comments.updateMany(filter, { $set: { hidden } }).exec();
+  /** Hides the comment at `path` and the visible descendants (through `{path}`), recording `hiddenBy` on each; returns the subtree's distinct authors. Rows already hidden keep their own `hiddenBy`, so the hide of an ancestor never takes them over. */
+  async hideSubtree(path: string, hiddenBy: string): Promise<string[]> {
+    await this.comments
+      .updateMany(
+        { ...subtreeFilter(path), hidden: false },
+        { $set: { hidden: true, hiddenBy } },
+      )
+      .exec();
+    return this.subtreeAuthors(path);
+  }
+
+  /** Unhides only the rows `hiddenBy` hid (through `{path}`): comments hidden on their own stay hidden. Returns the subtree's distinct authors. */
+  async unhideSubtree(path: string, hiddenBy: string): Promise<string[]> {
+    await this.comments
+      .updateMany(
+        { $and: [subtreeFilter(path), { hiddenBy }] },
+        { $set: { hidden: false, hiddenBy: null } },
+      )
+      .exec();
+    return this.subtreeAuthors(path);
+  }
+
+  private async subtreeAuthors(path: string): Promise<string[]> {
     const authors: unknown[] = await this.comments
-      .distinct('author', filter)
+      .distinct('author', subtreeFilter(path))
       .exec();
     return unique(authors.map(uuidStr));
   }
@@ -140,9 +159,12 @@ export class CommentsRepository {
     return this.connection.transaction(work).then(() => undefined);
   }
 
-  async isHidden(id: string): Promise<boolean> {
-    return (
-      (await this.comments.exists({ _id: id, hidden: true }).exec()) !== null
-    );
+  /** The id of the comment whose hide hid `id`; null when `id` is visible. */
+  async hiddenBy(id: string): Promise<string | null> {
+    const row = await this.comments
+      .findOne({ _id: id, hidden: true }, { hiddenBy: 1 })
+      .lean<{ hiddenBy: string | null }>()
+      .exec();
+    return row ? (row.hiddenBy ?? id) : null;
   }
 }

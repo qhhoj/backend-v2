@@ -4,6 +4,7 @@ import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { COMMENT_MAX_DEPTH, DISCORD_WEBHOOK_QUEUE } from '@libs/community';
 import type { DiscordWebhookJob } from '@libs/community';
+import { CommentPostingService } from '../src/modules/comments/posting/comment-posting.service';
 import { CommentsRepository } from '../src/modules/comments/core/comments.repository';
 import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
 import type { CommentResponse } from '../src/modules/comments/core/dto/comment.response';
@@ -13,6 +14,7 @@ import {
   commentUrl,
   createComment,
   createPost,
+  ghost,
   writer,
 } from './community-fixtures';
 import { clearRateLimits } from './contest-fixtures';
@@ -150,6 +152,25 @@ describe('comment posting and editing', () => {
     expect(
       (tooDeep.body as { error: { fields: object } }).error.fields,
     ).toHaveProperty('parentId');
+  });
+
+  it('answers 401 when the user vanished between the session check and the write', async () => {
+    const { user } = await person();
+    const page = await createPost(api);
+    const own = await createComment(api, {
+      page: { type: 'blog', id: page._id },
+      author: user._id,
+    });
+    const principal = ghost(user);
+    await api.users.deleteOne({ _id: user._id });
+    const posting = api.app.get(CommentPostingService);
+    await expect(
+      posting.create(principal, 'blog', page._id, { body: 'x' }),
+    ).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
+    await expect(posting.edit(principal, own._id, 'y')).rejects.toMatchObject({
+      status: 401,
+      code: 'unauthorized',
+    });
   });
 
   it('gates posting on solves, mute, locks, official mode, sign-in, page access and body size', async () => {

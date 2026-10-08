@@ -202,6 +202,53 @@ describe('comment votes and moderation', () => {
     expect(await queuedUsers()).toEqual([childAuthor, grandchildAuthor].sort());
   });
 
+  it('unhides only what the unhidden comment hid, keeping separately hidden descendants hidden', async () => {
+    const [rootAuthor, childAuthor, grandchildAuthor, siblingAuthor] = (
+      await Promise.all([person(), person(), person(), person()])
+    ).map(({ user }) => user._id);
+    const { session: moderator } = await person({
+      permissions: ['judge.change_comment'],
+    });
+    const page = await createPost(api);
+    const at = { type: 'blog' as const, id: page._id };
+    const root = await createComment(api, { page: at, author: rootAuthor });
+    const child = await createComment(api, {
+      page: at,
+      author: childAuthor,
+      parent: root,
+    });
+    const grandchild = await createComment(api, {
+      page: at,
+      author: grandchildAuthor,
+      parent: child,
+    });
+    const sibling = await createComment(api, {
+      page: at,
+      author: siblingAuthor,
+      parent: root,
+    });
+    const hiddenIds = async () =>
+      (await api.comments.find({ 'page.id': page._id, hidden: true }).lean())
+        .map((row) => uuidStr(row._id))
+        .sort();
+    await hide(child._id, moderator, true).expect(200);
+    await hide(root._id, moderator, true).expect(200);
+    expect(await hiddenIds()).toEqual(
+      [root._id, child._id, grandchild._id, sibling._id].sort(),
+    );
+    await clearQueued();
+    await hide(root._id, moderator, false).expect(200);
+    expect(await hiddenIds()).toEqual([child._id, grandchild._id].sort());
+    expect(await queuedUsers()).toEqual(
+      [rootAuthor, childAuthor, grandchildAuthor, siblingAuthor].sort(),
+    );
+    await hide(child._id, moderator, false).expect(200);
+    expect(await hiddenIds()).toEqual([]);
+    expect(
+      (await api.comments.findById(grandchild._id).lean())?.hiddenBy,
+    ).toBeNull();
+  });
+
   it('refuses moderation in official contest mode without touching the comment', async () => {
     const { user: author } = await person();
     const { session: moderator } = await person({

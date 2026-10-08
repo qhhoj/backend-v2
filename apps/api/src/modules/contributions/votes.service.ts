@@ -34,8 +34,7 @@ export class VotesService {
   ): Promise<VoteResponse> {
     if (request.ownerIds.includes(principal.userId))
       throw new AppError('forbidden', 403, 'You cannot vote on your own text');
-    const voter = await this.users.findById(principal.userId);
-    if (!voter) throw new AppError('unauthorized', 401, 'Login required');
+    const voter = await this.users.signedIn(principal);
     if (!canInteract(voter))
       throw new AppError(
         'forbidden',

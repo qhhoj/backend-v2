@@ -9,10 +9,12 @@ import {
 } from '@libs/community';
 import type { ContributionPointsJob, DiscordWebhookJob } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
+import { BlogEditingService } from '../src/modules/blog/editing/blog-editing.service';
 import type { PostDetailResponse } from '../src/modules/blog/core/dto/post.response';
 import {
   createComment,
   createPost,
+  ghost,
   postUrl,
   writer,
 } from './community-fixtures';
@@ -166,6 +168,39 @@ describe('blog editing', () => {
       organization: mutedOrganization.slug,
     }).expect(403);
     expect(await discord.getJobCounts('waiting')).toMatchObject({ waiting: 0 });
+  });
+
+  it('lets an edit_all_organization holder post for any organization', async () => {
+    const organization = await createOrganization(api, {});
+    const holder = await person({
+      permissions: [
+        'judge.edit_organization_post',
+        'judge.edit_all_organization',
+      ],
+    });
+    await create(holder.session, { organization: organization.slug }).expect(
+      201,
+    );
+    const withoutPostPermission = await person({
+      permissions: ['judge.edit_all_organization'],
+    });
+    await create(withoutPostPermission.session, {
+      organization: organization.slug,
+    }).expect(403);
+  });
+
+  it('answers 401 when the user vanished between the session check and the write', async () => {
+    const { user } = await person();
+    const post = await createPost(api, { authors: [user._id] });
+    const principal = ghost(user);
+    await api.users.deleteOne({ _id: user._id });
+    const editing = api.app.get(BlogEditingService);
+    await expect(
+      editing.create(principal, { title: 'T', content: 'C' }),
+    ).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
+    await expect(
+      editing.edit(principal, post._id, { title: 'New' }),
+    ).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
   });
 
   it('locks blog writing for non-superusers in official contest mode', async () => {

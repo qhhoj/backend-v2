@@ -1,6 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
+import type { Principal } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import { childPath, CONTRIBUTION_POINTS_QUEUE, rootOf } from '@libs/community';
 import type { CommentPage, CommentPageType } from '@libs/community';
@@ -45,6 +46,7 @@ export function createComment(
     body: 'text',
     bodyHtml: '<p>text</p>',
     ...overrides,
+    ...(overrides.hidden && !overrides.hiddenBy ? { hiddenBy: commentId } : {}),
   });
 }
 
@@ -82,3 +84,13 @@ export async function clearContributionQueue(api: ApiTest) {
   const pending = await redis.keys('contribution-points:pending:*');
   if (pending.length) await redis.del(...pending);
 }
+
+/** A principal for a user that may no longer exist: what a service sees when the user vanishes right after the guard. */
+export const ghost = (user: { _id: string; username: string }): Principal => ({
+  userId: user._id,
+  username: user.username,
+  isSuperuser: false,
+  isStaff: false,
+  permissions: new Set(),
+  organizationIds: [],
+});
