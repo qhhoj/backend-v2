@@ -4,9 +4,14 @@ import {
   batchSummaries,
   caseVisibility,
   detailAccess,
+  isSubmissionLocked,
   staffOnlyFilter,
+  submissionActions,
 } from './submission-access';
-import type { SubmissionProblemView } from './submission-access';
+import type {
+  SubmissionActionFacts,
+  SubmissionProblemView,
+} from './submission-access';
 
 const viewer = (extra: Partial<Principal> = {}): Principal => ({
   userId: 'viewer',
@@ -286,5 +291,128 @@ describe('staffOnlyFilter', () => {
     expect(
       staffOnlyFilter(viewer({ isSuperuser: true }), { result: ['SC'] }),
     ).toBeNull();
+  });
+});
+
+const NOW = new Date('2026-10-09T12:00:00Z');
+const withPermissions = (...permissions: string[]): Principal =>
+  viewer({ permissions: new Set(permissions) });
+const actionFacts = (
+  extra: Partial<SubmissionActionFacts> = {},
+): SubmissionActionFacts => ({
+  isOwner: false,
+  status: 'D',
+  rejudgedDate: null,
+  lockedAfter: null,
+  canEditProblem: false,
+  ...extra,
+});
+const EDITOR_PERMISSIONS = [
+  'judge.rejudge_submission',
+  'judge.reject_submission',
+];
+
+describe('isSubmissionLocked', () => {
+  it('locks only once lockedAfter has passed', () => {
+    expect(isSubmissionLocked(null, NOW)).toBe(false);
+    expect(isSubmissionLocked(new Date('2026-10-08T12:00:00Z'), NOW)).toBe(
+      true,
+    );
+    expect(isSubmissionLocked(new Date('2026-10-10T12:00:00Z'), NOW)).toBe(
+      false,
+    );
+  });
+});
+
+describe('submissionActions', () => {
+  it.each([
+    {
+      label: 'the owner of an unfinished submission may abort it',
+      principal: viewer({ userId: 'owner' }),
+      facts: actionFacts({ isOwner: true, status: 'QU' }),
+      expected: { canAbort: true, canRejudge: false, canReject: false },
+    },
+    {
+      label: 'the owner loses abort once an admin rejudged it',
+      principal: viewer({ userId: 'owner' }),
+      facts: actionFacts({
+        isOwner: true,
+        status: 'QU',
+        rejudgedDate: NOW,
+      }),
+      expected: { canAbort: false, canRejudge: false, canReject: false },
+    },
+    {
+      label:
+        "judge.abort_any_submission aborts someone else's running submission",
+      principal: withPermissions('judge.abort_any_submission'),
+      facts: actionFacts({ status: 'G' }),
+      expected: { canAbort: true, canRejudge: false, canReject: false },
+    },
+    {
+      label: 'a finished submission cannot be aborted, even by its owner',
+      principal: viewer({ userId: 'owner' }),
+      facts: actionFacts({ isOwner: true, status: 'D' }),
+      expected: { canAbort: false, canRejudge: false, canReject: false },
+    },
+    {
+      label:
+        'an editor with the permissions may rejudge and reject a finished submission',
+      principal: withPermissions(...EDITOR_PERMISSIONS),
+      facts: actionFacts({ canEditProblem: true }),
+      expected: { canAbort: false, canRejudge: true, canReject: true },
+    },
+    {
+      label:
+        'a locked submission cannot be rejudged, but can still be rejected',
+      principal: withPermissions(...EDITOR_PERMISSIONS),
+      facts: actionFacts({
+        canEditProblem: true,
+        lockedAfter: new Date('2026-10-08T12:00:00Z'),
+      }),
+      expected: { canAbort: false, canRejudge: false, canReject: true },
+    },
+    {
+      label: 'a lock still in the future does not block rejudging',
+      principal: withPermissions(...EDITOR_PERMISSIONS),
+      facts: actionFacts({
+        canEditProblem: true,
+        lockedAfter: new Date('2026-10-10T12:00:00Z'),
+      }),
+      expected: { canAbort: false, canRejudge: true, canReject: true },
+    },
+    {
+      label: 'a pending final-submission row can be rejected, not rejudged',
+      principal: withPermissions(...EDITOR_PERMISSIONS),
+      facts: actionFacts({ canEditProblem: true, status: 'PD' }),
+      expected: { canAbort: false, canRejudge: false, canReject: true },
+    },
+    {
+      label: 'a submission a judge holds can neither be rejudged nor rejected',
+      principal: withPermissions(...EDITOR_PERMISSIONS),
+      facts: actionFacts({ canEditProblem: true, status: 'P' }),
+      expected: { canAbort: false, canRejudge: false, canReject: false },
+    },
+    {
+      label: 'a queued submission can be rejected by nobody',
+      principal: withPermissions(...EDITOR_PERMISSIONS),
+      facts: actionFacts({ canEditProblem: true, status: 'QU' }),
+      expected: { canAbort: false, canRejudge: true, canReject: false },
+    },
+    {
+      label:
+        'the owner aborts without any permission; rejudge and reject still need theirs despite edit rights',
+      principal: viewer({ userId: 'owner' }),
+      facts: actionFacts({ canEditProblem: true, status: 'QU', isOwner: true }),
+      expected: { canAbort: true, canRejudge: false, canReject: false },
+    },
+    {
+      label: 'an editor without the action permissions may do nothing',
+      principal: withPermissions('judge.edit_own_problem'),
+      facts: actionFacts({ canEditProblem: true }),
+      expected: { canAbort: false, canRejudge: false, canReject: false },
+    },
+  ])('$label', ({ principal, facts, expected }) => {
+    expect(submissionActions(principal, facts, NOW)).toEqual(expected);
   });
 });

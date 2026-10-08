@@ -2,7 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { hasPermission } from '@libs/auth';
-import type { Permission, Principal } from '@libs/auth';
+import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import {
   IN_FLIGHT_STATUSES,
@@ -28,11 +28,25 @@ import type {
   BulkRejudgeResponse,
 } from './dto/bulk-rejudge.dto';
 import { BULK_REJUDGE_LIMIT } from '../core/rate-limits';
+import {
+  isSubmissionLocked,
+  mayAbortSubmission,
+  mayRejectSubmission,
+  mayRejudgeSubmission,
+} from '../core/submission-access';
 import { SubmissionsRepository } from '../core/submissions.repository';
 import { SubmissionsService } from '../core/submissions.service';
 
-const isLocked = (submission: Submission): boolean =>
-  submission.lockedAfter !== null && submission.lockedAfter < new Date();
+/** `ProblemAccess.canEdit` on the problem, the edit half of every manage check. */
+const editsProblem = (principal: Principal, problem: Problem): boolean =>
+  ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem));
+
+const cannotManageProblem = (): AppError =>
+  new AppError(
+    'forbidden',
+    403,
+    'You cannot manage submissions of this problem',
+  );
 
 /** Legacy `apply_submission_filter` for one problem; submissions a judge holds are never reset, and pending final-submission rows belong to contest judging. */
 function bulkFilter(
@@ -78,8 +92,10 @@ export class SubmissionActionsService {
     );
     const isOwner = uuidStr(submission.user) === principal.userId;
     if (
-      !hasPermission(principal, 'judge.abort_any_submission') &&
-      (!isOwner || submission.rejudgedDate !== null)
+      !mayAbortSubmission(principal, {
+        isOwner,
+        rejudgedDate: submission.rejudgedDate,
+      })
     )
       throw new AppError('forbidden', 403, 'You cannot abort this submission');
     if (!UNFINISHED_STATUSES.includes(submission.status)) return;
@@ -99,8 +115,9 @@ export class SubmissionActionsService {
       id,
       null,
     );
-    this.assertManagesProblem(principal, problem, 'judge.rejudge_submission');
-    if (isLocked(submission))
+    if (!mayRejudgeSubmission(principal, editsProblem(principal, problem)))
+      throw cannotManageProblem();
+    if (isSubmissionLocked(submission.lockedAfter))
       throw new AppError('conflict', 409, 'The submission is locked');
     if (submission.status === 'PD')
       throw new AppError(
@@ -128,7 +145,8 @@ export class SubmissionActionsService {
       id,
       null,
     );
-    this.assertManagesProblem(principal, problem, 'judge.reject_submission');
+    if (!mayRejectSubmission(principal, editsProblem(principal, problem)))
+      throw cannotManageProblem();
     if (!(await this.submissions.reject(id)))
       throw new AppError(
         'conflict',
@@ -150,7 +168,8 @@ export class SubmissionActionsService {
       principal,
       dto.problem,
     );
-    this.assertManagesProblem(principal, problem, 'judge.rejudge_submission');
+    if (!mayRejudgeSubmission(principal, editsProblem(principal, problem)))
+      throw cannotManageProblem();
     const filter = bulkFilter(problem._id, dto);
     const matching = await this.submissions.countMatching(filter);
     const allowed =
@@ -187,22 +206,5 @@ export class SubmissionActionsService {
 
   private notifyGraded(submission: Submission): Promise<void> {
     return notifyGraded(this.graded, gradedJobOf(submission), this.logger);
-  }
-
-  /** Legacy `is_rejudgeable_by` / `is_rejectable_by`: the permission and edit rights on the problem. */
-  private assertManagesProblem(
-    principal: Principal,
-    problem: Problem,
-    permission: Permission,
-  ): void {
-    if (
-      !hasPermission(principal, permission) ||
-      !ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem))
-    )
-      throw new AppError(
-        'forbidden',
-        403,
-        'You cannot manage submissions of this problem',
-      );
   }
 }

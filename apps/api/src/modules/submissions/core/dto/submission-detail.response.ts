@@ -1,6 +1,6 @@
 import type { CaseStatus, Submission, SubmissionCase } from '@libs/database';
 import { batchSummaries } from '../submission-access';
-import type { CaseVisibility } from '../submission-access';
+import type { CaseVisibility, SubmissionActions } from '../submission-access';
 import { SubmissionListItemResponse } from './submission-list.response';
 import type { SubmissionRefs } from './submission-list.response';
 
@@ -44,6 +44,13 @@ const caseResponse = (
   ...(visibility.output ? { output: testCase.output } : {}),
 });
 
+/** What the signed-in viewer may do here; each flag is the rule its action endpoint checks. */
+export class SubmissionViewerResponse {
+  canAbort!: boolean;
+  canRejudge!: boolean;
+  canReject!: boolean;
+}
+
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
   /** Compile log or compiler warnings; the judge's internal error message only for editors. */
   error!: string | null;
@@ -52,6 +59,9 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   judgedOn!: string | null;
   judgedDate!: Date | null;
   rejudgedDate!: Date | null;
+  /** Rejudging is refused after this time; null when the submission never locks. */
+  lockedAfter!: Date | null;
+  viewer!: SubmissionViewerResponse;
   /** Every case when the problem shows them (`testcaseResultVisibility` A) or to superusers. */
   cases!: SubmissionCaseResponse[] | null;
   /** Batch summaries when the problem shows only those (B). */
@@ -66,10 +76,12 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       visibility,
       showError,
       totalCases,
+      actions,
     }: {
       visibility: CaseVisibility;
       showError: boolean;
       totalCases: number | null;
+      actions: SubmissionActions;
     },
   ): SubmissionDetailResponse {
     return {
@@ -80,6 +92,8 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       judgedOn: submission.judgedOn,
       judgedDate: submission.judgedDate,
       rejudgedDate: submission.rejudgedDate,
+      lockedAfter: submission.lockedAfter,
+      viewer: actions,
       cases:
         visibility.cases === 'all'
           ? submission.cases.map((testCase) =>

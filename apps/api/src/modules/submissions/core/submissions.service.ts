@@ -26,8 +26,9 @@ import {
   caseVisibility,
   detailAccess,
   staffOnlyFilter,
+  submissionActions,
 } from './submission-access';
-import type { DetailAccess } from './submission-access';
+import type { DetailAccess, SubmissionActions } from './submission-access';
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
@@ -148,8 +149,24 @@ export class SubmissionsService {
         visibility,
         showError: canEdit || submission.status !== 'IE',
         totalCases,
+        actions: this.actionsFor(principal, submission, canEdit),
       },
     );
+  }
+
+  /** The viewer's action flags, from the rules the action endpoints check. */
+  private actionsFor(
+    principal: Principal,
+    submission: SubmissionDocument,
+    canEditProblem: boolean,
+  ): SubmissionActions {
+    return submissionActions(principal, {
+      isOwner: uuidStr(submission.user) === principal.userId,
+      status: submission.status,
+      rejudgedDate: submission.rejudgedDate,
+      lockedAfter: submission.lockedAfter,
+      canEditProblem,
+    });
   }
 
   /** The detail rules for a live stream, and whether case progress may be shown (every case result visible). */

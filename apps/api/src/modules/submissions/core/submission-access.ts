@@ -1,6 +1,11 @@
 import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import type { CaseStatus, SubmissionCase } from '@libs/database';
+import { IN_FLIGHT_STATUSES, UNFINISHED_STATUSES } from '@libs/database';
+import type {
+  CaseStatus,
+  SubmissionCase,
+  SubmissionStatus,
+} from '@libs/database';
 import type { ProblemAccessView } from '../../problems/core/problem-access';
 
 /** Legacy `DMOJ_SUBMISSION_SOURCE_VISIBILITY = 'all-solved'`: what a problem's `F` (follow the site) means. */
@@ -130,4 +135,73 @@ export function staffOnlyFilter(
   return filters.status?.some((code) => STAFF_ONLY_CODES.has(code))
     ? 'status'
     : null;
+}
+
+export const isSubmissionLocked = (
+  lockedAfter: Date | null,
+  now = new Date(),
+): boolean => lockedAfter !== null && lockedAfter < now;
+
+export interface SubmissionActionFacts {
+  isOwner: boolean;
+  status: SubmissionStatus;
+  rejudgedDate: Date | null;
+  lockedAfter: Date | null;
+  /** `ProblemAccess.canEdit` on the submission's problem (no contest scope). */
+  canEditProblem: boolean;
+}
+
+export interface SubmissionActions {
+  canAbort: boolean;
+  canRejudge: boolean;
+  canReject: boolean;
+}
+
+/** Legacy `abort_submission`: `judge.abort_any_submission`, or the owner until an admin rejudges the submission. */
+export const mayAbortSubmission = (
+  principal: Principal,
+  {
+    isOwner,
+    rejudgedDate,
+  }: Pick<SubmissionActionFacts, 'isOwner' | 'rejudgedDate'>,
+): boolean =>
+  hasPermission(principal, 'judge.abort_any_submission') ||
+  (isOwner && rejudgedDate === null);
+
+/** Legacy `is_rejudgeable_by`: the permission and edit rights on the problem. */
+export const mayRejudgeSubmission = (
+  principal: Principal,
+  canEditProblem: boolean,
+): boolean =>
+  canEditProblem && hasPermission(principal, 'judge.rejudge_submission');
+
+/** Legacy `is_rejectable_by`: the permission and edit rights on the problem. */
+export const mayRejectSubmission = (
+  principal: Principal,
+  canEditProblem: boolean,
+): boolean =>
+  canEditProblem && hasPermission(principal, 'judge.reject_submission');
+
+/** A rejudge is refused for pending final-submission rows and for submissions a judge holds. */
+const isRejudgeableStatus = (status: SubmissionStatus): boolean =>
+  status !== 'PD' && !IN_FLIGHT_STATUSES.includes(status);
+
+/** The action flags a viewer may use on one submission; each is the rule its action endpoint checks. */
+export function submissionActions(
+  principal: Principal,
+  facts: SubmissionActionFacts,
+  now = new Date(),
+): SubmissionActions {
+  return {
+    canAbort:
+      UNFINISHED_STATUSES.includes(facts.status) &&
+      mayAbortSubmission(principal, facts),
+    canRejudge:
+      mayRejudgeSubmission(principal, facts.canEditProblem) &&
+      !isSubmissionLocked(facts.lockedAfter, now) &&
+      isRejudgeableStatus(facts.status),
+    canReject:
+      mayRejectSubmission(principal, facts.canEditProblem) &&
+      !UNFINISHED_STATUSES.includes(facts.status),
+  };
 }
