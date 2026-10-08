@@ -324,6 +324,21 @@ describe('OpenAPI document', () => {
       );
     });
 
+    it('documents a has-more list with no total, and the CSV export as text/csv', async () => {
+      const doc = await document();
+      const logs = bodyOf(doc, '/api/internal/admin/user-activity/logs')!;
+      expect(logs.properties!.meta.$ref).toContain('HasMorePageMetaResponse');
+      expect(
+        doc.components.schemas.HasMorePageMetaResponse.properties,
+      ).toHaveProperty('hasMore');
+      expect(
+        doc.components.schemas.HasMorePageMetaResponse.properties,
+      ).not.toHaveProperty('total');
+      const exported =
+        doc.paths['/api/internal/admin/user-activity/logs/export'].get;
+      expect(exported.responses['200'].content).toHaveProperty('text/csv');
+    });
+
     it('leaves a RawResponse route unwrapped', async () => {
       const doc = await document();
       const operation = doc.paths['/api/v2/problems'].get;
