@@ -23,8 +23,10 @@ import {
 } from './dto/flatpage-admin.response';
 
 const PAGE_SIZE = 50;
-/** Staff write the page, but it is public: the `solution` style (sanitised, no raw HTML), same as editorials. */
-const PAGE_STYLE = 'solution';
+/** Legacy flatpage url charset: nothing that needs escaping in a path. */
+const URL_CHARSET = /^[-\w/.~]+$/;
+/** Staff write the page, but it is public: the `blog` style (sanitised: no foreign iframes, fixed overlays or ids). */
+const PAGE_STYLE = 'blog';
 const notFound = () => new AppError('not_found', 404, 'No such page');
 const REVISION_FIELDS = [
   'url',
@@ -109,7 +111,7 @@ export class FlatpagesAdminService {
   /** The stored form of `raw`, or a 400 on `url`. */
   private canonicalUrl(raw: string): string {
     const url = normalizeFlatpageUrl(raw);
-    if (!url || url.length > FLATPAGE_URL_MAX_LENGTH)
+    if (!url || url.length > FLATPAGE_URL_MAX_LENGTH || !URL_CHARSET.test(url))
       throw invalidField('url', 'Not a valid page url.', 'invalid_url');
     return url;
   }

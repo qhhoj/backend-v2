@@ -49,7 +49,7 @@ export class NavigationAdminService {
   ): Promise<NavigationItemResponse> {
     if (!(await this.items.findById(id))) throw notFound();
     this.assertContent(dto);
-    if (dto.parentId) await this.assertParentFits(id, dto.parentId);
+    if (dto.parentId != null) await this.assertParentFits(id, dto.parentId);
     const item = await this.write(() => this.items.update(id, dto));
     if (!item) throw notFound();
     await this.querier.resync();

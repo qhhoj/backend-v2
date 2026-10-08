@@ -256,6 +256,19 @@ describe('site content administration', () => {
       );
     });
 
+    it('strips foreign iframes and fixed overlays from page content', async () => {
+      const created = dataOf<FlatpageAdminResponse>(
+        await create({
+          url: '/overlay',
+          title: 'O',
+          content:
+            '<iframe src="https://evil.example/x"></iframe><div style="position:fixed;top:0;left:0;width:100vw;height:100vh">cover</div>ok',
+        }).expect(201),
+      );
+      expect(created.contentHtml).not.toMatch(/evil\.example|<iframe|fixed/i);
+      expect(created.contentHtml).toContain('ok');
+    });
+
     it('answers flatpage reads with a private, revalidated cache header', async () => {
       await create({ url: '/cached', title: 'C', content: 'x' }).expect(201);
       const response = await publicPage('cached').expect(200);
@@ -275,6 +288,10 @@ describe('site content administration', () => {
       ['only slashes', '///'],
       ['a control character', 'a\u0001b'],
       ['201 characters', 'x'.repeat(201)],
+      ['a space', '/a b'],
+      ['a query', '/a?x'],
+      ['a fragment', '/a#y'],
+      ['an escape', '/a%20b'],
       ['a url that only the leading slash makes too long', 'y'.repeat(200)],
     ])('refuses %s as a url with a 400 on url', async (_name, url) => {
       const response = await create({ url, title: 'T', content: 'x' }).expect(
@@ -506,6 +523,24 @@ describe('site content administration', () => {
       expect(issuesOf(response).some((found) => found.startsWith(issue))).toBe(
         true,
       );
+    });
+
+    it('refuses unsafe or empty-parent PATCHes and leaves the entry and GET /site unchanged', async () => {
+      const entry = await createdEntry('patch-keep');
+      const patch = (body: object) =>
+        send('patch', `/navigation/${entry.id}`, navigationEditor, body);
+      expect(
+        issuesOf(await patch({ path: 'javascript:alert(1)' }).expect(400)),
+      ).toContain('path:invalid_path');
+      expect(issuesOf(await patch({ regex: '(' }).expect(400))).toContain(
+        'regex:invalid_regex',
+      );
+      expect(issuesOf(await patch({ parentId: '' }).expect(400))).toContain(
+        'parentId:parent_unknown',
+      );
+      expect(
+        (await site()).navigation.find(({ id }) => id === entry.id),
+      ).toEqual(entry);
     });
 
     it('refuses a taken key with 409', async () => {

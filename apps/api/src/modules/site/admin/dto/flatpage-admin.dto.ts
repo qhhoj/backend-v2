@@ -17,7 +17,7 @@ export class CreateFlatpageDto {
   /** Canonicalised on save (`about/` becomes `/about`). */
   @IsString() @MaxLength(FLATPAGE_URL_MAX_LENGTH) url!: string;
   @IsString() @Length(1, FLATPAGE_TITLE_MAX_LENGTH) title!: string;
-  /** Markdown, rendered and sanitised on save in the `solution` style. */
+  /** Markdown, rendered and sanitised on save in the `blog` style. */
   @IsString() @MaxLength(FLATPAGE_CONTENT_MAX_LENGTH) content!: string;
   @IsOptional() @IsBoolean() registrationRequired?: boolean;
 }
