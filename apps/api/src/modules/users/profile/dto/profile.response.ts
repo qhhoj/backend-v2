@@ -9,6 +9,12 @@ export class ProfileOrganizationResponse implements OrganizationSummaryResponse 
   isAdmin!: boolean;
 }
 
+export class AppearanceResponse {
+  accent!: string;
+  glass!: number;
+  glow!: number;
+}
+
 export class ProfileResponse {
   about!: string;
   aboutHtml!: string;
@@ -17,6 +23,7 @@ export class ProfileResponse {
   languageId!: string | null;
   aceTheme!: string;
   siteTheme!: string;
+  appearance!: AppearanceResponse | null;
   mathEngine!: string;
   userScript!: string;
   badges!: string[];

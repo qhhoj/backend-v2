@@ -35,6 +35,7 @@ describe('user schema', () => {
       allowTagging: true,
       aceTheme: 'auto',
       siteTheme: 'auto',
+      appearance: null,
       displayRank: 'user',
       mathEngine: 'auto',
       points: 0,

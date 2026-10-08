@@ -103,6 +103,108 @@ describe('profile', () => {
     });
   });
 
+  it('stores a personal appearance, returns it, replaces it as a whole and clears it with null', async () => {
+    const { user, patch, get } = await person();
+    expect(
+      dataOf<ProfileResponse>(await get().expect(200)).appearance,
+    ).toBeNull();
+
+    const saved = dataOf<ProfileResponse>(
+      await patch({
+        appearance: { accent: 'ocean', glass: 30, glow: 100 },
+      }).expect(200),
+    );
+    expect(saved.appearance).toEqual({ accent: 'ocean', glass: 30, glow: 100 });
+    expect((await api.users.findOne({ _id: user._id }))!.appearance).toEqual({
+      accent: 'ocean',
+      glass: 30,
+      glow: 100,
+    });
+
+    // Another field leaves it alone.
+    const untouched = dataOf<ProfileResponse>(
+      await patch({ siteTheme: 'dark' }).expect(200),
+    );
+    expect(untouched.appearance).toEqual({
+      accent: 'ocean',
+      glass: 30,
+      glow: 100,
+    });
+
+    // A new object replaces the old one, boundaries included.
+    const replaced = dataOf<ProfileResponse>(
+      await patch({
+        appearance: { accent: 'mono', glass: 0, glow: 0 },
+      }).expect(200),
+    );
+    expect(replaced.appearance).toEqual({ accent: 'mono', glass: 0, glow: 0 });
+    const edge = dataOf<ProfileResponse>(
+      await patch({
+        appearance: { accent: 'gold', glass: 100, glow: 100 },
+      }).expect(200),
+    );
+    expect(edge.appearance).toEqual({ accent: 'gold', glass: 100, glow: 100 });
+
+    // null is the one way back to the site's look; mode (siteTheme) is not part of it.
+    const cleared = dataOf<ProfileResponse>(
+      await patch({ appearance: null }).expect(200),
+    );
+    expect(cleared.appearance).toBeNull();
+    expect(cleared.siteTheme).toBe('dark');
+  });
+
+  it('refuses an invalid appearance with a field code and stores nothing', async () => {
+    const { user, patch } = await person({
+      appearance: { accent: 'mint', glass: 10, glow: 20 },
+    });
+    const issuesOf = async (appearance: unknown) => {
+      const response = await patch({ appearance }).expect(400);
+      const { error } = response.body as {
+        error: {
+          code: string;
+          fields: Record<string, string[]>;
+          issues: Array<{ field: string; code: string }>;
+        };
+      };
+      expect(error.code).toBe('validation_failed');
+      return error.issues.map(({ field, code }) => `${field}:${code}`);
+    };
+    expect(await issuesOf({ accent: 'violet', glass: 10, glow: 20 })).toContain(
+      'appearance.accent:is_in',
+    );
+    expect(await issuesOf({ accent: 'mint', glass: 101, glow: 20 })).toContain(
+      'appearance.glass:max',
+    );
+    expect(await issuesOf({ accent: 'mint', glass: -1, glow: 20 })).toContain(
+      'appearance.glass:min',
+    );
+    expect(
+      await issuesOf({ accent: 'mint', glass: 10, glow: 100.5 }),
+    ).toContain('appearance.glow:is_int');
+    expect(await issuesOf({ accent: 'mint', glass: '10', glow: 20 })).toContain(
+      'appearance.glass:is_int',
+    );
+    expect(await issuesOf({ accent: 'mint', glass: 10 })).toContain(
+      'appearance.glow:is_int',
+    );
+    expect(
+      await issuesOf({ accent: 'mint', glass: 10, glow: 20, hue: 300 }),
+    ).toEqual(
+      expect.arrayContaining([expect.stringContaining('appearance.hue')]),
+    );
+    expect(await issuesOf('ocean')).toEqual(
+      expect.arrayContaining([expect.stringContaining('appearance')]),
+    );
+    expect(await issuesOf([])).toEqual(
+      expect.arrayContaining([expect.stringContaining('appearance')]),
+    );
+    expect((await api.users.findOne({ _id: user._id }))!.appearance).toEqual({
+      accent: 'mint',
+      glass: 10,
+      glow: 20,
+    });
+  });
+
   it('refuses null on every field but the badge, which null clears', async () => {
     const badge = (await person()).user._id;
     const { patch } = await person({ badges: [badge], displayBadgeId: badge });

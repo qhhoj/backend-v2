@@ -40,6 +40,7 @@ const PROFILE_FIELDS = {
   languageId: 1,
   aceTheme: 1,
   siteTheme: 1,
+  appearance: 1,
   mathEngine: 1,
   userScript: 1,
   points: 1,

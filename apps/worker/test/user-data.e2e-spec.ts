@@ -97,6 +97,7 @@ describe('user data export', () => {
         'dateJoined',
         'displayRank',
         'email',
+        'appearance',
         'firstName',
         'language',
         'lastLogin',

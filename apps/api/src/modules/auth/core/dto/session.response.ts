@@ -1,4 +1,5 @@
 import { uuidStr } from '@libs/database';
+import { AppearanceResponse } from '../../../users/profile/dto/profile.response';
 import { Principal, SessionData, UserDocument } from '@libs/auth';
 
 export type SecondFactorMethod = 'totp' | 'webauthn';
@@ -19,6 +20,7 @@ export class UserResponse {
   isTotpEnabled!: boolean;
   isWebauthnEnabled!: boolean;
   siteTheme!: string;
+  appearance!: AppearanceResponse | null;
   languageId!: string | null;
 
   static from(user: UserDocument, principal: Principal): UserResponse {
@@ -32,6 +34,7 @@ export class UserResponse {
       isTotpEnabled: user.isTotpEnabled,
       isWebauthnEnabled: user.isWebauthnEnabled,
       siteTheme: user.siteTheme,
+      appearance: user.appearance ?? null,
       languageId: user.languageId === null ? null : uuidStr(user.languageId),
     };
   }

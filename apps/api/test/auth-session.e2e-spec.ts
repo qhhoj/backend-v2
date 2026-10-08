@@ -2,6 +2,7 @@ import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import { newId } from '@libs/database';
 import Redis from 'ioredis';
+import { loginAs } from './problem-fixtures';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
 import { SessionResponse } from '../src/modules/auth/core/dto/session.response';
@@ -367,5 +368,28 @@ describe('auth session endpoints', () => {
       })
       .expect(429);
     await api.http().post(LOGIN).send({ username: 'rita' }).expect(400);
+  });
+
+  it('carries the personal appearance on the session user, null until it is set', async () => {
+    const paula = await createUser(api.users, {
+      username: 'paula',
+      email: 'paula@example.com',
+      appearance: { accent: 'sunset', glass: 60, glow: 40 },
+    });
+    const meOf = async (userId: string) =>
+      sessionOf(
+        await api
+          .http()
+          .get(ME)
+          .set('Cookie', (await loginAs(api, userId)).cookie)
+          .expect(200),
+      );
+    expect((await meOf(paula._id)).user?.appearance).toEqual({
+      accent: 'sunset',
+      glass: 60,
+      glow: 40,
+    });
+    const alice = await api.users.findOne({ username: 'Alice' });
+    expect((await meOf(alice!._id)).user?.appearance).toBeNull();
   });
 });

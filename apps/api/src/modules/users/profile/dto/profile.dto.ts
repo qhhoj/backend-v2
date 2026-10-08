@@ -3,12 +3,18 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
+  IsInt,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ABOUT_MAX_LENGTH } from '@libs/community';
 import { IsTimeZone } from '../../core/dto/is-time-zone';
 
@@ -55,8 +61,25 @@ export const MATH_ENGINES = ['tex', 'svg', 'mml', 'jax', 'auto'] as const;
 export const USER_SCRIPT_MAX_LENGTH = 65_536;
 /** Legacy `first_name` max_length. */
 export const FIRST_NAME_MAX_LENGTH = 30;
-/** The only profile field a PATCH may set to `null` (shows no badge). */
-export const NULLABLE_PROFILE_FIELDS = ['displayBadgeId'];
+/** The frontend's accent presets (frontend `src/theme/appearance.ts`); mode stays in `siteTheme`. */
+export const APPEARANCE_ACCENTS = [
+  'clay',
+  'orchid',
+  'ocean',
+  'mint',
+  'sunset',
+  'gold',
+  'mono',
+] as const;
+export type AppearanceAccent = (typeof APPEARANCE_ACCENTS)[number];
+/** The only profile fields a PATCH may set to `null`: no badge, the site's look. */
+export const NULLABLE_PROFILE_FIELDS = ['displayBadgeId', 'appearance'];
+
+export class AppearanceDto {
+  @IsIn(APPEARANCE_ACCENTS) accent!: AppearanceAccent;
+  @IsInt() @Min(0) @Max(100) glass!: number;
+  @IsInt() @Min(0) @Max(100) glow!: number;
+}
 
 /** Legacy `ProfileForm` fields; every one optional. */
 export class UpdateProfileDto {
@@ -75,6 +98,12 @@ export class UpdateProfileDto {
   @MaxLength(USER_SCRIPT_MAX_LENGTH)
   userScript?: string;
   @IsOptional() @IsUUID('7') displayBadgeId?: string | null;
+  /** The whole look replaces the stored one; `null` clears it (the site's look). */
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => AppearanceDto)
+  appearance?: AppearanceDto | null;
   /** The current memberships reordered or shortened. */
   @IsOptional()
   @IsArray()

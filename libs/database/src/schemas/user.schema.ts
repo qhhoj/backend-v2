@@ -47,6 +47,9 @@ export class User {
   @Prop({ default: 0 }) problemCount!: number;
   @Prop({ default: 'auto' }) aceTheme!: string;
   @Prop({ default: 'auto' }) siteTheme!: string;
+  /** The user's own look (accent preset, glass 0-100, glow 0-100); null = the site's look. Validated by `AppearanceDto`. */
+  @Prop({ type: Object, default: null })
+  appearance!: { accent: string; glass: number; glow: number } | null;
   @Prop({ type: Date, default: null }) lastAccess!: Date | null;
   @Prop({ type: String, default: null }) ip!: string | null;
   @Prop({ type: [UUID], default: [] }) badges!: string[];

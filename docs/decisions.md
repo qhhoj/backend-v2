@@ -156,6 +156,8 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Planned (migrator deferred): migrated `about` (users and organizations) must be rendered into `aboutHtml` on backfill, and `organizations.memberCount`/`performancePoints` recomputed — reads never render and the job writes the counts.
 - Unlisted organizations are kept out of every enumeration but stay reachable by slug — legacy leaked them through select2, `/api/v2` and the sitemap; a private unlisted organization is joined through its link.
 - Joins and profile reorders are compare-and-set on the membership array; approvals run under a per-organization Redis lock against a live member count — parallel requests cannot pass the open-organization cap or `slots`.
+- A personal look (accent preset, glass, glow) is one nullable `appearance` object on the user, replaced whole by PATCH /profile and cleared by null — the SPA sends the whole look, null means "use the site's"; the colour mode stays in `siteTheme`.
+- Accent presets are a closed enum (`APPEARANCE_ACCENTS`), not free colours — the SPA checks contrast per preset, a free colour cannot be checked.
 - Profile edit can only reorder or leave organizations — legacy let users self-join private organizations through the profile form.
 - `edit_all_organization` decides join requests and `spam_organization` lifts the admin cap — legacy ignored the first and its permission typo made the second superuser-only.
 - `about` renders in a `user` style that escapes raw HTML — legacy `safe_mode = 'escape'`.

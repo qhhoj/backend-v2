@@ -49,8 +49,14 @@ export class ProfileService {
     dto: UpdateProfileDto,
   ): Promise<ProfileResponse> {
     const user = (await this.users.findById(principal.userId))!;
-    const { about, firstName, organizations, ...fields } = dto;
+    const { about, firstName, organizations, appearance, ...fields } = dto;
     const changes: Partial<User> = { ...fields };
+    if (appearance !== undefined)
+      changes.appearance = appearance && {
+        accent: appearance.accent,
+        glass: appearance.glass,
+        glow: appearance.glow,
+      };
     const trimmedFirstName = firstName?.trim();
     if (trimmedFirstName !== undefined && trimmedFirstName !== user.firstName) {
       this.refuseInOfficialContest(principal);
@@ -150,6 +156,7 @@ export class ProfileService {
       languageId: user.languageId && uuidStr(user.languageId),
       aceTheme: user.aceTheme,
       siteTheme: user.siteTheme,
+      appearance: user.appearance ?? null,
       mathEngine: user.mathEngine,
       userScript: user.userScript,
       badges: user.badges.map(uuidStr),
