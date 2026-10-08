@@ -50,6 +50,8 @@ import {
   SettingRevisionSchema,
 } from './setting-revision.schema';
 import { Setting, SettingSchema } from './setting.schema';
+import { SimilarityPair, SimilarityPairSchema } from './similarity-pair.schema';
+import { SimilarityRun, SimilarityRunSchema } from './similarity-run.schema';
 import {
   SubmissionSource,
   SubmissionSourceSchema,
@@ -94,6 +96,8 @@ export * from './rating.schema';
 export * from './revision.schema';
 export * from './setting-revision.schema';
 export * from './setting.schema';
+export * from './similarity-pair.schema';
+export * from './similarity-run.schema';
 export * from './submission-source.schema';
 export * from './submission.schema';
 export * from './tag-group.schema';
@@ -140,6 +144,8 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: Revision.name, schema: RevisionSchema },
   { name: SettingRevision.name, schema: SettingRevisionSchema },
   { name: Setting.name, schema: SettingSchema },
+  { name: SimilarityPair.name, schema: SimilarityPairSchema },
+  { name: SimilarityRun.name, schema: SimilarityRunSchema },
   { name: SubmissionSource.name, schema: SubmissionSourceSchema },
   { name: Submission.name, schema: SubmissionSchema },
   { name: TagGroup.name, schema: TagGroupSchema },

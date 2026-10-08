@@ -12,6 +12,8 @@ import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
   Contest,
   ContestMoss,
+  SimilarityPair,
+  SimilarityRun,
   ContestParticipation,
   ContestSubmission,
   Language,
@@ -140,6 +142,12 @@ export async function setupWorkerTest({
       getModelToken(ContestSubmission.name),
     ),
     ratings: ready.get<Model<Rating>>(getModelToken(Rating.name)),
+    similarityRuns: ready.get<Model<SimilarityRun>>(
+      getModelToken(SimilarityRun.name),
+    ),
+    similarityPairs: ready.get<Model<SimilarityPair>>(
+      getModelToken(SimilarityPair.name),
+    ),
     contestMoss: ready.get<Model<ContestMoss>>(getModelToken(ContestMoss.name)),
     organizations: ready.get<Model<Organization>>(
       getModelToken(Organization.name),

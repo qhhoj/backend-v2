@@ -82,6 +82,9 @@ describe('/api/internal/admin/settings', () => {
         'auth.facebook',
         'pdf.renderTimeoutMs',
         'pdf.maxBytes',
+        'similarity.minPercent',
+        'similarity.maxPairs',
+        'similarity.maxSubmissions',
       ]),
     );
     expect(

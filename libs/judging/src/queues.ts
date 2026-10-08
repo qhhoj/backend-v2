@@ -66,3 +66,22 @@ export const enqueueRescore = async (
 export const EFFECTS_SWEEP_QUEUE = 'effects-sweep';
 export const EFFECTS_SWEEP_JOB = 'sweep';
 export const EFFECTS_SWEEP_SCHEDULER = 'effects-sweep-every-10-minutes';
+
+export const SIMILARITY_QUEUE = 'similarity';
+export const SIMILARITY_JOB = 'compare';
+/** Only the run id travels: the run document holds the scope and the limits the api snapshotted. */
+export interface SimilarityJob {
+  runId: string;
+}
+export const similarityJobId = (runId: string) => `similarity-${runId}`;
+/** One attempt: a failed run is recorded as failed and the staff member starts another; a retry would compare the same sources again for the same failure. */
+export const enqueueSimilarity = async (
+  queue: Queue<SimilarityJob>,
+  runId: string,
+): Promise<void> => {
+  await queue.add(
+    SIMILARITY_JOB,
+    { runId },
+    { jobId: similarityJobId(runId), attempts: 1, ...JOB_RETENTION },
+  );
+};

@@ -1,11 +1,11 @@
-export type SimilarityTokenizer = 'syntax' | 'text';
+import type { SimilarityTokenizerName } from '@libs/database';
 
 export interface SimilarityFamily {
   /** Stored on the run's groups and pairs; one family covers every judge language that maps to it. */
   name: string;
   /** Dolos language the engine tokenizes with (`char` is its character tokenizer). */
   language: string;
-  tokenizer: SimilarityTokenizer;
+  tokenizer: SimilarityTokenizerName;
   kgramLength: number;
   kgramsInWindow: number;
   /** Applied to every source before it is sent; must keep the number of lines. */

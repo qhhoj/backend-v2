@@ -11,6 +11,8 @@ import {
   Contest,
   ContestAnnouncement,
   ContestMoss,
+  SimilarityPair,
+  SimilarityRun,
   Flatpage,
   GeneralIssue,
   MiscConfig,
@@ -161,6 +163,12 @@ export async function setupApiTest({
       getModelToken(ContestSubmission.name),
     ),
     ratings: readyApp.get<Model<Rating>>(getModelToken(Rating.name)),
+    similarityRuns: readyApp.get<Model<SimilarityRun>>(
+      getModelToken(SimilarityRun.name),
+    ),
+    similarityPairs: readyApp.get<Model<SimilarityPair>>(
+      getModelToken(SimilarityPair.name),
+    ),
     contestMoss: readyApp.get<Model<ContestMoss>>(
       getModelToken(ContestMoss.name),
     ),

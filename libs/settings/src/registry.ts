@@ -108,6 +108,27 @@ export const SETTINGS = {
     description: 'A rendered PDF larger than this is discarded.',
     secret: false,
   }),
+  'similarity.minPercent': define({
+    type: integerType(1, 100),
+    default: 50,
+    description:
+      'Code similarity runs store pairs at or above this percentage.',
+    secret: false,
+  }),
+  'similarity.maxPairs': define({
+    type: integerType(1, 20_000),
+    default: 2000,
+    description:
+      'Code similarity runs keep at most this many pairs, most similar first.',
+    secret: false,
+  }),
+  'similarity.maxSubmissions': define({
+    type: integerType(2, 10_000),
+    default: 3000,
+    description:
+      'Code similarity compares at most this many (the newest) submissions per problem and language family.',
+    secret: false,
+  }),
 };
 
 export type SettingKey = keyof typeof SETTINGS;
