@@ -162,6 +162,7 @@ describe('auth session endpoints', () => {
         error: {
           code: 'banned',
           message: 'This account has been banned. Reason: spam',
+          banReason: 'spam',
         },
       });
     await api

@@ -1,5 +1,6 @@
 export * from './errors/app.error';
 export * from './errors/invalid-field';
+export * from './errors/validation-failed.error';
 export * from './errors/document-too-large';
 export * from './errors/duplicate-key';
 export * from './filters/exception.filter';

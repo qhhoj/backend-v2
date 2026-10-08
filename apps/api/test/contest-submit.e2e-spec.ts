@@ -22,7 +22,7 @@ import {
   clearBridgeCommands,
   dataOf,
 } from './submission-fixtures';
-import { setupApiTest } from './setup';
+import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 describe('submitting inside a contest', () => {
@@ -135,13 +135,17 @@ describe('submitting inside a contest', () => {
     await enter('spammer', contest._id);
     const first = idOf(await submit('spammer', 'cp_capped').expect(201));
     await submit('spammer', 'cp_capped').expect(201);
-    await submit('spammer', 'cp_capped').expect(403);
+    await submit('spammer', 'cp_capped')
+      .expect(403)
+      .expect(errorCode('contest_submission_limit'));
     await api.submissions.updateOne(
       { _id: first },
       { status: 'IE', result: 'IE' },
     );
     await submit('spammer', 'cp_capped').expect(201);
-    await submit('spammer', 'cp_capped').expect(403);
+    await submit('spammer', 'cp_capped')
+      .expect(403)
+      .expect(errorCode('contest_submission_limit'));
   });
 
   it('counts attempts within the participation, not the contest', async () => {
@@ -151,7 +155,9 @@ describe('submitting inside a contest', () => {
     });
     await enter('spammer', contest._id);
     await submit('spammer', 'cp_own').expect(201);
-    await submit('spammer', 'cp_own').expect(403);
+    await submit('spammer', 'cp_own')
+      .expect(403)
+      .expect(errorCode('contest_submission_limit'));
     const other = await enter('dave', contest._id);
     await submit('dave', 'cp_own').expect(201);
     expect(

@@ -1,5 +1,5 @@
 import type { PipeTransform } from '@nestjs/common';
-import { AppError } from '../errors/app.error';
+import { ValidationFailedError } from '../errors/validation-failed.error';
 
 /** For PATCH bodies: `PartialType` makes every field `@IsOptional`, which also lets an explicit `null` through to the update. Refuses `null` on every field except `nullableFields`; runs after the global validation pipe. */
 export class RefuseNullFieldsPipe implements PipeTransform<object, object> {
@@ -13,13 +13,13 @@ export class RefuseNullFieldsPipe implements PipeTransform<object, object> {
       )
       .map(([field]) => field);
     if (nulled.length)
-      throw new AppError(
-        'validation_failed',
-        400,
+      throw new ValidationFailedError(
         'Validation failed',
-        Object.fromEntries(
-          nulled.map((field) => [field, ['Must not be null.']]),
-        ),
+        nulled.map((field) => ({
+          field,
+          code: 'must_not_be_null',
+          message: 'Must not be null.',
+        })),
       );
     return body;
   }

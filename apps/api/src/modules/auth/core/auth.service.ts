@@ -5,6 +5,7 @@ import {
   hashPassword,
   needsRehash,
   passwordProblems,
+  PWNED_PASSWORD_PROBLEM,
   PrincipalService,
   PwnedPasswordService,
   SessionService,
@@ -12,7 +13,13 @@ import {
   verifyPassword,
 } from '@libs/auth';
 import type { AuthContext, SessionData, UserDocument } from '@libs/auth';
-import { AppError, ENV, RateLimitService } from '@libs/common';
+import {
+  AppError,
+  ENV,
+  RateLimitService,
+  ValidationFailedError,
+} from '@libs/common';
+import { BannedError } from './banned.error';
 import type { Env } from '@libs/common';
 import { FAILURE_LIMIT, FAILURE_WINDOW_SECONDS } from './rate-limits';
 
@@ -73,11 +80,7 @@ export class AuthService {
   assertLoginAllowed(user: UserDocument): void {
     if (!user.isActive)
       throw user.banReason !== null
-        ? new AppError(
-            'banned',
-            403,
-            `This account has been banned. Reason: ${user.banReason}`,
-          )
+        ? new BannedError(user.banReason)
         : new AppError('account_not_activated', 403, 'Account not activated');
   }
 
@@ -134,6 +137,16 @@ export class AuthService {
         400,
         'Current password is incorrect',
         { currentPassword: ['Current password is incorrect.'] },
+        undefined,
+        {
+          issues: [
+            {
+              field: 'currentPassword',
+              code: 'password_incorrect',
+              message: 'Current password is incorrect.',
+            },
+          ],
+        },
       );
     await release();
   }
@@ -148,13 +161,17 @@ export class AuthService {
 
     const problems = passwordProblems(newPassword, auth.user);
     if (newPassword === currentPassword)
-      problems.push('New password must differ from the current password.');
-    if (await this.pwned.isPwned(newPassword))
-      problems.push('This password has appeared in a data breach.');
-    if (problems.length)
-      throw new AppError('validation_failed', 400, 'Password rejected', {
-        newPassword: problems,
+      problems.push({
+        code: 'password_unchanged',
+        message: 'New password must differ from the current password.',
       });
+    if (await this.pwned.isPwned(newPassword))
+      problems.push(PWNED_PASSWORD_PROBLEM);
+    if (problems.length)
+      throw new ValidationFailedError(
+        'Password rejected',
+        problems.map((problem) => ({ field: 'newPassword', ...problem })),
+      );
     // The API token intentionally stays valid across a password change.
     const changed = await this.users.updatePasswordIfUnchanged(
       userId,

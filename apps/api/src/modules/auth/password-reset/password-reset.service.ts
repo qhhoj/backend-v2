@@ -3,6 +3,7 @@ import {
   createPasswordResetToken,
   hashPassword,
   passwordProblems,
+  PWNED_PASSWORD_PROBLEM,
   passwordResetTokenValid,
   PwnedPasswordService,
   readPasswordResetToken,
@@ -10,7 +11,13 @@ import {
   UsersRepository,
 } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
-import { AppError, ENV, MAILER, RateLimitService } from '@libs/common';
+import {
+  AppError,
+  ENV,
+  MAILER,
+  RateLimitService,
+  ValidationFailedError,
+} from '@libs/common';
 import type { Env, Mailer } from '@libs/common';
 import {
   PASSWORD_RESET_EMAIL_LIMIT,
@@ -85,11 +92,12 @@ export class PasswordResetService {
       throw invalidToken();
     const problems = passwordProblems(newPassword, user);
     if (await this.pwned.isPwned(newPassword))
-      problems.push('This password has appeared in a data breach.');
+      problems.push(PWNED_PASSWORD_PROBLEM);
     if (problems.length)
-      throw new AppError('validation_failed', 400, 'Password rejected', {
-        newPassword: problems,
-      });
+      throw new ValidationFailedError(
+        'Password rejected',
+        problems.map((problem) => ({ field: 'newPassword', ...problem })),
+      );
     const changed = await this.users.updatePasswordIfUnchanged(
       user._id,
       user.password,

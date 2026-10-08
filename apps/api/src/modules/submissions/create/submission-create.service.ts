@@ -79,7 +79,7 @@ export class SubmissionCreateService {
       problem.bannedUsers.map(uuidStr).includes(principal.userId)
     )
       throw new AppError(
-        'forbidden',
+        'banned_from_problem',
         403,
         'You are banned from submitting to this problem',
       );
@@ -117,7 +117,7 @@ export class SubmissionCreateService {
         )) >= plan.maxSubmissions!
       )
         throw new AppError(
-          'forbidden',
+          'contest_submission_limit',
           403,
           'You have used every submission allowed for this problem',
         );
@@ -128,7 +128,7 @@ export class SubmissionCreateService {
           UNFINISHED_LIMIT
       )
         throw new AppError(
-          'rate_limited',
+          'unfinished_submission_limit',
           429,
           'Wait until your earlier submissions are judged',
         );

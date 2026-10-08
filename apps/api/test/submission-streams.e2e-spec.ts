@@ -149,7 +149,7 @@ describe('submission event streams', () => {
     }
     const stranger = await open('other', `${EVENTS}/${visible._id}`);
     expect(stranger.status).toBe(403);
-    expect(await errorOf(stranger)).toBe('forbidden');
+    expect(await errorOf(stranger)).toBe('solve_first');
   });
 
   it('sends test-case progress only to viewers who see every case result', async () => {

@@ -25,7 +25,7 @@ import type { Catalog, TestSession } from './problem-fixtures';
 import { openStream, streamsOf } from './sse-client';
 import type { SseClient } from './sse-client';
 import { dataOf, seedSubmission } from './submission-fixtures';
-import { setupApiTest } from './setup';
+import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 const EVENTS = '/api/internal/events/submissions';
@@ -141,8 +141,12 @@ describe('contest submissions and the freeze', () => {
     expect(
       v2IdsOf(await get('/api/v2/submissions?problem=frozen_p').expect(200)),
     ).toEqual([bobOutside]);
-    await get(`/api/internal/submissions/${bobId}`, 'alice').expect(403);
-    await get(`/api/internal/submissions/${bobId}/source`, 'alice').expect(403);
+    await get(`/api/internal/submissions/${bobId}`, 'alice')
+      .expect(403)
+      .expect(errorCode('contest_running'));
+    await get(`/api/internal/submissions/${bobId}/source`, 'alice')
+      .expect(403)
+      .expect(errorCode('contest_running'));
     await get(`/api/v2/submission/${bobId}`, 'alice').expect(403);
     await get(`/api/internal/submissions/${aliceId}`, 'alice').expect(200);
     for (const who of ['author', 'staff']) {
@@ -167,7 +171,9 @@ describe('contest submissions and the freeze', () => {
       { submissionSourceVisibility: 'O' },
     );
     await get(`/api/internal/submissions/${bobId}`, 'author').expect(200);
-    await get(`/api/internal/submissions/${bobId}`, 'alice').expect(403);
+    await get(`/api/internal/submissions/${bobId}`, 'alice')
+      .expect(403)
+      .expect(errorCode('hidden'));
   });
 
   it('opens a frozen contest submission by id to the problem author, who still does not see it in lists', async () => {

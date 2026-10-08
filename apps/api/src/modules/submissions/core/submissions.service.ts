@@ -229,7 +229,13 @@ export class SubmissionsService {
           problem.points,
         )));
     if (!allowed)
-      throw new AppError('forbidden', 403, 'You cannot see this submission');
+      throw access === 'if-solved'
+        ? new AppError(
+            'solve_first',
+            403,
+            'Solve this problem to see this submission',
+          )
+        : new AppError('hidden', 403, 'You cannot see this submission');
     if (
       contest &&
       contestView &&
@@ -248,7 +254,7 @@ export class SubmissionsService {
         )
       )
         throw new AppError(
-          'forbidden',
+          'contest_running',
           403,
           'You cannot see this submission yet',
         );

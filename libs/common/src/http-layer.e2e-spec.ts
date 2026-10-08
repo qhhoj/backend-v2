@@ -2,7 +2,12 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { IsInt, IsString } from 'class-validator';
 import request from 'supertest';
-import { AppError, Paginated, RawResponse } from './index';
+import {
+  AppError,
+  Paginated,
+  RawResponse,
+  ValidationFailedError,
+} from './index';
 import { createTestApp } from './testing';
 
 type ErrBody = { error: { code: string; fields?: Record<string, string[]> } };
@@ -25,6 +30,17 @@ class TestController {
   }
   @Get('app-error') appError() {
     throw new AppError('banned', 403, 'Banned: spam');
+  }
+  @Get('app-error-extra') appErrorExtra() {
+    throw new AppError('conflict', 409, 'x', undefined, undefined, {
+      hint: 'y',
+      code: 'hacked',
+    });
+  }
+  @Get('issues') issues() {
+    throw new ValidationFailedError('Bad', [
+      { field: 'a', code: 'too_big', message: 'Too big.' },
+    ]);
   }
   @Get('crash') crash() {
     throw new Error('boom');
@@ -56,6 +72,21 @@ describe('http layer', () => {
     http()
       .get('/t/app-error')
       .expect(403, { error: { code: 'banned', message: 'Banned: spam' } }));
+  it('merges extras next to code and message without overriding them', () =>
+    http()
+      .get('/t/app-error-extra')
+      .expect(409, { error: { hint: 'y', code: 'conflict', message: 'x' } }));
+  it('answers field issues next to the field messages', () =>
+    http()
+      .get('/t/issues')
+      .expect(400, {
+        error: {
+          code: 'validation_failed',
+          message: 'Bad',
+          fields: { a: ['Too big.'] },
+          issues: [{ field: 'a', code: 'too_big', message: 'Too big.' }],
+        },
+      }));
   it('hides internal errors', async () => {
     const { body } = (await http()
       .get('/t/crash')

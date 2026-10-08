@@ -261,6 +261,11 @@ describe('submission read flow', () => {
       await as(who, `${SUBMISSIONS}/${owned[code]}`).expect(status);
     });
 
+    it('says hidden, not solve_first, when solving would not help', () =>
+      as('other', `${SUBMISSIONS}/${owned['vis_o']}`)
+        .expect(403)
+        .expect(errorCode('hidden')));
+
     it('opens an all-solved submission once the viewer solved the problem with full points', async () => {
       const path = `${SUBMISSIONS}/${owned['vis_s']}`;
       const problem = (await api.problems.findOne({ code: 'vis_s' }))!;
@@ -279,7 +284,7 @@ describe('submission read flow', () => {
         result: 'WA',
         points: 1000,
       });
-      await as('other', path).expect(403).expect(errorCode('forbidden'));
+      await as('other', path).expect(403).expect(errorCode('solve_first'));
       await seedSubmission(api, {
         user: ids.other,
         problem: problem._id,

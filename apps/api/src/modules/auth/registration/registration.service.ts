@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import {
   hashPassword,
   passwordProblems,
+  PWNED_PASSWORD_PROBLEM,
   PwnedPasswordService,
   sha256,
   UsersRepository,
@@ -16,9 +17,10 @@ import {
   MAILER,
   RateLimitService,
   REDIS,
+  ValidationFailedError,
   withRedisLock,
 } from '@libs/common';
-import type { Env, Mailer } from '@libs/common';
+import type { Env, FieldIssue, Mailer } from '@libs/common';
 import { ActivationKey, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import Redis from 'ioredis';
@@ -82,22 +84,27 @@ export class RegistrationService {
     email,
     password,
   }: RegisterDto): Promise<void> {
-    const fields: Record<string, string[]> = {};
+    const issues: FieldIssue[] = [];
     if (await this.isTaken(() => this.users.findByUsername(username)))
-      fields.username = ['Username is taken.'];
+      issues.push({
+        field: 'username',
+        code: 'username_taken',
+        message: 'Username is taken.',
+      });
     if (await this.isTaken(() => this.users.findByEmail(email)))
-      fields.email = ['Email is already registered.'];
+      issues.push({
+        field: 'email',
+        code: 'email_taken',
+        message: 'Email is already registered.',
+      });
     const problems = passwordProblems(password, { username, email });
     if (await this.pwned.isPwned(password))
-      problems.push('This password has appeared in a data breach.');
-    if (problems.length) fields.password = problems;
-    if (Object.keys(fields).length)
-      throw new AppError(
-        'validation_failed',
-        400,
-        'Registration rejected',
-        fields,
-      );
+      problems.push(PWNED_PASSWORD_PROBLEM);
+    issues.push(
+      ...problems.map((problem) => ({ field: 'password', ...problem })),
+    );
+    if (issues.length)
+      throw new ValidationFailedError('Registration rejected', issues);
   }
 
   private async registerLocked({
@@ -205,9 +212,13 @@ export class RegistrationService {
           'This social account is already linked',
         );
       if (isDuplicateKey(error))
-        throw new AppError('validation_failed', 400, 'Registration rejected', {
-          username: ['Username is taken.'],
-        });
+        throw new ValidationFailedError('Registration rejected', [
+          {
+            field: 'username',
+            code: 'username_taken',
+            message: 'Username is taken.',
+          },
+        ]);
       throw error;
     }
   }

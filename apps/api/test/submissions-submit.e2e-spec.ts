@@ -160,14 +160,16 @@ describe('POST /api/internal/problems/:code/submit', () => {
   });
 
   it('refuses banned users, superusers excepted', async () => {
-    await submit('banned').expect(403).expect(errorCode('forbidden'));
+    await submit('banned').expect(403).expect(errorCode('banned_from_problem'));
     await submit('root').expect(201);
   });
 
   it('allows two unfinished submissions per user unless the user may spam', async () => {
     await submit('alice').expect(201);
     const second = idOf(await submit('alice').expect(201));
-    await submit('alice').expect(429).expect(errorCode('rate_limited'));
+    await submit('alice')
+      .expect(429)
+      .expect(errorCode('unfinished_submission_limit'));
     await api.submissions.updateOne(
       { _id: second },
       { status: 'D', result: 'AC' },

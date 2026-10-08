@@ -29,6 +29,7 @@ export class AppExceptionFilter implements ExceptionFilter {
         .headers(exception.headers ?? {})
         .send({
           error: {
+            ...exception.extra,
             code: exception.code,
             message: exception.message,
             ...(exception.fields && { fields: exception.fields }),

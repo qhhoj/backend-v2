@@ -87,6 +87,39 @@ describe('registration', () => {
         .expect(errorCode('validation_failed'));
   });
 
+  it('answers machine codes next to the messages', async () => {
+    const response = await register(
+      'TAKEN',
+      'TAKEN@example.com',
+      '12345678',
+    ).expect(400);
+    const { error } = response.body as {
+      error: {
+        fields: Record<string, string[]>;
+        issues: Array<{ field: string; code: string }>;
+      };
+    };
+    expect(error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'username', code: 'username_taken' }),
+        expect.objectContaining({ field: 'email', code: 'email_taken' }),
+        expect.objectContaining({
+          field: 'password',
+          code: 'password_numeric',
+        }),
+      ]),
+    );
+    expect(error.fields.username).toEqual(['Username is taken.']);
+    const invalid = await register('bad name', 'nope', 'x').expect(400);
+    expect(
+      (
+        invalid.body as { error: { issues: Array<{ code: string }> } }
+      ).error.issues.map((issue) => issue.code),
+    ).toEqual(
+      expect.arrayContaining(['username_invalid_characters', 'email_invalid']),
+    );
+  });
+
   it('rejects expired and unknown activation keys without activating', async () => {
     await register('late', 'late@example.com').expect(204);
     const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
