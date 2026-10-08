@@ -21,18 +21,6 @@ const scoringParticipationOf = (
 ): ParticipationDocument | null =>
   viewer.current && isScoring(viewer.current) ? viewer.current : viewer.live;
 
-/** Non-editors see the frozen cells and counts during a freeze; editors always see the live ones. */
-const isFrozenViewOf = (
-  principal: Principal | null,
-  contest: ContestDocument,
-  now: Date,
-): boolean =>
-  isFrozenFor(
-    contest,
-    now,
-    ContestAccess.canEdit(principal, ContestAccess.accessView(contest)),
-  );
-
 /** The detail's problem rows and what the viewer may see of them. */
 @Injectable()
 export class ContestProblemFactsService {
@@ -49,10 +37,23 @@ export class ContestProblemFactsService {
     viewer: ContestViewer,
     now: Date,
   ): Promise<ContestProblemFacts> {
-    const isFrozenView = isFrozenViewOf(principal, contest, now);
-    const canSeeBoard = ContestAccess.canSeeFullScoreboard(
+    const view = ContestAccess.accessView(contest);
+    const isFrozenView = isFrozenFor(
+      contest,
+      now,
+      ContestAccess.canEdit(principal, view),
+    );
+    const ownParticipation = ContestAccess.canSeeOwnScoreboard(
       principal,
-      ContestAccess.accessView(contest),
+      view,
+      now,
+      viewer,
+    )
+      ? scoringParticipationOf(viewer)
+      : null;
+    const canSeeFullBoard = ContestAccess.canSeeFullScoreboard(
+      principal,
+      view,
       now,
       viewer,
     );
@@ -60,8 +61,8 @@ export class ContestProblemFactsService {
       this.problems.findSummaries(
         contest.problems.map((entry) => uuidStr(entry.problem)),
       ),
-      this.viewerResultsOf(principal, contest, viewer, now),
-      canSeeBoard ? this.solvers.countsOf(contest, isFrozenView) : null,
+      this.viewerResultsOf(contest, ownParticipation, isFrozenView),
+      canSeeFullBoard ? this.solvers.countsOf(contest, isFrozenView) : null,
     ]);
     return {
       summaries: summaries.map(({ _id, code, name }) => ({ _id, code, name })),
@@ -70,21 +71,13 @@ export class ContestProblemFactsService {
     };
   }
 
-  /** Only a viewer who may see their own row gets their cells. */
+  /** Only a viewer whose own row may be seen gets their cells (`participation` is null otherwise). */
   private async viewerResultsOf(
-    principal: Principal | null,
     contest: ContestDocument,
-    viewer: ContestViewer,
-    now: Date,
+    participation: ParticipationDocument | null,
+    isFrozenView: boolean,
   ): Promise<ContestProblemFacts['viewerResults']> {
-    const view = ContestAccess.accessView(contest);
-    const participation = scoringParticipationOf(viewer);
-    if (
-      !participation ||
-      !ContestAccess.canSeeOwnScoreboard(principal, view, now, viewer)
-    )
-      return null;
-    const isFrozenView = isFrozenViewOf(principal, contest, now);
+    if (!participation) return null;
     return viewerProblemResults({
       problems: contest.problems.map((entry) => ({
         problemId: uuidStr(entry.problem),

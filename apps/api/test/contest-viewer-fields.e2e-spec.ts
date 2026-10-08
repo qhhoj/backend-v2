@@ -542,6 +542,37 @@ describe('contest viewer fields', () => {
       ).toBe(2);
     });
 
+    it('keeps the frozen count for a non-editor even after an editor has read the live count', async () => {
+      const [first] = problems;
+      const contest = await createContest(api, {
+        name: 'solvers_frozen_reverse',
+        formatName: 'icpc',
+        frozenLastMinutes: 180,
+        authors: [users.author._id],
+        problems: [contestProblem(first._id, 0)],
+      });
+      const before = solvedCell(first._id);
+      const after = { [first._id]: { time: 5000, points: 100, tries: 1 } };
+      const hidden = {
+        [first._id]: { time: null, points: 0, tries: 1, pending: true },
+      };
+      await joinParticipation(api, contest._id, users.alice._id, {
+        formatData: before,
+        frozenFormatData: before,
+      });
+      const row = await joinParticipation(api, contest._id, users.bob._id, {
+        formatData: after,
+        frozenFormatData: hidden,
+      });
+      await makeCurrent(api, users.bob._id, row._id);
+      expect(
+        (await detail(contest.key, 'author')).problems![0].solverCount,
+      ).toBe(2);
+      expect((await detail(contest.key, 'bob')).problems![0].solverCount).toBe(
+        1,
+      );
+    });
+
     it('hides solver counts where the ranking hides the full board, keeping the own result', async () => {
       const [first] = problems;
       const contest = await createContest(api, {

@@ -9,7 +9,8 @@ import { ParticipationsRepository } from './participations.repository';
 /** How long a count may lag behind the ranking when nothing purges it: at most one aggregate per contest and frozen view per window. */
 export const SOLVER_COUNTS_CACHE_SECONDS = 30;
 
-/** Solver counts for the contest detail, read through Redis; concurrent misses on a key in this process share one aggregate. */
+/** Solver counts for the contest detail, read through Redis; concurrent misses on a key in this process share one aggregate.
+ * A caller that shares an in-flight read gets the problem list of the first caller, so a count may lack a problem edited meanwhile until the TTL or the next purge. */
 @Injectable()
 export class SolverCountsService {
   private readonly inFlight = new Map<string, Promise<Map<string, number>>>();

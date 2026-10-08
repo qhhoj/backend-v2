@@ -357,6 +357,7 @@ export class ParticipationsRepository {
     isFrozenView: boolean,
   ): Promise<Map<string, number>> {
     const cells = isFrozenView ? '$frozenFormatData' : '$formatData';
+    // Mongo form of `isSolvedCell` (libs/contests first-solves.ts): keep in step with it.
     const pointsOf = (problemId: string) => ({
       $getField: {
         field: 'points',
