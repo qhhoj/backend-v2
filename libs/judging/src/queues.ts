@@ -74,6 +74,8 @@ export interface SimilarityJob {
   runId: string;
 }
 export const similarityJobId = (runId: string) => `similarity-${runId}`;
+/** The worker's budget for one run, all its groups. The queue runs one job at a time, so this also bounds the wait of the next scope; the api treats a run still running past it (plus a margin) as abandoned. */
+export const SIMILARITY_DEADLINE_MS = 30 * 60 * 1000;
 /** One attempt: a failed run is recorded as failed and the staff member starts another; a retry would compare the same sources again for the same failure. */
 export const enqueueSimilarity = async (
   queue: Queue<SimilarityJob>,

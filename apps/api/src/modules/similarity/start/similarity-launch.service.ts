@@ -9,11 +9,10 @@ import type { SimilarityJob } from '@libs/judging';
 import { SettingsService } from '@libs/settings';
 import type { ScopeTarget } from '../core/similarity-access.service';
 import { SimilarityRunsRepository } from '../core/similarity-runs.repository';
-import { SIMILARITY_STALE_AFTER_MS } from '../core/rate-limits';
 
 const NEVER_QUEUED: SimilarityError = 'internal_error';
 
-/** Creates a scope's one active run, with the limits in force now, and queues its job. */
+/** The second step of a start, after access and the rate limit (`SimilarityStartService`): frees a stale run, creates the scope's one active run with the limits in force now, and queues its job. */
 @Injectable()
 export class SimilarityLaunchService {
   private readonly logger = new Logger(SimilarityLaunchService.name);
@@ -25,9 +24,11 @@ export class SimilarityLaunchService {
   ) {}
 
   /** Returns the run id; 409 while the scope has an active run. */
-  async launch(requestedBy: string, target: ScopeTarget): Promise<string> {
-    const staleBefore = new Date(Date.now() - SIMILARITY_STALE_AFTER_MS);
-    await this.runs.releaseStale(target.scopeKey, staleBefore);
+  async createAndQueue(
+    requestedBy: string,
+    target: ScopeTarget,
+  ): Promise<string> {
+    await this.runs.releaseStale(target.scopeKey);
     const run = await this.runs.createRun({
       ...target,
       requestedBy,

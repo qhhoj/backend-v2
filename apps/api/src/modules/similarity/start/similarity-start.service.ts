@@ -12,7 +12,7 @@ import { SimilarityLaunchService } from './similarity-launch.service';
 
 const startRateKey = (userId: string) => `similarity-start:${userId}`;
 
-/** Starts a run for a scope the caller edits, within the per-user start limit. */
+/** The first step of a start: the caller edits the scope and is within the per-user start limit. `SimilarityLaunchService` creates and queues the run, and a start that queues nothing is given back. */
 @Injectable()
 export class SimilarityStartService {
   constructor(
@@ -32,7 +32,9 @@ export class SimilarityStartService {
       SIMILARITY_START_WINDOW_SECONDS,
     );
     try {
-      return { runId: await this.launcher.launch(principal.userId, target) };
+      return {
+        runId: await this.launcher.createAndQueue(principal.userId, target),
+      };
     } catch (error) {
       // Nothing was queued (busy scope or a failed write): the start does not count.
       await releaseStart();

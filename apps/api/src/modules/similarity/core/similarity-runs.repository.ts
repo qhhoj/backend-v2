@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { SIMILARITY_DEADLINE_MS } from '@libs/judging';
 import {
   Contest,
   isUuid,
@@ -25,6 +26,12 @@ export interface NewSimilarityRun {
 
 const DUPLICATE_KEY = 11000;
 const ABANDONED: SimilarityError = 'abandoned';
+/** A run still queued this long is abandoned: its job was most likely lost. A run merely waiting behind a very long backlog is released too (accepted: rare under the start limit). */
+export const QUEUED_STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+/** A running run past the worker's deadline plus this margin is abandoned: the worker would have failed it by now. */
+const RUNNING_STALE_MARGIN_MS = 10 * 60 * 1000;
+export const RUNNING_STALE_AFTER_MS =
+  SIMILARITY_DEADLINE_MS + RUNNING_STALE_MARGIN_MS;
 
 @Injectable()
 export class SimilarityRunsRepository {
@@ -73,11 +80,25 @@ export class SimilarityRunsRepository {
     }
   }
 
-  /** Frees the scope of an active run created before `before`: its job is gone (lost job, crash) or stuck behind a backlog, where the worker's claim then finds nothing to do. */
-  async releaseStale(scopeKey: string, before: Date): Promise<void> {
+  /** Frees the scope of an active run whose job is gone (lost job, crash): queued past `QUEUED_STALE_AFTER_MS`, or running past `RUNNING_STALE_AFTER_MS`. A released run's job then finds nothing to claim or finish. */
+  async releaseStale(scopeKey: string, now = new Date()): Promise<void> {
+    const before = (ageMs: number) => new Date(now.getTime() - ageMs);
     await this.runs
       .updateMany(
-        { scopeKey, active: true, createdAt: { $lt: before } },
+        {
+          scopeKey,
+          active: true,
+          $or: [
+            {
+              status: 'queued',
+              createdAt: { $lt: before(QUEUED_STALE_AFTER_MS) },
+            },
+            {
+              status: 'running',
+              startedAt: { $lt: before(RUNNING_STALE_AFTER_MS) },
+            },
+          ],
+        },
         {
           $set: {
             status: 'failed',

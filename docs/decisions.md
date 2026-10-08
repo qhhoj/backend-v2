@@ -268,7 +268,8 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Newest 3000 submissions per problem and family — bounds memory and time (3000 identical files is 4.5 million pairs).
 - Limits as admin settings snapshotted into the run — operators tune them without a deploy and a run shows what applied; `maxPairs` caps a run, not a group; 50 fragments per pair cap the output.
 - A failing group is skipped and flagged `failed: true` — one bad group must not lose the others' results.
-- One active run per scope by a partial unique index — two racing starts cannot create two runs; a run active 3 hours is abandoned at the next start and never overwrites results.
+- One active run per scope by a partial unique index — two racing starts cannot create two runs; an abandoned run never overwrites results.
+- Stale release at the next start: a run queued 3 hours (by `createdAt`) or running past the 30 minute deadline plus 10 minutes (by `startedAt`) is abandoned — queue wait alone no longer discards a run that is legitimately running.
 - A success deletes the earlier runs and pairs in one transaction, a failed run keeps them — staff never see a half-written set.
 - A stalled redelivery fails the run, and a worker shutdown mid-run fails it (`internal_error`) keeping earlier results — the scope is freed at once; cost: one manual re-run after a deploy.
 - Rate limit of 10 starts per user per hour, given back on 409 or an enqueue failure — a refused start costs nothing.

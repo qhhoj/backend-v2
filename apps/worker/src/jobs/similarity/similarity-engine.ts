@@ -73,7 +73,8 @@ type FailureCode = SimilarityEngineError['code'];
 const dolosEntryUrl = (): string =>
   pathToFileURL(createRequire(__filename).resolve('@dodona/dolos-lib')).href;
 
-const requestLines = (request: EngineRequest): string[] => {
+/** The config line, then one line per submission, each serialized only when the writer asks for it. */
+function* requestLines(request: EngineRequest): Generator<string> {
   const { family, minSimilarity, maxPairs, timeoutMs } = request;
   const config = {
     dolosEntry: dolosEntryUrl(),
@@ -85,8 +86,10 @@ const requestLines = (request: EngineRequest): string[] => {
     maxPairs,
     maxFragments: request.maxFragments ?? DEFAULT_MAX_FRAGMENTS_PER_PAIR,
   };
-  return [config, ...request.submissions].map((line) => JSON.stringify(line));
-};
+  yield JSON.stringify(config);
+  for (const submission of request.submissions)
+    yield JSON.stringify(submission);
+}
 
 const decodePairs = (chunks: Buffer[]): EnginePair[] | null => {
   try {
@@ -99,8 +102,8 @@ const decodePairs = (chunks: Buffer[]): EnginePair[] | null => {
   }
 };
 
-/** One NDJSON line at a time, waiting for `drain`, so a big group is never held twice in memory. */
-const writeLines = async (child: ChildProcess, lines: string[]) => {
+/** One NDJSON line at a time, serialized as it is written and waiting for `drain`, so a big group's sources are never held twice in memory. */
+const writeLines = async (child: ChildProcess, lines: Iterable<string>) => {
   for (const line of lines)
     if (!child.stdin!.write(line + '\n')) await once(child.stdin!, 'drain');
   child.stdin!.end();

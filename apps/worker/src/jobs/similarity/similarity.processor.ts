@@ -37,7 +37,7 @@ export class SimilarityProcessor
     await startAfterIndexes(this.worker, this.submissions);
   }
 
-  /** Errors are not caught here: `run` records its own failures, and a shutdown must not look like a clean finish. */
+  /** `run` records every failure on the run itself, a shutdown included (the run is marked failed and the job completes); the job fails only if that recording does. */
   process(job: Job<SimilarityJob>): Promise<void> {
     return this.similarity.run(job.data.runId);
   }

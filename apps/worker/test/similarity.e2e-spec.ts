@@ -1,5 +1,6 @@
 import { SPECTATE } from '@libs/contests';
 import { newId, uuidStr } from '@libs/database';
+import { SIMILARITY_DEADLINE_MS } from '@libs/judging';
 import type {
   Contest,
   Language,
@@ -18,10 +19,7 @@ import type {
   EngineSubmission,
 } from '../src/jobs/similarity/similarity-engine';
 import { SimilarityRepository } from '../src/jobs/similarity/similarity.repository';
-import {
-  SIMILARITY_DEADLINE_MS,
-  SimilarityService,
-} from '../src/jobs/similarity/similarity.service';
+import { SimilarityService } from '../src/jobs/similarity/similarity.service';
 import {
   seedContest,
   seedContestSubmission,

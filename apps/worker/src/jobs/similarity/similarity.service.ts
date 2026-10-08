@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { uuidStr } from '@libs/database';
+import { SIMILARITY_DEADLINE_MS } from '@libs/judging';
 import type {
   SimilarityError,
   SimilarityGroup,
@@ -27,8 +28,6 @@ import type {
 
 /** Sources over this many bytes are skipped (the spec's 64 KiB). */
 export const SIMILARITY_MAX_SOURCE_BYTES = 64 * 1024;
-/** One run, all its groups. The queue runs one job at a time, so this also bounds the wait of the next scope. */
-export const SIMILARITY_DEADLINE_MS = 30 * 60 * 1000;
 /** Sources are read this many at a time. */
 export const SOURCE_CHUNK = 200;
 

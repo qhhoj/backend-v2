@@ -26,6 +26,8 @@ import type { ApiTest } from './setup';
 
 const RUNS = '/api/internal/similarity/runs';
 const LIMITS = { minPercent: 50, maxPairs: 2000, maxSubmissions: 3000 };
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
 
 describe('similarity runs', () => {
   let api: ApiTest;
@@ -65,6 +67,22 @@ describe('similarity runs', () => {
       limits: LIMITS,
       ...fields,
     });
+
+  /** An active run claimed `runningMs` ago after `waitedMs` in the queue; `createdAt` is immutable through Mongoose, so the driver ages it. */
+  const seedRunning = async (age: { waitedMs: number; runningMs: number }) => {
+    const run = await seedRun({ status: 'running', active: true });
+    const startedAt = new Date(Date.now() - age.runningMs);
+    await api.similarityRuns.collection.updateOne(
+      { scopeKey: run.scopeKey, active: true },
+      {
+        $set: {
+          startedAt,
+          createdAt: new Date(startedAt.getTime() - age.waitedMs),
+        },
+      },
+    );
+    return run;
+  };
 
   beforeAll(async () => {
     api = await setupApiTest();
@@ -203,17 +221,39 @@ describe('similarity runs', () => {
     await start('editor', { problem: 'simrun' }).expect(202);
   });
 
-  it('treats a run stuck for hours as abandoned when the next start arrives', async () => {
+  it('treats a run queued for hours as abandoned when the next start arrives', async () => {
     const { runId } = dataOf<{ runId: string }>(
       await start('editor', { problem: 'simrun' }).expect(202),
     );
     // `createdAt` is immutable through Mongoose: age the row with the driver.
     await api.similarityRuns.collection.updateOne(
       { scopeKey: `problem:${problem._id}`, active: true },
-      { $set: { createdAt: new Date(Date.now() - 4 * 3_600_000) } },
+      { $set: { createdAt: new Date(Date.now() - 4 * HOUR_MS) } },
     );
     await start('editor', { problem: 'simrun' }).expect(202);
     expect(await api.similarityRuns.findById(runId).lean()).toMatchObject({
+      status: 'failed',
+      active: false,
+      error: 'abandoned',
+    });
+  });
+
+  it('keeps a run that waited hours in the queue but started a minute ago', async () => {
+    const run = await seedRunning({
+      waitedMs: 4 * HOUR_MS,
+      runningMs: MINUTE_MS,
+    });
+    await start('editor', { problem: 'simrun' }).expect(409);
+    expect(await api.similarityRuns.findById(run._id).lean()).toMatchObject({
+      status: 'running',
+      active: true,
+    });
+  });
+
+  it('treats a run running past the deadline and its margin as abandoned', async () => {
+    const run = await seedRunning({ waitedMs: 0, runningMs: 41 * MINUTE_MS });
+    await start('editor', { problem: 'simrun' }).expect(202);
+    expect(await api.similarityRuns.findById(run._id).lean()).toMatchObject({
       status: 'failed',
       active: false,
       error: 'abandoned',
