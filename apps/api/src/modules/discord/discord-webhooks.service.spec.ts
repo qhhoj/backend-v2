@@ -1,6 +1,8 @@
 import type { Queue } from 'bullmq';
 import type { Env } from '@libs/common';
 import type { DiscordWebhookJob } from '@libs/community';
+import type { SettingsService } from '@libs/settings';
+import { fakeSettings } from '@libs/settings/testing';
 import { DiscordWebhooksService } from './discord-webhooks.service';
 
 describe('DiscordWebhooksService', () => {
@@ -10,11 +12,16 @@ describe('DiscordWebhooksService', () => {
     const queue = {
       add: (...args: unknown[]) => (added.push(args), Promise.resolve()),
     } as unknown as Queue<DiscordWebhookJob>;
-    const env = {
-      discordWebhookUrls: urls,
-      siteUrl: 'https://oj.example',
-    } as unknown as Env;
-    return { service: new DiscordWebhooksService(env, queue), added };
+    const env = { siteUrl: 'https://oj.example' } as unknown as Env;
+    const settings = fakeSettings({ 'discord.webhooks': urls });
+    return {
+      service: new DiscordWebhooksService(
+        env,
+        settings as unknown as SettingsService,
+        queue,
+      ),
+      added,
+    };
   };
 
   it('enqueues nothing when no URL serves the event', async () => {

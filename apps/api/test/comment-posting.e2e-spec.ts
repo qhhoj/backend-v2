@@ -48,8 +48,9 @@ describe('comment posting and editing', () => {
     authed(api.http().patch(commentUrl(id)), session).send({ body });
 
   beforeAll(async () => {
-    api = await setupApiTest({
-      env: { DISCORD_WEBHOOK_URLS: 'on_new_comment=http://127.0.0.1:9/hook' },
+    api = await setupApiTest();
+    await api.setSetting('discord.webhooks', {
+      on_new_comment: 'http://127.0.0.1:9/hook',
     });
     discord = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
   });

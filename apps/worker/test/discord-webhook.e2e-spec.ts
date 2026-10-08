@@ -44,10 +44,12 @@ describe('discord webhook job', () => {
       server.listen(0, '127.0.0.1', resolve),
     );
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    worker = await setupWorkerTest({
-      env: {
-        DISCORD_WEBHOOK_URLS: `default=${base}/default,on_new_blogpost=${base}/blog,on_new_problem=${base}/redirect,on_new_ticket=http://127.0.0.1:1/secret-path`,
-      },
+    worker = await setupWorkerTest();
+    await worker.setSetting('discord.webhooks', {
+      default: `${base}/default`,
+      on_new_blogpost: `${base}/blog`,
+      on_new_problem: `${base}/redirect`,
+      on_new_ticket: 'http://127.0.0.1:1/secret-path',
     });
   });
   beforeEach(() => {

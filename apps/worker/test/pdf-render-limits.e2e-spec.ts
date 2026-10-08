@@ -29,9 +29,8 @@ describeWithChromium('PdfRenderProcessor limits (Chromium)', () => {
     let worker: WorkerTest;
     let processor: PdfRenderProcessor;
     beforeAll(async () => {
-      worker = await setupWorkerTest({
-        env: { PDF_RENDER_TIMEOUT_MS: '1000' },
-      });
+      worker = await setupWorkerTest();
+      await worker.setSetting('pdf.renderTimeoutMs', 1000);
       processor = worker.module.get(PdfRenderProcessor);
       await worker.problems.create([
         {
@@ -72,7 +71,8 @@ describeWithChromium('PdfRenderProcessor limits (Chromium)', () => {
     let worker: WorkerTest;
     let processor: PdfRenderProcessor;
     beforeAll(async () => {
-      worker = await setupWorkerTest({ env: { PDF_MAX_BYTES: '500' } });
+      worker = await setupWorkerTest();
+      await worker.setSetting('pdf.maxBytes', 500);
       processor = worker.module.get(PdfRenderProcessor);
       await worker.problems.create({
         ...baseProblem,

@@ -18,6 +18,7 @@ import { newId } from '@libs/database';
 import { renderMarkdown } from '@libs/render';
 import type { PdfRenderJob } from '@libs/problems';
 import { BrowserService } from '../src/jobs/pdf-render/browser.service';
+import { SettingsService } from '@libs/settings';
 import { PdfRenderProcessor } from '../src/jobs/pdf-render/pdf-render.processor';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
@@ -206,7 +207,10 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
     ).toBeLessThan(EMBEDDED_IMAGE_MIN_BYTES);
   });
   it('relaunches Chromium after a failed launch', async () => {
-    const browser = new BrowserService(worker.module.get<Env>(ENV));
+    const browser = new BrowserService(
+      worker.module.get<Env>(ENV),
+      worker.module.get(SettingsService),
+    );
     const htmlPath = join(worker.pdfCacheRoot, 'launch.html');
     writeFileSync(htmlPath, '<p>hi</p>');
     const pdfPath = join(worker.pdfCacheRoot, 'launch.pdf');
@@ -221,7 +225,10 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
     await browser.onModuleDestroy();
   });
   it('tolerates shutdown after a failed launch', async () => {
-    const browser = new BrowserService(worker.module.get<Env>(ENV));
+    const browser = new BrowserService(
+      worker.module.get<Env>(ENV),
+      worker.module.get(SettingsService),
+    );
     jest.spyOn(chromium, 'launch').mockRejectedValueOnce(new Error('boom'));
     await browser
       .renderPdf('/nonexistent.html', '/nonexistent.pdf')

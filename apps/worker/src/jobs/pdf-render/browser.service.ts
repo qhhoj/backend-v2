@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 import type { Browser } from 'playwright';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
+import { SettingsService } from '@libs/settings';
 import { isAllowedRequest } from './local-file-policy';
 import { KATEX_DIST_DIR, PAGE_FOOTER } from './pdf-template';
 
@@ -27,7 +28,10 @@ export class BrowserService implements OnModuleDestroy {
   private readonly logger = new Logger(BrowserService.name);
   private browser: Promise<Browser> | null = null;
 
-  constructor(@Inject(ENV) private readonly env: Env) {}
+  constructor(
+    @Inject(ENV) private readonly env: Env,
+    private readonly settings: SettingsService,
+  ) {}
 
   async renderPdf(htmlPath: string, pdfPath: string): Promise<void> {
     const pageUrl = pathToFileURL(htmlPath).href;
@@ -56,13 +60,12 @@ export class BrowserService implements OnModuleDestroy {
       const page = await context.newPage();
       await withTimeout(
         this.printPage(page, pageUrl, pdfPath),
-        this.env.pdfRenderTimeoutMs,
+        this.settings.get('pdf.renderTimeoutMs'),
       );
       const { size } = await stat(pdfPath);
-      if (size > this.env.pdfMaxBytes)
-        throw new Error(
-          `PDF is ${size} bytes, over the ${this.env.pdfMaxBytes} limit`,
-        );
+      const maxBytes = this.settings.get('pdf.maxBytes');
+      if (size > maxBytes)
+        throw new Error(`PDF is ${size} bytes, over the ${maxBytes} limit`);
     } finally {
       await context.close();
     }

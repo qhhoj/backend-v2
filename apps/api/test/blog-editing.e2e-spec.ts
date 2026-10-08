@@ -43,8 +43,9 @@ describe('blog editing', () => {
     authed(api.http().patch(postUrl(id)), session).send(body);
 
   beforeAll(async () => {
-    api = await setupApiTest({
-      env: { DISCORD_WEBHOOK_URLS: 'default=http://127.0.0.1:9/hook' },
+    api = await setupApiTest();
+    await api.setSetting('discord.webhooks', {
+      default: 'http://127.0.0.1:9/hook',
     });
     discord = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
     contributions = api.app.get(getQueueToken(CONTRIBUTION_POINTS_QUEUE));
