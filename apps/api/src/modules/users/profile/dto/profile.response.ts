@@ -1,3 +1,5 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { PERCENT_SCHEMA } from './profile.dto';
 import type { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 export class ProfileOrganizationResponse implements OrganizationSummaryResponse {
@@ -11,8 +13,8 @@ export class ProfileOrganizationResponse implements OrganizationSummaryResponse 
 
 export class AppearanceResponse {
   accent!: string;
-  glass!: number;
-  glow!: number;
+  @ApiProperty(PERCENT_SCHEMA) glass!: number;
+  @ApiProperty(PERCENT_SCHEMA) glow!: number;
 }
 
 export class ProfileResponse {

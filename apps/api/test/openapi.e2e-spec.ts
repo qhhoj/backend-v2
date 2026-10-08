@@ -299,6 +299,17 @@ describe('OpenAPI document', () => {
       );
     });
 
+    it('types the appearance percentages as bounded integers', async () => {
+      const { schemas } = (await document()).components;
+      for (const name of ['AppearanceResponse', 'AppearanceDto'])
+        for (const field of ['glass', 'glow'])
+          expect(schemas[name].properties![field]).toMatchObject({
+            type: 'integer',
+            minimum: 0,
+            maximum: 100,
+          });
+    });
+
     it('documents a paginated route as data[] plus meta', async () => {
       const doc = await document();
       const body = bodyOf(doc, '/api/internal/problems')!;

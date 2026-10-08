@@ -4,6 +4,7 @@ import type { OrganizationPointsJob } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import type { ProfileResponse } from '../src/modules/users/profile/dto/profile.response';
+import type { SessionResponse } from '../src/modules/auth/core/dto/session.response';
 import { createOrganization } from './organization-fixtures';
 import {
   authed,
@@ -151,6 +152,28 @@ describe('profile', () => {
     );
     expect(cleared.appearance).toBeNull();
     expect(cleared.siteTheme).toBe('dark');
+  });
+
+  it('answers appearance null on the profile and the session for a user document without the field', async () => {
+    const { user, get } = await person({
+      appearance: { accent: 'ocean', glass: 30, glow: 70 },
+    });
+    await api.users.updateOne(
+      { _id: user._id },
+      { $unset: { appearance: '' } },
+    );
+    expect(
+      await api.users.findOne({ _id: user._id }).lean(),
+    ).not.toHaveProperty('appearance');
+
+    expect(
+      dataOf<ProfileResponse>(await get().expect(200)).appearance,
+    ).toBeNull();
+    const me = await authed(
+      api.http().get('/api/internal/auth/me'),
+      await loginAs(api, user._id),
+    ).expect(200);
+    expect(dataOf<SessionResponse>(me).user?.appearance).toBeNull();
   });
 
   it('refuses an invalid appearance with a field code and stores nothing', async () => {

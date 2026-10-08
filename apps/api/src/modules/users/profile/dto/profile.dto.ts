@@ -15,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 import { ABOUT_MAX_LENGTH } from '@libs/community';
 import { IsTimeZone } from '../../core/dto/is-time-zone';
 
@@ -75,10 +76,17 @@ export type AppearanceAccent = (typeof APPEARANCE_ACCENTS)[number];
 /** The only profile fields a PATCH may set to `null`: no badge, the site's look. */
 export const NULLABLE_PROFILE_FIELDS = ['displayBadgeId', 'appearance'];
 
+/** Whole numbers 0-100: the plugin would type them as `number`. */
+export const PERCENT_SCHEMA = {
+  type: 'integer',
+  minimum: 0,
+  maximum: 100,
+} as const;
+
 export class AppearanceDto {
   @IsIn(APPEARANCE_ACCENTS) accent!: AppearanceAccent;
-  @IsInt() @Min(0) @Max(100) glass!: number;
-  @IsInt() @Min(0) @Max(100) glow!: number;
+  @ApiProperty(PERCENT_SCHEMA) @IsInt() @Min(0) @Max(100) glass!: number;
+  @ApiProperty(PERCENT_SCHEMA) @IsInt() @Min(0) @Max(100) glow!: number;
 }
 
 /** Legacy `ProfileForm` fields; every one optional. */
