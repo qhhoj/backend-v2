@@ -62,6 +62,26 @@ interface ContestPlan {
 /** Typed text, or an upload that is saved to media just before its row is written and removed again if the row is not. */
 type PendingSource = { text: string } | { file: Buffer; path: string };
 
+/** What one submit call wants stored and judged. */
+interface SubmissionDraft {
+  problem: ProblemDocument;
+  language: Language;
+  judgeId: string | undefined;
+  source: PendingSource;
+}
+
+function assertNotBanned(principal: Principal, problem: ProblemDocument): void {
+  if (
+    !principal.isSuperuser &&
+    problem.bannedUsers.map(uuidStr).includes(principal.userId)
+  )
+    throw new AppError(
+      'banned_from_problem',
+      403,
+      'You are banned from submitting to this problem',
+    );
+}
+
 /** Legacy `ProblemSubmit.form_valid`; inside a current contest that lists the problem the submission is a contest submission (priority 0, lock, pretests, `maxSubmissions`, FSO pending). */
 @Injectable()
 export class SubmissionCreateService {
@@ -88,9 +108,14 @@ export class SubmissionCreateService {
   ): Promise<SubmitResponse> {
     const problem = await this.problems.visibleProblem(auth.principal, code);
     await this.reserveSubmit(auth.principal);
-    const language = this.assertLanguage(problem, dto.language, false);
-    return this.create(auth, problem, language, dto.judgeId, {
-      text: dto.source,
+    const language = this.assertLanguage(problem, dto.language, {
+      isFileUpload: false,
+    });
+    return this.create(auth.principal, {
+      problem,
+      language,
+      judgeId: dto.judgeId,
+      source: { text: dto.source },
     });
   }
 
@@ -111,10 +136,17 @@ export class SubmissionCreateService {
       type: 'body',
       metatype: SubmitFileDto,
     })) as SubmitFileDto;
-    const language = this.assertLanguage(problem, dto.language, true);
+    const language = this.assertLanguage(problem, dto.language, {
+      isFileUpload: true,
+    });
     const file = await submittedFile(language, upload);
     const path = `${SUBMISSION_FILE_DIR}/${problem.code}/${auth.principal.userId}/${randomUUID()}.${language.extension}`;
-    return this.create(auth, problem, language, dto.judgeId, { file, path });
+    return this.create(auth.principal, {
+      problem,
+      language,
+      judgeId: dto.judgeId,
+      source: { file, path },
+    });
   }
 
   /** Every attempt spends the per-user submit budget, taken before an upload is read (never released). */
@@ -128,88 +160,105 @@ export class SubmissionCreateService {
 
   /** Not banned, a chosen judge only for editors and only when online with the problem; then the contest's submission cap and the unfinished-submission limit. */
   private async create(
-    auth: AuthContext,
-    problem: ProblemDocument,
-    language: Language,
-    judgeId: string | undefined,
-    source: PendingSource,
+    principal: Principal,
+    draft: SubmissionDraft,
   ): Promise<SubmitResponse> {
-    const { principal } = auth;
-    if (
-      !principal.isSuperuser &&
-      problem.bannedUsers.map(uuidStr).includes(principal.userId)
-    )
-      throw new AppError(
-        'banned_from_problem',
-        403,
-        'You are banned from submitting to this problem',
+    assertNotBanned(principal, draft.problem);
+    if (draft.judgeId !== undefined)
+      await this.assertJudge(
+        principal,
+        draft.problem,
+        draft.judgeId,
+        draft.language.key,
       );
-    if (judgeId !== undefined)
-      await this.assertJudge(principal, problem, judgeId, language.key);
     const plan = this.contestPlan(
       await this.currentContest.current(principal),
-      problem._id,
+      draft.problem._id,
       new Date(),
     );
-    const create = () =>
+    const id = await this.insertWithinLimits(principal, draft, plan);
+    if (!plan?.finalOnly) await this.announceQueued(id, principal, draft);
+    return { id };
+  }
+
+  /** Spam-permitted users skip the per-user lock unless a contest cap applies; everyone else counts under it, so two parallel submits cannot both pass a limit. */
+  private insertWithinLimits(
+    principal: Principal,
+    draft: SubmissionDraft,
+    plan: ContestPlan | null,
+  ): Promise<string> {
+    const insertRow = () =>
       this.insert(
         {
           user: principal.userId,
-          problem: problem._id,
-          language: language._id,
+          problem: draft.problem._id,
+          language: draft.language._id,
           ...plan?.fields,
         },
-        source,
+        draft.source,
         plan?.entry ?? null,
       );
-    const spams = hasPermission(principal, 'judge.spam_submission');
-    const capped = plan !== null && plan.maxSubmissions !== null;
-    const guarded = async () => {
-      if (
-        capped &&
-        (await this.participations.countAttempts(
-          plan.entry.participation,
-          problem._id,
-        )) >= plan.maxSubmissions!
-      )
-        throw new AppError(
-          'contest_submission_limit',
-          403,
-          'You have used every submission allowed for this problem',
-        );
-      if (
-        !spams &&
-        !plan?.isFinalFormat &&
-        (await this.submissions.countUnfinished(principal.userId)) >=
-          UNFINISHED_LIMIT
-      )
-        throw new AppError(
-          'unfinished_submission_limit',
-          429,
-          'Wait until your earlier submissions are judged',
-        );
-      return create();
-    };
-    const id =
-      spams && !capped
-        ? await create()
-        : await withRedisLock(
-            this.redis,
-            `submit-lock:user:${principal.userId}`,
-            USER_LOCK_SECONDS,
-            'Another submission is being created; try again',
-            guarded,
+    const canSpam = hasPermission(principal, 'judge.spam_submission');
+    const contestCap = plan?.maxSubmissions ?? null;
+    if (canSpam && contestCap === null) return insertRow();
+    return withRedisLock(
+      this.redis,
+      `submit-lock:user:${principal.userId}`,
+      USER_LOCK_SECONDS,
+      'Another submission is being created; try again',
+      async () => {
+        if (plan && contestCap !== null)
+          await this.assertUnderContestCap(
+            plan.entry.participation,
+            draft.problem._id,
+            contestCap,
           );
-    if (plan?.finalOnly) return { id };
+        if (!canSpam && !plan?.isFinalFormat)
+          await this.assertUnderUnfinishedLimit(principal.userId);
+        return insertRow();
+      },
+    );
+  }
+
+  private async assertUnderContestCap(
+    participationId: string,
+    problemId: string,
+    maxSubmissions: number,
+  ): Promise<void> {
+    if (
+      (await this.participations.countAttempts(participationId, problemId)) >=
+      maxSubmissions
+    )
+      throw new AppError(
+        'contest_submission_limit',
+        403,
+        'You have used every submission allowed for this problem',
+      );
+  }
+
+  private async assertUnderUnfinishedLimit(userId: string): Promise<void> {
+    if ((await this.submissions.countUnfinished(userId)) >= UNFINISHED_LIMIT)
+      throw new AppError(
+        'unfinished_submission_limit',
+        429,
+        'Wait until your earlier submissions are judged',
+      );
+  }
+
+  /** Publishes the queued event, then asks the bridge to judge the row (on the chosen judge, or any when none). */
+  private async announceQueued(
+    submissionId: string,
+    principal: Principal,
+    { problem, judgeId }: SubmissionDraft,
+  ): Promise<void> {
     await this.events.publish(
       submissionEvent(
-        { submissionId: id, userId: principal.userId, problemId: problem._id },
+        { submissionId, userId: principal.userId, problemId: problem._id },
         'queued',
         'QU',
       ),
     );
-    await this.commands.judge([id], judgeId ?? null);
-    return { id };
+    await this.commands.judge([submissionId], judgeId ?? null);
   }
 
   private async insert(
@@ -267,7 +316,7 @@ export class SubmissionCreateService {
   private assertLanguage(
     problem: ProblemDocument,
     languageId: string,
-    takesFile: boolean,
+    { isFileUpload }: { isFileUpload: boolean },
   ): Language {
     const language = this.languages.byId(languageId);
     if (
@@ -278,7 +327,7 @@ export class SubmissionCreateService {
         'language',
         'This language is not allowed for this problem.',
       );
-    if (language.fileOnly !== takesFile)
+    if (language.fileOnly !== isFileUpload)
       throw language.fileOnly
         ? invalidField(
             'language',
