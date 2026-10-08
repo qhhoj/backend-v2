@@ -1,5 +1,13 @@
 import type { ProblemCell } from '@libs/contests';
-import type { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+
+export class RankingUserResponse {
+  id!: string;
+  username!: string;
+  /** Null while unrated. */
+  rating!: number | null;
+  /** Short name of the user's first organization when it is listed, null otherwise. */
+  organization!: string | null;
+}
 
 export class RankingProblemResponse {
   problemId!: string;
@@ -15,7 +23,7 @@ export class RankingRowResponse {
   /** Null on a board that shows only the viewer's row. */
   rank!: number | null;
   participationId!: string;
-  user!: UserSummaryResponse;
+  user!: RankingUserResponse;
   virtual!: number;
   isDisqualified!: boolean;
   score!: number;

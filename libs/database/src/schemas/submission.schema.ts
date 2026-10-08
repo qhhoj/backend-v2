@@ -140,6 +140,8 @@ SubmissionSchema.index({ problem: 1, language: 1, _id: -1 });
 SubmissionSchema.index({ problem: 1, status: 1, _id: -1 });
 SubmissionSchema.index({ user: 1, status: 1 });
 SubmissionSchema.index({ user: 1, problem: 1, result: 1 });
+// The unsolved filter of the problem list reads only the viewer's AC rows (`{user, problem, result}` cannot bound `result` without `problem`).
+SubmissionSchema.index({ user: 1, result: 1 });
 SubmissionSchema.index({ status: 1, priority: 1, _id: 1 });
 SubmissionSchema.index({ date: -1 });
 // The user's submission heatmap (a date window per user; migrated ids do not follow dates).

@@ -21,6 +21,7 @@ import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import type { RankingResponse } from './dto/ranking.response';
 import { ParticipationsRepository } from '../core/participations.repository';
+import { RankingUsersRepository } from './ranking-users.repository';
 import {
   ACCESS_CODE_IP_LIMIT,
   ACCESS_CODE_WINDOW_SECONDS,
@@ -35,6 +36,7 @@ export class ContestRankingService {
     private readonly contestsService: ContestsService,
     private readonly viewers: ContestViewerService,
     private readonly participations: ParticipationsRepository,
+    private readonly rankingUsers: RankingUsersRepository,
     private readonly problems: ProblemsRepository,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly rateLimit: RateLimitService,
@@ -168,7 +170,7 @@ export class ContestRankingService {
           left.id.localeCompare(right.id),
       );
     const ranks = competitionRanks(standings.map(({ standing }) => standing));
-    const usernames = await this.participations.usernamesOf(
+    const users = await this.rankingUsers.rankingUsersOf(
       unique(rows.map((row) => uuidStr(row.user))),
     );
     const ordered = [...contest.problems].sort(
@@ -210,7 +212,12 @@ export class ContestRankingService {
         return {
           rank: ranked ? ranks[index] : null,
           participationId: id,
-          user: { id: userId, username: usernames.get(userId) ?? '' },
+          user: {
+            id: userId,
+            username: users.get(userId)?.username ?? '',
+            rating: users.get(userId)?.rating ?? null,
+            organization: users.get(userId)?.organization ?? null,
+          },
           virtual: row.virtual,
           ...standing,
         };

@@ -248,6 +248,28 @@ describe('homepage and user comments', () => {
     expect(newest[0].docsExamined).toBeLessThanOrEqual(HOME_NEW_PROBLEMS + 2);
   });
 
+  it('counts only the contests an anonymous visitor can see, through an index', async () => {
+    await api.contests.deleteMany({});
+    await createContest(api);
+    await createContest(api, { isVisible: false });
+    await createContest(api, { isPrivate: true });
+    const organization = await createOrganization(api);
+    await createContest(api, {
+      isOrganizationPrivate: true,
+      organizations: [organization._id],
+    });
+    const operations = await profileQueries(api.db, () => home());
+    expect((await home()).counts.contests).toBe(1);
+    const counted = operations.filter(
+      ({ collection }) => collection === 'contests',
+    );
+    expect(counted.length).toBeGreaterThan(0);
+    for (const operation of counted)
+      expect(operation.planSummary).not.toContain('COLLSCAN');
+    await createContest(api);
+    expect((await home()).counts.contests).toBe(2);
+  });
+
   it("pages a user's readable comments for view_all_user_comment only", async () => {
     const { user: author } = await person();
     const { session: plain } = await person();

@@ -142,6 +142,8 @@ export class Contest {
 
 export const ContestSchema = SchemaFactory.createForClass(Contest);
 ContestSchema.index({ key: 1 }, { unique: true });
+// The public contest count of the homepage.
+ContestSchema.index({ isVisible: 1, isPrivate: 1, isOrganizationPrivate: 1 });
 ContestSchema.index({ startTime: -1 });
 ContestSchema.index({ endTime: -1 });
 ContestSchema.index({ authors: 1 });

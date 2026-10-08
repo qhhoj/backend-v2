@@ -19,6 +19,8 @@ export class HomeCountsResponse {
   users!: number;
   problems!: number;
   submissions!: number;
+  /** Contests an anonymous visitor can see. */
+  contests!: number;
   languages!: number;
 }
 

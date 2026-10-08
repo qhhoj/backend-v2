@@ -16,6 +16,7 @@ import {
   joinParticipation,
   makeCurrent,
 } from './contest-fixtures';
+import { createOrganization } from './organization-fixtures';
 import {
   authed,
   createProblem,
@@ -241,6 +242,53 @@ describe('contest ranking', () => {
       'dan',
       'carol',
     ]);
+  });
+
+  it('carries each user rating and the short name of their first listed organization, never an unlisted one', async () => {
+    const listed = await createOrganization(api, { shortName: 'SCH' });
+    const second = await createOrganization(api, { shortName: 'SECOND' });
+    const unlisted = await createOrganization(api, {
+      shortName: 'HIDDEN',
+      isUnlisted: true,
+    });
+    await api.users.updateOne(
+      { _id: users.alice._id },
+      { rating: 1650, organizations: [listed._id, second._id] },
+    );
+    await api.users.updateOne(
+      { _id: users.bob._id },
+      { rating: null, organizations: [] },
+    );
+    await api.users.updateOne(
+      { _id: users.carol._id },
+      { rating: 900, organizations: [unlisted._id, listed._id] },
+    );
+    const contest = await createContest(api, { scoreboardCacheTimeout: 60 });
+    for (const name of ['alice', 'bob', 'carol'])
+      await joinParticipation(api, contest._id, users[name]._id, results(10));
+    const userOf = (board: RankingResponse, name: string) =>
+      board.rows.find((row) => row.user.username === name)!.user;
+    for (const board of [
+      await ranking(contest.key),
+      await ranking(contest.key, 'erin'),
+      await ranking(contest.key),
+    ]) {
+      expect(userOf(board, 'alice')).toMatchObject({
+        rating: 1650,
+        organization: 'SCH',
+      });
+      expect(userOf(board, 'bob')).toMatchObject({
+        rating: null,
+        organization: null,
+      });
+      expect(userOf(board, 'carol')).toMatchObject({
+        rating: 900,
+        organization: null,
+      });
+      expect(JSON.stringify(board)).not.toContain('HIDDEN');
+    }
+    // Other tests scan whole boards for leaked numbers: leave the users as they were.
+    await api.users.updateMany({}, { rating: null, organizations: [] });
   });
 
   it('serves a cached board until its keys are purged, and caches nothing with a zero timeout', async () => {

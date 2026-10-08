@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { Problem, Submission, User } from '@libs/database';
+import { Contest, Problem, Submission, User } from '@libs/database';
+import { ContestAccess } from '../contests/core/contest-access';
 
 /** Legacy `Problem.get_public_problems()`. */
 const PUBLIC_PROBLEMS = {
@@ -19,6 +20,7 @@ export class HomeRepository {
     @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(Submission.name)
     private readonly submissions: Model<Submission>,
+    @InjectModel(Contest.name) private readonly contests: Model<Contest>,
   ) {}
 
   /** Newest public problems through `{isPublic, date}` (no `_id` tiebreak: it would force a blocking sort); the statement only for the feed. */
@@ -44,12 +46,14 @@ export class HomeRepository {
     users: number;
     problems: number;
     submissions: number;
+    contests: number;
   }> {
-    const [users, problems, submissions] = await Promise.all([
+    const [users, problems, submissions, contests] = await Promise.all([
       this.users.estimatedDocumentCount().exec(),
       this.problems.countDocuments(PUBLIC_PROBLEMS).exec(),
       this.submissions.estimatedDocumentCount().exec(),
+      this.contests.countDocuments(ContestAccess.visibleFilter(null)).exec(),
     ]);
-    return { users, problems, submissions };
+    return { users, problems, submissions, contests };
   }
 }

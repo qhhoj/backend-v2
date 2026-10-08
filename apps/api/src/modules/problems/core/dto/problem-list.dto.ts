@@ -35,6 +35,8 @@ export class ProblemListQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() pointsMin?: number;
   @IsOptional() @Type(() => Number) @IsInt() pointsMax?: number;
   @IsOptional() @Transform(toBoolean) @IsBoolean() hasEditorial?: boolean;
+  /** `false`: only problems the viewer has not solved; `true`: only solved ones (an AC with every case point). Anonymous viewers have solved nothing. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() solved?: boolean;
   @IsOptional() @IsIn(PROBLEM_VISIBILITIES) visibility: ProblemVisibility =
     'public';
   @IsOptional() @IsIn(PROBLEM_SORT_OPTIONS) sort = '-date';

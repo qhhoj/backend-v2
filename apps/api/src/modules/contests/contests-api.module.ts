@@ -43,6 +43,7 @@ import { ContestsService } from './core/contests.service';
 import { OfficialRankingController } from './ranking/official-ranking.controller';
 import { OfficialRankingService } from './ranking/official-ranking.service';
 import { OfficialRankingsRepository } from './ranking/official-rankings.repository';
+import { RankingUsersRepository } from './ranking/ranking-users.repository';
 import { RatingsRepository } from './rating/ratings.repository';
 import { RankingLinksController } from './ranking/ranking-links.controller';
 import { RankingLinksRepository } from './ranking/ranking-links.repository';
@@ -99,6 +100,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     OfficialRankingService,
     OfficialRankingsRepository,
     RankingLinksRepository,
+    RankingUsersRepository,
     RankingLinksService,
     RateLimitService,
     RatingsRepository,

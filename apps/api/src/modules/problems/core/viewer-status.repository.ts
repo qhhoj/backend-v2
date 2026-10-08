@@ -45,4 +45,14 @@ export class ViewerStatusRepository {
       ]),
     );
   }
+
+  /** Problems with an AC that earned every case point: the same rule as `statusesOf`, one aggregate over the viewer's AC rows. */
+  async solvedIds(userId: string): Promise<string[]> {
+    const rows = await this.submissions.aggregate<{ _id: unknown }>([
+      { $match: { user: toUuid(userId), result: 'AC' } },
+      { $group: { _id: '$problem', solved: ANY_SOLVED } },
+      { $match: { solved: 1 } },
+    ]);
+    return rows.map((row) => uuidStr(row._id));
+  }
 }

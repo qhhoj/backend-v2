@@ -123,4 +123,72 @@ describe('viewerStatus', () => {
     expect(reads).toHaveLength(1);
     expect(reads[0].planSummary).not.toContain('COLLSCAN');
   });
+
+  describe('solved filter', () => {
+    const codesOf = async (who: TestSession | null, solved: string) => {
+      const request = api.http().get(PROBLEMS).query({ solved, pageSize: 100 });
+      const response = await (who ? authed(request, who) : request).expect(200);
+      return (response.body as ListBody).data.map((item) => item.code).sort();
+    };
+    const EVERY_CODE = [
+      'vs_compile',
+      'vs_others',
+      'vs_queued',
+      'vs_short',
+      'vs_solved',
+      'vs_untouched',
+      'vs_wrong',
+    ];
+
+    it('answers only solved problems for solved=true and everything else for solved=false', async () => {
+      expect(await codesOf(viewer, 'true')).toEqual(['vs_solved']);
+      expect(await codesOf(viewer, 'false')).toEqual(
+        EVERY_CODE.filter((code) => code !== 'vs_solved'),
+      );
+    });
+
+    it('keeps partial ACs, wrong answers and other users solves out of the solved set', async () => {
+      const unsolved = await codesOf(viewer, 'false');
+      expect(unsolved).toEqual(
+        expect.arrayContaining(['vs_short', 'vs_wrong', 'vs_others']),
+      );
+      expect(await codesOf(viewer, 'true')).not.toContain('vs_others');
+    });
+
+    it('gives anonymous viewers every problem for false and none for true', async () => {
+      expect(await codesOf(null, 'false')).toEqual(EVERY_CODE);
+      expect(await codesOf(null, 'true')).toEqual([]);
+    });
+
+    it('is per viewer: another user sees their own solves', async () => {
+      const other = await loginAs(
+        api,
+        (await api.users.findOne({ username: 'other' }))!._id,
+      );
+      expect(await codesOf(other, 'true')).toEqual(['vs_others']);
+    });
+
+    it('rejects a non-boolean value', async () => {
+      await authed(
+        api.http().get(PROBLEMS).query({ solved: 'maybe' }),
+        viewer,
+      ).expect(400);
+    });
+
+    it('reads the viewer AC submissions through an index', async () => {
+      const operations = await profileQueries(api.db, async () => {
+        await codesOf(viewer, 'false');
+      });
+      const reads = operations.filter(
+        ({ collection }) => collection === 'submissions',
+      );
+      for (const read of reads)
+        expect(read.planSummary).not.toContain('COLLSCAN');
+      // The viewer has two AC rows (solved, short) among six submissions: the filter's read examines only those.
+      const solvedRead = reads.find(({ planSummary }) =>
+        planSummary.includes('{ user: 1, result: 1 }'),
+      );
+      expect(solvedRead?.docsExamined).toBe(2);
+    });
+  });
 });

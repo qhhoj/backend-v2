@@ -267,6 +267,14 @@ export class ProblemsService {
           ? publicEditorialFilter()
           : { $nor: [publicEditorialFilter()] },
       );
+    if (query.solved !== undefined) {
+      const solved = principal
+        ? await this.viewerStatuses.solvedIds(principal.userId)
+        : [];
+      clauses.push(
+        query.solved ? { _id: { $in: solved } } : { _id: { $nin: solved } },
+      );
+    }
     const search = query.search?.trim();
     if (search) clauses.push(searchFilter(search));
     return { $and: clauses };
