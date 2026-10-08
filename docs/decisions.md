@@ -34,6 +34,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - TOTP rejects steps at or before `lastTotpTimecode` — a code cannot be replayed.
 - TOTP secrets and scratch codes are AES-256-GCM encrypted at rest; the migrator will decrypt the legacy Fernet format (planned, migrator deferred) — a database leak does not leak second factors.
 - 2FA enrolment and credential removal need `currentPassword` and are blocked while impersonating — a hijacked session cannot add its own second factor.
+- Security keys are listed by `GET /auth/2fa/webauthn/credentials` (registration order, no credential id or public key), session-only and refused while impersonating; no rename route (not needed by the UI).
 - Password change writes with optimistic concurrency (409) and rejects the same password — a race cannot overwrite a freshly changed password.
 - Registration creates an inactive user plus a hashed activation key; `POST /auth/activate/resend` replaces the keys of a pending account and always answers 204 — a lost mail needs a way out, and resend adds no account-existence oracle (`POST /auth/register` still answers `email_taken`, limited to 5 per hour per IP).
 - Password reset tokens are bound to the stored hash and `lastLogin` — single use without a token table; it also lets migrated social-only users set a first password.

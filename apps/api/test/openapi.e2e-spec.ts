@@ -38,6 +38,7 @@ describe('OpenAPI document', () => {
         '/api/internal/auth/2fa/webauthn/register/verify',
         '/api/internal/auth/2fa/webauthn/login/options',
         '/api/internal/auth/2fa/webauthn/login/verify',
+        '/api/internal/auth/2fa/webauthn/credentials',
         '/api/internal/auth/2fa/webauthn/credentials/{credentialId}',
         '/api/internal/auth/social/{provider}/start',
         '/api/internal/auth/social/{provider}/callback',
@@ -359,6 +360,16 @@ describe('OpenAPI document', () => {
           'impersonatorId',
         ]),
       );
+    });
+
+    it('documents the security key list items as id and name only', async () => {
+      const doc = await document();
+      const items = bodyOf(doc, '/api/internal/auth/2fa/webauthn/credentials')!
+        .properties!.data.items!;
+      const name = items.$ref!.split('/').pop()!;
+      expect(
+        Object.keys(doc.components.schemas[name].properties!).sort(),
+      ).toEqual(['id', 'name']);
     });
 
     it('types the appearance percentages as bounded integers', async () => {

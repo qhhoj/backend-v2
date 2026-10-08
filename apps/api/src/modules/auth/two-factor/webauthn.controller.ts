@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   Param,
   Post,
@@ -26,6 +27,13 @@ import { WebauthnService } from './webauthn.service';
 @Controller('api/internal/auth/2fa/webauthn')
 export class WebauthnController {
   constructor(private readonly webauthn: WebauthnService) {}
+
+  @SessionOnly()
+  @NoImpersonation()
+  @Get('credentials')
+  list(@CurrentAuth() auth: AuthContext): WebauthnCredentialResponse[] {
+    return this.webauthn.list(auth);
+  }
 
   @SessionOnly()
   @NoImpersonation()

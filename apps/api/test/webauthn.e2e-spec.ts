@@ -63,6 +63,8 @@ describe('webauthn endpoints', () => {
     if (keys.length) await redis.del(...keys);
   };
   const authenticator = () => new FakeAuthenticator(RP_ID, ORIGIN);
+  const listKeys = (session: Session) =>
+    api.http().get(`${WEBAUTHN}/credentials`).set('Cookie', session.cookie);
 
   /** Registers `fake` through the API on a fresh logged-in session. */
   const register = async (fake: FakeAuthenticator, name = 'Key') => {
@@ -74,7 +76,7 @@ describe('webauthn endpoints', () => {
       name,
       response: fake.register(options.challenge),
     }).expect(201);
-    return { session, options, credential: dataOf(response) };
+    return { session, options, credential: dataOf(response), fake };
   };
   const loginOptions = async (session: Session) =>
     dataOf(
@@ -524,5 +526,61 @@ describe('webauthn endpoints', () => {
     const bobSession = await loginAs('bob');
     const { challenge } = await loginOptions(bobSession);
     await failedAssertion(bobSession, fake, challenge);
+  });
+
+  it('lists the own keys oldest first, never the credential id', async () => {
+    const laptop = await register(authenticator(), 'Laptop');
+    // A second API registration would need the second factor first; a stored row is enough to pin the order.
+    await api.users.updateOne(
+      { username: 'alice' },
+      {
+        $push: {
+          webauthnCredentials: {
+            _id: '01900000-0000-7000-8000-000000000003',
+            name: 'Phone',
+            credId: 'phone-cred',
+            publicKey: 'AA',
+            counter: 0,
+          },
+        },
+      },
+    );
+    const session = await login();
+    const { challenge } = await loginOptions(session);
+    await post('login/verify', session, {
+      response: laptop.fake.authenticate(challenge),
+    }).expect(204);
+    const listed = await listKeys(session).expect(200);
+    const keys = (listed.body as { data: Record<string, unknown>[] }).data;
+    expect(keys.map((key) => key.name)).toEqual(['Laptop', 'Phone']);
+    expect(Object.keys(keys[0]).sort()).toEqual(['id', 'name']);
+    expect(keys[0].id).toBe(laptop.credential.id);
+    expect(listed.text).not.toContain(laptop.fake.id);
+  });
+
+  it('lists no keys for a user without any', async () => {
+    const session = await login();
+    expect((await listKeys(session).expect(200)).body).toEqual({ data: [] });
+  });
+
+  it('returns the listed item shape from register/verify', async () => {
+    const { session, credential } = await register(authenticator(), 'Laptop');
+    expect(Object.keys(credential).sort()).toEqual(['id', 'name']);
+    const listed = (await listKeys(session).expect(200)).body as {
+      data: unknown[];
+    };
+    expect(credential).toEqual(listed.data[0]);
+  });
+
+  it('keeps the key list off bearer tokens', async () => {
+    const user = (await stored())!;
+    const { token, hash } = generateApiToken(user._id, TEST_ENV.TOKEN_SECRET);
+    await api.users.updateOne({ username: 'alice' }, { apiTokenHash: hash });
+    await api
+      .http()
+      .get(`${WEBAUTHN}/credentials`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403)
+      .expect(errorCode('forbidden'));
   });
 });

@@ -17,8 +17,9 @@ import { SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, ENV, isDuplicateKey } from '@libs/common';
 import type { Env } from '@libs/common';
-import { newId } from '@libs/database';
+import { newId, type WebauthnCredential } from '@libs/database';
 import { AuthService } from '../core/auth.service';
+import { WebauthnCredentialResponse } from './dto/webauthn.response';
 import { SecondFactorService } from './second-factor.service';
 
 const RP_NAME = 'QHHOJ';
@@ -70,7 +71,7 @@ export class WebauthnService {
     auth: AuthContext,
     name: string,
     response: Record<string, unknown>,
-  ): Promise<{ id: string; name: string }> {
+  ): Promise<WebauthnCredentialResponse> {
     // Atomic read+clear: a challenge authorizes exactly one verification.
     const challenge = await this.sessions.consume(
       auth.sessionId!,
@@ -91,21 +92,28 @@ export class WebauthnService {
     } catch {
       throw failed();
     }
-    const id = newId();
+    const stored: WebauthnCredential = {
+      _id: newId(),
+      name,
+      credId: credentialInfo.id,
+      publicKey: Buffer.from(credentialInfo.publicKey).toString('base64url'),
+      counter: credentialInfo.counter,
+    };
     try {
-      await this.users.addWebauthnCredential(auth.user._id, {
-        _id: id,
-        name,
-        credId: credentialInfo.id,
-        publicKey: Buffer.from(credentialInfo.publicKey).toString('base64url'),
-        counter: credentialInfo.counter,
-      });
+      await this.users.addWebauthnCredential(auth.user._id, stored);
     } catch (error) {
       // credId is unique across users: registering an already-known authenticator.
       if (isDuplicateKey(error)) throw failed('WebAuthn registration failed');
       throw error;
     }
-    return { id, name };
+    return WebauthnCredentialResponse.from(stored);
+  }
+
+  /** Registration order, oldest first: the array keeps the order it was stored in. */
+  list(auth: AuthContext): WebauthnCredentialResponse[] {
+    return [...auth.user.webauthnCredentials].map((credential) =>
+      WebauthnCredentialResponse.from(credential),
+    );
   }
 
   /** Like `login`, an already completed session is a no-op (`null`, nothing stored): it must never open a challenge. */
