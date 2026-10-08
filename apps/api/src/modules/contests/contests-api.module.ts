@@ -5,7 +5,6 @@ import { RateLimitService } from '@libs/common';
 import {
   CONTEST_DATA_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_MOSS_QUEUE,
   CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_QUEUE,
 } from '@libs/contests';
@@ -24,9 +23,6 @@ import { ContestEditingService } from './editing/contest-editing.service';
 import { ContestEventsService } from './announcements/contest-events.service';
 import { ContestStreamsController } from './announcements/contest-streams.controller';
 import { ContestStreamsService } from './announcements/contest-streams.service';
-import { ContestMossController } from './moss/contest-moss.controller';
-import { ContestMossRepository } from './moss/contest-moss.repository';
-import { ContestMossService } from './moss/contest-moss.service';
 import { ContestParticipationController } from './participation/contest-participation.controller';
 import { ContestParticipationService } from './participation/contest-participation.service';
 import { ContestRatingController } from './rating/contest-rating.controller';
@@ -60,7 +56,6 @@ import { RankingLinksService } from './ranking/ranking-links.service';
       { name: CONTEST_RESCORE_QUEUE },
       { name: CONTEST_FINAL_JUDGE_QUEUE },
       { name: CONTEST_RATING_QUEUE },
-      { name: CONTEST_MOSS_QUEUE },
       { name: CONTEST_DATA_QUEUE },
     ),
   ],
@@ -69,7 +64,6 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestAnnouncementsController,
     ContestDataController,
     ContestEditingController,
-    ContestMossController,
     ContestParticipationController,
     ContestRankingController,
     ContestRatingController,
@@ -86,8 +80,6 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestDataService,
     ContestEventsService,
     ContestStreamsService,
-    ContestMossRepository,
-    ContestMossService,
     ContestsService,
     ContestEditFieldsService,
     ContestEditingService,

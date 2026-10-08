@@ -26,8 +26,6 @@ export interface Env {
   judgeBridgePort: number;
   /** Bridge: interface the judge port listens on. */
   judgeBridgeHost: string;
-  /** MOSS user id: set on the api (gates the routes, 404 without it) and the worker (runs the job); null disables MOSS. Never in job data or logs. */
-  mossApiKey: string | null;
   /** Contest data zips, shared by the api (serves) and the worker (writes); null disables data download. Not under MEDIA_ROOT (served publicly). */
   contestDataRoot: string | null;
   /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
@@ -101,7 +99,6 @@ export function loadEnv(
     pdfConcurrency: positiveInteger('PDF_CONCURRENCY', 2),
     judgeBridgePort: portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
     judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
-    mossApiKey: source.MOSS_API_KEY || null,
     contestDataRoot: source.CONTEST_DATA_ROOT || null,
     userDataRoot: source.USER_DATA_ROOT || null,
   };

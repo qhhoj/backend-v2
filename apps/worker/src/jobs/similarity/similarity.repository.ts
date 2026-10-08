@@ -222,7 +222,7 @@ export class SimilarityRepository {
       .map((entry) => uuidStr(entry.problem));
   }
 
-  /** Live and spectating participations only, as the MOSS flow before it: virtual participations run after the contest, when its solutions may already be public. */
+  /** Live and spectating participations only: virtual participations run after the contest, when its solutions may already be public. */
   private async contestSubmissionIdsByProblem(
     contestId: string,
   ): Promise<Map<string, string[]>> {

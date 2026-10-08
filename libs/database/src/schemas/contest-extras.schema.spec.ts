@@ -5,14 +5,12 @@ import { newId } from '../uuid';
 import { ContestSchema } from './contest.schema';
 import { ContestAnnouncementSchema } from './contest-announcement.schema';
 import { ContestOfficialRankingSchema } from './contest-official-ranking.schema';
-import { ContestMossSchema } from './contest-moss.schema';
 import { ContestPublicRankingLinkSchema } from './contest-public-ranking-link.schema';
 import { RatingSchema } from './rating.schema';
 
 describe('Contest extras schemas', () => {
   let replSet: MongoMemoryReplSet;
   const Ratings = mongoose.model('RatingSchemaSpec', RatingSchema);
-  const MossRows = mongoose.model('ContestMossSchemaSpec', ContestMossSchema);
   const Announcements = mongoose.model(
     'ContestAnnouncementSchemaSpec',
     ContestAnnouncementSchema,
@@ -31,7 +29,7 @@ describe('Contest extras schemas', () => {
     replSet = await startMongo();
     await mongoose.connect(replSet.getUri());
     await Promise.all(
-      [Ratings, MossRows, Announcements, Links, Contests].map((model) =>
+      [Ratings, Announcements, Links, Contests].map((model) =>
         model.syncIndexes(),
       ),
     );
@@ -103,21 +101,6 @@ describe('Contest extras schemas', () => {
         rows: [{ username: 'u'.repeat(201), scores: [], totalScore: 0 }],
       }),
     ).rejects.toThrow(/username/);
-  });
-
-  it('accepts only the five MOSS languages and one row per contest, problem and language', async () => {
-    const row = {
-      contest: newId(),
-      problem: newId(),
-      language: 'C++',
-      submissionCount: 3,
-      url: null,
-    };
-    await MossRows.create(row);
-    await expect(MossRows.create(row)).rejects.toThrow(/duplicate key/);
-    await expect(MossRows.create({ ...row, language: 'Rust' })).rejects.toThrow(
-      /language/,
-    );
   });
 
   it('bounds announcement titles', async () => {

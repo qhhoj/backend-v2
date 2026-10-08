@@ -169,7 +169,6 @@ describe('OpenAPI document', () => {
         '/api/internal/contests/{key}/announcements/{id}/resend',
         '/api/internal/events/contests/{key}',
         '/api/internal/contests/{key}/stats',
-        '/api/internal/contests/{key}/moss',
         '/api/internal/contests/{key}/data',
         '/api/internal/contests/{key}/data/download',
         '/api/internal/contests/{key}/clone',

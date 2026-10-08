@@ -11,7 +11,6 @@ import { CONTEST_FINAL_JUDGE_QUEUE } from '@libs/contests';
 import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
   Contest,
-  ContestMoss,
   SimilarityPair,
   SimilarityRun,
   ContestParticipation,
@@ -67,7 +66,6 @@ export async function setupWorkerTest({
     PDF_CACHE_ROOT: roots.pdfCacheRoot,
     CONTEST_DATA_ROOT: roots.contestDataRoot,
     USER_DATA_ROOT: roots.userDataRoot,
-    MOSS_API_KEY: '',
     ...env,
   });
   const cleanup = async () => {
@@ -148,7 +146,6 @@ export async function setupWorkerTest({
     similarityPairs: ready.get<Model<SimilarityPair>>(
       getModelToken(SimilarityPair.name),
     ),
-    contestMoss: ready.get<Model<ContestMoss>>(getModelToken(ContestMoss.name)),
     organizations: ready.get<Model<Organization>>(
       getModelToken(Organization.name),
     ),

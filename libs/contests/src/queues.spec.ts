@@ -3,22 +3,22 @@ import { Queue } from 'bullmq';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import {
+  CONTEST_DATA_JOB,
+  CONTEST_DATA_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_MOSS_JOB,
-  CONTEST_MOSS_QUEUE,
   CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_JOB,
   CONTEST_RESCORE_QUEUE,
+  contestDataJobId,
   enqueueContestRating,
   finalJudgeJobId,
-  mossJobId,
   oneJobPerContest,
   notifyContestRescore,
   rescheduleFinalJudge,
 } from './queues';
 import type {
+  ContestDataJob,
   ContestFinalJudgeJob,
-  ContestMossJob,
   ContestRatingJob,
   ContestRescoreJob,
   FinalJudgeTarget,
@@ -131,10 +131,10 @@ describe('rescheduleFinalJudge', () => {
 });
 
 describe('contest extras queues', () => {
-  let mossQueue: Queue<ContestMossJob>;
+  let dataQueue: Queue<ContestDataJob>;
   let ratingQueue: Queue<ContestRatingJob>;
   beforeAll(() => {
-    mossQueue = new Queue(CONTEST_MOSS_QUEUE, {
+    dataQueue = new Queue<ContestDataJob>(CONTEST_DATA_QUEUE, {
       connection: { url: TEST_REDIS_URL },
     });
     ratingQueue = new Queue(CONTEST_RATING_QUEUE, {
@@ -142,30 +142,33 @@ describe('contest extras queues', () => {
     });
   });
   beforeEach(async () => {
-    await mossQueue.obliterate({ force: true });
+    await dataQueue.obliterate({ force: true });
     await ratingQueue.obliterate({ force: true });
   });
   afterAll(async () => {
-    await mossQueue.obliterate({ force: true });
+    await dataQueue.obliterate({ force: true });
     await ratingQueue.obliterate({ force: true });
-    await mossQueue.close();
+    await dataQueue.close();
     await ratingQueue.close();
   });
 
-  it('dedupes MOSS and data jobs by contest id; one attempt, removed on completion and failure', async () => {
+  it('dedupes data jobs by contest id; one attempt, removed on completion and failure', async () => {
     const contestId = newId();
-    await mossQueue.add(
-      CONTEST_MOSS_JOB,
-      { contestId },
-      oneJobPerContest('moss', contestId),
+    const job = { contestId, problemGlob: '*', results: [] };
+    await dataQueue.add(
+      CONTEST_DATA_JOB,
+      job,
+      oneJobPerContest('data', contestId),
     );
-    await mossQueue.add(
-      CONTEST_MOSS_JOB,
-      { contestId },
-      oneJobPerContest('moss', contestId),
+    await dataQueue.add(
+      CONTEST_DATA_JOB,
+      job,
+      oneJobPerContest('data', contestId),
     );
-    expect(await mossQueue.getJobs(['waiting'])).toHaveLength(1);
-    expect((await mossQueue.getJob(mossJobId(contestId)))?.opts).toMatchObject({
+    expect(await dataQueue.getJobs(['waiting'])).toHaveLength(1);
+    expect(
+      (await dataQueue.getJob(contestDataJobId(contestId)))?.opts,
+    ).toMatchObject({
       attempts: 1,
       removeOnComplete: true,
       removeOnFail: true,

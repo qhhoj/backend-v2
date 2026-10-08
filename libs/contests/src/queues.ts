@@ -154,13 +154,6 @@ export const enqueueContestRating = async (
   );
 };
 
-export const CONTEST_MOSS_QUEUE = 'contest-moss';
-export const CONTEST_MOSS_JOB = 'moss';
-/** The MOSS key is read by the worker from its env, never carried here. */
-export interface ContestMossJob {
-  contestId: string;
-}
-
 export const CONTEST_DATA_QUEUE = 'contest-data';
 export const CONTEST_DATA_JOB = 'prepare';
 export interface ContestDataJob {
@@ -172,16 +165,11 @@ export interface ContestDataJob {
 }
 
 /** At most one job per contest (an `add` with a live id is ignored), dropped as soon as it ends either way: "running" is "the job exists", and a failure never blocks the next request. */
-export const oneJobPerContest = (
-  prefix: 'moss' | 'data',
-  contestId: string,
-) => ({
+export const oneJobPerContest = (prefix: 'data', contestId: string) => ({
   jobId: `${prefix}-${contestId}`,
   attempts: 1,
   removeOnComplete: true,
   removeOnFail: true,
 });
-export const mossJobId = (contestId: string) =>
-  oneJobPerContest('moss', contestId).jobId;
 export const contestDataJobId = (contestId: string) =>
   oneJobPerContest('data', contestId).jobId;

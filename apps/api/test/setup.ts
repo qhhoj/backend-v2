@@ -10,7 +10,6 @@ import { createTestApp, InMemoryMailer, TEST_ENV } from '@libs/common/testing';
 import {
   Contest,
   ContestAnnouncement,
-  ContestMoss,
   SimilarityPair,
   SimilarityRun,
   Flatpage,
@@ -98,7 +97,6 @@ export async function setupApiTest({
     PDF_CACHE_ROOT: pdfCacheRoot,
     CONTEST_DATA_ROOT: contestDataRoot,
     USER_DATA_ROOT: userDataRoot,
-    MOSS_API_KEY: '',
     ...env,
   });
   let app: NestFastifyApplication | undefined;
@@ -168,9 +166,6 @@ export async function setupApiTest({
     ),
     similarityPairs: readyApp.get<Model<SimilarityPair>>(
       getModelToken(SimilarityPair.name),
-    ),
-    contestMoss: readyApp.get<Model<ContestMoss>>(
-      getModelToken(ContestMoss.name),
     ),
     announcements: readyApp.get<Model<ContestAnnouncement>>(
       getModelToken(ContestAnnouncement.name),

@@ -13,6 +13,6 @@ describe('removedEnvInUse', () => {
     ).toEqual(['GOOGLE_CLIENT_ID', 'OFFICIAL_CONTEST_MODE', 'SMTP_URL']);
   });
   it('is empty for a clean environment', () => {
-    expect(removedEnvInUse({ MONGO_URL: 'x', MOSS_API_KEY: '1' })).toEqual([]);
+    expect(removedEnvInUse({ MONGO_URL: 'x', PORT: '3000' })).toEqual([]);
   });
 });

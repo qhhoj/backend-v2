@@ -18,7 +18,6 @@ import {
   ContestAnnouncement,
   ContestAnnouncementSchema,
 } from './contest-announcement.schema';
-import { ContestMoss, ContestMossSchema } from './contest-moss.schema';
 import {
   ContestOfficialRanking,
   ContestOfficialRankingSchema,
@@ -72,7 +71,6 @@ export * from './comment-lock.schema';
 export * from './comment-vote.schema';
 export * from './comment.schema';
 export * from './contest-announcement.schema';
-export * from './contest-moss.schema';
 export * from './contest-official-ranking.schema';
 export * from './contest-participation.schema';
 export * from './contest-public-ranking-link.schema';
@@ -117,7 +115,6 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: UserActivity.name, schema: UserActivitySchema },
   { name: UserSession.name, schema: UserSessionSchema },
   { name: ContestAnnouncement.name, schema: ContestAnnouncementSchema },
-  { name: ContestMoss.name, schema: ContestMossSchema },
   { name: ContestOfficialRanking.name, schema: ContestOfficialRankingSchema },
   {
     name: ContestPublicRankingLink.name,

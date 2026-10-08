@@ -30,7 +30,6 @@ describe('loadEnv', () => {
       judgeBridgePort: 9999,
       judgeBridgeHost: '0.0.0.0',
       mediaUrl: '/media',
-      mossApiKey: null,
       contestDataRoot: null,
       userDataRoot: null,
     }));
@@ -68,12 +67,12 @@ describe('loadEnv', () => {
     expect(roots('/srv/user-data', '/srv/contest-data')).not.toThrow();
   });
 
-  it('reads the optional MOSS key and contest data root, blank meaning off', () => {
-    expect(loadEnv({ ...valid }).mossApiKey).toBeNull();
-    expect(loadEnv({ ...valid, MOSS_API_KEY: '' }).mossApiKey).toBeNull();
-    expect(loadEnv({ ...valid, MOSS_API_KEY: '123456' }).mossApiKey).toBe(
-      '123456',
+  it('no longer reads a MOSS key', () => {
+    expect(loadEnv({ ...valid, MOSS_API_KEY: '123456' })).not.toHaveProperty(
+      'mossApiKey',
     );
+  });
+  it('reads the optional contest data root, blank meaning off', () => {
     expect(loadEnv({ ...valid }).contestDataRoot).toBeNull();
     expect(
       loadEnv({ ...valid, CONTEST_DATA_ROOT: '/srv/contest-data' })
