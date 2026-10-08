@@ -84,196 +84,313 @@ const pointsOf = (element: XmlElement, what: string): number =>
     ? 0
     : finiteNumber(element.attributes.points, what, MAX_POINTS);
 
-/** Legacy `parse_tests`: complete-group groups become batches (a batch also runs every test of the groups it depends on; the judge caches results), each-test groups become plain cases, fractional points are scaled to integers, and a problem scoring nothing gives its last case one point. */
-export function planTests(
-  root: XmlElement,
-  options: TestPlanOptions,
-): TestPlan {
+const MS_PER_SECOND = 1000;
+const BYTES_PER_KIB = 1024;
+
+interface PathPatterns {
+  input: string;
+  answer: string;
+}
+interface NumberedTests {
+  tests: PlannedTest[];
+  casePoints: number[];
+  /** Tests outside any known group, in file order. */
+  ungroupedCases: number[];
+}
+interface PlannedRows {
+  batches: Group[];
+  normalCases: number[];
+}
+
+function findTestset(root: XmlElement): XmlElement {
   const testset = descendant(
     root,
     'testset',
     (candidate) => candidate.attributes.name === 'tests',
   );
   if (!testset) throw new PolygonImportError('testset tests not found');
+  return testset;
+}
+
+function readTestNodes(testset: XmlElement, maxCases: number): XmlElement[] {
   const testNodes = childrenOf(childOf(testset, 'tests') ?? testset, 'test');
   if (!testNodes.length) throw new PolygonImportError('no testcases found');
-  if (testNodes.length > options.maxCases)
+  if (testNodes.length > maxCases)
     throw new PolygonImportError('too many testcases');
-  const inputPattern = childText(testset, 'input-path-pattern');
-  const answerPattern = childText(testset, 'answer-path-pattern');
-  if (!inputPattern || !answerPattern)
-    throw new PolygonImportError('input/answer path patterns not found');
+  return testNodes;
+}
 
-  const groupNodes = childrenOf(childOf(testset, 'groups') ?? testset, 'group');
-  if (groupNodes.length > MAX_GROUPS)
-    throw new PolygonImportError('too many groups');
-  const groups = new Map<string, Group>();
-  for (const group of groupNodes) {
-    const name = group.attributes.name;
-    if (!name) throw new PolygonImportError('group without a name');
-    const policy = group.attributes['points-policy'];
-    if (policy !== 'complete-group' && policy !== 'each-test')
-      throw new PolygonImportError(
-        `unknown points policy for group ${shown(name)}`,
-      );
-    const dependencies = childrenOf(
-      childOf(group, 'dependencies') ?? group,
-      'dependency',
-    ).map((dependency) => {
+function readPathPatterns(testset: XmlElement): PathPatterns {
+  const input = childText(testset, 'input-path-pattern');
+  const answer = childText(testset, 'answer-path-pattern');
+  if (!input || !answer)
+    throw new PolygonImportError('input/answer path patterns not found');
+  return { input, answer };
+}
+
+function parseDependencies(group: XmlElement): string[] {
+  return childrenOf(childOf(group, 'dependencies') ?? group, 'dependency').map(
+    (dependency) => {
       const dependsOn = dependency.attributes.group;
       if (!dependsOn)
         throw new PolygonImportError('dependency without a group');
       return dependsOn;
-    });
-    if (policy === 'each-test' && dependencies.length)
-      throw new PolygonImportError(
-        'dependencies are only supported for batches with complete-group point policy',
-      );
-    groups.set(name, {
-      name,
-      points: pointsOf(group, `points of group ${name}`),
-      policy,
-      dependencies,
-      cases: [],
-    });
-  }
+    },
+  );
+}
 
-  const tests: PlannedTest[] = [];
-  const casePoints: number[] = [];
-  let normalCases: number[] = [];
+function parseGroup(node: XmlElement): Group {
+  const name = node.attributes.name;
+  if (!name) throw new PolygonImportError('group without a name');
+  const policy = node.attributes['points-policy'];
+  if (policy !== 'complete-group' && policy !== 'each-test')
+    throw new PolygonImportError(
+      `unknown points policy for group ${shown(name)}`,
+    );
+  const dependencies = parseDependencies(node);
+  if (policy === 'each-test' && dependencies.length)
+    throw new PolygonImportError(
+      'dependencies are only supported for batches with complete-group point policy',
+    );
+  return {
+    name,
+    points: pointsOf(node, `points of group ${name}`),
+    policy,
+    dependencies,
+    cases: [],
+  };
+}
+
+function parseGroups(testset: XmlElement): Map<string, Group> {
+  const groupNodes = childrenOf(childOf(testset, 'groups') ?? testset, 'group');
+  if (groupNodes.length > MAX_GROUPS)
+    throw new PolygonImportError('too many groups');
+  const groups = new Map<string, Group>();
+  for (const node of groupNodes) {
+    const group = parseGroup(node);
+    groups.set(group.name, group);
+  }
+  return groups;
+}
+
+const plannedTest = (index: number, patterns: PathPatterns): PlannedTest => {
+  const number = index + 1;
+  const label = String(number).padStart(2, '0');
+  return {
+    index,
+    inputPath: formatPathPattern(patterns.input, number),
+    answerPath: formatPathPattern(patterns.answer, number),
+    inputName: `${label}.inp`,
+    outputName: `${label}.out`,
+  };
+};
+
+/** Names the repacked files, reads each test's points and adds every grouped test to its group's `cases`. */
+function numberTests(
+  testNodes: XmlElement[],
+  patterns: PathPatterns,
+  groups: Map<string, Group>,
+): NumberedTests {
+  const numbered: NumberedTests = {
+    tests: [],
+    casePoints: [],
+    ungroupedCases: [],
+  };
   testNodes.forEach((test, index) => {
-    const number = index + 1;
-    const label = String(number).padStart(2, '0');
-    tests.push({
-      index,
-      inputPath: formatPathPattern(inputPattern, number),
-      answerPath: formatPathPattern(answerPattern, number),
-      inputName: `${label}.inp`,
-      outputName: `${label}.out`,
-    });
-    casePoints.push(pointsOf(test, `points of test ${number}`));
+    numbered.tests.push(plannedTest(index, patterns));
+    numbered.casePoints.push(pointsOf(test, `points of test ${index + 1}`));
     const group =
       test.attributes.group === undefined
         ? undefined
         : groups.get(test.attributes.group);
     if (group) group.cases.push(index);
-    else normalCases.push(index);
+    else numbered.ungroupedCases.push(index);
   });
+  return numbered;
+}
 
-  /** Transitive dependencies, iterative; Polygon guarantees no cycles and `seen` keeps a bad package finite. */
-  const closure = (group: Group): number[] => {
-    const cases = new Set(group.cases);
-    const seen = new Set([group.name]);
-    const pending = [...group.dependencies];
-    while (pending.length) {
-      const name = pending.pop()!;
-      if (seen.has(name)) continue;
-      seen.add(name);
-      const dependency = groups.get(name);
-      if (!dependency)
-        throw new PolygonImportError(`unknown dependency group ${shown(name)}`);
-      dependency.cases.forEach((index) => cases.add(index));
-      for (const name of dependency.dependencies) pending.push(name);
-    }
-    return [...cases].sort((left, right) => left - right);
-  };
+/** Transitive dependencies, iterative; Polygon guarantees no cycles and `seen` keeps a bad package finite. */
+function groupClosure(group: Group, groups: Map<string, Group>): number[] {
+  const cases = new Set(group.cases);
+  const seen = new Set([group.name]);
+  const pending = [...group.dependencies];
+  while (pending.length) {
+    const name = pending.pop()!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const dependency = groups.get(name);
+    if (!dependency)
+      throw new PolygonImportError(`unknown dependency group ${shown(name)}`);
+    dependency.cases.forEach((index) => cases.add(index));
+    for (const dependsOn of dependency.dependencies) pending.push(dependsOn);
+  }
+  return [...cases].sort((left, right) => left - right);
+}
+
+/** Complete-group groups as batches over their dependency closure; the S and E rows count against `maxCases` too. */
+function expandBatches(groups: Map<string, Group>, maxCases: number): Group[] {
   let plannedRows = 0;
-  let batches = [...groups.values()]
+  return [...groups.values()]
     .filter((group) => group.policy === 'complete-group')
     .map((group) => {
-      const cases = closure(group);
+      const cases = groupClosure(group, groups);
       plannedRows += cases.length + 2;
-      if (plannedRows > options.maxCases)
+      if (plannedRows > maxCases)
         throw new PolygonImportError(
-          `expanded batch rows exceed the limit of ${options.maxCases}`,
+          `expanded batch rows exceed the limit of ${maxCases}`,
         );
       return { ...group, cases };
     });
-  for (const group of groups.values())
-    if (group.policy === 'each-test') normalCases.push(...group.cases);
+}
 
+const eachTestCases = (groups: Map<string, Group>): number[] =>
+  [...groups.values()]
+    .filter((group) => group.policy === 'each-test')
+    .flatMap((group) => group.cases);
+
+const toThousandths = (points: number) => Math.round(points * POINT_PRECISION);
+
+/** Fractional points become integers sharing one divisor (gcd of all points in thousandths), so their ratios hold. Batch members carry no points in the rows, so scaling every case entry is safe. */
+function scaleToIntegerPoints(
+  { batches, normalCases }: PlannedRows,
+  casePoints: number[],
+): { batches: Group[]; casePoints: number[] } {
   const allPoints = [
     ...batches.map((batch) => batch.points),
     ...normalCases.map((index) => casePoints[index]),
   ];
-  if (allPoints.some((points) => !Number.isInteger(points))) {
-    const divisor =
-      allPoints
-        .map((points) => Math.round(points * POINT_PRECISION))
-        .reduce(gcd, 0) || 1;
-    const scale = (points: number) =>
-      Math.round(points * POINT_PRECISION) / divisor;
-    batches.forEach((batch) => (batch.points = scale(batch.points)));
-    normalCases.forEach(
-      (index) => (casePoints[index] = scale(casePoints[index])),
-    );
-  }
-  const total =
-    batches.reduce((sum, batch) => sum + batch.points, 0) +
-    normalCases.reduce((sum, index) => sum + casePoints[index], 0);
-  const partial = total !== 0;
-  if (partial) {
-    if (options.ignoreZeroPointBatches)
-      batches = batches.filter((batch) => batch.points > 0);
-    if (options.ignoreZeroPointCases)
-      normalCases = normalCases.filter((index) => casePoints[index] > 0);
-  }
-  normalCases.sort((left, right) => left - right);
+  if (allPoints.every((points) => Number.isInteger(points)))
+    return { batches, casePoints };
+  const divisor = allPoints.map(toThousandths).reduce(gcd, 0) || 1;
+  const scale = (points: number) => toThousandths(points) / divisor;
+  return {
+    batches: batches.map((batch) => ({
+      ...batch,
+      points: scale(batch.points),
+    })),
+    casePoints: casePoints.map(scale),
+  };
+}
 
+const totalPoints = (
+  { batches, normalCases }: PlannedRows,
+  casePoints: number[],
+) =>
+  batches.reduce((sum, batch) => sum + batch.points, 0) +
+  normalCases.reduce((sum, index) => sum + casePoints[index], 0);
+
+function dropZeroPointRows(
+  { batches, normalCases }: PlannedRows,
+  casePoints: number[],
+  options: TestPlanOptions,
+): PlannedRows {
+  return {
+    batches: options.ignoreZeroPointBatches
+      ? batches.filter((batch) => batch.points > 0)
+      : batches,
+    normalCases: options.ignoreZeroPointCases
+      ? normalCases.filter((index) => casePoints[index] > 0)
+      : normalCases,
+  };
+}
+
+/** S/E-wrapped batches first, then plain cases in test order; a problem scoring nothing gives its last scoring row one point (legacy). */
+function buildCaseRows(
+  { batches, normalCases }: PlannedRows,
+  { tests, casePoints }: Pick<NumberedTests, 'tests' | 'casePoints'>,
+  isPartial: boolean,
+): ProblemTestCase[] {
   const cases: ProblemTestCase[] = [];
-  let last: ProblemTestCase | null = null;
+  let lastScored: ProblemTestCase | null = null;
   for (const batch of batches) {
     if (!batch.cases.length) continue;
-    last = row({ type: 'S', points: batch.points });
-    cases.push(last);
+    lastScored = row({ type: 'S', points: batch.points });
+    cases.push(lastScored);
     for (const index of batch.cases)
       cases.push(
         row({ input: tests[index].inputName, output: tests[index].outputName }),
       );
     cases.push(row({ type: 'E' }));
   }
-  for (const index of normalCases) {
-    last = row({
+  for (const index of [...normalCases].sort((left, right) => left - right)) {
+    lastScored = row({
       input: tests[index].inputName,
       output: tests[index].outputName,
       points: casePoints[index],
     });
-    cases.push(last);
+    cases.push(lastScored);
   }
-  if (!partial && last) last.points = 1;
+  if (!isPartial && lastScored) lastScored.points = 1;
+  return cases;
+}
 
-  const judging = descendant(root, 'judging');
+function fileIoArgs(judging: XmlElement | null): JsonObject | null {
   const inputFile = judging?.attributes['input-file'] ?? '';
   const outputFile = judging?.attributes['output-file'] ?? '';
+  return inputFile && outputFile
+    ? {
+        io_method: 'file',
+        io_input_file: inputFile,
+        io_output_file: outputFile,
+      }
+    : null;
+}
+
+/** Polygon gives milliseconds and bytes; problems store seconds and KiB, clamped to the editor's limits. */
+function readJudgingLimits(
+  root: XmlElement,
+  testset: XmlElement,
+): Pick<TestPlan, 'timeLimit' | 'memoryLimit' | 'graderArgs'> {
+  const timeLimitMs = finiteNumber(
+    childText(testset, 'time-limit'),
+    'time limit',
+    Number.MAX_SAFE_INTEGER,
+  );
+  const memoryLimitBytes = finiteNumber(
+    childText(testset, 'memory-limit'),
+    'memory limit',
+    Number.MAX_SAFE_INTEGER,
+  );
   return {
-    timeLimit: clamp(
-      finiteNumber(
-        childText(testset, 'time-limit'),
-        'time limit',
-        Number.MAX_SAFE_INTEGER,
-      ) / 1000,
-      PROBLEM_LIMITS.timeLimit,
-    ),
+    timeLimit: clamp(timeLimitMs / MS_PER_SECOND, PROBLEM_LIMITS.timeLimit),
     memoryLimit: clamp(
-      Math.floor(
-        finiteNumber(
-          childText(testset, 'memory-limit'),
-          'memory limit',
-          Number.MAX_SAFE_INTEGER,
-        ) / 1024,
-      ),
+      Math.floor(memoryLimitBytes / BYTES_PER_KIB),
       PROBLEM_LIMITS.memoryLimit,
     ),
-    partial,
-    tests,
+    graderArgs: fileIoArgs(descendant(root, 'judging')),
+  };
+}
+
+/** Legacy `parse_tests`: complete-group groups become batches (a batch also runs every test of the groups it depends on; the judge caches results), each-test groups become plain cases, fractional points are scaled to integers, and a problem scoring nothing gives its last case one point. */
+export function planTests(
+  root: XmlElement,
+  options: TestPlanOptions,
+): TestPlan {
+  const testset = findTestset(root);
+  const testNodes = readTestNodes(testset, options.maxCases);
+  const patterns = readPathPatterns(testset);
+  const groups = parseGroups(testset);
+  const numbered = numberTests(testNodes, patterns, groups);
+  const planned: PlannedRows = {
+    batches: expandBatches(groups, options.maxCases),
+    normalCases: [...numbered.ungroupedCases, ...eachTestCases(groups)],
+  };
+  const scaled = scaleToIntegerPoints(planned, numbered.casePoints);
+  const scaledRows = { ...planned, batches: scaled.batches };
+  const isPartial = totalPoints(scaledRows, scaled.casePoints) !== 0;
+  const kept = isPartial
+    ? dropZeroPointRows(scaledRows, scaled.casePoints, options)
+    : scaledRows;
+  const cases = buildCaseRows(
+    kept,
+    { tests: numbered.tests, casePoints: scaled.casePoints },
+    isPartial,
+  );
+  // Limits are read last, as before: a package with several faults reports the same one first.
+  return {
+    ...readJudgingLimits(root, testset),
+    partial: isPartial,
+    tests: numbered.tests,
     cases,
-    graderArgs:
-      inputFile && outputFile
-        ? {
-            io_method: 'file',
-            io_input_file: inputFile,
-            io_output_file: outputFile,
-          }
-        : null,
   };
 }
