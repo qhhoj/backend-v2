@@ -104,3 +104,22 @@ export const isRegistrationOpen = (
   requiresRegistration(window) &&
   (window.registrationStart === null || now >= window.registrationStart) &&
   (window.registrationEnd === null || now <= window.registrationEnd);
+
+export const LIVE_STATUSES = [
+  'registered',
+  'participating',
+  'finished',
+] as const;
+/** Where the viewer's live participation stands: registered and not joined, inside its window, or past its end. */
+export type LiveStatus = (typeof LIVE_STATUSES)[number];
+
+/** A registration never joined ends with the contest, like legacy (it counts in `userCount` too). */
+export function liveStatusOf(
+  contest: ContestTimes,
+  live: ParticipationTimes | null,
+  now: Date,
+): LiveStatus | null {
+  if (live === null) return null;
+  if (hasParticipationEnded(contest, live, now)) return 'finished';
+  return live.isRegistered ? 'registered' : 'participating';
+}

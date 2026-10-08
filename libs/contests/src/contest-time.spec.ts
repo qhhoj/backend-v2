@@ -4,6 +4,7 @@ import {
   hasParticipationEnded,
   isFrozen,
   isRegistrationOpen,
+  liveStatusOf,
   participationEnd,
   participationStart,
   requiresRegistration,
@@ -163,5 +164,57 @@ describe('registration (legacy require_registration / can_register)', () => {
     [window(after(-2 * hour), null), after(4 * hour), true],
   ])('is open for %p at %p: %p', (bounds, now, open) =>
     expect(isRegistrationOpen(bounds, now)).toBe(open),
+  );
+});
+
+describe('liveStatusOf (viewer live participation)', () => {
+  it('is null without a live participation', () =>
+    expect(liveStatusOf(contest(), null, after(hour))).toBeNull());
+
+  it.each([
+    {
+      name: 'registered before the start',
+      live: { isRegistered: true },
+      times: {},
+      now: after(-hour),
+      status: 'registered',
+    },
+    {
+      name: 'registered, never joined, on a timed contest after the start',
+      live: { isRegistered: true },
+      times: { timeLimit: 600 },
+      now: after(2 * hour),
+      status: 'registered',
+    },
+    {
+      name: 'registered, never joined, after the end',
+      live: { isRegistered: true },
+      times: {},
+      now: after(5 * hour + 1),
+      status: 'finished',
+    },
+    {
+      name: 'joined, inside its window',
+      live: {},
+      times: {},
+      now: after(2 * hour),
+      status: 'participating',
+    },
+    {
+      name: 'joined, its time limit spent while the contest runs',
+      live: {},
+      times: { timeLimit: 600 },
+      now: after(2 * hour),
+      status: 'finished',
+    },
+    {
+      name: 'joined, after the end',
+      live: {},
+      times: {},
+      now: after(5 * hour + 1),
+      status: 'finished',
+    },
+  ])('$name', ({ live, times, now, status }) =>
+    expect(liveStatusOf(contest(times), participation(live), now)).toBe(status),
   );
 });
