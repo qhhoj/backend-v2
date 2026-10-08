@@ -59,13 +59,15 @@ export class ContestDataService {
         this.limits.sourceChunk,
         (ids) => this.repository.sources(ids),
       ),
-      path,
-      temporary,
-      this.limits.maxBytes,
-      () =>
-        new ContestDataError(
-          `The sources pass ${this.limits.maxBytes} bytes; narrow the filter`,
-        ),
+      {
+        path,
+        temporaryPath: temporary,
+        maxBytes: this.limits.maxBytes,
+        tooLarge: () =>
+          new ContestDataError(
+            `The sources pass ${this.limits.maxBytes} bytes; narrow the filter`,
+          ),
+      },
     );
     return entries.length;
   }

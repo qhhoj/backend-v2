@@ -90,13 +90,16 @@ describe('rescheduleFinalJudge', () => {
   });
 
   it('delays one job until the end and moves it with the end', async () => {
-    await rescheduleFinalJudge(queue, null, target(), logger);
+    await rescheduleFinalJudge(
+      queue,
+      { previous: null, next: target() },
+      logger,
+    );
     expect(await ids()).toEqual([finalJudgeJobId('c9', end)]);
     const later = new Date(end.getTime() + 60_000);
     await rescheduleFinalJudge(
       queue,
-      target(),
-      target({ endTime: later }),
+      { previous: target(), next: target({ endTime: later }) },
       logger,
     );
     expect(await ids()).toEqual([finalJudgeJobId('c9', later)]);
@@ -108,22 +111,29 @@ describe('rescheduleFinalJudge', () => {
   it('schedules nothing for other formats or without autoJudge, and drops the job when the contest stops judging at its end', async () => {
     await rescheduleFinalJudge(
       queue,
-      null,
-      target({ formatName: 'icpc', formatConfig: {} }),
+      {
+        previous: null,
+        next: target({ formatName: 'icpc', formatConfig: {} }),
+      },
       logger,
     );
     await rescheduleFinalJudge(
       queue,
-      null,
-      target({ formatConfig: { autoJudge: false } }),
+      { previous: null, next: target({ formatConfig: { autoJudge: false } }) },
       logger,
     );
     expect(await ids()).toEqual([]);
-    await rescheduleFinalJudge(queue, null, target(), logger);
     await rescheduleFinalJudge(
       queue,
-      target(),
-      target({ formatName: 'default', formatConfig: {} }),
+      { previous: null, next: target() },
+      logger,
+    );
+    await rescheduleFinalJudge(
+      queue,
+      {
+        previous: target(),
+        next: target({ formatName: 'default', formatConfig: {} }),
+      },
       logger,
     );
     expect(await ids()).toEqual([]);

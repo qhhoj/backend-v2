@@ -19,11 +19,9 @@ export abstract class BaseCatalogQuerier<Item extends { _id: string }>
   }
 
   async onModuleInit() {
-    await this.setupMongoStream(
-      this.model,
-      [],
+    await this.setupMongoStream(this.model, [], {
       // eslint-disable-next-line @typescript-eslint/require-await
-      async ({ fullDocument }) =>
+      onChange: async ({ fullDocument }) =>
         void (
           fullDocument &&
           this.items.set(
@@ -31,9 +29,9 @@ export abstract class BaseCatalogQuerier<Item extends { _id: string }>
             this.toItem(fullDocument as object & { _id: unknown }),
           )
         ),
-      () => this.resync(),
-      (id) => void this.items.delete(uuidStr(id)),
-    );
+      resync: () => this.resync(),
+      onDelete: (id) => void this.items.delete(uuidStr(id)),
+    });
     this.forceResyncQuerier(
       () => this.resync(),
       CronExpression.EVERY_10_MINUTES,

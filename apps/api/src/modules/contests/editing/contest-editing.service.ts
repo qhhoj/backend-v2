@@ -140,8 +140,7 @@ export class ContestEditingService {
     });
     await rescheduleFinalJudge(
       this.finalJudges,
-      null,
-      finalJudgeTarget(contest),
+      { previous: null, next: finalJudgeTarget(contest) },
       this.logger,
     );
     return contest;
@@ -171,8 +170,7 @@ export class ContestEditingService {
     await purgeRankingCache(this.redis, contest._id);
     await rescheduleFinalJudge(
       this.finalJudges,
-      finalJudgeTarget(contest),
-      finalJudgeTarget(updated),
+      { previous: finalJudgeTarget(contest), next: finalJudgeTarget(updated) },
       this.logger,
     );
     // `endTime` is part of the scoring: the rescore's follow-up re-rates a contest that has ratings.

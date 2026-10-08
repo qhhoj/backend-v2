@@ -87,11 +87,11 @@ const FINAL_JUDGE_OPTIONS = {
 /** After a create or an edit: the previous end's job goes, the new end's comes (delay 0 once past). Never throws: the sweep judges any ended contest whose job was lost. */
 export async function rescheduleFinalJudge(
   queue: Queue<ContestFinalJudgeJob>,
-  previous: FinalJudgeTarget | null,
-  next: FinalJudgeTarget,
+  change: { previous: FinalJudgeTarget | null; next: FinalJudgeTarget },
   logger: Logger,
   now = Date.now(),
 ): Promise<void> {
+  const { previous, next } = change;
   const unchanged =
     previous !== null &&
     judgesAtEnd(previous) &&

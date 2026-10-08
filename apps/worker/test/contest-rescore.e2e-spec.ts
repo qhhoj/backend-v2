@@ -65,15 +65,13 @@ describe('contest rescore', () => {
       worker,
       participation,
       problem._id,
-      { result: 'WA', casePoints: 1, caseTotal: 4 },
-      25,
+      { fields: { result: 'WA', casePoints: 1, caseTotal: 4 }, points: 25 },
     );
     const full = await seedContestSubmission(
       worker,
       participation,
       problem._id,
-      { casePoints: 4, caseTotal: 4 },
-      100,
+      { fields: { casePoints: 4, caseTotal: 4 }, points: 100 },
     );
     return { problem, contest, participation, quarter, full };
   };

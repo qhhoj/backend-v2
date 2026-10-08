@@ -76,9 +76,11 @@ export class RegistrationService {
     const lockKey = `register-lock:email:${email.toLowerCase()}`;
     return withRedisLock(
       this.redis,
-      lockKey,
-      EMAIL_LOCK_SECONDS,
-      'Registration in progress; try again',
+      {
+        key: lockKey,
+        ttlSeconds: EMAIL_LOCK_SECONDS,
+        busyMessage: 'Registration in progress; try again',
+      },
       signup,
     );
   }

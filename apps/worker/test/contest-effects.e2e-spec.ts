@@ -79,7 +79,7 @@ describe('contest effects', () => {
       worker,
       participation,
       problem._id,
-      { result: 'WA', casePoints: 1, caseTotal: 4, points: 250 },
+      { fields: { result: 'WA', casePoints: 1, caseTotal: 4, points: 250 } },
     );
     await apply(submission);
     expect(await pointsOf(submission._id)).toBe(25);
@@ -110,9 +110,11 @@ describe('contest effects', () => {
     const ioi = await contestOn({}, { formatName: 'ioi' });
     await apply(
       await seedContestSubmission(worker, ioi.participation, ioi.problem._id, {
-        result: 'WA',
-        casePoints: 3,
-        caseTotal: 4,
+        fields: {
+          result: 'WA',
+          casePoints: 3,
+          caseTotal: 4,
+        },
       }),
     );
     const scored = await participationOf(ioi.participation._id);
@@ -164,7 +166,7 @@ describe('contest effects', () => {
       worker,
       participation,
       problem._id,
-      { result: 'WA', casePoints: 1, caseTotal: 4 },
+      { fields: { result: 'WA', casePoints: 1, caseTotal: 4 } },
     );
     await apply(submission);
     const withoutUpdatedAt = async () => ({
@@ -178,18 +180,30 @@ describe('contest effects', () => {
   });
 
   it.each([
-    ['a non-partial contest problem', {}, {}, { partial: false }, 0],
-    ['a non-partial problem', { partial: false }, {}, {}, 0],
-    [
-      'an FSO contest, always partial',
-      { partial: false },
-      { formatName: 'final_submission' },
-      { partial: false },
-      25,
-    ],
+    {
+      name: 'a non-partial contest problem',
+      problemFields: {},
+      contestFields: {},
+      entry: { partial: false },
+      points: 0,
+    },
+    {
+      name: 'a non-partial problem',
+      problemFields: { partial: false },
+      contestFields: {},
+      entry: {},
+      points: 0,
+    },
+    {
+      name: 'an FSO contest, always partial',
+      problemFields: { partial: false },
+      contestFields: { formatName: 'final_submission' },
+      entry: { partial: false },
+      points: 25,
+    },
   ])(
-    'scores a quarter of the cases on %s as %p',
-    async (_case, problemFields, contestFields, entry, points) => {
+    'scores a quarter of the cases on $name as $points',
+    async ({ problemFields, contestFields, entry, points }) => {
       const { problem, participation } = await contestOn(
         problemFields,
         contestFields,
@@ -199,7 +213,7 @@ describe('contest effects', () => {
         worker,
         participation,
         problem._id,
-        { result: 'WA', casePoints: 1, caseTotal: 4 },
+        { fields: { result: 'WA', casePoints: 1, caseTotal: 4 } },
       );
       await apply(submission);
       expect(await pointsOf(submission._id)).toBe(points);
@@ -237,7 +251,10 @@ describe('contest effects', () => {
   it('stops scoring a problem removed from the contest', async () => {
     const { problem, contest, participation } = await contestOn({});
     const kept = await seedProblem(worker, { points: 1000, partial: true });
-    await seedContestSubmission(worker, participation, problem._id, {}, 100);
+    await seedContestSubmission(worker, participation, problem._id, {
+      fields: {},
+      points: 100,
+    });
     await worker.contests.updateOne(
       { _id: contest._id },
       {
@@ -301,10 +318,12 @@ describe('contest effects', () => {
       participation,
       problem._id,
       {
-        cases: [
-          { position: 1, status: 'AC', points: 30, total: 30, batch: 1 },
-          { position: 2, status: 'WA', points: 0, total: 20, batch: null },
-        ] as never,
+        fields: {
+          cases: [
+            { position: 1, status: 'AC', points: 30, total: 30, batch: 1 },
+            { position: 2, status: 'WA', points: 0, total: 20, batch: null },
+          ] as never,
+        },
       },
     );
     await apply(submission);
@@ -318,9 +337,11 @@ describe('contest effects', () => {
     for (let index = 0; index < 50; index += 1)
       submissions.push(
         await seedContestSubmission(worker, participation, problem._id, {
-          result: 'WA',
-          casePoints: index % 5,
-          caseTotal: 4,
+          fields: {
+            result: 'WA',
+            casePoints: index % 5,
+            caseTotal: 4,
+          },
         }),
       );
     const reads = jest.spyOn(

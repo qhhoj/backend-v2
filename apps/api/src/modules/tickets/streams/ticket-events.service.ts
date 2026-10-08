@@ -15,10 +15,12 @@ export class TicketEventsService {
   publish(event: TicketEvent): Promise<void> {
     return publishEvent(
       this.redis,
-      TICKET_EVENTS_CHANNEL,
-      event,
+      {
+        channel: TICKET_EVENTS_CHANNEL,
+        payload: event,
+        label: `Ticket ${event.ticketId} ${event.type}`,
+      },
       this.logger,
-      `Ticket ${event.ticketId} ${event.type}`,
     );
   }
 }

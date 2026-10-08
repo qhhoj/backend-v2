@@ -8,11 +8,10 @@ export const EVENT_PUBLISH_TIMEOUT_MS = 1000;
 /** Fire-and-forget: skipped at once while the client is not ready, bounded by `EVENT_PUBLISH_TIMEOUT_MS`; a failure is logged, never thrown (Mongo holds the state; streams resync on reconnect). */
 export async function publishEvent(
   redis: Redis,
-  channel: string,
-  payload: unknown,
+  event: { channel: string; payload: unknown; label: string },
   logger: Logger,
-  label: string,
 ): Promise<void> {
+  const { channel, payload, label } = event;
   if (redis.status !== 'ready')
     return void logger.warn(`${label} skipped: Redis is ${redis.status}`);
   try {

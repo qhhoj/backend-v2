@@ -4,22 +4,57 @@ describe('contestSubmissionPoints (legacy update_contest)', () => {
   const quarter = { casePoints: 1, caseTotal: 4 };
   const full = { casePoints: 4, caseTotal: 4 };
   it.each([
-    ['partial contest problem and problem', quarter, true, 'default', true, 25],
-    ['non-partial contest problem', quarter, false, 'default', true, 0],
-    ['non-partial problem', quarter, true, 'icpc', false, 0],
-    ['full marks are never zeroed', full, false, 'default', false, 100],
-    ['FSO is always partial', quarter, false, 'final_submission', false, 25],
-    [
-      'no cases score nothing',
-      { casePoints: 0, caseTotal: 0 },
-      true,
-      'default',
-      true,
-      0,
-    ],
+    {
+      name: 'partial contest problem and problem',
+      totals: quarter,
+      partial: true,
+      formatName: 'default',
+      problemPartial: true,
+      points: 25,
+    },
+    {
+      name: 'non-partial contest problem',
+      totals: quarter,
+      partial: false,
+      formatName: 'default',
+      problemPartial: true,
+      points: 0,
+    },
+    {
+      name: 'non-partial problem',
+      totals: quarter,
+      partial: true,
+      formatName: 'icpc',
+      problemPartial: false,
+      points: 0,
+    },
+    {
+      name: 'full marks are never zeroed',
+      totals: full,
+      partial: false,
+      formatName: 'default',
+      problemPartial: false,
+      points: 100,
+    },
+    {
+      name: 'FSO is always partial',
+      totals: quarter,
+      partial: false,
+      formatName: 'final_submission',
+      problemPartial: false,
+      points: 25,
+    },
+    {
+      name: 'no cases score nothing',
+      totals: { casePoints: 0, caseTotal: 0 },
+      partial: true,
+      formatName: 'default',
+      problemPartial: true,
+      points: 0,
+    },
   ] as const)(
-    '%s',
-    (_case, totals, partial, formatName, problemPartial, points) =>
+    '$name',
+    ({ totals, partial, formatName, problemPartial, points }) =>
       expect(
         contestSubmissionPoints(
           totals,

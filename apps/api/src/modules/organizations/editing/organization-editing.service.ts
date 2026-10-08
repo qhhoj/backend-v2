@@ -149,9 +149,11 @@ export class OrganizationEditingService {
   ): Promise<Result> {
     return withRedisLock(
       this.redis,
-      'organization-admins',
-      ORGANIZATION_ADMIN_LOCK_SECONDS,
-      'Another admin change is in progress; try again',
+      {
+        key: 'organization-admins',
+        ttlSeconds: ORGANIZATION_ADMIN_LOCK_SECONDS,
+        busyMessage: 'Another admin change is in progress; try again',
+      },
       async () => {
         await this.checkNewAdmins(principal, newAdminIds);
         return write();

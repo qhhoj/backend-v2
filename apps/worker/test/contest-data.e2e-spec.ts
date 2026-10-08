@@ -54,8 +54,7 @@ describe('contest data zip', () => {
       worker,
       participation,
       problem._id,
-      { language: cpp._id, ...fields },
-      fields.points,
+      { fields: { language: cpp._id, ...fields }, points: fields.points },
     );
     await worker.submissionSources.create({ _id: submission._id, source });
     return submission;

@@ -55,7 +55,10 @@ describe('contest rating', () => {
       score,
       ...extra,
     });
-    await seedContestSubmission(worker, participation, problemId, {}, score);
+    await seedContestSubmission(worker, participation, problemId, {
+      fields: {},
+      points: score,
+    });
     return participation;
   };
   /** What an edit of a contest's end triggers: its rescore, whose follow-up re-rates; resolves once the rating queue is idle. */

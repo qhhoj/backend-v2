@@ -151,8 +151,10 @@ export async function seedContestSubmission(
   worker: WorkerTest,
   participation: { _id: string; contest: string; user: string },
   problemId: string,
-  fields: Partial<Submission> = {},
-  points = 0,
+  {
+    fields = {},
+    points = 0,
+  }: { fields?: Partial<Submission>; points?: number } = {},
 ) {
   const submission = await seedGraded(
     worker,

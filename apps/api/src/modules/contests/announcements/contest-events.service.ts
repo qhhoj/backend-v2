@@ -14,10 +14,12 @@ export class ContestEventsService {
   publish(event: ContestEvent): Promise<void> {
     return publishEvent(
       this.redis,
-      CONTEST_EVENTS_CHANNEL,
-      event,
+      {
+        channel: CONTEST_EVENTS_CHANNEL,
+        payload: event,
+        label: `Announcement ${event.announcementId} of contest ${event.contestId}`,
+      },
       this.logger,
-      `Announcement ${event.announcementId} of contest ${event.contestId}`,
     );
   }
 }

@@ -4,6 +4,13 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ZipFile } from 'yazl';
 
+/** Where a zip goes, how much content it may hold, and the error raised past that cap. */
+export interface ZipTarget {
+  path: string;
+  maxBytes: number;
+  tooLarge: () => Error;
+}
+
 export interface ZipLimits {
   /** Total uncompressed content bytes per zip. */
   maxBytes: number;
@@ -16,10 +23,9 @@ export interface ZipLimits {
 export async function writeLazyZip(
   names: readonly string[],
   contentAt: (index: number) => Promise<string>,
-  path: string,
-  maxBytes: number,
-  tooLarge: () => Error,
+  target: ZipTarget,
 ): Promise<void> {
+  const { path, maxBytes, tooLarge } = target;
   const zip = new ZipFile();
   const output = zip.outputStream as Readable;
   const fail = (error: unknown) => output.destroy(error as Error);
@@ -43,16 +49,14 @@ export async function writeLazyZip(
 export async function writeZipInPlace(
   names: readonly string[],
   contentAt: (index: number) => Promise<string>,
-  path: string,
-  temporary: string,
-  maxBytes: number,
-  tooLarge: () => Error,
+  target: ZipTarget & { temporaryPath: string },
 ): Promise<void> {
+  const { path, temporaryPath, ...limits } = target;
   try {
-    await writeLazyZip(names, contentAt, temporary, maxBytes, tooLarge);
-    await rename(temporary, path);
+    await writeLazyZip(names, contentAt, { ...limits, path: temporaryPath });
+    await rename(temporaryPath, path);
   } catch (error) {
-    await rm(temporary, { force: true });
+    await rm(temporaryPath, { force: true });
     throw error;
   }
 }

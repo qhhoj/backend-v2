@@ -28,14 +28,12 @@ export class SettingsQuerier
   }
 
   async onModuleInit() {
-    await this.setupMongoStream(
-      this.model,
-      [],
+    await this.setupMongoStream(this.model, [], {
       // eslint-disable-next-line @typescript-eslint/require-await
-      async ({ fullDocument }) =>
+      onChange: async ({ fullDocument }) =>
         void (fullDocument && this.load(this.values, fullDocument as Setting)),
-      () => this.resync(),
-    );
+      resync: () => this.resync(),
+    });
     this.forceResyncQuerier(() => this.resync(), CronExpression.EVERY_MINUTE);
   }
 

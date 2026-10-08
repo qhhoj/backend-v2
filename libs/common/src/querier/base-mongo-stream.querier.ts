@@ -17,6 +17,12 @@ export type QuerierChange =
   | ChangeStreamUpdateDocument
   | ChangeStreamReplaceDocument;
 
+export interface StreamHandlers {
+  onChange: (change: QuerierChange) => Promise<void>;
+  resync: () => Promise<void>;
+  onDelete?: (id: unknown) => void;
+}
+
 /** In-memory read model for small, simple, frequently read data. Deletes reach `onDelete` only when the subclass passes one; without it a deleted row lingers until the next resync. */
 export abstract class BaseMongoStreamQuerier {
   private readonly streamLogger = new Logger(BaseMongoStreamQuerier.name);
@@ -35,20 +41,17 @@ export abstract class BaseMongoStreamQuerier {
   async setupMongoStream(
     model: Model<any>,
     pipeline: Record<string, unknown>[],
-    onChange: (change: QuerierChange) => Promise<void>,
-    resync: () => Promise<void>,
-    onDelete?: (id: unknown) => void,
+    handlers: StreamHandlers,
   ) {
-    if (process.env.DISABLE_MONGODB_STREAM === 'true') return resync();
+    if (process.env.DISABLE_MONGODB_STREAM === 'true') return handlers.resync();
     const syncAndWatch = async () => {
       const stream = this.getModelStream(
         model,
         pipeline,
-        onChange,
-        onDelete,
+        handlers,
         await this.clusterTime(model),
       );
-      await resync().catch((error: Error) => {
+      await handlers.resync().catch((error: Error) => {
         stream.close().catch(() => {});
         throw error;
       });
@@ -87,8 +90,7 @@ export abstract class BaseMongoStreamQuerier {
   private getModelStream(
     model: Model<any>,
     pipeline: Record<string, unknown>[],
-    onChange: (change: QuerierChange) => Promise<void>,
-    onDelete: ((id: unknown) => void) | undefined,
+    handlers: Pick<StreamHandlers, 'onChange' | 'onDelete'>,
     startAtOperationTime: Timestamp,
   ) {
     const stream = model.watch(pipeline, {
@@ -97,14 +99,16 @@ export abstract class BaseMongoStreamQuerier {
     });
     stream.on('change', (change: ChangeStreamDocument) => {
       if (change.operationType === 'delete')
-        return onDelete?.(change.documentKey._id);
+        return handlers.onDelete?.(change.documentKey._id);
       if (!['insert', 'update', 'replace'].includes(change.operationType))
         return;
-      onChange(change as QuerierChange).catch((error: Error) =>
-        this.streamLogger.warn(
-          `Querier change handler failed (${model.modelName}): ${error.message}`,
-        ),
-      );
+      handlers
+        .onChange(change as QuerierChange)
+        .catch((error: Error) =>
+          this.streamLogger.warn(
+            `Querier change handler failed (${model.modelName}): ${error.message}`,
+          ),
+        );
     });
     stream.on('error', (err: Error) => {
       this.streamLogger.warn(

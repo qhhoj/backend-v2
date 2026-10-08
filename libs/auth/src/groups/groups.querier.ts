@@ -20,14 +20,12 @@ export class GroupsQuerier
   }
 
   async onModuleInit() {
-    await this.setupMongoStream(
-      this.model,
-      [],
+    await this.setupMongoStream(this.model, [], {
       // eslint-disable-next-line @typescript-eslint/require-await
-      async ({ fullDocument: group }) =>
+      onChange: async ({ fullDocument: group }) =>
         void (group && this.perms.set(uuidStr(group._id), group.permissions)),
-      () => this.resync(),
-    );
+      resync: () => this.resync(),
+    });
     this.forceResyncQuerier(
       () => this.resync(),
       CronExpression.EVERY_10_MINUTES,

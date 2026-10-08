@@ -203,9 +203,11 @@ export class SubmissionCreateService {
     if (canSpam && contestCap === null) return insertRow();
     return withRedisLock(
       this.redis,
-      `submit-lock:user:${principal.userId}`,
-      USER_LOCK_SECONDS,
-      'Another submission is being created; try again',
+      {
+        key: `submit-lock:user:${principal.userId}`,
+        ttlSeconds: USER_LOCK_SECONDS,
+        busyMessage: 'Another submission is being created; try again',
+      },
       async () => {
         if (plan && contestCap !== null)
           await this.assertUnderContestCap(

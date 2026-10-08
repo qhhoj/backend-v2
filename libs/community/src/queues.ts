@@ -36,13 +36,16 @@ interface FlaggedJob<Data> {
 
 /** At most one waiting job per id: a Redis flag set here and cleared when the job starts (a `jobId` would also drop adds during a running recompute, leaving it stale). Duplicate ids collapse too. Never rethrown: the write that caused it is committed; a lost recompute waits for the next change (logged). */
 async function enqueueFlagged<Data>(
-  // Untyped: BullMQ's `addBulk` job-name typing rejects `Queue<Data>` with a plain string name.
-  queue: Queue,
-  redis: Redis,
+  deps: {
+    // Untyped: BullMQ's `addBulk` job-name typing rejects `Queue<Data>` with a plain string name.
+    queue: Queue;
+    redis: Redis;
+    logger: Logger;
+  },
   ids: readonly string[],
   job: FlaggedJob<Data>,
-  logger: Logger,
 ): Promise<void> {
+  const { queue, redis, logger } = deps;
   const flagged: string[] = [];
   try {
     await withinTimeout(
@@ -89,18 +92,12 @@ export const notifyOrganizationPoints = (
   organizationIds: readonly string[],
   logger: Logger,
 ): Promise<void> =>
-  enqueueFlagged(
-    queue,
-    redis,
-    organizationIds,
-    {
-      pendingKey,
-      jobName: ORGANIZATION_POINTS_JOB,
-      dataOf: (organizationId) => ({ organizationId }),
-      label: 'Points of organizations',
-    },
-    logger,
-  );
+  enqueueFlagged({ queue, redis, logger }, organizationIds, {
+    pendingKey,
+    jobName: ORGANIZATION_POINTS_JOB,
+    dataOf: (organizationId) => ({ organizationId }),
+    label: 'Points of organizations',
+  });
 
 export const CONTRIBUTION_POINTS_QUEUE = 'contribution-points';
 export const CONTRIBUTION_POINTS_JOB = 'recompute';
@@ -122,18 +119,12 @@ export const notifyContributionPoints = (
   userIds: readonly string[],
   logger: Logger,
 ): Promise<void> =>
-  enqueueFlagged(
-    queue,
-    redis,
-    userIds,
-    {
-      pendingKey: contributionPendingKey,
-      jobName: CONTRIBUTION_POINTS_JOB,
-      dataOf: (userId) => ({ userId }),
-      label: 'Contribution points of users',
-    },
-    logger,
-  );
+  enqueueFlagged({ queue, redis, logger }, userIds, {
+    pendingKey: contributionPendingKey,
+    jobName: CONTRIBUTION_POINTS_JOB,
+    dataOf: (userId) => ({ userId }),
+    label: 'Contribution points of users',
+  });
 
 export const USER_DATA_QUEUE = 'user-data';
 export const USER_DATA_JOB = 'prepare';

@@ -41,13 +41,11 @@ describe('writeLazyZip', () => {
       inFlight -= 1;
       return `source ${index}`;
     };
-    await writeLazyZip(
-      ['a/x.cpp', 'b/x.cpp'],
-      sourceAt,
+    await writeLazyZip(['a/x.cpp', 'b/x.cpp'], sourceAt, {
       path,
-      1024,
-      () => new Error('too large'),
-    );
+      maxBytes: 1024,
+      tooLarge: () => new Error('too large'),
+    });
     expect(await readZip(path)).toEqual({
       'a/x.cpp': 'source 0',
       'b/x.cpp': 'source 1',
@@ -60,9 +58,11 @@ describe('writeLazyZip', () => {
       writeLazyZip(
         ['a/x.cpp', 'a/y.cpp'],
         () => Promise.resolve('x'.repeat(600)),
-        path,
-        1000,
-        () => new Error('too large'),
+        {
+          path,
+          maxBytes: 1000,
+          tooLarge: () => new Error('too large'),
+        },
       ),
     ).rejects.toThrow('too large');
   });
@@ -72,9 +72,11 @@ describe('writeLazyZip', () => {
       writeLazyZip(
         ['a/x.cpp'],
         () => Promise.reject(new Error('database down')),
-        path,
-        1000,
-        () => new Error('too large'),
+        {
+          path,
+          maxBytes: 1000,
+          tooLarge: () => new Error('too large'),
+        },
       ),
     ).rejects.toThrow('database down');
   });

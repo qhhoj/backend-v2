@@ -142,7 +142,7 @@ describe('similarity run', () => {
       worker,
       participation,
       onProblem._id,
-      { language: cpp._id },
+      { fields: { language: cpp._id } },
     );
     await worker.submissionSources.create({ _id: submission._id, source });
     return submission;

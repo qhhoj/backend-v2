@@ -10,11 +10,10 @@ const logger = new Logger('RedisLock');
 /** Runs `work` while holding `key` (expires after `ttlSeconds`); a held lock is a 409 `conflict` at once, no waiting. The owner-checked release never throws: a failure is logged, the work's result stands. */
 export async function withRedisLock<Result>(
   redis: Redis,
-  key: string,
-  ttlSeconds: number,
-  busyMessage: string,
+  lock: { key: string; ttlSeconds: number; busyMessage: string },
   work: () => Promise<Result>,
 ): Promise<Result> {
+  const { key, ttlSeconds, busyMessage } = lock;
   const token = randomBytes(16).toString('hex');
   if ((await redis.set(key, token, 'EX', ttlSeconds, 'NX')) !== 'OK')
     throw new AppError('conflict', 409, busyMessage);

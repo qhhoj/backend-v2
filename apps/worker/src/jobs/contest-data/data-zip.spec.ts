@@ -5,18 +5,20 @@ const row = (
   userId: string,
   username: string,
   code: string,
-  submissionId: string,
-  extension = 'cpp',
+  {
+    submissionId,
+    extension = 'cpp',
+  }: { submissionId: string; extension?: string },
 ): DataRow => ({ submissionId, userId, username, code, extension });
 
 describe('planEntries', () => {
   it('keeps the best submission per user and problem at the top and the rest under $History', () => {
     expect(
       planEntries([
-        row('u1', 'alice', 'sum', 's1'),
-        row('u1', 'alice', 'sum', 's2', 'py'),
-        row('u1', 'alice', 'max', 's3'),
-        row('u2', 'bob', 'sum', 's4'),
+        row('u1', 'alice', 'sum', { submissionId: 's1' }),
+        row('u1', 'alice', 'sum', { submissionId: 's2', extension: 'py' }),
+        row('u1', 'alice', 'max', { submissionId: 's3' }),
+        row('u2', 'bob', 'sum', { submissionId: 's4' }),
       ]).map((entry) => entry.name),
     ).toEqual([
       'alice/sum.cpp',
@@ -28,12 +30,12 @@ describe('planEntries', () => {
 
   it('contains hostile usernames and extensions', () => {
     const names = planEntries([
-      row('u1', '../../etc', 'sum', 's1'),
-      row('u2', '..', 'sum', 's2', '../x'),
-      row('u3', 'a/b', 'sum', 's3'),
-      row('u4', 'a_b', 'sum', 's4'),
-      row('u5', 'Nguyễn Văn', 'sum', 's5', ''),
-      row('u6', '\u0000‮', 'sum', 's6'),
+      row('u1', '../../etc', 'sum', { submissionId: 's1' }),
+      row('u2', '..', 'sum', { submissionId: 's2', extension: '../x' }),
+      row('u3', 'a/b', 'sum', { submissionId: 's3' }),
+      row('u4', 'a_b', 'sum', { submissionId: 's4' }),
+      row('u5', 'Nguyễn Văn', 'sum', { submissionId: 's5', extension: '' }),
+      row('u6', '\u0000‮', 'sum', { submissionId: 's6' }),
     ]).map((entry) => entry.name);
     expect(names).toEqual([
       '.._.._etc/sum.cpp',
@@ -57,9 +59,9 @@ describe('planEntries', () => {
 
   it("gives one folder to all of a user's rows, whatever the name", () => {
     const names = planEntries([
-      row('u1', 'alice', 'sum', 's1'),
-      row('u2', 'alice', 'sum', 's2'),
-      row('u1', 'alice', 'max', 's3'),
+      row('u1', 'alice', 'sum', { submissionId: 's1' }),
+      row('u2', 'alice', 'sum', { submissionId: 's2' }),
+      row('u1', 'alice', 'max', { submissionId: 's3' }),
     ]).map((entry) => entry.name);
     expect(names).toEqual([
       'alice/sum.cpp',

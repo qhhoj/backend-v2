@@ -44,63 +44,63 @@ describe('contestPhase (legacy can_join / ended)', () => {
 
 describe('participation window (legacy start / end_time)', () => {
   it.each([
-    [
-      'live, no time limit: the contest window',
-      contest(),
-      participation(),
-      START,
-      after(5 * hour),
-    ],
-    [
-      'live with a time limit: from joining, cut at the contest end',
-      contest({ timeLimit: 2 * 3600 }),
-      participation(),
-      after(hour),
-      after(3 * hour),
-    ],
-    [
-      'live joining late with a time limit: still ends with the contest',
-      contest({ timeLimit: 2 * 3600 }),
-      participation({ realStart: after(4 * hour) }),
-      after(4 * hour),
-      after(5 * hour),
-    ],
-    [
-      'registered, not joined: the contest window',
-      contest({ timeLimit: 3600 }),
-      participation({ isRegistered: true, realStart: new Date(0) }),
-      START,
-      after(5 * hour),
-    ],
-    [
-      'spectating, no time limit: the contest window',
-      contest(),
-      participation({ virtual: -1 }),
-      START,
-      after(5 * hour),
-    ],
-    [
-      'spectating: the contest window',
-      contest({ timeLimit: 3600 }),
-      participation({ virtual: -1 }),
-      after(hour),
-      after(5 * hour),
-    ],
-    [
-      'virtual without a time limit: the contest length from joining',
-      contest(),
-      participation({ virtual: 2, realStart: after(10 * hour) }),
-      after(10 * hour),
-      after(15 * hour),
-    ],
-    [
-      'virtual with a time limit: the limit from joining',
-      contest({ timeLimit: 1800 }),
-      participation({ virtual: 1, realStart: after(10 * hour) }),
-      after(10 * hour),
-      after(10.5 * hour),
-    ],
-  ])('%s', (_case, times, joined, start, end) => {
+    {
+      name: 'live, no time limit: the contest window',
+      times: contest(),
+      joined: participation(),
+      start: START,
+      end: after(5 * hour),
+    },
+    {
+      name: 'live with a time limit: from joining, cut at the contest end',
+      times: contest({ timeLimit: 2 * 3600 }),
+      joined: participation(),
+      start: after(hour),
+      end: after(3 * hour),
+    },
+    {
+      name: 'live joining late with a time limit: still ends with the contest',
+      times: contest({ timeLimit: 2 * 3600 }),
+      joined: participation({ realStart: after(4 * hour) }),
+      start: after(4 * hour),
+      end: after(5 * hour),
+    },
+    {
+      name: 'registered, not joined: the contest window',
+      times: contest({ timeLimit: 3600 }),
+      joined: participation({ isRegistered: true, realStart: new Date(0) }),
+      start: START,
+      end: after(5 * hour),
+    },
+    {
+      name: 'spectating, no time limit: the contest window',
+      times: contest(),
+      joined: participation({ virtual: -1 }),
+      start: START,
+      end: after(5 * hour),
+    },
+    {
+      name: 'spectating: the contest window',
+      times: contest({ timeLimit: 3600 }),
+      joined: participation({ virtual: -1 }),
+      start: after(hour),
+      end: after(5 * hour),
+    },
+    {
+      name: 'virtual without a time limit: the contest length from joining',
+      times: contest(),
+      joined: participation({ virtual: 2, realStart: after(10 * hour) }),
+      start: after(10 * hour),
+      end: after(15 * hour),
+    },
+    {
+      name: 'virtual with a time limit: the limit from joining',
+      times: contest({ timeLimit: 1800 }),
+      joined: participation({ virtual: 1, realStart: after(10 * hour) }),
+      start: after(10 * hour),
+      end: after(10.5 * hour),
+    },
+  ])('$name', ({ times, joined, start, end }) => {
     expect(participationStart(times, joined)).toEqual(start);
     expect(participationEnd(times, joined)).toEqual(end);
   });

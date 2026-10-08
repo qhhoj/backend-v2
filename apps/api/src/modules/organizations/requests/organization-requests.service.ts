@@ -152,9 +152,11 @@ export class OrganizationRequestsService {
     } else {
       await withRedisLock(
         this.redis,
-        `organization-requests:${organization._id}`,
-        APPROVAL_LOCK_SECONDS,
-        'Another decision is being made; try again',
+        {
+          key: `organization-requests:${organization._id}`,
+          ttlSeconds: APPROVAL_LOCK_SECONDS,
+          busyMessage: 'Another decision is being made; try again',
+        },
         () => this.approve(principal, slug, request, now),
       );
     }

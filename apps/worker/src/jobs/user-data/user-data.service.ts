@@ -152,10 +152,13 @@ export class UserDataService {
         }
         return '';
       },
-      path,
-      temporary,
-      this.limits.maxBytes,
-      () => new UserDataError(`Your data passes ${this.limits.maxBytes} bytes`),
+      {
+        path,
+        temporaryPath: temporary,
+        maxBytes: this.limits.maxBytes,
+        tooLarge: () =>
+          new UserDataError(`Your data passes ${this.limits.maxBytes} bytes`),
+      },
     );
     return names.length;
   }

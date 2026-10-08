@@ -23,10 +23,12 @@ export class SubmissionEventsService implements OnModuleInit {
   publish(event: SubmissionEvent): Promise<void> {
     return publishEvent(
       this.redis,
-      SUBMISSION_EVENTS_CHANNEL,
-      event,
+      {
+        channel: SUBMISSION_EVENTS_CHANNEL,
+        payload: event,
+        label: `Event ${event.type} of submission ${event.submissionId}`,
+      },
       this.logger,
-      `Event ${event.type} of submission ${event.submissionId}`,
     );
   }
 }

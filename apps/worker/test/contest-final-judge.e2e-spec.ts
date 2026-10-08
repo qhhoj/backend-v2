@@ -68,10 +68,12 @@ describe('FSO final judging', () => {
       ids.push(
         (
           await seedContestSubmission(worker, participation, problem._id, {
-            status: 'PD',
-            result: null,
-            points: null,
-            judgedDate: null,
+            fields: {
+              status: 'PD',
+              result: null,
+              points: null,
+              judgedDate: null,
+            },
           })
         )._id,
       );
@@ -167,7 +169,7 @@ describe('FSO final judging', () => {
       worker,
       participation,
       problem._id,
-      { status: 'PD', result: 'RJ', points: 0 },
+      { fields: { status: 'PD', result: 'RJ', points: 0 } },
     );
     expect(await service.sweep()).toBe(2);
     expect(await service.judgeFinal(contest._id, { isManual: true })).toBe(0);
@@ -209,8 +211,7 @@ describe('FSO final judging', () => {
     });
     await rescheduleFinalJudge(
       queue,
-      null,
-      target(firstEnd),
+      { previous: null, next: target(firstEnd) },
       new Logger('spec'),
     );
     const laterEnd = new Date(Date.now() + 4000);
@@ -220,8 +221,7 @@ describe('FSO final judging', () => {
     );
     await rescheduleFinalJudge(
       queue,
-      target(firstEnd),
-      target(laterEnd),
+      { previous: target(firstEnd), next: target(laterEnd) },
       new Logger('spec'),
     );
     expect(await queue.getJob(finalJudgeJobId(contest._id, firstEnd))).toBe(

@@ -55,9 +55,11 @@ describe('problem uploads', () => {
   const upload = (
     path: string,
     session: TestSession,
-    content: Buffer,
-    filename: string,
-    contentType = 'application/octet-stream',
+    {
+      content,
+      filename,
+      contentType = 'application/octet-stream',
+    }: { content: Buffer; filename: string; contentType?: string },
   ) =>
     authed(api.http().post(path), session).attach('file', content, {
       filename,
@@ -66,67 +68,55 @@ describe('problem uploads', () => {
 
   it('stores images for staff and judge.can_upload_image under images/<uuid>.<ext>', async () => {
     const url = urlOf(
-      await upload(
-        `${PROBLEMS}/uploads/image`,
-        staff,
-        PNG,
-        'photo.png',
-        'image/png',
-      ).expect(201),
+      await upload(`${PROBLEMS}/uploads/image`, staff, {
+        content: PNG,
+        filename: 'photo.png',
+        contentType: 'image/png',
+      }).expect(201),
     );
     expect(url).toMatch(/^\/media\/images\/[0-9a-f-]{36}\.png$/);
     expect(
       readFileSync(join(api.mediaRoot, url.replace('/media/', ''))),
     ).toEqual(PNG);
-    await upload(
-      `${PROBLEMS}/uploads/image`,
-      uploader,
-      PNG,
-      'anything.jpg',
-      'image/jpeg',
-    ).expect(201);
-    await upload(
-      `${PROBLEMS}/uploads/image`,
-      plain,
-      PNG,
-      'photo.png',
-      'image/png',
-    )
+    await upload(`${PROBLEMS}/uploads/image`, uploader, {
+      content: PNG,
+      filename: 'anything.jpg',
+      contentType: 'image/jpeg',
+    }).expect(201);
+    await upload(`${PROBLEMS}/uploads/image`, plain, {
+      content: PNG,
+      filename: 'photo.png',
+      contentType: 'image/png',
+    })
       .expect(403)
       .expect(errorCode('forbidden'));
   });
   it('decides the type from the bytes, not the name', async () => {
-    const response = await upload(
-      `${PROBLEMS}/uploads/image`,
-      staff,
-      Buffer.from('<html>not an image</html>'),
-      'fake.png',
-      'image/png',
-    ).expect(400);
+    const response = await upload(`${PROBLEMS}/uploads/image`, staff, {
+      content: Buffer.from('<html>not an image</html>'),
+      filename: 'fake.png',
+      contentType: 'image/png',
+    }).expect(400);
     expect(
       (response.body as { error: { fields: Record<string, string[]> } }).error
         .fields,
     ).toHaveProperty('file');
-    await upload(
-      `${PROBLEMS}/uploads/image`,
-      staff,
-      PDF,
-      'doc.gif',
-      'image/gif',
-    ).expect(400);
+    await upload(`${PROBLEMS}/uploads/image`, staff, {
+      content: PDF,
+      filename: 'doc.gif',
+      contentType: 'image/gif',
+    }).expect(400);
     await authed(api.http().post(`${PROBLEMS}/uploads/image`), staff)
       .expect(400)
       .expect(errorCode('validation_failed'));
   });
   it('sanitizes svg', async () => {
     const url = urlOf(
-      await upload(
-        `${PROBLEMS}/uploads/image`,
-        staff,
-        SVG_WITH_SCRIPT,
-        'figure.svg',
-        'image/svg+xml',
-      ).expect(201),
+      await upload(`${PROBLEMS}/uploads/image`, staff, {
+        content: SVG_WITH_SCRIPT,
+        filename: 'figure.svg',
+        contentType: 'image/svg+xml',
+      }).expect(201),
     );
     const stored = readFileSync(
       join(api.mediaRoot, url.replace('/media/', '')),
@@ -148,13 +138,11 @@ describe('problem uploads', () => {
     ['full of NBSP-named elements', `<svg>${'<\u00A0>'.repeat(20001)}`],
     ['full of odd element names', `<svg>${'<_>'.repeat(20001)}`],
   ])('refuses an svg that is %s', async (_label, svg) => {
-    const response = await upload(
-      `${PROBLEMS}/uploads/image`,
-      staff,
-      Buffer.from(svg),
-      'bomb.svg',
-      'image/svg+xml',
-    ).expect(400);
+    const response = await upload(`${PROBLEMS}/uploads/image`, staff, {
+      content: Buffer.from(svg),
+      filename: 'bomb.svg',
+      contentType: 'image/svg+xml',
+    }).expect(400);
     expect(
       (response.body as { error: { fields: Record<string, string[]> } }).error
         .fields,
@@ -170,89 +158,71 @@ describe('problem uploads', () => {
         ),
       );
     };
-    await upload(
-      `${PROBLEMS}/uploads/image`,
-      staff,
-      svgOfSize(SVG_MAX_BYTES),
-      'edge.svg',
-      'image/svg+xml',
-    ).expect(201);
-    const response = await upload(
-      `${PROBLEMS}/uploads/image`,
-      staff,
-      svgOfSize(SVG_MAX_BYTES + 1),
-      'over.svg',
-      'image/svg+xml',
-    ).expect(400);
+    await upload(`${PROBLEMS}/uploads/image`, staff, {
+      content: svgOfSize(SVG_MAX_BYTES),
+      filename: 'edge.svg',
+      contentType: 'image/svg+xml',
+    }).expect(201);
+    const response = await upload(`${PROBLEMS}/uploads/image`, staff, {
+      content: svgOfSize(SVG_MAX_BYTES + 1),
+      filename: 'over.svg',
+      contentType: 'image/svg+xml',
+    }).expect(400);
     expect(
       (response.body as { error: { fields: Record<string, string[]> } }).error
         .fields,
     ).toHaveProperty('file');
   });
   it('refuses oversized images with 413', async () => {
-    await upload(
-      `${PROBLEMS}/uploads/image`,
-      staff,
-      Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]),
-      'big.png',
-      'image/png',
-    )
+    await upload(`${PROBLEMS}/uploads/image`, staff, {
+      content: Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]),
+      filename: 'big.png',
+      contentType: 'image/png',
+    })
       .expect(413)
       .expect(errorCode('file_too_large'));
   });
   it('attaches a PDF statement to an editable problem', async () => {
     const url = urlOf(
-      await upload(
-        `${PROBLEMS}/sum/statement`,
-        editor,
-        PDF,
-        'statement.pdf',
-        'application/pdf',
-      ).expect(201),
+      await upload(`${PROBLEMS}/sum/statement`, editor, {
+        content: PDF,
+        filename: 'statement.pdf',
+        contentType: 'application/pdf',
+      }).expect(201),
     );
     expect(url).toMatch(/^\/media\/pdf\/[0-9a-f-]{36}\.pdf$/);
     expect((await api.problems.findOne({ code: 'sum' }))!.pdfStatementUrl).toBe(
       url,
     );
-    await upload(
-      `${PROBLEMS}/sum/statement`,
-      editor,
-      PNG,
-      'statement.pdf',
-      'application/pdf',
-    ).expect(400);
-    await upload(
-      `${PROBLEMS}/other/statement`,
-      editor,
-      PDF,
-      'statement.pdf',
-      'application/pdf',
-    ).expect(403);
-    await upload(
-      `${PROBLEMS}/sum/statement`,
-      staff,
-      PDF,
-      'statement.pdf',
-      'application/pdf',
-    ).expect(403);
-    await upload(
-      `${PROBLEMS}/missing/statement`,
-      editor,
-      PDF,
-      'statement.pdf',
-      'application/pdf',
-    ).expect(404);
+    await upload(`${PROBLEMS}/sum/statement`, editor, {
+      content: PNG,
+      filename: 'statement.pdf',
+      contentType: 'application/pdf',
+    }).expect(400);
+    await upload(`${PROBLEMS}/other/statement`, editor, {
+      content: PDF,
+      filename: 'statement.pdf',
+      contentType: 'application/pdf',
+    }).expect(403);
+    await upload(`${PROBLEMS}/sum/statement`, staff, {
+      content: PDF,
+      filename: 'statement.pdf',
+      contentType: 'application/pdf',
+    }).expect(403);
+    await upload(`${PROBLEMS}/missing/statement`, editor, {
+      content: PDF,
+      filename: 'statement.pdf',
+      contentType: 'application/pdf',
+    }).expect(404);
     expect(await api.revisions.countDocuments({ action: 'upload' })).toBe(1);
   });
   it('stores materials under materials/<problem id>/<safe name>', async () => {
     const problemId = (await api.problems.findOne({ code: 'sum' }))!._id;
     const url = urlOf(
-      await upload(
-        `${PROBLEMS}/sum/material`,
-        editor,
-        Buffer.from('zip'),
-        'my file (final).zip',
-      ).expect(201),
+      await upload(`${PROBLEMS}/sum/material`, editor, {
+        content: Buffer.from('zip'),
+        filename: 'my file (final).zip',
+      }).expect(201),
     );
     expect(url).toBe(`/media/materials/${problemId}/my_file_final.zip`);
     expect(url).toMatch(
@@ -271,18 +241,14 @@ describe('problem uploads', () => {
     expect((await api.problems.findOne({ code: 'sum' }))!.materialUrl).toBe(
       url,
     );
-    await upload(
-      `${PROBLEMS}/sum/material`,
-      editor,
-      Buffer.alloc(20 * 1024 * 1024 + 1),
-      'big.zip',
-    ).expect(413);
-    await upload(
-      `${PROBLEMS}/sum/material`,
-      plain,
-      Buffer.from('zip'),
-      'x.zip',
-    ).expect(403);
+    await upload(`${PROBLEMS}/sum/material`, editor, {
+      content: Buffer.alloc(20 * 1024 * 1024 + 1),
+      filename: 'big.zip',
+    }).expect(413);
+    await upload(`${PROBLEMS}/sum/material`, plain, {
+      content: Buffer.from('zip'),
+      filename: 'x.zip',
+    }).expect(403);
   });
   it('removes the replaced PDF and material files', async () => {
     const mediaPath = (url: string) =>
@@ -290,24 +256,20 @@ describe('problem uploads', () => {
     const firstPdf = (await api.problems.findOne({ code: 'sum' }))!
       .pdfStatementUrl!;
     const secondPdf = urlOf(
-      await upload(
-        `${PROBLEMS}/sum/statement`,
-        editor,
-        PDF,
-        's.pdf',
-        'application/pdf',
-      ).expect(201),
+      await upload(`${PROBLEMS}/sum/statement`, editor, {
+        content: PDF,
+        filename: 's.pdf',
+        contentType: 'application/pdf',
+      }).expect(201),
     );
     expect(existsSync(mediaPath(firstPdf))).toBe(false);
     expect(existsSync(mediaPath(secondPdf))).toBe(true);
     const firstMaterial = (await api.problems.findOne({ code: 'sum' }))!
       .materialUrl!;
-    await upload(
-      `${PROBLEMS}/sum/material`,
-      editor,
-      Buffer.from('zip'),
-      'second.zip',
-    ).expect(201);
+    await upload(`${PROBLEMS}/sum/material`, editor, {
+      content: Buffer.from('zip'),
+      filename: 'second.zip',
+    }).expect(201);
     expect(existsSync(mediaPath(firstMaterial))).toBe(false);
   });
   it('keeps a file that a clone still references', async () => {
@@ -321,9 +283,10 @@ describe('problem uploads', () => {
     const session = await loginAs(api, cloner._id);
     await createProblem(api, catalog, { code: 'src2', authors: [cloner._id] });
     const sharedUrl = urlOf(
-      await upload(`${PROBLEMS}/src2/statement`, session, PDF, 's.pdf').expect(
-        201,
-      ),
+      await upload(`${PROBLEMS}/src2/statement`, session, {
+        content: PDF,
+        filename: 's.pdf',
+      }).expect(201),
     );
     await authed(api.http().post(`${PROBLEMS}/src2/clone`), session)
       .send({ code: 'copy2' })
@@ -332,9 +295,10 @@ describe('problem uploads', () => {
       (await api.problems.findOne({ code: 'copy2' }))!.pdfStatementUrl,
     ).toBe(sharedUrl);
     const ownUrl = urlOf(
-      await upload(`${PROBLEMS}/copy2/statement`, session, PDF, 's.pdf').expect(
-        201,
-      ),
+      await upload(`${PROBLEMS}/copy2/statement`, session, {
+        content: PDF,
+        filename: 's.pdf',
+      }).expect(201),
     );
     expect(ownUrl).not.toBe(sharedUrl);
     expect(
@@ -355,12 +319,10 @@ describe('problem uploads', () => {
       const problemId = (await api.problems.findOne({ code: 'sum' }))!._id;
       expect(
         urlOf(
-          await upload(
-            `${PROBLEMS}/sum/material`,
-            editor,
-            Buffer.from('zip'),
-            name,
-          ).expect(201),
+          await upload(`${PROBLEMS}/sum/material`, editor, {
+            content: Buffer.from('zip'),
+            filename: name,
+          }).expect(201),
         ),
       ).toBe(`/media/materials/${problemId}/${safeName}`);
     },
@@ -380,12 +342,10 @@ describe('problem uploads', () => {
     'a.HTML',
     'noext',
   ])('refuses the material name %s', async (name) => {
-    const response = await upload(
-      `${PROBLEMS}/sum/material`,
-      editor,
-      Buffer.from('x'),
-      name,
-    ).expect(400);
+    const response = await upload(`${PROBLEMS}/sum/material`, editor, {
+      content: Buffer.from('x'),
+      filename: name,
+    }).expect(400);
     expect(
       (response.body as { error: { fields: Record<string, string[]> } }).error
         .fields,
@@ -393,9 +353,11 @@ describe('problem uploads', () => {
   });
   it('rejects empty files, extra fields, wrong field names and broken bodies', async () => {
     const path = `${PROBLEMS}/uploads/image`;
-    await upload(path, staff, Buffer.alloc(0), 'e.png', 'image/png').expect(
-      400,
-    );
+    await upload(path, staff, {
+      content: Buffer.alloc(0),
+      filename: 'e.png',
+      contentType: 'image/png',
+    }).expect(400);
     await authed(api.http().post(path), staff)
       .field('note', 'x')
       .attach('file', PNG, { filename: 'p.png', contentType: 'image/png' })
@@ -420,20 +382,16 @@ describe('problem uploads', () => {
   });
   it('rate-limits uploads per user', async () => {
     for (let attempt = 0; attempt < 29; attempt++)
-      await upload(
-        `${PROBLEMS}/uploads/image`,
-        uploader,
-        PNG,
-        'p.png',
-        'image/png',
-      ).expect(201);
-    await upload(
-      `${PROBLEMS}/uploads/image`,
-      uploader,
-      PNG,
-      'p.png',
-      'image/png',
-    )
+      await upload(`${PROBLEMS}/uploads/image`, uploader, {
+        content: PNG,
+        filename: 'p.png',
+        contentType: 'image/png',
+      }).expect(201);
+    await upload(`${PROBLEMS}/uploads/image`, uploader, {
+      content: PNG,
+      filename: 'p.png',
+      contentType: 'image/png',
+    })
       .expect(429)
       .expect(errorCode('rate_limited'));
   });
