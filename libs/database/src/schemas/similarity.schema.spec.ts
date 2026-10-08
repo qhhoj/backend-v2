@@ -73,11 +73,14 @@ describe('similarity schemas', () => {
     expect(await Runs.countDocuments({ scopeKey: first.scopeKey })).toBe(3);
   });
 
-  it('refuses unknown scopes and statuses', async () => {
+  it('refuses unknown scopes, statuses and error codes', async () => {
     await expect(Runs.create(run({ scope: 'user' }))).rejects.toThrow(/scope/);
     await expect(Runs.create(run({ status: 'paused' }))).rejects.toThrow(
       /status/,
     );
+    await expect(
+      Runs.create(run({ status: 'failed', error: 'disk on fire' })),
+    ).rejects.toThrow(/error/);
   });
 
   it('bounds pair similarity to 0..1 and line ranges to 1 or more', async () => {

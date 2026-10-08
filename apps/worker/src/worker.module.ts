@@ -13,6 +13,7 @@ import { ContestDataModule } from './jobs/contest-data/contest-data.module';
 import { ContestFinalJudgeModule } from './jobs/contest-final-judge/contest-final-judge.module';
 import { ContestRatingModule } from './jobs/contest-rating/contest-rating.module';
 import { ContestMossModule } from './jobs/contest-moss/contest-moss.module';
+import { SimilarityModule } from './jobs/similarity/similarity.module';
 import { ContestRescoreModule } from './jobs/contest-rescore/contest-rescore.module';
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
 import { OrganizationPointsModule } from './jobs/organization-points/organization-points.module';
@@ -43,6 +44,7 @@ import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.mod
     ContestFinalJudgeModule,
     ContestRatingModule,
     ContestMossModule,
+    SimilarityModule,
     ContestDataModule,
     OrganizationPointsModule,
     ContributionPointsModule,

@@ -1,0 +1,259 @@
+import { Injectable, Logger } from '@nestjs/common';
+import type {
+  SimilarityError,
+  SimilarityGroup,
+  SimilarityLimits,
+  SimilarityRun,
+  SimilarityUnsupported,
+} from '@libs/database';
+import { SimilarityEngine, SimilarityEngineError } from './similarity-engine';
+import type { EnginePair, EngineSubmission } from './similarity-engine';
+import { familyOf } from './similarity-languages';
+import type { SimilarityFamily } from './similarity-languages';
+import { keepStrongestPairs, toStoredPairs } from './similarity-outcome';
+import type { GroupResult } from './similarity-outcome';
+import { SimilarityRepository } from './similarity.repository';
+import type {
+  ProblemScope,
+  RunOutcome,
+  SubmissionRow,
+} from './similarity.repository';
+
+/** Sources over this many bytes are skipped (the spec's 64 KiB). */
+export const SIMILARITY_MAX_SOURCE_BYTES = 64 * 1024;
+/** One run, all its groups. The queue runs one job at a time, so this also bounds the wait of the next scope. */
+export const SIMILARITY_DEADLINE_MS = 30 * 60 * 1000;
+/** Sources are read this many at a time. */
+export const SOURCE_CHUNK = 200;
+
+interface FamilyLanguages {
+  family: SimilarityFamily;
+  languageIds: string[];
+}
+interface LanguageSplit {
+  /** One entry per engine family (C, C++03..C++20 share one). */
+  families: FamilyLanguages[];
+  /** Language ids by common name, for languages with no grammar. */
+  unsupported: Map<string, string[]>;
+}
+interface PreparedSources {
+  submissions: EngineSubmission[];
+  skippedEmpty: number;
+  skippedTooLarge: number;
+}
+
+/** Counts a source that cannot be compared, or prepares it for the engine. */
+const addSource = (
+  prepared: PreparedSources,
+  row: SubmissionRow,
+  source: string,
+  family: SimilarityFamily,
+): void => {
+  if (source.trim() === '') prepared.skippedEmpty++;
+  else if (Buffer.byteLength(source) > SIMILARITY_MAX_SOURCE_BYTES)
+    prepared.skippedTooLarge++;
+  else
+    prepared.submissions.push({
+      id: row.id,
+      user: row.user,
+      source: family.prepare(source),
+    });
+};
+
+@Injectable()
+export class SimilarityService {
+  private readonly logger = new Logger(SimilarityService.name);
+
+  constructor(
+    private readonly repository: SimilarityRepository,
+    private readonly engine: SimilarityEngine,
+  ) {}
+
+  /** A comparison that fails is recorded on the run and the job still completes: retrying the same sources would fail the same way. */
+  async run(runId: string): Promise<void> {
+    const run = await this.repository.claim(runId);
+    if (!run) return this.failStalledAttempt(runId);
+    try {
+      const deadlineAt = Date.now() + SIMILARITY_DEADLINE_MS;
+      const outcome = await this.compareScope(run, deadlineAt);
+      if (!(await this.repository.finish(run, outcome)))
+        this.logger.warn(
+          `Similarity run ${runId} was released while it ran; its results were dropped`,
+        );
+    } catch (error) {
+      await this.repository.fail(runId, this.failureCode(runId, error));
+    }
+  }
+
+  /** For a job that died outside `run` (stalled, killed). */
+  markFailed(runId: string, reason: SimilarityError): Promise<void> {
+    return this.repository.fail(runId, reason);
+  }
+
+  /**
+   * The run is not queued: gone, finished, or `running` from an attempt whose worker died (BullMQ redelivers a stalled job).
+   * One job per run and one job at a time mean nobody works on that leftover, so it is failed now rather than block its scope
+   * until the api's stale-run release. Should the first attempt be alive after all, its `finish` finds the run no longer running
+   * and writes nothing. `fail` touches active runs only, so a finished or unknown run is left alone.
+   */
+  private failStalledAttempt(runId: string): Promise<void> {
+    return this.repository.fail(runId, 'internal_error');
+  }
+
+  /** Only the code is stored: a raw message can hold paths or source text. */
+  private failureCode(runId: string, error: unknown): SimilarityError {
+    if (error instanceof SimilarityEngineError) return error.code;
+    const message = error instanceof Error ? error.message : String(error);
+    this.logger.error(`Similarity run ${runId} failed: ${message}`);
+    return 'internal_error';
+  }
+
+  private async compareScope(
+    run: SimilarityRun,
+    deadlineAt: number,
+  ): Promise<RunOutcome> {
+    const languages = await this.splitLanguages();
+    const problemScopes = await this.repository.problemScopes(run);
+    const results: GroupResult[] = [];
+    for (const scope of problemScopes)
+      for (const familyLanguages of languages.families) {
+        const result = await this.compareGroup(
+          run.limits,
+          scope,
+          familyLanguages,
+          deadlineAt,
+        );
+        if (result) results.push(result);
+      }
+    return {
+      ...keepStrongestPairs(results, run.limits.maxPairs),
+      unsupported: await this.countUnsupported(
+        problemScopes,
+        languages.unsupported,
+      ),
+    };
+  }
+
+  /** One problem in one language family; null when it has no eligible submission. */
+  private async compareGroup(
+    limits: SimilarityLimits,
+    scope: ProblemScope,
+    { family, languageIds }: FamilyLanguages,
+    deadlineAt: number,
+  ): Promise<GroupResult | null> {
+    const submissionCount = await this.repository.countRows(scope, languageIds);
+    if (submissionCount === 0) return null;
+    const rows = await this.repository.submissionRows(
+      scope,
+      languageIds,
+      limits.maxSubmissions,
+    );
+    const { submissions, skippedEmpty, skippedTooLarge } =
+      await this.prepareSources(rows, family);
+    const group: SimilarityGroup = {
+      problem: scope.problemId,
+      language: family.name,
+      tokenizer: family.tokenizer,
+      submissionCount,
+      comparedCount: submissions.length,
+      skippedEmpty,
+      skippedTooLarge,
+      truncated: submissionCount > limits.maxSubmissions,
+      pairCount: 0,
+      failed: false,
+    };
+    const enginePairs = await this.enginePairs(
+      limits,
+      family,
+      submissions,
+      deadlineAt,
+    );
+    if (!enginePairs) return { group: { ...group, failed: true }, pairs: [] };
+    return { group, pairs: toStoredPairs(group, enginePairs, submissions) };
+  }
+
+  /** Null when the engine failed on this group alone. */
+  private async enginePairs(
+    limits: SimilarityLimits,
+    family: SimilarityFamily,
+    submissions: EngineSubmission[],
+    deadlineAt: number,
+  ): Promise<EnginePair[] | null> {
+    const timeoutMs = deadlineAt - Date.now();
+    if (timeoutMs <= 0) throw new SimilarityEngineError('deadline');
+    try {
+      return await this.engine.compare({
+        family,
+        submissions,
+        minSimilarity: limits.minPercent / 100,
+        maxPairs: limits.maxPairs,
+        timeoutMs,
+      });
+    } catch (error) {
+      // One odd group (an unusual parse) must not cost the whole run. A deadline still does: every later group would hit it too.
+      if (
+        !(error instanceof SimilarityEngineError) ||
+        error.code !== 'engine_failed'
+      )
+        throw error;
+      this.logger.warn(`Similarity engine failed on a ${family.name} group`);
+      return null;
+    }
+  }
+
+  /** Judge languages grouped by engine family, the rest by common name. */
+  private async splitLanguages(): Promise<LanguageSplit> {
+    const families = new Map<string, FamilyLanguages>();
+    const unsupported = new Map<string, string[]>();
+    for (const { id, commonName } of await this.repository.languages()) {
+      const family = familyOf(commonName);
+      if (!family) {
+        unsupported.set(commonName, [
+          ...(unsupported.get(commonName) ?? []),
+          id,
+        ]);
+        continue;
+      }
+      const entry = families.get(family.name) ?? { family, languageIds: [] };
+      entry.languageIds.push(id);
+      families.set(family.name, entry);
+    }
+    return { families: [...families.values()], unsupported };
+  }
+
+  /** Per language without a grammar, its eligible submissions over every problem of the scope; languages with none are left out. */
+  private async countUnsupported(
+    problemScopes: ProblemScope[],
+    unsupported: Map<string, string[]>,
+  ): Promise<SimilarityUnsupported[]> {
+    const counted: SimilarityUnsupported[] = [];
+    for (const [language, languageIds] of unsupported) {
+      let submissionCount = 0;
+      for (const scope of problemScopes)
+        submissionCount += await this.repository.countRows(scope, languageIds);
+      if (submissionCount > 0) counted.push({ language, submissionCount });
+    }
+    return counted;
+  }
+
+  /** Read in chunks so a capped group of thousands never holds a single huge query. */
+  private async prepareSources(
+    rows: SubmissionRow[],
+    family: SimilarityFamily,
+  ): Promise<PreparedSources> {
+    const prepared: PreparedSources = {
+      submissions: [],
+      skippedEmpty: 0,
+      skippedTooLarge: 0,
+    };
+    for (let start = 0; start < rows.length; start += SOURCE_CHUNK) {
+      const chunk = rows.slice(start, start + SOURCE_CHUNK);
+      const sources = await this.repository.sourcesOf(
+        chunk.map((row) => row.id),
+      );
+      for (const row of chunk)
+        addSource(prepared, row, sources.get(row.id) ?? '', family);
+    }
+    return prepared;
+  }
+}

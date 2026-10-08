@@ -16,6 +16,14 @@ export const SIMILARITY_STATUSES = [
 export type SimilarityStatus = (typeof SIMILARITY_STATUSES)[number];
 export const SIMILARITY_TOKENIZERS = ['syntax', 'text'] as const;
 export type SimilarityTokenizerName = (typeof SIMILARITY_TOKENIZERS)[number];
+/** Why a run failed, safe to show to staff (never a raw message): the engine's two codes, any other error, and the api's stale-run release. */
+export const SIMILARITY_ERRORS = [
+  'deadline',
+  'engine_failed',
+  'internal_error',
+  'abandoned',
+] as const;
+export type SimilarityError = (typeof SIMILARITY_ERRORS)[number];
 
 const RESULTS_WITHOUT_SIGNAL: readonly SubmissionResult[] = [
   'CE',
@@ -46,6 +54,8 @@ export class SimilarityGroup {
   /** More than `limits.maxSubmissions` submissions: only the newest were compared. */
   @Prop({ default: false }) truncated!: boolean;
   @Prop({ default: 0, min: 0 }) pairCount!: number;
+  /** The engine failed on this group alone (an unusual parse): it is listed with no pairs and the rest of the run still completes. */
+  @Prop({ default: false }) failed!: boolean;
 }
 export const SimilarityGroupSchema =
   SchemaFactory.createForClass(SimilarityGroup);
@@ -87,8 +97,8 @@ export class SimilarityRun {
   @Prop({ default: true }) active!: boolean;
   @Prop({ type: Date, default: null }) startedAt!: Date | null;
   @Prop({ type: Date, default: null }) finishedAt!: Date | null;
-  /** `deadline`, `engine_failed`, `internal_error` or `abandoned` (never a raw message). */
-  @Prop({ type: String, default: null }) error!: string | null;
+  @Prop({ type: String, default: null, enum: SIMILARITY_ERRORS })
+  error!: SimilarityError | null;
   @Prop({ type: SimilarityLimitsSchema, required: true })
   limits!: SimilarityLimits;
   @Prop({ type: [SimilarityGroupSchema], default: [] })

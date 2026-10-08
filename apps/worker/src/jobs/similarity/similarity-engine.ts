@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Injectable, Logger } from '@nestjs/common';
 import type { BeforeApplicationShutdown } from '@nestjs/common';
+import type { SimilarityError } from '@libs/database';
 import { ENGINE_SOURCE } from './similarity-engine.script';
 import type { SimilarityFamily } from './similarity-languages';
 
@@ -52,7 +53,9 @@ export interface EnginePair {
 
 /** `code` is safe to show to staff: the child's own output (paths, stack traces) never reaches it, only the log. */
 export class SimilarityEngineError extends Error {
-  constructor(readonly code: 'deadline' | 'engine_failed') {
+  constructor(
+    readonly code: Extract<SimilarityError, 'deadline' | 'engine_failed'>,
+  ) {
     super(code);
   }
 }
