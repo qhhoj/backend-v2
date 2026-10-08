@@ -88,6 +88,23 @@ export class SimilarityRunsRepository {
     await this.runs.deleteOne({ _id: id }).exec();
   }
 
+  /** Ends an active run as failed, freeing its scope. */
+  async failRun(id: string, error: SimilarityError): Promise<void> {
+    await this.runs
+      .updateOne(
+        { _id: id, active: true },
+        {
+          $set: {
+            status: 'failed',
+            active: false,
+            error,
+            finishedAt: new Date(),
+          },
+        },
+      )
+      .exec();
+  }
+
   /** Newest first (ids are time-ordered uuid v7). */
   recentRuns(scopeKey: string, limit: number): Promise<SimilarityRun[]> {
     return this.runs.find({ scopeKey }).sort({ _id: -1 }).limit(limit).exec();

@@ -1,7 +1,7 @@
 import { IsOptional, IsString } from 'class-validator';
 
-/** Exactly one of the two (checked in `SimilarityAccessService.targetOf`). */
-export class ListSimilarityRunsDto {
+/** The scope of a start (body) or a list (query): exactly one of the two, checked in `SimilarityAccessService.targetOf`. */
+export class ScopeQueryDto {
   /** Problem code. */
   @IsOptional() @IsString() problem?: string;
   /** Contest key. */

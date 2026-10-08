@@ -8,8 +8,9 @@ import type {
   SimilarityRun,
   SimilarityScope,
 } from '@libs/database';
-import { ContestAccess } from '../contests/core/contest-access';
-import { ProblemAccess } from '../problems/core/problem-access';
+import { ContestAccess } from '../../contests/core/contest-access';
+import { ProblemAccess } from '../../problems/core/problem-access';
+import type { ScopeQueryDto } from './dto/scope-query.dto';
 import { SimilarityRunsRepository } from './similarity-runs.repository';
 
 export interface ScopeTarget {
@@ -17,12 +18,6 @@ export interface ScopeTarget {
   scopeKey: string;
   problem: string | null;
   contest: string | null;
-}
-
-/** The scope named by a request: a problem code or a contest key. */
-export interface ScopeQuery {
-  problem?: string;
-  contest?: string;
 }
 
 export const similarityNotFound = () =>
@@ -41,29 +36,41 @@ export class SimilarityAccessService {
 
   async targetOf(
     principal: Principal,
-    query: ScopeQuery,
+    { problem, contest }: ScopeQueryDto,
   ): Promise<ScopeTarget> {
-    const hasProblem = query.problem !== undefined;
-    if (hasProblem === (query.contest !== undefined))
-      throw invalidField(
-        'problem',
-        'Give exactly one of problem and contest',
-        'scope_required',
-      );
-    return hasProblem
-      ? this.problemTarget(principal, query.problem!)
-      : this.contestTarget(principal, query.contest!);
+    if (problem !== undefined && contest === undefined)
+      return this.problemTarget(principal, problem);
+    if (contest !== undefined && problem === undefined)
+      return this.contestTarget(principal, contest);
+    throw invalidField(
+      'problem',
+      'Give exactly one of problem and contest',
+      'scope_required',
+    );
   }
 
   /** Whether the viewer may see this run and its pairs; callers answer 404 when not. */
-  async canView(principal: Principal, run: SimilarityRun): Promise<boolean> {
-    const scopeId = run.scope === 'problem' ? run.problem : run.contest;
-    if (scopeId === null) return false;
-    if (run.scope === 'problem') {
-      const problem = await this.runs.findProblemById(uuidStr(scopeId));
-      return problem !== null && canEditProblem(principal, problem);
-    }
-    const contest = await this.runs.findContestById(uuidStr(scopeId));
+  canView(principal: Principal, run: SimilarityRun): Promise<boolean> {
+    if (run.scope === 'problem')
+      return this.canEditProblemId(principal, run.problem);
+    return this.canEditContestId(principal, run.contest);
+  }
+
+  private async canEditProblemId(
+    principal: Principal,
+    problemId: string | null,
+  ): Promise<boolean> {
+    if (problemId === null) return false;
+    const problem = await this.runs.findProblemById(uuidStr(problemId));
+    return problem !== null && canEditProblem(principal, problem);
+  }
+
+  private async canEditContestId(
+    principal: Principal,
+    contestId: string | null,
+  ): Promise<boolean> {
+    if (contestId === null) return false;
+    const contest = await this.runs.findContestById(uuidStr(contestId));
     return contest !== null && canEditContest(principal, contest);
   }
 

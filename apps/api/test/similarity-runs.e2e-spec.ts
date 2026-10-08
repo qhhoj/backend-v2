@@ -1,10 +1,12 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { newId, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { SIMILARITY_QUEUE } from '@libs/judging';
 import type { SimilarityJob } from '@libs/judging';
-import type { SimilarityRunResponse } from '../src/modules/similarity/dto/similarity-run.response';
+import type { SimilarityRunResponse } from '../src/modules/similarity/core/dto/similarity-run.response';
+import { SimilarityRunsRepository } from '../src/modules/similarity/core/similarity-runs.repository';
 import {
   clearRateLimits,
   contestProblem,
@@ -100,6 +102,11 @@ describe('similarity runs', () => {
       sessions.unpermitted,
     ).expect(403);
     expect(await api.similarityRuns.countDocuments()).toBe(0);
+    const run = await seedRun();
+    await authed(
+      api.http().get(`${RUNS}/${run._id}`),
+      sessions.unpermitted,
+    ).expect(403);
   });
 
   it('answers 404 for unknown scopes and for scopes the viewer cannot edit', async () => {
@@ -174,6 +181,26 @@ describe('similarity runs', () => {
       await deactivateRuns();
     }
     await start('editor', { problem: 'simrun' }).expect(429);
+  });
+
+  it('frees the scope and logs when the unqueued run cannot be removed', async () => {
+    jest.spyOn(queue, 'add').mockRejectedValueOnce(new Error('redis down'));
+    const deleteError = new Error('mongo blip');
+    jest
+      .spyOn(api.app.get(SimilarityRunsRepository), 'deleteRun')
+      .mockRejectedValueOnce(deleteError);
+    const logError = jest.spyOn(Logger.prototype, 'error');
+    await start('editor', { problem: 'simrun' }).expect(500);
+    expect(logError).toHaveBeenCalledWith(
+      expect.stringContaining('Deleting unqueued run'),
+      deleteError,
+    );
+    expect(await api.similarityRuns.findOne().lean()).toMatchObject({
+      status: 'failed',
+      active: false,
+      error: 'internal_error',
+    });
+    await start('editor', { problem: 'simrun' }).expect(202);
   });
 
   it('treats a run stuck for hours as abandoned when the next start arrives', async () => {
@@ -284,5 +311,35 @@ describe('similarity runs', () => {
     await authed(api.http().get(`${RUNS}/not-a-uuid`), sessions.editor).expect(
       404,
     );
+  });
+
+  it('shows a contest run and its list to the contest editor only', async () => {
+    const contest = await createContest(api, {
+      authors: [users.editor._id],
+      problems: [contestProblem(problem._id, 0)],
+    });
+    const run = await seedRun({
+      scope: 'contest',
+      scopeKey: `contest:${contest._id}`,
+      problem: null,
+      contest: contest._id,
+    });
+    const listOf = (who: string) =>
+      authed(
+        api.http().get(RUNS).query({ contest: contest.key }),
+        sessions[who],
+      );
+    const detailOf = (who: string) =>
+      authed(api.http().get(`${RUNS}/${run._id}`), sessions[who]);
+    await listOf('outsider').expect(404).expect(errorCode('not_found'));
+    await detailOf('outsider').expect(404).expect(errorCode('not_found'));
+    const list = dataOf<SimilarityRunResponse[]>(
+      await listOf('editor').expect(200),
+    );
+    expect(list.map((entry) => entry.id)).toEqual([run._id]);
+    const detail = dataOf<SimilarityRunResponse>(
+      await detailOf('editor').expect(200),
+    );
+    expect(detail).toMatchObject({ scope: 'contest', contestId: contest._id });
   });
 });

@@ -1,19 +1,9 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Param,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ListSimilarityRunsDto } from './dto/list-runs.dto';
+import { ScopeQueryDto } from '../core/dto/scope-query.dto';
+import { SimilarityRunResponse } from '../core/dto/similarity-run.response';
 import { SimilarityRunParamDto } from './dto/run-params.dto';
-import { SimilarityRunResponse } from './dto/similarity-run.response';
-import { StartSimilarityRunDto } from './dto/start-run.dto';
-import { StartedSimilarityRunResponse } from './dto/started-run.response';
 import { SimilarityRunsService } from './similarity-runs.service';
 
 @RequirePermission('judge.moss_contest')
@@ -21,19 +11,10 @@ import { SimilarityRunsService } from './similarity-runs.service';
 export class SimilarityRunsController {
   constructor(private readonly runs: SimilarityRunsService) {}
 
-  @Post()
-  @HttpCode(202)
-  start(
-    @CurrentAuth() auth: AuthContext,
-    @Body() dto: StartSimilarityRunDto,
-  ): Promise<StartedSimilarityRunResponse> {
-    return this.runs.start(auth.principal, dto);
-  }
-
   @Get()
   list(
     @CurrentAuth() auth: AuthContext,
-    @Query() query: ListSimilarityRunsDto,
+    @Query() query: ScopeQueryDto,
   ): Promise<SimilarityRunResponse[]> {
     return this.runs.list(auth.principal, query);
   }

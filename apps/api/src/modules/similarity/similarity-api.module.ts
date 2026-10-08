@@ -2,18 +2,24 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { RateLimitService } from '@libs/common';
 import { SIMILARITY_QUEUE } from '@libs/judging';
-import { SimilarityAccessService } from './similarity-access.service';
-import { SimilarityRunsController } from './similarity-runs.controller';
-import { SimilarityRunsRepository } from './similarity-runs.repository';
-import { SimilarityRunsService } from './similarity-runs.service';
+import { SimilarityAccessService } from './core/similarity-access.service';
+import { SimilarityRunsRepository } from './core/similarity-runs.repository';
+import { SimilarityRunsController } from './runs/similarity-runs.controller';
+import { SimilarityRunsService } from './runs/similarity-runs.service';
+import { SimilarityLaunchService } from './start/similarity-launch.service';
+import { SimilarityStartController } from './start/similarity-start.controller';
+import { SimilarityStartService } from './start/similarity-start.service';
 
+/** Code similarity runs: core/ (access, repository, shared dto), start/ (start a run), runs/ (list and detail). */
 @Module({
   imports: [BullModule.registerQueue({ name: SIMILARITY_QUEUE })],
-  controllers: [SimilarityRunsController],
+  controllers: [SimilarityStartController, SimilarityRunsController],
   providers: [
-    SimilarityRunsService,
     SimilarityAccessService,
     SimilarityRunsRepository,
+    SimilarityStartService,
+    SimilarityLaunchService,
+    SimilarityRunsService,
     RateLimitService,
   ],
 })
