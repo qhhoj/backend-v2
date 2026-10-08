@@ -23,6 +23,7 @@ import { ContestsApiModule } from './modules/contests/contests-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
 import { SettingsApiModule } from './modules/settings/settings-api.module';
 import { TicketsApiModule } from './modules/tickets/tickets-api.module';
+import { SiteApiModule } from './modules/site/site-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
 import { UsersApiModule } from './modules/users/users-api.module';
 import { HealthController } from './health.controller';
@@ -52,6 +53,7 @@ import { HealthController } from './health.controller';
     TicketsApiModule,
     HomeApiModule,
     SettingsApiModule,
+    SiteApiModule,
     ApiV2Module,
   ],
   controllers: [HealthController],

@@ -1,0 +1,34 @@
+import { Controller, Get, Header } from '@nestjs/common';
+import { Public } from '@libs/auth';
+import { uuidStr } from '@libs/database';
+import { SiteResponse } from './dto/site.response';
+import { MiscConfigQuerier } from './misc-config.querier';
+import { NavigationQuerier } from './navigation.querier';
+
+@Public()
+@Controller('api/internal/site')
+export class SiteController {
+  constructor(
+    private readonly navigation: NavigationQuerier,
+    private readonly config: MiscConfigQuerier,
+  ) {}
+
+  /** What the SPA shell needs on every load. `private`: the auth guard may attach a refreshed session cookie to any request, so a shared cache must never store this response. */
+  @Header('Cache-Control', 'private, max-age=60')
+  @Get()
+  site(): SiteResponse {
+    return {
+      navigation: this.navigation.ordered().map((item) => ({
+        id: item._id,
+        key: item.key,
+        label: item.label,
+        path: item.path,
+        regex: item.regex,
+        hidden: item.hidden,
+        order: item.order,
+        parentId: item.parentId === null ? null : uuidStr(item.parentId),
+      })),
+      config: this.config.asRecord(),
+    };
+  }
+}
