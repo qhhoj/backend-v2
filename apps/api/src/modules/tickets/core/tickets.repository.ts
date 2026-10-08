@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { TICKETS_PAGE_SIZE } from '@libs/community';
-import { GeneralIssue, isUuid, Ticket } from '@libs/database';
-import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { TICKET_MESSAGE_CAP, TICKETS_PAGE_SIZE } from '@libs/community';
+import { GeneralIssue, isUuid, Ticket, uuidStr } from '@libs/database';
+import type { TicketMessage } from '@libs/database';
+import type {
+  Connection,
+  FilterQuery,
+  HydratedDocument,
+  Model,
+} from 'mongoose';
 
 export type TicketDocument = HydratedDocument<Ticket>;
 
@@ -17,6 +23,7 @@ export class TicketsRepository {
     @InjectModel(Ticket.name) private readonly tickets: Model<Ticket>,
     @InjectModel(GeneralIssue.name)
     private readonly issues: Model<GeneralIssue>,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   /** A malformed id is "not found", never a Mongoose CastError. */
@@ -56,5 +63,59 @@ export class TicketsRepository {
     return ids.length
       ? this.issues.find({ _id: { $in: ids } }).exec()
       : Promise.resolve([]);
+  }
+
+  /** A general ticket's issue row and the ticket commit together. */
+  async create(
+    fields: Omit<Partial<Ticket>, 'linkedItem'>,
+    link:
+      { type: 'problem'; id: string } | { type: 'general'; issueUrl: string },
+  ): Promise<TicketDocument> {
+    let created!: TicketDocument;
+    await this.connection.transaction(async (session) => {
+      const linkedItem =
+        link.type === 'problem'
+          ? { type: link.type, id: link.id }
+          : {
+              type: link.type,
+              id: uuidStr(
+                (
+                  await this.issues.create([{ issueUrl: link.issueUrl }], {
+                    session,
+                  })
+                )[0]._id,
+              ),
+            };
+      [created] = await this.tickets.create([{ ...fields, linkedItem }], {
+        session,
+      });
+    });
+    return created;
+  }
+
+  /** The cap is part of the filter, so parallel posts can never pass it; false = the ticket is full (or gone). */
+  async pushMessage(
+    ticketId: string,
+    message: TicketMessage,
+  ): Promise<boolean> {
+    const result = await this.tickets
+      .updateOne(
+        {
+          _id: ticketId,
+          $expr: {
+            $lt: [
+              { $size: { $ifNull: ['$messages', []] } },
+              TICKET_MESSAGE_CAP,
+            ],
+          },
+        },
+        {
+          $push: { messages: message },
+          $set: { lastMessageAt: message.createdAt },
+          $inc: { messageCount: 1 },
+        },
+      )
+      .exec();
+    return result.modifiedCount === 1;
   }
 }
