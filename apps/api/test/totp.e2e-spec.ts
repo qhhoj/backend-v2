@@ -1,4 +1,5 @@
-import { decrypt, encryptionKey, timecodeAt, totpCode } from '@libs/auth';
+import { timecodeAt, totpCode } from '@libs/auth';
+import { decrypt, encryptionKey } from '@libs/common';
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
 import {

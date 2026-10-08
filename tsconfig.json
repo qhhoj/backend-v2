@@ -70,6 +70,12 @@
       ],
       "@libs/community/*": [
         "libs/community/src/*"
+      ],
+      "@libs/settings": [
+        "libs/settings/src"
+      ],
+      "@libs/settings/*": [
+        "libs/settings/src/*"
       ]
     }
   }

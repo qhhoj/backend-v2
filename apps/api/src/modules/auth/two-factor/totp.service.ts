@@ -1,9 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   constantTimeEqual,
-  decrypt,
-  encrypt,
-  encryptionKey,
   generateScratchCodes,
   generateTotpSecret,
   matchTotp,
@@ -12,7 +9,7 @@ import {
   UsersRepository,
 } from '@libs/auth';
 import type { AuthContext, UserDocument } from '@libs/auth';
-import { AppError, ENV } from '@libs/common';
+import { AppError, decrypt, ENV, encrypt, encryptionKey } from '@libs/common';
 import type { Env } from '@libs/common';
 import { AuthService } from '../core/auth.service';
 import { SecondFactorService } from './second-factor.service';
