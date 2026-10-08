@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
-import { AppError, Paginated, unique } from '@libs/common';
+import { AppError, Paginated } from '@libs/common';
 import { competitionRanks } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { LeaderboardField } from '@libs/database';
-import { OrganizationAccess } from '../../organizations/core/organization-access';
-import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
+import { OrganizationsService } from '../../organizations/core/organizations.service';
 import { LEADERBOARD_PAGE_SIZE } from './dto/leaderboard.dto';
 import {
   LeaderboardEntryResponse,
@@ -17,7 +16,7 @@ import { LeaderboardsRepository } from './leaderboards.repository';
 export class LeaderboardsService {
   constructor(
     private readonly leaderboards: LeaderboardsRepository,
-    private readonly organizations: OrganizationsRepository,
+    private readonly organizations: OrganizationsService,
     private readonly users: UsersRepository,
   ) {}
 
@@ -36,29 +35,13 @@ export class LeaderboardsService {
       ? (await this.leaderboards.countAbove(field, values[0])) + 1
       : 1;
     const ranks = competitionRanks(values, firstRank);
-    const listed = new Map(
-      (
-        await this.organizations.findByIds(
-          unique(rows.flatMap((row) => row.organizations.map(uuidStr))),
-        )
-      )
-        .filter((organization) =>
-          OrganizationAccess.canList(
-            null,
-            OrganizationAccess.accessView(organization),
-          ),
-        )
-        .map((organization) => [uuidStr(organization._id), organization]),
-    );
+    const firstOf = await this.organizations.firstListedByUser(rows);
     return new Paginated(
       rows.map((row, index) =>
         LeaderboardEntryResponse.from(
           row,
           ranks[index],
-          row.organizations
-            .map(uuidStr)
-            .map((id) => listed.get(id))
-            .find(Boolean) ?? null,
+          firstOf.get(uuidStr(row._id)) ?? null,
         ),
       ),
       { page, pageSize, total },

@@ -270,6 +270,20 @@ describe('homepage and user comments', () => {
     expect((await home()).counts.contests).toBe(2);
   });
 
+  it('gives each top user their first listed organization, never an unlisted one', async () => {
+    await api.users.updateMany({}, { $set: { performancePoints: 0 } });
+    const listed = await createOrganization(api, { isOpen: false });
+    const hidden = await createOrganization(api, { isUnlisted: true });
+    await person({ performancePoints: 900, organizations: [listed._id] });
+    await person({ performancePoints: 800, organizations: [hidden._id] });
+    const { topPerformers } = await home();
+    expect(topPerformers[0].organization).toMatchObject({
+      slug: listed.slug,
+      isOpen: false,
+    });
+    expect(topPerformers[1].organization).toBeNull();
+  });
+
   it("pages a user's readable comments for view_all_user_comment only", async () => {
     const { user: author } = await person();
     const { session: plain } = await person();

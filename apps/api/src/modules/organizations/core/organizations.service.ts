@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated } from '@libs/common';
+import { AppError, Paginated, unique } from '@libs/common';
 import { competitionRanks } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
@@ -96,6 +96,34 @@ export class OrganizationsService {
         ? [organization]
         : [];
     });
+  }
+
+  /** The first listed organization of each user, for lists any visitor sees (unlisted ones are skipped, whoever views). Keyed by user id. */
+  async firstListedByUser(
+    rows: ReadonlyArray<{ _id: string; organizations: readonly string[] }>,
+  ): Promise<Map<string, Organization>> {
+    const listed = new Map(
+      (
+        await this.organizations.findByIds(
+          unique(rows.flatMap((row) => row.organizations.map(uuidStr))),
+        )
+      )
+        .filter((organization) =>
+          OrganizationAccess.canList(
+            null,
+            OrganizationAccess.accessView(organization),
+          ),
+        )
+        .map((organization) => [uuidStr(organization._id), organization]),
+    );
+    return new Map(
+      rows.flatMap((row) => {
+        const first = row.organizations
+          .map((id) => listed.get(uuidStr(id)))
+          .find(Boolean);
+        return first ? [[uuidStr(row._id), first] as const] : [];
+      }),
+    );
   }
 
   async detail(

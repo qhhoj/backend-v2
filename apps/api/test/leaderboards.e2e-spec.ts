@@ -107,7 +107,10 @@ describe('leaderboards', () => {
       ['em', 5],
       ['gia', 6],
     ]);
-    expect(rows[1].organization?.slug).toBe('listed_org');
+    expect(rows[1].organization).toMatchObject({
+      slug: 'listed_org',
+      isOpen: true,
+    });
     await api.http().get('/api/internal/users?sort=password').expect(400);
   });
 

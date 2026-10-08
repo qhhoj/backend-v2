@@ -1,3 +1,4 @@
+import type { OrganizationSummaryResponse } from '../../organizations/core/dto/organization.response';
 import type { RecentCommentResponse } from '../../comments/core/dto/recent-comment.response';
 
 export class HomeProblemResponse {
@@ -13,6 +14,8 @@ export class HomeUserResponse {
   rating!: number | null;
   performancePoints!: number;
   contributionPoints!: number;
+  /** The user's first listed organization, whoever views; null when none is listed. */
+  organization!: OrganizationSummaryResponse | null;
 }
 
 export class HomeCountsResponse {

@@ -3,11 +3,14 @@ import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import type { Principal } from '@libs/auth';
 import { officialContestLocks, RECENT_COMMENTS_COUNT } from '@libs/community';
+import { uuidStr } from '@libs/database';
 import type { LeaderboardField } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import type { RecentCommentResponse } from '../comments/core/dto/recent-comment.response';
 import { RecentCommentsService } from '../comments/core/recent-comments.service';
 import { LanguagesQuerier } from '../problems/catalog/languages.querier';
+import { OrganizationsService } from '../organizations/core/organizations.service';
+import { OrganizationSummaryResponse } from '../organizations/core/dto/organization.response';
 import { LeaderboardsRepository } from '../users/leaderboards/leaderboards.repository';
 import type { HomeResponse, HomeUserResponse } from './dto/home.response';
 import { HomeRepository } from './home.repository';
@@ -27,6 +30,7 @@ export class HomeService {
     private readonly repository: HomeRepository,
     private readonly recentComments: RecentCommentsService,
     private readonly leaderboards: LeaderboardsRepository,
+    private readonly organizations: OrganizationsService,
     private readonly languages: LanguagesQuerier,
   ) {}
 
@@ -87,14 +91,22 @@ export class HomeService {
       'performancePoints' | 'contributionPoints'
     >,
   ): Promise<HomeUserResponse[]> {
-    return (await this.leaderboards.page(field, 1, HOME_TOP_USERS))
-      .filter((user) => user[field] > 0)
-      .map((user) => ({
+    const users = (
+      await this.leaderboards.page(field, 1, HOME_TOP_USERS)
+    ).filter((user) => user[field] > 0);
+    const firstOf = await this.organizations.firstListedByUser(users);
+    return users.map((user) => {
+      const organization = firstOf.get(uuidStr(user._id));
+      return {
         username: user.username,
         displayRank: user.displayRank,
         rating: user.rating,
         performancePoints: user.performancePoints,
         contributionPoints: user.contributionPoints,
-      }));
+        organization: organization
+          ? OrganizationSummaryResponse.from(organization)
+          : null,
+      };
+    });
   }
 }

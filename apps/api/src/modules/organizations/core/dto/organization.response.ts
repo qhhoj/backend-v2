@@ -31,6 +31,7 @@ export class OrganizationSummaryResponse {
   slug!: string;
   name!: string;
   shortName!: string;
+  isOpen!: boolean;
 
   static from(organization: Organization): OrganizationSummaryResponse {
     return {
@@ -38,6 +39,7 @@ export class OrganizationSummaryResponse {
       slug: organization.slug,
       name: organization.name,
       shortName: organization.shortName,
+      isOpen: organization.isOpen,
     };
   }
 }
