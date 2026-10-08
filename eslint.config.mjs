@@ -42,13 +42,13 @@ export default tseslint.config(
   },
   {
     rules: {
-      complexity: ['warn', 15],
+      complexity: ['error', 15],
       'max-lines-per-function': [
-        'warn',
+        'error',
         { max: 80, skipBlankLines: true, skipComments: true },
       ],
       'no-restricted-syntax': [
-        'warn',
+        'error',
         {
           selector: MAX_PARAMS_SELECTOR,
           message:

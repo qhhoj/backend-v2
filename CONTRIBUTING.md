@@ -466,6 +466,17 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 | Booleans | `isX`, `hasX`, `canX`, `shouldX`, `wasX`; a read that loads more takes `{ withX: true }` | adjective-only names (`hidden`, `frozen`), literal `true`/`false` as a positional argument |
 | Pretests | `isPretested` (problem, contest problem, submission), `pretestsOnly` (judge request) | `pretested` outside the judge packet |
 
+## Readability rules
+
+- One job per function: if its doc comment needs "and" to say what it does, split it into named helpers.
+- Length: aim for 40 lines or fewer; 80 is the hard limit (lint `error`, blank lines and comments not counted; specs exempt).
+- Complexity: aim for 10 or less; 15 is the hard limit (lint `error`). Essential complexity — a protocol switch, a tokenizer — gets an inline `eslint-disable-next-line complexity -- <why>` instead of a split that reads worse.
+- At most 4 parameters (lint `error`; Nest DI constructors and decorated handler parameters exempt): group the rest in an options object with named keys.
+- Units in names: every duration ends in `Ms` or `Seconds`, every size in `Bytes` or `Kib`.
+- Booleans read as questions: `isX`, `hasX`, `canX`, `shouldX`, `wasX`; never pass a literal `true`/`false` positionally — use `{ withCases: true }`. A `setX(…, value)` setter is the one exception.
+- Guard clauses first: refuse or return early, then the main path at one indentation level.
+- Comments say why (a legacy rule, a race, a bound), never what the next line does.
+
 ## Testing
 
 - Unit: `<file>.spec.ts` next to the file under test; e2e: `apps/<app>/test/*.e2e-spec.ts` for apps, next to the file for libs
