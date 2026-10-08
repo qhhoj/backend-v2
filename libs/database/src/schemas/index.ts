@@ -42,6 +42,11 @@ import { Problem, ProblemSchema } from './problem.schema';
 import { ProblemType, ProblemTypeSchema } from './problem-type.schema';
 import { Revision, RevisionSchema } from './revision.schema';
 import {
+  SettingRevision,
+  SettingRevisionSchema,
+} from './setting-revision.schema';
+import { Setting, SettingSchema } from './setting.schema';
+import {
   SubmissionSource,
   SubmissionSourceSchema,
 } from './submission-source.schema';
@@ -76,6 +81,8 @@ export * from './problem-type.schema';
 export * from './problem.schema';
 export * from './rating.schema';
 export * from './revision.schema';
+export * from './setting-revision.schema';
+export * from './setting.schema';
 export * from './submission-source.schema';
 export * from './submission.schema';
 export * from './tag-group.schema';
@@ -110,6 +117,8 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: ProblemType.name, schema: ProblemTypeSchema },
   { name: Rating.name, schema: RatingSchema },
   { name: Revision.name, schema: RevisionSchema },
+  { name: SettingRevision.name, schema: SettingRevisionSchema },
+  { name: Setting.name, schema: SettingSchema },
   { name: SubmissionSource.name, schema: SubmissionSourceSchema },
   { name: Submission.name, schema: SubmissionSchema },
   { name: TagGroup.name, schema: TagGroupSchema },
