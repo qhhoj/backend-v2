@@ -150,6 +150,12 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Official ranking CSV is parsed at write with fixed size, row and column caps; the body limit is raised only on that route (and the problem data upload route).
 - Announcements are rendered at save and pushed as ids over Redis `contest-events` and the shared SSE hub — one streaming stack for submissions and contests.
 - Clarifications dropped (no rows in production).
+- List rows carry the viewer's live status and current contest from one participation read per page (`$in` on the unique `{contest, user, virtual}` index) plus the pointer — no read per row.
+- The detail shows the viewer's own cells frozen during a freeze, exactly as their ranking row — one freeze rule; attempts and pending flags read statuses only, never results.
+- Solver counts are the ranking's `acceptedCount` rule from one aggregate over live rows, cached 30 s per frozen view and purged with the ranking keys, null unless the full board is visible — the detail must not rebuild the whole board per view or leak a hidden board.
+- Register, join and leave refusals have one code each (legacy's distinct messages) with unchanged statuses — the SPA maps codes, never messages.
+- No unregister — legacy has none (`ContestLeave` only clears the current contest); YAGNI.
+- Announcements get no author and no server read state — neither the schema nor legacy has an author; ids are time-ordered, so the SPA keeps the last seen id.
 
 ## Organizations and users
 
