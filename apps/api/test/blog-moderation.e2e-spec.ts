@@ -1,5 +1,6 @@
 import type { PostListItemResponse } from '../src/modules/blog/core/dto/post.response';
 import { createOrganization } from './organization-fixtures';
+import { profileQueries } from '@libs/database/testing';
 import { createPost, writer } from './community-fixtures';
 import { authed, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
@@ -103,6 +104,34 @@ describe('blog moderation list', () => {
     expect(row).toMatchObject({ slug: organization.slug, visible: false });
     expect('content' in row).toBe(false);
     expect('summary' in row).toBe(false);
+  });
+
+  it('reads both lists through the moderation index', async () => {
+    const session = await moderator();
+    for (let index = 0; index < 30; index += 1) {
+      await createPost(api, {
+        visible: false,
+        publishOn: hoursFromNow(-index),
+      });
+      await createPost(api, { publishOn: hoursFromNow(index + 1) });
+    }
+    for (const query of ['state=hidden', 'state=scheduled']) {
+      const operations = await profileQueries(api.db, () =>
+        listing(query, session).expect(200),
+      );
+      const reads = operations.filter(
+        ({ collection, operation }) =>
+          collection === 'blogPosts' && operation === 'query',
+      );
+      expect(reads.length).toBeGreaterThan(0);
+      for (const read of reads) {
+        expect(read.planSummary).toContain('IXSCAN');
+        expect(read.planSummary).not.toContain('COLLSCAN');
+        expect(read.hasSortStage).toBe(false);
+        expect(read.docsExamined).toBeLessThanOrEqual(11);
+        expect(read.keysExamined).toBeLessThanOrEqual(11);
+      }
+    }
   });
 
   it('refuses users without edit_all_post and anonymous visitors', async () => {
