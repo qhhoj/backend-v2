@@ -93,13 +93,14 @@ interface PathPatterns {
 }
 interface NumberedTests {
   tests: PlannedTest[];
-  casePoints: number[];
+  /** Points as written in the package, by test index; may be fractional. */
+  declaredCasePoints: number[];
   /** Tests outside any known group, in file order. */
   ungroupedCases: number[];
 }
 interface PlannedRows {
   batches: Group[];
-  normalCases: number[];
+  plainCases: number[];
 }
 
 function findTestset(root: XmlElement): XmlElement {
@@ -185,20 +186,22 @@ const plannedTest = (index: number, patterns: PathPatterns): PlannedTest => {
   };
 };
 
-/** Names the repacked files, reads each test's points and adds every grouped test to its group's `cases`. */
-function numberTests(
+/** Names the repacked files, reads each test's points and adds every grouped test to its group's `cases`. Mutates `groups`: expandBatches and eachTestCases read those `cases`, so this must run before them. */
+function assignTestsToGroups(
   testNodes: XmlElement[],
   patterns: PathPatterns,
   groups: Map<string, Group>,
 ): NumberedTests {
   const numbered: NumberedTests = {
     tests: [],
-    casePoints: [],
+    declaredCasePoints: [],
     ungroupedCases: [],
   };
   testNodes.forEach((test, index) => {
     numbered.tests.push(plannedTest(index, patterns));
-    numbered.casePoints.push(pointsOf(test, `points of test ${index + 1}`));
+    numbered.declaredCasePoints.push(
+      pointsOf(test, `points of test ${index + 1}`),
+    );
     const group =
       test.attributes.group === undefined
         ? undefined
@@ -252,15 +255,15 @@ const toThousandths = (points: number) => Math.round(points * POINT_PRECISION);
 
 /** Fractional points become integers sharing one divisor (gcd of all points in thousandths), so their ratios hold. Batch members carry no points in the rows, so scaling every case entry is safe. */
 function scaleToIntegerPoints(
-  { batches, normalCases }: PlannedRows,
-  casePoints: number[],
-): { batches: Group[]; casePoints: number[] } {
+  { batches, plainCases }: PlannedRows,
+  declaredCasePoints: number[],
+): { batches: Group[]; integerCasePoints: number[] } {
   const allPoints = [
     ...batches.map((batch) => batch.points),
-    ...normalCases.map((index) => casePoints[index]),
+    ...plainCases.map((index) => declaredCasePoints[index]),
   ];
   if (allPoints.every((points) => Number.isInteger(points)))
-    return { batches, casePoints };
+    return { batches, integerCasePoints: declaredCasePoints };
   const divisor = allPoints.map(toThousandths).reduce(gcd, 0) || 1;
   const scale = (points: number) => toThousandths(points) / divisor;
   return {
@@ -268,19 +271,19 @@ function scaleToIntegerPoints(
       ...batch,
       points: scale(batch.points),
     })),
-    casePoints: casePoints.map(scale),
+    integerCasePoints: declaredCasePoints.map(scale),
   };
 }
 
 const totalPoints = (
-  { batches, normalCases }: PlannedRows,
+  { batches, plainCases }: PlannedRows,
   casePoints: number[],
 ) =>
   batches.reduce((sum, batch) => sum + batch.points, 0) +
-  normalCases.reduce((sum, index) => sum + casePoints[index], 0);
+  plainCases.reduce((sum, index) => sum + casePoints[index], 0);
 
 function dropZeroPointRows(
-  { batches, normalCases }: PlannedRows,
+  { batches, plainCases }: PlannedRows,
   casePoints: number[],
   options: TestPlanOptions,
 ): PlannedRows {
@@ -288,16 +291,16 @@ function dropZeroPointRows(
     batches: options.ignoreZeroPointBatches
       ? batches.filter((batch) => batch.points > 0)
       : batches,
-    normalCases: options.ignoreZeroPointCases
-      ? normalCases.filter((index) => casePoints[index] > 0)
-      : normalCases,
+    plainCases: options.ignoreZeroPointCases
+      ? plainCases.filter((index) => casePoints[index] > 0)
+      : plainCases,
   };
 }
 
 /** S/E-wrapped batches first, then plain cases in test order; a problem scoring nothing gives its last scoring row one point (legacy). */
 function buildCaseRows(
-  { batches, normalCases }: PlannedRows,
-  { tests, casePoints }: Pick<NumberedTests, 'tests' | 'casePoints'>,
+  { batches, plainCases }: PlannedRows,
+  { tests, casePoints }: { tests: PlannedTest[]; casePoints: number[] },
   isPartial: boolean,
 ): ProblemTestCase[] {
   const cases: ProblemTestCase[] = [];
@@ -312,7 +315,7 @@ function buildCaseRows(
       );
     cases.push(row({ type: 'E' }));
   }
-  for (const index of [...normalCases].sort((left, right) => left - right)) {
+  for (const index of [...plainCases].sort((left, right) => left - right)) {
     lastScored = row({
       input: tests[index].inputName,
       output: tests[index].outputName,
@@ -337,7 +340,7 @@ function fileIoArgs(judging: XmlElement | null): JsonObject | null {
 }
 
 /** Polygon gives milliseconds and bytes; problems store seconds and KiB, clamped to the editor's limits. */
-function readJudgingLimits(
+function readLimitsAndGraderArgs(
   root: XmlElement,
   testset: XmlElement,
 ): Pick<TestPlan, 'timeLimit' | 'memoryLimit' | 'graderArgs'> {
@@ -370,25 +373,28 @@ export function planTests(
   const testNodes = readTestNodes(testset, options.maxCases);
   const patterns = readPathPatterns(testset);
   const groups = parseGroups(testset);
-  const numbered = numberTests(testNodes, patterns, groups);
-  const planned: PlannedRows = {
+  const numbered = assignTestsToGroups(testNodes, patterns, groups);
+  const rowsBeforeScaling: PlannedRows = {
     batches: expandBatches(groups, options.maxCases),
-    normalCases: [...numbered.ungroupedCases, ...eachTestCases(groups)],
+    plainCases: [...numbered.ungroupedCases, ...eachTestCases(groups)],
   };
-  const scaled = scaleToIntegerPoints(planned, numbered.casePoints);
-  const scaledRows = { ...planned, batches: scaled.batches };
-  const isPartial = totalPoints(scaledRows, scaled.casePoints) !== 0;
-  const kept = isPartial
-    ? dropZeroPointRows(scaledRows, scaled.casePoints, options)
-    : scaledRows;
+  const scaled = scaleToIntegerPoints(
+    rowsBeforeScaling,
+    numbered.declaredCasePoints,
+  );
+  const scoredRows = { ...rowsBeforeScaling, batches: scaled.batches };
+  const isPartial = totalPoints(scoredRows, scaled.integerCasePoints) !== 0;
+  const rowsToEmit = isPartial
+    ? dropZeroPointRows(scoredRows, scaled.integerCasePoints, options)
+    : scoredRows;
   const cases = buildCaseRows(
-    kept,
-    { tests: numbered.tests, casePoints: scaled.casePoints },
+    rowsToEmit,
+    { tests: numbered.tests, casePoints: scaled.integerCasePoints },
     isPartial,
   );
   // Limits are read last, as before: a package with several faults reports the same one first.
   return {
-    ...readJudgingLimits(root, testset),
+    ...readLimitsAndGraderArgs(root, testset),
     partial: isPartial,
     tests: numbered.tests,
     cases,

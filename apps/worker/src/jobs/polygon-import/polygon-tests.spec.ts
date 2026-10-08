@@ -411,4 +411,58 @@ describe('planTests', () => {
     );
     expect(() => fixtureXml(xml)).toThrow(/unknown points policy/);
   });
+
+  describe('error order when a package has several faults', () => {
+    const faulty = ({
+      testsXml = '<test group="g" points="1"/>',
+      patterns = '<input-path-pattern>t/%d</input-path-pattern><answer-path-pattern>t/%d.a</answer-path-pattern>',
+      groupsXml = '<group name="g" points-policy="complete-group"/>',
+      timeLimit = '1000',
+      memoryLimit = '1048576',
+    }) =>
+      `<problem><judging><testset name="tests"><time-limit>${timeLimit}</time-limit><memory-limit>${memoryLimit}</memory-limit>${patterns}<tests>${testsXml}</tests><groups>${groupsXml}</groups></testset></judging></problem>`;
+    const unknownDependency =
+      '<group name="g" points-policy="complete-group"><dependencies><dependency group="missing"/></dependencies></group>';
+
+    it.each([
+      [
+        'no testcases before missing path patterns',
+        { testsXml: '', patterns: '' },
+        /no testcases found/,
+      ],
+      [
+        'missing path patterns before a bad group',
+        { patterns: '', groupsXml: '<group name="g" points-policy="bogus"/>' },
+        /path patterns not found/,
+      ],
+      [
+        'a bad group before bad test points',
+        {
+          testsXml: '<test points="many"/>',
+          groupsXml: '<group name="g" points-policy="bogus"/>',
+        },
+        /unknown points policy/,
+      ],
+      [
+        'bad test points before an unknown dependency',
+        {
+          testsXml: '<test group="g" points="many"/>',
+          groupsXml: unknownDependency,
+        },
+        /invalid points of test 1/,
+      ],
+      [
+        'an unknown dependency before a bad time limit',
+        { groupsXml: unknownDependency, timeLimit: 'fast' },
+        /unknown dependency group/,
+      ],
+      [
+        'a bad time limit before a bad memory limit',
+        { timeLimit: 'fast', memoryLimit: 'lots' },
+        /invalid time limit/,
+      ],
+    ])('reports %s', (_label, fault, message) =>
+      expect(() => fixtureXml(faulty(fault))).toThrow(message),
+    );
+  });
 });
