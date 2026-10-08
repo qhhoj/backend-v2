@@ -12,6 +12,14 @@ import { HydratedDocument, Model } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
 
+/** An abandoned signup: never activated, never logged in, not banned, older than `cutoff`. */
+export const stalePendingFilter = (cutoff: Date) => ({
+  isActive: false,
+  banReason: null,
+  lastLogin: null,
+  dateJoined: { $lt: cutoff },
+});
+
 @Injectable()
 export class UsersRepository {
   constructor(@InjectModel(User.name) private readonly users: Model<User>) {}
@@ -82,18 +90,31 @@ export class UsersRepository {
     await this.users.deleteOne({ _id: id }).exec();
   }
 
-  /** Conditional delete of an abandoned signup (never activated, never logged in, not banned, older than `cutoff`); false when it does not qualify. */
+  /** Conditional delete of an abandoned signup (see `stalePendingFilter`); false when it does not qualify. */
   async deleteStalePendingUser(id: string, cutoff: Date): Promise<boolean> {
     const { deletedCount } = await this.users
-      .deleteOne({
-        _id: id,
-        isActive: false,
-        banReason: null,
-        lastLogin: null,
-        dateJoined: { $lt: cutoff },
-      })
+      .deleteOne({ _id: id, ...stalePendingFilter(cutoff) })
       .exec();
     return deletedCount === 1;
+  }
+
+  /** Free, or taken only by an abandoned signup that registration would reclaim. */
+  async isUsernameFree(username: string, cutoff: Date): Promise<boolean> {
+    const existing = await this.findByUsername(username, { _id: 1 });
+    return (
+      !existing ||
+      (await this.users
+        .countDocuments({ _id: existing._id, ...stalePendingFilter(cutoff) })
+        .exec()) === 1
+    );
+  }
+
+  /** Signups waiting for activation (resend): inactive, no ban, never logged in. */
+  findPendingByEmail(email: string): Promise<UserDocument[]> {
+    return this.users
+      .find({ email, isActive: false, banReason: null, lastLogin: null })
+      .collation(CI)
+      .exec();
   }
 
   /** False when the user is missing, already active or banned. */

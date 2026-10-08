@@ -211,6 +211,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Accepted residuals: unhide's parent check is read-then-write (a racing hide can leave an orphan), and hide/unhide of a subtree is not one atomic step.
 - Planned (migrator deferred): comments map legacy `p:`/`s:`/`c:`/`b:`/`t:` pages to entity ids, build `path`/`threadId` from MPTT and render `bodyHtml`; posts render `contentHtml`/`summaryHtml`; `users.contributionPoints` are recomputed after the backfill — reads never render and one job writes the points.
 - `judge.change_settings` is operator-grade (grant it to superusers only): webhook and pwned URLs are admin-set, loopback and private targets are an accepted residual as the env rule was, and the pwned fetch refuses redirects.
+- Registration takes one optional `organizationId` (open and listed only, never private or unlisted) and `languageId`; legacy allowed several open organizations without the unlisted filter — a signup must not reach hidden schools, more are joined afterwards through the usual membership caps. `activate/resend` always answers 204 and is limited per IP and per email so it cannot enumerate accounts or flood mailboxes.
 
 ## Deploy
 

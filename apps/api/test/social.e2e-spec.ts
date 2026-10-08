@@ -387,6 +387,46 @@ describe('social login', () => {
       .expect(errorCode('invalid_token'));
   });
 
+  it('stores the chosen language and school on a social signup and refuses a closed school', async () => {
+    const language = await api.languages.create({
+      key: 'PY3',
+      name: 'Python 3',
+      commonName: 'Python',
+      ace: 'python',
+      pygments: 'python3',
+      extension: 'py',
+    });
+    const [open, closed] = await api.organizations.create(
+      [true, false].map((isOpen) => ({
+        slug: isOpen ? 'open' : 'closed',
+        shortName: isOpen ? 'OPEN' : 'CLOSED',
+        name: 'School',
+        about: '',
+        aboutHtml: '',
+        isOpen,
+        isUnlisted: false,
+      })),
+    );
+    github.identities.set('code-1', {
+      uid: 'g-2',
+      email: 'new@example.com',
+      emailVerified: true,
+    });
+    const token = pendingToken((await login('code-1')).headers.location);
+    const body = { token, username: 'socialite', password: PASSWORD };
+    await complete({ ...body, organizationId: closed._id })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    await complete({
+      ...body,
+      organizationId: open._id,
+      languageId: language._id,
+    }).expect(200);
+    const user = (await api.users.findOne({ username: 'socialite' }).lean())!;
+    expect(user.languageId?.toString()).toBe(language._id);
+    expect(user.organizations.map(String)).toEqual([open._id]);
+  });
+
   it('binds the pending token to the browser through the oauth_pending cookie', async () => {
     github.identities.set('code-1', {
       uid: 'g-2',

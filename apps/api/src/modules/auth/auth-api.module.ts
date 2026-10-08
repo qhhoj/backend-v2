@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
+import { OrganizationsApiModule } from '../organizations/organizations-api.module';
+import { ActivationService } from './registration/activation.service';
 import { AuthController } from './core/auth.controller';
 import { AuthService } from './core/auth.service';
 import { ImpersonationController } from './impersonation/impersonation.controller';
@@ -19,7 +21,7 @@ import { WebauthnController } from './two-factor/webauthn.controller';
 import { WebauthnService } from './two-factor/webauthn.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, OrganizationsApiModule],
   controllers: [
     AuthController,
     ImpersonationController,
@@ -33,6 +35,7 @@ import { WebauthnService } from './two-factor/webauthn.service';
     AuthService,
     ImpersonationService,
     RegistrationService,
+    ActivationService,
     PasswordResetService,
     SecondFactorService,
     TotpService,

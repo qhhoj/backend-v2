@@ -1,4 +1,3 @@
-import { randomBytes } from 'crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import {
@@ -21,17 +20,20 @@ import {
   withRedisLock,
 } from '@libs/common';
 import type { Env, FieldIssue, Mailer } from '@libs/common';
-import { ActivationKey, uuidStr } from '@libs/database';
+import { ActivationKey, Language, Organization, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
+import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
+import { ACTIVATION_DAYS, ActivationService } from './activation.service';
 import type { RegisterDto } from './dto/register.dto';
 import {
   REGISTRATION_IP_LIMIT,
   REGISTRATION_WINDOW_SECONDS,
+  USERNAME_CHECK_IP_LIMIT,
+  USERNAME_CHECK_WINDOW_SECONDS,
 } from '../core/rate-limits';
 
-const ACTIVATION_DAYS = 7;
 const EMAIL_LOCK_SECONDS = 30;
 
 @Injectable()
@@ -42,8 +44,13 @@ export class RegistrationService {
     private readonly users: UsersRepository,
     private readonly pwned: PwnedPasswordService,
     private readonly rateLimit: RateLimitService,
+    private readonly activation: ActivationService,
+    private readonly organizationPoints: OrganizationPointsService,
     @InjectModel(ActivationKey.name)
     private readonly activationKeys: Model<ActivationKey>,
+    @InjectModel(Language.name) private readonly languages: Model<Language>,
+    @InjectModel(Organization.name)
+    private readonly organizations: Model<Organization>,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(ENV) private readonly env: Env,
@@ -83,6 +90,8 @@ export class RegistrationService {
     username,
     email,
     password,
+    languageId,
+    organizationId,
   }: RegisterDto): Promise<void> {
     const issues: FieldIssue[] = [];
     if (await this.isTaken(() => this.users.findByUsername(username)))
@@ -97,6 +106,25 @@ export class RegistrationService {
         code: 'email_taken',
         message: 'Email is already registered.',
       });
+    if (languageId && !(await this.languages.exists({ _id: languageId })))
+      issues.push({
+        field: 'languageId',
+        code: 'language_unknown',
+        message: 'Choose one of the listed languages.',
+      });
+    if (
+      organizationId &&
+      !(await this.organizations.exists({
+        _id: organizationId,
+        isOpen: true,
+        isUnlisted: false,
+      }))
+    )
+      issues.push({
+        field: 'organizationId',
+        code: 'organization_unavailable',
+        message: 'Choose one of the listed open organizations.',
+      });
     const problems = passwordProblems(password, { username, email });
     if (await this.pwned.isPwned(password))
       problems.push(PWNED_PASSWORD_PROBLEM);
@@ -107,35 +135,25 @@ export class RegistrationService {
       throw new ValidationFailedError('Registration rejected', issues);
   }
 
-  private async registerLocked({
-    username,
-    email,
-    password,
-  }: RegisterDto): Promise<void> {
-    await this.assertRegistrable({ username, email, password });
+  private async registerLocked(body: RegisterDto): Promise<void> {
+    await this.assertRegistrable(body);
+    const { username, email, password } = body;
     const user = await this.createUser({
       username,
       email,
       password,
       isActive: false,
+      ...this.profileFields(body),
     });
-    const key = randomBytes(32).toString('hex');
+    let key: string;
     try {
-      await this.activationKeys.create({
-        userId: user._id,
-        keyHash: sha256(key),
-        expiresAt: new Date(Date.now() + ACTIVATION_DAYS * 86_400_000),
-      });
+      key = await this.activation.createKey(user._id);
     } catch (error) {
       await this.rollback(user._id, error);
       throw error;
     }
     try {
-      await this.mailer.send({
-        to: email,
-        subject: 'Activate your QHHOJ account',
-        text: `Activate your account: ${this.env.siteUrl}/activate/${key}\nThe link expires in ${ACTIVATION_DAYS} days.`,
-      });
+      await this.mailer.send(this.activation.mail(email, key));
     } catch (error) {
       await this.rollback(user._id, error);
       throw new AppError(
@@ -144,6 +162,41 @@ export class RegistrationService {
         'Could not send the activation email; try again later',
       );
     }
+    await this.announceMembership(user);
+  }
+
+  /** The optional signup choices as user fields. */
+  profileFields({
+    languageId,
+    organizationId,
+  }: Pick<RegisterDto, 'languageId' | 'organizationId'>): Pick<
+    User,
+    'languageId' | 'organizations'
+  > {
+    return {
+      languageId: languageId ?? null,
+      organizations: organizationId ? [organizationId] : [],
+    };
+  }
+
+  /** Queues the organization's points recompute once the signup succeeded; never throws. */
+  announceMembership(user: UserDocument): Promise<void> {
+    return user.organizations.length
+      ? this.organizationPoints.refresh(user.organizations.map(uuidStr))
+      : Promise.resolve();
+  }
+
+  /** Whether `username` could be registered now; spends the caller's per-IP budget. */
+  async usernameAvailable(username: string, ip: string): Promise<boolean> {
+    await this.rateLimit.reserve(
+      [`username-check:ip:${ip}`],
+      USERNAME_CHECK_IP_LIMIT,
+      USERNAME_CHECK_WINDOW_SECONDS,
+    );
+    return this.users.isUsernameFree(
+      username,
+      new Date(Date.now() - ACTIVATION_DAYS * 86_400_000),
+    );
   }
 
   /** Whether any match blocks registration; abandoned signups are reclaimed one by one and the lookup repeated, since legacy data can hold several matches. */

@@ -137,7 +137,13 @@ export class SocialService {
   }
 
   async complete(
-    { token, username, password }: SocialCompleteDto,
+    {
+      token,
+      username,
+      password,
+      organizationId,
+      languageId,
+    }: SocialCompleteDto,
     ip: string,
     previousSessionId: string | null,
     pendingCookie: string | undefined,
@@ -149,7 +155,13 @@ export class SocialService {
       pending.email,
       ip,
       async () => {
-        const credentials = { username, email: pending.email, password };
+        const credentials = {
+          username,
+          email: pending.email,
+          password,
+          organizationId,
+          languageId,
+        };
         await this.registration.assertRegistrable(credentials);
         if (await this.users.findBySocial(pending.provider, pending.uid))
           throw invalidToken();
@@ -157,7 +169,10 @@ export class SocialService {
         if (!(await this.redis.getdel(`oauth-pending:${token}`)))
           throw invalidToken();
         return this.registration.createUser({
-          ...credentials,
+          username,
+          email: pending.email,
+          password,
+          ...this.registration.profileFields(credentials),
           isActive: true,
           socialAuth: [
             { provider: pending.provider, uid: pending.uid, extraData: {} },
@@ -165,6 +180,7 @@ export class SocialService {
         });
       },
     );
+    await this.registration.announceMembership(created);
     return this.auth.startSession(created, false, previousSessionId);
   }
 
