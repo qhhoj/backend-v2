@@ -1,4 +1,4 @@
-import { timecodeAt, totpCode } from '@libs/auth';
+import { generateApiToken, timecodeAt, totpCode } from '@libs/auth';
 import { decrypt, encryptionKey } from '@libs/common';
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
@@ -363,6 +363,9 @@ describe('totp endpoints', () => {
       await post(`${TOTP}/${path}`, partial, { code: '123456' })
         .expect(403)
         .expect(errorCode('two_factor_required'));
+    await remainingCodes(partial)
+      .expect(403)
+      .expect(errorCode('two_factor_required'));
     await api.users.updateOne({ username: 'alice' }, { isTotpEnabled: false });
     const session = await login();
     await api.sessions.update(session.cookie.split('=')[1], {
@@ -372,6 +375,27 @@ describe('totp endpoints', () => {
       await post(`${TOTP}/${path}`, session, { code: '123456' })
         .expect(403)
         .expect(errorCode('password_change_required'));
+    await remainingCodes(session)
+      .expect(403)
+      .expect(errorCode('password_change_required'));
+  });
+
+  it('refuses the scratch-code count to an API token', async () => {
+    await enable();
+    const issued = generateApiToken(
+      (await stored())!._id,
+      TEST_ENV.TOKEN_SECRET,
+    );
+    await api.users.updateOne(
+      { username: 'alice' },
+      { apiTokenHash: issued.hash },
+    );
+    await api
+      .http()
+      .get(`${TOTP}/scratch-codes`)
+      .set('Authorization', `Bearer ${issued.token}`)
+      .expect(403)
+      .expect(errorCode('forbidden'));
   });
 
   it('works for migrated users lacking the totp fields', async () => {

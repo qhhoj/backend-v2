@@ -156,9 +156,10 @@ export class TotpService {
     user: UserDocument,
     code: string,
   ): Promise<boolean> {
+    if (!user.scratchCodes) return false;
     const codes = this.storedScratchCodes(user);
     const normalized = code.toUpperCase();
-    if (!user.scratchCodes || !containsCode(codes, normalized)) return false;
+    if (!containsCode(codes, normalized)) return false;
     const unused = codes.filter((candidate) => candidate !== normalized);
     return this.users.replaceScratchCodes(
       user._id,
