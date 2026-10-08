@@ -65,8 +65,12 @@ const wrapTables = (html: string) =>
     )
     .replaceAll('</table>', '</table></div>');
 
-function createMarkdown(html: boolean): MarkdownIt.MarkdownIt {
-  const markdown = new MarkdownIt({ html, typographer: true });
+function createMarkdown({
+  allowsHtml,
+}: {
+  allowsHtml: boolean;
+}): MarkdownIt.MarkdownIt {
+  const markdown = new MarkdownIt({ html: allowsHtml, typographer: true });
   markdown.disable('replacements');
   markdown.core.ruler.after('smartquotes', 'dashes', dashesRule);
   markdown.inline.ruler.before('escape', 'math_inline', mathInlineRule);
@@ -86,6 +90,7 @@ function createMarkdown(html: boolean): MarkdownIt.MarkdownIt {
       renderMath(tokens[index].content, true, (env as RenderEnv).budget),
     );
   markdown.renderer.rules.user_reference = renderUserReference;
+  // eslint-disable-next-line no-restricted-syntax -- markdown-it's renderer rule signature
   markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
     const token = tokens[index];
     if (!String(token.attrGet('href') ?? '').startsWith('#')) {
@@ -97,7 +102,10 @@ function createMarkdown(html: boolean): MarkdownIt.MarkdownIt {
   return markdown;
 }
 
-const markdowns = { raw: createMarkdown(true), escaped: createMarkdown(false) };
+const markdowns = {
+  raw: createMarkdown({ allowsHtml: true }),
+  escaped: createMarkdown({ allowsHtml: false }),
+};
 
 const MAX_MARKUP_TAGS = 200000;
 const MAX_MARKUP_DEPTH = 500;

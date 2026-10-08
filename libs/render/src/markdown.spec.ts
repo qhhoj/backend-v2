@@ -125,6 +125,33 @@ describe('renderMarkdown', () => {
     expect(full('a ~ x ~ b')).toMatch(KATEX_INLINE);
     expect(full('a $x \\leq 10 $ b')).toBe('<p>a $x \\leq 10 $ b</p>\n');
   });
+  it('keeps dollar math on one line and refuses empty spans', () => {
+    expect(full('a $x\ny$ b')).not.toContain('katex');
+    expect(full('a $$$$ b')).not.toContain('katex');
+    expect(full('a $$x\ny$$ b')).toContain('<span class="katex-display">');
+  });
+  it('refuses a single-dollar span that ends after a space or before a digit', () => {
+    expect(full('a $x $ b')).not.toContain('katex');
+    expect(full('a $x$5 b')).not.toContain('katex');
+  });
+  it('lets display math end after a space or before a digit', () => {
+    expect(full('a $$x $$ b')).toContain('<span class="katex-display">');
+    expect(full('a $$x$$5 b')).toContain('<span class="katex-display">');
+  });
+  it('consumes both closing dollars of display math', () => {
+    expect(full('a $$x$$ b')).toMatch(
+      /^<p>a <span class="katex-display">.*<\/span> b<\/p>\n$/s,
+    );
+  });
+  it('refuses any dollar span that contains a backtick', () => {
+    expect(full('$a `b` c$')).not.toContain('katex');
+    expect(full('$$a `b` c$$')).not.toContain('katex');
+  });
+  it('does not let a dollar span close beyond the enclosing link label', () => {
+    expect(full('[a $x](u) $y$')).toContain(
+      '<a href="u" rel="nofollow noopener" target="_blank">a $x</a>',
+    );
+  });
   it('catches every KaTeX failure into a truncated math-error span', () => {
     const nested = full(`$${'{'.repeat(20000)}${'}'.repeat(20000)}$`);
     const frac = full(`$${'\\frac{'.repeat(3000)}$`);

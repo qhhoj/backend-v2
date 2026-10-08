@@ -140,6 +140,7 @@ const limitExceeded = (
 };
 
 /** KaTeX HTML+MathML for `tex`; any KaTeX failure (parse error, stack overflow on deep nesting) or a spent `budget` keeps the raw source in a `math-error` span so a bad formula never fails a save. */
+// eslint-disable-next-line complexity -- essential: one KaTeX render behind the budget checks, which must run in this order (see the doc comment)
 export function renderMath(
   tex: string,
   displayMode: boolean,
@@ -220,31 +221,63 @@ const indexOfUnescaped = (
   return index;
 };
 
-/** `$…$` (one line; not `$ x$`, `$x $` or `$5 and $10`) and `$$…$$` (may span lines); never crosses a backtick, so code spans win. */
+interface DollarMath {
+  tex: string;
+  isDisplay: boolean;
+  /** Index of the closing marker. */
+  end: number;
+}
+
+/**
+ * Index of the closing `marker` for a span whose body starts at `start`, or -1 when the span is refused:
+ * a single-dollar span must not end after a space or before a digit (`$5 and $10`), and an empty span is refused.
+ */
+function findClosingDollar(
+  src: string,
+  marker: string,
+  start: number,
+  posMax: number,
+): number {
+  const isDisplay = marker === '$$';
+  const end = indexOfUnescaped(src, marker, start);
+  if (end === -1 || end >= posMax || end === start) return -1;
+  if (isDisplay) return end;
+  const endsAfterSpace = isSpace(src.charCodeAt(end - 1));
+  const endsBeforeDigit = isDigit(src.charCodeAt(end + 1));
+  return endsAfterSpace || endsBeforeDigit ? -1 : end;
+}
+
+/** `$…$` (one line; not `$ x$`, `$x $` or `$5 and $10`) or `$$…$$` (may span lines) starting at `pos`; never crosses a backtick, so code spans win. */
+function findDollarMath(
+  src: string,
+  pos: number,
+  posMax: number,
+): DollarMath | null {
+  if (src.charCodeAt(pos) !== DOLLAR) return null;
+  const isDisplay = src.charCodeAt(pos + 1) === DOLLAR;
+  const marker = isDisplay ? '$$' : '$';
+  const start = pos + marker.length;
+  if (!isDisplay && isSpace(src.charCodeAt(start))) return null;
+  const end = findClosingDollar(src, marker, start, posMax);
+  if (end === -1) return null;
+  const tex = src.slice(start, end);
+  if (tex.includes('`') || (!isDisplay && tex.includes('\n'))) return null;
+  return { tex, isDisplay, end };
+}
+
 export function mathInlineRule(
   state: MarkdownIt.StateInline,
   silent: boolean,
 ): boolean {
-  const { src, pos, posMax } = state;
-  if (src.charCodeAt(pos) !== DOLLAR) return false;
-  const display = src.charCodeAt(pos + 1) === DOLLAR;
-  const marker = display ? '$$' : '$';
-  const start = pos + marker.length;
-  if (start >= posMax || (!display && isSpace(src.charCodeAt(start))))
-    return false;
-  const end = indexOfUnescaped(src, marker, start);
-  if (end === -1 || end >= posMax || end === start) return false;
-  if (
-    !display &&
-    (isSpace(src.charCodeAt(end - 1)) || isDigit(src.charCodeAt(end + 1)))
-  )
-    return false;
-  const tex = src.slice(start, end);
-  if ((!display && tex.includes('\n')) || tex.includes('`')) return false;
+  const math = findDollarMath(state.src, state.pos, state.posMax);
+  if (!math) return false;
   if (!silent)
-    state.push(display ? 'math_display' : 'math_inline', 'span', 0).content =
-      tex;
-  state.pos = end + marker.length;
+    state.push(
+      math.isDisplay ? 'math_display' : 'math_inline',
+      'span',
+      0,
+    ).content = math.tex;
+  state.pos = math.end + (math.isDisplay ? 2 : 1);
   return true;
 }
 

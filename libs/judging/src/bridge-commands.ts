@@ -28,6 +28,7 @@ const isIdList = (value: unknown, maxLength: number): value is string[] =>
   value.every((item) => typeof item === 'string' && isUuid(item));
 
 /** Stream entries come from our own api but are still checked before the bridge casts ids into queries; null = ignore. */
+// eslint-disable-next-line complexity -- essential: one switch over the four bridge commands, each validated in place
 export function parseBridgeCommand(raw: string): BridgeCommand | null {
   let value: unknown;
   try {
