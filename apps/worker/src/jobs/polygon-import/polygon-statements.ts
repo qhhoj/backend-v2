@@ -233,6 +233,7 @@ const hasPropertiesShape = (
   value: Partial<Record<keyof ProblemProperties, unknown>> | null,
 ): boolean =>
   REQUIRED_TEXT_KEYS.every((key) => isString(value?.[key])) &&
+  // Polygon omits some optional keys and writes null for others: a missing key and an explicit null are both fine.
   OPTIONAL_TEXT_KEYS.every((key) => isNullableString(value?.[key] ?? null)) &&
   Array.isArray(value?.sampleTests) &&
   value.sampleTests.every(isSampleTest);

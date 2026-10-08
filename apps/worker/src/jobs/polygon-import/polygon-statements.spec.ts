@@ -689,6 +689,16 @@ describe('parseStatements error order when a package has several faults', () => 
       'disallowed characters',
     ],
     [
+      'an invalid main language before an invalid tutorial language',
+      () =>
+        withTranslation(
+          properties({ tutorial: 'Cộng lại.' }),
+          properties({ tutorial: 'Add them.' }),
+        ),
+      {},
+      'invalid main statement language',
+    ],
+    [
       'an invalid site language before an invalid tutorial language',
       () =>
         withTranslation(
@@ -749,5 +759,75 @@ describe('parseStatements error order when a package has several faults', () => 
     );
     expect(saved).toEqual([]);
     pkg.close();
+  });
+});
+
+describe('problem-properties.json shape', () => {
+  const parseOne = async (propertiesJson: Record<string, unknown>) => {
+    const pkg = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      statements: [
+        { language: 'english', name: 'Sum', properties: propertiesJson },
+      ],
+    });
+    try {
+      return await parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: saveEcho(),
+      });
+    } finally {
+      pkg.close();
+    }
+  };
+  const textKeys = [
+    'legend',
+    'input',
+    'output',
+    'notes',
+    'interaction',
+    'scoring',
+    'tutorial',
+  ];
+
+  it.each(textKeys)('rejects a non-string %s', async (key) => {
+    await expect(parseOne(properties({ [key]: 5 }))).rejects.toThrow(
+      'unexpected shape',
+    );
+  });
+  it.each(['legend', 'input', 'output', 'notes'])(
+    'rejects a null or missing required %s',
+    async (key) => {
+      await expect(parseOne(properties({ [key]: null }))).rejects.toThrow(
+        'unexpected shape',
+      );
+      await expect(parseOne(properties({ [key]: undefined }))).rejects.toThrow(
+        'unexpected shape',
+      );
+    },
+  );
+  it.each(['interaction', 'scoring', 'tutorial'])(
+    'accepts a null or missing optional %s',
+    async (key) => {
+      await expect(
+        parseOne(properties({ [key]: null })),
+      ).resolves.toBeDefined();
+      await expect(
+        parseOne(properties({ [key]: undefined })),
+      ).resolves.toBeDefined();
+    },
+  );
+  it.each([
+    ['not an array', 'x'],
+    ['missing', undefined],
+    ['an entry that is null', [null]],
+    ['an entry without output', [{ input: '1' }]],
+    ['an entry with a non-string input', [{ input: 1, output: '1' }]],
+    ['an entry with a non-string output', [{ input: '1', output: 1 }]],
+  ])('rejects sampleTests %s', async (_label, sampleTests) => {
+    await expect(parseOne(properties({ sampleTests }))).rejects.toThrow(
+      'unexpected shape',
+    );
   });
 });
