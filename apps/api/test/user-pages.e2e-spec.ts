@@ -495,4 +495,39 @@ describe('user pages', () => {
       spy.mockRestore();
     }
   });
+
+  it('shows the ban reason and superuser flag only to judges who may ban', async () => {
+    await createUserWith(api, 'banned_page', {
+      banReason: 'spam',
+      displayRank: 'banned',
+      isActive: false,
+    });
+    await createUserWith(api, 'root_page', { isSuperuser: true });
+    const moderator = await loginAs(
+      api,
+      (
+        await createUserWith(api, 'page_moderator', {
+          permissions: ['judge.ban_user'],
+        })
+      )._id,
+    );
+    const ordinary = await loginAs(
+      api,
+      (await createUserWith(api, 'page_ordinary', {}))._id,
+    );
+    const staffOf = async (username: string, session?: TestSession) =>
+      dataOf<UserPageResponse>(
+        await get(`/api/internal/users/${username}`, session).expect(200),
+      ).staff;
+    expect(await staffOf('banned_page', moderator)).toEqual({
+      isSuperuser: false,
+      banReason: 'spam',
+    });
+    expect(await staffOf('root_page', moderator)).toEqual({
+      isSuperuser: true,
+      banReason: null,
+    });
+    expect(await staffOf('banned_page')).toBeNull();
+    expect(await staffOf('banned_page', ordinary)).toBeNull();
+  });
 });

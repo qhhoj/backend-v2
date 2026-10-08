@@ -12,6 +12,9 @@ import { UserDataService } from './data/user-data.service';
 import { LeaderboardsController } from './leaderboards/leaderboards.controller';
 import { LeaderboardsRepository } from './leaderboards/leaderboards.repository';
 import { LeaderboardsService } from './leaderboards/leaderboards.service';
+import { UserAdminController } from './admin/user-admin.controller';
+import { UserAdminRepository } from './admin/user-admin.repository';
+import { UserAdminService } from './admin/user-admin.service';
 import { UserModerationController } from './moderation/user-moderation.controller';
 import { UserModerationService } from './moderation/user-moderation.service';
 import { ProfileController } from './profile/profile.controller';
@@ -35,6 +38,7 @@ import { UserPagesService } from './pages/user-pages.service';
     ProfileController,
     UserModerationController,
     UserDataController,
+    UserAdminController,
   ],
   providers: [
     LeaderboardsRepository,
@@ -44,6 +48,8 @@ import { UserPagesService } from './pages/user-pages.service';
     ProfileService,
     UserModerationService,
     UserDataService,
+    UserAdminRepository,
+    UserAdminService,
     RateLimitService,
   ],
   exports: [LeaderboardsRepository, UserPagesRepository],

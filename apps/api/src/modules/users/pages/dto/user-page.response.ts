@@ -8,6 +8,12 @@ export class RatingSummaryResponse {
   contests!: number;
 }
 
+/** Only for viewers who hold `judge.ban_user`; null for everyone else. */
+export class UserPageStaffResponse {
+  isSuperuser!: boolean;
+  banReason!: string | null;
+}
+
 export class UserPageResponse {
   id!: string;
   username!: string;
@@ -26,6 +32,7 @@ export class UserPageResponse {
   ratingSummary!: RatingSummaryResponse | null;
   organizations!: OrganizationSummaryResponse[];
   dateJoined!: Date;
+  staff!: UserPageStaffResponse | null;
 }
 
 export class RatingHistoryEntryResponse {

@@ -119,5 +119,10 @@ export const LEADERBOARD_FIELDS = [
 export type LeaderboardField = (typeof LEADERBOARD_FIELDS)[number];
 for (const field of LEADERBOARD_FIELDS)
   UserSchema.index({ isUnlisted: 1, isActive: 1, [field]: -1, _id: 1 });
+// Staff list of banned users; the ban reason is only set while banned.
+UserSchema.index(
+  { banReason: 1 },
+  { partialFilterExpression: { banReason: { $type: 'string' } } },
+);
 // Organization points (top 100 by PP), member counts and member lists.
 UserSchema.index({ organizations: 1, performancePoints: -1 });

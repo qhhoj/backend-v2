@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { UsersRepository } from '@libs/auth';
+import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
   AppError,
@@ -24,6 +24,7 @@ import type {
   RatingHistoryEntryResponse,
   SolvedResponse,
   UserPageResponse,
+  UserPageStaffResponse,
 } from './dto/user-page.response';
 import { UserPagesRepository } from './user-pages.repository';
 
@@ -45,6 +46,14 @@ const summarize = (
     : null;
 };
 const notFound = () => new AppError('not_found', 404, 'No such user');
+/** Judges who may ban see why a user is banned and whether they are a superuser. */
+const staffViewOf = (
+  principal: Principal | null,
+  user: { isSuperuser: boolean; banReason: string | null },
+): UserPageStaffResponse | null =>
+  principal && hasPermission(principal, 'judge.ban_user')
+    ? { isSuperuser: user.isSuperuser, banReason: user.banReason }
+    : null;
 
 @Injectable()
 export class UserPagesService {
@@ -97,6 +106,7 @@ export class UserPagesService {
         OrganizationSummaryResponse.from(organization),
       ),
       dateJoined: user.dateJoined,
+      staff: staffViewOf(principal, user),
     };
   }
 
