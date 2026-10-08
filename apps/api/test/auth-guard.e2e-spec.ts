@@ -5,6 +5,7 @@ import {
   AllowBeforeTwoFactor,
   AllowPwnedPassword,
   type AuthContext,
+  COOKIE_REFRESH_MS,
   CurrentAuth,
   generateApiToken,
   GroupsQuerier,
@@ -60,6 +61,9 @@ class GuardedController {
     return 'secured';
   }
 }
+
+/** One hour past the refresh window, so the guard re-issues the cookie. */
+const STALE_COOKIE_AGE_MS = COOKIE_REFRESH_MS + 60 * 60 * 1000;
 
 const errorMessage =
   (message: string) =>
@@ -382,7 +386,7 @@ describe('AuthGuard', () => {
   it('re-issues the session cookie once a day of activity has passed', async () => {
     const { id } = await login();
     await api.sessions.update(id, {
-      cookieIssuedAt: Date.now() - 25 * 60 * 60 * 1000,
+      cookieIssuedAt: Date.now() - STALE_COOKIE_AGE_MS,
     });
     const refreshed = await api
       .http()
@@ -511,7 +515,7 @@ describe('AuthGuard', () => {
   it('re-issues an old session cookie on public routes too', async () => {
     const { id } = await login();
     await api.sessions.update(id, {
-      cookieIssuedAt: Date.now() - 25 * 60 * 60 * 1000,
+      cookieIssuedAt: Date.now() - STALE_COOKIE_AGE_MS,
     });
     const refreshed = await api
       .http()

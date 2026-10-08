@@ -29,7 +29,7 @@ import { AuthContext } from './auth-context';
 const isBearerHeader = (header: string) => /^bearer/i.test(header);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 /** Reads a decorator's value, the handler's overriding the controller's. */
-type RouteMetadata = <Value>(key: string) => Value | undefined;
+type RouteMetadataReader = <Value>(key: string) => Value | undefined;
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -53,23 +53,23 @@ export class AuthGuard implements CanActivate {
       request,
       http.getResponse<FastifyReply>(),
     );
-    const routeMetadata: RouteMetadata = <Value>(key: string) =>
+    const readRouteMetadata: RouteMetadataReader = <Value>(key: string) =>
       this.reflector.getAllAndOverride<Value | undefined>(key, [
         context.getHandler(),
         context.getClass(),
       ]);
-    if (routeMetadata<boolean>(PUBLIC_ROUTE)) return true;
+    if (readRouteMetadata<boolean>(PUBLIC_ROUTE)) return true;
     const { auth } = request;
     if (!auth) throw new AppError('unauthorized', 401, 'Login required');
-    if (auth.viaToken && routeMetadata<boolean>(SESSION_ONLY_ROUTE))
+    if (auth.viaToken && readRouteMetadata<boolean>(SESSION_ONLY_ROUTE))
       throw new AppError(
         'forbidden',
         403,
         'This endpoint requires a browser session',
       );
     if (auth.session)
-      this.assertSessionAllows(request, auth.session, routeMetadata);
-    const permission = routeMetadata<Permission>(REQUIRED_PERMISSION);
+      this.assertSessionAllows(request, auth.session, readRouteMetadata);
+    const permission = readRouteMetadata<Permission>(REQUIRED_PERMISSION);
     if (permission && !hasPermission(auth.principal, permission))
       throw new AppError('forbidden', 403, 'Permission denied');
     return true;
@@ -103,7 +103,7 @@ export class AuthGuard implements CanActivate {
   private assertSessionAllows(
     request: FastifyRequest,
     session: NonNullable<AuthContext['session']>,
-    routeMetadata: RouteMetadata,
+    readRouteMetadata: RouteMetadataReader,
   ): void {
     if (
       !SAFE_METHODS.has(request.method) &&
@@ -112,14 +112,17 @@ export class AuthGuard implements CanActivate {
       throw new AppError('csrf_failed', 403, 'Missing or invalid CSRF token');
     if (
       !session.twoFaPassed &&
-      !routeMetadata<boolean>(BEFORE_TWO_FACTOR_ROUTE)
+      !readRouteMetadata<boolean>(BEFORE_TWO_FACTOR_ROUTE)
     )
       throw new AppError(
         'two_factor_required',
         403,
         'Two-factor authentication required',
       );
-    if (session.passwordPwned && !routeMetadata<boolean>(PWNED_PASSWORD_ROUTE))
+    if (
+      session.passwordPwned &&
+      !readRouteMetadata<boolean>(PWNED_PASSWORD_ROUTE)
+    )
       throw new AppError(
         'password_change_required',
         403,
@@ -127,7 +130,7 @@ export class AuthGuard implements CanActivate {
       );
     if (
       session.impersonatorId &&
-      routeMetadata<boolean>(NO_IMPERSONATION_ROUTE)
+      readRouteMetadata<boolean>(NO_IMPERSONATION_ROUTE)
     )
       throw new AppError('forbidden', 403, 'Not allowed while impersonating');
   }
