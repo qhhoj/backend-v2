@@ -11,6 +11,8 @@ import { BlogPostsController } from './core/blog-posts.controller';
 import { BlogPostsService } from './core/blog-posts.service';
 import { BlogEditingController } from './editing/blog-editing.controller';
 import { BlogEditingService } from './editing/blog-editing.service';
+import { BlogModerationController } from './moderation/blog-moderation.controller';
+import { BlogModerationService } from './moderation/blog-moderation.service';
 import { BlogVotesController } from './votes/blog-votes.controller';
 import { BlogVotesService } from './votes/blog-votes.service';
 import { OrganizationPostsController } from './core/organization-posts.controller';
@@ -30,11 +32,13 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
     OrganizationPostsController,
     BlogEditingController,
     BlogVotesController,
+    BlogModerationController,
   ],
   providers: [
     BlogPostsService,
     BlogEditingService,
     BlogVotesService,
+    BlogModerationService,
     RateLimitService,
   ],
   exports: [BlogPostsService],

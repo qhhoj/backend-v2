@@ -133,7 +133,7 @@ export class BlogPostsService {
       : new Paginated([], { page, pageSize: BLOG_PAGE_SIZE, total: 0 });
   }
 
-  private async pageOf(
+  async pageOf(
     principal: Principal | null,
     filter: FilterQuery<BlogPost>,
     sort: Record<string, SortOrder>,

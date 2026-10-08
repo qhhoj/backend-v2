@@ -51,6 +51,8 @@ BlogPostSchema.index({
   publishOn: -1,
   _id: -1,
 });
+// Moderation lists: hidden drafts, and scheduled posts (visible, publishing later).
+BlogPostSchema.index({ visible: 1, publishOn: -1, _id: -1 });
 // A user's blog tab and their contribution sum.
 BlogPostSchema.index({
   authors: 1,
