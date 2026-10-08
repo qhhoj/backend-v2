@@ -221,25 +221,32 @@ const indexOfUnescaped = (
   return index;
 };
 
+const DOLLAR_MARKER = '$';
+const DISPLAY_MARKER = '$$';
+const markerOf = (isDisplay: boolean) =>
+  isDisplay ? DISPLAY_MARKER : DOLLAR_MARKER;
+
 interface DollarMath {
   tex: string;
   isDisplay: boolean;
   /** Index of the closing marker. */
   end: number;
+  /** Index just past the closing marker, where the inline scan resumes. */
+  after: number;
 }
 
 /**
- * Index of the closing `marker` for a span whose body starts at `start`, or -1 when the span is refused:
+ * Index of the closing marker for a span whose body starts at `start`, or -1 when the span is refused:
  * a single-dollar span must not end after a space or before a digit (`$5 and $10`), and an empty span is refused.
  */
 function findClosingDollar(
   src: string,
-  marker: string,
+  isDisplay: boolean,
   start: number,
   posMax: number,
 ): number {
-  const isDisplay = marker === '$$';
-  const end = indexOfUnescaped(src, marker, start);
+  const end = indexOfUnescaped(src, markerOf(isDisplay), start);
+  // markdown-it's inline rules must not read past posMax (a link label's end while the label is tokenized).
   if (end === -1 || end >= posMax || end === start) return -1;
   if (isDisplay) return end;
   const endsAfterSpace = isSpace(src.charCodeAt(end - 1));
@@ -255,14 +262,13 @@ function findDollarMath(
 ): DollarMath | null {
   if (src.charCodeAt(pos) !== DOLLAR) return null;
   const isDisplay = src.charCodeAt(pos + 1) === DOLLAR;
-  const marker = isDisplay ? '$$' : '$';
-  const start = pos + marker.length;
+  const start = pos + markerOf(isDisplay).length;
   if (!isDisplay && isSpace(src.charCodeAt(start))) return null;
-  const end = findClosingDollar(src, marker, start, posMax);
+  const end = findClosingDollar(src, isDisplay, start, posMax);
   if (end === -1) return null;
   const tex = src.slice(start, end);
   if (tex.includes('`') || (!isDisplay && tex.includes('\n'))) return null;
-  return { tex, isDisplay, end };
+  return { tex, isDisplay, end, after: end + markerOf(isDisplay).length };
 }
 
 export function mathInlineRule(
@@ -277,7 +283,7 @@ export function mathInlineRule(
       'span',
       0,
     ).content = math.tex;
-  state.pos = math.end + (math.isDisplay ? 2 : 1);
+  state.pos = math.after;
   return true;
 }
 

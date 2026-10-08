@@ -1,5 +1,5 @@
 import { renderMarkdown, renderMath } from './markdown';
-import { createMathBudget } from './math';
+import { createMathBudget, mathInlineRule } from './math';
 import { RenderLimitError } from './render-limit.error';
 
 const full = (text: string) => renderMarkdown(text, 'problem-full');
@@ -129,6 +129,17 @@ describe('renderMarkdown', () => {
     expect(full('a $x\ny$ b')).not.toContain('katex');
     expect(full('a $$$$ b')).not.toContain('katex');
     expect(full('a $$x\ny$$ b')).toContain('<span class="katex-display">');
+  });
+  it('never reads a closing dollar past posMax', () => {
+    const push = jest.fn();
+    const state = {
+      src: '$x$',
+      pos: 0,
+      posMax: 2,
+      push,
+    } as unknown as Parameters<typeof mathInlineRule>[0];
+    expect(mathInlineRule(state, true)).toBe(false);
+    expect(push).not.toHaveBeenCalled();
   });
   it('refuses a single-dollar span that ends after a space or before a digit', () => {
     expect(full('a $x $ b')).not.toContain('katex');
