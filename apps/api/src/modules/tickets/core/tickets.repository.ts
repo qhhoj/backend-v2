@@ -93,6 +93,17 @@ export class TicketsRepository {
     return created;
   }
 
+  /** One `$set`; the caller already decided what may change. */
+  async update(
+    ticketId: string,
+    changes: Partial<
+      Pick<Ticket, 'isOpen' | 'isContributive' | 'notes' | 'assignees'>
+    >,
+  ): Promise<void> {
+    if (Object.keys(changes).length)
+      await this.tickets.updateOne({ _id: ticketId }, { $set: changes }).exec();
+  }
+
   /** The cap is part of the filter, so parallel posts can never pass it; false = the ticket is full (or gone). */
   async pushMessage(
     ticketId: string,

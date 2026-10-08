@@ -79,6 +79,44 @@ describe('contribution points', () => {
     ).toBe(true);
   });
 
+  it('adds 10 points per good ticket and ignores ordinary ones', async () => {
+    const user = await seedUser(worker);
+    await worker.tickets.create({
+      title: 'A',
+      user: user._id,
+      linkedItem: { type: 'general', id: newId() },
+      isContributive: true,
+    });
+    await worker.tickets.create({
+      title: 'B',
+      user: user._id,
+      linkedItem: { type: 'general', id: newId() },
+      isContributive: true,
+    });
+    await worker.tickets.create({
+      title: 'C',
+      user: user._id,
+      linkedItem: { type: 'general', id: newId() },
+    });
+    const operations = await profileQueries(worker.db, () =>
+      service.recompute(user._id),
+    );
+    expect(await pointsOf(user._id)).toBe(20);
+    await worker.tickets.updateOne(
+      { user: user._id, title: 'A' },
+      { isContributive: false },
+    );
+    await service.recompute(user._id);
+    expect(await pointsOf(user._id)).toBe(10);
+    const reads = operations.filter(
+      ({ collection }) => collection === 'tickets',
+    );
+    expect(reads.length).toBeGreaterThanOrEqual(1);
+    expect(
+      reads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
+    ).toBe(true);
+  });
+
   it('recomputes through the queue', async () => {
     const user = await seedUser(worker, { contributionPoints: 99 });
     await comment(user._id, -2);
