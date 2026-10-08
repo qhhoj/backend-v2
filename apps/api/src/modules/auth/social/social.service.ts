@@ -181,7 +181,10 @@ export class SocialService {
       },
     );
     await this.registration.announceMembership(created);
-    return this.auth.startSession(created, false, previousSessionId);
+    return this.auth.startSession(created, {
+      isPasswordPwned: false,
+      previousSessionId,
+    });
   }
 
   private async resolve(
@@ -232,11 +235,10 @@ export class SocialService {
     previousSessionId: string | null,
   ): Promise<CallbackResult> {
     this.auth.assertLoginAllowed(user);
-    const { sessionId, session } = await this.auth.startSession(
-      user,
-      false,
+    const { sessionId, session } = await this.auth.startSession(user, {
+      isPasswordPwned: false,
       previousSessionId,
-    );
+    });
     return {
       sessionId,
       location: `${this.env.siteUrl}${session.twoFaPassed ? '/' : '/login/2fa'}`,

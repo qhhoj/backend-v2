@@ -11,6 +11,8 @@ export const CONTEST_RESCORE_JOB = 'rescore';
 export interface ContestRescoreJob {
   contestId: string;
 }
+/** First retry delay of the contest jobs; BullMQ doubles it per attempt. */
+const RETRY_BACKOFF_MS = 10_000;
 /** Longest an edit waits for its job to reach Redis. */
 export const CONTEST_ENQUEUE_TIMEOUT_MS = 1000;
 
@@ -24,7 +26,7 @@ export const enqueueContestRescore = async (
     { contestId },
     {
       attempts: 3,
-      backoff: { type: 'exponential', delay: 10_000 },
+      backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
       ...JOB_RETENTION,
     },
   );
@@ -78,7 +80,7 @@ export const judgesAtEnd = (contest: FinalJudgeTarget): boolean =>
 
 const FINAL_JUDGE_OPTIONS = {
   attempts: 3,
-  backoff: { type: 'exponential', delay: 10_000 },
+  backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
   ...JOB_RETENTION,
 };
 
@@ -148,7 +150,7 @@ export const enqueueContestRating = async (
     { contestId },
     {
       attempts: 3,
-      backoff: { type: 'exponential', delay: 10_000 },
+      backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
       ...JOB_RETENTION,
     },
   );

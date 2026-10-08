@@ -77,7 +77,7 @@ export class ContestDataRepository {
   }
 
   /** Live rows of the chosen problems through `{contest, problem}`; submission fields in id chunks; best first. An empty `results` keeps every result. */
-  async rows(
+  async liveSubmissionRows(
     contestId: string,
     problemIds: string[],
     results: SubmissionResult[],

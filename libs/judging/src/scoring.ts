@@ -85,11 +85,11 @@ export function submissionPoints(
   casePoints: number,
   caseTotal: number,
   problemPoints: number,
-  partial: boolean,
+  isPartial: boolean,
 ): number {
   const points =
     caseTotal > 0
       ? pythonRound((casePoints / caseTotal) * problemPoints, 3)
       : 0;
-  return partial || points === problemPoints ? points : 0;
+  return isPartial || points === problemPoints ? points : 0;
 }

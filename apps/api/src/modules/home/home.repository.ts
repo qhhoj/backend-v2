@@ -24,7 +24,10 @@ export class HomeRepository {
   ) {}
 
   /** Newest public problems through `{isPublic, date}` (no `_id` tiebreak: it would force a blocking sort); the statement only for the feed. */
-  newProblems(limit: number, withStatement = false): Promise<DatedProblem[]> {
+  newProblems(
+    limit: number,
+    { withStatement = false }: { withStatement?: boolean } = {},
+  ): Promise<DatedProblem[]> {
     return this.problems
       .find(
         { ...PUBLIC_PROBLEMS, date: { $ne: null } },

@@ -24,7 +24,7 @@ export class ImpersonationService {
       throw new AppError('not_found', 404, 'User not found');
     if (target.isSuperuser)
       throw new AppError('forbidden', 403, 'Cannot impersonate a superuser');
-    const result = await this.auth.openSession(
+    const opened = await this.auth.openSession(
       target,
       {
         twoFaPassed: true,
@@ -34,7 +34,7 @@ export class ImpersonationService {
       auth.sessionId,
     );
     this.logger.log(`Impersonation started: ${auth.user._id} as ${target._id}`);
-    return result;
+    return opened;
   }
 
   /** Restores the impersonator's session (the guard already ended it if they lost superuser rights). */
@@ -49,7 +49,7 @@ export class ImpersonationService {
         401,
         'Impersonator is no longer authorized',
       );
-    const result = await this.auth.openSession(
+    const opened = await this.auth.openSession(
       impersonator,
       {
         twoFaPassed: true,
@@ -61,6 +61,6 @@ export class ImpersonationService {
     this.logger.log(
       `Impersonation stopped: ${impersonator._id} as ${auth.user._id}`,
     );
-    return result;
+    return opened;
   }
 }

@@ -51,7 +51,11 @@ export class UserDataService {
     const dailyLimitUsed =
       (await this.rateLimits.count(dailyKey(user._id))) >=
       USER_DATA_PREPARE_LIMIT;
-    const nextPrepareAt = canPrepareUserData(preparedAt, file !== null, now)
+    const nextPrepareAt = canPrepareUserData({
+      preparedAt,
+      hasFreshZip: file !== null,
+      now,
+    })
       ? null
       : new Date(
           preparedAt!.getTime() + USER_DATA_PREPARE_INTERVAL_MS,
@@ -77,11 +81,11 @@ export class UserDataService {
     if (await this.queue.getJob(userDataJobId(user._id)))
       throw new AppError('conflict', 409, 'Your data is being prepared');
     if (
-      !canPrepareUserData(
-        user.dataLastDownloaded,
-        (await this.freshZip(root, user._id, now)) !== null,
+      !canPrepareUserData({
+        preparedAt: user.dataLastDownloaded,
+        hasFreshZip: (await this.freshZip(root, user._id, now)) !== null,
         now,
-      )
+      })
     )
       throw new AppError(
         'rate_limited',

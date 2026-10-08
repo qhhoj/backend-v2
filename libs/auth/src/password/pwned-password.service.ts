@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { SettingsService } from '@libs/settings';
 
+const PWNED_LOOKUP_TIMEOUT_MS = 3000;
+
 @Injectable()
 export class PwnedPasswordService {
   private readonly logger = new Logger(PwnedPasswordService.name);
@@ -21,7 +23,10 @@ export class PwnedPasswordService {
     try {
       const response = await fetch(
         `${baseUrl.replace(/\/+$/, '')}/range/${hash.slice(0, 5)}`,
-        { signal: AbortSignal.timeout(3000), redirect: 'error' },
+        {
+          signal: AbortSignal.timeout(PWNED_LOOKUP_TIMEOUT_MS),
+          redirect: 'error',
+        },
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return (await response.text())

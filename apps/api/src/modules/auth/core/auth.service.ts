@@ -74,7 +74,10 @@ export class AuthService {
         user.password,
         await hashPassword(password),
       );
-    return this.startSession(user, passwordPwned, previousSessionId);
+    return this.startSession(user, {
+      isPasswordPwned: passwordPwned,
+      previousSessionId,
+    });
   }
 
   assertLoginAllowed(user: UserDocument): void {
@@ -90,15 +93,21 @@ export class AuthService {
    */
   async startSession(
     user: UserDocument,
-    passwordPwned: boolean,
-    previousSessionId: string | null,
+    {
+      isPasswordPwned,
+      previousSessionId,
+    }: { isPasswordPwned: boolean; previousSessionId: string | null },
   ) {
     const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
     if (twoFaPassed)
       await this.users.update(user._id, { lastLogin: new Date() });
     return this.openSession(
       user,
-      { twoFaPassed, passwordPwned, impersonatorId: null },
+      {
+        twoFaPassed,
+        passwordPwned: isPasswordPwned,
+        impersonatorId: null,
+      },
       previousSessionId,
     );
   }

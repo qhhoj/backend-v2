@@ -98,9 +98,9 @@ describe('FSO final judging', () => {
       problem._id,
     );
     await Promise.all([
-      service.judgeFinal(contest._id, false),
+      service.judgeFinal(contest._id, { isManual: false }),
       service.sweep(),
-      service.judgeFinal(contest._id, true),
+      service.judgeFinal(contest._id, { isManual: true }),
     ]);
     const rows = await worker.submissions.find({ _id: { $in: ids } }).lean();
     expect(rows.map((row) => [row.status, row.priority])).toEqual([
@@ -110,7 +110,7 @@ describe('FSO final judging', () => {
     ]);
     expect(rows.every((row) => row.rejudgedDate !== null)).toBe(true);
     expect((await commandedIds()).sort()).toEqual([...ids].sort());
-    expect(await service.judgeFinal(contest._id, false)).toBe(0);
+    expect(await service.judgeFinal(contest._id, { isManual: false })).toBe(0);
     expect((await worker.submissions.findById(judged._id).lean())!.status).toBe(
       'D',
     );
@@ -127,7 +127,7 @@ describe('FSO final judging', () => {
     });
     await subscriber.subscribe(SUBMISSION_EVENTS_CHANNEL);
     try {
-      await service.judgeFinal(contest._id, false);
+      await service.judgeFinal(contest._id, { isManual: false });
       await waitUntil(() => events.length === ids.length);
       expect(events.map((event) => event.submissionId).sort()).toEqual(
         [...ids].sort(),
@@ -143,8 +143,8 @@ describe('FSO final judging', () => {
   it("waits for the end and honours autoJudge, except on an editor's request", async () => {
     const running = await fsoContest({ endTime: hours(1) });
     const live = await pending(running, 2);
-    expect(await service.judgeFinal(running._id, false)).toBe(0);
-    expect(await service.judgeFinal(running._id, true)).toBe(0);
+    expect(await service.judgeFinal(running._id, { isManual: false })).toBe(0);
+    expect(await service.judgeFinal(running._id, { isManual: true })).toBe(0);
     const manualOnly = await fsoContest({ formatConfig: { autoJudge: false } });
     const waiting = await pending(manualOnly, 2);
     await service.sweep();
@@ -154,7 +154,9 @@ describe('FSO final judging', () => {
       'PD',
       'PD',
     ]);
-    expect(await service.judgeFinal(manualOnly._id, true)).toBe(2);
+    expect(await service.judgeFinal(manualOnly._id, { isManual: true })).toBe(
+      2,
+    );
     expect(await statusesOf(waiting.ids)).toEqual(['QU', 'QU']);
   });
 
@@ -168,7 +170,7 @@ describe('FSO final judging', () => {
       { status: 'PD', result: 'RJ', points: 0 },
     );
     expect(await service.sweep()).toBe(2);
-    expect(await service.judgeFinal(contest._id, true)).toBe(0);
+    expect(await service.judgeFinal(contest._id, { isManual: true })).toBe(0);
     expect(
       await worker.submissions.findById(rejected._id).lean(),
     ).toMatchObject({ status: 'PD', result: 'RJ' });
@@ -227,7 +229,7 @@ describe('FSO final judging', () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 2000));
     // Past the first end: a stale job that still fired would find the contest running.
-    expect(await service.judgeFinal(contest._id, false)).toBe(0);
+    expect(await service.judgeFinal(contest._id, { isManual: false })).toBe(0);
     expect(await statusesOf(ids)).toEqual(['PD', 'PD']);
     // The command follows the status flip, so wait for the command.
     await waitUntil(

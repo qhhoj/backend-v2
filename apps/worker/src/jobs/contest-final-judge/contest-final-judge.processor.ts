@@ -52,7 +52,9 @@ export class ContestFinalJudgeProcessor
   process(job: Job<ContestFinalJudgeJob>): Promise<number> {
     return job.name === CONTEST_FINAL_JUDGE_SWEEP_JOB
       ? this.finalJudging.sweep()
-      : this.finalJudging.judgeFinal(job.data.contestId, job.data.manual);
+      : this.finalJudging.judgeFinal(job.data.contestId, {
+          isManual: job.data.manual,
+        });
   }
 
   @OnWorkerEvent('error')

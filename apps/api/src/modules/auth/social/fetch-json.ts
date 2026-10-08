@@ -1,4 +1,4 @@
-const TIMEOUT_MILLISECONDS = 5000;
+const TIMEOUT_MS = 5000;
 
 /** Provider request with a timeout; throws on a non-2xx status or a non-JSON body. */
 export async function fetchJson<Body>(
@@ -8,7 +8,7 @@ export async function fetchJson<Body>(
 ): Promise<Body> {
   const response = await fetch(url, {
     ...init,
-    signal: AbortSignal.timeout(TIMEOUT_MILLISECONDS),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`${label} failed: HTTP ${response.status}`);
   return (await response.json()) as Body;

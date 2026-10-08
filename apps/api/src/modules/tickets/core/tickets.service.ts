@@ -95,7 +95,9 @@ export class TicketsService {
     principal: Principal,
     id: string,
   ): Promise<TicketDetailResponse> {
-    const { ticket, view } = await this.context.accessible(principal, id, true);
+    const { ticket, view } = await this.context.accessible(principal, id, {
+      withMessages: true,
+    });
     return this.responses.detail(principal, ticket, view);
   }
 

@@ -42,7 +42,11 @@ export class ContestDataService {
     const problems = contest.problems
       .filter((problem) => matchesGlob(problemGlob, problem.code))
       .map((problem) => problem.id);
-    const rows = await this.repository.rows(contest._id, problems, results);
+    const rows = await this.repository.liveSubmissionRows(
+      contest._id,
+      problems,
+      results,
+    );
     if (rows.length > this.limits.maxEntries)
       throw new ContestDataError(
         `More than ${this.limits.maxEntries} submissions; narrow the filter`,

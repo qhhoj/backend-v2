@@ -1,11 +1,14 @@
 import type { Queue } from 'bullmq';
 import { uuidStr } from '@libs/database';
 
+const FAILED_JOB_RETENTION_SECONDS = 7 * 24 * 60 * 60;
 /** Finished jobs are dropped at once; failed ones stay a week for inspection. */
 export const JOB_RETENTION = {
   removeOnComplete: true,
-  removeOnFail: { age: 7 * 24 * 60 * 60 },
+  removeOnFail: { age: FAILED_JOB_RETENTION_SECONDS },
 };
+/** First retry delay of the queue's jobs; BullMQ doubles it per attempt. */
+const RETRY_BACKOFF_MS = 10_000;
 
 export const SUBMISSION_GRADED_QUEUE = 'submission-graded';
 export const SUBMISSION_GRADED_JOB = 'graded';
@@ -35,7 +38,7 @@ export const enqueueGraded = async (
 ): Promise<void> => {
   await queue.add(SUBMISSION_GRADED_JOB, job, {
     attempts: 3,
-    backoff: { type: 'exponential', delay: 10_000 },
+    backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
     ...JOB_RETENTION,
   });
 };
@@ -56,7 +59,7 @@ export const enqueueRescore = async (
     { problemId },
     {
       attempts: 3,
-      backoff: { type: 'exponential', delay: 10_000 },
+      backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
       ...JOB_RETENTION,
     },
   );

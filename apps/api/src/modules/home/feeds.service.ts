@@ -80,7 +80,11 @@ export class FeedsService {
         published: comment.createdAt,
         html: comment.bodyHtml,
       }));
-    return (await this.home.newProblems(FEED_ITEMS, true)).map((problem) => ({
+    return (
+      await this.home.newProblems(FEED_ITEMS, {
+        withStatement: true,
+      })
+    ).map((problem) => ({
       id: uuidStr(problem._id),
       title: problem.name,
       link: `${site}${pagePath('problem', problem.code)}`,

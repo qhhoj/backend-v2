@@ -5,6 +5,8 @@ import { JOB_RETENTION, withinTimeout } from '@libs/judging';
 import type { DiscordEvent, DiscordMessage } from './discord';
 
 export const COMMUNITY_ENQUEUE_TIMEOUT_MS = 1000;
+/** First retry delay of the queue's jobs; BullMQ doubles it per attempt. */
+const RETRY_BACKOFF_MS = 10_000;
 
 export const ORGANIZATION_POINTS_QUEUE = 'organization-points';
 export const ORGANIZATION_POINTS_JOB = 'recompute';
@@ -63,7 +65,7 @@ async function enqueueFlagged<Data>(
             data: job.dataOf(id),
             opts: {
               attempts: 3,
-              backoff: { type: 'exponential', delay: 10_000 },
+              backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
               ...JOB_RETENTION,
             },
           })),
@@ -170,7 +172,7 @@ export async function notifyDiscord(
     await withinTimeout(
       queue.add(DISCORD_WEBHOOK_JOB, job, {
         attempts: 3,
-        backoff: { type: 'exponential', delay: 10_000 },
+        backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
         ...JOB_RETENTION,
       }),
       COMMUNITY_ENQUEUE_TIMEOUT_MS,

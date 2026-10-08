@@ -17,13 +17,17 @@ export const userDataPath = (root: string, userId: string) =>
 export const userDataTempPath = (root: string, userId: string, runId: string) =>
   `${userDataPath(root, userId)}.${runId}.tmp`;
 
-export const canPrepareUserData = (
-  preparedAt: Date | null,
-  zipReady: boolean,
-  now: Date,
-): boolean =>
+export const canPrepareUserData = ({
+  preparedAt,
+  hasFreshZip,
+  now,
+}: {
+  preparedAt: Date | null;
+  hasFreshZip: boolean;
+  now: Date;
+}): boolean =>
   preparedAt === null ||
-  !zipReady ||
+  !hasFreshZip ||
   preparedAt.getTime() + USER_DATA_PREPARE_INTERVAL_MS < now.getTime();
 
 export const isUserDataExpired = (readyAt: Date, now: Date): boolean =>

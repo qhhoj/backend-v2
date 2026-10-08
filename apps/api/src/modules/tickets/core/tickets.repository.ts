@@ -27,7 +27,10 @@ export class TicketsRepository {
   ) {}
 
   /** A malformed id is "not found", never a Mongoose CastError. */
-  findById(id: string, withMessages = false): Promise<TicketDocument | null> {
+  findById(
+    id: string,
+    { withMessages = false }: { withMessages?: boolean } = {},
+  ): Promise<TicketDocument | null> {
     return isUuid(id)
       ? this.tickets
           .findById(id, withMessages ? undefined : WITHOUT_MESSAGES)
@@ -109,7 +112,7 @@ export class TicketsRepository {
     ticketId: string,
     message: TicketMessage,
   ): Promise<boolean> {
-    const result = await this.tickets
+    const { modifiedCount } = await this.tickets
       .updateOne(
         {
           _id: ticketId,
@@ -127,6 +130,6 @@ export class TicketsRepository {
         },
       )
       .exec();
-    return result.modifiedCount === 1;
+    return modifiedCount === 1;
   }
 }

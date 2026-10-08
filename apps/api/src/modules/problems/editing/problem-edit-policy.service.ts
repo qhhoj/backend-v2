@@ -16,7 +16,7 @@ import { ProblemTypesQuerier } from '../catalog/problem-types.querier';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
 
-const TIME_LIMIT_WITHOUT_PERMISSION = 5;
+const TIME_LIMIT_WITHOUT_PERMISSION_SECONDS = 5;
 const GATED_FIELDS: ReadonlyArray<[keyof CreateProblemDto, Permission]> = [
   ['isPublic', 'judge.change_public_visibility'],
   ['isManuallyManaged', 'judge.change_manually_managed'],
@@ -129,13 +129,14 @@ export class ProblemEditPolicyService {
     ];
     if (
       limits.some(
-        (limit) => limit !== undefined && limit > TIME_LIMIT_WITHOUT_PERMISSION,
+        (limit) =>
+          limit !== undefined && limit > TIME_LIMIT_WITHOUT_PERMISSION_SECONDS,
       ) &&
       !hasPermission(principal, 'judge.high_problem_timelimit')
     )
       throw new AppError('validation_failed', 400, 'Time limit too high', {
         timeLimit: [
-          `You cannot set time limit higher than ${TIME_LIMIT_WITHOUT_PERMISSION} seconds`,
+          `You cannot set time limit higher than ${TIME_LIMIT_WITHOUT_PERMISSION_SECONDS} seconds`,
         ],
       });
   }

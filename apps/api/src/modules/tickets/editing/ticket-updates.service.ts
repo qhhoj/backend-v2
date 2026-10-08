@@ -65,7 +65,9 @@ export class TicketUpdatesService {
       });
     if (changes.isContributive !== undefined)
       await this.contributions.refresh([view.creator]);
-    const fresh = (await this.tickets.findById(ticketId, true))!;
+    const fresh = (await this.tickets.findById(ticketId, {
+      withMessages: true,
+    }))!;
     return this.responses.detail(
       principal,
       fresh,

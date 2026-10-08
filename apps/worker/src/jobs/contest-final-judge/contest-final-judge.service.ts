@@ -22,8 +22,7 @@ export class ContestFinalJudgeService {
   /** Legacy `judge_final_submissions` for an ended FSO contest, for pending rows only: back to the queue, announced as `queued` and commanded to the bridge a batch at a time. Serialised per contest across processes; a row leaves PD once, so racing triggers requeue each submission exactly once. Automatic runs skip `autoJudge: false`. Returns how many this call requeued. */
   async judgeFinal(
     contestId: string,
-    manual: boolean,
-    now = new Date(),
+    { isManual, now = new Date() }: { isManual: boolean; now?: Date },
   ): Promise<number> {
     const contest = await this.repository.findContest(contestId);
     if (
@@ -33,7 +32,7 @@ export class ContestFinalJudgeService {
     )
       return 0;
     if (
-      !manual &&
+      !isManual &&
       !finalSubmissionFormat.parseConfig(contest.formatConfig).autoJudge
     )
       return 0;
@@ -72,7 +71,7 @@ export class ContestFinalJudgeService {
   async sweep(now = new Date()): Promise<number> {
     let requeued = 0;
     for (const contestId of await this.repository.pendingContestIds())
-      requeued += await this.judgeFinal(contestId, false, now);
+      requeued += await this.judgeFinal(contestId, { isManual: false, now });
     return requeued;
   }
 }

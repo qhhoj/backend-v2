@@ -35,9 +35,9 @@ export class TicketContextService {
   async accessible(
     principal: Principal,
     id: string,
-    withMessages = false,
+    { withMessages = false }: { withMessages?: boolean } = {},
   ): Promise<{ ticket: TicketDocument; view: TicketAccessView }> {
-    const ticket = await this.tickets.findById(id, withMessages);
+    const ticket = await this.tickets.findById(id, { withMessages });
     if (!ticket) throw new AppError('not_found', 404, 'No such ticket');
     const view = await this.accessView(ticket);
     if (!TicketAccess.canSee(principal, view))

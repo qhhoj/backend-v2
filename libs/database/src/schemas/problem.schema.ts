@@ -14,6 +14,7 @@ export const dataVersionIs = (version: number) =>
 export const SUBMISSION_SOURCE_VISIBILITIES = ['F', 'A', 'S', 'O'] as const;
 export const TESTCASE_VISIBILITIES = ['O', 'C', 'A'] as const;
 export const TESTCASE_RESULT_VISIBILITIES = ['A', 'B', 'S'] as const;
+/** `timeLimit` in seconds, `memoryLimit` in KiB (the judge's units), `points` as shown to users. */
 export const PROBLEM_LIMITS = {
   timeLimit: { min: 0.01, max: 60 },
   memoryLimit: { min: 0, max: 1048576 },
