@@ -287,6 +287,24 @@ describe('contest ranking', () => {
       });
       expect(JSON.stringify(board)).not.toContain('HIDDEN');
     }
+    const frozen = await createContest(api, {
+      formatName: 'icpc',
+      frozenLastMinutes: 180,
+    });
+    await joinParticipation(
+      api,
+      frozen._id,
+      users.alice._id,
+      results(777, { frozenScore: 5 }),
+    );
+    const frozenBoard = await ranking(frozen.key);
+    expect(frozenBoard.frozen).toBe(true);
+    expect(userOf(frozenBoard, 'alice')).toMatchObject({
+      rating: 1650,
+      organization: 'SCH',
+    });
+    expect(frozenBoard.rows[0].score).toBe(5);
+    expect(JSON.stringify(frozenBoard)).not.toContain('777');
     // Other tests scan whole boards for leaked numbers: leave the users as they were.
     await api.users.updateMany({}, { rating: null, organizations: [] });
   });

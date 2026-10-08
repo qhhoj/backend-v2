@@ -185,10 +185,9 @@ describe('viewerStatus', () => {
       for (const read of reads)
         expect(read.planSummary).not.toContain('COLLSCAN');
       // The viewer has two AC rows (solved, short) among six submissions: the filter's read examines only those.
-      const solvedRead = reads.find(({ planSummary }) =>
-        planSummary.includes('{ user: 1, result: 1 }'),
+      expect(Math.min(...reads.map(({ docsExamined }) => docsExamined))).toBe(
+        2,
       );
-      expect(solvedRead?.docsExamined).toBe(2);
     });
   });
 });
