@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
@@ -32,6 +33,10 @@ const request = (
 class InspectableEngine extends SimilarityEngine {
   childPid(): number | undefined {
     return this.activeChild?.pid;
+  }
+
+  childHandle(): ChildProcess | null {
+    return this.activeChild;
   }
 }
 
@@ -186,7 +191,9 @@ describe('SimilarityEngine', () => {
   it('kills the child at the deadline', async () => {
     const comparison = engine.compare(request(twoCopies(), { timeoutMs: 1 }));
     const pid = engine.childPid()!;
+    const kill = jest.spyOn(engine.childHandle()!, 'kill');
     await expect(comparison).rejects.toMatchObject({ code: 'deadline' });
+    expect(kill).toHaveBeenCalledWith('SIGKILL');
     await sleep(300);
     expect(isRunning(pid)).toBe(false);
   });
