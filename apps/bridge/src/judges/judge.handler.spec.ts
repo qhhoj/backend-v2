@@ -171,3 +171,97 @@ describe('JudgeHandler liveness while a packet is being handled', () => {
     expect(judgeLost).not.toHaveBeenCalled();
   });
 });
+
+describe('JudgeHandler on test-case packets', () => {
+  const addCases = jest.fn<
+    Promise<string>,
+    [string, string, { batch: number | null }[]]
+  >(() => Promise.resolve('appended'));
+  const markBatched = jest.fn(() => Promise.resolve());
+  const { state, send, handshake } = useHandler(() => ({
+    judges: judgesStub(),
+    dispatch: {
+      register: () => Promise.resolve(),
+      offerWork: () => Promise.resolve(),
+      judgeFree: () => Promise.resolve(),
+      judgeLost: () => Promise.resolve(),
+      isStopped: () => false,
+    },
+    grading: {
+      beginGrading: () => Promise.resolve(),
+      markBatched,
+      addCases,
+    },
+    timings: TIMINGS,
+  }));
+  const caseOf = (position: number) => ({
+    position,
+    status: 0,
+    time: 0.01,
+    memory: 1024,
+    points: 1,
+    'total-points': 1,
+    feedback: '',
+    'extended-feedback': '',
+    output: '',
+  });
+  const beginGradingOf = async (submissionId: string) => {
+    handshake();
+    await waitUntil(() => state.handler.name === 'judge-1');
+    state.handler.workingOn = submissionId;
+    send({
+      name: 'grading-begin',
+      'submission-id': submissionId,
+      pretested: false,
+    });
+  };
+
+  beforeEach(() => {
+    addCases.mockClear();
+    markBatched.mockClear();
+  });
+
+  it('closes the connection when a judge sends more cases than a submission may have', async () => {
+    await beginGradingOf('sub-1');
+    addCases.mockResolvedValueOnce('full');
+    send({
+      name: 'test-case-status',
+      'submission-id': 'sub-1',
+      cases: [caseOf(1)],
+    });
+    await state.handler.finished;
+    expect(state.handler.isClosed).toBe(true);
+  });
+
+  it('keeps the connection and stores cases appended within the limit', async () => {
+    await beginGradingOf('sub-1');
+    send({
+      name: 'test-case-status',
+      'submission-id': 'sub-1',
+      cases: [caseOf(1)],
+    });
+    await waitUntil(() => addCases.mock.calls.length === 1);
+    expect(state.handler.isClosed).toBe(false);
+  });
+
+  it('marks the submission batched once, and numbers each batch its cases arrive in', async () => {
+    await beginGradingOf('sub-1');
+    send({ name: 'batch-begin', 'submission-id': 'sub-1' });
+    send({
+      name: 'test-case-status',
+      'submission-id': 'sub-1',
+      cases: [caseOf(1)],
+    });
+    send({ name: 'batch-end', 'submission-id': 'sub-1' });
+    send({ name: 'batch-begin', 'submission-id': 'sub-1' });
+    send({
+      name: 'test-case-status',
+      'submission-id': 'sub-1',
+      cases: [caseOf(2)],
+    });
+    await waitUntil(() => addCases.mock.calls.length === 2);
+    expect(markBatched).toHaveBeenCalledTimes(1);
+    const batchesOf = addCases.mock.calls.map(([, , cases]) => cases[0].batch);
+    expect(batchesOf).toEqual([1, 2]);
+  });
+});
