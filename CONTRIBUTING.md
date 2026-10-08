@@ -442,6 +442,30 @@ Add a job:
 - Same shape for every instance of a pattern (every mapper looks like `groups.mapper.ts`)
 - Formatting is Prettier through ESLint: `npx eslint --fix <files>`
 
+### Glossary
+
+One name per concept. Rename only where a term is ambiguous, and never rename a wire field (DTOs, packets, job data, schema fields).
+
+| Concept | Use | Not |
+|---|---|---|
+| A problem's public identifier | `code` on the Problem schema, in problem routes (`:code`) and inside `modules/problems`; `problemCode` anywhere another code is in scope (bridge, judge requests, submissions filters) | bare `code` next to an access code, error code or language key |
+| A contest's public identifier | `key` | `code` |
+| Access codes | `accessCode` (plaintext from the request), `accessCodeHash` (stored) | `code` |
+| Database ids | `<entity>Id` (`userId`, `problemId`, `contestId`, `submissionId`); `_id` only on documents | `id` for a second entity in the same scope |
+| A user in a role | `<role>Id`: `ownerId`, `authorId`, `requesterId`; schema fields keep their names (`user`, `suggester`, `authors`) | `user` for an id |
+| The acting user | `principal: Principal` (identity and permissions); what services take | `auth`, `me`, `user` for the actor |
+| The authenticated request | `auth: AuthContext` (`user`, `principal`, `session`, `sessionId`, `viaToken`); only where the session matters (cookies, CSRF, two-factor, impersonation) | passing `auth` just to read `auth.principal` in new code |
+| The one a page is computed for | `viewer`: `ContestViewer` (their participation), `viewerStatus` (solved/attempted), `viewerScope` (their current contest) | `viewer` in a permission check (use `principal`) |
+| Another user's public data | `profile` | `user` for the same shape |
+| Problem test data | `data` (`ProblemData`: cases, checker, grader, archive) | `data` for anything else |
+| Other payloads | `payload` (wire), `fields` (a DB patch), `dto` (a request body), `changes` (a diff) | `data`, `info`, `result` |
+| Partial scoring | `partial`: a problem or contest problem scores per case | "partial" for anything else |
+| A session still owing its second factor | "before two-factor": `AllowBeforeTwoFactor`, `twoFaPassed: false` | "partial auth" |
+| Durations | a `Ms` or `Seconds` suffix on every number; a library option key (`delay`, `age`) takes a suffixed constant | bare `timeout`, `delay`, `ttl` |
+| Problem limits | `timeLimit` in seconds, `memoryLimit` in KiB (schema and wire names) | other units without a suffix |
+| Booleans | `isX`, `hasX`, `canX`, `shouldX`, `wasX`; a read that loads more takes `{ withX: true }` | adjective-only names (`hidden`, `frozen`), literal `true`/`false` as a positional argument |
+| Pretests | `isPretested` (problem, contest problem, submission), `pretestsOnly` (judge request) | `pretested` outside the judge packet |
+
 ## Testing
 
 - Unit: `<file>.spec.ts` next to the file under test; e2e: `apps/<app>/test/*.e2e-spec.ts` for apps, next to the file for libs
@@ -454,6 +478,7 @@ Add a job:
 - Playwright specs skip without Chromium; the pandoc spec skips locally and fails in CI without pandoc
 - Similarity specs spawn the real engine (about 1 s each); they need the grammars compiled by `npm ci`
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
+- `libs/<lib>/src/testing.ts` is the lib's only test-support entry (`@libs/<lib>/testing`), imported by specs and `apps/*/test` only; lint refuses it in production code. Keep it one file per lib; when it outgrows one screen, add a sibling file under `libs/<lib>/src/testing/` and re-export it from `testing.ts`, so the import path never changes.
 
 ## Commands
 
