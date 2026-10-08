@@ -102,8 +102,19 @@ export const rankingCacheKeys = (contestId: string): string[] =>
     ),
   );
 
-/** Every recompute of a contest's participation drops all four boards, the frozen ones included (legacy left those stale). */
+/** The api caches per-problem solver counts per frozen view (`SolverCountsService`); the recomputes that drop the boards drop them too. */
+export const solverCountsCacheKey = (
+  contestId: string,
+  isFrozenView: boolean,
+): string => `contest-solvers:${contestId}:${isFrozenView ? 'frozen' : 'open'}`;
+
+/** Every recompute of a contest's participation drops all four boards, the frozen ones included (legacy left those stale), and both solver-count keys. */
 export const purgeRankingCache = (
   redis: Redis,
   contestId: string,
-): Promise<number> => redis.del(...rankingCacheKeys(contestId));
+): Promise<number> =>
+  redis.del(
+    ...rankingCacheKeys(contestId),
+    solverCountsCacheKey(contestId, false),
+    solverCountsCacheKey(contestId, true),
+  );

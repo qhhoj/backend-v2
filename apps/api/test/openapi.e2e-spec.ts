@@ -309,7 +309,7 @@ describe('OpenAPI document', () => {
     it("documents the viewer's own result on each detail problem", async () => {
       const { schemas } = (await document()).components;
       expect(Object.keys(schemas.ContestProblemResponse.properties!)).toEqual(
-        expect.arrayContaining(['viewerResult']),
+        expect.arrayContaining(['viewerResult', 'solverCount']),
       );
       expect(
         Object.keys(schemas.ContestProblemViewerResultResponse.properties!),

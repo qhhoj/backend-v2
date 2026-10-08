@@ -37,6 +37,7 @@ import { ContestSubmissionsService } from './submissions/contest-submissions.ser
 import { ContestProblemFactsService } from './core/contest-problem-facts.service';
 import { ContestsController } from './core/contests.controller';
 import { ContestsService } from './core/contests.service';
+import { SolverCountsService } from './core/solver-counts.service';
 import { OfficialRankingController } from './ranking/official-ranking.controller';
 import { OfficialRankingService } from './ranking/official-ranking.service';
 import { OfficialRankingsRepository } from './ranking/official-rankings.repository';
@@ -98,6 +99,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     RankingLinksService,
     RateLimitService,
     RatingsRepository,
+    SolverCountsService,
   ],
   exports: [RatingsRepository],
 })

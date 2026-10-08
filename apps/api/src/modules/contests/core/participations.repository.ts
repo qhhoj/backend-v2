@@ -9,6 +9,7 @@ import {
   ContestSubmission,
   isUuid,
   Submission,
+  toUuid,
   UNCOUNTED_ATTEMPT_STATUSES,
   User,
   uuidStr,
@@ -347,6 +348,40 @@ export class ParticipationsRepository {
       })
       .lean<ContestParticipation[]>()
       .exec();
+  }
+
+  /** One aggregate over the contest's live rows through `{contest, virtual}`, returning one document: per problem, the rows whose cell (frozen when asked) is worth the problem's full points. */
+  async solverCountsOf(
+    contestId: string,
+    problems: readonly { problemId: string; points: number }[],
+    isFrozenView: boolean,
+  ): Promise<Map<string, number>> {
+    const cells = isFrozenView ? '$frozenFormatData' : '$formatData';
+    const pointsOf = (problemId: string) => ({
+      $getField: {
+        field: 'points',
+        input: { $getField: { field: problemId, input: cells } },
+      },
+    });
+    const sums = Object.fromEntries(
+      problems.map(({ problemId, points }, index) => [
+        `problem${index}`,
+        { $sum: { $cond: [{ $eq: [pointsOf(problemId), points] }, 1, 0] } },
+      ]),
+    );
+    const [row] = await this.participations
+      .aggregate<Record<string, number>>([
+        { $match: { contest: toUuid(contestId), virtual: LIVE } },
+        { $group: { _id: null, ...sums } },
+      ])
+      .hint({ contest: 1, virtual: 1 })
+      .exec();
+    return new Map(
+      problems.map(({ problemId }, index) => [
+        problemId,
+        row?.[`problem${index}`] ?? 0,
+      ]),
+    );
   }
 
   /** Lean usernames for boards of thousands of rows. */

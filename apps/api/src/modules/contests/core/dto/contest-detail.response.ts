@@ -38,6 +38,8 @@ export class ContestProblemResponse {
   partial!: boolean;
   isPretested!: boolean;
   maxSubmissions!: number | null;
+  /** Live participants whose cell is worth the problem's full points (the ranking's `acceptedCount`), frozen for non-editors during a freeze; null unless the viewer may see the full ranking. Up to 30 s old. */
+  solverCount!: number | null;
   /** Null when signed out, without a scoring participation (live or virtual) in the contest, or when the board is hidden from the viewer. */
   viewerResult!: ContestProblemViewerResultResponse | null;
 }
@@ -121,6 +123,8 @@ export interface ContestProblemFacts {
   summaries: Array<{ _id: string; code: string; name: string }>;
   /** Per problem id; null when the viewer has no scoring participation or may not see the board. */
   viewerResults: Map<string, ContestProblemViewerResultResponse> | null;
+  /** Per problem id; null when the viewer may not see the full ranking. */
+  solverCounts: Map<string, number> | null;
 }
 
 /** The contest's problems in order, labelled; an entry whose problem is gone (deleted or not found) is skipped, not an error. */
@@ -147,6 +151,8 @@ function labelledProblems(
           partial: entry.partial,
           isPretested: entry.isPretested,
           maxSubmissions: entry.maxSubmissions,
+          solverCount:
+            facts.solverCounts && (facts.solverCounts.get(problemId) ?? 0),
           viewerResult: facts.viewerResults?.get(problemId) ?? null,
         },
       ];
