@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
 import {
   AllowBeforeTwoFactor,
   AllowPwnedPassword,
@@ -9,6 +9,7 @@ import {
 import type { AuthContext } from '@libs/auth';
 import { CodeDto } from './dto/code.dto';
 import {
+  ScratchCodesRemainingResponse,
   ScratchCodesResponse,
   TotpEnrollmentResponse,
 } from './dto/totp.response';
@@ -64,5 +65,14 @@ export class TotpController {
     @Body() body: CodeDto,
   ): Promise<ScratchCodesResponse> {
     return this.totp.regenerateScratchCodes(auth, body.code);
+  }
+
+  @SessionOnly()
+  @NoImpersonation()
+  @Get('scratch-codes')
+  remainingScratchCodes(
+    @CurrentAuth() auth: AuthContext,
+  ): ScratchCodesRemainingResponse {
+    return this.totp.remainingScratchCodes(auth);
   }
 }

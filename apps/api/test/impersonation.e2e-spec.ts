@@ -228,6 +228,7 @@ describe('impersonation', () => {
       ['post', `${AUTH}/2fa/totp/confirm`],
       ['post', `${AUTH}/2fa/totp/disable`],
       ['post', `${AUTH}/2fa/totp/scratch-codes`],
+      ['get', `${AUTH}/2fa/totp/scratch-codes`],
       ['post', `${AUTH}/2fa/webauthn/register/options`],
       ['post', `${AUTH}/2fa/webauthn/register/verify`],
       ['delete', `${AUTH}/2fa/webauthn/credentials/abc`],

@@ -309,3 +309,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `contestMetaOf` stays in the bridge — the api and worker read different contest fields for different jobs; only `runPretestsOnly && isPretested` recurs, and a one-line expression is not worth a shared helper.
 - One name per concept, listed in CONTRIBUTING's glossary; renames happen only where a term was ambiguous (`AllowBeforeTwoFactor` for the 2FA-pending session, since `partial` means partial scoring), and wire fields never change — the SPA and `/api/v2` clients depend on them.
 - `libs/<lib>/src/testing.ts` stays one test-support entry per lib, refused in production code by lint — splitting the small files would add paths without adding clarity.
+- Backup codes left come from `GET /auth/2fa/totp/scratch-codes` (`{ remaining }`), not a `/me` field — counting needs decryption, and a stored count could drift from the set.

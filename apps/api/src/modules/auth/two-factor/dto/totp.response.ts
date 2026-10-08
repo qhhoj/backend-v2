@@ -6,3 +6,7 @@ export class TotpEnrollmentResponse {
 export class ScratchCodesResponse {
   scratchCodes!: string[];
 }
+
+export class ScratchCodesRemainingResponse {
+  remaining!: number;
+}

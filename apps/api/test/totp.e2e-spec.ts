@@ -25,6 +25,7 @@ interface Body {
     scratchCodes: string[];
     twoFactorRequired: boolean;
     user: { username: string } | null;
+    remaining: number;
   };
 }
 const dataOf = (response: { body: unknown }) => (response.body as Body).data;
@@ -424,6 +425,38 @@ describe('totp endpoints', () => {
       ),
     ) as string[];
     expect(remaining).toHaveLength(4);
+  });
+
+  const remainingCodes = (session: { cookie: string }) =>
+    api.http().get(`${TOTP}/scratch-codes`).set('Cookie', session.cookie);
+
+  it('counts the unused scratch codes: one less after use, five after regeneration', async () => {
+    const { scratchCodes } = await enable();
+    const session = await login();
+    await post(`${TOTP}/verify`, session, { code: scratchCodes[0] }).expect(
+      204,
+    );
+    expect(dataOf(await remainingCodes(session).expect(200)).remaining).toBe(4);
+    await post(`${TOTP}/scratch-codes`, session, {
+      code: scratchCodes[1],
+    }).expect(201);
+    expect(dataOf(await remainingCodes(session).expect(200)).remaining).toBe(5);
+  });
+
+  it('counts a TOTP sign-in as no scratch code used', async () => {
+    const { secret } = await enable();
+    await rewind();
+    const session = await login();
+    await post(`${TOTP}/verify`, session, { code: currentCode(secret) }).expect(
+      204,
+    );
+    expect(dataOf(await remainingCodes(session).expect(200)).remaining).toBe(5);
+  });
+
+  it('answers totp_not_enabled for the count when TOTP is off', async () => {
+    await remainingCodes(await login())
+      .expect(400)
+      .expect(errorCode('totp_not_enabled'));
   });
 
   it('needs a session', async () => {

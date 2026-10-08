@@ -13,9 +13,17 @@ import { AppError, decrypt, ENV, encrypt, encryptionKey } from '@libs/common';
 import type { Env } from '@libs/common';
 import { AuthService } from '../core/auth.service';
 import { SecondFactorService } from './second-factor.service';
+import { ScratchCodesRemainingResponse } from './dto/totp.response';
 
 const invalidCode = () =>
   new AppError('invalid_code', 400, 'Invalid authentication code');
+
+const assertTotpEnabled: (
+  user: UserDocument,
+) => asserts user is UserDocument & { totpKey: string } = (user) => {
+  if (!user.isTotpEnabled || !user.totpKey)
+    throw new AppError('totp_not_enabled', 400, 'TOTP is not enabled');
+};
 
 const alreadyEnabled = () =>
   new AppError('invalid_code', 400, 'TOTP is already enabled');
@@ -108,45 +116,59 @@ export class TotpService {
     return { scratchCodes };
   }
 
+  remainingScratchCodes(auth: AuthContext): ScratchCodesRemainingResponse {
+    assertTotpEnabled(auth.user);
+    return { remaining: this.storedScratchCodes(auth.user).length };
+  }
+
   /** TOTP or scratch code; each is consumed by compare-and-set so one code authorizes exactly one request. */
   private async checkCode(user: UserDocument, code: string): Promise<void> {
-    if (!user.isTotpEnabled || !user.totpKey)
-      throw new AppError('totp_not_enabled', 400, 'TOTP is not enabled');
+    assertTotpEnabled(user);
     const release = await this.secondFactor.reserveAttempt(user._id);
+    if (
+      (await this.consumeTotpCode(user, code)) ||
+      (await this.consumeScratchCode(user, code))
+    )
+      return release();
+    throw invalidCode();
+  }
+
+  /** A TOTP step later than the last accepted one, recorded by CAS so it cannot be replayed. */
+  private async consumeTotpCode(
+    user: UserDocument & { totpKey: string },
+    code: string,
+  ): Promise<boolean> {
     const timecode = matchTotp(
       decrypt(user.totpKey, this.key),
       code,
       user.lastTotpTimecode,
     );
-    if (
-      timecode !== null &&
-      (await this.users.advanceTotpTimecode(
-        user._id,
-        user.lastTotpTimecode,
-        timecode,
-      ))
-    )
-      return release();
-    if (user.scratchCodes) {
-      const codes = JSON.parse(
-        decrypt(user.scratchCodes, this.key),
-      ) as string[];
-      const normalized = code.toUpperCase();
-      if (
-        containsCode(codes, normalized) &&
-        (await this.users.replaceScratchCodes(
-          user._id,
-          user.scratchCodes,
-          encrypt(
-            JSON.stringify(
-              codes.filter((candidate) => candidate !== normalized),
-            ),
-            this.key,
-          ),
-        ))
-      )
-        return release();
-    }
-    throw invalidCode();
+    if (timecode === null) return false;
+    return this.users.advanceTotpTimecode(
+      user._id,
+      user.lastTotpTimecode,
+      timecode,
+    );
+  }
+
+  /** One of the stored scratch codes (case-insensitive), removed by CAS so it works once. */
+  private async consumeScratchCode(
+    user: UserDocument,
+    code: string,
+  ): Promise<boolean> {
+    const codes = this.storedScratchCodes(user);
+    const normalized = code.toUpperCase();
+    if (!user.scratchCodes || !containsCode(codes, normalized)) return false;
+    const unused = codes.filter((candidate) => candidate !== normalized);
+    return this.users.replaceScratchCodes(
+      user._id,
+      user.scratchCodes,
+      encrypt(JSON.stringify(unused), this.key),
+    );
+  }
+
+  private storedScratchCodes(user: UserDocument): string[] {
+    if (!user.scratchCodes) return [];
+    return JSON.parse(decrypt(user.scratchCodes, this.key)) as string[];
   }
 }
