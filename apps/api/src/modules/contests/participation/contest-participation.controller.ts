@@ -54,12 +54,10 @@ export class ContestParticipationController {
     @Body() { accessCode }: AccessCodeDto,
     @Req() request: FastifyRequest,
   ): Promise<ParticipationSummaryResponse> {
-    return this.participation.register(
-      auth.principal,
-      key,
+    return this.participation.register(auth.principal, key, {
       accessCode,
-      request.ip,
-    );
+      ip: request.ip,
+    });
   }
 
   @Post(':key/join')
@@ -69,7 +67,10 @@ export class ContestParticipationController {
     @Body() { accessCode }: AccessCodeDto,
     @Req() request: FastifyRequest,
   ): Promise<ParticipationSummaryResponse> {
-    return this.participation.join(auth.principal, key, accessCode, request.ip);
+    return this.participation.join(auth.principal, key, {
+      accessCode,
+      ip: request.ip,
+    });
   }
 
   @Post(':key/leave')

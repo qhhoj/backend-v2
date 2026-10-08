@@ -60,12 +60,12 @@ export class ContestsRepository {
   async setBanned(
     contestId: string,
     userId: string,
-    banned: boolean,
+    isBanned: boolean,
   ): Promise<void> {
     await this.contests
       .updateOne(
         { _id: contestId },
-        banned
+        isBanned
           ? { $addToSet: { bannedUsers: userId } }
           : { $pull: { bannedUsers: userId } },
       )

@@ -118,14 +118,10 @@ export class ParticipationsRepository {
 
   async setDisqualified(
     id: string,
-    disqualified: boolean,
+    isDisqualified: boolean,
   ): Promise<ParticipationDocument> {
     return (await this.participations
-      .findByIdAndUpdate(
-        id,
-        { $set: { isDisqualified: disqualified } },
-        { new: true },
-      )
+      .findByIdAndUpdate(id, { $set: { isDisqualified } }, { new: true })
       .exec())!;
   }
 

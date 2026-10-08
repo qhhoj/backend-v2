@@ -29,6 +29,78 @@ const USER_FIELDS = [
   'rateExclude',
 ] as const;
 
+const DATE_FIELDS = [
+  'startTime',
+  'endTime',
+  'registrationStart',
+  'registrationEnd',
+  'lockedAfter',
+] as const;
+
+function assertNoForbiddenNulls(dto: UpdateContestDto): void {
+  for (const [field, value] of Object.entries(dto))
+    if (
+      value === null &&
+      !NULLABLE_CONTEST_FIELDS.includes(field as keyof UpdateContestDto)
+    )
+      throw invalidField(field, `${field} cannot be null.`);
+}
+
+/** Only the dates the request sent; null clears one. */
+function datesOf(
+  requested: Partial<Record<(typeof DATE_FIELDS)[number], string | null>>,
+): Partial<Contest> {
+  const dates: Partial<Contest> = {};
+  for (const field of DATE_FIELDS) {
+    const value = requested[field];
+    if (value !== undefined)
+      Object.assign(dates, {
+        [field]: value === null ? null : new Date(value),
+      });
+  }
+  return dates;
+}
+
+/** Plaintext codes are never stored; an empty code clears the hash. */
+function accessCodeHashes({
+  accessCode,
+  rankingAccessCode,
+}: Pick<
+  UpdateContestDto,
+  'accessCode' | 'rankingAccessCode'
+>): Partial<Contest> {
+  return {
+    ...(accessCode === undefined
+      ? {}
+      : { accessCodeHash: accessCode ? sha256(accessCode) : null }),
+    ...(rankingAccessCode === undefined
+      ? {}
+      : {
+          rankingAccessCodeHash: rankingAccessCode
+            ? sha256(rankingAccessCode)
+            : null,
+        }),
+  };
+}
+
+/** The request's config, else the stored one while the format stays, else the new format's defaults. */
+function resolveFormatConfig(
+  dto: UpdateContestDto,
+  current: ContestDocument | null,
+): Contest['formatConfig'] {
+  const formatName = dto.formatName ?? current?.formatName ?? 'default';
+  const storedConfig =
+    formatName === current?.formatName ? current.formatConfig : null;
+  const rawConfig =
+    dto.formatConfig !== undefined ? dto.formatConfig : storedConfig;
+  try {
+    return parseFormatConfig(formatName, rawConfig);
+  } catch (error) {
+    if (!(error instanceof FormatConfigError)) throw error;
+    throw invalidField('formatConfig', `${formatName}: ${error.message}`);
+  }
+}
+
 @Injectable()
 export class ContestEditFieldsService {
   constructor(
@@ -42,12 +114,7 @@ export class ContestEditFieldsService {
     dto: UpdateContestDto,
     current: ContestDocument | null,
   ): Promise<Partial<Contest>> {
-    for (const [field, value] of Object.entries(dto))
-      if (
-        value === null &&
-        !NULLABLE_CONTEST_FIELDS.includes(field as keyof UpdateContestDto)
-      )
-        throw invalidField(field, `${field} cannot be null.`);
+    assertNoForbiddenNulls(dto);
     const {
       accessCode,
       rankingAccessCode,
@@ -60,47 +127,25 @@ export class ContestEditFieldsService {
       lockedAfter,
       ...plain
     } = dto;
-    const toDate = (value: string | null | undefined) =>
-      value === undefined ? undefined : value === null ? null : new Date(value);
-    const fields: Partial<Contest> = { ...plain };
-    const dates = {
-      startTime: toDate(startTime),
-      endTime: toDate(endTime),
-      registrationStart: toDate(registrationStart),
-      registrationEnd: toDate(registrationEnd),
-      lockedAfter: toDate(lockedAfter),
+    const fields: Partial<Contest> = {
+      ...plain,
+      ...datesOf({
+        startTime,
+        endTime,
+        registrationStart,
+        registrationEnd,
+        lockedAfter,
+      }),
+      ...accessCodeHashes({ accessCode, rankingAccessCode }),
     };
-    for (const [field, value] of Object.entries(dates))
-      if (value !== undefined) Object.assign(fields, { [field]: value });
-    if (accessCode !== undefined)
-      fields.accessCodeHash = accessCode ? sha256(accessCode) : null;
-    if (rankingAccessCode !== undefined)
-      fields.rankingAccessCodeHash = rankingAccessCode
-        ? sha256(rankingAccessCode)
-        : null;
     if (problems !== undefined)
       fields.problems = await this.contestProblems(principal, problems);
     if (dto.description !== undefined)
       fields.descriptionHtml = this.render(dto.description);
-    if (
-      !current ||
-      formatConfig !== undefined ||
-      dto.formatName !== undefined
-    ) {
-      const formatName = dto.formatName ?? current?.formatName ?? 'default';
-      const raw =
-        formatConfig !== undefined
-          ? formatConfig
-          : formatName === current?.formatName
-            ? current.formatConfig
-            : null;
-      try {
-        fields.formatConfig = parseFormatConfig(formatName, raw);
-      } catch (error) {
-        if (!(error instanceof FormatConfigError)) throw error;
-        throw invalidField('formatConfig', `${formatName}: ${error.message}`);
-      }
-    }
+    const isFormatEdited =
+      formatConfig !== undefined || dto.formatName !== undefined;
+    if (!current || isFormatEdited)
+      fields.formatConfig = resolveFormatConfig(dto, current);
     const merged = { ...(current?.toObject() ?? {}), ...fields } as Contest;
     assertWindow(principal, merged);
     assertGates(

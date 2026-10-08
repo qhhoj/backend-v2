@@ -48,6 +48,26 @@ describe('parseOfficialRanking', () => {
     ]);
   });
 
+  it('keeps a quote inside an unquoted field and refuses lone carriage returns and open quotes', () => {
+    expect(
+      parseOfficialRanking('Username,Full Name,X,Points\ng,G "Jr",x,1\n')
+        .rows[0].fullName,
+    ).toBe('G "Jr"');
+    expect(() =>
+      parseOfficialRanking('Username,Full Name,X,Points\ng,G\rH,x,1\n'),
+    ).toThrow(/control character/);
+    expect(() =>
+      parseOfficialRanking('Username,Full Name,X,Points\n"g,G,x,1\n'),
+    ).toThrow('Unterminated quoted field');
+  });
+
+  it('reads a closing quote followed by text and an escaped quote at a field end', () => {
+    expect(
+      parseOfficialRanking('Username,Full Name,X,Points\n"g""",x"y,z,1\n')
+        .rows[0],
+    ).toMatchObject({ username: 'g"', fullName: 'x"y' });
+  });
+
   it('refuses a newline inside a quoted field as a control character', () => {
     expect(() =>
       parseOfficialRanking('Username,Full Name,X,Points\n"f","F\nG",x,1\n'),

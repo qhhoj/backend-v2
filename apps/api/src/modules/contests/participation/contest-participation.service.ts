@@ -49,6 +49,12 @@ const conflict = (message: string) => new AppError('conflict', 409, message);
 const forbidden = (message: string) => new AppError('forbidden', 403, message);
 
 /** Legacy `ContestRegister`, `ContestJoin`, `ContestLeave` and `ContestParticipationList`. */
+/** What a register or join request brings besides the contest: the access code it typed and its address (rate limits). */
+export interface JoinCredentials {
+  accessCode: string | undefined;
+  ip: string;
+}
+
 @Injectable()
 export class ContestParticipationService {
   private readonly logger = new Logger(ContestParticipationService.name);
@@ -69,8 +75,7 @@ export class ContestParticipationService {
   async register(
     principal: Principal,
     key: string,
-    accessCode: string | undefined,
-    ip: string,
+    { accessCode, ip }: JoinCredentials,
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
@@ -108,8 +113,7 @@ export class ContestParticipationService {
   async join(
     principal: Principal,
     key: string,
-    accessCode: string | undefined,
-    ip: string,
+    { accessCode, ip }: JoinCredentials,
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
@@ -178,7 +182,7 @@ export class ContestParticipationService {
     principal: Principal,
     key: string,
     participationId: string,
-    disqualified: boolean,
+    isDisqualified: boolean,
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
     const participation =
@@ -188,7 +192,7 @@ export class ContestParticipationService {
     const userId = uuidStr(participation.user);
     let updated = await this.participationRows.setDisqualified(
       participation._id,
-      disqualified,
+      isDisqualified,
     );
     // Concurrent opposite requests: write the ban from the row's state, and repeat until a re-read agrees.
     for (

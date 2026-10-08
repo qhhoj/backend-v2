@@ -14,55 +14,91 @@ const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 /** Fields of every record; quoted fields may hold commas and quotes (""); a newline is lexed but later refused as a control character. */
-function records(text: string): string[][] {
-  const result: string[][] = [];
-  let record: string[] = [];
-  let field = '';
-  let quoted = false;
-  let index = 0;
-  const endField = () => {
-    if (field.length > OFFICIAL_RANKING_LIMITS.fieldLength)
+class CsvRecordReader {
+  private readonly records: string[][] = [];
+  private record: string[] = [];
+  private field = '';
+  private isQuoted = false;
+
+  read(text: string): string[][] {
+    let index = 0;
+    while (index < text.length)
+      index += this.isQuoted
+        ? this.readQuoted(text, index)
+        : this.readPlain(text, index);
+    if (this.isQuoted) throw new CsvRankingError('Unterminated quoted field');
+    if (this.field !== '' || this.record.length) this.endRecord();
+    return this.records;
+  }
+
+  /** Characters consumed inside quotes: `""` is one quote, a lone `"` closes the quotes. */
+  private readQuoted(text: string, index: number): number {
+    const char = text[index];
+    if (char !== '"') {
+      this.field += char;
+      return 1;
+    }
+    if (text[index + 1] === '"') {
+      this.field += '"';
+      return 2;
+    }
+    this.isQuoted = false;
+    return 1;
+  }
+
+  /** Characters consumed outside quotes: `"` opens an empty field's quotes, `,` ends a field, LF or CRLF ends a record. */
+  private readPlain(text: string, index: number): number {
+    const char = text[index];
+    if (char === '"' && this.field === '') {
+      this.isQuoted = true;
+      return 1;
+    }
+    if (char === ',') {
+      this.endField();
+      return 1;
+    }
+    if (char === '\n') {
+      this.endRecord();
+      return 1;
+    }
+    if (char === '\r' && text[index + 1] === '\n') {
+      this.endRecord();
+      return 2;
+    }
+    this.field += char;
+    return 1;
+  }
+
+  private endField(): void {
+    if (this.field.length > OFFICIAL_RANKING_LIMITS.fieldLength)
       throw new CsvRankingError(
         `A field is longer than ${OFFICIAL_RANKING_LIMITS.fieldLength} characters`,
       );
-    record.push(field);
-    field = '';
-  };
-  const endRecord = () => {
-    endField();
+    this.record.push(this.field);
+    this.field = '';
+  }
+
+  private endRecord(): void {
+    this.endField();
     // A blank line is skipped, like DictReader.
-    if (record.length === 1 && record[0] === '') return void (record = []);
-    if (record.length > OFFICIAL_RANKING_LIMITS.columns)
+    if (this.record.length === 1 && this.record[0] === '') {
+      this.record = [];
+      return;
+    }
+    if (this.record.length > OFFICIAL_RANKING_LIMITS.columns)
       throw new CsvRankingError(
         `More than ${OFFICIAL_RANKING_LIMITS.columns} columns`,
       );
-    if (result.length > OFFICIAL_RANKING_LIMITS.rows)
+    if (this.records.length > OFFICIAL_RANKING_LIMITS.rows)
       throw new CsvRankingError(
         `More than ${OFFICIAL_RANKING_LIMITS.rows} rows`,
       );
-    result.push(record);
-    record = [];
-  };
-  while (index < text.length) {
-    const char = text[index];
-    const next = text[index + 1];
-    index += 1;
-    if (quoted && char === '"' && next === '"') {
-      field += '"';
-      index += 1;
-    } else if (quoted && char === '"') quoted = false;
-    else if (quoted) field += char;
-    else if (char === '"' && field === '') quoted = true;
-    else if (char === ',') endField();
-    else if (char === '\n' || (char === '\r' && next === '\n')) {
-      if (char === '\r') index += 1;
-      endRecord();
-    } else field += char;
+    this.records.push(this.record);
+    this.record = [];
   }
-  if (quoted) throw new CsvRankingError('Unterminated quoted field');
-  if (field !== '' || record.length) endRecord();
-  return result;
 }
+
+const records = (text: string): string[][] => new CsvRecordReader().read(text);
 
 const number = (value: string, what: string): number => {
   const trimmed = value.trim();

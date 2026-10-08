@@ -131,6 +131,15 @@ describe('contest CRUD', () => {
       ]);
     });
 
+    it("fills the chosen format's defaults when a create sends no config", async () => {
+      const created = dataOf<ContestDetailResponse>(
+        await create('creator', { formatName: 'icpc' }).expect(201),
+      );
+      expect(
+        (await api.contests.findOne({ key: created.key }).lean())!.formatConfig,
+      ).toEqual({ penalty: 20 });
+    });
+
     it('lists the creator once among the authors', async () => {
       const created = dataOf<ContestDetailResponse>(
         await create('creator', { authors: [users.creator._id] }).expect(201),
@@ -383,6 +392,41 @@ describe('contest CRUD', () => {
   });
 
   describe('edit', () => {
+    it('keeps a stored format config across edits that keep the format', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+        formatName: 'icpc',
+        formatConfig: { penalty: 10 },
+      });
+      const storedConfig = async () =>
+        (await api.contests.findById(contest._id).lean())!.formatConfig;
+      await patch('creator', contest.key, { name: 'Renamed' }).expect(200);
+      expect(await storedConfig()).toMatchObject({ penalty: 10 });
+      await patch('creator', contest.key, { formatName: 'icpc' }).expect(200);
+      expect(await storedConfig()).toMatchObject({ penalty: 10 });
+    });
+
+    it('stores a sent date, clears it on null and leaves unsent dates alone', async () => {
+      const registrationEnd = hoursFromNow(0.5);
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+        registrationEnd,
+      });
+      const storedEnd = async () =>
+        (await api.contests.findById(contest._id).lean())!.registrationEnd;
+      await patch('creator', contest.key, { name: 'Renamed' }).expect(200);
+      expect(await storedEnd()).toEqual(registrationEnd);
+      const moved = hoursFromNow(1);
+      await patch('creator', contest.key, {
+        registrationEnd: moved.toISOString(),
+      }).expect(200);
+      expect(await storedEnd()).toEqual(moved);
+      await patch('creator', contest.key, { registrationEnd: null }).expect(
+        200,
+      );
+      expect(await storedEnd()).toBeNull();
+    });
+
     it('lets only contest editors edit', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id],
