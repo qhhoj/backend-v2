@@ -12,3 +12,4 @@ export * from './tickets';
 export * from './ticket-events';
 export * from './flatpages';
 export * from './user-activity';
+export * from './site-content';

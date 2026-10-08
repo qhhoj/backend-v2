@@ -7,6 +7,8 @@ const UUID = MongooseSchema.Types.UUID;
 export const NAVIGATION_KEY_MAX = 10;
 export const NAVIGATION_LABEL_MAX = 20;
 export const NAVIGATION_PATH_MAX = 255;
+/** Not a schema bound (migrated legacy regexes may be longer); the staff API refuses longer ones. */
+export const NAVIGATION_REGEX_MAX = 500;
 
 /** Legacy `NavigationBar` (MPTT) as a flat list: `parentId` and `order` build the tree; `regex` is a JavaScript regular expression the SPA tests against the current path. */
 @Schema({ ...baseSchemaOptions, collection: 'navigationBar' })

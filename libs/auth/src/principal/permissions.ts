@@ -62,6 +62,11 @@ export const PERMISSIONS = [
   'judge.change_ticket',
   'judge.change_blogpost',
   'judge.delete_blogpost',
+  'flatpages.add_flatpage',
+  'flatpages.change_flatpage',
+  'flatpages.delete_flatpage',
+  'judge.change_navigationbar',
+  'judge.change_miscconfig',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

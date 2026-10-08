@@ -32,6 +32,7 @@ export abstract class BaseCatalogQuerier<Item extends { _id: string }>
           )
         ),
       () => this.resync(),
+      (id) => void this.items.delete(uuidStr(id)),
     );
     this.forceResyncQuerier(
       () => this.resync(),

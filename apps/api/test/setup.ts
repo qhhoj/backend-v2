@@ -58,8 +58,8 @@ import { ProblemGroupsQuerier } from '../src/modules/problems/catalog/problem-gr
 import { ProblemTypesQuerier } from '../src/modules/problems/catalog/problem-types.querier';
 import { TagGroupsQuerier } from '../src/modules/tags/tag-groups.querier';
 import { TagsQuerier } from '../src/modules/tags/tags.querier';
-import { NavigationQuerier } from '../src/modules/site/navigation.querier';
-import { MiscConfigQuerier } from '../src/modules/site/misc-config.querier';
+import { NavigationQuerier } from '../src/modules/site/public/navigation.querier';
+import { MiscConfigQuerier } from '../src/modules/site/public/misc-config.querier';
 import { setupOpenApi } from '../src/openapi';
 
 export { TEST_ENV };

@@ -1,5 +1,5 @@
-import type { FlatpageResponse } from '../src/modules/site/dto/flatpage.response';
-import type { SiteResponse } from '../src/modules/site/dto/site.response';
+import type { FlatpageResponse } from '../src/modules/site/public/dto/flatpage.response';
+import type { SiteResponse } from '../src/modules/site/public/dto/site.response';
 import { authed } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, sessionCookie, setupApiTest } from './setup';
@@ -59,6 +59,21 @@ describe('site content', () => {
           await authed(page('members'), session).expect(200),
         ).contentHtml,
       ).toBe('<p>Members only</p>');
+    });
+
+    it('answers 401 to a signed-out reader whose session no longer exists, and sends a private no-cache header', async () => {
+      const { session } = await signedIn(api, 'stale');
+      const id = /qhhoj_session=([^;]+)/.exec(session.cookie)![1];
+      const fresh = await authed(page('members'), session).expect(200);
+      expect(fresh.headers['cache-control']).toBe('private, no-cache');
+      await api.sessions.destroy(id);
+      const stale = await api
+        .http()
+        .get('/api/internal/pages/members')
+        .set('Cookie', sessionCookie(id))
+        .expect(401)
+        .expect(errorCode('unauthorized'));
+      expect(JSON.stringify(stale.body)).not.toContain('Members only');
     });
 
     it('answers 404 for unknown pages and a missing slug, and the same page for odd spellings', async () => {

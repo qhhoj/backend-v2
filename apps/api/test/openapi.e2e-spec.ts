@@ -217,6 +217,25 @@ describe('OpenAPI document', () => {
     );
   });
 
+  it('lists the site content endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/site',
+        '/api/internal/pages/{path}',
+        '/api/internal/admin/site/pages',
+        '/api/internal/admin/site/pages/{id}',
+        '/api/internal/admin/site/navigation',
+        '/api/internal/admin/site/navigation/{id}',
+        '/api/internal/admin/site/config/{key}',
+      ]),
+    );
+  });
+
   it('lists the blog, comment, homepage and feed endpoints', async () => {
     const response = await api
       .http()

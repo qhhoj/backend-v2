@@ -16,7 +16,7 @@ export type QuerierChange =
   | ChangeStreamUpdateDocument
   | ChangeStreamReplaceDocument;
 
-/** In-memory read model for small, simple, frequently read data that is never deleted. */
+/** In-memory read model for small, simple, frequently read data. Deletes reach `onDelete` only when the subclass passes one; without it a deleted row lingers until the next resync. */
 export abstract class BaseMongoStreamQuerier {
   private readonly streamLogger = new Logger(BaseMongoStreamQuerier.name);
 
@@ -36,6 +36,7 @@ export abstract class BaseMongoStreamQuerier {
     pipeline: Record<string, unknown>[],
     onChange: (change: QuerierChange) => Promise<void>,
     resync: () => Promise<void>,
+    onDelete?: (id: unknown) => void,
   ) {
     if (process.env.DISABLE_MONGODB_STREAM === 'true') return resync();
     const syncAndWatch = async () => {
@@ -43,6 +44,7 @@ export abstract class BaseMongoStreamQuerier {
         model,
         pipeline,
         onChange,
+        onDelete,
         await this.clusterTime(model),
       );
       await resync().catch((error: Error) => {
@@ -85,6 +87,7 @@ export abstract class BaseMongoStreamQuerier {
     model: Model<any>,
     pipeline: Record<string, unknown>[],
     onChange: (change: QuerierChange) => Promise<void>,
+    onDelete: ((id: unknown) => void) | undefined,
     startAtOperationTime: Timestamp,
   ) {
     const stream = model.watch(pipeline, {
@@ -92,6 +95,8 @@ export abstract class BaseMongoStreamQuerier {
       startAtOperationTime,
     });
     stream.on('change', (change: ChangeStreamDocument) => {
+      if (change.operationType === 'delete')
+        return onDelete?.(change.documentKey._id);
       if (!['insert', 'update', 'replace'].includes(change.operationType))
         return;
       onChange(change as QuerierChange).catch((error: Error) =>

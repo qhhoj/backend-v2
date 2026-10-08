@@ -1,7 +1,6 @@
 import { Controller, Get, Header } from '@nestjs/common';
 import { Public } from '@libs/auth';
-import { uuidStr } from '@libs/database';
-import { SiteResponse } from './dto/site.response';
+import { NavigationItemResponse, SiteResponse } from './dto/site.response';
 import { MiscConfigQuerier } from './misc-config.querier';
 import { NavigationQuerier } from './navigation.querier';
 
@@ -18,16 +17,9 @@ export class SiteController {
   @Get()
   site(): SiteResponse {
     return {
-      navigation: this.navigation.ordered().map((item) => ({
-        id: item._id,
-        key: item.key,
-        label: item.label,
-        path: item.path,
-        regex: item.regex,
-        hidden: item.hidden,
-        order: item.order,
-        parentId: item.parentId === null ? null : uuidStr(item.parentId),
-      })),
+      navigation: this.navigation
+        .ordered()
+        .map((item) => NavigationItemResponse.from(item)),
       config: this.config.asRecord(),
     };
   }

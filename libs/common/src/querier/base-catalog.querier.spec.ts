@@ -91,4 +91,11 @@ describe('BaseCatalogQuerier', () => {
     await waitFor(() => querier.has(downtime._id));
     expect(watch.mock.calls.length).toBeGreaterThan(1);
   });
+  it('drops a row from memory when its document is deleted', async () => {
+    const doomed = await languages.create(languageNamed('DOOMED'));
+    await waitFor(() => querier.has(doomed._id));
+    await languages.deleteOne({ _id: doomed._id });
+    await waitFor(() => !querier.has(doomed._id));
+    expect(querier.all().map(({ key }) => key)).not.toContain('DOOMED');
+  });
 });
