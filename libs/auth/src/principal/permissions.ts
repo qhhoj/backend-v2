@@ -68,6 +68,9 @@ export const PERMISSIONS = [
   'flatpages.delete_flatpage',
   'judge.change_navigationbar',
   'judge.change_miscconfig',
+  // Languages admin: legacy Django codenames.
+  'judge.add_language',
+  'judge.change_language',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

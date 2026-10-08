@@ -6,6 +6,8 @@ import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import { PDF_QUEUE, POLYGON_QUEUE } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { DiscordModule } from '../discord/discord.module';
+import { LanguagesAdminController } from './catalog/languages-admin.controller';
+import { LanguagesAdminService } from './catalog/languages-admin.service';
 import { LanguagesQuerier } from './catalog/languages.querier';
 import { LicensesQuerier } from './catalog/licenses.querier';
 import { ProblemGroupsQuerier } from './catalog/problem-groups.querier';
@@ -60,6 +62,7 @@ const repositories = [
   controllers: [
     ProblemImportsController,
     ProblemsController,
+    LanguagesAdminController,
     ProblemEditingController,
     ProblemUploadsController,
     ProblemDataController,
@@ -69,6 +72,7 @@ const repositories = [
     ...queriers,
     ...repositories,
     ProblemsService,
+    LanguagesAdminService,
     ProblemEditPolicyService,
     ProblemEditingService,
     ProblemStatementEditingService,
