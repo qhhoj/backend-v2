@@ -304,7 +304,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Lint errors at `complexity` 15, `max-lines-per-function` 80 (blank lines and comments skipped) and more than 4 parameters — the refactor cleared every hit, so new code cannot regress; the targets are 10 and 40.
 - Parameters are capped by a `no-restricted-syntax` selector, not core `max-params` — that rule cannot exempt Nest DI constructors or route handlers whose parameters are all decorators, which are framework-shaped.
 - Specs and the spec harness under `apps/*/test/` skip the length rule only — they read as tables of cases; complexity and parameters still apply to them.
-- `parseBridgeCommand` and `renderMath` keep their complexity behind an inline disable — one protocol switch and one guarded KaTeX call read best whole; `resolveNavigation` (frontend) likewise stays as one guard sequence.
+- `parseBridgeCommand` and `renderMath` keep their complexity behind an inline disable — one protocol switch and one guarded KaTeX call read best whole.
 - `contestMetaOf` stays in the bridge — the api and worker read different contest fields for different jobs; only `runPretestsOnly && isPretested` recurs, and a one-line expression is not worth a shared helper.
 - One name per concept, listed in CONTRIBUTING's glossary; renames happen only where a term was ambiguous (`AllowBeforeTwoFactor` for the 2FA-pending session, since `partial` means partial scoring), and wire fields never change — the SPA and `/api/v2` clients depend on them.
 - `libs/<lib>/src/testing.ts` stays one test-support entry per lib, refused in production code by lint — splitting the small files would add paths without adding clarity.
