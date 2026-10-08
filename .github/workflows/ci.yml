@@ -3,6 +3,7 @@ on: { push: { branches: [main] }, pull_request: {} }
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       mariadb:
         image: mariadb:11
@@ -49,5 +50,6 @@ jobs:
       - run: pandoc --version
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      # --forceExit: one leaked handle must not hang the job until the timeout.
+      - run: npm test -- --forceExit
       - run: npm run build && npx nest build migrator && npx nest build worker && npx nest build bridge
