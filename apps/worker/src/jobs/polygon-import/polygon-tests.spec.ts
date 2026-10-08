@@ -386,4 +386,29 @@ describe('planTests', () => {
         .map((row) => row.points),
     ).toEqual([1, 3]);
   });
+
+  it('gives the last batch start one point when only zero-point batches exist', () => {
+    expect(
+      rows(
+        plan({
+          tests: [test(0, 'g')],
+          groups: [{ name: 'g', points: 0, policy: 'complete-group' }],
+        }).cases,
+      ),
+    ).toEqual(['S1', 'C:01.inp', 'E']);
+  });
+
+  it('plans a test naming an unknown group as a plain case', () => {
+    expect(rows(plan({ tests: [test(2, 'nope')] }).cases)).toEqual([
+      'C2:01.inp',
+    ]);
+  });
+
+  it('reports a bad points policy before a bad time limit', () => {
+    const xml = withTimeLimit('fast').replace(
+      '</tests>',
+      '</tests><groups><group name="g" points-policy="bogus"/></groups>',
+    );
+    expect(() => fixtureXml(xml)).toThrow(/unknown points policy/);
+  });
 });
