@@ -236,6 +236,32 @@ describe('OpenAPI document', () => {
     );
   });
 
+  it('lists the ticket and user activity endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/tickets',
+        '/api/internal/tickets/{id}',
+        '/api/internal/tickets/{id}/messages',
+        '/api/internal/tickets/general',
+        '/api/internal/problems/{code}/tickets',
+        '/api/internal/events/tickets',
+        '/api/internal/events/tickets/{id}',
+        '/api/internal/admin/user-activity/logs',
+        '/api/internal/admin/user-activity/logs/export',
+        '/api/internal/admin/user-activity/users/{username}/logs',
+        '/api/internal/admin/user-activity/users/{username}/summary',
+        '/api/internal/admin/user-activity/users/{username}',
+        '/api/internal/admin/user-activity/anonymous',
+        '/api/internal/admin/user-activity/live',
+      ]),
+    );
+  });
+
   it('lists the blog, comment, homepage and feed endpoints', async () => {
     const response = await api
       .http()

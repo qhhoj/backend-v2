@@ -89,9 +89,7 @@ export class UserActivityCaptureService implements OnModuleInit {
         at: new Date(),
       });
     } catch (error) {
-      this.logger.error(
-        `Recording activity failed: ${(error as Error).message}`,
-      );
+      this.logger.error(`Recording activity failed: ${describe(error)}`);
     }
   }
 

@@ -216,6 +216,17 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `judge.change_settings` is operator-grade (grant it to superusers only): webhook and pwned URLs are admin-set, so in production they must be https and may not be `localhost` or a literal loopback/private/link-local IP, and the pwned fetch refuses redirects; the accepted residual is a hostname that resolves to an internal address (blind SSRF, an operator could already reach it).
 - Registration takes one optional `organizationId` (open and listed only, never private or unlisted) and `languageId`; legacy allowed several open organizations without the unlisted filter — a signup must not reach hidden schools, more are joined afterwards through the usual membership caps. `activate/resend` always answers 204 and is limited per IP and per email so it cannot enumerate accounts or flood mailboxes.
 
+## Tickets and site content
+
+- Ticket messages are limited to 30 per 10 minutes per user (and tickets to 5): legacy had no limit and each message fans out to SSE and Discord.
+- Ticket notes are visible to everyone who can read the ticket (legacy parity) and editable only by assignees and `change_ticket` holders.
+- Activity session keys are `sha256` hashes (anonymous visitors: hash of address and agent) so a log or dump never holds a usable session id.
+- The user agent is classified by a small in-house function (desktop, mobile, tablet, bot): coarse is enough for the staff view and it avoids a dependency.
+- Legacy `userActivity` and `userSessions` are not migrated: they are unbounded and v2 expires them after 90 days; `users.lastAccess` and `users.ip` come from the profile.
+- Misc config is served publicly through `GET /site` (legacy parity), so it must never hold secrets.
+- Flatpages render in the `blog` style, the sanitised staff-HTML style, not `solution`: staff pages stay contained like posts.
+- Flatpage urls match `^[-\w/.~]+$` (the legacy charset): no query, fragment, dot segment ambiguity or encoded tricks reach another page.
+
 ## Settings
 
 - Non-infrastructure env became admin settings in one typed registry (`libs/settings/src/registry.ts`), edited at `/api/internal/admin/settings` — operators change SMTP, social login, webhooks and limits without a redeploy; env keeps infrastructure and key material.

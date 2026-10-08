@@ -1,4 +1,4 @@
-/** Legacy `judge/tasks/webhook.py` event names, also the keys of the `discord.webhooks` setting; the ticket events are sent from 5c. */
+/** Legacy `judge/tasks/webhook.py` event names, also the keys of the `discord.webhooks` setting; the ticket events are sent by `TicketCreationService` and `TicketMessagesService`. */
 export const DISCORD_EVENTS = [
   'on_new_comment',
   'on_new_blogpost',
