@@ -70,7 +70,6 @@ const summaryOf = (problem: Partial<Problem>) => ({
   curators: problem.curators?.map(uuidStr),
 });
 
-type StatementFields = ReturnType<typeof statementFields>;
 interface WrittenProblem {
   problemId: string;
   after: Partial<Problem>;
@@ -99,6 +98,7 @@ function statementFields(
     },
   };
 }
+type StatementFields = ReturnType<typeof statementFields>;
 
 @Injectable()
 export class PolygonImportRepository {

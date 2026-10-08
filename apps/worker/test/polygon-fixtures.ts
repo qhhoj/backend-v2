@@ -36,11 +36,13 @@ export interface PolygonFixture {
 const attribute = (name: string, value: string | number | undefined) =>
   value === undefined ? '' : ` ${name}="${String(value)}"`;
 
+/** Where a fixture's checker source lives unless it names another path. */
+const DEFAULT_CHECKER_PATH = 'files/check.cpp';
 const checkerXml = (fixture: PolygonFixture): string => {
   if (fixture.checker === null) return '';
   const name =
     fixture.checker === undefined ? 'std::wcmp.cpp' : fixture.checker.name;
-  const path = fixture.checker?.path ?? 'files/check.cpp';
+  const path = fixture.checker?.path ?? DEFAULT_CHECKER_PATH;
   return `<checker${attribute('name', name)} type="testlib"><source path="${path}" type="cpp.g++17"/></checker>`;
 };
 const interactorXml = (fixture: PolygonFixture): string =>
@@ -116,7 +118,7 @@ const checkerAndInteractorEntries = (
     ? []
     : [
         {
-          name: fixture.checker?.path ?? 'files/check.cpp',
+          name: fixture.checker?.path ?? DEFAULT_CHECKER_PATH,
           content: '// checker',
         },
       ]),
