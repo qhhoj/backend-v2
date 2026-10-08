@@ -18,7 +18,7 @@ import {
   OAUTH_START_WINDOW_SECONDS,
 } from '../core/rate-limits';
 import { RegistrationService } from '../registration/registration.service';
-import { OAUTH_PROVIDERS } from './oauth-provider';
+import { OAuthProvidersService } from './oauth-providers.service';
 import type { OAuthProvider, SocialIdentity } from './oauth-provider';
 
 /** Lifetime of OAuth state and pending signup, in Redis and in their browser cookies. */
@@ -54,7 +54,7 @@ export interface CallbackInput {
 @Injectable()
 export class SocialService {
   constructor(
-    @Inject(OAUTH_PROVIDERS) private readonly providers: OAuthProvider[],
+    private readonly providers: OAuthProvidersService,
     private readonly users: UsersRepository,
     private readonly auth: AuthService,
     private readonly registration: RegistrationService,
@@ -62,6 +62,10 @@ export class SocialService {
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(ENV) private readonly env: Env,
   ) {}
+
+  enabledProviders(): string[] {
+    return this.providers.slugs();
+  }
 
   /** The provider's authorization URL plus the state the browser must present again on the callback. */
   async start(
@@ -224,9 +228,7 @@ export class SocialService {
   }
 
   private provider(slug: string): OAuthProvider {
-    const provider = this.providers.find(
-      (candidate) => candidate.slug === slug,
-    );
+    const provider = this.providers.find(slug);
     if (!provider) throw new AppError('not_found', 404, 'Unknown provider');
     return provider;
   }

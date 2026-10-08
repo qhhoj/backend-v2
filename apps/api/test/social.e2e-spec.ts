@@ -1,8 +1,8 @@
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
 import { RegistrationService } from '../src/modules/auth/registration/registration.service';
+import { OAuthProvidersService } from '../src/modules/auth/social/oauth-providers.service';
 import {
-  OAUTH_PROVIDERS,
   OAuthProvider,
   SocialIdentity,
 } from '../src/modules/auth/social/oauth-provider';
@@ -37,6 +37,14 @@ class FakeOAuthProvider implements OAuthProvider {
 
 const github = new FakeOAuthProvider('github', 'github-secure');
 const google = new FakeOAuthProvider('google', 'google-oauth2');
+
+/** Stands in for the settings-driven service: `all` is the set of enabled providers. */
+class FakeProviders {
+  all: FakeOAuthProvider[] = [github, google];
+  find = (slug: string) => this.all.find((provider) => provider.slug === slug);
+  slugs = () => this.all.map((provider) => provider.slug);
+}
+const providers = new FakeProviders();
 
 const cookiesOf = (headers: Record<string, unknown>) =>
   (headers['set-cookie'] as string[] | undefined) ?? [];
@@ -78,7 +86,7 @@ describe('social login', () => {
 
   beforeAll(async () => {
     api = await setupApiTest({
-      overrides: [{ provide: OAUTH_PROVIDERS, useValue: [github, google] }],
+      overrides: [{ provide: OAuthProvidersService, useValue: providers }],
     });
     redis = api.app.get<Redis>(REDIS);
   });
@@ -119,6 +127,30 @@ describe('social login', () => {
           .get(`${SOCIAL}/${slug}/${path}`)
           .expect(404)
           .expect(errorCode('not_found'));
+  });
+
+  it('lists the enabled providers publicly and refuses a disabled one at once', async () => {
+    const listed = (body: unknown) =>
+      (body as { data: { providers: string[] } }).data.providers;
+    const before = await api.http().get(`${SOCIAL}/providers`).expect(200);
+    expect(listed(before.body)).toEqual(['github', 'google']);
+    providers.all = [github];
+    try {
+      const after = await api.http().get(`${SOCIAL}/providers`).expect(200);
+      expect(listed(after.body)).toEqual(['github']);
+      await api
+        .http()
+        .get(`${SOCIAL}/google/start`)
+        .expect(404)
+        .expect(errorCode('not_found'));
+      await api
+        .http()
+        .get(`${SOCIAL}/google/callback?code=c&state=s`)
+        .expect(404)
+        .expect(errorCode('not_found'));
+    } finally {
+      providers.all = [github, google];
+    }
   });
 
   it('a wrong state is rejected and the right state is single-use', async () => {

@@ -1,4 +1,4 @@
-import type { OAuthClient } from '@libs/common';
+import type { OAuthClientSetting as OAuthClient } from '@libs/settings';
 import { fetchJson, requireText } from './fetch-json';
 import { challengeOf } from './pkce';
 import type { OAuthProvider, SocialIdentity } from './oauth-provider';

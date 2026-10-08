@@ -20,6 +20,3 @@ export interface OAuthProvider {
     redirectUri: string,
   ): Promise<SocialIdentity>;
 }
-
-/** Only the configured providers. */
-export const OAUTH_PROVIDERS = Symbol('OAUTH_PROVIDERS');

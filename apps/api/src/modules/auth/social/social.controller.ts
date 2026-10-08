@@ -16,6 +16,7 @@ import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { SessionResponse } from '../core/dto/session.response';
 import { SocialCompleteDto } from './dto/social-complete.dto';
+import { SocialProvidersResponse } from './dto/social-providers.response';
 import { SocialService, STATE_TTL_SECONDS } from './social.service';
 
 const STATE_COOKIE = 'oauth_state';
@@ -29,6 +30,11 @@ export class SocialController {
     private readonly social: SocialService,
     @Inject(ENV) private readonly env: Env,
   ) {}
+
+  @Get('providers')
+  providers(): SocialProvidersResponse {
+    return { providers: this.social.enabledProviders() };
+  }
 
   @Get(':provider/start')
   async start(
