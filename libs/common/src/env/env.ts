@@ -1,11 +1,6 @@
 import { realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-export interface OAuthClient {
-  clientId: string;
-  clientSecret: string;
-}
-
 export interface Env {
   mongoUrl: string;
   redisUrl: string;
@@ -17,10 +12,6 @@ export interface Env {
   /** false, or a comma-separated list of proxy addresses (IPs/CIDRs/`loopback`) whose forwarding headers are trusted. */
   trustProxy: false | string;
   cookieSecure: boolean;
-  /** null disables the Have I Been Pwned check. */
-  pwnedApiUrl: string | null;
-  smtpUrl: string;
-  mailFrom: string;
   /** Directory of uploaded files (images, PDF statements, materials); nginx serves it at `mediaUrl`. */
   mediaRoot: string;
   /** Public URL prefix of `mediaRoot`, without a trailing slash. */
@@ -29,14 +20,8 @@ export interface Env {
   problemDataRoot: string;
   /** Rendered statement PDFs, `<root>/<code>.<lang>.pdf`; shared between api and worker. */
   pdfCacheRoot: string;
-  /** Worker: a single PDF render (page load and printing) is aborted after this long. */
-  pdfRenderTimeoutMs: number;
-  /** Worker: a rendered PDF larger than this is discarded. */
-  pdfMaxBytes: number;
   /** Worker: PDF renders running at once. */
   pdfConcurrency: number;
-  /** Disqualifications (in contests that are not organisation-private) that ban an account; 0 turns the ban off. */
-  contestBanAfterDisqualifications: number;
   /** Bridge: judges connect to this TCP port (DMOJ judge protocol); 0 picks a free port (tests). */
   judgeBridgePort: number;
   /** Bridge: interface the judge port listens on. */
@@ -47,16 +32,6 @@ export interface Env {
   contestDataRoot: string | null;
   /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
   userDataRoot: string | null;
-  /** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: non-superusers cannot edit `about` or `firstName`, read or write comments, vote on comments, or write blog posts. */
-  officialContestMode: boolean;
-  /** `DISCORD_WEBHOOK_URLS`: legacy event name (or `default`) to webhook URL; empty disables the webhooks. Secrets: never logged or put in job data. */
-  discordWebhookUrls: Readonly<Record<string, string>>;
-  /** A provider is null (login disabled) unless both its client id and secret are set. */
-  oauth: {
-    google: OAuthClient | null;
-    facebook: OAuthClient | null;
-    github: OAuthClient | null;
-  };
 }
 
 const LOG_LEVELS = [
@@ -95,23 +70,10 @@ export function loadEnv(
     }
     return value;
   };
-  const oauthClient = (name: string): OAuthClient | null => {
-    const clientId = source[`${name}_CLIENT_ID`];
-    const clientSecret = source[`${name}_CLIENT_SECRET`];
-    if (!clientId !== !clientSecret)
-      problems.push(`${name} requires both CLIENT_ID and CLIENT_SECRET`);
-    return clientId && clientSecret ? { clientId, clientSecret } : null;
-  };
   const positiveInteger = (name: string, fallback: number): number => {
     const value = Number(source[name] ?? fallback);
     if (!Number.isInteger(value) || value < 1)
       problems.push(`${name} must be a positive integer`);
-    return value;
-  };
-  const nonNegativeInteger = (name: string, fallback: number): number => {
-    const value = Number(source[name] ?? fallback);
-    if (!Number.isInteger(value) || value < 0)
-      problems.push(`${name} must be a non-negative integer`);
     return value;
   };
   /** Blank counts as unset; `min` 0 allows "any free port". */
@@ -121,38 +83,6 @@ export function loadEnv(
     if (!Number.isInteger(value) || value < min || value > 65535)
       problems.push(`${name} must be ${min}-65535`);
     return value;
-  };
-  /** A parseable URL, https unless it targets this machine (the token travels in the URL). */
-  const isWebhookUrl = (url: string): boolean => {
-    if (!URL.canParse(url)) return false;
-    const { protocol, hostname } = new URL(url);
-    return (
-      protocol === 'https:' ||
-      (protocol === 'http:' && ['localhost', '127.0.0.1'].includes(hostname))
-    );
-  };
-  /** `event=url` pairs separated by commas; errors never echo a URL (they are secrets). */
-  const webhooks = (name: string): Record<string, string> => {
-    const urls: Record<string, string> = {};
-    for (const pair of (source[name] ?? '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)) {
-      const separator = pair.indexOf('=');
-      const event = pair.slice(0, Math.max(separator, 0)).trim();
-      const url = pair.slice(separator + 1).trim();
-      if (
-        separator < 1 ||
-        !/^(default|on_[a-z_]+)$/.test(event) ||
-        !isWebhookUrl(url) ||
-        event in urls
-      )
-        problems.push(
-          `${name} must be event=url pairs: default or on_<event>, each once, with https URLs`,
-        );
-      else urls[event] = url;
-    }
-    return urls;
   };
   const env: Env = {
     mongoUrl: required('MONGO_URL'),
@@ -164,38 +94,17 @@ export function loadEnv(
     logLevel: source.LOG_LEVEL ?? 'info',
     trustProxy: proxies('TRUST_PROXY'),
     cookieSecure: flag('COOKIE_SECURE', true),
-    pwnedApiUrl:
-      source.PWNED_API_URL === undefined
-        ? 'https://api.pwnedpasswords.com'
-        : source.PWNED_API_URL || null,
-    smtpUrl: required('SMTP_URL'),
-    mailFrom: source.MAIL_FROM || 'QHHOJ <no-reply@qhhoj.local>',
     mediaRoot: required('MEDIA_ROOT'),
     mediaUrl: (source.MEDIA_URL || '/media').replace(/\/+$/, ''),
     problemDataRoot: required('PROBLEM_DATA_ROOT'),
     pdfCacheRoot: required('PDF_CACHE_ROOT'),
-    pdfRenderTimeoutMs: positiveInteger('PDF_RENDER_TIMEOUT_MS', 30_000),
-    pdfMaxBytes: positiveInteger('PDF_MAX_BYTES', 52_428_800),
     pdfConcurrency: positiveInteger('PDF_CONCURRENCY', 2),
-    contestBanAfterDisqualifications: nonNegativeInteger(
-      'CONTEST_BAN_AFTER_DISQUALIFICATIONS',
-      0,
-    ),
     judgeBridgePort: portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
     judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
     mossApiKey: source.MOSS_API_KEY || null,
     contestDataRoot: source.CONTEST_DATA_ROOT || null,
     userDataRoot: source.USER_DATA_ROOT || null,
-    officialContestMode: flag('OFFICIAL_CONTEST_MODE', false),
-    discordWebhookUrls: webhooks('DISCORD_WEBHOOK_URLS'),
-    oauth: {
-      google: oauthClient('GOOGLE'),
-      facebook: oauthClient('FACEBOOK'),
-      github: oauthClient('GITHUB'),
-    },
   };
-  if (env.smtpUrl && !/^smtps?:\/\//.test(env.smtpUrl))
-    problems.push('SMTP_URL must start with smtp:// or smtps://');
   if (!/^[0-9a-f]{64}$/i.test(env.encryptionKey))
     problems.push('ENCRYPTION_KEY must be 64 hex chars');
   if (env.tokenSecret.length < 32)

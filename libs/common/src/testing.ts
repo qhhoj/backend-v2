@@ -36,10 +36,8 @@ export const TEST_ENV = {
   TOKEN_SECRET: 'test-token-secret-test-token-secret',
   SITE_URL: 'http://localhost:5173',
   COOKIE_SECURE: 'false',
-  PWNED_API_URL: '',
   LOG_LEVEL: 'silent',
   DISABLE_MONGODB_STREAM: 'true',
-  SMTP_URL: 'smtp://127.0.0.1:2525',
 };
 
 /** Polls `condition` every 20 ms until it holds; throws after `timeoutMs`. */

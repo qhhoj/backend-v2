@@ -87,8 +87,6 @@ export async function setupApiTest({
     PDF_CACHE_ROOT: pdfCacheRoot,
     CONTEST_DATA_ROOT: contestDataRoot,
     USER_DATA_ROOT: userDataRoot,
-    OFFICIAL_CONTEST_MODE: 'false',
-    DISCORD_WEBHOOK_URLS: '',
     MOSS_API_KEY: '',
     ...env,
   });
