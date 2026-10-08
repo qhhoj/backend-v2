@@ -190,4 +190,71 @@ describe('organizations', () => {
       ).toBe(true);
     }
   });
+
+  it('searches organizations by name, short name or slug, literally and case-insensitively, never leaking unlisted ones', async () => {
+    await createOrganization(api, {
+      name: 'Oxford Club',
+      slug: 'club-one',
+      shortName: 'Ox Club',
+    });
+    await createOrganization(api, {
+      name: 'Other',
+      slug: 'club-two',
+      shortName: 'OXF',
+    });
+    await createOrganization(api, {
+      name: 'Third',
+      slug: 'oxf-slug',
+      shortName: 'Third',
+    });
+    await createOrganization(
+      api,
+      { name: 'Oxford Secret', slug: 'secret-club', isUnlisted: true },
+      [users.member._id],
+    );
+    const slugsFor = async (search: string, session?: TestSession) =>
+      dataOf<OrganizationListItemResponse[]>(
+        await get(
+          `/api/internal/organizations?search=${search}`,
+          session,
+        ).expect(200),
+      )
+        .map((item) => item.slug)
+        .sort();
+    expect(await slugsFor('oxf')).toEqual(['club-one', 'club-two', 'oxf-slug']);
+    expect(await slugsFor('OXF')).toEqual(['club-one', 'club-two', 'oxf-slug']);
+    expect(await slugsFor('oxf', sessions.member)).toEqual([
+      'club-one',
+      'club-two',
+      'oxf-slug',
+      'secret-club',
+    ]);
+    expect(await slugsFor('oxf', sessions.staff)).toEqual([
+      'club-one',
+      'club-two',
+      'oxf-slug',
+      'secret-club',
+    ]);
+    expect(await slugsFor('oxf', sessions.outsider)).toEqual([
+      'club-one',
+      'club-two',
+      'oxf-slug',
+    ]);
+  });
+
+  it('matches the search text literally, not as a pattern', async () => {
+    await createOrganization(api, { name: 'Xabc Lab', slug: 'lab-abc' });
+    const slugsFor = async (search: string) =>
+      dataOf<OrganizationListItemResponse[]>(
+        await get(`/api/internal/organizations?search=${search}`).expect(200),
+      ).map((item) => item.slug);
+    expect(await slugsFor('a.c')).toEqual([]);
+    expect(await slugsFor('abc')).toEqual(['lab-abc']);
+    expect(await slugsFor('%20abc%20')).toEqual(['lab-abc']);
+    await get('/api/internal/organizations?search=%20%20').expect(400);
+    await get('/api/internal/organizations?search=').expect(400);
+    await get(`/api/internal/organizations?search=${'x'.repeat(51)}`).expect(
+      400,
+    );
+  });
 });

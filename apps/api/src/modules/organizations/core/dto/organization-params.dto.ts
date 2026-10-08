@@ -1,5 +1,13 @@
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+} from 'class-validator';
 import { MEMBER_SORTS } from '../organization-members.repository';
 import type { MemberSort } from '../organization-members.repository';
 
@@ -9,6 +17,13 @@ export class OrganizationSlugParamDto {
 }
 
 export class OrganizationListQueryDto {
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @Length(1, 50)
+  search?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 100;
 }

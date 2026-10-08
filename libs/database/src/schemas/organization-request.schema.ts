@@ -33,4 +33,6 @@ OrganizationRequestSchema.index(
 );
 // Admin lists per state, newest first.
 OrganizationRequestSchema.index({ organization: 1, state: 1, _id: -1 });
+// The staff queue across organizations, per state, newest first.
+OrganizationRequestSchema.index({ state: 1, _id: -1 });
 OrganizationRequestSchema.index({ user: 1, _id: -1 });

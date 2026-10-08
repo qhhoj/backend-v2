@@ -5,6 +5,8 @@ import { RateLimitService } from '@libs/common';
 import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
 import { OrganizationEditingController } from './editing/organization-editing.controller';
 import { OrganizationEditingService } from './editing/organization-editing.service';
+import { OrganizationRequestQueueController } from './requests/organization-request-queue.controller';
+import { OrganizationRequestQueueService } from './requests/organization-request-queue.service';
 import { OrganizationRequestsController } from './requests/organization-requests.controller';
 import { OrganizationRequestsService } from './requests/organization-requests.service';
 import { MembershipController } from './membership/membership.controller';
@@ -26,6 +28,7 @@ import { OrganizationsService } from './core/organizations.service';
     OrganizationEditingController,
     MembershipController,
     OrganizationRequestsController,
+    OrganizationRequestQueueController,
   ],
   providers: [
     OrganizationsRepository,
@@ -36,6 +39,7 @@ import { OrganizationsService } from './core/organizations.service';
     OrganizationEditingService,
     MembershipService,
     OrganizationRequestsService,
+    OrganizationRequestQueueService,
     RateLimitService,
   ],
   exports: [

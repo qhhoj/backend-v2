@@ -15,7 +15,10 @@ import type Redis from 'ioredis';
 import { OrganizationAccess } from '../core/organization-access';
 import { OrganizationMembersRepository } from '../core/organization-members.repository';
 import { OrganizationPointsService } from '../core/organization-points.service';
-import { OrganizationRequestsRepository } from '../core/organization-requests.repository';
+import {
+  OrganizationRequestsRepository,
+  ORGANIZATION_REQUEST_PAGE_SIZE,
+} from '../core/organization-requests.repository';
 import { OrganizationsService } from '../core/organizations.service';
 import {
   APPROVAL_LOCK_SECONDS,
@@ -33,7 +36,6 @@ const conflict = (message: string) => new AppError('conflict', 409, message);
 const DUPLICATE_MESSAGE =
   'You already have a pending request to join this organization';
 const DECIDED_MESSAGE = 'This request has already been decided';
-const PAGE_SIZE = 50;
 
 @Injectable()
 export class OrganizationRequestsService {
@@ -97,7 +99,7 @@ export class OrganizationRequestsService {
       organization._id,
       state,
       page,
-      PAGE_SIZE,
+      ORGANIZATION_REQUEST_PAGE_SIZE,
     );
     const usernames = new Map(
       (await this.users.findByIds(items.map((row) => uuidStr(row.user)))).map(
@@ -112,7 +114,7 @@ export class OrganizationRequestsService {
           usernames.get(uuidStr(row.user)) ?? '',
         ),
       ),
-      { page, pageSize: PAGE_SIZE, total },
+      { page, pageSize: ORGANIZATION_REQUEST_PAGE_SIZE, total },
     );
   }
 

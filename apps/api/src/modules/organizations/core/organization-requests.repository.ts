@@ -2,9 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isUuid, OrganizationRequest, uuidStr } from '@libs/database';
 import type { OrganizationRequestState } from '@libs/database';
-import type { HydratedDocument, Model } from 'mongoose';
+import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
 export type OrganizationRequestDocument = HydratedDocument<OrganizationRequest>;
+
+export const ORGANIZATION_REQUEST_PAGE_SIZE = 50;
 
 @Injectable()
 export class OrganizationRequestsRepository {
@@ -47,13 +49,29 @@ export class OrganizationRequestsRepository {
   }
 
   /** Legacy pending, approved and rejected tabs, newest first, through `{organization, state, _id}`. */
-  async list(
+  list(
     organizationId: string,
     state: OrganizationRequestState,
     page: number,
     pageSize: number,
   ): Promise<{ items: OrganizationRequest[]; total: number }> {
-    const filter = { organization: organizationId, state };
+    return this.page({ organization: organizationId, state }, page, pageSize);
+  }
+
+  /** The staff queue across organizations, newest first, through `{state, _id}`. */
+  listAll(
+    state: OrganizationRequestState,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: OrganizationRequest[]; total: number }> {
+    return this.page({ state }, page, pageSize);
+  }
+
+  private async page(
+    filter: FilterQuery<OrganizationRequest>,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: OrganizationRequest[]; total: number }> {
     const [items, total] = await Promise.all([
       this.requests
         .find(filter)

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import type { FilterQuery } from 'mongoose';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated, unique } from '@libs/common';
+import { AppError, escapeRegExp, Paginated, unique } from '@libs/common';
 import { competitionRanks } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
@@ -58,13 +59,14 @@ export class OrganizationsService {
     return organization;
   }
 
-  /** Legacy `OrganizationList`, plus the viewer's own unlisted ones. */
+  /** Legacy `OrganizationList`, plus the viewer's own unlisted ones. A search only narrows what the viewer may already list. */
   async list(
     principal: Principal | null,
-    { page, pageSize }: OrganizationListQueryDto,
+    { search, page, pageSize }: OrganizationListQueryDto,
   ): Promise<Paginated<OrganizationListItemResponse>> {
+    const listFilter = OrganizationAccess.listFilter(principal);
     const { items, total } = await this.organizations.list(
-      OrganizationAccess.listFilter(principal),
+      search ? { $and: [listFilter, this.searchFilter(search)] } : listFilter,
       page,
       pageSize,
     );
@@ -74,6 +76,16 @@ export class OrganizationsService {
       ),
       { page, pageSize, total },
     );
+  }
+
+  /** Case-insensitive substring over name, short name and slug; the text is literal, not a pattern. */
+  private searchFilter(search: string): FilterQuery<Organization> {
+    const pattern = new RegExp(escapeRegExp(search), 'i');
+    return {
+      $or: ['name', 'shortName', 'slug'].map((field) => ({
+        [field]: pattern,
+      })),
+    };
   }
 
   /** A user's organizations in their order, without the unlisted ones the viewer may not see enumerated. */
