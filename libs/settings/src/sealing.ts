@@ -74,13 +74,13 @@ export function redactSetting(
   };
 }
 
-/** A revision's `before` without its sealed parts, ready to patch back; null for a whole-secret setting (nothing restorable is stored). The merge keeps the current secret, so a restore never brings back an old one. */
+/** A revision's `before` without its sealed parts, ready to patch back; undefined for a whole-secret setting (nothing restorable is stored). The merge keeps the current secret, so a restore never brings back an old one. */
 export function restorableValue(
   definition: SettingDefinition<unknown>,
   redactedBefore: unknown,
 ): unknown {
   const { secret } = definition;
-  if (secret === true) return null;
+  if (secret === true) return undefined;
   if (secret === false) return redactedBefore;
   const fields = { ...(redactedBefore as Fields) };
   for (const field of secret) delete fields[field];

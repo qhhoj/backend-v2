@@ -107,6 +107,8 @@ describe('sealing', () => {
   });
 
   it('has nothing to restore for a whole-value secret', () => {
-    expect(restorableValue(smtp, redactSetting(smtp, SMTP_URL))).toBeNull();
+    expect(
+      restorableValue(smtp, redactSetting(smtp, SMTP_URL)),
+    ).toBeUndefined();
   });
 });

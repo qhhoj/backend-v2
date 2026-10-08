@@ -338,6 +338,7 @@ describe('OpenAPI document', () => {
       format?: string;
       items?: Schema;
       required?: string[];
+      nullable?: boolean;
     };
     type Operation = {
       requestBody?: { content: Record<string, { schema: Schema }> };
@@ -537,6 +538,13 @@ describe('OpenAPI document', () => {
         expect(property).not.toHaveProperty('type');
         expect(property).not.toHaveProperty('additionalProperties');
       }
+    });
+
+    it('marks the language update shortName nullable, so clearing it type-checks', async () => {
+      const { schemas } = (await document()).components;
+      expect(schemas.UpdateLanguageDto.properties!.shortName.nullable).toBe(
+        true,
+      );
     });
 
     it('has a response schema for every JSON route, except the listed ones', async () => {

@@ -41,8 +41,10 @@ export class CreateLanguageDto {
 
 /** `shortName: null` clears it; the other fields refuse null (see `RefuseNullFieldsPipe`). */
 export class UpdateLanguageDto extends PartialType(
-  OmitType(CreateLanguageDto, ['key'] as const),
-) {}
+  OmitType(CreateLanguageDto, ['key', 'shortName'] as const),
+) {
+  @IsOptional() @IsString() @Length(1, 20) shortName?: string | null;
+}
 
 export class LanguageIdParamDto {
   @IsUUID('7') id!: string;

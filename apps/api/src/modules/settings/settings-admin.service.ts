@@ -47,7 +47,7 @@ export class SettingsAdminService {
     const revision = await this.settings.revisionOf(known, revisionId);
     if (!revision) throw new AppError('not_found', 404, 'No such revision');
     const value = restorableValue(definitionOf(known)!, revision.before);
-    if (value === null)
+    if (value === undefined)
       throw new AppError(
         'secret_unrestorable',
         409,
