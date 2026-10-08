@@ -26,6 +26,16 @@ const LIST_PROJECTION = {
   'solution.contentHtml': 0,
 } as const;
 
+const ACCESS_FIELDS = {
+  isPublic: 1,
+  isOrganizationPrivate: 1,
+  organizations: 1,
+  authors: 1,
+  curators: 1,
+  testers: 1,
+  suggester: 1,
+} as const;
+
 @Injectable()
 export class ProblemsRepository {
   constructor(
@@ -78,18 +88,13 @@ export class ProblemsRepository {
   /** Only the fields `ProblemAccess.accessView` reads: no statement, no data. */
   findForAccess(id: string): Promise<ProblemDocument | null> {
     return isUuid(id)
-      ? this.problems
-          .findById(id, {
-            isPublic: 1,
-            isOrganizationPrivate: 1,
-            organizations: 1,
-            authors: 1,
-            curators: 1,
-            testers: 1,
-            suggester: 1,
-          })
-          .exec()
+      ? this.problems.findById(id, ACCESS_FIELDS).exec()
       : Promise.resolve(null);
+  }
+
+  /** `findForAccess` by code. */
+  findForAccessByCode(code: string): Promise<ProblemDocument | null> {
+    return this.problems.findOne({ code }, ACCESS_FIELDS).exec();
   }
 
   async list(

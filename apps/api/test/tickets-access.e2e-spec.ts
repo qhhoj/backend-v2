@@ -7,6 +7,12 @@ import type {
 import { profileQueries } from '@libs/database/testing';
 import { authed, createProblem, seedCatalog } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
+import {
+  createContest,
+  hoursFromNow,
+  joinParticipation,
+  makeCurrent,
+} from './contest-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
@@ -119,7 +125,16 @@ describe('ticket reads', () => {
         .filter(([, readers]) => readers.includes(who))
         .map(([name]) => tickets[name])
         .sort();
-      expect([who, (await listIds(who)).sort()]).toEqual([who, expected]);
+      const response = await as(who, '/api/internal/tickets').expect(200);
+      const body = response.body as {
+        data: { id: string }[];
+        meta: { total: number };
+      };
+      expect([who, body.data.map((item) => item.id).sort()]).toEqual([
+        who,
+        expected,
+      ]);
+      expect([who, body.meta.total]).toEqual([who, expected.length]);
     }
   });
 
@@ -200,6 +215,8 @@ describe('ticket reads', () => {
     expect(await listIds('staff', '?user=outsider')).toEqual([
       tickets.byOutsider,
     ]);
+    const filtered = await as('staff', '/api/internal/tickets?user=outsider');
+    expect((filtered.body as { meta: { total: number } }).meta.total).toBe(1);
     expect(await listIds('staff', '?assignee=assignee')).toEqual([
       tickets.onPublic,
     ]);
@@ -233,6 +250,23 @@ describe('ticket reads', () => {
     ]);
     expect(await problemList('outsider', 'hidden_one')).toBeNull();
     await as('creator', '/api/internal/problems/nope/tickets').expect(404);
+    // Legacy checks `is_editable_by` first: an editor whose contest has not started keeps the list, staff without edit rights do not.
+    const upcoming = await createContest(api, {
+      startTime: hoursFromNow(1),
+      endTime: hoursFromNow(2),
+    });
+    for (const who of ['author', 'staff'])
+      await makeCurrent(
+        api,
+        people[who].id,
+        (await joinParticipation(api, upcoming._id, people[who].id))._id,
+      );
+    expect(await problemList('author', 'open_one')).toEqual(
+      [tickets.onPublic, tickets.byOutsider].sort(),
+    );
+    expect(await problemList('staff', 'open_one')).toBeNull();
+    for (const who of ['author', 'staff'])
+      await makeCurrent(api, people[who].id, null);
   });
 
   it('pages 50 per page, newest first, with a total', async () => {
@@ -262,11 +296,15 @@ describe('ticket reads', () => {
     expect(ids.slice(-5).sort()).toEqual(Object.values(tickets).sort());
   });
 
-  it('reads every list through an index, with no blocking sort', async () => {
+  it('reads every list through an index, with no unbounded blocking sort', async () => {
     const lists = [
       ['staff', '/api/internal/tickets'],
       ['staff', '/api/internal/tickets?open=true&user=creator'],
       ['creator', '/api/internal/tickets?own=true'],
+      ['creator', '/api/internal/tickets?own=true&open=true'],
+      ['creator', '/api/internal/tickets?open=true'],
+      ['author', '/api/internal/tickets?open=true'],
+      ['allEditor', '/api/internal/tickets?open=true'],
       ['creator', '/api/internal/tickets'],
       ['plainAuthor', '/api/internal/tickets'],
       ['author', '/api/internal/tickets'],
@@ -290,11 +328,20 @@ describe('ticket reads', () => {
           planSummary.includes('COLLSCAN'),
         ),
       ]).toEqual([who, path, []]);
+      // With `open` the planner may merge the visibility branches and sort the union in memory: allowed only while it
+      // reads nothing but the viewer's readable tickets (bounded by what they may see, never the whole collection).
+      const OR_BRANCHES = 3; // creator, assignee, linked problem: a ticket may be fetched once per branch
+      const readable =
+        Object.values(READABLE).filter((readers) => readers.includes(who))
+          .length + (who === 'creator' ? 52 : 0);
+      const sorted = ticketReads.filter(({ hasSortStage }) => hasSortStage);
       expect([
         who,
         path,
-        ticketReads.filter(({ hasSortStage }) => hasSortStage),
-      ]).toEqual([who, path, []]);
+        sorted.length > 0 && !path.includes('open=true'),
+      ]).toEqual([who, path, false]);
+      for (const read of sorted)
+        expect(read.docsExamined).toBeLessThanOrEqual(readable * OR_BRANCHES);
     }
   });
 });

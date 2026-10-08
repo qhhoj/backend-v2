@@ -62,14 +62,19 @@ export class TicketsService {
     code: string,
     query: TicketPageQueryDto,
   ): Promise<Paginated<TicketListItemResponse>> {
-    const problem = await this.problems.findByCode(code);
+    const problem = await this.problems.findForAccessByCode(code);
     const view = problem && ProblemAccess.accessView(problem);
+    // Legacy `is_editable_by` comes first: an editor in a contest that has not started still sees the list.
+    const edits = view !== null && ProblemAccess.canEdit(principal, view);
     if (
       !view ||
-      !ProblemAccess.canSee(
-        principal,
-        view,
-        await this.currentContest.scopeOf(principal),
+      !(
+        edits ||
+        ProblemAccess.canSee(
+          principal,
+          view,
+          await this.currentContest.scopeOf(principal),
+        )
       )
     )
       throw new AppError('not_found', 404, 'No such problem');
@@ -77,8 +82,7 @@ export class TicketsService {
       'linkedItem.type': 'problem',
       'linkedItem.id': view.id,
     };
-    const seesAll =
-      TicketAccess.isStaff(principal) || ProblemAccess.canEdit(principal, view);
+    const seesAll = TicketAccess.isStaff(principal) || edits;
     return this.page(
       query.page,
       seesAll
@@ -116,6 +120,7 @@ export class TicketsService {
     const editable = ProblemAccess.editableFilter(principal);
     if (editable)
       clauses.push({
+        'linkedItem.type': 'problem',
         'linkedItem.id': { $in: await this.problems.visibleIds(editable) },
       });
     return { $or: clauses };
