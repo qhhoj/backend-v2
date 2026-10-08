@@ -9,11 +9,8 @@ import {
   renderMath,
 } from './math';
 import { RenderLimitError } from './render-limit.error';
-import {
-  MATH_SLOT_ATTRIBUTE,
-  sanitizeBlogHtml,
-  sanitizeStatementHtml,
-} from './sanitizer';
+import { MATH_SLOT_ATTRIBUTE, sanitizeBlogHtml } from './blog-sanitizer';
+import { sanitizeStatementHtml } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
 import {
   allowsRawHtml,

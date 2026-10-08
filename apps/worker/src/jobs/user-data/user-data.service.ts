@@ -11,12 +11,13 @@ import {
 } from '@libs/community';
 import { chunkedSources, writeZipInPlace } from '../lazy-zip';
 import type { ZipLimits } from '../lazy-zip';
+import { UserDataCommunityRepository } from './user-data-community.repository';
 import { UserDataRepository } from './user-data.repository';
 import type {
   UserDataComment,
   UserDataPost,
-  UserDataSubmission,
-} from './user-data.repository';
+} from './user-data-community.repository';
+import type { UserDataSubmission } from './user-data.repository';
 
 export type UserDataLimits = ZipLimits;
 export const USER_DATA_LIMITS = Symbol('USER_DATA_LIMITS');
@@ -84,6 +85,7 @@ const postInfo = (posts: UserDataPost[]) =>
 export class UserDataService {
   constructor(
     private readonly repository: UserDataRepository,
+    private readonly community: UserDataCommunityRepository,
     @Inject(ENV) private readonly env: Env,
     @Inject(USER_DATA_LIMITS) private readonly limits: UserDataLimits,
   ) {}
@@ -104,8 +106,8 @@ export class UserDataService {
       this.limits.maxEntries + 1,
     );
     const [comments, posts] = await Promise.all([
-      this.repository.commentsOf(userId, this.limits.maxEntries + 1),
-      this.repository.postsOf(userId, this.limits.maxEntries + 1),
+      this.community.commentsOf(userId, this.limits.maxEntries + 1),
+      this.community.postsOf(userId, this.limits.maxEntries + 1),
     ]);
     const texts: Array<[name: string, text: string]> = [
       ['profile.json', json(profile)],
@@ -119,11 +121,11 @@ export class UserDataService {
     const streams = [
       {
         names: comments.map((comment) => `comments/${comment.id}.txt`),
-        at: this.chunked(comments, (ids) => this.repository.commentBodies(ids)),
+        at: this.chunked(comments, (ids) => this.community.commentBodies(ids)),
       },
       {
         names: posts.map((post) => `posts/${post.id}.md`),
-        at: this.chunked(posts, (ids) => this.repository.postTexts(ids)),
+        at: this.chunked(posts, (ids) => this.community.postTexts(ids)),
       },
       {
         names: submissions.map(

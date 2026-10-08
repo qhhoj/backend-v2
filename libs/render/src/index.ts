@@ -1,5 +1,6 @@
 export * from './styles';
-export * from './sanitizer';
+export { sanitizeStatementHtml, sanitizeSvg } from './sanitizer';
+export * from './blog-sanitizer';
 export * from './legacy-allow-list';
 export * from './markdown';
 export * from './markup-limits';

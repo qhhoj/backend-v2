@@ -7,6 +7,7 @@ import {
   canInteract,
   COMMENT_THREADS_PAGE_SIZE,
   officialContestLocks,
+  pageOf,
   pageRef,
 } from '@libs/community';
 import type { CommentPageType, VoteScore } from '@libs/community';
@@ -14,6 +15,7 @@ import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
 import { VotesRepository } from '../../contributions/votes.repository';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { moderatesComments } from './comment-moderators';
 import { CommentLocksRepository } from './comment-locks.repository';
 import { CommentPagesService } from './comment-pages.service';
 import type { PageInfo } from './comment-pages.service';
@@ -101,11 +103,8 @@ export class CommentsService {
     { allowHidden }: { allowHidden: boolean },
   ): Promise<{ comment: CommentDocument; info: PageInfo }> {
     const comment = await this.comments.findById(id);
-    const moderates = this.moderates(principal);
-    const page = comment && {
-      type: comment.page.type,
-      id: uuidStr(comment.page.id),
-    };
+    const moderates = moderatesComments(principal);
+    const page = comment && pageOf(comment);
     const info =
       comment &&
       page &&
@@ -133,7 +132,7 @@ export class CommentsService {
     const authorOf = new Map(
       authors.map((user) => [user._id, UserSummaryResponse.from(user)]),
     );
-    const moderates = this.moderates(principal);
+    const moderates = moderatesComments(principal);
     return comments.map((comment) => {
       const authorId = uuidStr(comment.author);
       return CommentResponse.from(
@@ -158,12 +157,6 @@ export class CommentsService {
   /** A contest problem's thread is hidden from its contestants (legacy showed the clarifications area instead), unless they hold `override_comment_lock`. A plain lock keeps the thread readable. */
   hidesThread(principal: Principal | null, info: PageInfo): boolean {
     return info.contestLocked && !this.overridesLock(principal);
-  }
-
-  private moderates(principal: Principal | null): boolean {
-    return (
-      principal !== null && hasPermission(principal, 'judge.change_comment')
-    );
   }
 
   private overridesLock(principal: Principal | null): boolean {

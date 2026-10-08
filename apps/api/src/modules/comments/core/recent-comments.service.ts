@@ -3,7 +3,7 @@ import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, ENV, Paginated } from '@libs/common';
 import type { Env } from '@libs/common';
-import { officialContestLocks, pageRef } from '@libs/community';
+import { officialContestLocks, pageOf, pageRef } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
@@ -18,11 +18,6 @@ import type { RecentCommentResponse } from './dto/recent-comment.response';
 export const RECENT_SCAN_BATCHES = 10;
 /** Legacy `UserCommentPage.paginate_by`. */
 export const USER_COMMENTS_PAGE_SIZE = 10;
-
-const pageOf = (comment: Comment) => ({
-  type: comment.page.type,
-  id: uuidStr(comment.page.id),
-});
 
 @Injectable()
 export class RecentCommentsService {

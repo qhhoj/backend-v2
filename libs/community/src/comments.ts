@@ -1,4 +1,4 @@
-import { COMMENT_PAGE_TYPES } from '@libs/database';
+import { COMMENT_PAGE_TYPES, uuidStr } from '@libs/database';
 import type { CommentPageType } from '@libs/database';
 
 export { COMMENT_PAGE_TYPES };
@@ -20,6 +20,14 @@ export interface CommentPage {
   type: CommentPageType;
   id: string;
 }
+
+/** The page a comment row belongs to. */
+export const pageOf = (comment: {
+  page: { type: CommentPageType; id: unknown };
+}): CommentPage => ({
+  type: comment.page.type,
+  id: uuidStr(comment.page.id),
+});
 
 /** Map key of a page. */
 export const pageRef = (page: CommentPage): string => `${page.type}:${page.id}`;

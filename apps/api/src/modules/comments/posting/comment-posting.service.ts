@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { hasPermission, UsersRepository } from '@libs/auth';
+import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, RateLimitService, unique } from '@libs/common';
 import {
@@ -19,6 +19,7 @@ import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { renderField } from '../../problems/editing/problem-markup';
+import { moderatesComments } from '../core/comment-moderators';
 import { CommentPagesService } from '../core/comment-pages.service';
 import type { PageInfo } from '../core/comment-pages.service';
 import { CommentsRepository } from '../core/comments.repository';
@@ -113,7 +114,7 @@ export class CommentPostingService {
     const { comment } = await this.reads.visibleComment(principal, id, {
       allowHidden: true,
     });
-    if (!hasPermission(principal, 'judge.change_comment')) {
+    if (!moderatesComments(principal)) {
       if (uuidStr(comment.author) !== principal.userId)
         throw forbidden('You can only edit your own comments');
       if ((await this.users.signedIn(principal)).mute)
@@ -193,13 +194,7 @@ export class CommentPostingService {
       uuidStr(parent.page.id) !== info.page.id
     )
       throw new AppError('not_found', 404, 'No such parent comment');
-    if (
-      !canReplyAfter(
-        parent.createdAt,
-        now,
-        hasPermission(principal, 'judge.change_comment'),
-      )
-    )
+    if (!canReplyAfter(parent.createdAt, now, moderatesComments(principal)))
       throw forbidden('This comment is too old to reply to');
     if (depthOf(parent.path) >= COMMENT_MAX_DEPTH)
       throw new AppError('validation_failed', 400, 'Replies nest too deep', {
