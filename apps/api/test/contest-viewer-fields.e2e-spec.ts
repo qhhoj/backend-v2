@@ -397,6 +397,28 @@ describe('contest viewer fields', () => {
       ]);
     });
 
+    it('hides the result from a tester who may not see even their own board, and shows it to an editor', async () => {
+      const [first] = problems;
+      const contest = await createContest(api, {
+        name: 'results_gate',
+        scoreboardVisibility: 'H',
+        authors: [users.author._id],
+        testers: [users.carol._id],
+        problems: [contestProblem(first._id, 0)],
+      });
+      const cell = { time: 60, points: 100 };
+      const scored = {
+        formatData: { [first._id]: cell },
+        frozenFormatData: { [first._id]: cell },
+      };
+      await joinParticipation(api, contest._id, users.carol._id, scored);
+      await joinParticipation(api, contest._id, users.author._id, scored);
+      expect(await resultsOf(contest.key, 'carol')).toEqual([null]);
+      expect((await resultsOf(contest.key, 'author'))[0]).toMatchObject({
+        cell,
+      });
+    });
+
     it("reads the viewer's own submissions through the participation index", async () => {
       const [first] = problems;
       const contest = await createContest(api, {
