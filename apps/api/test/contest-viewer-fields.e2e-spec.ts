@@ -1,9 +1,11 @@
 import { sha256 } from '@libs/auth';
-import type { User } from '@libs/database';
+import type { SubmissionStatus, User } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 import type { ContestListItemResponse } from '../src/modules/contests/core/dto/contest-list.response';
+import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
 import {
+  contestProblem,
   contestUrl,
   createContest,
   hoursFromNow,
@@ -18,7 +20,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
-import { dataOf } from './submission-fixtures';
+import { dataOf, seedSubmission } from './submission-fixtures';
 import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -41,6 +43,11 @@ describe('contest viewer fields', () => {
     Object.fromEntries(rows.map((row) => [row.key, row]));
   const detail = async (key: string, who?: string) =>
     dataOf<ContestDetailResponse>(await get(contestUrl(key), who).expect(200));
+
+  const ranking = async (key: string, who: string) =>
+    dataOf<RankingResponse>(
+      await get(contestUrl(key, '/ranking'), who).expect(200),
+    );
 
   beforeAll(async () => {
     api = await setupApiTest();
@@ -241,6 +248,187 @@ describe('contest viewer fields', () => {
       expect((await detail(ended.key, 'erin')).viewer.liveStatus).toBe(
         'finished',
       );
+    });
+  });
+
+  describe('viewer results', () => {
+    const submitIn = async (submission: {
+      contestId: string;
+      participationId: string;
+      problemId: string;
+      who: string;
+      status: SubmissionStatus;
+    }) => {
+      const stored = await seedSubmission(api, {
+        user: users[submission.who]._id,
+        problem: submission.problemId,
+        language: catalog.languages.cpp,
+        contest: submission.contestId,
+        status: submission.status,
+        result: submission.status === 'D' ? 'WA' : null,
+      });
+      await api.contestSubmissions.create({
+        _id: stored._id,
+        participation: submission.participationId,
+        contest: submission.contestId,
+        problem: submission.problemId,
+      });
+    };
+    const resultsOf = async (key: string, who: string) =>
+      (await detail(key, who)).problems!.map((problem) => problem.viewerResult);
+
+    it('shows the viewer their own cell, counted attempts and pending submissions per problem', async () => {
+      const [first, second] = problems;
+      const contest = await createContest(api, {
+        name: 'results_open',
+        authors: [users.author._id],
+        problems: [
+          contestProblem(first._id, 0, { maxSubmissions: 5 }),
+          contestProblem(second._id, 1),
+        ],
+      });
+      const cell = { time: 600, points: 100 };
+      const own = await joinParticipation(api, contest._id, users.alice._id, {
+        formatData: { [first._id]: cell },
+        frozenFormatData: { [first._id]: cell },
+      });
+      await makeCurrent(api, users.alice._id, own._id);
+      for (const status of ['D', 'IE', 'PD', 'QU'] as const)
+        await submitIn({
+          contestId: contest._id,
+          participationId: own._id,
+          problemId: first._id,
+          who: 'alice',
+          status,
+        });
+      const other = await joinParticipation(api, contest._id, users.bob._id);
+      await submitIn({
+        contestId: contest._id,
+        participationId: other._id,
+        problemId: second._id,
+        who: 'bob',
+        status: 'QU',
+      });
+
+      expect(await resultsOf(contest.key, 'alice')).toEqual([
+        { cell, isSolved: true, attempts: 2, hasPendingSubmission: true },
+        {
+          cell: null,
+          isSolved: false,
+          attempts: 0,
+          hasPendingSubmission: false,
+        },
+      ]);
+      expect(await resultsOf(contest.key, 'author')).toEqual([null, null]);
+    });
+
+    it('shows a non-editor their frozen cell during a freeze, the cell their ranking row shows', async () => {
+      const [first] = problems;
+      const contest = await createContest(api, {
+        name: 'results_frozen',
+        formatName: 'icpc',
+        frozenLastMinutes: 180,
+        problems: [contestProblem(first._id, 0)],
+      });
+      const live = { time: 4000, points: 100, tries: 1 };
+      const frozen = { time: null, points: 0, tries: 1, pending: true };
+      const own = await joinParticipation(api, contest._id, users.bob._id, {
+        score: 100,
+        formatData: { [first._id]: live },
+        frozenFormatData: { [first._id]: frozen },
+      });
+      await makeCurrent(api, users.bob._id, own._id);
+      const [result] = await resultsOf(contest.key, 'bob');
+      expect(result).toMatchObject({ cell: frozen, isSolved: false });
+      const board = await ranking(contest.key, 'bob');
+      expect(board.rows[0].cells[first._id]).toEqual(result!.cell);
+    });
+
+    it('shows a viewer of a hidden, ended board their own cell, as their ranking row does', async () => {
+      const [first] = problems;
+      const contest = await createContest(api, {
+        name: 'results_hidden',
+        scoreboardVisibility: 'H',
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+        problems: [contestProblem(first._id, 0)],
+      });
+      const cell = { time: 60, points: 40 };
+      await joinParticipation(api, contest._id, users.dave._id, {
+        realStart: hoursFromNow(-5),
+        formatData: { [first._id]: cell },
+        frozenFormatData: { [first._id]: cell },
+      });
+      const [result] = await resultsOf(contest.key, 'dave');
+      expect(result).toMatchObject({ cell, isSolved: false });
+      expect(
+        (await ranking(contest.key, 'dave')).rows.map(
+          (row) => row.cells[first._id],
+        ),
+      ).toEqual([cell]);
+    });
+
+    it('follows the running virtual participation, not the finished live one', async () => {
+      const [first] = problems;
+      const contest = await createContest(api, {
+        name: 'results_virtual',
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+        problems: [contestProblem(first._id, 0)],
+      });
+      const solved = { [first._id]: { time: 60, points: 100 } };
+      await joinParticipation(api, contest._id, users.erin._id, {
+        realStart: hoursFromNow(-5),
+        formatData: solved,
+        frozenFormatData: solved,
+      });
+      const run = await joinParticipation(api, contest._id, users.erin._id, {
+        virtual: 1,
+        realStart: hoursFromNow(-0.5),
+      });
+      await makeCurrent(api, users.erin._id, run._id);
+      expect(await resultsOf(contest.key, 'erin')).toEqual([
+        {
+          cell: null,
+          isSolved: false,
+          attempts: 0,
+          hasPendingSubmission: false,
+        },
+      ]);
+    });
+
+    it("reads the viewer's own submissions through the participation index", async () => {
+      const [first] = problems;
+      const contest = await createContest(api, {
+        name: 'results_indexed',
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+        problems: [contestProblem(first._id, 0)],
+      });
+      const own = await joinParticipation(api, contest._id, users.carol._id, {
+        realStart: hoursFromNow(-5),
+      });
+      await submitIn({
+        contestId: contest._id,
+        participationId: own._id,
+        problemId: first._id,
+        who: 'carol',
+        status: 'D',
+      });
+      const operations = await profileQueries(api.db, () =>
+        get(contestUrl(contest.key), 'carol').expect(200),
+      );
+      const ownReads = operations.filter(
+        ({ collection }) => collection === 'contestSubmissions',
+      );
+      expect(ownReads).toHaveLength(1);
+      expect(ownReads[0].planSummary).toContain('participation: 1, problem: 1');
+      const statusReads = operations.filter(
+        ({ collection }) => collection === 'submissions',
+      );
+      expect(statusReads).toHaveLength(1);
+      expect(statusReads[0].planSummary).not.toContain('COLLSCAN');
+      expect(statusReads[0].docsExamined).toBe(1);
     });
   });
 });

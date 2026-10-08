@@ -6,7 +6,7 @@ import { AppError, RateLimitService, REDIS, unique } from '@libs/common';
 import {
   compareStandings,
   competitionRanks,
-  isFrozen,
+  isFrozenFor,
   problemLabel,
   problemSummaries,
   rankingCacheKey,
@@ -93,7 +93,7 @@ export class ContestRankingService {
     const accessView = ContestAccess.accessView(contest);
     const canEdit = ContestAccess.canEdit(principal, accessView);
     // Non-editors only ever see frozen standings during a freeze, their own row included.
-    const isFrozenView = isFrozen(contest, now) && !canEdit;
+    const isFrozenView = isFrozenFor(contest, now, canEdit);
     const boardView: BoardView = {
       withVirtual,
       isFrozenView,

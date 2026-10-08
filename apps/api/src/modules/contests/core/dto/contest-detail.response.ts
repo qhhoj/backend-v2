@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { UserDocument } from '@libs/auth';
 import { participationEnd, problemLabel } from '@libs/contests';
+import type { ProblemCell } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type {
   Contest,
@@ -9,10 +10,24 @@ import type {
   ScoreboardVisibility,
 } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { ApiProblemCell } from './api-problem-cells';
 import {
   ContestListViewerResponse,
   ContestSummaryResponse,
 } from './contest-list.response';
+
+/** The viewer's own result on one problem. */
+export class ContestProblemViewerResultResponse {
+  /** The format's cell (as in `RankingRowResponse.cells`); frozen for non-editors during a freeze; null before a scored submission. */
+  @ApiProblemCell()
+  cell!: ProblemCell | null;
+  /** The cell is worth the problem's full points (the ranking's `acceptedCount` rule). */
+  isSolved!: boolean;
+  /** Submissions counted against `maxSubmissions` (IE and PD excluded). */
+  attempts!: number;
+  /** A submission waits for a verdict: queued, judging, or held for final judging. */
+  hasPendingSubmission!: boolean;
+}
 
 export class ContestProblemResponse {
   problemId!: string;
@@ -23,6 +38,8 @@ export class ContestProblemResponse {
   partial!: boolean;
   isPretested!: boolean;
   maxSubmissions!: number | null;
+  /** Null when signed out, without a scoring participation (live or virtual) in the contest, or when the board is hidden from the viewer. */
+  viewerResult!: ContestProblemViewerResultResponse | null;
 }
 
 export class ParticipationSummaryResponse {
@@ -99,27 +116,38 @@ export class ContestSettingsResponse {
   }
 }
 
+/** What the detail service gathered about the contest's problems. */
+export interface ContestProblemFacts {
+  summaries: Array<{ _id: string; code: string; name: string }>;
+  /** Per problem id; null when the viewer has no scoring participation or may not see the board. */
+  viewerResults: Map<string, ContestProblemViewerResultResponse> | null;
+}
+
 /** The contest's problems in order, labelled; an entry whose problem is gone (deleted or not found) is skipped, not an error. */
 function labelledProblems(
   contest: Contest,
-  summaries: Array<{ _id: string; code: string; name: string }>,
+  facts: ContestProblemFacts,
 ): ContestProblemResponse[] {
-  const summaryOf = new Map(summaries.map((problem) => [problem._id, problem]));
+  const summaryOf = new Map(
+    facts.summaries.map((summary) => [summary._id, summary]),
+  );
   return [...contest.problems]
     .sort((left, right) => left.order - right.order)
     .flatMap((entry, index) => {
-      const problem = summaryOf.get(uuidStr(entry.problem));
-      if (!problem) return [];
+      const problemId = uuidStr(entry.problem);
+      const summary = summaryOf.get(problemId);
+      if (!summary) return [];
       return [
         {
-          problemId: problem._id,
-          code: problem.code,
-          name: problem.name,
+          problemId,
+          code: summary.code,
+          name: summary.name,
           label: problemLabel(index, contest.labelStyle),
           points: entry.points,
           partial: entry.partial,
           isPretested: entry.isPretested,
           maxSubmissions: entry.maxSubmissions,
+          viewerResult: facts.viewerResults?.get(problemId) ?? null,
         },
       ];
     });
@@ -153,7 +181,7 @@ export class ContestDetailResponse extends ContestSummaryResponse {
     extras: {
       now: Date;
       authors: UserDocument[];
-      problems: Array<{ _id: string; code: string; name: string }> | null;
+      problems: ContestProblemFacts | null;
       viewer: ContestViewerResponse;
     },
   ): ContestDetailResponse {

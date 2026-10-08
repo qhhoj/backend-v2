@@ -87,6 +87,13 @@ export const isFrozen = (contest: FreezeTimes, now: Date): boolean => {
   return from !== null && now >= from;
 };
 
+/** Frozen for this viewer: editors always see the live board. */
+export const isFrozenFor = (
+  contest: FreezeTimes,
+  now: Date,
+  canEdit: boolean,
+): boolean => isFrozen(contest, now) && !canEdit;
+
 export interface RegistrationWindow {
   registrationStart: Date | null;
   registrationEnd: Date | null;

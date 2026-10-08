@@ -9,7 +9,7 @@ import {
   CONTEST_RESCORE_QUEUE,
   contestPhase,
   hasParticipationEnded,
-  isFrozen,
+  isFrozenFor,
   isRegistrationOpen,
   LIVE,
   notifyContestRescore,
@@ -306,7 +306,7 @@ export class ContestParticipationService {
     const usernames = await this.participationRows.usernamesOf(
       items.map((item) => uuidStr(item.user)),
     );
-    const frozen = isFrozen(contest, now) && !canEdit;
+    const frozen = isFrozenFor(contest, now, canEdit);
     return new Paginated(
       items.map((item) => {
         const userId = uuidStr(item.user);

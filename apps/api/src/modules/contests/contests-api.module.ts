@@ -34,6 +34,7 @@ import { ContestStatsRepository } from './stats/contest-stats.repository';
 import { ContestStatsService } from './stats/contest-stats.service';
 import { ContestSubmissionsController } from './submissions/contest-submissions.controller';
 import { ContestSubmissionsService } from './submissions/contest-submissions.service';
+import { ContestProblemFactsService } from './core/contest-problem-facts.service';
 import { ContestsController } from './core/contests.controller';
 import { ContestsService } from './core/contests.service';
 import { OfficialRankingController } from './ranking/official-ranking.controller';
@@ -81,6 +82,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestEventsService,
     ContestStreamsService,
     ContestsService,
+    ContestProblemFactsService,
     ContestEditFieldsService,
     ContestEditingService,
     ContestParticipationService,

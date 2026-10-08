@@ -22,6 +22,11 @@ export const UNFINISHED_STATUSES: readonly SubmissionStatus[] = [
   'P',
   'G',
 ];
+/** Legacy `get_contest_submission_count`: `maxSubmissions` does not count these. */
+export const UNCOUNTED_ATTEMPT_STATUSES: readonly SubmissionStatus[] = [
+  'IE',
+  'PD',
+];
 /** Handed to a judge: P until `grading-begin`, then G. */
 export const IN_FLIGHT_STATUSES: readonly SubmissionStatus[] = ['P', 'G'];
 export const SUBMISSION_RESULTS = [

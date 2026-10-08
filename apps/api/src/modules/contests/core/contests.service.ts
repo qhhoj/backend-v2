@@ -6,8 +6,8 @@ import { contestPhase, liveStatusOf } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
-import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestAccess } from './contest-access';
+import { ContestProblemFactsService } from './contest-problem-facts.service';
 import { ContestViewerService } from './contest-viewer.service';
 import type { ContestViewer } from './contest-viewer.service';
 import { ContestsRepository } from './contests.repository';
@@ -25,7 +25,7 @@ export class ContestsService {
   constructor(
     private readonly contests: ContestsRepository,
     private readonly viewers: ContestViewerService,
-    private readonly problems: ProblemsRepository,
+    private readonly problemFacts: ContestProblemFactsService,
     private readonly users: UsersRepository,
   ) {}
 
@@ -87,26 +87,18 @@ export class ContestsService {
     now = new Date(),
   ): Promise<ContestDetailResponse> {
     const contest = await this.visibleContest(principal, key);
-    const viewer = this.viewerResponseOf(
-      principal,
-      contest,
-      await this.viewers.viewerOf(principal, contest, now),
-      now,
-    );
+    const viewerFacts = await this.viewers.viewerOf(principal, contest, now);
+    const viewer = this.viewerResponseOf(principal, contest, viewerFacts, now);
     const [authors, problems] = await Promise.all([
       this.users.findByIds(ContestAccess.accessView(contest).authors),
       this.isProblemListOpen(contest, viewer, now)
-        ? this.problems.findSummaries(
-            contest.problems.map((entry) => uuidStr(entry.problem)),
-          )
+        ? this.problemFacts.factsFor(principal, contest, viewerFacts, now)
         : null,
     ]);
     return ContestDetailResponse.fromDetail(contest, {
       now,
       authors,
-      problems:
-        problems &&
-        problems.map(({ _id, code, name }) => ({ _id, code, name })),
+      problems,
       viewer,
     });
   }

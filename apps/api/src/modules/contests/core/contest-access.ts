@@ -1,6 +1,6 @@
 import { hasPermission } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { contestPhase, isFrozen } from '@libs/contests';
+import { contestPhase, isFrozen, isFrozenFor } from '@libs/contests';
 import type { ContestTimes } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest, ScoreboardVisibility } from '@libs/database';
@@ -186,7 +186,7 @@ function boardReadable(
 ): boolean {
   return (
     boardVisible(principal, contest, now) &&
-    !(isFrozen(contest, now) && !canEdit(principal, contest))
+    !isFrozenFor(contest, now, canEdit(principal, contest))
   );
 }
 

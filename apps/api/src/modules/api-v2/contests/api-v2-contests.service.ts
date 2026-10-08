@@ -6,7 +6,7 @@ import { AppError, unique } from '@libs/common';
 import {
   compareStandings,
   contestPhase,
-  isFrozen,
+  isFrozenFor,
   participationEnd,
   participationStart,
   problemLabel,
@@ -126,7 +126,7 @@ export class ApiV2ContestsService {
         ? await this.rankings(
             contest,
             problemIds,
-            isFrozen(contest, now) && !canEdit,
+            isFrozenFor(contest, now, canEdit),
           )
         : [],
     };
@@ -185,11 +185,11 @@ export class ApiV2ContestsService {
         const contest = byId.get(uuidStr(row.contest))!;
         const standing = standingOf(
           row,
-          isFrozen(contest, now) &&
-            !ContestAccess.canEdit(
-              principal,
-              ContestAccess.accessView(contest),
-            ),
+          isFrozenFor(
+            contest,
+            now,
+            ContestAccess.canEdit(principal, ContestAccess.accessView(contest)),
+          ),
         );
         return {
           user: usernames.get(uuidStr(row.user)) ?? '',

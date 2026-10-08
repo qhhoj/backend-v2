@@ -306,6 +306,23 @@ describe('OpenAPI document', () => {
   });
 
   describe('response schemas', () => {
+    it("documents the viewer's own result on each detail problem", async () => {
+      const { schemas } = (await document()).components;
+      expect(Object.keys(schemas.ContestProblemResponse.properties!)).toEqual(
+        expect.arrayContaining(['viewerResult']),
+      );
+      expect(
+        Object.keys(schemas.ContestProblemViewerResultResponse.properties!),
+      ).toEqual(
+        expect.arrayContaining([
+          'cell',
+          'isSolved',
+          'attempts',
+          'hasPendingSubmission',
+        ]),
+      );
+    });
+
     type Schema = {
       $ref?: string;
       properties?: Record<string, Schema>;

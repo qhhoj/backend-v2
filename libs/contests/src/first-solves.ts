@@ -15,6 +15,12 @@ export interface SolveRow {
   cells: Record<string, ProblemCell>;
 }
 
+/** The one definition of "solved": a cell worth the problem's full points (the ranking's `acceptedCount` rule). */
+export const isSolvedCell = (
+  cell: ProblemCell | null | undefined,
+  points: number,
+): boolean => cell?.points === points;
+
 /** Legacy `get_first_solves_and_total_ac`, one helper for every format: a cell worth the problem's full points is accepted; the first solve is the live row with the strictly smallest solve time, so a tie goes to the row ranked first. */
 export function problemSummaries(
   format: FormatSetting,
@@ -30,7 +36,7 @@ export function problemSummaries(
       let acceptedCount = 0;
       for (const standing of rows) {
         const cell = standing.cells[problemId];
-        if (cell?.points !== points) continue;
+        if (!isSolvedCell(cell, points)) continue;
         acceptedCount += 1;
         const time = definition.firstSolveTime(cell, config);
         if (

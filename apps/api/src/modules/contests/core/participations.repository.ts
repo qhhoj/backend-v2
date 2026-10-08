@@ -9,10 +9,12 @@ import {
   ContestSubmission,
   isUuid,
   Submission,
+  UNCOUNTED_ATTEMPT_STATUSES,
   User,
   uuidStr,
 } from '@libs/database';
 import { VIRTUAL_JOIN_ATTEMPTS } from '../core/rate-limits';
+import type { OwnSubmission } from './viewer-problem-results';
 
 export type ParticipationDocument = HydratedDocument<ContestParticipation>;
 
@@ -51,9 +53,34 @@ export class ParticipationsRepository {
       .exec();
     return ids.length
       ? this.submissions
-          .countDocuments({ _id: { $in: ids }, status: { $nin: ['IE', 'PD'] } })
+          .countDocuments({
+            _id: { $in: ids },
+            status: { $nin: [...UNCOUNTED_ATTEMPT_STATUSES] },
+          })
           .exec()
       : 0;
+  }
+
+  /** Every submission of the participation with its problem and status: `{participation, problem}` index, then `_id` reads of only those submissions. */
+  async submissionStatusesOf(
+    participationId: string,
+  ): Promise<OwnSubmission[]> {
+    const rows = await this.contestSubmissions
+      .find({ participation: participationId }, { problem: 1 })
+      .lean()
+      .exec();
+    if (!rows.length) return [];
+    const problemOf = new Map(
+      rows.map((row) => [uuidStr(row._id), uuidStr(row.problem)]),
+    );
+    const statuses = await this.submissions
+      .find({ _id: { $in: rows.map((row) => row._id) } }, { status: 1 })
+      .lean()
+      .exec();
+    return statuses.map((row) => ({
+      problem: problemOf.get(uuidStr(row._id))!,
+      status: row.status,
+    }));
   }
 
   findOne(
