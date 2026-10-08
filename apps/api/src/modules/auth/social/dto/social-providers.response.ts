@@ -1,3 +1,5 @@
+import type { OAuthProvider } from '../oauth-provider';
+
 export class SocialProvidersResponse {
-  providers!: string[];
+  providers!: Array<OAuthProvider['slug']>;
 }

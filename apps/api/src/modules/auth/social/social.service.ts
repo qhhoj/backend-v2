@@ -63,7 +63,7 @@ export class SocialService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  enabledProviders(): string[] {
+  enabledProviders(): Array<OAuthProvider['slug']> {
     return this.providers.slugs();
   }
 
