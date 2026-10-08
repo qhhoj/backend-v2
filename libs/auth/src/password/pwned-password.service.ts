@@ -1,22 +1,26 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { ENV, type Env } from '@libs/common';
+import { SettingsService } from '@libs/settings';
 
 @Injectable()
 export class PwnedPasswordService {
   private readonly logger = new Logger(PwnedPasswordService.name);
 
-  constructor(@Inject(ENV) private readonly env: Env) {}
+  constructor(
+    @Inject(SettingsService)
+    private readonly settings: Pick<SettingsService, 'get'>,
+  ) {}
 
   async isPwned(password: string): Promise<boolean> {
-    if (!this.env.pwnedApiUrl) return false;
+    const baseUrl = this.settings.get('auth.pwnedApiUrl');
+    if (!baseUrl) return false;
     const hash = createHash('sha1')
       .update(password)
       .digest('hex')
       .toUpperCase();
     try {
       const response = await fetch(
-        `${this.env.pwnedApiUrl.replace(/\/+$/, '')}/range/${hash.slice(0, 5)}`,
+        `${baseUrl.replace(/\/+$/, '')}/range/${hash.slice(0, 5)}`,
         { signal: AbortSignal.timeout(3000), redirect: 'error' },
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

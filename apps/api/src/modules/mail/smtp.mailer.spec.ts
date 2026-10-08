@@ -1,6 +1,5 @@
 import { createServer, Server, Socket } from 'node:net';
-import { loadEnv } from '../env/env';
-import { validEnv } from '../env/env.fixture';
+import { fakeSettings } from '@libs/settings/testing';
 import { SmtpMailer } from './smtp.mailer';
 
 /** Minimal SMTP sink: records every DATA payload it receives. */
@@ -72,14 +71,11 @@ function startSink() {
 }
 
 const mailerFor = (port: number) =>
-  new SmtpMailer(
-    loadEnv({ ...validEnv, SMTP_URL: `smtp://127.0.0.1:${port}` }),
-  );
+  new SmtpMailer(fakeSettings({ 'mail.smtpUrl': `smtp://127.0.0.1:${port}` }));
 
 describe('SmtpMailer', () => {
   const optionsFor = (smtpUrl: string) =>
-    new SmtpMailer(loadEnv({ ...validEnv, SMTP_URL: smtpUrl }))
-      .transportOptions;
+    new SmtpMailer(fakeSettings({ 'mail.smtpUrl': smtpUrl })).transportOptions;
 
   it('applies default transport timeouts', () => {
     expect(optionsFor('smtp://localhost:1025')).toMatchObject({
@@ -88,7 +84,7 @@ describe('SmtpMailer', () => {
       socketTimeout: 20000,
     });
   });
-  it('lets SMTP_URL override a timeout', () => {
+  it('lets the SMTP URL override a timeout', () => {
     expect(
       optionsFor('smtp://localhost:1025?socketTimeout=5000'),
     ).toMatchObject({ connectionTimeout: 10000, socketTimeout: 5000 });
@@ -98,10 +94,9 @@ describe('SmtpMailer', () => {
     const sink = await startSink();
     try {
       const mailer = new SmtpMailer(
-        loadEnv({
-          ...validEnv,
-          SMTP_URL: `smtp://127.0.0.1:${sink.port}`,
-          MAIL_FROM: 'QHHOJ <noreply@example.test>',
+        fakeSettings({
+          'mail.smtpUrl': `smtp://127.0.0.1:${sink.port}`,
+          'mail.from': 'QHHOJ <noreply@example.test>',
         }),
       );
       await mailer.send({
@@ -114,6 +109,51 @@ describe('SmtpMailer', () => {
       expect(sink.received[0]).toContain('Verify your account please');
       expect(sink.received[0]).toContain('From: QHHOJ <noreply@example.test>');
       expect(sink.received[0]).toContain('To: bob@example.com');
+    } finally {
+      await sink.stop();
+    }
+  });
+
+  it('switches to a new server when the URL setting changes, without a restart', async () => {
+    const first = await startSink();
+    const second = await startSink();
+    try {
+      const settings = fakeSettings({
+        'mail.smtpUrl': `smtp://127.0.0.1:${first.port}`,
+      });
+      const mailer = new SmtpMailer(settings);
+      await mailer.send({ to: 'bob@example.com', subject: 'one', text: 'a' });
+      settings.override('mail.smtpUrl', `smtp://127.0.0.1:${second.port}`);
+      await mailer.send({ to: 'bob@example.com', subject: 'two', text: 'b' });
+      expect(first.received).toHaveLength(1);
+      expect(second.received).toHaveLength(1);
+      expect(second.received[0]).toContain('Subject: two');
+    } finally {
+      await first.stop();
+      await second.stop();
+    }
+  });
+
+  it('refuses to send while no SMTP URL is configured', async () => {
+    await expect(
+      new SmtpMailer(fakeSettings()).send({
+        to: 'bob@example.com',
+        subject: 's',
+        text: 'b',
+      }),
+    ).rejects.toThrow('Mail is not configured');
+  });
+
+  it('applies a changed From address to the next message', async () => {
+    const sink = await startSink();
+    try {
+      const settings = fakeSettings({
+        'mail.smtpUrl': `smtp://127.0.0.1:${sink.port}`,
+      });
+      const mailer = new SmtpMailer(settings);
+      settings.override('mail.from', 'Ops <ops@example.test>');
+      await mailer.send({ to: 'bob@example.com', subject: 's', text: 'b' });
+      expect(sink.received[0]).toContain('From: Ops <ops@example.test>');
     } finally {
       await sink.stop();
     }

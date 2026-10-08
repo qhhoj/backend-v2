@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { MAILER } from './mailer';
+import { MAILER } from '@libs/common';
 import { SmtpMailer } from './smtp.mailer';
 
 @Global()

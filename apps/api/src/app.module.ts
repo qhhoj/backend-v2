@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import {
   EnvModule,
-  MailModule,
   QueueModule,
   RedisModule,
   StorageModule,
@@ -10,6 +9,7 @@ import {
 import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
 import { SettingsModule } from '@libs/settings';
+import { MailModule } from './modules/mail/mail.module';
 import { AuthApiModule } from './modules/auth/auth-api.module';
 import { ApiV2Module } from './modules/api-v2/api-v2.module';
 import { JudgesApiModule } from './modules/judges/judges-api.module';

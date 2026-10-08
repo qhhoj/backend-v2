@@ -1,7 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
-import { ENV, type Env } from '../env/env';
-import { MAIL_ADDRESS_PATTERN, type MailMessage, type Mailer } from './mailer';
+import {
+  MAIL_ADDRESS_PATTERN,
+  type MailMessage,
+  type Mailer,
+} from '@libs/common';
+import { SettingsService } from '@libs/settings';
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTER = /[\x00-\x1F\x7F]/;
@@ -21,18 +25,20 @@ function withTimeouts(smtpUrl: string): string {
   return url.toString();
 }
 
+/** The transport is rebuilt (and the old one closed) whenever the `mail.smtpUrl` setting changed; `mail.from` is read per message. */
 @Injectable()
 export class SmtpMailer implements Mailer {
-  private readonly transport: Transporter;
+  private current: { url: string; transport: Transporter } | null = null;
+
+  constructor(
+    @Inject(SettingsService)
+    private readonly settings: Pick<SettingsService, 'get'>,
+  ) {}
 
   /** Resolved transport options, for tests. */
   get transportOptions(): Record<string, unknown> {
-    return (this.transport as unknown as { options: Record<string, unknown> })
+    return (this.transport() as unknown as { options: Record<string, unknown> })
       .options;
-  }
-
-  constructor(@Inject(ENV) private readonly env: Env) {
-    this.transport = createTransport(withTimeouts(env.smtpUrl));
   }
 
   async send(message: MailMessage): Promise<void> {
@@ -40,11 +46,21 @@ export class SmtpMailer implements Mailer {
       throw new Error('Invalid mail recipient');
     if (CONTROL_CHARACTER.test(message.subject))
       throw new Error('Invalid mail subject');
-    await this.transport.sendMail({
-      from: this.env.mailFrom,
+    await this.transport().sendMail({
+      from: this.settings.get('mail.from'),
       to: message.to,
       subject: message.subject,
       text: message.text,
     });
+  }
+
+  private transport(): Transporter {
+    const url = this.settings.get('mail.smtpUrl');
+    if (!url) throw new Error('Mail is not configured');
+    if (this.current?.url !== url) {
+      this.current?.transport.close();
+      this.current = { url, transport: createTransport(withTimeouts(url)) };
+    }
+    return this.current.transport;
   }
 }

@@ -2,13 +2,13 @@ import { Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { createServer, Server } from 'node:http';
 import { AddressInfo } from 'node:net';
-import { Env } from '@libs/common';
+import { fakeSettings } from '@libs/settings/testing';
 import { PwnedPasswordService } from './pwned-password.service';
 
 const sha1 = (text: string) =>
   createHash('sha1').update(text).digest('hex').toUpperCase();
-const service = (pwnedApiUrl: string | null) =>
-  new PwnedPasswordService({ pwnedApiUrl } as Env);
+const service = (pwnedApiUrl: string) =>
+  new PwnedPasswordService(fakeSettings({ 'auth.pwnedApiUrl': pwnedApiUrl }));
 
 describe('PwnedPasswordService', () => {
   let server: Server;
@@ -55,5 +55,14 @@ describe('PwnedPasswordService', () => {
     );
   });
   it('is disabled without a URL', async () =>
-    expect(await service(null).isPwned('password123')).toBe(false));
+    expect(await service('').isPwned('password123')).toBe(false));
+  it('follows a changed URL', async () => {
+    const settings = fakeSettings({ 'auth.pwnedApiUrl': baseUrl });
+    const pwned = new PwnedPasswordService(settings);
+    expect(await pwned.isPwned('password123')).toBe(true);
+    const requestCount = requestedPaths.length;
+    settings.override('auth.pwnedApiUrl', '');
+    expect(await pwned.isPwned('password123')).toBe(false);
+    expect(requestedPaths).toHaveLength(requestCount);
+  });
 });
