@@ -49,8 +49,19 @@ export class SimilarityAccessService {
     );
   }
 
-  /** Whether the viewer may see this run and its pairs; callers answer 404 when not. */
-  canView(principal: Principal, run: SimilarityRun): Promise<boolean> {
+  /** The run, when the viewer may see it and its pairs; 404 for an unknown, malformed or hidden id alike. */
+  async viewableRun(
+    principal: Principal,
+    runId: string,
+  ): Promise<SimilarityRun> {
+    const run = await this.runs.findRun(runId);
+    if (!run || !(await this.canView(principal, run)))
+      throw similarityNotFound();
+    return run;
+  }
+
+  /** Whether the viewer may see this run and its pairs. */
+  private canView(principal: Principal, run: SimilarityRun): Promise<boolean> {
     if (run.scope === 'problem')
       return this.canEditProblemId(principal, run.problem);
     return this.canEditContestId(principal, run.contest);

@@ -170,14 +170,28 @@ describe('OpenAPI document', () => {
         '/api/internal/events/contests/{key}',
         '/api/internal/contests/{key}/stats',
         '/api/internal/contests/{key}/moss',
-        '/api/internal/similarity/runs',
-        '/api/internal/similarity/runs/{runId}',
         '/api/internal/contests/{key}/data',
         '/api/internal/contests/{key}/data/download',
         '/api/internal/contests/{key}/clone',
         '/api/v2/contests',
         '/api/v2/contest/{key}',
         '/api/v2/participations',
+      ]),
+    );
+  });
+
+  it('lists the similarity routes', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/similarity/runs',
+        '/api/internal/similarity/runs/{runId}',
+        '/api/internal/similarity/runs/{runId}/pairs',
+        '/api/internal/similarity/pairs/{pairId}',
       ]),
     );
   });

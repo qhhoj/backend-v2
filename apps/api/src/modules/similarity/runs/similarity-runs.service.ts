@@ -4,10 +4,7 @@ import { uuidStr } from '@libs/database';
 import type { SimilarityRun } from '@libs/database';
 import type { ScopeQueryDto } from '../core/dto/scope-query.dto';
 import { SimilarityRunResponse } from '../core/dto/similarity-run.response';
-import {
-  SimilarityAccessService,
-  similarityNotFound,
-} from '../core/similarity-access.service';
+import { SimilarityAccessService } from '../core/similarity-access.service';
 import { SimilarityRunsRepository } from '../core/similarity-runs.repository';
 
 /** Runs listed per scope, newest first. */
@@ -34,9 +31,7 @@ export class SimilarityRunsService {
     principal: Principal,
     runId: string,
   ): Promise<SimilarityRunResponse> {
-    const run = await this.runs.findRun(runId);
-    if (!run || !(await this.access.canView(principal, run)))
-      throw similarityNotFound();
+    const run = await this.access.viewableRun(principal, runId);
     const [response] = await this.responsesOf([run]);
     return response;
   }
