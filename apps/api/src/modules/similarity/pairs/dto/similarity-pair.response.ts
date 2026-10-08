@@ -5,13 +5,22 @@ export class SimilaritySideResponse {
   submissionId!: string;
   userId!: string;
   username!: string;
+
+  /** `usernames` maps user ids to usernames; a deleted user shows as ''. */
+  static from(
+    side: SimilaritySide,
+    usernames: Map<string, string>,
+  ): SimilaritySideResponse {
+    const userId = uuidStr(side.user);
+    return {
+      submissionId: uuidStr(side.submission),
+      userId,
+      username: usernames.get(userId) ?? '',
+    };
+  }
 }
 
-/**
- * The fields the pair list and the pair detail share. Responses are built by
- * the functions below each class.
- */
-export class SimilarityPairFieldsResponse {
+export class SimilarityPairResponse {
   id!: string;
   runId!: string;
   problemId!: string;
@@ -24,52 +33,27 @@ export class SimilarityPairFieldsResponse {
   longestFragment!: number;
   /** Shared k-grams over both files. */
   totalOverlap!: number;
-}
-
-export function pairFieldsResponse(
-  pair: SimilarityPair,
-  problemCode: string,
-): SimilarityPairFieldsResponse {
-  return {
-    id: uuidStr(pair._id),
-    runId: uuidStr(pair.run),
-    problemId: uuidStr(pair.problem),
-    problemCode,
-    language: pair.language,
-    similarity: pair.similarity,
-    longestFragment: pair.longestFragment,
-    totalOverlap: pair.totalOverlap,
-  };
-}
-
-/** `usernames` maps user ids to usernames; a deleted user shows as ''. */
-export function sideResponse(
-  side: SimilaritySide,
-  usernames: Map<string, string>,
-): SimilaritySideResponse {
-  const userId = uuidStr(side.user);
-  return {
-    submissionId: uuidStr(side.submission),
-    userId,
-    username: usernames.get(userId) ?? '',
-  };
-}
-
-export class SimilarityPairResponse extends SimilarityPairFieldsResponse {
   fragmentCount!: number;
   left!: SimilaritySideResponse;
   right!: SimilaritySideResponse;
-}
 
-export function pairResponse(
-  pair: SimilarityPair,
-  problemCode: string,
-  usernames: Map<string, string>,
-): SimilarityPairResponse {
-  return {
-    ...pairFieldsResponse(pair, problemCode),
-    fragmentCount: pair.fragments.length,
-    left: sideResponse(pair.left, usernames),
-    right: sideResponse(pair.right, usernames),
-  };
+  static from(
+    pair: SimilarityPair,
+    problemCode: string,
+    usernames: Map<string, string>,
+  ): SimilarityPairResponse {
+    return {
+      id: uuidStr(pair._id),
+      runId: uuidStr(pair.run),
+      problemId: uuidStr(pair.problem),
+      problemCode,
+      language: pair.language,
+      similarity: pair.similarity,
+      longestFragment: pair.longestFragment,
+      totalOverlap: pair.totalOverlap,
+      fragmentCount: pair.fragments.length,
+      left: SimilaritySideResponse.from(pair.left, usernames),
+      right: SimilaritySideResponse.from(pair.right, usernames),
+    };
+  }
 }

@@ -39,6 +39,27 @@ export class SimilarityGroupResponse {
   pairCount!: number;
   /** The engine failed on this group alone: it has no pairs, the rest of the run completed. */
   failed!: boolean;
+
+  /** `problemCodes` maps problem ids to codes. */
+  static from(
+    group: SimilarityGroup,
+    problemCodes: Map<string, string>,
+  ): SimilarityGroupResponse {
+    const problemId = uuidStr(group.problem);
+    return {
+      problemId,
+      problemCode: problemCodes.get(problemId) ?? '',
+      language: group.language,
+      tokenizer: group.tokenizer,
+      submissionCount: group.submissionCount,
+      comparedCount: group.comparedCount,
+      skippedEmpty: group.skippedEmpty,
+      skippedTooLarge: group.skippedTooLarge,
+      truncated: group.truncated,
+      pairCount: group.pairCount,
+      failed: group.failed,
+    };
+  }
 }
 
 export class SimilarityUnsupportedResponse {
@@ -48,26 +69,6 @@ export class SimilarityUnsupportedResponse {
 }
 
 const optionalId = (id: string | null) => (id === null ? null : uuidStr(id));
-
-function groupResponse(
-  group: SimilarityGroup,
-  problemCodes: Map<string, string>,
-): SimilarityGroupResponse {
-  const problemId = uuidStr(group.problem);
-  return {
-    problemId,
-    problemCode: problemCodes.get(problemId) ?? '',
-    language: group.language,
-    tokenizer: group.tokenizer,
-    submissionCount: group.submissionCount,
-    comparedCount: group.comparedCount,
-    skippedEmpty: group.skippedEmpty,
-    skippedTooLarge: group.skippedTooLarge,
-    truncated: group.truncated,
-    pairCount: group.pairCount,
-    failed: group.failed,
-  };
-}
 
 export class SimilarityRunResponse {
   id!: string;
@@ -110,7 +111,9 @@ export class SimilarityRunResponse {
         maxPairs: run.limits.maxPairs,
         maxSubmissions: run.limits.maxSubmissions,
       },
-      groups: run.groups.map((group) => groupResponse(group, problemCodes)),
+      groups: run.groups.map((group) =>
+        SimilarityGroupResponse.from(group, problemCodes),
+      ),
       unsupported: run.unsupported.map((entry) => ({
         language: entry.language,
         submissionCount: entry.submissionCount,

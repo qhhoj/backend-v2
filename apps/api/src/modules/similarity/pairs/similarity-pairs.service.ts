@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { SimilarityPair, SimilaritySide } from '@libs/database';
+import type { SimilarityPair } from '@libs/database';
 import { SubmissionsService } from '../../submissions/core/submissions.service';
 import {
   SimilarityAccessService,
@@ -11,16 +11,11 @@ import {
 import { SimilarityRunsRepository } from '../core/similarity-runs.repository';
 import type { SimilarityPairListDto } from './dto/pair-list.dto';
 import {
-  fragmentResponse,
-  sourceSideResponse,
+  SimilarityPairDetailResponse,
+  SimilarityPairSourceResponse,
 } from './dto/similarity-pair-detail.response';
-import type { SimilarityPairDetailResponse } from './dto/similarity-pair-detail.response';
-import {
-  pairFieldsResponse,
-  pairResponse,
-  sideResponse,
-} from './dto/similarity-pair.response';
-import type { SimilarityPairResponse } from './dto/similarity-pair.response';
+import { SimilarityPairResponse } from './dto/similarity-pair.response';
+import type { SimilaritySideResponse } from './dto/similarity-pair.response';
 import { SimilarityPairsRepository } from './similarity-pairs.repository';
 import type { PairFilter } from './similarity-pairs.repository';
 
@@ -69,7 +64,7 @@ export class SimilarityPairsService {
       this.pairs.usernames(uniqueUserIds(items)),
     ]);
     const responses = items.map((pair) =>
-      pairResponse(
+      SimilarityPairResponse.from(
         pair,
         problemCodes.get(uuidStr(pair.problem)) ?? '',
         usernames,
@@ -96,21 +91,22 @@ export class SimilarityPairsService {
       this.pairs.usernames(uniqueUserIds([pair])),
       this.pairs.sourcesOf([...factsById.keys()]),
     ]);
-    const sourceSide = (side: SimilaritySide) => {
-      const sideFields = sideResponse(side, usernames);
-      const submissionId = sideFields.submissionId;
-      return sourceSideResponse(
-        sideFields,
-        factsById.get(submissionId),
-        sourcesById.get(submissionId),
+    const summary = SimilarityPairResponse.from(
+      pair,
+      problemCodes.get(problemId) ?? '',
+      usernames,
+    );
+    const withSource = (side: SimilaritySideResponse) =>
+      SimilarityPairSourceResponse.withSource(
+        side,
+        factsById.get(side.submissionId),
+        sourcesById.get(side.submissionId),
       );
-    };
-    return {
-      ...pairFieldsResponse(pair, problemCodes.get(problemId) ?? ''),
-      left: sourceSide(pair.left),
-      right: sourceSide(pair.right),
-      fragments: pair.fragments.map(fragmentResponse),
-    };
+    return SimilarityPairDetailResponse.withSources(
+      summary,
+      { left: withSource(summary.left), right: withSource(summary.right) },
+      pair.fragments,
+    );
   }
 
   /**

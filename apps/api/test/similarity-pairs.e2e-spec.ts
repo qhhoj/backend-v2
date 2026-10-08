@@ -76,11 +76,15 @@ describe('similarity pairs', () => {
         .body as PairPage
     ).data.map((pair) => pair.similarity);
 
-  /** `overrides` apply to the pair, `submissionFields` to both its submissions. */
+  /**
+   * `overrides` apply to the pair, `submissionFields` to both its submissions,
+   * unless `rightFields` replaces them on the right one.
+   */
   const addPair = async (
     similarity: number,
     overrides: Record<string, unknown> = {},
     submissionFields: Record<string, unknown> = {},
+    rightFields: Record<string, unknown> = submissionFields,
   ) => {
     const left = await seedSubmission(api, {
       user: users.ann._id,
@@ -94,7 +98,7 @@ describe('similarity pairs', () => {
       problem: problem._id,
       language: catalog.languages.cpp,
       source: SOURCE_RIGHT,
-      ...submissionFields,
+      ...rightFields,
     });
     return api.similarityPairs.create({
       run: run._id,
@@ -283,7 +287,6 @@ describe('similarity pairs', () => {
       right: { username: 'bob', source: SOURCE_RIGHT },
       fragments: [{ leftStart: 1, leftEnd: 4, rightStart: 2, rightEnd: 5 }],
     });
-    expect(detail).not.toHaveProperty('fragmentCount');
     expect(detail.left.submissionId).toBe(uuidStr(pair.left.submission));
     // The ranges lie inside the sources they describe.
     const lines = (source: string) => source.trimEnd().split('\n').length;
@@ -351,6 +354,20 @@ describe('similarity pairs', () => {
       await api.submissions.deleteMany({});
       await get('curator', pairUrl(privatePair._id)).expect(404);
       await get('owner', pairUrl(privatePair._id)).expect(200);
+    });
+
+    it('hides a pair when the source route would hide either side', async () => {
+      // A practice submission: being the contest's curator grants nothing on it.
+      const inContest = { contest: contestRun.contest };
+      const practice = { contest: null };
+      const pairs = [
+        await addPair(0.8, { run: contestRun._id }, practice, inContest),
+        await addPair(0.8, { run: contestRun._id }, inContest, practice),
+      ];
+      for (const pair of pairs)
+        await get('curator', pairUrl(pair._id))
+          .expect(404)
+          .expect(errorCode('not_found'));
     });
 
     it('hides sources that the source route would hide', async () => {
