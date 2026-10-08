@@ -22,6 +22,20 @@ set -a; . ./.env; set +a   # the apps read process.env; they do not load .env th
 
 `.env.example` lists every variable with a comment; [CONTRIBUTING.md](CONTRIBUTING.md#env-and-deploy) explains the shared volumes and deploy requirements. Each app validates its env at boot and fails fast.
 
+Env holds only infrastructure and key material (database, Redis, secrets, paths, ports). Everything an operator may want to change at runtime (SMTP and mail sender, social login clients, Discord webhooks, the breach-check URL, PDF limits, official contest mode, the disqualification ban threshold, the site time zone) is an admin setting, edited without a restart: `GET /api/internal/admin/settings` lists them, `PATCH /api/internal/admin/settings/<key>` with `{ "value": ... }` changes one (permission `judge.change_settings`, grant it to superusers only; secrets are never returned, every change is recorded). How to add one: [CONTRIBUTING.md](CONTRIBUTING.md#runtime-settings).
+
+### After upgrading
+
+The settings default to off or to the site defaults, so after deploying set in the admin API what you use (the old variables are not read; boot logs one `removedEnvInUse` warning naming any still set, and ignores them):
+
+- `mail.smtpUrl` (e.g. `smtps://user:pass@host:465`, credentials percent-encoded) and `mail.from`: without an SMTP URL registration, activation and password reset answer 503 `mail_unavailable`
+- `auth.google`, `auth.github`, `auth.facebook`: `{ "enabled": true, "clientId": "...", "clientSecret": "..." }` per provider you offer
+- `discord.webhooks`: `{ "default": "https://discord.com/api/webhooks/..." }` or per-event keys
+- `site.timeZone` if the site is not on `Asia/Ho_Chi_Minh` (the statistics strip's "today")
+- optionally `auth.pwnedApiUrl` (default Have I Been Pwned), `pdf.renderTimeoutMs`, `pdf.maxBytes`, `contest.officialMode`, `contest.banAfterDisqualifications`
+
+Local mail: start Mailpit (`docker compose up -d mailpit`), then `npm run seed:e2e` (see Run) sets `mail.smtpUrl` to it, or PATCH `mail.smtpUrl` to `smtp://localhost:1025` yourself.
+
 ## Run
 
 Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
@@ -33,7 +47,9 @@ Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
 | bridge (`:9999`, exactly one instance) | `npm run start:bridge` | `npx nest build bridge && npm run start:prod:bridge` |
 | migrator (CLI) | `npx nest build migrator` | `node dist/apps/migrator/main backfill\|verify [jobs...]` |
 
-OpenAPI JSON: `GET /api/internal/openapi.json`.
+OpenAPI JSON: `GET /api/internal/openapi.json` (request and response schemas of every route; the frontend generates its types from it). `npm run test:openapi` checks that every JSON route has a response schema.
+
+Dev and end-to-end data: `NODE_ENV=development npm run seed:e2e` creates `e2e_admin`, `e2e_user`, problem `e2e_sum` and the Mailpit mail setting (idempotent, refuses outside `test`/`development`).
 
 ## Tests and checks
 
@@ -113,6 +129,8 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | A background job | `apps/worker/src/jobs/<job>/` and its queue contract in `libs/<lib>/src/queues.ts` |
 | A legacy import | `apps/migrator/src/mappers/` |
 | Env variables | `libs/common/src/env/`, `.env.example` |
+| A runtime setting (admin-editable) | one entry in `libs/settings/src/registry.ts`; admin API in `modules/settings/` |
+| OpenAPI schemas | `dto/*.response.ts`; `libs/common/src/openapi/` |
 
 ## More
 

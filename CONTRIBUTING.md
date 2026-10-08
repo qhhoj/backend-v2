@@ -20,24 +20,26 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 
 ```
 apps/
-  api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
+  api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts, modules/ (feature modules incl. `mail/` (SMTP mailer) and `settings/` (admin API)), seed/ (`npm run seed:e2e`)
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
   worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data, organization-points, user-data, contribution-points, discord-webhook)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
-  common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier, `runCoalesced`
+  common/     http layer (AppError and its subclasses, filter, interceptor, pipes), bootstrap, env, BaseMongoStreamQuerier, `runCoalesced`, AES-GCM helper (`crypto/`), time zones (`text/time-zone.ts`), OpenAPI helpers (`openapi/`), mail contract (`Mailer`, `MAILER`, `InMemoryMailer`)
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
-  auth/       groups, password, token, session, principal, users, guards, decorators, crypto, AuthModule
+  settings/   runtime settings: `registry`, `setting-types`, `sealing`, `settings.querier`, `settings.service`, `settings.module`, `testing` (`fakeSettings`)
+  auth/       groups, password, token, session, principal, users, guards, decorators, legacy Fernet `crypto` (no AES), AuthModule
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
   contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
-  community/  org PP, ranks, interaction gate, time zones, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook)
+  community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
 
-- Aliases: `@libs/common`, `@libs/database`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging`, `@libs/contests`, `@libs/community` (and `@libs/<name>/*`) -> `libs/<name>/src`
+- Layer order (no cycles): `database` <- `common` <- `settings` <- `auth` <- every other lib and app
+- Aliases: `@libs/common`, `@libs/database`, `@libs/settings`, `@libs/auth`, `@libs/render`, `@libs/problems`, `@libs/judging`, `@libs/contests`, `@libs/community` (and `@libs/<name>/*`) -> `libs/<name>/src`
 - Import from the alias root (`@libs/database`) except `/testing` entry points
 - Each lib exports through `libs/<name>/src/index.ts`; add new files there
 
@@ -98,6 +100,8 @@ comments/
   comments-api.module.ts
   core/            CommentPagesService (the one page-access decision), threads, counts, locks, recent comments, rate-limits, dto
   posting/  votes/  moderation/
+settings/          flat: admin settings API (`GET`/`PATCH /api/internal/admin/settings`)
+mail/              flat: `SmtpMailer` behind the `MAILER` token
 contributions/     flat: vote ledger (votes.repository), vote gates and limit, contribution-points enqueuer
 discord/           flat: Discord webhook enqueuer
 home/              flat: homepage data, RSS/Atom feeds
@@ -134,6 +138,18 @@ api-v2/            legacy shapes, grouped like the features
 - Streams need a replica set; `DISABLE_MONGODB_STREAM=true` turns them off
 - Queriers never handle deletes (stream only forwards insert/update/replace)
 
+## Runtime settings
+
+- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `LEGACY_MYSQL_URL`, `LEGACY_SECRET_KEY`, `TEST_MYSQL_URL`, `TEST_REDIS_URL` (and `MOSS_API_KEY` until the similarity plan replaces it)
+- Settings (the admin edits them, no restart): `site.timeZone`, `contest.officialMode`, `contest.banAfterDisqualifications`, `discord.webhooks`, `mail.from`, `mail.smtpUrl`, `auth.pwnedApiUrl`, `auth.google`, `auth.github`, `auth.facebook`, `pdf.renderTimeoutMs`, `pdf.maxBytes`
+- Add one: a `define({ type, default, description, secret, combine? })` entry in `SETTINGS` (`libs/settings/src/registry.ts`), `type` from `setting-types.ts` (add a type there when none fits); no other file changes, the admin API and revisions pick it up. `secret: true` encrypts the whole value, `secret: ['clientSecret']` those top-level fields; `combine` merges a PATCH into the stored object (the `auth.*` clients), without it the patch replaces the value
+- Read: inject `SettingsService` and call `settings.get('<key>')` where the value is used, never cache it (it is a synchronous read of an in-memory snapshot kept fresh by change stream plus a one-minute resync, so a change reaches api, worker and bridge within seconds); a consumer that builds something expensive keys it by the value (the mailer keeps its SMTP transport per URL)
+- Write: only `SettingsService.set(key, patch, actorId)` (one transaction: combine, validate, seal, upsert, revision); over HTTP `GET /api/internal/admin/settings`, `PATCH /api/internal/admin/settings/:key` with `{ value }`, `GET .../:key/revisions`, all needing `judge.change_settings` (grant it to superusers only, it can point the server at outbound URLs). `null` is refused: clear with `{}` (webhooks), `''` (URLs, SMTP) or `enabled: false`
+- A stored value that cannot be read (corrupt row, rotated `ENCRYPTION_KEY`) falls back to the default and the process keeps booting
+- Secrets (`mail.smtpUrl`, `discord.webhooks`, each `clientSecret`) are returned by `GET` as `{ set: true }` only, stored sealed, redacted in revisions (`changedFields` names what changed); never log or echo a value, and a `SettingError` message never contains the input
+- URL settings must be https; `http` is accepted for `localhost`/`127.0.0.1` outside production; in production `localhost` and literal loopback/private/link-local IPs are refused (`isSafeUrl`)
+- Tests: `api.setSetting(key, value)` / `worker.setSetting(key, value)` on the harnesses; unit specs build `fakeSettings({ key: value })` from `@libs/settings/testing`; the api harness switches the pwned-password check off (`auth.pwnedApiUrl` is `''`)
+
 ## HTTP conventions
 
 | Case | Return / throw | Wire format |
@@ -141,11 +157,13 @@ api-v2/            legacy shapes, grouped like the features
 | Single | value | `{ data }` |
 | List | `new Paginated(items, meta)` | `{ data, meta }` |
 | Legacy shape | `@RawResponse()` on handler/class | body as returned |
-| Error | `throw new AppError(code, status, message, fields?)` | `{ error: { code, message, fields? } }` |
+| Error | `throw new AppError(code, status, message, fields?, headers?, extra?)` | `{ error: { code, message, fields?, issues?, ...extra } }` |
 
 - Wrapping/unwrapping lives in `libs/common/src/interceptors/response.interceptor.ts`; errors in `filters/exception.filter.ts`
 - Nest `HttpException` < 500 maps to codes `unauthorized|forbidden|not_found|rate_limited|http_error`; anything else is `internal_error`
-- Validation: DTO classes + class-validator; global pipe is whitelist + forbid unknown + transform, failure -> `validation_failed` (400) with `fields`
+- Validation: DTO classes + class-validator; global pipe is whitelist + forbid unknown + transform, failure -> `validation_failed` (400) with `fields` (messages per field, unchanged) and `issues`
+- `issues: [{ field, code, message }]` is the machine-readable twin of `fields`, built from one list by `ValidationFailedError` (or derived by `AppError` when `fields` is given, code `invalid`); codes are snake_case: the failing constraint name (`max_length`, `is_in`), or `context: { code: '...' }` on the class-validator decorator (`username_invalid_characters`, `email_invalid`), or the code a service gives (`invalidField(field, message, code)`, `ValidationFailedError`): `username_taken`, `email_taken`, `password_pwned`, `organization_unavailable`, `language_unknown`, `language_takes_file`, `language_takes_text`, `file_upload_disabled`, `language_extension_invalid`, `file_wrong_extension`; nested DTO fields use dotted names (`appearance.glass`)
+- `extra` (6th `AppError` argument) is merged into the error object next to `code` and `message`, never overriding them; `BannedError` (login) uses it for `banReason`
 - Query DTOs: `@Type(() => Number)` for numbers; `dto/transforms.ts` (`toArray`, `toBoolean`) for arrays and booleans
 - Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`
 - Multipart routes read `request.parts({ limits: { files: 1, fields: 0, fileSize } })`, check for a single file and the expected fieldname, and never declare `@Body()`; an oversized file is `file_too_large` 413
@@ -159,7 +177,7 @@ api-v2/            legacy shapes, grouped like the features
 - Decorators: `@AllowPartialAuth()` (before 2FA), `@AllowPwnedPassword()`, `@SessionOnly()` (Bearer -> 403 `forbidden`; used on password change, token regenerate, logout-all, the 2FA enrol/disable/credential routes and impersonation start/stop), `@NoImpersonation()` (403 `forbidden` while impersonating; 2FA enrol/disable/credential routes, password change, token regenerate), `@RequirePermission('judge.<codename>')`, param `@CurrentAuth()` -> `AuthContext`
 - Origin rule: unsafe methods without a Bearer header must carry no `Origin` or exactly the `SITE_URL` origin, else 403 `csrf_failed`; checked first, even on `@Public` routes. The session cookie is re-issued once a day while the session is active
 - Guard order: Origin check -> authenticate (Bearer, else session cookie; an invalid Bearer token is rejected 401 even on `@Public` routes) -> cookie refresh -> `@Public` exit -> `unauthorized` -> `@SessionOnly` -> CSRF (`csrf_failed`) -> 2FA (`two_factor_required`) -> pwned password (`password_change_required`) -> `@NoImpersonation` (`forbidden`) -> permission (`forbidden`)
-- Error codes: `unauthorized` 401, `invalid_credentials` 401 (login) / 400 (password change), `csrf_failed` 403, `two_factor_required` 403, `password_change_required` 403, `forbidden` 403, `banned` 403, `account_not_activated` 403, `rate_limited` 429, `validation_failed` 400, `conflict` 409, `not_found` 404, `not_impersonating` 400, `invalid_token` 400 (activation/reset/social token), `invalid_code` 400 (TOTP/scratch code), `totp_not_enabled` 400, `webauthn_not_enabled` 400, `webauthn_failed` 400, `mail_unavailable` 503, `pdf_unavailable` 503 (statement PDF render failed; carries `Retry-After`; the SPA polls `GET /problems/:code/pdf` no faster than every 3 s and stops on 503)
+- Error codes: `unauthorized` 401, `invalid_credentials` 401 (login) / 400 (password change), `csrf_failed` 403, `two_factor_required` 403, `password_change_required` 403, `forbidden` 403, `banned` 403 (login; `banReason` is a member of the error object), `account_not_activated` 403, `rate_limited` 429, `validation_failed` 400, `conflict` 409, `not_found` 404, `not_impersonating` 400, `invalid_token` 400 (activation/reset/social token), `invalid_code` 400 (TOTP/scratch code), `totp_not_enabled` 400, `webauthn_not_enabled` 400, `webauthn_failed` 400, `banned_from_problem` 403, `contest_submission_limit` 403, `unfinished_submission_limit` 429, `solve_first` / `contest_running` / `hidden` 403 (submission detail and source: solve the problem first; the contest's list is not open yet; no access), `mail_unavailable` 503, `pdf_unavailable` 503 (statement PDF render failed; carries `Retry-After`; the SPA polls `GET /problems/:code/pdf` no faster than every 3 s and stops on 503)
 - SPA contract: cookie `qhhoj_session`; send `X-CSRF-Token` (from `/auth/me` or login) on POST/PUT/PATCH/DELETE
 - API tokens (Bearer) skip the CSRF, 2FA and pwned-password gates but cannot reach `@SessionOnly()` routes; the token stays valid across a password change (design choice)
 - Login rate limiting is reserve-then-release, per IP plus per resolved account; unknown usernames are limited per NFKC-lowercased name
@@ -167,11 +185,13 @@ api-v2/            legacy shapes, grouped like the features
 - `@fastify/cookie` is pinned at 11.0.2: 11.1.1+ depends on ESM-only `cookie` 2, which breaks Jest CJS; do not bump
 - New permissions: add the codename to `libs/auth/src/principal/permissions.ts`
 - Account flows live in `apps/api/src/modules/auth/<flow>/<flow>.controller.ts` + `<flow>.service.ts` + `dto/` (registration, password-reset, social); totp and webauthn share `auth/two-factor/` (`totp.controller.ts`, `webauthn.controller.ts`, `second-factor.service.ts`) and `impersonation/` has no `dto/`; add new flows the same way and list their paths in `apps/api/test/openapi.e2e-spec.ts`
-- Mail goes through the `MAILER` token (`@libs/common`): SMTP from the `mail.smtpUrl` setting, sender `mail.from`, both read per message; `InMemoryMailer` in tests; a send failure is `mail_unavailable` 503
+- Mail goes through the `MAILER` token (`@libs/common`; `SmtpMailer` in `apps/api/src/modules/mail/`): SMTP from the `mail.smtpUrl` setting, sender `mail.from`, both read per message (a new URL gets a new transport, the old one is closed); `InMemoryMailer` in tests; a send failure, or no `mail.smtpUrl` set, is `mail_unavailable` 503
 - Uploads go through `StorageService` (`@libs/common`): files live under `MEDIA_ROOT` (a volume nginx serves at `MEDIA_URL`), paths are checked to stay inside it, and callers never pass client-supplied names unsanitised; file type is decided from the bytes (exception: a file submission keeps its language's extension, which `LANGUAGE_EXTENSION_PATTERN` limits to `[a-z0-9]{1,10}`, as legacy did)
 - Deploy requirement for the nginx `/media` location: send `X-Content-Type-Options: nosniff`; `/media/materials/` uses `default_type application/octet-stream` and `Content-Disposition: attachment`; `/media/images/` and `/media/materials/` add `Content-Security-Policy: sandbox`
 - Frontend routes embedded in mails/redirects (SPA contract): `/activate/<key>`, `/reset-password/<token>`, `/login`, `/login/2fa`, `/register/social?token=<token>`, `/`, `/post/<id>`, `/problem/<code>`, `/problem/<code>/editorial`, `/contest/<key>`, `/tagproblem/<code>`, `/user/<username>`, `#comment-<id>` (Discord links and feeds)
-- Registration: usernames `^\w+$` (max 30), email unique case-insensitively (checked in code); activation keys are stored as sha256 hashes
+- Registration: usernames `^\w+$` (max 30), email unique case-insensitively (checked in code); activation keys are stored as sha256 hashes; optional `organizationId` (an open, listed organization the account joins) and `languageId` (its default language), each refused with an issue code when unknown or unavailable
+- `GET /auth/username-available?username=` -> `{ available }` (public, 30 per 10 min per IP; a stale pending signup reads as available); `POST /auth/activate/resend { email }` -> 204 whatever the email (resends only to a pending account, replaces its activation keys; 10 per hour per IP, 3 per hour per email); `GET /auth/social/providers` lists the enabled providers
+- Session shape (`GET /auth/me`, login): `SessionResponse { user, csrfToken, twoFactorRequired, twoFactor, passwordChangeRequired, impersonatorId }`; `user` carries `siteTheme`, `appearance` (null until set) and `languageId`; before the second factor `user` is null and `twoFactor` is `{ username, methods }` (`totp`, `webauthn`; empty when the factor was disabled meanwhile: sign in again). `siteTheme` defaults to `auto` for new accounts and must match `^[a-z][a-z0-9-]{0,31}$` (the SPA owns the theme ids)
 - 2FA enrolment (`totp/enroll`, `webauthn/register/options`) and removing a WebAuthn credential require `currentPassword` and share the `password-confirm` failure budget; WebAuthn registration and login use separate session challenges
 - Password reset also works for active accounts with an unusable (`!`) hash (migrated social-only users): it sets their first password; the token is bound to the stored hash, so it is single-use either way
 - Rate limits for guarded attempts use `RateLimitService.reserve(keys, limit, windowSeconds)`: it hits first, throws `rate_limited` over the limit, and returns a `release()` to call on success (only failures consume budget); all limit/window constants live in `auth/core/rate-limits.ts`. The password-reset per-email limit (3/hour) is never released, an accepted trade-off
@@ -181,13 +201,26 @@ api-v2/            legacy shapes, grouped like the features
 - Social login (`GET /auth/social/{google|facebook|github}/start|callback`, `POST /auth/social/complete`): a provider is enabled by its `auth.google|facebook|github` setting (`enabled`, `clientId`, `clientSecret`) and disappears from `GET /providers` and 404s at start and callback the moment it is disabled; state is bound to the browser by the `oauth_state` cookie, and the signup continuation by the `oauth_pending` cookie (set by the callback, must equal the `complete` token, else 400 `invalid_token` without spending it); `start` is limited to 30 per IP per 600 s. Stored legacy provider names: `google-oauth2`, `facebook`, `github-secure`
 - Impersonation (`POST /auth/impersonate/{userId}`, `/stop`): active superusers only, never onto a superuser or nested; `lastLogin` is untouched; the guard rechecks the impersonator on every request and ends the session if they lost superuser rights; credential routes are `@NoImpersonation()`
 - Test overrides: `setupApiTest({ overrides: [{ provide, useValue }] })` (the harness already swaps `MAILER` for an `InMemoryMailer`); clear `rate:*` Redis keys in tests that need a fresh budget
-- OpenAPI: `GET /api/internal/openapi.json` (raw JSON, no auth). Every JSON route returns a class from a `*.response.ts` (paginated: `@ApiPaginatedResponse(Item)`); `npm run test:openapi` fails for a route without a schema
+
+## OpenAPI
+
+- `GET /api/internal/openapi.json` (raw JSON, no auth) is the contract the frontend generates its types from; `docs/decisions.md` has why
+- Response shapes are classes in `dto/*.response.ts`; the swagger CLI plugin (`nest-cli.json`) documents every `*.dto.ts` and `*.response.ts` from its types and comments, so a new route needs only its class, no decorators
+- A paginated route returns `Paginated<Item>` and carries `@ApiPaginatedResponse(Item)` (`{ data: Item[], meta }`); `@RawResponse()` marks routes that bypass the `{ data }` envelope (legacy `/api/v2`, files); `envelopeResponses` wraps every other 2xx JSON schema in `{ data }`
+- Give `Record`, `unknown`, nullable-union and integer-bounded fields an explicit `@ApiProperty(...)` (the plugin cannot infer them); multipart bodies use `@ApiConsumes` + `@ApiBody`
+- `npm run test:openapi` runs `openapi.e2e-spec.ts` under `jest.openapi.config.js`, which applies the plugin; plain jest cannot (the plugin reads types, so `isolatedModules` must be off) and the main suite ignores that spec. It fails for a JSON route without a response schema, so run it after adding or changing a route
+
+## Seed script
+
+- `npm run seed:e2e` (`apps/api/src/seed/`) upserts by natural key and never touches an existing row: users `e2e_admin` (superuser) and `e2e_user`, language `PY3`, a problem type and group, public problem `e2e_sum` with one case (files in `PROBLEM_DATA_ROOT/e2e_sum/`), and `mail.smtpUrl` = `smtp://localhost:1025` (Mailpit) when it has no row
+- Needs `MONGO_URL`, `PROBLEM_DATA_ROOT`, `ENCRYPTION_KEY`; passwords from `E2E_ADMIN_PASSWORD` / `E2E_USER_PASSWORD` (defaults in `main.ts`); refuses unless `NODE_ENV` is `test` or `development` (it writes known passwords); prints a JSON summary
 
 ## Problems
 
 - Layout: `apps/api/src/modules/problems/` (`/api/internal/problems`), `modules/api-v2/` (`/api/v2`), rendering in `libs/render`
 - File names: reads are `problems.*`, write flows are `problem-<flow>.*` (`problem-editing`, `problem-uploads`)
 - Rules live in `ProblemAccess` (`problem-access.ts`): `canSee`, `canEdit`, `visibleFilter`
+- List filter `solved=true|false` (the viewer's solved problems, an AC with every case point; anonymous viewers have solved nothing); detail `contest` is `{ contestKey, attemptsLeft }` (null `attemptsLeft` = no `maxSubmissions`) when the viewer's current contest lists the problem, else null
 - `visibleFilter` goes only inside `find`/`count`, never an aggregate
 - Public routes: `@Public()` + `@CurrentAuth()` + `optionalPrincipal(auth)`; invisible or unknown problem -> 404, visible but not editable -> 403
 - Events (`ProblemEvents`): `pointsChanged`, `publicityChanged`, `codeRenamed`, `statementChanged`; listeners run synchronously after the write
@@ -237,7 +270,8 @@ api-v2/            legacy shapes, grouped like the features
 - Dispatch: lowest load among free candidates, random tie-break; a rejudge never takes the last free candidate when another judge could; mirrors dispatch under `mirrorRoot`'s code; `languageLimits` override limits; `short-circuit = !partial`
 - Submit: visible problem, allowed non-file-only language, not banned (superuser exempt), `judgeId` (a judge name) for editors and only to an online judge with the problem; 20 per minute per user; 2 unfinished (429 `rate_limited`) unless `judge.spam_submission`, counted under a fail-fast `withRedisLock` (`libs/common`; contention -> 409)
 - File submit (`POST .../submit/file`, multipart `language`, optional `judgeId`, `file`): file-only languages only, through the same checks as submit; extension = `language.extension`, size ≤ `fileSizeLimit` MB (0 = off; clamped to `MAX_UPLOAD_BYTES`), a `SCRATCH` `.sb3` is reduced to its `project.json`; the file is saved at `submission_file/<code>/<userId>/<newId>.<ext>` under `MEDIA_ROOT` and its media URL is the source, which the bridge makes absolute with `SITE_URL`
-- Detail/source: problem visible (else 404), then legacy `can_see_detail` (`F` follows `all-solved`); cases by `testcaseResultVisibility` (A all, B batches, S none; superusers all), feedback for superusers/editors/`allowViewFeedback`, output unless `testcaseVisibility` O (editors always); IE messages for editors only; the list (`GET /api/internal/submissions`) is public over visible problems, and IE/QU/P/G/D/SC filters are staff-only (400)
+- `GET /api/internal/submissions/stats` (public, route declared before `/submissions/:id`): `{ judgedToday, acceptedToday, queueLength, judgesOnline, judgesTotal }`; counts only what a signed-out viewer may see (the list's own filter), "today" starts at midnight of the `site.timeZone` setting, cached 30 s in Redis (a zone change or the midnight rollover can lag that long), judges online = connected now, total = neither blocked nor disabled
+- Detail/source: problem visible (else 404), then legacy `can_see_detail` (`F` follows `all-solved`); `totalCases` (the problem's case count, batch members included, null when the viewer may not see case results), cases by `testcaseResultVisibility` (A all, B batches, S none; superusers all), feedback for superusers/editors/`allowViewFeedback`, output unless `testcaseVisibility` O (editors always); IE messages for editors only; the list (`GET /api/internal/submissions`) is public over visible problems, and IE/QU/P/G/D/SC filters are staff-only (400)
 - Actions: invisible problem -> 404; abort (owner unless rejudged, or `judge.abort_any_submission`), rejudge/reject (`judge.rejudge_submission`/`judge.reject_submission` + edit rights; 409 while unfinished; rejudge: while in flight or locked), bulk rejudge per problem (more than 10 needs `judge.rejudge_submission_lot`, locked only with `force`; counts first, then streams chunks of at most 1000 ids)
 - Judges admin (`judge.change_judge`): `/api/internal/judges`; keys are shown once; rotate and block force-disconnect
 
@@ -271,7 +305,7 @@ api-v2/            legacy shapes, grouped like the features
 - Submission lists: `GET /:key/submissions` filters by contest and shows everyone's rows only when `canSeeFullSubmissionList` (never during a freeze unless editor), else the viewer's own (403 for another `user`). Other users' submissions of contests whose full list the viewer may not see leave `/api/internal/submissions`, `/api/v2/submissions` and the detail (403)
 - FSO (`final_submission`): delayed job `final-judge-<contest>-<endTime ms>` rescheduled on create and edit, one-minute sweep over contests holding `PD` rows, `POST /:key/judge-final` (ended FSO contests only, else 409; ignores `autoJudge`); each run is serialised per contest, requeues each `PD` row once at priority 3 and skips rows rejected with `RJ`; a single rejudge of a `PD` row is 409; leaving `final_submission` while rows are `PD` is 409
 - Access codes (`contests/core/rate-limits.ts`): wrong codes 10 per user and 30 per IP per 10 min on join and register (a missing code and a right one cost nothing); editors skip the code; virtual numbering retried up to 10 times
-- Disqualify (`POST /:key/participations/:id/disqualify`, `{ disqualified }`): scores -9999 (frozen fields too), bans or unbans the user from the contest, clears the current pointer, queues a rescore. the `contest.banAfterDisqualifications` setting (0 = off) bans the account (`isActive` false, `isUnlisted`) at that many disqualifications outside organisation-private contests; lifting uses compare-and-set on the ban reason
+- Disqualify (`POST /:key/participations/:id/disqualify`, `{ disqualified }`): scores -9999 (frozen fields too), bans or unbans the user from the contest, clears the current pointer, queues a rescore. The `contest.banAfterDisqualifications` setting (0 = off) bans the account (`isActive` false, `isUnlisted`) at that many disqualifications outside organisation-private contests; lifting uses compare-and-set on the ban reason
 - Legacy migration (migrator requirement): `formatConfig` keys `last_score_altering` -> `lastScoreAltering`, `auto_judge` -> `autoJudge`, `LSO` -> `lso`; drop `cumtime` on `final_submission`; format name `Ultimate` -> `ultimate`; Lua label scripts become `labelStyle`
 - Deviations from legacy: `ultimate` takes the latest row (no double count on equal dates), writes its tiebreaker and rounds its score; FSO final judging requeues `PD` rows only; no fifth ranking sort key (`-submission_count`); frozen results never reach non-editors through `/api/v2` (legacy leaked them)
 
@@ -297,7 +331,7 @@ api-v2/            legacy shapes, grouped like the features
 - PATCH bodies go through `RefuseNullFieldsPipe` with a per-DTO nullable allowlist: `null` on any other field is 400, never stored
 - Org PP and `memberCount` are written only by the `organization-points` job, queued by membership changes and by `recomputeUser` when a member's PP changed; enqueues coalesce per organization through a Redis NX pending flag; a failed enqueue is logged and lost until the next change
 - `about` (users and organizations) renders at save in the `user` style (raw HTML escaped); editing a profile `about` needs >= 5 solved, staff or superuser, and not muted (an organization `about` needs only `canAdminister`); a profile `about` is locked for non-superusers when the `contest.officialMode` setting is on (so are comments and blog writing, see Blog and comments); other profile settings stay editable while muted; `firstName` (<= 30) is blocked in official-contest mode
-- Leaderboards (`/users`, `/contributors`, `/users/:username/rank`) count listed, active users (`LISTED_USERS`); ties share a rank and pages continue it; rely on the `{isUnlisted, isActive, <field>, _id}` indexes, which the query planner picks (no `.hint()`), so they must exist (see Env and deploy)
+- Leaderboards (`/users`, `/contributors`, `/users/:username/rank`) count listed, active users (`LISTED_USERS`); ties share a rank and pages continue it; each row carries the user's `rating` (null when unrated) and first listed `organization` (whoever views); rely on the `{isUnlisted, isActive, <field>, _id}` indexes, which the query planner picks (no `.hint()`), so they must exist (see Env and deploy)
 - `/users/:username/pp-breakdown` is its own paged route; the first `PP_ENTRIES` rows are cached 600 s per user (`user-pp:<userId>`), so a newly private problem can show for up to 600 s
 - Heatmap: last 365 days per day in `?timezone=`, else the viewer's zone, else UTC (`$dateToString` with the zone; a zone Mongo rejects falls back to UTC), cached 10 minutes per user and zone
 - Ban (`judge.ban_user`, never yourself or a superuser): compare-and-set on `banReason`, unlisted, inactive, every session destroyed; the reserved automatic cheating reason cannot be used; unban restores rank `user`, listed and active whatever the user had before (legacy)
@@ -316,7 +350,7 @@ api-v2/            legacy shapes, grouped like the features
 - Votes: `PUT .../vote {score: 1 | -1 | 0}` on posts and comments through `VotesService` (not own, `canInteract`, 60 per minute per user across both) and `VotesRepository.cast` (row and target `score` in one transaction; a vanished target is 404 and aborts); the route answers 404 for an invisible post or hidden comment before `cast`
 - Contribution points: written only by the `contribution-points` job (coalesced per user, always recomputed and `$set`, never incremented), queued by votes, hide/unhide, post visibility/authors/deletion and a suggested problem's `publicityChanged`; the good-tickets term is 0 until 5c
 - Official-contest mode (`contest.officialMode` setting on): non-superusers get 403 on comment pages, posting, editing and comment votes and on blog create/edit (also for moderation routes, before any write); blog reads and post votes stay; recent comments are empty
-- Homepage `GET /home`: 10 recent comments (batched scan, <= 10 batches of 2 x limit, readable pages only, one contest scope per call; the anonymous slice is cached 60 s as `home:recent-comments`), 7 new public problems, top 5 by PP and by contribution, counts; contests come from `GET /contests?phase=`
+- Homepage `GET /home`: 10 recent comments (batched scan, <= 10 batches of 2 x limit, readable pages only, one contest scope per call; the anonymous slice is cached 60 s as `home:recent-comments`), 7 new public problems, top 5 by PP and by contribution, counts (`contests` = those an anonymous visitor can see); contests come from `GET /contests?phase=`
 - Feeds `GET /feeds/:kind/:format` (`blog|comments|problems`, `rss|atom`): a signed-out viewer's view only, 25 items, cached 300 s (`feed:<kind>:<format>`); superagent buffers the feed content types, so tests call `.buffer(true)` to read `.text`
 - Discord: `DiscordWebhooksService.notify(event, message)` (api) queues `discord-webhook` only when the `discord.webhooks` setting has a URL for the event or `default`; the worker reads the URL from that setting, never from job data or logs; payloads set `allowed_mentions` to none, a 4xx is not retried, redirects are refused; comments announce only pages a signed-out viewer can read, posts only once published and personal; organization and suggested problems on create
 - User-data export includes the user's own comments (hidden ones too) and own or co-authored posts, streamed into the zip
@@ -379,6 +413,8 @@ Add a job:
 | `npm test` | Jest, runs in band |
 | `npm run format` | Prettier write on `apps/` and `libs/` |
 | `npm run lint` | ESLint (+ Prettier) on `apps/` and `libs/` |
+| `npm run test:openapi` | the OpenAPI coverage spec with the swagger plugin (see OpenAPI) |
+| `npm run seed:e2e` | idempotent dev/e2e seed (see Seed script) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run build` | build `api` |
 | `npx nest build migrator` | build migrator |
@@ -399,9 +435,9 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
 - `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`
 - The `contest.officialMode` setting (on) locks profile `about` and `firstName`, comment pages, posting, comment votes and blog writing for non-superusers
-- Moved to admin settings (`GET` and `PATCH /api/internal/admin/settings/<key>`, needs `judge.change_settings`): `mail.smtpUrl`, `mail.from`, `auth.google`, `auth.facebook`, `auth.github` (social login), `auth.pwnedApiUrl`, `discord.webhooks`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `contest.officialMode`, `contest.banAfterDisqualifications`. Boot logs a warning naming any of their old variables still set and ignores them; the values are never logged
-- Mail locally: `docker compose up mailpit`, then as a user with `judge.change_settings` send `PATCH /api/internal/admin/settings/mail.smtpUrl` with body `{"value":"smtp://localhost:1025"}`; until a `mail.smtpUrl` is set, mail sends fail with 503 `mail_unavailable`
-- `discord.webhooks` (api and worker): a map of `default` or `on_<event>` keys (`on_new_comment`, `on_new_blogpost`, `on_new_problem`, `on_new_suggested_problem`, `on_new_ticket`, `on_new_ticket_message`) to https URLs (http only for `localhost`/`127.0.0.1`); empty sends nothing; the worker needs outbound HTTPS to Discord
+- Moved to admin settings (see Runtime settings; `GET /api/internal/admin/settings`, `PATCH .../<key>`, needs `judge.change_settings`): `site.timeZone` (new), `mail.smtpUrl`, `mail.from`, `auth.google`, `auth.facebook`, `auth.github` (social login), `auth.pwnedApiUrl`, `discord.webhooks`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `contest.officialMode`, `contest.banAfterDisqualifications`. Boot logs one `removedEnvInUse` warning naming any of their old variables still set (`REMOVED_ENV` in `libs/common/src/env/removed-env.ts`) and ignores them (no env fallback); the values are never logged
+- Mail locally: `docker compose up -d mailpit`, then either `npm run seed:e2e` (sets `mail.smtpUrl` to `smtp://localhost:1025` when no row exists) or, as a user with `judge.change_settings`, `PATCH /api/internal/admin/settings/mail.smtpUrl` with `{"value":"smtp://localhost:1025"}`; until `mail.smtpUrl` is set, registration and every other mail send answer 503 `mail_unavailable`
+- `discord.webhooks` (api and worker): a map of `default` or `on_<event>` keys (`on_new_comment`, `on_new_blogpost`, `on_new_problem`, `on_new_suggested_problem`, `on_new_ticket`, `on_new_ticket_message`) to https URLs (http only for `localhost`/`127.0.0.1` outside production, see Runtime settings); empty sends nothing; the worker needs outbound HTTPS to Discord
 - nginx: serve `MEDIA_URL` with `X-Content-Type-Options: nosniff` (file submissions are user bytes stored under their language's extension)
 - nginx: map the legacy `/feed/<blog|comment|problems>/<rss|atom>/` to `/api/internal/feeds/<blog|comments|problems>/<rss|atom>`
 - The `.hint()` queries (organization members, submissions, comment threads) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`); the leaderboards are not hinted but are only fast with theirs
