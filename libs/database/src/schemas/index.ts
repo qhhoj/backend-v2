@@ -31,6 +31,10 @@ import {
   OrganizationRequest,
   OrganizationRequestSchema,
 } from './organization-request.schema';
+import { Flatpage, FlatpageSchema } from './flatpage.schema';
+import { GeneralIssue, GeneralIssueSchema } from './general-issue.schema';
+import { MiscConfig, MiscConfigSchema } from './misc-config.schema';
+import { NavigationItem, NavigationItemSchema } from './navigation-item.schema';
 import { Organization, OrganizationSchema } from './organization.schema';
 import { Rating, RatingSchema } from './rating.schema';
 import { Group, GroupSchema } from './group.schema';
@@ -54,6 +58,9 @@ import { Submission, SubmissionSchema } from './submission.schema';
 import { TagGroup, TagGroupSchema } from './tag-group.schema';
 import { TagProblem, TagProblemSchema } from './tag-problem.schema';
 import { Tag, TagSchema } from './tag.schema';
+import { Ticket, TicketSchema } from './ticket.schema';
+import { UserActivity, UserActivitySchema } from './user-activity.schema';
+import { UserSession, UserSessionSchema } from './user-session.schema';
 import { User, UserSchema } from './user.schema';
 
 export * from './activation-key.schema';
@@ -69,10 +76,14 @@ export * from './contest-participation.schema';
 export * from './contest-public-ranking-link.schema';
 export * from './contest-submission.schema';
 export * from './contest.schema';
+export * from './flatpage.schema';
+export * from './general-issue.schema';
 export * from './group.schema';
 export * from './judge.schema';
 export * from './language.schema';
 export * from './license.schema';
+export * from './misc-config.schema';
+export * from './navigation-item.schema';
 export * from './organization-request.schema';
 export * from './organization.schema';
 export * from './problem-data.schema';
@@ -88,9 +99,19 @@ export * from './submission.schema';
 export * from './tag-group.schema';
 export * from './tag-problem.schema';
 export * from './tag.schema';
+export * from './ticket.schema';
+export * from './user-activity.schema';
+export * from './user-session.schema';
 export * from './user.schema';
 export const SCHEMAS: ModelDefinition[] = [
   { name: ActivationKey.name, schema: ActivationKeySchema },
+  { name: Flatpage.name, schema: FlatpageSchema },
+  { name: GeneralIssue.name, schema: GeneralIssueSchema },
+  { name: MiscConfig.name, schema: MiscConfigSchema },
+  { name: NavigationItem.name, schema: NavigationItemSchema },
+  { name: Ticket.name, schema: TicketSchema },
+  { name: UserActivity.name, schema: UserActivitySchema },
+  { name: UserSession.name, schema: UserSessionSchema },
   { name: ContestAnnouncement.name, schema: ContestAnnouncementSchema },
   { name: ContestMoss.name, schema: ContestMossSchema },
   { name: ContestOfficialRanking.name, schema: ContestOfficialRankingSchema },

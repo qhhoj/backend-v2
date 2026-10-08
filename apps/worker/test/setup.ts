@@ -25,6 +25,7 @@ import {
   Submission,
   TagProblem,
   SubmissionSource,
+  Ticket,
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
@@ -145,6 +146,7 @@ export async function setupWorkerTest({
     ),
     blogPosts: ready.get<Model<BlogPost>>(getModelToken(BlogPost.name)),
     comments: ready.get<Model<Comment>>(getModelToken(Comment.name)),
+    tickets: ready.get<Model<Ticket>>(getModelToken(Ticket.name)),
     tagProblems: ready.get<Model<TagProblem>>(getModelToken(TagProblem.name)),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,

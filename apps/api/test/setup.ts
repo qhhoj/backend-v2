@@ -11,6 +11,13 @@ import {
   Contest,
   ContestAnnouncement,
   ContestMoss,
+  Flatpage,
+  GeneralIssue,
+  MiscConfig,
+  NavigationItem,
+  Ticket,
+  UserActivity,
+  UserSession,
   ContestOfficialRanking,
   ContestParticipation,
   ContestPublicRankingLink,
@@ -178,6 +185,23 @@ export async function setupApiTest({
     ),
     commentLocks: readyApp.get<Model<CommentLock>>(
       getModelToken(CommentLock.name),
+    ),
+    tickets: readyApp.get<Model<Ticket>>(getModelToken(Ticket.name)),
+    generalIssues: readyApp.get<Model<GeneralIssue>>(
+      getModelToken(GeneralIssue.name),
+    ),
+    flatpages: readyApp.get<Model<Flatpage>>(getModelToken(Flatpage.name)),
+    navigationItems: readyApp.get<Model<NavigationItem>>(
+      getModelToken(NavigationItem.name),
+    ),
+    miscConfigs: readyApp.get<Model<MiscConfig>>(
+      getModelToken(MiscConfig.name),
+    ),
+    userSessions: readyApp.get<Model<UserSession>>(
+      getModelToken(UserSession.name),
+    ),
+    userActivities: readyApp.get<Model<UserActivity>>(
+      getModelToken(UserActivity.name),
     ),
     db: readyApp.get<Connection>(getConnectionToken()).db!,
     /** Streams are disabled in tests; call after inserting catalog rows. */

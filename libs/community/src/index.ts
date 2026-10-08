@@ -8,3 +8,7 @@ export * from './comments';
 export * from './blog-posts';
 export * from './contribution';
 export * from './votes';
+export * from './tickets';
+export * from './ticket-events';
+export * from './flatpages';
+export * from './user-activity';
