@@ -75,6 +75,23 @@ export class ProblemsRepository {
       .exec();
   }
 
+  /** Only the fields `ProblemAccess.accessView` reads: no statement, no data. */
+  findForAccess(id: string): Promise<ProblemDocument | null> {
+    return isUuid(id)
+      ? this.problems
+          .findById(id, {
+            isPublic: 1,
+            isOrganizationPrivate: 1,
+            organizations: 1,
+            authors: 1,
+            curators: 1,
+            testers: 1,
+            suggester: 1,
+          })
+          .exec()
+      : Promise.resolve(null);
+  }
+
   async list(
     filter: FilterQuery<Problem>,
     sort: Record<string, 1 | -1>,

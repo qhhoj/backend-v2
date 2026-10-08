@@ -22,6 +22,7 @@ import { ContributionsModule } from './modules/contributions/contributions.modul
 import { ContestsApiModule } from './modules/contests/contests-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
 import { SettingsApiModule } from './modules/settings/settings-api.module';
+import { TicketsApiModule } from './modules/tickets/tickets-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
 import { UsersApiModule } from './modules/users/users-api.module';
 import { HealthController } from './health.controller';
@@ -48,6 +49,7 @@ import { HealthController } from './health.controller';
     ContributionsModule,
     BlogApiModule,
     CommentsApiModule,
+    TicketsApiModule,
     HomeApiModule,
     SettingsApiModule,
     ApiV2Module,
