@@ -183,6 +183,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Threads: roots newest first, replies in `path` order, depth <= 100, all replies of a page of roots loaded — legacy MPTT put siblings newest first and had no cap; the 10-comments-per-5-minutes limit bounds growth.
 - Subtree hide and unhide filter with an `$or` of equality and a prefix regex — a single `^path(/|$)` regex has no index bounds and scans the whole `path` index.
 - Comment-thread reads `.hint()` `{threadId, hidden, path}` — the indexes must be built before serving.
+- Comments record `hiddenBy` (the comment whose hide hid them, itself for a direct hide); unhide clears only the rows that comment hid, so a reply hidden on its own stays hidden when an ancestor is unhidden. Legacy hidden comments migrate with `hiddenBy` = own id.
 - Unhiding under a hidden parent is 409 — otherwise a visible orphan shows in lists, counts and points.
 - Votes are changeable and withdrawable; the vote row and the target's score change in one transaction, and a vanished target aborts it — legacy allowed one vote ever, and parallel votes must not lose a point.
 - Contribution points are recomputed by a job coalesced per user on every trigger, never incremented — the spec's "incremental on votes" would drift against a concurrent recompute.
@@ -192,14 +193,14 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `blog` sanitizes author HTML first and splices KaTeX in afterwards through nonce slots — KaTeX output carries inline styles the sanitizer must otherwise allow, which would let authors forge overlays.
 - `blog` author CSS is strict (no `position`, offsets, `transform`, `z-index`, `opacity`, negative margins or viewport units; unit allow-list; `user-` class prefix; no author MathML or SVG; iframes only YouTube/Vimeo, sandboxed) — a post must not cover the page.
 - The frontend must contain every user-authored HTML container (`overflow: clip; contain: paint; isolation: isolate; min-width: 0; contain: inline-size`, `.katex-display { overflow-x: auto }`) — in-flow overflow cannot be stopped by the sanitizer; this covers posts, comments, profile and organization `about` and ticket messages.
-- User-authored KaTeX (`blog`, `user`): `maxExpand` 50, `maxSize` 50, sizes beyond ±50em refused on the parse tree, parametered macros refused (hex colours allowed only after colour commands), 20k parse-node cap, 500 ms budget per formula — a stranger's `\def` chain cost seconds per formula; worst accepted formula is about 350 ms.
+- User-authored KaTeX (`blog`, `user`): `maxExpand` 50, `maxSize` 50, sizes beyond ±50em refused on the parse tree, parametered macros refused (hex colours allowed only after colour commands), 20k parse-node cap, 500 ms of KaTeX per render in total (the first formula past it is a `math-error`, later ones show as source) — a stranger's `\def` chain cost seconds per formula; worst accepted formula is about 350 ms.
 - `katex` is pinned to exactly 0.19.0 — the size and node checks call the internal `katex.__parse`.
 - `font-size` multipliers scale after the size check — accepted, container containment covers the overflow.
 - Muted users cannot write or edit posts; staff do not bypass the 10-solve gate — muting silences public text; legacy let superusers only bypass.
 - `publishOn` may be set on create (default now) — legacy overwrote it, which made scheduling impossible; a scheduled post is announced on Discord only once published.
 - Deleting a post deletes its votes, comments and lock — legacy orphaned the comments; a comment created during the delete may survive unreadable (its page is 404).
 - Blog writes are limited to 10 per hour per user, comments to 10 per 5 minutes, votes to 60 per minute across posts and comments — legacy had no limits; moderators share the blog budget.
-- Official-contest mode closes comment pages, posting, editing, comment votes and blog writing for non-superusers (moderation routes refuse before writing); blog reads and votes stay — legacy hid the comment area and the editor.
+- Official-contest mode closes comment pages, posting, editing, comment votes and blog writing for non-superusers (moderation routes refuse before writing); blog reads and votes stay, and post delete is not locked (intentional, legacy parity) — legacy hid the comment area and the editor.
 - Recent comments scan at most 10 batches of 2 x the page size with one contest scope and continue by id — bounded work even when most recent comments sit on unreadable pages; the anonymous slice is cached 60 s.
 - Homepage contests come from `GET /contests?phase=`, not `/home` — one source for contest lists.
 - Feeds (blog, comments, problems) carry 25 items, cached 5 minutes, chronological — legacy fed every post with sticky ones first.
