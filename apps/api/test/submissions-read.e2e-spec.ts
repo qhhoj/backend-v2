@@ -87,6 +87,7 @@ describe('submission read flow', () => {
       ['viewall', { permissions: ['judge.view_all_submission'] }],
       ['staff', { isStaff: true }],
       ['root', { isSuperuser: true }],
+      ['seer', { permissions: ['judge.see_private_problem'] }],
     ];
     for (const [name, extra] of roles) {
       ids[name] = (await createUserWith(api, name, extra))._id;
@@ -102,6 +103,10 @@ describe('submission read flow', () => {
       await problemWith('vis_o', {
         submissionSourceVisibility: 'O',
         testers: [ids.tester],
+      }),
+      await problemWith('priv_s', {
+        isPublic: false,
+        submissionSourceVisibility: 'S',
       }),
       await problemWith('priv', { isPublic: false, testers: [ids.tester] }),
       await problemWith('res_b', { testcaseResultVisibility: 'B' }),
@@ -263,6 +268,11 @@ describe('submission read flow', () => {
 
     it('says hidden, not solve_first, when solving would not help', () =>
       as('other', `${SUBMISSIONS}/${owned['vis_o']}`)
+        .expect(403)
+        .expect(errorCode('hidden')));
+
+    it('says hidden on a non-public problem the viewer can see but is no tester of', () =>
+      as('seer', `${SUBMISSIONS}/${owned['priv_s']}`)
         .expect(403)
         .expect(errorCode('hidden')));
 

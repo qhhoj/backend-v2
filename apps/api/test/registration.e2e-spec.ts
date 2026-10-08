@@ -1,3 +1,4 @@
+import { UsersRepository } from '@libs/auth';
 import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { MAILER, REDIS } from '@libs/common';
@@ -118,6 +119,28 @@ describe('registration', () => {
     ).toEqual(
       expect.arrayContaining(['username_invalid_characters', 'email_invalid']),
     );
+  });
+
+  it.each([
+    ['email', 'email_taken'],
+    ['username', 'username_taken'],
+  ])('maps a lost %s race on insert to %s', async (field, code) => {
+    jest.spyOn(api.app.get(UsersRepository), 'create').mockRejectedValueOnce(
+      Object.assign(new Error('E11000'), {
+        code: 11000,
+        keyPattern: { [field]: 1 },
+      }),
+    );
+    const response = await register('racer_x', 'racer_x@example.com').expect(
+      400,
+    );
+    expect(
+      (
+        response.body as {
+          error: { issues: Array<{ field: string; code: string }> };
+        }
+      ).error.issues,
+    ).toEqual([expect.objectContaining({ field, code })]);
   });
 
   it('rejects expired and unknown activation keys without activating', async () => {

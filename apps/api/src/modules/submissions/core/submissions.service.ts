@@ -188,7 +188,7 @@ export class SubmissionsService {
     return { submission, problem };
   }
 
-  /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in; another user's contest submission also needs the contest's full submission list (never during a freeze), unless the viewer edits the contest or the problem or sees every submission. */
+  /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in; another user's contest submission also needs the contest's full submission list (never during a freeze), unless the viewer edits the contest or the problem or sees every submission. `contest_running` means the contest's list is not open to the viewer yet: running, frozen, or an ended contest whose scoreboard stays hidden. */
   async viewable(
     principal: Principal,
     id: string,
@@ -220,6 +220,19 @@ export class SubmissionsService {
       canEdit,
       contestEditor,
     );
+    const contestListClosed =
+      contest !== null &&
+      contestView !== null &&
+      ownerId !== principal.userId &&
+      !canEdit &&
+      !contestEditor &&
+      !hasPermission(principal, 'judge.view_all_submission') &&
+      !ContestAccess.canSeeFullSubmissionList(
+        principal,
+        contestView,
+        new Date(),
+        await this.viewers.viewerOf(principal, contest, new Date()),
+      );
     const allowed =
       access === 'granted' ||
       (access === 'if-solved' &&
@@ -228,6 +241,13 @@ export class SubmissionsService {
           problem._id,
           problem.points,
         )));
+    // Solving would not help while the contest list is closed, so that reason wins over `solve_first`.
+    if (contestListClosed && access !== 'denied')
+      throw new AppError(
+        'contest_running',
+        403,
+        'You cannot see this submission yet',
+      );
     if (!allowed)
       throw access === 'if-solved'
         ? new AppError(
@@ -236,29 +256,6 @@ export class SubmissionsService {
             'Solve this problem to see this submission',
           )
         : new AppError('hidden', 403, 'You cannot see this submission');
-    if (
-      contest &&
-      contestView &&
-      ownerId !== principal.userId &&
-      !canEdit &&
-      !contestEditor &&
-      !hasPermission(principal, 'judge.view_all_submission')
-    ) {
-      const now = new Date();
-      if (
-        !ContestAccess.canSeeFullSubmissionList(
-          principal,
-          contestView,
-          now,
-          await this.viewers.viewerOf(principal, contest, now),
-        )
-      )
-        throw new AppError(
-          'contest_running',
-          403,
-          'You cannot see this submission yet',
-        );
-    }
     return { submission, problem, canEdit };
   }
 

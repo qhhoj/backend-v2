@@ -164,6 +164,17 @@ describe('contest submissions and the freeze', () => {
     );
   });
 
+  it('answers contest_running, not solve_first, for an unsolved if-solved source while the list is closed', async () => {
+    const { bobId } = await frozenScene(
+      'if_solved_p',
+      {},
+      { submissionSourceVisibility: 'S' },
+    );
+    await get(`/api/internal/submissions/${bobId}/source`, 'alice')
+      .expect(403)
+      .expect(errorCode('contest_running'));
+  });
+
   it("opens a frozen contest submission of a source-hidden problem to the contest's editors, and to nobody else", async () => {
     const { bobId } = await frozenScene(
       'editor_rule_p',

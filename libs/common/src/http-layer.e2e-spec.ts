@@ -42,6 +42,9 @@ class TestController {
       { field: 'a', code: 'too_big', message: 'Too big.' },
     ]);
   }
+  @Get('plain-fields') plainFields() {
+    throw new AppError('validation_failed', 400, 'x', { a: ['m'] });
+  }
   @Get('crash') crash() {
     throw new Error('boom');
   }
@@ -85,6 +88,17 @@ describe('http layer', () => {
           message: 'Bad',
           fields: { a: ['Too big.'] },
           issues: [{ field: 'a', code: 'too_big', message: 'Too big.' }],
+        },
+      }));
+  it('derives issues with code invalid for a plain AppError with fields', () =>
+    http()
+      .get('/t/plain-fields')
+      .expect(400, {
+        error: {
+          code: 'validation_failed',
+          message: 'x',
+          fields: { a: ['m'] },
+          issues: [{ field: 'a', code: 'invalid', message: 'm' }],
         },
       }));
   it('hides internal errors', async () => {

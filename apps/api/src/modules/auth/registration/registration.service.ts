@@ -211,6 +211,14 @@ export class RegistrationService {
           409,
           'This social account is already linked',
         );
+      if (isDuplicateKey(error, 'email'))
+        throw new ValidationFailedError('Registration rejected', [
+          {
+            field: 'email',
+            code: 'email_taken',
+            message: 'Email is already registered.',
+          },
+        ]);
       if (isDuplicateKey(error))
         throw new ValidationFailedError('Registration rejected', [
           {
