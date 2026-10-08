@@ -29,8 +29,13 @@ export class BulkRejudgeDto {
   results?: SubmissionResult[];
   /** Also rejudge locked submissions. */
   @IsOptional() @IsBoolean() force?: boolean;
+  /** Count what would be rejudged and change nothing. */
+  @IsOptional() @IsBoolean() dryRun?: boolean;
 }
 
 export class BulkRejudgeResponse {
   count!: number;
+  dryRun!: boolean;
+  /** The caller may run this rejudge: within `BULK_REJUDGE_LIMIT` or holds `judge.rejudge_submission_lot`. */
+  allowed!: boolean;
 }

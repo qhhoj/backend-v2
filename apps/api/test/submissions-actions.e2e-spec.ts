@@ -317,7 +317,7 @@ describe('submission actions', () => {
               problem: 'acts',
             }).expect(200),
           ),
-        ).toEqual({ count: 1 });
+        ).toEqual({ count: 1, dryRun: false, allowed: true });
       });
     });
 
@@ -378,7 +378,11 @@ describe('submission actions', () => {
       );
       await bulk('manager', {}).expect(403).expect(errorCode('forbidden'));
       expect(await api.submissions.countDocuments({ status: 'QU' })).toBe(0);
-      expect(dataOf(await bulk('lot', {}).expect(200))).toEqual({ count: 11 });
+      expect(dataOf(await bulk('lot', {}).expect(200))).toEqual({
+        count: 11,
+        dryRun: false,
+        allowed: true,
+      });
       expect(
         await api.submissions.countDocuments({ status: 'QU', priority: 3 }),
       ).toBe(11);
@@ -392,6 +396,8 @@ describe('submission actions', () => {
       await Promise.all(Array.from({ length: 10 }, () => seed()));
       expect(dataOf(await bulk('manager', {}).expect(200))).toEqual({
         count: 10,
+        dryRun: false,
+        allowed: true,
       });
     });
 
@@ -408,6 +414,8 @@ describe('submission actions', () => {
       );
       expect(dataOf(await bulk('lot', {}).expect(200))).toEqual({
         count: 2100,
+        dryRun: false,
+        allowed: true,
       });
       const sizes = (await bridgeCommands(api)).map((command) =>
         command.type === 'judge' ? command.submissionIds.length : 0,
@@ -449,6 +457,8 @@ describe('submission actions', () => {
       const finished = await seed();
       expect(dataOf(await bulk('manager', {}).expect(200))).toEqual({
         count: 1,
+        dryRun: false,
+        allowed: true,
       });
       expect((await row(pending)).status).toBe('PD');
       expect((await row(finished)).status).toBe('QU');

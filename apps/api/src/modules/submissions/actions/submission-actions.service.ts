@@ -152,17 +152,29 @@ export class SubmissionActionsService {
     );
     this.assertManagesProblem(principal, problem, 'judge.rejudge_submission');
     const filter = bulkFilter(problem._id, dto);
-    if (
-      !hasPermission(principal, 'judge.rejudge_submission_lot') &&
-      (await this.submissions.countMatching(filter)) > BULK_REJUDGE_LIMIT
-    )
+    const matching = await this.submissions.countMatching(filter);
+    const allowed =
+      matching <= BULK_REJUDGE_LIMIT ||
+      hasPermission(principal, 'judge.rejudge_submission_lot');
+    if (dto.dryRun) return { count: matching, dryRun: true, allowed };
+    if (!allowed)
       throw new AppError(
         'forbidden',
         403,
         `Rejudging more than ${BULK_REJUDGE_LIMIT} submissions needs judge.rejudge_submission_lot`,
       );
+    return {
+      count: await this.rejudgeChunks(filter),
+      dryRun: false,
+      allowed,
+    };
+  }
+
+  /** The command may carry ids that raced into P/G; the bridge only loads queued ones. */
+  private async rejudgeChunks(
+    filter: FilterQuery<Submission>,
+  ): Promise<number> {
     let count = 0;
-    // The command may carry ids that raced into P/G; the bridge only loads queued ones.
     for await (const ids of this.submissions.idChunks(filter)) {
       count += await this.submissions.resetForJudging(
         ids,
@@ -170,7 +182,7 @@ export class SubmissionActionsService {
       );
       await this.commands.judge(ids);
     }
-    return { count };
+    return count;
   }
 
   private notifyGraded(submission: Submission): Promise<void> {
