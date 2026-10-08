@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthContext, Principal } from '@libs/auth';
 import { parseTicketEvent, TICKET_EVENTS_CHANNEL } from '@libs/community';
@@ -10,12 +10,11 @@ import type {
   OpenStream,
 } from '../../events/event-stream-hub.service';
 import { sseFrame } from '../../events/sse';
+import { STREAM_LIMITS } from '../../events/stream-limits';
+import type { StreamLimits } from '../../events/stream-limits';
 import { TicketAccess } from '../core/ticket-access';
 import { TicketContextService } from '../core/ticket-context.service';
 import { TicketsRepository } from '../core/tickets.repository';
-
-/** Events waiting for their ticket lookup; beyond this (Mongo stalled) new events are dropped and clients resync on reconnect. */
-const MAX_PENDING_EVENTS = 1000;
 
 interface TicketStream extends OpenStream {
   /** Null on the feed of every readable ticket. */
@@ -35,9 +34,12 @@ export class TicketStreamsService implements EventChannel {
   /** Deliveries run one after another, so a lookup never reorders events. */
   private queue: Promise<void> = Promise.resolve();
   private pending = 0;
+  /** Events were dropped since the queue last drained: the streams get one `resync` when it does. */
+  private dropped = false;
 
   constructor(
     private readonly hub: EventStreamHubService,
+    @Inject(STREAM_LIMITS) private readonly limits: StreamLimits,
     private readonly context: TicketContextService,
     private readonly tickets: TicketsRepository,
   ) {
@@ -104,12 +106,30 @@ export class TicketStreamsService implements EventChannel {
   deliver(raw: string): void {
     const event = parseTicketEvent(raw);
     if (!event) return;
-    if (this.pending >= MAX_PENDING_EVENTS)
-      return this.logger.warn('Ticket event dropped: delivery is backed up');
+    if (this.pending >= this.limits.ticketBacklog) {
+      if (!this.dropped)
+        this.logger.warn('Ticket events dropped: delivery is backed up');
+      this.dropped = true;
+      return;
+    }
     this.pending += 1;
     this.queue = this.queue
       .then(() => this.dispatch(event))
-      .finally(() => (this.pending -= 1));
+      .finally(() => {
+        this.pending -= 1;
+        if (this.pending === 0 && this.dropped) this.resync();
+      });
+  }
+
+  /** Clients refetch what they show: events were lost. */
+  private resync(): void {
+    this.dropped = false;
+    const frame = sseFrame('resync', {});
+    const streams = [
+      ...this.feed,
+      ...[...this.byTicket.values()].flatMap((set) => [...set]),
+    ];
+    for (const entry of streams) entry.stream.send(frame);
   }
 
   forget(entry: TicketStream): void {

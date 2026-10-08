@@ -1,4 +1,5 @@
 import { waitUntil } from '@libs/common/testing';
+import { newId } from '@libs/database';
 import type { User } from '@libs/database';
 import {
   DEFAULT_STREAM_LIMITS,
@@ -10,12 +11,14 @@ import { openStream, streamsOf } from './sse-client';
 import type { SseClient } from './sse-client';
 import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
+import { TicketsRepository } from '../src/modules/tickets/core/tickets.repository';
 import { createTicket, signedIn, ticketUrl } from './ticket-fixtures';
 
 describe('ticket streams', () => {
   let api: ApiTest;
   let streams: ReturnType<typeof streamsOf>;
   let problemId: string;
+  let catalog: Awaited<ReturnType<typeof seedCatalog>>;
   const people: Record<string, { id: string; session: TestSession }> = {};
   const opened: SseClient[] = [];
   const open = async (path: string, who: string | null) => {
@@ -46,12 +49,13 @@ describe('ticket streams', () => {
             ...DEFAULT_STREAM_LIMITS,
             heartbeatMs: 100,
             recheckMs: 150,
+            ticketBacklog: 3,
           },
         },
       ],
     });
     streams = streamsOf(api);
-    const catalog = await seedCatalog(api);
+    catalog = await seedCatalog(api);
     const roles: Array<[string, Partial<User>]> = [
       ['creator', {}],
       ['assignee', {}],
@@ -248,5 +252,91 @@ describe('ticket streams', () => {
     expect(JSON.stringify(watcher.messages)).not.toMatch(
       /secret|must stay out/,
     );
+  });
+
+  it('answers 404 for a well-formed id of no ticket', async () => {
+    expect(
+      (await open(`/api/internal/events/tickets/${newId()}`, 'staff')).status,
+    ).toBe(404);
+  });
+
+  it('stops delivering to staff who lose the permission, once the stream is rechecked', async () => {
+    const { user, session } = await signedIn(api, 'demoted', {
+      permissions: ['judge.change_ticket'],
+    });
+    people.demoted = { id: user._id, session };
+    const ticket = await createTicket(api, { creator: people.creator.id });
+    const demoted = await feed('demoted');
+    const creatorFeed = await feed('creator');
+    await post('creator', ticket._id, 'first').expect(201);
+    await demoted.next('ticket-message');
+    await creatorFeed.next('ticket-message');
+    await api.users.updateOne({ _id: user._id }, { $set: { permissions: [] } });
+    await quiet();
+    await post('creator', ticket._id, 'second').expect(201);
+    await creatorFeed.next('ticket-message');
+    await quiet();
+    expect(framesOf(demoted, 'ticket-message')).toEqual([]);
+  });
+
+  it('stops delivering when the problem becomes private', async () => {
+    const hidden = await createProblem(api, catalog, {
+      code: 'soon_private',
+      authors: [people.author.id],
+    });
+    const ticket = await createTicket(api, {
+      creator: people.creator.id,
+      problem: hidden._id,
+    });
+    const editor = await feed('publicEditor');
+    const creatorFeed = await feed('creator');
+    await api.problems.updateOne(
+      { _id: hidden._id },
+      { $set: { isPublic: false } },
+    );
+    await post('creator', ticket._id, 'after hiding').expect(201);
+    await creatorFeed.next('ticket-message');
+    await quiet();
+    expect(framesOf(editor, 'ticket-message')).toEqual([]);
+  });
+
+  it('closes the feed of a banned user', async () => {
+    const { user, session } = await signedIn(api, 'banned');
+    people.banned = { id: user._id, session };
+    const banned = await feed('banned');
+    await api.users.updateOne({ _id: user._id }, { $set: { isActive: false } });
+    await Promise.race([
+      banned.closed,
+      new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error('stream stayed open')), 2000),
+      ),
+    ]);
+  });
+
+  it('drops events beyond the backlog and tells the streams to resync once it drains', async () => {
+    const ticket = await createTicket(api, { creator: people.creator.id });
+    const watcher = await feed('creator');
+    const repository = api.app.get(TicketsRepository);
+    const findById = repository.findById.bind(repository);
+    const slow = jest
+      .spyOn(repository, 'findById')
+      .mockImplementation(async (...args) => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return findById(...args);
+      });
+    try {
+      await Promise.all(
+        Array.from({ length: 6 }, (_unused, count) =>
+          post('creator', ticket._id, `burst ${count}`).expect(201),
+        ),
+      );
+      await watcher.next('resync');
+      await quiet();
+    } finally {
+      slow.mockRestore();
+    }
+    expect(framesOf(watcher, 'ticket-message').length).toBeLessThan(6);
+    // the first resync was consumed by next(); no second one follows
+    expect(framesOf(watcher, 'resync')).toEqual([]);
   });
 });
