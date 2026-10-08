@@ -38,7 +38,7 @@ export class TicketsService {
     private readonly currentContest: CurrentContestService,
   ) {}
 
-  /** Legacy `TicketList`: `own` replaces the visibility rule (it is narrower), the rest narrows it. */
+  /** Legacy `TicketList`: `own` replaces the visibility rule (it is narrower), the rest narrows it; `open` filters both ways (`true` open only, `false` closed only, absent both). */
   async list(
     principal: Principal,
     query: TicketListQueryDto,
@@ -48,7 +48,7 @@ export class TicketsService {
         ? TicketAccess.ownFilter(principal.userId)
         : await this.visibleTo(principal),
     ];
-    if (query.open) clauses.push({ isOpen: true });
+    if (query.open !== undefined) clauses.push({ isOpen: query.open });
     if (query.user)
       clauses.push({ user: { $in: await this.idsOf(query.user) } });
     if (query.assignee)
