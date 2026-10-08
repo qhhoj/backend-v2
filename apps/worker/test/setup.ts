@@ -23,6 +23,7 @@ import {
   ProblemType,
   Rating,
   Submission,
+  TagProblem,
   SubmissionSource,
   User,
 } from '@libs/database';
@@ -139,6 +140,7 @@ export async function setupWorkerTest({
     ),
     blogPosts: ready.get<Model<BlogPost>>(getModelToken(BlogPost.name)),
     comments: ready.get<Model<Comment>>(getModelToken(Comment.name)),
+    tagProblems: ready.get<Model<TagProblem>>(getModelToken(TagProblem.name)),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
     teardown: async () => {

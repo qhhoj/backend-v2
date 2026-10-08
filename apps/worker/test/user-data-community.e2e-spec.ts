@@ -7,7 +7,12 @@ import {
   UserDataError,
   UserDataService,
 } from '../src/jobs/user-data/user-data.service';
-import { seedProblem, seedUser } from './effects-fixtures';
+import {
+  seedContest,
+  seedOrganization,
+  seedProblem,
+  seedUser,
+} from './effects-fixtures';
 import { readZip } from './read-zip';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
@@ -40,6 +45,21 @@ describe('user data export of comments and posts', () => {
       visible: true,
       score: 4,
     });
+    const organization = await seedOrganization(worker);
+    const orgPost = await worker.blogPosts.create({
+      title: 'Org post',
+      slug: organization.slug,
+      authors: [owner._id],
+      organization: organization._id,
+      publishOn: new Date('2026-01-02T00:00:00Z'),
+      content: 'org body',
+    });
+    const contest = await seedContest(worker);
+    const tagProblem = await worker.tagProblems.create({
+      code: 'tagged_one',
+      name: 'Tagged',
+      link: 'https://example.com/p',
+    });
     await worker.blogPosts.create({
       title: 'Not mine',
       slug: 'other',
@@ -68,13 +88,21 @@ describe('user data export of comments and posts', () => {
       { type: 'problem', id: problem._id },
       { score: 2 },
     );
+    const onContest = await comment(owner._id, {
+      type: 'contest',
+      id: contest._id,
+    });
+    const onTag = await comment(owner._id, {
+      type: 'tagProblem',
+      id: tagProblem._id,
+    });
     const hidden = await comment(
       owner._id,
       { type: 'blog', id: post._id },
       { hidden: true },
     );
     await comment(other._id, { type: 'problem', id: problem._id });
-    expect(await service.prepare(owner._id)).toBe(6);
+    expect(await service.prepare(owner._id)).toBe(9);
     const files = await readZip(userDataPath(worker.userDataRoot, owner._id));
     expect(Object.keys(files).sort()).toEqual(
       [
@@ -82,8 +110,11 @@ describe('user data export of comments and posts', () => {
         'comments/info.json',
         `comments/${onProblem._id}.txt`,
         `comments/${hidden._id}.txt`,
+        `comments/${onContest._id}.txt`,
+        `comments/${onTag._id}.txt`,
         'posts/info.json',
         `posts/${post._id}.md`,
+        `posts/${orgPost._id}.md`,
       ].sort(),
     );
     const commentInfo = JSON.parse(files['comments/info.json']) as Record<
@@ -95,6 +126,18 @@ describe('user data export of comments and posts', () => {
         date: onProblem.createdAt.toISOString(),
         page: { type: 'problem', key: 'talked_about' },
         score: 2,
+        hidden: false,
+      },
+      [onContest._id]: {
+        date: onContest.createdAt.toISOString(),
+        page: { type: 'contest', key: contest.key },
+        score: 0,
+        hidden: false,
+      },
+      [onTag._id]: {
+        date: onTag.createdAt.toISOString(),
+        page: { type: 'tagProblem', key: 'tagged_one' },
+        score: 0,
         hidden: false,
       },
       [hidden._id]: {
@@ -124,7 +167,17 @@ describe('user data export of comments and posts', () => {
         organization: null,
         score: 4,
       },
+      [orgPost._id]: {
+        title: 'Org post',
+        publish_on: '2026-01-02T00:00:00.000Z',
+        visible: false,
+        organization: organization.slug,
+        score: 0,
+      },
     });
+    expect(Object.keys(postInfo).sort()).toEqual(
+      [post._id, orgPost._id].sort(),
+    );
     expect(Object.keys(postInfo[post._id]).sort()).toEqual([
       'organization',
       'publish_on',
@@ -186,6 +239,14 @@ describe('user data export of comments and posts', () => {
       };
     });
     await worker.comments.create(rows);
+    for (let index = 0; index < 20; index += 1)
+      await worker.blogPosts.create({
+        title: 'Foreign',
+        slug: 'foreign',
+        authors: [newId()],
+        publishOn: new Date(),
+        content: 'x',
+      });
     const operations = await profileQueries(worker.db, () =>
       service.prepare(owner._id),
     );
@@ -195,10 +256,22 @@ describe('user data export of comments and posts', () => {
         ['query', 'getmore'].includes(operation),
     );
     expect(reads.length).toBeGreaterThan(0);
-    for (const { planSummary, hasSortStage } of reads) {
-      expect(planSummary).toContain('author: 1');
+    const postReads = operations.filter(
+      ({ collection, operation }) =>
+        collection === worker.blogPosts.collection.name &&
+        ['query', 'getmore'].includes(operation),
+    );
+    expect(postReads.length).toBeGreaterThan(0);
+    for (const { planSummary, docsExamined, hasSortStage } of postReads) {
       expect(hasSortStage).toBe(false);
+      expect(planSummary).toContain('authors: 1');
+      expect(docsExamined).toBe(0);
     }
+    // The listing goes through the author index; the body reads are by `_id`.
+    expect(
+      reads.some(({ planSummary }) => planSummary.includes('author: 1')),
+    ).toBe(true);
+    for (const { hasSortStage } of reads) expect(hasSortStage).toBe(false);
   });
 
   it('counts comments and posts against the entry cap', async () => {

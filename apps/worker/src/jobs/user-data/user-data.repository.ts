@@ -36,7 +36,6 @@ export interface UserDataComment {
   page: { type: string; key: string };
   score: number;
   hidden: boolean;
-  body: string;
 }
 
 export interface UserDataPost {
@@ -46,8 +45,6 @@ export interface UserDataPost {
   visible: boolean;
   organization: string | null;
   score: number;
-  content: string;
-  summary: string;
 }
 
 /** Whitelisted: never the password hash, second-factor secrets, API token hash, staff notes, IPs or social login data. */
@@ -188,7 +185,7 @@ export class UserDataRepository {
     const rows = await this.comments
       .find(
         { author: userId, hidden: { $in: [false, true] } },
-        { page: 1, score: 1, hidden: 1, body: 1, createdAt: 1 },
+        { page: 1, score: 1, hidden: 1, createdAt: 1 },
       )
       .sort({ _id: 1 })
       .limit(limit)
@@ -236,12 +233,11 @@ export class UserDataRepository {
         },
         score: row.score,
         hidden: row.hidden,
-        body: row.body,
       };
     });
   }
 
-  /** Every post the user authored or co-authored, oldest first, through the `authors` index. */
+  /** Every post the user authored or co-authored, oldest first (sorted here: the `authors` index cannot serve an `_id` sort, so the read stays bounded by the user's posts). */
   async postsOf(userId: string, limit: number): Promise<UserDataPost[]> {
     const rows = await this.posts
       .find(
@@ -252,11 +248,8 @@ export class UserDataRepository {
           visible: 1,
           organization: 1,
           score: 1,
-          content: 1,
-          summary: 1,
         },
       )
-      .sort({ _id: 1 })
       .limit(limit)
       .lean()
       .exec();
@@ -279,18 +272,44 @@ export class UserDataRepository {
           .exec()
       ).map((organization) => [uuidStr(organization._id), organization.slug]),
     );
-    return rows.map((row) => ({
-      id: uuidStr(row._id),
-      title: row.title,
-      publishOn: row.publishOn,
-      visible: row.visible,
-      organization: row.organization
-        ? (slugOf.get(uuidStr(row.organization)) ?? null)
-        : null,
-      score: row.score,
-      content: row.content,
-      summary: row.summary,
-    }));
+    return rows
+      .map((row) => ({
+        id: uuidStr(row._id),
+        title: row.title,
+        publishOn: row.publishOn,
+        visible: row.visible,
+        organization: row.organization
+          ? (slugOf.get(uuidStr(row.organization)) ?? null)
+          : null,
+        score: row.score,
+      }))
+      .sort((first, second) => (first.id < second.id ? -1 : 1));
+  }
+
+  async commentBodies(ids: string[]): Promise<Map<string, string>> {
+    return new Map(
+      (
+        await this.comments
+          .find({ _id: { $in: ids } }, { body: 1 })
+          .lean()
+          .exec()
+      ).map((row) => [uuidStr(row._id), row.body]),
+    );
+  }
+
+  /** Content, then the summary after a `---` line when there is one. */
+  async postTexts(ids: string[]): Promise<Map<string, string>> {
+    return new Map(
+      (
+        await this.posts
+          .find({ _id: { $in: ids } }, { content: 1, summary: 1 })
+          .lean()
+          .exec()
+      ).map((row) => [
+        uuidStr(row._id),
+        row.summary ? `${row.content}\n\n---\n\n${row.summary}` : row.content,
+      ]),
+    );
   }
 
   async sources(ids: string[]): Promise<Map<string, string>> {

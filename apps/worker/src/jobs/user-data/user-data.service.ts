@@ -113,45 +113,60 @@ export class UserDataService {
     if (submissions.length)
       texts.push(['submissions/info.json', json(submissionInfo(submissions))]);
     if (comments.length)
-      texts.push(
-        ['comments/info.json', json(commentInfo(comments))],
-        ...comments.map((comment): [string, string] => [
-          `comments/${comment.id}.txt`,
-          comment.body,
-        ]),
-      );
-    if (posts.length)
-      texts.push(
-        ['posts/info.json', json(postInfo(posts))],
-        ...posts.map((post): [string, string] => [
-          `posts/${post.id}.md`,
-          post.summary
-            ? `${post.content}\n\n---\n\n${post.summary}`
-            : post.content,
-        ]),
-      );
-    const sourceNames = submissions.map(
-      (row) =>
-        `submissions/${row.id}.${row.extension.replace(/[^A-Za-z0-9]/g, '') || 'txt'}`,
-    );
-    const names = [...texts.map(([name]) => name), ...sourceNames];
+      texts.push(['comments/info.json', json(commentInfo(comments))]);
+    if (posts.length) texts.push(['posts/info.json', json(postInfo(posts))]);
+    /** Bodies, contents and sources are read a chunk at a time, in this order. */
+    const streams = [
+      {
+        names: comments.map((comment) => `comments/${comment.id}.txt`),
+        at: this.chunked(comments, (ids) => this.repository.commentBodies(ids)),
+      },
+      {
+        names: posts.map((post) => `posts/${post.id}.md`),
+        at: this.chunked(posts, (ids) => this.repository.postTexts(ids)),
+      },
+      {
+        names: submissions.map(
+          (row) =>
+            `submissions/${row.id}.${row.extension.replace(/[^A-Za-z0-9]/g, '') || 'txt'}`,
+        ),
+        at: this.chunked(submissions, (ids) => this.repository.sources(ids)),
+      },
+    ];
+    const names = [
+      ...texts.map(([name]) => name),
+      ...streams.flatMap((stream) => stream.names),
+    ];
     if (names.length > this.limits.maxEntries)
       throw new UserDataError(`More than ${this.limits.maxEntries} entries`);
-    const sourceAt = chunkedSources(
-      submissions.map((row) => row.id),
-      this.limits.sourceChunk,
-      (ids) => this.repository.sources(ids),
-    );
     await writeZipInPlace(
       names,
-      async (index) =>
-        index < texts.length ? texts[index][1] : sourceAt(index - texts.length),
+      async (index) => {
+        if (index < texts.length) return texts[index][1];
+        let offset = index - texts.length;
+        for (const stream of streams) {
+          if (offset < stream.names.length) return stream.at(offset);
+          offset -= stream.names.length;
+        }
+        return '';
+      },
       path,
       temporary,
       this.limits.maxBytes,
       () => new UserDataError(`Your data passes ${this.limits.maxBytes} bytes`),
     );
     return names.length;
+  }
+
+  private chunked(
+    rows: Array<{ id: string }>,
+    fetch: (ids: string[]) => Promise<Map<string, string>>,
+  ) {
+    return chunkedSources(
+      rows.map((row) => row.id),
+      this.limits.sourceChunk,
+      fetch,
+    );
   }
 
   /** Own zips past their seven days and own temp files of crashed runs older than a day; any other file in the root is left alone. Returns the files removed. */
