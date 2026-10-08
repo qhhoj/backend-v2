@@ -60,6 +60,13 @@ export class SimilarityEngineError extends Error {
   }
 }
 
+/** The worker is stopping: the comparison was killed or never started. It says nothing about the sources, so it must fail the run, never just one group. */
+export class EngineShutdownError extends Error {
+  constructor() {
+    super('the worker is shutting down');
+  }
+}
+
 type FailureCode = SimilarityEngineError['code'];
 
 /** Resolved from this package, not the working directory, so the engine works wherever the worker is started. */
@@ -104,17 +111,21 @@ export class SimilarityEngine implements BeforeApplicationShutdown {
   private readonly logger = new Logger(SimilarityEngine.name);
   /** The worker runs one comparison at a time (queue concurrency 1). */
   protected activeChild: ChildProcess | null = null;
+  /** Set once by the shutdown hook: no child may start after it, since nothing would kill that one. */
+  private isShuttingDown = false;
 
   /**
    * The orchestrator kills the worker, not its children. `before…` runs for every module ahead of any `onApplicationShutdown`,
    * so it fires before the BullMQ worker starts waiting for the active job.
    */
   beforeApplicationShutdown(): void {
+    this.isShuttingDown = true;
     this.activeChild?.kill('SIGKILL');
   }
 
   /** Sources must already be prepared (`family.prepare`): the engine is a transport. */
   compare(request: EngineRequest): Promise<EnginePair[]> {
+    if (this.isShuttingDown) return Promise.reject(new EngineShutdownError());
     if (request.submissions.length < 2) return Promise.resolve([]);
     return new Promise((resolve, reject) => {
       const child = this.spawnEngine();
@@ -130,7 +141,7 @@ export class SimilarityEngine implements BeforeApplicationShutdown {
         if (isSettled) return;
         child.kill('SIGKILL');
         this.logger.warn(`similarity engine ${detail}`);
-        settle(() => reject(new SimilarityEngineError(code)));
+        settle(() => reject(this.failureOf(code)));
       };
       const deadline = setTimeout(() => fail('deadline'), request.timeoutMs);
       const stdout = this.collectStdout(child, () =>
@@ -141,12 +152,9 @@ export class SimilarityEngine implements BeforeApplicationShutdown {
       child.stdin!.on('error', () => undefined);
       child.on('close', (exitCode, signal) =>
         settle(() => {
-          const pairs = exitCode === 0 ? decodePairs(stdout) : null;
-          if (pairs) return resolve(pairs);
-          this.logger.warn(
-            `similarity engine failed (exit ${exitCode}, signal ${signal}): ${stderrTail().toString('utf8')}`,
-          );
-          reject(new SimilarityEngineError('engine_failed'));
+          const result = this.exitResult(exitCode, signal, stdout, stderrTail);
+          if (result instanceof Error) reject(result);
+          else resolve(result);
         }),
       );
       // Anything that throws while feeding the child must still kill it.
@@ -154,6 +162,28 @@ export class SimilarityEngine implements BeforeApplicationShutdown {
         .then(() => writeLines(child, requestLines(request)))
         .catch((error: Error) => fail('engine_failed', error.message));
     });
+  }
+
+  /** The child's pairs, or why there are none. */
+  private exitResult(
+    exitCode: number | null,
+    signal: NodeJS.Signals | null,
+    stdout: Buffer[],
+    stderrTail: () => Buffer,
+  ): EnginePair[] | Error {
+    const pairs = exitCode === 0 ? decodePairs(stdout) : null;
+    if (pairs) return pairs;
+    this.logger.warn(
+      `similarity engine failed (exit ${exitCode}, signal ${signal}): ${stderrTail().toString('utf8')}`,
+    );
+    return this.failureOf('engine_failed');
+  }
+
+  /** A shutdown kill shows up as a closed child or a broken pipe; either way it is reported as the shutdown it is. */
+  private failureOf(code: FailureCode): Error {
+    return this.isShuttingDown
+      ? new EngineShutdownError()
+      : new SimilarityEngineError(code);
   }
 
   private spawnEngine(): ChildProcess {

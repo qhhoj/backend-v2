@@ -20,7 +20,6 @@ import type {
   SimilarityGroup,
   SimilarityUnsupported,
 } from '@libs/database';
-import { DEFAULT_MAX_FRAGMENTS_PER_PAIR } from './similarity-engine';
 import type { LineRange } from './similarity-engine';
 
 export interface SubmissionRow {
@@ -54,16 +53,6 @@ export interface ProblemScope {
 /** Thrown inside the `finish` transaction so it rolls back. */
 class RunNoLongerRunningError extends Error {}
 
-const isWellFormed = (range: LineRange): boolean =>
-  range.leftStart >= 1 &&
-  range.rightStart >= 1 &&
-  range.leftEnd >= range.leftStart &&
-  range.rightEnd >= range.rightStart;
-
-/** The engine already guarantees both; the stored rows must hold them whatever produced the pair, because the viewer slices sources by these lines. */
-const storableFragments = (fragments: LineRange[]): LineRange[] =>
-  fragments.filter(isWellFormed).slice(0, DEFAULT_MAX_FRAGMENTS_PER_PAIR);
-
 const toPairDocument = (runId: string, pair: StoredPair) => ({
   _id: newId(),
   run: runId,
@@ -74,7 +63,7 @@ const toPairDocument = (runId: string, pair: StoredPair) => ({
   similarity: pair.similarity,
   longestFragment: pair.longest,
   totalOverlap: pair.overlap,
-  fragments: storableFragments(pair.fragments),
+  fragments: pair.fragments,
 });
 
 @Injectable()
@@ -140,7 +129,7 @@ export class SimilarityRepository {
   /** Eligible submissions in scope with one of these languages, before any cap. */
   countRows(scope: ProblemScope, languageIds: string[]): Promise<number> {
     return this.submissions
-      .countDocuments(this.eligible(scope, languageIds))
+      .countDocuments(this.eligibleFilter(scope, languageIds))
       .exec();
   }
 
@@ -151,7 +140,7 @@ export class SimilarityRepository {
     limit: number,
   ): Promise<SubmissionRow[]> {
     const rows = await this.submissions
-      .find(this.eligible(scope, languageIds), { user: 1 })
+      .find(this.eligibleFilter(scope, languageIds), { user: 1 })
       .sort({ _id: -1 })
       .limit(limit)
       .lean()
@@ -190,7 +179,7 @@ export class SimilarityRepository {
   }
 
   /** Only a run that is still active: a finished run is never overwritten. */
-  async fail(runId: string, reason: SimilarityError): Promise<void> {
+  async markFailed(runId: string, reason: SimilarityError): Promise<void> {
     await this.runs
       .updateOne(
         { _id: runId, active: true },
@@ -202,12 +191,13 @@ export class SimilarityRepository {
             error: reason,
           },
         },
+        { runValidators: true },
       )
       .exec();
   }
 
   /** Language and result filters on top of the scope; only results whose source compiled and ran (`SIMILARITY_RESULTS`). */
-  private eligible(
+  private eligibleFilter(
     scope: ProblemScope,
     languageIds: string[],
   ): FilterQuery<Submission> {
@@ -256,10 +246,9 @@ export class SimilarityRepository {
     const idsByProblem = new Map<string, string[]>();
     for (const row of rows) {
       const problemId = uuidStr(row.problem);
-      idsByProblem.set(problemId, [
-        ...(idsByProblem.get(problemId) ?? []),
-        uuidStr(row._id),
-      ]);
+      const ids = idsByProblem.get(problemId) ?? [];
+      ids.push(uuidStr(row._id));
+      idsByProblem.set(problemId, ids);
     }
     return idsByProblem;
   }
@@ -282,7 +271,7 @@ export class SimilarityRepository {
             unsupported: outcome.unsupported,
           },
         },
-        { session },
+        { session, runValidators: true },
       )
       .exec();
     if (matchedCount !== 1) throw new RunNoLongerRunningError();

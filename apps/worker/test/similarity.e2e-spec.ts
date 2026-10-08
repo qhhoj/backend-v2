@@ -17,7 +17,11 @@ import type {
   EngineRequest,
   EngineSubmission,
 } from '../src/jobs/similarity/similarity-engine';
-import { SimilarityService } from '../src/jobs/similarity/similarity.service';
+import { SimilarityRepository } from '../src/jobs/similarity/similarity.repository';
+import {
+  SIMILARITY_DEADLINE_MS,
+  SimilarityService,
+} from '../src/jobs/similarity/similarity.service';
 import {
   seedContest,
   seedContestSubmission,
@@ -110,6 +114,48 @@ describe('similarity run', () => {
     left: { submission: unknown };
     right: { submission: unknown };
   }) => [uuidStr(pair.left.submission), uuidStr(pair.right.submission)].sort();
+  /** A contest over `problems`, each placed at the given contest `order`. */
+  const contestOf = (problems: Array<{ entry: Problem; order: number }>) =>
+    seedContest(worker, {
+      problems: problems.map(({ entry, order }) => ({
+        problem: entry._id,
+        points: 100,
+        partial: true,
+        isPretested: false,
+        order,
+        outputPrefixOverride: null,
+        maxSubmissions: null,
+      })),
+    });
+  /** A C++ contest submission with its source, in a new participation (live unless `virtual` says otherwise). */
+  const submitInContest = async (
+    contest: Contest,
+    userId: string,
+    source: string,
+    {
+      virtual = 0,
+      onProblem = problem,
+    }: { virtual?: number; onProblem?: Problem } = {},
+  ) => {
+    const participation = await seedParticipation(worker, contest._id, userId, {
+      virtual,
+    });
+    const submission = await seedContestSubmission(
+      worker,
+      participation,
+      onProblem._id,
+      { language: cpp._id },
+    );
+    await worker.submissionSources.create({ _id: submission._id, source });
+    return submission;
+  };
+  const runContest = (contest: Contest) =>
+    runAndLoad({
+      scope: 'contest',
+      scopeKey: `contest:${contest._id}`,
+      problem: null,
+      contest: contest._id,
+    });
   /** Replaces the engine with `answer`, per request. */
   const fakeEngine = (
     answer: (request: EngineRequest) => EnginePair[] | Promise<EnginePair[]>,
@@ -198,11 +244,12 @@ describe('similarity run', () => {
     expect(keys).not.toContain([first._id, second._id].sort().join());
   });
 
-  it('compares C with C++ as one family and lists languages without a grammar', async () => {
-    const [ann, bob, cat] = await newUsers(3);
+  it('compares C with C++ as one family and lists languages without a grammar, eligible submissions only', async () => {
+    const [ann, bob, cat, dan] = await newUsers(4);
     const inCpp = await submit(ann, SIEVE);
     const inC = await submit(bob, SIEVE_RENAMED, { language: plainC._id });
     await submit(cat, 'fun main() { println(1) }', { language: kotlin._id });
+    await submit(dan, 'fun main() {', { language: kotlin._id, result: 'CE' });
     const { run, pairs } = await runAndLoad();
     expect(pairs.map(idsOf)).toEqual([[inCpp._id, inC._id].sort()]);
     expect(run.groups).toMatchObject([
@@ -334,55 +381,43 @@ describe('similarity run', () => {
   });
 
   it('compares a contest per contest problem, live and spectating participations only', async () => {
-    const second = await seedProblem(worker);
-    const contest: Contest = await seedContest(worker, {
-      problems: [problem, second].map((entry, order) => ({
-        problem: entry._id,
-        points: 100,
-        partial: true,
-        isPretested: false,
-        order,
-        outputPrefixOverride: null,
-        maxSubmissions: null,
-      })),
-    });
-    const inContest = async (
-      userId: string,
-      virtual: number,
-      source: string,
-    ) => {
-      const participation = await seedParticipation(
-        worker,
-        contest._id,
-        userId,
-        { virtual },
-      );
-      const submission = await seedContestSubmission(
-        worker,
-        participation,
-        problem._id,
-        { language: cpp._id },
-      );
-      await worker.submissionSources.create({ _id: submission._id, source });
-      return submission;
-    };
+    const contest = await contestOf([
+      { entry: problem, order: 0 },
+      { entry: await seedProblem(worker), order: 1 },
+    ]);
     const [ann, bob, cat, dan] = await newUsers(4);
-    const live = await inContest(ann, 0, SIEVE);
-    const spectating = await inContest(bob, SPECTATE, SIEVE_RENAMED);
-    await inContest(cat, 1, SIEVE); // a virtual participation: out
-    await submit(dan, SIEVE); // the same problem outside the contest: out
-    const { run, pairs } = await runAndLoad({
-      scope: 'contest',
-      scopeKey: `contest:${contest._id}`,
-      problem: null,
-      contest: contest._id,
+    const live = await submitInContest(contest, ann, SIEVE);
+    const spectating = await submitInContest(contest, bob, SIEVE_RENAMED, {
+      virtual: SPECTATE,
     });
+    await submitInContest(contest, cat, SIEVE, { virtual: 1 }); // a virtual participation: out
+    await submit(dan, SIEVE); // the same problem outside the contest: out
+    const { run, pairs } = await runContest(contest);
     expect(pairs).toHaveLength(1);
     expect(idsOf(pairs[0])).toEqual([live._id, spectating._id].sort());
     expect(run.groups.map((group) => uuidStr(group.problem))).toEqual([
       problem._id,
     ]);
     expect(run.groups[0].submissionCount).toBe(2);
+  });
+
+  it('compares contest problems in contest order, not in stored order', async () => {
+    const first = await seedProblem(worker);
+    const contest = await contestOf([
+      { entry: problem, order: 1 },
+      { entry: first, order: 0 },
+    ]);
+    for (const [userId, onProblem] of [
+      [await newUser(), problem],
+      [await newUser(), first],
+    ] as const)
+      await submitInContest(contest, userId, SIEVE, { onProblem });
+    fakeEngine(() => []);
+    const { run } = await runContest(contest);
+    expect(run.groups.map((group) => uuidStr(group.problem))).toEqual([
+      first._id,
+      problem._id,
+    ]);
   });
 
   it('records a failed run without touching the previous results, and the next success replaces them', async () => {
@@ -475,6 +510,101 @@ describe('similarity run', () => {
     expect(spy).not.toHaveBeenCalled();
     expect(run).toMatchObject({ status: 'failed', error: 'internal_error' });
     await expect(startRun()).resolves.toMatchObject({ status: 'queued' });
+  });
+
+  it('never stores a pair of one user, whatever the engine returns', async () => {
+    const [ann, bob] = await newUsers(2);
+    await submit(ann, SIEVE);
+    await submit(ann, SIEVE_RENAMED);
+    const bobs = await submit(bob, SIEVE);
+    fakeEngine(({ submissions }) => {
+      const [annNewer, annOlder] = submissions.filter(
+        (submission) => submission.user === ann,
+      );
+      const bobsSubmission = submissions.find(
+        (submission) => submission.user === bob,
+      )!;
+      return [
+        fakePair(annOlder, annNewer, 0.99),
+        fakePair(annOlder, bobsSubmission, 0.8),
+      ];
+    });
+    const { run, pairs } = await runAndLoad();
+    expect(pairs.map((pair) => uuidStr(pair.right.submission))).toEqual([
+      bobs._id,
+    ]);
+    expect(run.groups[0].pairCount).toBe(1);
+  });
+
+  it('keeps the previous results when storing the new ones fails', async () => {
+    await submit(await newUser(), SIEVE);
+    await submit(await newUser(), SIEVE_RENAMED);
+    const previous = await runAndLoad();
+    // Over the schema's maximum of 1: the insert fails after the earlier run was already deleted in the same transaction.
+    fakeEngine(({ submissions: [first, second] }) => [
+      fakePair(first, second, 1.5),
+    ]);
+    const { run, pairs } = await runAndLoad();
+    expect(run).toMatchObject({ status: 'failed', error: 'internal_error' });
+    expect(pairs).toHaveLength(0);
+    expect(await loadRun(previous.run._id)).toMatchObject({
+      run: { status: 'done' },
+      pairs: [expect.anything()],
+    });
+  });
+
+  it('fails the run at the deadline between two groups', async () => {
+    const users = await newUsers(4);
+    await submit(users[0], SIEVE);
+    await submit(users[1], SIEVE_RENAMED);
+    await submit(users[2], 'print(1)', { language: python._id });
+    await submit(users[3], 'print(2)', { language: python._id });
+    const startedAt = Date.now();
+    // The first group takes the whole budget, and more.
+    const compare = fakeEngine(() => {
+      jest
+        .spyOn(Date, 'now')
+        .mockReturnValue(startedAt + 2 * SIMILARITY_DEADLINE_MS);
+      return [];
+    });
+    const { run } = await runAndLoad();
+    expect(compare).toHaveBeenCalledTimes(1);
+    expect(run).toMatchObject({ status: 'failed', error: 'deadline' });
+  });
+
+  it('fails the run on worker shutdown, starting no further group and keeping the previous results', async () => {
+    const users = await newUsers(4);
+    await submit(users[0], SIEVE);
+    await submit(users[1], SIEVE_RENAMED);
+    const previous = await runAndLoad();
+    await submit(users[2], 'print(1)', { language: python._id });
+    await submit(users[3], 'print(2)', { language: python._id });
+    // A service of its own: the shutdown flag must not reach the shared engine the other tests use.
+    const repository = worker.module.get(SimilarityRepository);
+    const stoppingEngine = new SimilarityEngine();
+    const stoppingService = new SimilarityService(repository, stoppingEngine);
+    const realCompare = stoppingEngine.compare.bind(stoppingEngine);
+    const compare = jest
+      .spyOn(stoppingEngine, 'compare')
+      .mockImplementation((request) => {
+        const comparison = realCompare(request);
+        stoppingEngine.beforeApplicationShutdown();
+        return comparison;
+      });
+    const finish = jest.spyOn(repository, 'finish');
+    const run = await startRun();
+    await stoppingService.run(run._id);
+    expect(compare).toHaveBeenCalledTimes(1);
+    expect(finish).not.toHaveBeenCalled();
+    expect((await loadRun(run._id)).run).toMatchObject({
+      status: 'failed',
+      active: false,
+      error: 'internal_error',
+    });
+    expect(await loadRun(previous.run._id)).toMatchObject({
+      run: { status: 'done' },
+      pairs: [expect.anything()],
+    });
   });
 
   it('does not let markFailed overwrite a finished run', async () => {

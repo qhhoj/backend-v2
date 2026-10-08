@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { uuidStr } from '@libs/database';
 import type {
   SimilarityError,
   SimilarityGroup,
@@ -10,12 +11,17 @@ import { SimilarityEngine, SimilarityEngineError } from './similarity-engine';
 import type { EnginePair, EngineSubmission } from './similarity-engine';
 import { familyOf } from './similarity-languages';
 import type { SimilarityFamily } from './similarity-languages';
-import { keepStrongestPairs, toStoredPairs } from './similarity-outcome';
-import type { GroupResult } from './similarity-outcome';
+import {
+  keepStrongest,
+  toStoredPairs,
+  withKeptPairCounts,
+} from './similarity-outcome';
+import type { GroupComparison } from './similarity-outcome';
 import { SimilarityRepository } from './similarity.repository';
 import type {
   ProblemScope,
   RunOutcome,
+  StoredPair,
   SubmissionRow,
 } from './similarity.repository';
 
@@ -41,24 +47,34 @@ interface PreparedSources {
   skippedEmpty: number;
   skippedTooLarge: number;
 }
+/** A group ready for the engine: its summary so far and the sources to send. */
+interface PreparedGroup {
+  group: SimilarityGroup;
+  submissions: EngineSubmission[];
+}
 
-/** Counts a source that cannot be compared, or prepares it for the engine. */
-const addSource = (
-  prepared: PreparedSources,
-  row: SubmissionRow,
+const classifySource = (
   source: string,
-  family: SimilarityFamily,
-): void => {
-  if (source.trim() === '') prepared.skippedEmpty++;
-  else if (Buffer.byteLength(source) > SIMILARITY_MAX_SOURCE_BYTES)
-    prepared.skippedTooLarge++;
-  else
-    prepared.submissions.push({
-      id: row.id,
-      user: row.user,
-      source: family.prepare(source),
-    });
+): 'empty' | 'tooLarge' | 'comparable' => {
+  if (source.trim() === '') return 'empty';
+  if (Buffer.byteLength(source) > SIMILARITY_MAX_SOURCE_BYTES)
+    return 'tooLarge';
+  return 'comparable';
 };
+
+/** The time left before the run's deadline; a run past it fails as a whole. */
+const timeLeftOrThrow = (deadlineAt: number): number => {
+  const timeoutMs = deadlineAt - Date.now();
+  if (timeoutMs <= 0) throw new SimilarityEngineError('deadline');
+  return timeoutMs;
+};
+
+/** Only the code is stored: a raw message can hold paths or source text. */
+const failureCodeOf = (error: unknown): SimilarityError =>
+  error instanceof SimilarityEngineError ? error.code : 'internal_error';
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 @Injectable()
 export class SimilarityService {
@@ -78,34 +94,30 @@ export class SimilarityService {
       const outcome = await this.compareScope(run, deadlineAt);
       if (!(await this.repository.finish(run, outcome)))
         this.logger.warn(
-          `Similarity run ${runId} was released while it ran; its results were dropped`,
+          `Similarity run ${runId} was no longer running (released, or failed by a redelivery); its results were dropped`,
         );
     } catch (error) {
-      await this.repository.fail(runId, this.failureCode(runId, error));
+      if (!(error instanceof SimilarityEngineError))
+        this.logger.error(
+          `Similarity run ${runId} failed: ${messageOf(error)}`,
+        );
+      await this.repository.markFailed(runId, failureCodeOf(error));
     }
   }
 
   /** For a job that died outside `run` (stalled, killed). */
   markFailed(runId: string, reason: SimilarityError): Promise<void> {
-    return this.repository.fail(runId, reason);
+    return this.repository.markFailed(runId, reason);
   }
 
   /**
    * The run is not queued: gone, finished, or `running` from an attempt whose worker died (BullMQ redelivers a stalled job).
    * One job per run and one job at a time mean nobody works on that leftover, so it is failed now rather than block its scope
    * until the api's stale-run release. Should the first attempt be alive after all, its `finish` finds the run no longer running
-   * and writes nothing. `fail` touches active runs only, so a finished or unknown run is left alone.
+   * and writes nothing. `markFailed` touches active runs only, so a finished or unknown run is left alone.
    */
   private failStalledAttempt(runId: string): Promise<void> {
-    return this.repository.fail(runId, 'internal_error');
-  }
-
-  /** Only the code is stored: a raw message can hold paths or source text. */
-  private failureCode(runId: string, error: unknown): SimilarityError {
-    if (error instanceof SimilarityEngineError) return error.code;
-    const message = error instanceof Error ? error.message : String(error);
-    this.logger.error(`Similarity run ${runId} failed: ${message}`);
-    return 'internal_error';
+    return this.repository.markFailed(runId, 'internal_error');
   }
 
   private async compareScope(
@@ -114,19 +126,28 @@ export class SimilarityService {
   ): Promise<RunOutcome> {
     const languages = await this.splitLanguages();
     const problemScopes = await this.repository.problemScopes(run);
-    const results: GroupResult[] = [];
+    const groups: SimilarityGroup[] = [];
+    let strongestPairs: StoredPair[] = [];
     for (const scope of problemScopes)
       for (const familyLanguages of languages.families) {
-        const result = await this.compareGroup(
-          run.limits,
+        const comparison = await this.compareGroup(
+          run,
           scope,
           familyLanguages,
           deadlineAt,
         );
-        if (result) results.push(result);
+        if (!comparison) continue;
+        groups.push(comparison.group);
+        // Trimmed after every group, so a run holds about maxPairs pairs however many groups its scope has.
+        strongestPairs = keepStrongest(
+          strongestPairs,
+          comparison.pairs,
+          run.limits.maxPairs,
+        );
       }
     return {
-      ...keepStrongestPairs(results, run.limits.maxPairs),
+      groups: withKeptPairCounts(groups, strongestPairs),
+      pairs: strongestPairs,
       unsupported: await this.countUnsupported(
         problemScopes,
         languages.unsupported,
@@ -136,11 +157,38 @@ export class SimilarityService {
 
   /** One problem in one language family; null when it has no eligible submission. */
   private async compareGroup(
+    run: SimilarityRun,
+    scope: ProblemScope,
+    familyLanguages: FamilyLanguages,
+    deadlineAt: number,
+  ): Promise<GroupComparison | null> {
+    const prepared = await this.prepareGroup(
+      run.limits,
+      scope,
+      familyLanguages,
+    );
+    if (!prepared) return null;
+    const { group, submissions } = prepared;
+    const enginePairs = await this.compareOrNullOnEngineFailure(
+      run.limits,
+      familyLanguages.family,
+      submissions,
+      timeLeftOrThrow(deadlineAt),
+    );
+    if (enginePairs)
+      return { group, pairs: toStoredPairs(group, enginePairs, submissions) };
+    this.logger.warn(
+      `Similarity engine failed on run ${uuidStr(run._id)}, problem ${scope.problemId}, family ${group.language}; the group is listed as failed`,
+    );
+    return { group: { ...group, failed: true }, pairs: [] };
+  }
+
+  /** Counts and reads the group's sources; null when it has no eligible submission. */
+  private async prepareGroup(
     limits: SimilarityLimits,
     scope: ProblemScope,
     { family, languageIds }: FamilyLanguages,
-    deadlineAt: number,
-  ): Promise<GroupResult | null> {
+  ): Promise<PreparedGroup | null> {
     const submissionCount = await this.repository.countRows(scope, languageIds);
     if (submissionCount === 0) return null;
     const rows = await this.repository.submissionRows(
@@ -162,25 +210,19 @@ export class SimilarityService {
       pairCount: 0,
       failed: false,
     };
-    const enginePairs = await this.enginePairs(
-      limits,
-      family,
-      submissions,
-      deadlineAt,
-    );
-    if (!enginePairs) return { group: { ...group, failed: true }, pairs: [] };
-    return { group, pairs: toStoredPairs(group, enginePairs, submissions) };
+    return { group, submissions };
   }
 
-  /** Null when the engine failed on this group alone. */
-  private async enginePairs(
+  /**
+   * Null when the engine failed on this group alone: one odd group (an unusual parse) must not cost the whole run.
+   * Every other error propagates and fails the run: a deadline (every later group would hit it too) or a worker shutdown.
+   */
+  private async compareOrNullOnEngineFailure(
     limits: SimilarityLimits,
     family: SimilarityFamily,
     submissions: EngineSubmission[],
-    deadlineAt: number,
+    timeoutMs: number,
   ): Promise<EnginePair[] | null> {
-    const timeoutMs = deadlineAt - Date.now();
-    if (timeoutMs <= 0) throw new SimilarityEngineError('deadline');
     try {
       return await this.engine.compare({
         family,
@@ -190,13 +232,10 @@ export class SimilarityService {
         timeoutMs,
       });
     } catch (error) {
-      // One odd group (an unusual parse) must not cost the whole run. A deadline still does: every later group would hit it too.
-      if (
-        !(error instanceof SimilarityEngineError) ||
-        error.code !== 'engine_failed'
-      )
-        throw error;
-      this.logger.warn(`Similarity engine failed on a ${family.name} group`);
+      const isEngineFailure =
+        error instanceof SimilarityEngineError &&
+        error.code === 'engine_failed';
+      if (!isEngineFailure) throw error;
       return null;
     }
   }
@@ -208,10 +247,9 @@ export class SimilarityService {
     for (const { id, commonName } of await this.repository.languages()) {
       const family = familyOf(commonName);
       if (!family) {
-        unsupported.set(commonName, [
-          ...(unsupported.get(commonName) ?? []),
-          id,
-        ]);
+        const languageIds = unsupported.get(commonName) ?? [];
+        languageIds.push(id);
+        unsupported.set(commonName, languageIds);
         continue;
       }
       const entry = families.get(family.name) ?? { family, languageIds: [] };
@@ -251,8 +289,18 @@ export class SimilarityService {
       const sources = await this.repository.sourcesOf(
         chunk.map((row) => row.id),
       );
-      for (const row of chunk)
-        addSource(prepared, row, sources.get(row.id) ?? '', family);
+      for (const row of chunk) {
+        const source = sources.get(row.id) ?? '';
+        const kind = classifySource(source);
+        if (kind === 'empty') prepared.skippedEmpty++;
+        else if (kind === 'tooLarge') prepared.skippedTooLarge++;
+        else
+          prepared.submissions.push({
+            id: row.id,
+            user: row.user,
+            source: family.prepare(source),
+          });
+      }
     }
     return prepared;
   }

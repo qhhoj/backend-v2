@@ -10,7 +10,11 @@ import {
 } from '../../../test/similarity-fixtures';
 import { ENGINE_SOURCE } from './similarity-engine.script';
 import { familyOf } from './similarity-languages';
-import { SimilarityEngine, SimilarityEngineError } from './similarity-engine';
+import {
+  EngineShutdownError,
+  SimilarityEngine,
+  SimilarityEngineError,
+} from './similarity-engine';
 import type { EngineRequest, LineRange } from './similarity-engine';
 
 jest.setTimeout(60_000);
@@ -198,13 +202,22 @@ describe('SimilarityEngine', () => {
     expect(isRunning(pid)).toBe(false);
   });
 
-  it('kills the child before application shutdown, failing the comparison', async () => {
-    const comparison = engine.compare(request(twoCopies()));
-    const pid = engine.childPid()!;
-    engine.beforeApplicationShutdown();
-    await expect(comparison).rejects.toMatchObject({ code: 'engine_failed' });
+  it('kills the child before application shutdown, failing the comparison as a shutdown', async () => {
+    const stopping = new InspectableEngine();
+    const comparison = stopping.compare(request(twoCopies()));
+    const pid = stopping.childPid()!;
+    stopping.beforeApplicationShutdown();
+    await expect(comparison).rejects.toBeInstanceOf(EngineShutdownError);
     await sleep(300);
     expect(isRunning(pid)).toBe(false);
+  });
+
+  it('starts no child once shutdown began', async () => {
+    const stopping = new InspectableEngine();
+    stopping.beforeApplicationShutdown();
+    const comparison = stopping.compare(request(twoCopies()));
+    expect(stopping.childPid()).toBeUndefined();
+    await expect(comparison).rejects.toBeInstanceOf(EngineShutdownError);
   });
 
   it('child exits when the worker goes away, without waiting for the deadline', async () => {
