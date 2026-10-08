@@ -396,6 +396,44 @@ describe('ProblemAccess.visibleFilter', () => {
     expect(expected.length).toBeGreaterThan(0);
   });
 
+  it.each([
+    ...Object.entries(PRINCIPALS).map(
+      ([who, principal]) => [who, principal] as [string, Principal | null],
+    ),
+    ...EXHAUSTIVE,
+  ])('matches canEdit for %s', async (_who, principal) => {
+    const expected = generated
+      .filter(({ view: problemView }) =>
+        ProblemAccess.canEdit(principal, problemView),
+      )
+      .map(({ code }) => code)
+      .sort();
+    const filter = ProblemAccess.editableFilter(principal);
+    const actual = filter
+      ? (
+          await problems
+            .find({
+              $and: [
+                { code: { $in: generated.map(({ code }) => code) } },
+                filter,
+              ],
+            })
+            .lean()
+        )
+          .map((problem) => problem.code)
+          .sort()
+      : [];
+    expect(actual).toEqual(expected);
+  });
+
+  it('edits nothing when signed out', () => {
+    expect(ProblemAccess.editableFilter(null)).toBeNull();
+  });
+
+  it('lets a superuser edit every problem', () => {
+    expect(ProblemAccess.editableFilter(PRINCIPALS.superuser)).toEqual({});
+  });
+
   it('matches canSee under a contest scope, started or not', async () => {
     const codes = generated.map(({ code }) => code);
     const privateCodes = generated
