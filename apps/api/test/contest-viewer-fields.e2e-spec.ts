@@ -166,18 +166,81 @@ describe('contest viewer fields', () => {
       });
     });
 
-    it("reads the viewer's rows of a page with one query on the unique participation index", async () => {
+    it("reads only the viewer's rows in the page's contests with one query on the unique participation index", async () => {
+      const page = [];
       for (let index = 0; index < 3; index += 1)
-        await createContest(api, { name: `indexed_${index}` });
+        page.push(await createContest(api, { name: `indexed_${index}` }));
+      const elsewhere = await createContest(api, { name: 'unrelated_contest' });
+      await joinParticipation(api, page[0]._id, users.dave._id);
+      await joinParticipation(api, page[1]._id, users.dave._id, { virtual: 1 });
+      await joinParticipation(api, elsewhere._id, users.dave._id);
+      await joinParticipation(api, page[0]._id, users.erin._id);
+      await joinParticipation(api, page[2]._id, users.erin._id);
       const operations = await profileQueries(api.db, () =>
-        get('/api/internal/contests?search=indexed_', 'alice').expect(200),
+        get('/api/internal/contests?search=indexed_', 'dave').expect(200),
       );
       const reads = operations.filter(
         ({ collection }) => collection === 'contestParticipations',
       );
       expect(reads).toHaveLength(1);
       expect(reads[0].planSummary).toContain('contest: 1, user: 1, virtual: 1');
-      expect(reads[0].docsExamined).toBe(0);
+      // Dave's two rows on the page; his row elsewhere and Erin's rows are never read.
+      expect(reads[0].docsExamined).toBe(2);
+      expect(reads[0].keysExamined).toBeLessThanOrEqual(4);
+    });
+  });
+
+  describe('access code and anonymous viewer', () => {
+    it('never exposes the access code, in a list row or on the detail', async () => {
+      const guarded = await createContest(api, {
+        name: 'guarded_code',
+        accessCodeHash: sha256('opensesame'),
+      });
+      const listBody = JSON.stringify(await listed('guarded_code', 'alice'));
+      const detailBody = JSON.stringify(await detail(guarded.key, 'alice'));
+      for (const body of [listBody, detailBody]) {
+        expect(body).not.toMatch(/accessCode(Hash)?"/);
+        expect(body).not.toContain(sha256('opensesame'));
+      }
+      expect((await detail(guarded.key)).requiresAccessCode).toBe(true);
+    });
+
+    it('gives an anonymous visitor a detail viewer with no state', async () => {
+      const open = await createContest(api, { name: 'anonymous_detail' });
+      expect((await detail(open.key)).viewer).toMatchObject({
+        liveStatus: null,
+        isCurrent: false,
+        inContest: false,
+        liveParticipation: null,
+      });
+    });
+  });
+
+  describe('detail viewer live status', () => {
+    it("reports 'registered' before the start and 'finished' after the end", async () => {
+      const upcoming = await createContest(api, {
+        name: 'detail_registered',
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+      });
+      const ended = await createContest(api, {
+        name: 'detail_finished',
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      });
+      await joinParticipation(api, upcoming._id, users.erin._id, {
+        isRegistered: true,
+        realStart: upcoming.startTime,
+      });
+      await joinParticipation(api, ended._id, users.erin._id, {
+        realStart: hoursFromNow(-5),
+      });
+      expect((await detail(upcoming.key, 'erin')).viewer.liveStatus).toBe(
+        'registered',
+      );
+      expect((await detail(ended.key, 'erin')).viewer.liveStatus).toBe(
+        'finished',
+      );
     });
   });
 });

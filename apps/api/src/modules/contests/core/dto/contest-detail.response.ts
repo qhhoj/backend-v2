@@ -99,7 +99,7 @@ export class ContestSettingsResponse {
   }
 }
 
-/** The contest's problems in order, labelled, skipping any whose summary is missing. */
+/** The contest's problems in order, labelled; an entry whose problem is gone (deleted or not found) is skipped, not an error. */
 function labelledProblems(
   contest: Contest,
   summaries: Array<{ _id: string; code: string; name: string }>,

@@ -51,6 +51,7 @@ export class ContestsService {
         ContestListItemResponse.withViewer(
           contest,
           now,
+          // `viewers` is empty for a signed-out visitor, so the row has no viewer.
           viewers.get(uuidStr(contest._id)) ?? null,
         ),
       ),

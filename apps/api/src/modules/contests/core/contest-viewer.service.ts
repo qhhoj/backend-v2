@@ -146,12 +146,17 @@ export class ContestViewerService {
       this.participations.ownRowsIn(principal.userId, contestIds),
       this.participations.currentIdOf(principal.userId),
     ]);
+    const rowsOf = new Map<string, OwnParticipationRow[]>();
+    for (const row of rows) {
+      const contestId = uuidStr(row.contest);
+      rowsOf.set(contestId, [...(rowsOf.get(contestId) ?? []), row]);
+    }
     return new Map(
       contests.map((contest, index) => [
         contestIds[index],
         listViewerOf(
           contest,
-          rows.filter((row) => uuidStr(row.contest) === contestIds[index]),
+          rowsOf.get(contestIds[index]) ?? [],
           pointer,
           now,
         ),
