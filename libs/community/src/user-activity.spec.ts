@@ -4,6 +4,7 @@ import {
   csvCell,
   csvLine,
   isTrackedPath,
+  redactCredentials,
   stripQuery,
 } from './user-activity';
 
@@ -20,6 +21,18 @@ describe('user activity rules', () => {
       ),
     ).toBe('/api/internal/auth/social/github/callback');
     expect(stripQuery('/a'.repeat(400))).toHaveLength(500);
+  });
+
+  it('redacts link credentials in paths and referers, leaving the rest', () => {
+    expect(
+      redactCredentials('/api/internal/public-rankings/Zk3-secret_token'),
+    ).toBe('/api/internal/public-rankings/:token');
+    expect(
+      redactCredentials('https://oj.example/public-rankings/abc/extra'),
+    ).toBe('https://oj.example/public-rankings/:token/extra');
+    expect(redactCredentials('/api/internal/contests/r42/ranking')).toBe(
+      '/api/internal/contests/r42/ranking',
+    );
   });
 
   it('skips noise, the staff API itself and the SPA polls, tracks everything else', () => {

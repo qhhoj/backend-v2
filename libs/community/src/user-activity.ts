@@ -23,6 +23,11 @@ export const stripQuery = (url: string): string => {
   );
 };
 
+/** Path segments that are link credentials (`/public-rankings/<token>` grants read access): staff who read the log must not learn them. */
+const CREDENTIAL_SEGMENT = /(\/public-rankings\/)[^/]+/gi;
+export const redactCredentials = (path: string): string =>
+  path.replace(CREDENTIAL_SEGMENT, '$1:token');
+
 const UNTRACKED_PREFIXES = [
   '/healthz',
   '/media/',

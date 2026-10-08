@@ -26,6 +26,7 @@ import { TicketsApiModule } from './modules/tickets/tickets-api.module';
 import { SiteApiModule } from './modules/site/site-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
 import { UsersApiModule } from './modules/users/users-api.module';
+import { UserActivityModule } from './modules/user-activity/user-activity.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -54,6 +55,7 @@ import { HealthController } from './health.controller';
     HomeApiModule,
     SettingsApiModule,
     SiteApiModule,
+    UserActivityModule,
     ApiV2Module,
   ],
   controllers: [HealthController],
