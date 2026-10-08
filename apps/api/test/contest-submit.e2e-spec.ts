@@ -1,3 +1,5 @@
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { recordSubmissionEvents } from '@libs/judging/testing';
 import { uuidStr } from '@libs/database';
@@ -182,6 +184,27 @@ describe('submitting inside a contest', () => {
         participation: participation._id,
       }),
     ).toBe(1);
+  });
+
+  it('checks the contest cap only while holding the per-user lock, and frees the lock after', async () => {
+    const problem = await createProblem(api, catalog, { code: 'cp_lock' });
+    const contest = await createContest(api, {
+      problems: [contestProblem(problem._id, 0, { maxSubmissions: 1 })],
+    });
+    await enter('bob', contest._id);
+    const redis = api.app.get<Redis>(REDIS);
+    const lockKey = `submit-lock:user:${users.bob._id}`;
+    await redis.set(lockKey, 'held-by-another-request', 'EX', 10);
+    await submit('bob', 'cp_lock').expect(409).expect(errorCode('conflict'));
+    await redis.del(lockKey);
+    await submit('bob', 'cp_lock').expect(201);
+    expect(await redis.exists(lockKey)).toBe(0);
+    await redis.set(lockKey, 'held-by-another-request', 'EX', 10);
+    await submit('bob', 'cp_lock').expect(409).expect(errorCode('conflict'));
+    await redis.del(lockKey);
+    await submit('bob', 'cp_lock')
+      .expect(403)
+      .expect(errorCode('contest_submission_limit'));
   });
 
   it('stores FSO submissions pending without judging, publishing or the unfinished limit', async () => {
