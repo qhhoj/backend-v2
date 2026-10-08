@@ -70,6 +70,36 @@ const summaryOf = (problem: Partial<Problem>) => ({
   curators: problem.curators?.map(uuidStr),
 });
 
+type StatementFields = ReturnType<typeof statementFields>;
+interface WrittenProblem {
+  problemId: string;
+  after: Partial<Problem>;
+}
+
+/** The imported statement, limits and data; a re-import with a tutorial keeps the editorial's publication state (it is never un-published), one without a tutorial removes the editorial. */
+function statementFields(
+  imported: ImportedProblem,
+  before: Problem | undefined,
+) {
+  return {
+    name: imported.name,
+    description: imported.description,
+    descriptionHtml: imported.descriptionHtml,
+    translations: imported.translations,
+    timeLimit: imported.timeLimit,
+    memoryLimit: imported.memoryLimit,
+    partial: imported.partial,
+    data: imported.data,
+    solution: imported.solution && {
+      isPublic: false,
+      publishOn: new Date(),
+      authors: [],
+      ...before?.solution,
+      ...imported.solution,
+    },
+  };
+}
+
 @Injectable()
 export class PolygonImportRepository {
   constructor(
@@ -125,7 +155,7 @@ export class PolygonImportRepository {
   ): Promise<AppliedImport> {
     try {
       return await this.connection.transaction((session) =>
-        this.write(job, imported, target, session),
+        this.writeImportedProblem(job, imported, target, session),
       );
     } catch (error) {
       if (isDuplicateKey(error, 'code'))
@@ -138,7 +168,7 @@ export class PolygonImportRepository {
     }
   }
 
-  private async write(
+  private async writeImportedProblem(
     job: PolygonImportJob,
     imported: ImportedProblem,
     target: ImportTarget,
@@ -151,79 +181,112 @@ export class PolygonImportRepository {
       .exec();
     this.checkTarget(job, existing);
     const before = existing?.toObject();
-    const statement = {
-      name: imported.name,
-      description: imported.description,
-      descriptionHtml: imported.descriptionHtml,
-      translations: imported.translations,
-      timeLimit: imported.timeLimit,
-      memoryLimit: imported.memoryLimit,
-      partial: imported.partial,
-      data: imported.data,
-      // A re-import with a tutorial keeps the editorial's publication state (it is never un-published); one without a tutorial removes the editorial.
-      solution: imported.solution && {
-        isPublic: false,
-        publishOn: new Date(),
-        authors: [],
-        ...before?.solution,
-        ...imported.solution,
-      },
+    const statement = statementFields(imported, before);
+    const written =
+      existing && before
+        ? await this.updateIfDataVersionUnchanged(
+            job,
+            { problemId: existing._id, before, statement, target },
+            session,
+          )
+        : await this.insertWithCatalogDefaults(job, statement, session);
+    await this.appendImportRevision(
+      job,
+      { before, written, imported },
+      session,
+    );
+    return {
+      problemId: written.problemId,
+      previousFiles: DATA_FILE_KINDS.flatMap(
+        (kind) => before?.data?.[kind] ?? [],
+      ),
     };
-    let problemId: string;
-    let after: Partial<Problem>;
-    if (existing && before) {
-      const catalog = definedOnly({
-        groupId: job.groupId,
-        typeIds: job.typeIds,
-        points: job.points,
-        authors: job.authors,
-        curators: job.curators,
-      });
-      const { matchedCount } = await this.problems
-        .updateOne(
-          {
-            _id: existing._id,
-            code: job.code,
-            dataVersion: dataVersionIs(target?.dataVersion ?? 0),
-          },
-          {
-            $set: definedOnly({ ...statement, ...catalog }),
-            $inc: { dataVersion: 1 },
-          },
-          { session },
-        )
-        .exec();
-      if (matchedCount !== 1)
-        throw new PolygonImportError(
-          'the problem changed while the package was importing, try again',
-        );
-      problemId = existing._id;
-      after = {
-        ...before,
-        ...definedOnly({ ...statement, ...catalog }),
-      };
-    } else {
-      const created = {
-        ...definedOnly(statement),
-        code: job.code,
-        isFullMarkup: job.isFullMarkup,
-        date: new Date(),
-        dataVersion: 1,
-        ...(await this.createCatalog(job, session)),
-      };
-      // `create` with a session takes an array.
-      [{ _id: problemId }] = await this.problems.create([created], { session });
-      after = created;
-    }
+  }
+
+  /** Compare-and-set on the editor's `dataVersion`: an edit that landed meanwhile fails the import instead of being overwritten. */
+  private async updateIfDataVersionUnchanged(
+    job: PolygonImportJob,
+    {
+      problemId,
+      before,
+      statement,
+      target,
+    }: {
+      problemId: string;
+      before: Problem;
+      statement: StatementFields;
+      target: ImportTarget;
+    },
+    session: ClientSession,
+  ): Promise<WrittenProblem> {
+    const catalog = definedOnly({
+      groupId: job.groupId,
+      typeIds: job.typeIds,
+      points: job.points,
+      authors: job.authors,
+      curators: job.curators,
+    });
+    const changes = definedOnly({ ...statement, ...catalog });
+    const { matchedCount } = await this.problems
+      .updateOne(
+        {
+          _id: problemId,
+          code: job.code,
+          dataVersion: dataVersionIs(target?.dataVersion ?? 0),
+        },
+        { $set: changes, $inc: { dataVersion: 1 } },
+        { session },
+      )
+      .exec();
+    if (matchedCount !== 1)
+      throw new PolygonImportError(
+        'the problem changed while the package was importing, try again',
+      );
+    return { problemId, after: { ...before, ...changes } };
+  }
+
+  private async insertWithCatalogDefaults(
+    job: PolygonImportJob,
+    statement: StatementFields,
+    session: ClientSession,
+  ): Promise<WrittenProblem> {
+    const created = {
+      ...definedOnly(statement),
+      code: job.code,
+      isFullMarkup: job.isFullMarkup,
+      date: new Date(),
+      dataVersion: 1,
+      ...(await this.createCatalog(job, session)),
+    };
+    // `create` with a session takes an array.
+    const [{ _id: problemId }] = await this.problems.create([created], {
+      session,
+    });
+    return { problemId, after: created };
+  }
+
+  private async appendImportRevision(
+    job: PolygonImportJob,
+    {
+      before,
+      written,
+      imported,
+    }: {
+      before: Problem | undefined;
+      written: WrittenProblem;
+      imported: ImportedProblem;
+    },
+    session: ClientSession,
+  ): Promise<void> {
     await this.revisions.create(
       [
         {
           entity: 'problem',
-          entityId: problemId,
+          entityId: written.problemId,
           action: 'import',
           userId: job.requesterId,
           changes: {
-            ...fieldDiff(summaryOf(before ?? {}), summaryOf(after)),
+            ...fieldDiff(summaryOf(before ?? {}), summaryOf(written.after)),
             ...dataChanges(before?.data ?? emptyProblemData(), imported.data),
           },
           comment: `Imported from a Polygon package (${job.mode})`,
@@ -231,12 +294,6 @@ export class PolygonImportRepository {
       ],
       { session },
     );
-    return {
-      problemId,
-      previousFiles: DATA_FILE_KINDS.flatMap(
-        (kind) => before?.data?.[kind] ?? [],
-      ),
-    };
   }
 
   /** Legacy defaults for a new problem: the oldest group and type (UUIDv7 ids sort by creation time), every language offered on problems, the lowest point value. */

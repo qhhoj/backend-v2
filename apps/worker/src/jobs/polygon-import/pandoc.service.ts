@@ -220,7 +220,7 @@ export class PandocService {
     const directory = await mkdtemp(join(tmpdir(), 'qhhoj-pandoc-'));
     try {
       await writeFile(join(directory, FILTER_FILE), PANDOC_FILTER, 'utf8');
-      return await this.run(
+      return await this.runPandoc(
         [...PANDOC_ARGUMENTS, `--lua-filter=${FILTER_FILE}`],
         input,
         directory,
@@ -233,7 +233,7 @@ export class PandocService {
   /** null only when the binary does not exist; a pandoc that exists but cannot start throws its own stderr. */
   async version(): Promise<number[] | null> {
     try {
-      const banner = await this.run(
+      const banner = await this.runPandoc(
         ['--version'],
         Buffer.alloc(0),
         tmpdir(),
@@ -253,7 +253,7 @@ export class PandocService {
       throw new PolygonImportError('pandoc version must be at least 3.0.0');
   }
 
-  private run(
+  private runPandoc(
     args: readonly string[],
     input: Buffer,
     cwd: string,

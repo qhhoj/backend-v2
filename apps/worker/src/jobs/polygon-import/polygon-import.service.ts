@@ -80,7 +80,7 @@ export class PolygonImportService {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
       await this.repository.assertFullMarkupWriter(job);
-      return await this.run(packagePath, job, target);
+      return await this.importPackage(packagePath, job, target);
     } finally {
       await rm(packagePath, { force: true });
     }
@@ -90,7 +90,7 @@ export class PolygonImportService {
    * Parse, render and compile everything that can fail without touching the database; then stage the data files, run the transaction, and only after it committed give the files their final names and write init.yml.
    * Before the commit a failure removes the images and staged files it saved; after it, Mongo is authoritative and nothing it references is removed.
    */
-  private async run(
+  private async importPackage(
     packagePath: string,
     job: PolygonImportJob,
     target: ImportTarget,

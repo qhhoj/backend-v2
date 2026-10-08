@@ -635,6 +635,35 @@ describe('PolygonImportProcessor', () => {
     expect(imageCount()).toBe(imagesBefore);
   });
 
+  it('rolls the problem update back when writing its revision fails, leaving staged files and images removed', async () => {
+    const problem = await worker.problems
+      .findOne({ code: 'sum' })
+      .select('+data');
+    const failing = jest
+      .spyOn(revisions, 'create')
+      .mockRejectedValueOnce(new Error('revision write failed'));
+    const imagesBefore = imageCount();
+    const filesBefore = readdirSync(dataDirectory('sum')).sort();
+    await expect(
+      processor.process(
+        bareUpdate(
+          {},
+          buildPolygonPackage({
+            ...fixture,
+            statements: [{ ...fixture.statements![0], name: 'Rolled back' }],
+          }),
+        ),
+      ),
+    ).rejects.toThrow('revision write failed');
+    failing.mockRestore();
+    expect(await worker.problems.findOne({ code: 'sum' })).toMatchObject({
+      name: problem!.name,
+      dataVersion: problem!.dataVersion,
+    });
+    expect(readdirSync(dataDirectory('sum')).sort()).toEqual(filesBefore);
+    expect(imageCount()).toBe(imagesBefore);
+  });
+
   it('removes the empty data directory of an update that fails after staging', async () => {
     await worker.problems.create({
       code: 'nodir',
