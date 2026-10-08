@@ -49,6 +49,16 @@ class EnvReader {
 
   constructor(private readonly source: Record<string, string | undefined>) {}
 
+  /** The raw value, `fallback` only when unset (a blank stays blank). */
+  textOr(name: string, fallback: string): string {
+    return this.source[name] ?? fallback;
+  }
+
+  /** Blank counts as unset. */
+  nonBlankOr<Fallback>(name: string, fallback: Fallback): string | Fallback {
+    return this.source[name] || fallback;
+  }
+
   required(name: string): string {
     return this.source[name] || (this.problems.push(`${name} is required`), '');
   }
@@ -91,29 +101,26 @@ class EnvReader {
 }
 
 /** Every field, read in this order so problems are reported in it. */
-function readEnv(
-  reader: EnvReader,
-  source: Record<string, string | undefined>,
-): Env {
+function readEnv(reader: EnvReader): Env {
   return {
     mongoUrl: reader.required('MONGO_URL'),
     redisUrl: reader.required('REDIS_URL'),
-    encryptionKey: source.ENCRYPTION_KEY ?? '',
-    tokenSecret: source.TOKEN_SECRET ?? '',
+    encryptionKey: reader.textOr('ENCRYPTION_KEY', ''),
+    tokenSecret: reader.textOr('TOKEN_SECRET', ''),
     siteUrl: reader.required('SITE_URL'),
     port: reader.portNumber('PORT', 3000, 1),
-    logLevel: source.LOG_LEVEL ?? 'info',
+    logLevel: reader.textOr('LOG_LEVEL', 'info'),
     trustProxy: reader.proxyList('TRUST_PROXY'),
     cookieSecure: reader.booleanFrom('COOKIE_SECURE', true),
     mediaRoot: reader.required('MEDIA_ROOT'),
-    mediaUrl: (source.MEDIA_URL || '/media').replace(/\/+$/, ''),
+    mediaUrl: reader.nonBlankOr('MEDIA_URL', '/media').replace(/\/+$/, ''),
     problemDataRoot: reader.required('PROBLEM_DATA_ROOT'),
     pdfCacheRoot: reader.required('PDF_CACHE_ROOT'),
     pdfConcurrency: reader.positiveInteger('PDF_CONCURRENCY', 2),
     judgeBridgePort: reader.portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
-    judgeBridgeHost: source.JUDGE_BRIDGE_HOST || '0.0.0.0',
-    contestDataRoot: source.CONTEST_DATA_ROOT || null,
-    userDataRoot: source.USER_DATA_ROOT || null,
+    judgeBridgeHost: reader.nonBlankOr('JUDGE_BRIDGE_HOST', '0.0.0.0'),
+    contestDataRoot: reader.nonBlankOr('CONTEST_DATA_ROOT', null),
+    userDataRoot: reader.nonBlankOr('USER_DATA_ROOT', null),
   };
 }
 
@@ -133,7 +140,7 @@ export function loadEnv(
   source: Record<string, string | undefined> = process.env,
 ): Env {
   const reader = new EnvReader(source);
-  const env = readEnv(reader, source);
+  const env = readEnv(reader);
   const problems = [
     ...reader.problems,
     ...checkValues(env),

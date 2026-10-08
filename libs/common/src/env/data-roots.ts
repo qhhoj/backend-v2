@@ -20,25 +20,31 @@ export function isInside(child: string, parent: string): boolean {
   return relation.split(sep)[0] !== '..' && !isAbsolute(relation);
 }
 
+/** Unset roots (null) are never inside anything. */
+function isSetAndInside(child: string | null, parent: string | null): boolean {
+  return !!child && !!parent && isInside(child, parent);
+}
+
 /** MEDIA_ROOT is served publicly: the contest and user data zips must live outside it and apart from each other. */
 export function checkDataRoots({
   mediaRoot,
   contestDataRoot,
   userDataRoot,
 }: Pick<Env, 'mediaRoot' | 'contestDataRoot' | 'userDataRoot'>): string[] {
-  const problems: string[] = [];
-  if (contestDataRoot && mediaRoot && isInside(contestDataRoot, mediaRoot))
-    problems.push('CONTEST_DATA_ROOT must not be inside MEDIA_ROOT');
-  if (userDataRoot && mediaRoot && isInside(userDataRoot, mediaRoot))
-    problems.push('USER_DATA_ROOT must not be inside MEDIA_ROOT');
-  if (
-    userDataRoot &&
-    contestDataRoot &&
-    (isInside(userDataRoot, contestDataRoot) ||
-      isInside(contestDataRoot, userDataRoot))
-  )
-    problems.push(
+  const rules: [violated: boolean, problem: string][] = [
+    [
+      isSetAndInside(contestDataRoot, mediaRoot),
+      'CONTEST_DATA_ROOT must not be inside MEDIA_ROOT',
+    ],
+    [
+      isSetAndInside(userDataRoot, mediaRoot),
+      'USER_DATA_ROOT must not be inside MEDIA_ROOT',
+    ],
+    [
+      isSetAndInside(userDataRoot, contestDataRoot) ||
+        isSetAndInside(contestDataRoot, userDataRoot),
       'USER_DATA_ROOT and CONTEST_DATA_ROOT must be separate directories',
-    );
-  return problems;
+    ],
+  ];
+  return rules.filter(([violated]) => violated).map(([, problem]) => problem);
 }
