@@ -107,6 +107,8 @@ describe('outbound URL safety', () => {
       'http://hooks.example.test/a',
       'https://localhost:8443/a',
       'https://api.localhost/a',
+      'https://localhost./a',
+      'https://api.localhost./a',
       'https://127.0.0.1/a',
       'https://127.1/a',
       'https://10.0.0.5/a',

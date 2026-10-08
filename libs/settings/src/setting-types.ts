@@ -52,7 +52,8 @@ for (const [network, prefix] of [
 
 /** Literal internal hosts only: a name that resolves to an internal address is not caught (accepted residual risk). */
 const isInternalHost = (hostname: string): boolean => {
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
+  const name = hostname.replace(/\.$/, '');
+  if (name === 'localhost' || name.endsWith('.localhost')) return true;
   const address = hostname.replace(/^\[|\]$/g, '');
   const family = isIP(address);
   if (family === 4) return internalIpv4.check(address, 'ipv4');
