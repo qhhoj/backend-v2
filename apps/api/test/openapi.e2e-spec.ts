@@ -95,6 +95,7 @@ describe('OpenAPI document', () => {
     expect(Object.keys(body.paths)).toEqual(
       expect.arrayContaining([
         '/api/internal/problems/{code}/submit',
+        '/api/internal/problems/{code}/submit/file',
         '/api/internal/submissions',
         '/api/internal/submissions/rejudge',
         '/api/internal/submissions/{id}',

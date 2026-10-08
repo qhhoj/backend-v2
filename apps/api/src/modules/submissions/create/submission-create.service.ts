@@ -1,16 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import {
   AppError,
   invalidField,
+  MAX_UPLOAD_BYTES,
   RateLimitService,
   REDIS,
+  StorageService,
+  validationPipe,
   withRedisLock,
 } from '@libs/common';
 import { contestPhase, LIVE } from '@libs/contests';
-import { SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
+import { newId, SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
+import type { Language } from '@libs/database';
 import {
   BridgeCommandsService,
   submissionEvent,
@@ -25,8 +30,11 @@ import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
 import { ProblemsService } from '../../problems/core/problems.service';
+import { readMultipartForm } from '../../problems/core/multipart';
+import { SUBMIT_FILE_FIELDS, SubmitFileDto } from './dto/submit-file.dto';
 import type { SubmitDto } from './dto/submit.dto';
 import type { SubmitResponse } from './dto/submit.response';
+import { SUBMISSION_FILE_DIR, submittedFile } from './submission-file';
 import {
   SUBMIT_LIMIT,
   SUBMIT_WINDOW_SECONDS,
@@ -50,6 +58,9 @@ interface ContestPlan {
   isFinalFormat: boolean;
 }
 
+/** Typed text, or an upload that is saved to media just before its row is written and removed again if the row is not. */
+type PendingSource = { text: string } | { file: Buffer; path: string };
+
 /** Legacy `ProblemSubmit.form_valid`; inside a current contest that lists the problem the submission is a contest submission (priority 0, lock, pretests, `maxSubmissions`, FSO pending). */
 @Injectable()
 export class SubmissionCreateService {
@@ -64,18 +75,54 @@ export class SubmissionCreateService {
     private readonly rateLimit: RateLimitService,
     private readonly currentContest: CurrentContestService,
     private readonly participations: ParticipationsRepository,
+    private readonly storage: StorageService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** Visible problem, allowed (and not file-only) language, not banned, a chosen judge only for editors and only when online with the problem; then the per-user rate and the unfinished-submission limit. */
+  /** A typed source for a language that is not file-only. */
   async submit(
     auth: AuthContext,
     code: string,
     dto: SubmitDto,
   ): Promise<SubmitResponse> {
+    const problem = await this.problems.visibleProblem(auth.principal, code);
+    const language = this.assertLanguage(problem, dto.language, false);
+    return this.create(auth, problem, language, dto.judgeId, {
+      text: dto.source,
+    });
+  }
+
+  /** Legacy file submission: a multipart form (`language`, optional `judgeId`, `file`) for a file-only language; the file is stored under the media root and its media URL becomes the source (the bridge makes it absolute for the judge). */
+  async submitFile(
+    auth: AuthContext,
+    code: string,
+    request: FastifyRequest,
+  ): Promise<SubmitResponse> {
+    const problem = await this.problems.visibleProblem(auth.principal, code);
+    const upload = await readMultipartForm(
+      request,
+      MAX_UPLOAD_BYTES,
+      SUBMIT_FILE_FIELDS,
+    );
+    const dto = (await validationPipe.transform(upload.fields, {
+      type: 'body',
+      metatype: SubmitFileDto,
+    })) as SubmitFileDto;
+    const language = this.assertLanguage(problem, dto.language, true);
+    const file = await submittedFile(language, upload);
+    const path = `${SUBMISSION_FILE_DIR}/${problem.code}/${auth.principal.userId}/${newId()}.${language.extension}`;
+    return this.create(auth, problem, language, dto.judgeId, { file, path });
+  }
+
+  /** Not banned, a chosen judge only for editors and only when online with the problem; then the per-user rate, the contest's submission cap and the unfinished-submission limit. */
+  private async create(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    language: Language,
+    judgeId: string | undefined,
+    source: PendingSource,
+  ): Promise<SubmitResponse> {
     const { principal } = auth;
-    const problem = await this.problems.visibleProblem(principal, code);
-    const languageKey = this.assertLanguage(problem, dto.language);
     if (
       !principal.isSuperuser &&
       problem.bannedUsers.map(uuidStr).includes(principal.userId)
@@ -85,8 +132,8 @@ export class SubmissionCreateService {
         403,
         'You are banned from submitting to this problem',
       );
-    if (dto.judgeId !== undefined)
-      await this.assertJudge(principal, problem, dto.judgeId, languageKey);
+    if (judgeId !== undefined)
+      await this.assertJudge(principal, problem, judgeId, language.key);
     await this.rateLimit.reserve(
       [`submit:user:${principal.userId}`],
       SUBMIT_LIMIT,
@@ -98,14 +145,14 @@ export class SubmissionCreateService {
       new Date(),
     );
     const create = () =>
-      this.submissions.create(
+      this.insert(
         {
           user: principal.userId,
           problem: problem._id,
-          language: dto.language,
+          language: language._id,
           ...plan?.fields,
         },
-        dto.source,
+        source,
         plan?.entry ?? null,
       );
     const spams = hasPermission(principal, 'judge.spam_submission');
@@ -154,8 +201,24 @@ export class SubmissionCreateService {
         'QU',
       ),
     );
-    await this.commands.judge([id], dto.judgeId ?? null);
+    await this.commands.judge([id], judgeId ?? null);
     return { id };
+  }
+
+  private async insert(
+    fields: NewSubmission,
+    source: PendingSource,
+    contestEntry: NewContestSubmission | null,
+  ): Promise<string> {
+    if ('text' in source)
+      return this.submissions.create(fields, source.text, contestEntry);
+    const url = await this.storage.save(source.path, source.file);
+    try {
+      return await this.submissions.create(fields, url, contestEntry);
+    } catch (error) {
+      await this.storage.delete(source.path);
+      throw error;
+    }
   }
 
   /** Legacy `form_valid` in a contest: only when the current contest lists the problem. */
@@ -193,8 +256,12 @@ export class SubmissionCreateService {
     };
   }
 
-  /** Returns the language's key, the name judges know it by. */
-  private assertLanguage(problem: ProblemDocument, languageId: string): string {
+  /** An allowed language of the problem, file-only exactly when the route takes a file. */
+  private assertLanguage(
+    problem: ProblemDocument,
+    languageId: string,
+    takesFile: boolean,
+  ): Language {
     const language = this.languages.byId(languageId);
     if (
       !language ||
@@ -204,9 +271,19 @@ export class SubmissionCreateService {
         'language',
         'This language is not allowed for this problem.',
       );
-    if (language.fileOnly)
-      throw invalidField('language', 'File submissions are not supported yet.');
-    return language.key;
+    if (language.fileOnly !== takesFile)
+      throw language.fileOnly
+        ? invalidField(
+            'language',
+            'This language takes a file: use the file submit route.',
+            'language_takes_file',
+          )
+        : invalidField(
+            'language',
+            'This language takes a typed source, not a file.',
+            'language_takes_text',
+          );
+    return language;
   }
 
   /** Legacy `judge_choices`: editors only, among online judges that have the problem (a mirror: its root) and run the language. */

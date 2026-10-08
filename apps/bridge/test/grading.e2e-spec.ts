@@ -114,6 +114,47 @@ describe('Grading (bridge Mongo layer)', () => {
     ]);
   });
 
+  it('sends a file-only language its limits and the file URL made absolute against SITE_URL', async () => {
+    const scratch = await bridge.languages.create({
+      key: 'SCRATCH',
+      name: 'Scratch',
+      commonName: 'Scratch',
+      ace: 'text',
+      pygments: 'text',
+      extension: 'sb3',
+      fileOnly: true,
+      fileSizeLimit: 5,
+    });
+    const problem = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      allowedLanguages: [catalog.cpp._id, scratch._id],
+    });
+    const requestFor = async (language: string, source: string) => {
+      const submission = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+        language,
+        source,
+      });
+      const [queued] = await repository.loadQueued([submission._id]);
+      return (await grading.claim(queued, JUDGE))?.request;
+    };
+    expect(
+      await requestFor(scratch._id, '/media/submission_file/p/u/a.sb3'),
+    ).toMatchObject({
+      source: 'http://localhost:5173/media/submission_file/p/u/a.sb3',
+      fileOnly: true,
+      fileSizeLimit: 5,
+    });
+    expect(
+      await requestFor(scratch._id, 'https://cdn.test/submission_file/b.sb3'),
+    ).toMatchObject({ source: 'https://cdn.test/submission_file/b.sb3' });
+    expect(await requestFor(catalog.cpp._id, '/media/x.cpp')).toMatchObject({
+      source: '/media/x.cpp',
+      fileOnly: false,
+      fileSizeLimit: 0,
+    });
+  });
+
   it('claims a queued submission once and builds the request from the problem', async () => {
     const problem = await seedProblem(bridge, catalog, {
       code: nextCode(),

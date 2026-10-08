@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { unique } from '@libs/common';
+import { ENV, unique } from '@libs/common';
+import type { Env } from '@libs/common';
 import { LIVE } from '@libs/contests';
 import {
   Contest,
@@ -46,6 +47,7 @@ export const REQUEUE_RESET = {
 } as const;
 
 const IN_FLIGHT = { $in: [...IN_FLIGHT_STATUSES] };
+const ABSOLUTE_URL = /^https?:\/\//i;
 
 /** What a contest submission adds to dispatch and to the judge's request. */
 export interface ContestMeta {
@@ -74,6 +76,7 @@ export class SubmissionsRepository {
     private readonly participations: Model<ContestParticipation>,
     @InjectModel(ContestSubmission.name)
     private readonly contestSubmissions: Model<ContestSubmission>,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   /** Queued submissions (all, or those of `ids`) in dispatch order, with the codes judges know: a mirror is judged under its root's code. A row whose problem or language is gone is skipped. */
@@ -256,21 +259,25 @@ export class SubmissionsRepository {
       )
       .lean();
     if (!submission) return null;
-    const [problem, source, earlierAttempts, metaOf] = await Promise.all([
-      this.problems
-        .findById(submission.problem, {
-          timeLimit: 1,
-          memoryLimit: 1,
-          partial: 1,
-          languageLimits: 1,
-        })
-        .lean(),
-      this.sources.findById(queued.id).lean(),
-      this.countEarlierAttempts(submission),
-      submission.contest
-        ? this.contestMetaOf([queued.id])
-        : Promise.resolve(new Map<string, ContestMeta>()),
-    ]);
+    const [problem, source, language, earlierAttempts, metaOf] =
+      await Promise.all([
+        this.problems
+          .findById(submission.problem, {
+            timeLimit: 1,
+            memoryLimit: 1,
+            partial: 1,
+            languageLimits: 1,
+          })
+          .lean(),
+        this.sources.findById(queued.id).lean(),
+        this.languages
+          .findById(submission.language, { fileOnly: 1, fileSizeLimit: 1 })
+          .lean(),
+        this.countEarlierAttempts(submission),
+        submission.contest
+          ? this.contestMetaOf([queued.id])
+          : Promise.resolve(new Map<string, ContestMeta>()),
+      ]);
     if (!problem || !source) {
       this.logger.error(`Submission ${queued.id} lost its problem or source`);
       const failed = await this.finishWith(
@@ -289,7 +296,9 @@ export class SubmissionsRepository {
       submissionId: queued.id,
       problemCode: queued.problemCode,
       languageKey: queued.languageKey,
-      source: source.source,
+      source: language?.fileOnly
+        ? this.absoluteFileUrl(source.source)
+        : source.source,
       timeLimit: limit?.timeLimit ?? problem.timeLimit,
       memoryLimit: limit?.memoryLimit ?? problem.memoryLimit,
       shortCircuit: !problem.partial,
@@ -297,10 +306,17 @@ export class SubmissionsRepository {
       inContest: metaOf.get(queued.id)?.virtual ?? null,
       attemptNo: earlierAttempts + 1,
       userId: uuidStr(submission.user),
-      fileOnly: false,
-      fileSizeLimit: 0,
+      fileOnly: language?.fileOnly ?? false,
+      fileSizeLimit: language?.fileSizeLimit ?? 0,
     };
     return { request, subject: gradedJobOf(submission) };
+  }
+
+  /** Legacy `get_absolute_submission_file_url`: a file source is a media URL, site-relative unless MEDIA_URL is absolute; the judge downloads it. */
+  private absoluteFileUrl(source: string): string {
+    return ABSOLUTE_URL.test(source)
+      ? source
+      : new URL(source, this.env.siteUrl).href;
   }
 
   /** The judge vanished between the claim and the request: back to the queue without spending the requeue (the judge never saw it). */

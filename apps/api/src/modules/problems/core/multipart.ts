@@ -10,23 +10,48 @@ export interface UploadedFile {
   content: Buffer;
 }
 
+/** An uploaded file plus the text fields sent with it. */
+export interface UploadedForm extends UploadedFile {
+  fields: Record<string, string>;
+}
+
+/** Text fields carry ids and names, never content. */
+const FIELD_MAX_BYTES = 256;
+
 export const rejectFile = (message: string) =>
   new AppError('validation_failed', 400, message, { file: [message] });
-const tooLarge = (maxBytes: number) =>
+export const tooLarge = (maxBytes: number) =>
   new AppError('file_too_large', 413, `The file exceeds ${maxBytes} bytes`);
 
-/** The multipart contract of every upload route: exactly one file part named `file`, no fields, `maxBytes` per call (overrides the plugin default); `consume` drains the part. */
+/** The multipart contract of every upload route: exactly one file part named `file`, at most one of each of `fieldNames` (none by default), `maxBytes` per call (overrides the plugin default); `consume` drains the part. */
 async function withMultipartFile(
   request: FastifyRequest,
   maxBytes: number,
   consume: (part: MultipartFile) => Promise<void>,
-): Promise<string> {
+  fieldNames: readonly string[] = [],
+): Promise<{ filename: string; fields: Record<string, string> }> {
   if (!request.isMultipart()) throw rejectFile('A file is required.');
   let filename: string | undefined;
+  const fields: Record<string, string> = {};
   try {
     for await (const part of request.parts({
-      limits: { files: 1, fields: 0, fileSize: maxBytes },
+      limits: {
+        files: 1,
+        fields: fieldNames.length,
+        fileSize: maxBytes,
+        fieldSize: FIELD_MAX_BYTES,
+      },
     })) {
+      if (part.type === 'field') {
+        if (
+          !fieldNames.includes(part.fieldname) ||
+          part.fieldname in fields ||
+          part.valueTruncated
+        )
+          throw rejectFile('Unexpected, repeated or oversized field.');
+        fields[part.fieldname] = String(part.value);
+        continue;
+      }
       if (
         part.type !== 'file' ||
         part.fieldname !== 'file' ||
@@ -44,7 +69,7 @@ async function withMultipartFile(
     throw rejectFile('The upload is malformed.');
   }
   if (filename === undefined) throw rejectFile('A file is required.');
-  return filename;
+  return { filename, fields };
 }
 
 /** Small files (images, sources): buffered. */
@@ -52,12 +77,27 @@ export async function readMultipartFile(
   request: FastifyRequest,
   maxBytes: number,
 ): Promise<UploadedFile> {
-  let content: Buffer = Buffer.alloc(0);
-  const filename = await withMultipartFile(request, maxBytes, async (part) => {
-    content = await part.toBuffer();
-  });
-  if (!content.length) throw rejectFile('A non-empty file is required.');
+  const { filename, content } = await readMultipartForm(request, maxBytes, []);
   return { filename, content };
+}
+
+/** A small file sent with the text fields `fieldNames` (any order, each optional; the caller validates them): buffered. */
+export async function readMultipartForm(
+  request: FastifyRequest,
+  maxBytes: number,
+  fieldNames: readonly string[],
+): Promise<UploadedForm> {
+  let content: Buffer = Buffer.alloc(0);
+  const { filename, fields } = await withMultipartFile(
+    request,
+    maxBytes,
+    async (part) => {
+      content = await part.toBuffer();
+    },
+    fieldNames,
+  );
+  if (!content.length) throw rejectFile('A non-empty file is required.');
+  return { filename, content, fields };
 }
 
 /** Large files (archives, packages): streamed to `targetPath`, which is removed again on any failure, including a truncated upload. `checkFilename` runs before the stream is consumed and rejects by throwing. */
@@ -69,7 +109,7 @@ export async function saveMultipartFile(
 ): Promise<{ filename: string; bytes: number }> {
   let bytes = 0;
   try {
-    const filename = await withMultipartFile(
+    const { filename } = await withMultipartFile(
       request,
       maxBytes,
       async (part) => {

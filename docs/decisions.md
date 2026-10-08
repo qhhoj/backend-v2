@@ -82,6 +82,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Pre-handshake packets are capped (4 MiB compressed, 8 MiB inflated), anything but `handshake` closes, JSON depth is limited, and unauthenticated sockets are capped per address — unauthenticated memory and CPU stay bounded. The bridge port is reachable only from judge hosts.
 - Flood cap is 1000 packets/s and the idle clock pauses while a packet is handled — batch traffic from a real judge must not trip it.
 - Case text is clipped by UTF-8 bytes (512, feedback 50) at a code-point boundary and cases are capped at 10000 — a submission document stays well under Mongo's 16 MB.
+- File-only languages (B17) follow legacy: the upload is saved under `MEDIA_ROOT/submission_file/<code>/<userId>/<random>.<ext>`, the source is its media URL, `fileSizeLimit` is MB, and the bridge sends `file-only`/`file-size-limit` and makes the URL absolute with `SITE_URL` — no judge-fork change, and migrated legacy sources (`/submission_file/...`) still judge.
 - Source length counts code points, not UTF-16 units — legacy Python `str` semantics; schema and DTO use one `codePointLength`.
 - Judge key is compared in constant time against a sha256 hash; keys are shown once; block and rotate force-disconnect — a leaked or rotated key stops working immediately.
 - Resync reconciles connected judges with Mongo (blocked, rotated key, disabled) and requeues P/G rows that no connected judge holds for two consecutive ticks — covers lost commands without requeueing in-flight work.

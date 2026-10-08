@@ -1,15 +1,6 @@
-import {
-  codePointLength,
-  JUDGE_NAME_PATTERN,
-  MAX_SOURCE_LENGTH,
-} from '@libs/database';
-import {
-  IsOptional,
-  IsString,
-  IsUUID,
-  Matches,
-  registerDecorator,
-} from 'class-validator';
+import { codePointLength, MAX_SOURCE_LENGTH } from '@libs/database';
+import { IsString, registerDecorator } from 'class-validator';
+import { SubmitFileDto } from './submit-file.dto';
 
 /** 1 to `MAX_SOURCE_LENGTH` code points, counted exactly as the schema does. */
 const IsSourceLength = () => (target: object, propertyName: string) =>
@@ -27,10 +18,6 @@ const IsSourceLength = () => (target: object, propertyName: string) =>
     },
   });
 
-export class SubmitDto {
-  /** Language id; must be one of the problem's allowed languages. */
-  @IsUUID('7') language!: string;
+export class SubmitDto extends SubmitFileDto {
   @IsString() @IsSourceLength() source!: string;
-  /** Name of the judge to use (legacy `judge-id`); problem editors only. */
-  @IsOptional() @IsString() @Matches(JUDGE_NAME_PATTERN) judgeId?: string;
 }

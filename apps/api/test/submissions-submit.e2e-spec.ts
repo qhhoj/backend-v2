@@ -143,10 +143,20 @@ describe('POST /api/internal/problems/:code/submit', () => {
       'an unknown language',
       () => ({ language: '0192b0e0-0000-7000-8000-000000000009' }),
     ],
-    ['a file-only language', () => ({ language: catalog.languages.text })],
   ])('refuses %s on the language field', async (_label, extra) => {
     const response = await submit('alice', 'sum', extra()).expect(400);
     expect(fieldsOf(response)).toEqual(['language']);
+  });
+
+  it('sends a file-only language to the file route', async () => {
+    const response = await submit('alice', 'sum', {
+      language: catalog.languages.text,
+    }).expect(400);
+    expect(
+      (
+        response.body as { error: { issues: Array<{ code: string }> } }
+      ).error.issues.map((issue) => issue.code),
+    ).toEqual(['language_takes_file']);
   });
 
   it('accepts 1 to 65536 characters of source', async () => {
