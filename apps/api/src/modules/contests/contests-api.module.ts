@@ -17,6 +17,7 @@ import { ContestAnnouncementsController } from './announcements/contest-announce
 import { ContestAnnouncementsService } from './announcements/contest-announcements.service';
 import { ContestDataController } from './data/contest-data.controller';
 import { ContestDataService } from './data/contest-data.service';
+import { ContestActionsService } from './editing/contest-actions.service';
 import { ContestEditingController } from './editing/contest-editing.controller';
 import { ContestEditFieldsService } from './editing/contest-edit-fields.service';
 import { ContestEditingService } from './editing/contest-editing.service';
@@ -78,6 +79,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
   ],
   providers: [
     AnnouncementsRepository,
+    ContestActionsService,
     ContestAnnouncementsService,
     ContestDataService,
     ContestEventsService,

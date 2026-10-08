@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
+import type { JobType } from 'bullmq';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import {
@@ -9,6 +10,7 @@ import {
   CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_JOB,
   CONTEST_RESCORE_QUEUE,
+  contestActionState,
   contestDataJobId,
   enqueueContestRating,
   finalJudgeJobId,
@@ -194,5 +196,65 @@ describe('contest extras queues', () => {
       [{ contestId }, 3],
       [{ contestId }, 3],
     ]);
+  });
+});
+
+interface StubJob {
+  data: { contestId: string; manual?: boolean };
+}
+
+/** A queue whose live jobs are listed by type: only `getJobs` is used. */
+const stubQueue = (jobsByType: Partial<Record<JobType, StubJob[]>>) =>
+  ({
+    getJobs: (types: JobType[]) =>
+      Promise.resolve(types.flatMap((type) => jobsByType[type] ?? [])),
+  }) as unknown as Queue<StubJob['data']>;
+
+describe('contestActionState', () => {
+  it('is idle without a job', async () => {
+    expect(await contestActionState(stubQueue({}), 'contest-a')).toBe('idle');
+  });
+
+  it('is running while the job is active, even with a waiting one behind it', async () => {
+    const queue = stubQueue({
+      active: [{ data: { contestId: 'contest-a' } }],
+      waiting: [{ data: { contestId: 'contest-a' } }],
+    });
+    expect(await contestActionState(queue, 'contest-a')).toBe('running');
+  });
+
+  it.each<JobType>(['waiting', 'prioritized', 'delayed'])(
+    'is queued while a %s job waits',
+    async (type) => {
+      const queue = stubQueue({
+        [type]: [{ data: { contestId: 'contest-a' } }],
+      });
+      expect(await contestActionState(queue, 'contest-a')).toBe('queued');
+    },
+  );
+
+  it('ignores jobs of another contest', async () => {
+    const queue = stubQueue({
+      active: [{ data: { contestId: 'contest-b' } }],
+      waiting: [{ data: { contestId: 'contest-b' } }],
+    });
+    expect(await contestActionState(queue, 'contest-a')).toBe('idle');
+  });
+
+  it('counts only the jobs the request filter accepts', async () => {
+    const queue = stubQueue({
+      delayed: [{ data: { contestId: 'contest-a', manual: false } }],
+    });
+    const isManual = (data: StubJob['data']) => data.manual === true;
+    expect(await contestActionState(queue, 'contest-a', isManual)).toBe('idle');
+    expect(await contestActionState(queue, 'contest-a')).toBe('queued');
+  });
+
+  it('ignores an active job the request filter rejects', async () => {
+    const queue = stubQueue({
+      active: [{ data: { contestId: 'contest-a', manual: false } }],
+    });
+    const isManual = (data: StubJob['data']) => data.manual === true;
+    expect(await contestActionState(queue, 'contest-a', isManual)).toBe('idle');
   });
 });

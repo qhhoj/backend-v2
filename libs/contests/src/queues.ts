@@ -1,5 +1,5 @@
 import type { Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import type { JobType, Queue } from 'bullmq';
 import type { SubmissionResult } from '@libs/database';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
 import { finalSubmissionFormat } from './formats/final-submission';
@@ -166,3 +166,22 @@ export const oneJobPerContest = (prefix: 'data', contestId: string) => ({
 });
 export const contestDataJobId = (contestId: string) =>
   oneJobPerContest('data', contestId).jobId;
+
+export type ContestActionState = 'idle' | 'queued' | 'running';
+const WAITING_JOB_TYPES: JobType[] = ['waiting', 'prioritized', 'delayed'];
+
+/** Whether an editor's request for this contest waits in the queue, or runs now. Rescore and rating jobs carry no per-contest id, so the live jobs are scanned; failed and completed jobs are removed (`JOB_RETENTION`), so there is no "failed" state. */
+export async function contestActionState<Data extends { contestId: string }>(
+  queue: Queue<Data>,
+  contestId: string,
+  isRequest: (data: Data) => boolean = () => true,
+): Promise<ContestActionState> {
+  const isContestRequest = (data: Data): boolean =>
+    isRequest(data) && data.contestId === contestId;
+  const hasRequest = async (types: JobType[]): Promise<boolean> =>
+    (await queue.getJobs(types)).some((job: { data: Data }) =>
+      isContestRequest(job.data),
+    );
+  if (await hasRequest(['active'])) return 'running';
+  return (await hasRequest(WAITING_JOB_TYPES)) ? 'queued' : 'idle';
+}

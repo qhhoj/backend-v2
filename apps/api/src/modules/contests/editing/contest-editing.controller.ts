@@ -1,8 +1,18 @@
-import { Body, Controller, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RefuseNullFieldsPipe } from '@libs/common';
+import { ContestActionsService } from './contest-actions.service';
 import { ContestEditingService } from './contest-editing.service';
+import { ContestActionsResponse } from './dto/contest-actions.response';
 import { ContestDetailResponse } from '../core/dto/contest-detail.response';
 import { CloneContestDto } from './dto/contest-clone.dto';
 import {
@@ -15,7 +25,10 @@ import { QueuedResponse } from '../core/dto/queued.response';
 
 @Controller('api/internal/contests')
 export class ContestEditingController {
-  constructor(private readonly editing: ContestEditingService) {}
+  constructor(
+    private readonly editing: ContestEditingService,
+    private readonly actionStatus: ContestActionsService,
+  ) {}
 
   @RequirePermission('judge.add_contest')
   @Post()
@@ -62,5 +75,13 @@ export class ContestEditingController {
     @Param() { key }: ContestKeyParamDto,
   ): Promise<QueuedResponse> {
     return this.editing.judgeFinal(auth.principal, key);
+  }
+
+  @Get(':key/actions')
+  actions(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key }: ContestKeyParamDto,
+  ): Promise<ContestActionsResponse> {
+    return this.actionStatus.status(auth.principal, key);
   }
 }
