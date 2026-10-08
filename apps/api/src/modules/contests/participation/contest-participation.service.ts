@@ -95,17 +95,24 @@ export class ContestParticipationService {
     return ParticipationSummaryResponse.from(participation, contest);
   }
 
+  private isEditorOrTester(
+    principal: Principal,
+    contest: ContestDocument,
+  ): boolean {
+    const view = ContestAccess.accessView(contest);
+    return (
+      ContestAccess.isEditor(principal, view) ||
+      ContestAccess.isTester(principal, view)
+    );
+  }
+
   /** Legacy `ContestRegister` refusals, in legacy order. */
   private assertMayRegister(
     principal: Principal,
     contest: ContestDocument,
     now: Date,
   ): void {
-    const view = ContestAccess.accessView(contest);
-    if (
-      ContestAccess.isEditor(principal, view) ||
-      ContestAccess.isTester(principal, view)
-    )
+    if (this.isEditorOrTester(principal, contest))
       throw refusal('editor_cannot_register');
     this.assertNotBanned(principal, contest);
     if (!requiresRegistration(contest))
@@ -122,11 +129,8 @@ export class ContestParticipationService {
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
-    const view = ContestAccess.accessView(contest);
     const phase = contestPhase(contest, now);
-    const isSpectatorOnly =
-      ContestAccess.isEditor(principal, view) ||
-      ContestAccess.isTester(principal, view);
+    const isSpectatorOnly = this.isEditorOrTester(principal, contest);
     if (phase === 'upcoming' && !isSpectatorOnly)
       throw refusal('contest_not_started');
     this.assertNotBanned(principal, contest);
