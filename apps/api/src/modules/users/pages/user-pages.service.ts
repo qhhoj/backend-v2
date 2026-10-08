@@ -1,8 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated, REDIS } from '@libs/common';
-import { canonicalTimeZone, isTimeZone } from '@libs/community';
+import {
+  AppError,
+  canonicalTimeZone,
+  isTimeZone,
+  Paginated,
+  REDIS,
+} from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { PP_ENTRIES, PP_STEP } from '@libs/judging';
 import type Redis from 'ioredis';

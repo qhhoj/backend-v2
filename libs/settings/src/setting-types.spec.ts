@@ -6,6 +6,7 @@ import {
   optionalUrlType,
   SettingError,
   smtpUrlType,
+  timeZoneType,
   webhooksType,
 } from './setting-types';
 
@@ -37,6 +38,13 @@ describe('setting types', () => {
       expect(optionalUrlType.parse(ok)).toBe(ok);
     for (const bad of ['http://example.com', 'ftp://x.test', 'nonsense', 5])
       expect(() => optionalUrlType.parse(bad)).toThrow(SettingError);
+  });
+
+  it('takes an IANA time zone name', () => {
+    for (const ok of ['Asia/Ho_Chi_Minh', 'UTC'])
+      expect(timeZoneType.parse(ok)).toBe(ok);
+    for (const bad of ['+07:00', 'Nowhere/City', 5])
+      expect(() => timeZoneType.parse(bad)).toThrow(SettingError);
   });
 
   it('takes an empty value or an smtp(s) URL', () => {

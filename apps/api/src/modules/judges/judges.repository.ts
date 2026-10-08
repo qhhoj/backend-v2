@@ -16,6 +16,16 @@ export type JudgeChanges = Partial<
 export class JudgesRepository {
   constructor(@InjectModel(Judge.name) private readonly judges: Model<Judge>) {}
 
+  /** Connected judges and judges that may connect at all (neither blocked nor disabled). */
+  async counts(): Promise<{ online: number; total: number }> {
+    const usable = { isBlocked: false, isDisabled: false };
+    const [online, total] = await Promise.all([
+      this.judges.countDocuments({ ...usable, online: true }).exec(),
+      this.judges.countDocuments(usable).exec(),
+    ]);
+    return { online, total };
+  }
+
   /** Every judge by name, or just `name`. */
   list(name?: string): Promise<JudgeListRow[]> {
     return this.judges

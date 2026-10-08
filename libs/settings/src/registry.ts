@@ -5,6 +5,7 @@ import {
   oauthClientType,
   optionalUrlType,
   smtpUrlType,
+  timeZoneType,
   webhooksType,
 } from './setting-types';
 import type { OAuthClientSetting, SettingType } from './setting-types';
@@ -43,6 +44,13 @@ const socialLogin = (provider: string) =>
 
 /** The single place to add a setting: key, type, default, secret flag, description. Readers call `SettingsService.get(key)`. */
 export const SETTINGS = {
+  'site.timeZone': define({
+    type: timeZoneType,
+    default: 'Asia/Ho_Chi_Minh',
+    description:
+      'Time zone of the site: "today" in the statistics strip starts at its midnight.',
+    secret: false,
+  }),
   'contest.officialMode': define({
     type: booleanType,
     default: false,

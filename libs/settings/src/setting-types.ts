@@ -1,4 +1,4 @@
-import { MAIL_ADDRESS_PATTERN } from '@libs/common';
+import { canonicalTimeZone, MAIL_ADDRESS_PATTERN } from '@libs/common';
 import { BlockList, isIP } from 'node:net';
 
 /** A rejected value; the message is safe to show an admin and never contains the value. */
@@ -75,6 +75,14 @@ export const isSafeUrl = (url: string): boolean => {
     protocol === 'http:' &&
     ['localhost', '127.0.0.1'].includes(hostname)
   );
+};
+
+/** An IANA zone name (`Asia/Ho_Chi_Minh`); offsets like `+07:00` are refused. */
+export const timeZoneType: SettingType<string> = {
+  parse: (raw) =>
+    canonicalTimeZone(raw) !== null
+      ? (raw as string)
+      : fail('Must be an IANA time zone name.'),
 };
 
 /** `''` switches the feature off. */

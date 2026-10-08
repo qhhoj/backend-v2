@@ -28,3 +28,4 @@ export * from './redis/redis-coalesce';
 export * from './collections/unique';
 export * from './collections/same-json';
 export * from './crypto/aes-gcm';
+export * from './text/time-zone';

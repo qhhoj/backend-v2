@@ -1,5 +1,5 @@
 import { ValidateBy } from 'class-validator';
-import { isTimeZone } from '@libs/community';
+import { isTimeZone } from '@libs/common';
 
 export const IsTimeZone = () =>
   ValidateBy({

@@ -9,11 +9,16 @@ import {
 import { SubmissionListQueryDto } from './dto/submission-list.dto';
 import { SubmissionListItemResponse } from './dto/submission-list.response';
 import { SubmissionIdParamDto } from './dto/submission-params.dto';
+import { SubmissionStatsResponse } from './dto/submission-stats.response';
+import { SubmissionStatsService } from './submission-stats.service';
 import { SubmissionsService } from './submissions.service';
 
 @Controller('api/internal/submissions')
 export class SubmissionsController {
-  constructor(private readonly submissions: SubmissionsService) {}
+  constructor(
+    private readonly submissions: SubmissionsService,
+    private readonly stats: SubmissionStatsService,
+  ) {}
 
   @Public()
   @Get()
@@ -22,6 +27,13 @@ export class SubmissionsController {
     @CurrentAuth() auth: AuthContext | undefined,
   ): Promise<Paginated<SubmissionListItemResponse>> {
     return this.submissions.list(optionalPrincipal(auth), query);
+  }
+
+  /** Declared before `:id`, which would take `stats` for an id. */
+  @Public()
+  @Get('stats')
+  statistics(): Promise<SubmissionStatsResponse> {
+    return this.stats.stats();
   }
 
   @Get(':id')
