@@ -18,12 +18,19 @@ import {
   FlatpageAdminListItemResponse,
   FlatpageAdminResponse,
 } from './dto/flatpage-admin.response';
+import { FlatpagePreviewDto } from './dto/flatpage-preview.dto';
+import { FlatpageRevisionResponse } from './dto/flatpage-revision.response';
 import { PageListQueryDto, SiteIdParamDto } from './dto/site-admin-params.dto';
+import { FlatpageHistoryService } from './flatpage-history.service';
 import { FlatpagesAdminService } from './flatpages-admin.service';
+import { RenderPreviewResponse } from '../../problems/editing/dto/render-preview.response';
 
 @Controller('api/internal/admin/site/pages')
 export class FlatpagesAdminController {
-  constructor(private readonly pages: FlatpagesAdminService) {}
+  constructor(
+    private readonly pages: FlatpagesAdminService,
+    private readonly history: FlatpageHistoryService,
+  ) {}
 
   @ApiPaginatedResponse(FlatpageAdminListItemResponse)
   @RequirePermission('flatpages.change_flatpage')
@@ -32,6 +39,26 @@ export class FlatpagesAdminController {
     @Query() { page }: PageListQueryDto,
   ): Promise<Paginated<FlatpageAdminListItemResponse>> {
     return this.pages.list(page);
+  }
+
+  @RequirePermission('flatpages.change_flatpage')
+  @Post('render-preview')
+  @HttpCode(200)
+  preview(
+    @CurrentAuth() auth: AuthContext,
+    @Body() body: FlatpagePreviewDto,
+  ): Promise<RenderPreviewResponse> {
+    return this.history.preview(auth.principal, body);
+  }
+
+  @ApiPaginatedResponse(FlatpageRevisionResponse)
+  @RequirePermission('flatpages.change_flatpage')
+  @Get(':id/revisions')
+  revisions(
+    @Param() { id }: SiteIdParamDto,
+    @Query() { page }: PageListQueryDto,
+  ): Promise<Paginated<FlatpageRevisionResponse>> {
+    return this.history.history(id, page);
   }
 
   @RequirePermission('flatpages.change_flatpage')

@@ -6,6 +6,7 @@ import type {
   NavigationItemResponse,
   SiteResponse,
 } from '../src/modules/site/public/dto/site.response';
+import { MAX_MARKDOWN_LENGTH } from '../src/modules/problems/core/dto/limits';
 import { authed } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -97,6 +98,25 @@ describe('site content administration', () => {
         prepare: async () => ({
           method: 'get',
           path: `/pages/${await page()}`,
+        }),
+      },
+      {
+        name: 'GET pages/:id/revisions',
+        permission: 'flatpages.change_flatpage',
+        status: 200,
+        prepare: async () => ({
+          method: 'get',
+          path: `/pages/${await page()}/revisions`,
+        }),
+      },
+      {
+        name: 'POST render-preview',
+        permission: 'flatpages.change_flatpage',
+        status: 200,
+        prepare: () => ({
+          method: 'post',
+          path: '/pages/render-preview',
+          body: { content: 'x' },
         }),
       },
       {
@@ -453,6 +473,161 @@ describe('site content administration', () => {
         before: '/history',
         after: null,
       });
+    });
+  });
+
+  describe('page history and preview', () => {
+    const historian = async () =>
+      signedIn(api, unique('historian'), {
+        permissions: [
+          'flatpages.add_flatpage',
+          'flatpages.change_flatpage',
+          'flatpages.delete_flatpage',
+        ],
+      });
+    const create = (body: object) => send('post', '/pages', pageEditor, body);
+    const edit = (id: string, body: object) =>
+      send('patch', `/pages/${id}`, pageEditor, body);
+    const revisions = (id: string, session: Session, query = '') =>
+      send('get', `/pages/${id}/revisions${query}`, session);
+    const preview = (content: string, session: Session = pageEditor) =>
+      send('post', '/pages/render-preview', session, { content });
+    type RevisionsBody = {
+      data: Array<{
+        action: string;
+        editor: { id: string; username: string } | null;
+        changes: Record<string, { before: unknown; after: unknown }>;
+      }>;
+      meta: { page: number; pageSize: number; total: number };
+    };
+    const bodyOf = (response: { body: unknown }) =>
+      response.body as RevisionsBody;
+
+    it('lists a deleted page history newest first with editor and changes', async () => {
+      const { user, session } = await historian();
+      const created = dataOf<FlatpageAdminResponse>(
+        await send('post', '/pages', session, {
+          url: `/${unique('history')}`,
+          title: 'One',
+          content: 'one',
+        }).expect(201),
+      );
+      await send('patch', `/pages/${created.id}`, session, {
+        title: 'Two',
+        content: 'two',
+      }).expect(200);
+      await send('delete', `/pages/${created.id}`, session).expect(204);
+      const { data, meta } = bodyOf(
+        await revisions(created.id, session).expect(200),
+      );
+      expect(data.map(({ action }) => action)).toEqual([
+        'delete',
+        'edit',
+        'create',
+      ]);
+      expect(data[0].editor).toEqual({ id: user._id, username: user.username });
+      expect(data[1].changes).toEqual({
+        title: { before: 'One', after: 'Two' },
+        content: { before: 'one', after: 'two' },
+      });
+      expect(data[2].changes.title.after).toBe('One');
+      expect(meta).toEqual({ page: 1, pageSize: 20, total: 3 });
+    });
+
+    it('keeps another page out of the history', async () => {
+      const mine = dataOf<FlatpageAdminResponse>(
+        await create({
+          url: `/${unique('mine')}`,
+          title: 'M',
+          content: 'm',
+        }).expect(201),
+      );
+      const other = dataOf<FlatpageAdminResponse>(
+        await create({
+          url: `/${unique('other')}`,
+          title: 'O',
+          content: 'o',
+        }).expect(201),
+      );
+      await edit(other.id, { title: 'O2' }).expect(200);
+      const { data, meta } = bodyOf(
+        await revisions(mine.id, pageEditor).expect(200),
+      );
+      expect(meta.total).toBe(1);
+      expect(data.map(({ action }) => action)).toEqual(['create']);
+    });
+
+    it('paginates 20 revisions per page', async () => {
+      const created = dataOf<FlatpageAdminResponse>(
+        await create({
+          url: `/${unique('long')}`,
+          title: 'T0',
+          content: 'c',
+        }).expect(201),
+      );
+      for (let edits = 1; edits <= 20; edits++)
+        await edit(created.id, { title: `T${edits}` }).expect(200);
+      const first = bodyOf(await revisions(created.id, pageEditor).expect(200));
+      const second = bodyOf(
+        await revisions(created.id, pageEditor, '?page=2').expect(200),
+      );
+      expect(first.data).toHaveLength(20);
+      expect(first.meta).toEqual({ page: 1, pageSize: 20, total: 21 });
+      expect(second.data.map(({ action }) => action)).toEqual(['create']);
+    });
+
+    it('answers an empty history for an id that was never a page', async () => {
+      const { data, meta } = bodyOf(
+        await revisions('not-an-id', pageEditor).expect(200),
+      );
+      expect(data).toEqual([]);
+      expect(meta.total).toBe(0);
+    });
+
+    it('refuses the history to a user without change_flatpage', async () => {
+      const adder = await staff('flatpages.add_flatpage');
+      const created = dataOf<FlatpageAdminResponse>(
+        await create({
+          url: `/${unique('gated')}`,
+          title: 'G',
+          content: 'g',
+        }).expect(201),
+      );
+      await revisions(created.id, adder).expect(403);
+    });
+
+    it('previews with the saved page sanitiser and strips script, iframe and handlers', async () => {
+      const content =
+        '**hi** <script>alert(1)</script><img src=x onerror=alert(2)><iframe src="https://evil.example"></iframe>';
+      const saved = dataOf<FlatpageAdminResponse>(
+        await create({
+          url: `/${unique('preview')}`,
+          title: 'P',
+          content,
+        }).expect(201),
+      );
+      const { html } = dataOf<{ html: string }>(
+        await preview(content).expect(200),
+      );
+      expect(html).toBe(saved.contentHtml);
+      expect(html).toContain('<strong>hi</strong>');
+      expect(html).not.toMatch(/<script|<iframe|onerror/i);
+    });
+
+    it('refuses a preview to a user without change_flatpage, and a content over the limit', async () => {
+      const adder = await staff('flatpages.add_flatpage');
+      await preview('x', adder).expect(403);
+      await preview('x'.repeat(MAX_MARKDOWN_LENGTH + 1)).expect(400);
+    });
+
+    it('rate limits previews per user and answers 429 with Retry-After', async () => {
+      const { session } = await historian();
+      for (let attempt = 0; attempt < 60; attempt++)
+        await preview('x', session).expect(200);
+      const refused = await preview('x', session)
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
     });
   });
 

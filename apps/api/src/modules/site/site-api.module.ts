@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
+import { RateLimitService } from '@libs/common';
 import { ProblemsApiModule } from '../problems/problems-api.module';
+import { FlatpageHistoryService } from './admin/flatpage-history.service';
 import { FlatpagesAdminController } from './admin/flatpages-admin.controller';
 import { FlatpagesAdminService } from './admin/flatpages-admin.service';
 import { MiscConfigAdminController } from './admin/misc-config-admin.controller';
@@ -31,6 +33,8 @@ import { SiteController } from './public/site.controller';
     NavigationQuerier,
     MiscConfigQuerier,
     FlatpagesAdminService,
+    FlatpageHistoryService,
+    RateLimitService,
     NavigationRepository,
     NavigationAdminService,
     MiscConfigRepository,
