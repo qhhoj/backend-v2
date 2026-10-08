@@ -121,28 +121,31 @@ describe('polygon statements', () => {
     });
     const save = () => Promise.resolve('/media/images/x.png');
     await expect(
-      parseStatements(await pkg.problemXml(), pkg, job(), identity, save),
+      parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: save,
+      }),
     ).rejects.toThrow('invalid main statement language');
     await expect(
-      parseStatements(
-        await pkg.problemXml(),
+      parseStatements(await pkg.problemXml(), {
         pkg,
-        job({ mainStatementLanguage: 'english' }),
-        identity,
-        save,
-      ),
+        job: job({ mainStatementLanguage: 'english' }),
+        texToMarkdown: identity,
+        saveImage: save,
+      }),
     ).rejects.toThrow('invalid site language for vietnamese');
-    const result = await parseStatements(
-      await pkg.problemXml(),
+    const result = await parseStatements(await pkg.problemXml(), {
       pkg,
-      job({
+      job: job({
         mainStatementLanguage: 'english',
         statementLanguages: { vietnamese: 'vi' },
         tutorialLanguage: 'vietnamese',
       }),
-      identity,
-      save,
-    );
+      texToMarkdown: identity,
+      saveImage: save,
+    });
     expect(result.name).toBe('Sum');
     expect(result.description).toContain('Add $a$ and $b$.');
     expect(result.translations).toEqual([
@@ -155,25 +158,27 @@ describe('polygon statements', () => {
     ]);
     expect(result.tutorial).toBe('Cộng lại.');
     await expect(
-      parseStatements(
-        await pkg.problemXml(),
+      parseStatements(await pkg.problemXml(), {
         pkg,
-        job({
+        job: job({
           mainStatementLanguage: 'english',
           statementLanguages: { vietnamese: 'vi' },
         }),
-        identity,
-        save,
-      ),
+        texToMarkdown: identity,
+        saveImage: save,
+      }),
     ).rejects.toThrow('invalid main tutorial language');
     pkg.close();
   });
   it('requires a statement and problem-properties.json', async () => {
     const none = await openPackage({ tests: [{ input: '1', answer: '1' }] });
     await expect(
-      parseStatements(await none.problemXml(), none, job(), identity, () =>
-        Promise.resolve(''),
-      ),
+      parseStatements(await none.problemXml(), {
+        pkg: none,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: () => Promise.resolve(''),
+      }),
     ).rejects.toThrow('statement not found');
     none.close();
   });
@@ -357,7 +362,12 @@ describe('statement paths and validation', () => {
     writeFileSync(path, buildZip([{ name: 'problem.xml', content: xml }]));
     const pkg = await PolygonPackage.open(path);
     await expect(
-      parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
+      parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: saveEcho(),
+      }),
     ).rejects.toThrow(PolygonImportError);
     pkg.close();
   });
@@ -387,7 +397,12 @@ describe('statement paths and validation', () => {
       ],
     });
     await expect(
-      parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
+      parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: saveEcho(),
+      }),
     ).rejects.toThrow(PolygonImportError);
     pkg.close();
   });
@@ -399,7 +414,12 @@ describe('statement paths and validation', () => {
       ],
     });
     await expect(
-      parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
+      parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: saveEcho(),
+      }),
     ).rejects.toThrow(PolygonImportError);
     pkg.close();
   });
@@ -417,13 +437,12 @@ describe('hostile problem.xml values', () => {
         ],
       });
       await expect(
-        parseStatements(
-          await pkg.problemXml(),
+        parseStatements(await pkg.problemXml(), {
           pkg,
-          job({ mainStatementLanguage: 'english' }),
-          identity,
-          saveEcho(),
-        ),
+          job: job({ mainStatementLanguage: 'english' }),
+          texToMarkdown: identity,
+          saveImage: saveEcho(),
+        }),
       ).rejects.toThrow(`invalid site language for ${language}`);
       pkg.close();
     },
@@ -448,7 +467,12 @@ describe('hostile problem.xml values', () => {
     );
     const pkg = await PolygonPackage.open(path);
     await expect(
-      parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
+      parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: saveEcho(),
+      }),
     ).rejects.toThrow('two statements in the language english');
     pkg.close();
   });
@@ -462,7 +486,12 @@ describe('hostile problem.xml values', () => {
       statements: [{ language: 'english', name, properties: properties() }],
     });
     await expect(
-      parseStatements(await pkg.problemXml(), pkg, job(), identity, saveEcho()),
+      parseStatements(await pkg.problemXml(), {
+        pkg,
+        job: job(),
+        texToMarkdown: identity,
+        saveImage: saveEcho(),
+      }),
     ).rejects.toThrow(PolygonImportError);
     pkg.close();
   });
@@ -534,5 +563,191 @@ describe('mainSolution', () => {
       mainSolution(await missing.problemXml(), missing),
     ).rejects.toThrow(PolygonImportError);
     missing.close();
+  });
+});
+
+describe('parseStatements error order when a package has several faults', () => {
+  const parseWith = async (
+    pkg: PolygonPackage,
+    overrides: Partial<PolygonImportJob> = {},
+    saveImage = saveEcho(),
+  ) =>
+    parseStatements(await pkg.problemXml(), {
+      pkg,
+      job: job(overrides),
+      texToMarkdown: identity,
+      saveImage,
+    });
+  const statementNode = (language: string, folder = language) =>
+    `<statement language="${language}" path="statements/${folder}/problem.tex" type="application/x-tex"/>`;
+  /** A package whose problem.xml and files are written by hand, so any fault can be planted. */
+  const handMadePackage = async (
+    statementNodes: string[],
+    names: Record<string, string>,
+    files: Record<string, string>,
+  ) => {
+    const nameNodes = Object.entries(names)
+      .map(
+        ([language, value]) =>
+          `<name language="${language}" value="${value}"/>`,
+      )
+      .join('');
+    const xml = `<problem><names>${nameNodes}</names><statements>${statementNodes.join('')}</statements></problem>`;
+    const path = join(
+      mkdtempSync(join(tmpdir(), 'qhhoj-polygon-')),
+      'package.zip',
+    );
+    writeFileSync(
+      path,
+      buildZip([
+        { name: 'problem.xml', content: xml },
+        ...Object.entries(files).map(([name, content]) => ({ name, content })),
+      ]),
+    );
+    return PolygonPackage.open(path);
+  };
+  const goodProperties = JSON.stringify(properties());
+  const fakeImage = Buffer.from('#!/bin/sh\necho hi');
+  const withTranslation = (
+    translation: Record<string, unknown>,
+    main: Record<string, unknown> = properties(),
+  ) =>
+    openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      statements: [
+        { language: 'english', name: 'Sum', properties: main },
+        {
+          language: 'vietnamese',
+          name: 'Tổng',
+          ...{ properties: translation },
+        },
+      ],
+    });
+
+  it.each([
+    [
+      'no statement before an invalid main language',
+      () => openPackage({ tests: [{ input: '1', answer: '1' }] }),
+      { mainStatementLanguage: 'english' },
+      'statement not found',
+    ],
+    [
+      'two statements in one language before a missing properties file',
+      () =>
+        handMadePackage(
+          [statementNode('english'), statementNode('english', 'copy')],
+          { english: 'Sum' },
+          { 'statements/english/problem-properties.json': goodProperties },
+        ),
+      {},
+      'two statements in the language english',
+    ],
+    [
+      'a missing properties file before an invalid name',
+      () => handMadePackage([statementNode('english')], { english: '' }, {}),
+      {},
+      'problem-properties.json not found',
+    ],
+    [
+      'an invalid name before a malformed properties file',
+      () =>
+        handMadePackage(
+          [statementNode('english')],
+          { english: '' },
+          { 'statements/english/problem-properties.json': 'not json' },
+        ),
+      {},
+      'statement name for english',
+    ],
+    [
+      'a malformed properties file before an invalid main language',
+      () => withTranslation({ legend: 5 }),
+      {},
+      'has an unexpected shape',
+    ],
+    [
+      'an invalid image before an invalid statement text',
+      () =>
+        openPackage({
+          tests: [{ input: '1', answer: '1' }],
+          statements: [
+            {
+              language: 'english',
+              name: 'Sum',
+              properties: properties({ legend: '![image](fig.png) say “hi”' }),
+              images: { 'fig.png': fakeImage },
+            },
+          ],
+        }),
+      {},
+      'not a supported image',
+    ],
+    [
+      'an invalid statement text before an invalid site language',
+      () => withTranslation(properties({ legend: 'say “hi”' })),
+      { mainStatementLanguage: 'english' },
+      'disallowed characters',
+    ],
+    [
+      'an invalid site language before an invalid tutorial language',
+      () =>
+        withTranslation(
+          properties({ tutorial: 'Cộng lại.' }),
+          properties({ tutorial: 'Add them.' }),
+        ),
+      { mainStatementLanguage: 'english' },
+      'invalid site language for vietnamese',
+    ],
+  ])('reports %s', async (_label, makePackage, overrides, message) => {
+    const pkg = await makePackage();
+    await expect(parseWith(pkg, overrides)).rejects.toThrow(message);
+    pkg.close();
+  });
+
+  it('refuses two statements mapped to one site language', async () => {
+    const pkg = await handMadePackage(
+      ['english', 'vietnamese', 'french'].map((language) =>
+        statementNode(language),
+      ),
+      { english: 'Sum', vietnamese: 'Tổng', french: 'Somme' },
+      Object.fromEntries(
+        ['english', 'vietnamese', 'french'].map((language) => [
+          `statements/${language}/problem-properties.json`,
+          goodProperties,
+        ]),
+      ),
+    );
+    await expect(
+      parseWith(pkg, {
+        mainStatementLanguage: 'english',
+        statementLanguages: { vietnamese: 'vi', french: 'vi' },
+      }),
+    ).rejects.toThrow('two statements map to the site language vi');
+    pkg.close();
+  });
+
+  it('saves no image when the main statement language is invalid', async () => {
+    const pkg = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      statements: [
+        {
+          language: 'english',
+          name: 'Sum',
+          properties: properties({ legend: '![image](fig.png)' }),
+          images: { 'fig.png': PNG },
+        },
+        { language: 'vietnamese', name: 'Tổng', properties: properties() },
+      ],
+    });
+    const saved: string[] = [];
+    const save = (_bytes: Buffer, name: string) => {
+      saved.push(name);
+      return Promise.resolve('/media/images/1.png');
+    };
+    await expect(parseWith(pkg, {}, save)).rejects.toThrow(
+      'invalid main statement language',
+    );
+    expect(saved).toEqual([]);
+    pkg.close();
   });
 });

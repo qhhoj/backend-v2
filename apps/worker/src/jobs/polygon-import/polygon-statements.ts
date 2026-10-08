@@ -221,40 +221,83 @@ const isString = (value: unknown): value is string => typeof value === 'string';
 const isNullableString = (value: unknown): value is string | null =>
   value === null || isString(value);
 
+const REQUIRED_TEXT_KEYS = ['legend', 'input', 'output', 'notes'] as const;
+const OPTIONAL_TEXT_KEYS = ['interaction', 'scoring', 'tutorial'] as const;
+
+const isSampleTest = (sample: unknown): boolean => {
+  const fields = sample as Record<string, unknown> | null;
+  return isString(fields?.input) && isString(fields.output);
+};
+
+const hasPropertiesShape = (
+  value: Partial<Record<keyof ProblemProperties, unknown>> | null,
+): boolean =>
+  REQUIRED_TEXT_KEYS.every((key) => isString(value?.[key])) &&
+  OPTIONAL_TEXT_KEYS.every((key) => isNullableString(value?.[key] ?? null)) &&
+  Array.isArray(value?.sampleTests) &&
+  value.sampleTests.every(isSampleTest);
+
 /** problem-properties.json is untrusted: the shape is checked before any field is used. */
 function parseProperties(json: string, path: string): ProblemProperties {
-  let value: Partial<Record<keyof ProblemProperties, unknown>>;
+  let value: Partial<Record<keyof ProblemProperties, unknown>> | null;
   try {
     value = JSON.parse(json) as typeof value;
   } catch {
     throw new PolygonImportError(`${path} is not valid JSON`);
   }
-  const { sampleTests } = value ?? {};
-  if (
-    ![value?.legend, value?.input, value?.output, value?.notes].every(
-      isString,
-    ) ||
-    !isNullableString(value.interaction ?? null) ||
-    !isNullableString(value.scoring ?? null) ||
-    !isNullableString(value.tutorial ?? null) ||
-    !Array.isArray(sampleTests) ||
-    !sampleTests.every(
-      (sample: Record<string, unknown> | null) =>
-        isString(sample?.input) && isString(sample.output),
-    )
-  )
+  if (!hasPropertiesShape(value))
     throw new PolygonImportError(`${path} has an unexpected shape`);
   return value as unknown as ProblemProperties;
 }
 
-/** Legacy `parse_statements` in its non-interactive form: every choice comes from the job. The result passes the editor's statement limits. */
-export async function parseStatements(
+/** What `parseStatements` needs besides problem.xml: the package, the job's choices, and the two side-effecting converters. */
+export interface StatementContext {
+  pkg: PolygonPackage;
+  job: PolygonImportJob;
+  texToMarkdown: TexToMarkdown;
+  saveImage: ImageSaver;
+}
+interface RenderedStatement {
+  description: string;
+  descriptionHtml: string;
+}
+type Translation = ImportedStatements['translations'][number];
+
+async function readStatementSource(
   root: XmlElement,
   pkg: PolygonPackage,
-  job: PolygonImportJob,
-  texToMarkdown: TexToMarkdown,
-  saveImage: ImageSaver,
-): Promise<ImportedStatements> {
+  node: XmlElement,
+  language: string,
+): Promise<StatementSource> {
+  const folder = posix.dirname(resolveMemberPath(node.attributes.path ?? ''));
+  const propertiesPath = resolveMemberPath('problem-properties.json', folder);
+  if (!pkg.has(propertiesPath))
+    throw new PolygonImportError(
+      `problem-properties.json not found at path ${propertiesPath}`,
+    );
+  const name =
+    descendant(
+      root,
+      'name',
+      (candidate) => candidate.attributes.language === language,
+    )?.attributes.value ?? '';
+  assertStatementName(name, language);
+  return {
+    language,
+    name,
+    folder,
+    properties: parseProperties(
+      await pkg.readText(propertiesPath, SOURCE_MAX_BYTES),
+      propertiesPath,
+    ),
+  };
+}
+
+/** Every TeX statement of problem.xml with its properties, one per language. Each statement is fully checked before the next is read. */
+async function readStatementSources(
+  root: XmlElement,
+  pkg: PolygonPackage,
+): Promise<StatementSource[]> {
   const nodes = descendants(
     root,
     'statement',
@@ -268,29 +311,16 @@ export async function parseStatements(
       throw new PolygonImportError(
         `two statements in the language ${language}`,
       );
-    const folder = posix.dirname(resolveMemberPath(node.attributes.path ?? ''));
-    const propertiesPath = resolveMemberPath('problem-properties.json', folder);
-    if (!pkg.has(propertiesPath))
-      throw new PolygonImportError(
-        `problem-properties.json not found at path ${propertiesPath}`,
-      );
-    const name =
-      descendant(
-        root,
-        'name',
-        (candidate) => candidate.attributes.language === language,
-      )?.attributes.value ?? '';
-    assertStatementName(name, language);
-    sources.push({
-      language,
-      name,
-      folder,
-      properties: parseProperties(
-        await pkg.readText(propertiesPath, SOURCE_MAX_BYTES),
-        propertiesPath,
-      ),
-    });
+    sources.push(await readStatementSource(root, pkg, node, language));
   }
+  return sources;
+}
+
+/** A single statement is the main one; with several, the job names it. Checked before anything is rendered, so a bad choice saves no image. */
+function pickMainLanguage(
+  sources: StatementSource[],
+  job: PolygonImportJob,
+): string {
   const mainLanguage =
     sources.length === 1 ? sources[0].language : job.mainStatementLanguage;
   if (
@@ -300,55 +330,61 @@ export async function parseStatements(
     throw new PolygonImportError(
       `invalid main statement language ${mainLanguage ?? '(none)'}`,
     );
-  const style: RenderStyle = job.isFullMarkup ? 'problem-full' : 'problem';
-  const result: ImportedStatements = {
-    name: '',
-    description: '',
-    descriptionHtml: '',
-    translations: [],
-    tutorial: '',
-  };
-  for (const source of sources) {
-    const description = await rehostImages(
-      await buildDescription(source.properties, texToMarkdown),
-      source.folder,
-      pkg,
-      saveImage,
-    );
-    const descriptionHtml = renderStatement(
+  return mainLanguage;
+}
+
+/** Saves the statement's images through `saveImage`, so it must run once per statement, in source order. */
+async function renderSourceAndSaveImages(
+  source: StatementSource,
+  style: RenderStyle,
+  { pkg, texToMarkdown, saveImage }: StatementContext,
+): Promise<RenderedStatement> {
+  const description = await rehostImages(
+    await buildDescription(source.properties, texToMarkdown),
+    source.folder,
+    pkg,
+    saveImage,
+  );
+  return {
+    description,
+    descriptionHtml: renderStatement(
       description,
       style,
       `statement ${source.language}`,
+    ),
+  };
+}
+
+function toTranslation(
+  source: StatementSource,
+  rendered: RenderedStatement,
+  job: PolygonImportJob,
+  earlierTranslations: Translation[],
+): Translation {
+  /** Languages come from problem.xml: `constructor` or `__proto__` must not resolve through the prototype. */
+  const siteLanguage = Object.hasOwn(job.statementLanguages, source.language)
+    ? job.statementLanguages[source.language]
+    : undefined;
+  if (!siteLanguage)
+    throw new PolygonImportError(
+      `invalid site language for ${source.language}`,
     );
-    if (source.language === mainLanguage) {
-      result.name = source.name;
-      result.description = description;
-      result.descriptionHtml = descriptionHtml;
-      continue;
-    }
-    /** Languages come from problem.xml: `constructor` or `__proto__` must not resolve through the prototype. */
-    const siteLanguage = Object.hasOwn(job.statementLanguages, source.language)
-      ? job.statementLanguages[source.language]
-      : undefined;
-    if (!siteLanguage)
-      throw new PolygonImportError(
-        `invalid site language for ${source.language}`,
-      );
-    if (
-      result.translations.some(
-        (translation) => translation.language === siteLanguage,
-      )
+  if (
+    earlierTranslations.some(
+      (translation) => translation.language === siteLanguage,
     )
-      throw new PolygonImportError(
-        `two statements map to the site language ${siteLanguage}`,
-      );
-    result.translations.push({
-      language: siteLanguage,
-      name: source.name,
-      description,
-      descriptionHtml,
-    });
-  }
+  )
+    throw new PolygonImportError(
+      `two statements map to the site language ${siteLanguage}`,
+    );
+  return { language: siteLanguage, name: source.name, ...rendered };
+}
+
+/** The one tutorial, or the job's choice among several, as markdown with its images saved; '' when no statement has one. */
+async function pickAndSaveTutorial(
+  sources: StatementSource[],
+  { job, pkg, texToMarkdown, saveImage }: StatementContext,
+): Promise<string> {
   const tutorials = sources.filter(
     (source) =>
       typeof source.properties.tutorial === 'string' &&
@@ -362,15 +398,43 @@ export async function parseStatements(
     throw new PolygonImportError(
       `invalid main tutorial language ${job.tutorialLanguage ?? '(none)'}`,
     );
-  if (tutorialSource) {
-    result.tutorial = await rehostImages(
-      await texToMarkdown(tutorialSource.properties.tutorial!),
-      tutorialSource.folder,
-      pkg,
-      saveImage,
-    );
+  if (!tutorialSource) return '';
+  return rehostImages(
+    await texToMarkdown(tutorialSource.properties.tutorial!),
+    tutorialSource.folder,
+    pkg,
+    saveImage,
+  );
+}
+
+/** Legacy `parse_statements` in its non-interactive form: every choice comes from the job. The result passes the editor's statement limits. */
+export async function parseStatements(
+  root: XmlElement,
+  context: StatementContext,
+): Promise<ImportedStatements> {
+  const sources = await readStatementSources(root, context.pkg);
+  const mainLanguage = pickMainLanguage(sources, context.job);
+  const style: RenderStyle = context.job.isFullMarkup
+    ? 'problem-full'
+    : 'problem';
+  const imported: ImportedStatements = {
+    name: '',
+    description: '',
+    descriptionHtml: '',
+    translations: [],
+    tutorial: '',
+  };
+  for (const source of sources) {
+    const rendered = await renderSourceAndSaveImages(source, style, context);
+    if (source.language === mainLanguage)
+      Object.assign(imported, { name: source.name, ...rendered });
+    else
+      imported.translations.push(
+        toTranslation(source, rendered, context.job, imported.translations),
+      );
   }
-  return result;
+  imported.tutorial = await pickAndSaveTutorial(sources, context);
+  return imported;
 }
 
 /** Legacy `parse_solutions`: the main solution's source, with the Polygon source type for the fence. */

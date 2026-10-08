@@ -109,13 +109,12 @@ export class PolygonImportService {
         )
       )
         throw new PolygonImportError('not full package');
-      const statements = await parseStatements(
-        root,
+      const statements = await parseStatements(root, {
         pkg,
         job,
-        (tex) => this.pandoc.texToMarkdown(tex),
-        this.imageSaver(savedImages),
-      );
+        texToMarkdown: (tex) => this.pandoc.texToMarkdown(tex),
+        saveImage: this.imageSaver(savedImages),
+      });
       if (job.appendMainSolution) {
         const solution = await mainSolution(root, pkg);
         statements.tutorial = withMainSolution(
