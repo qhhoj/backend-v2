@@ -30,6 +30,16 @@ describe('user activity rules', () => {
     expect(
       redactCredentials('https://oj.example/public-rankings/abc/extra'),
     ).toBe('https://oj.example/public-rankings/:token/extra');
+    for (const route of ['reset-password', 'activate'])
+      expect(redactCredentials(`https://oj.example/${route}/live-secret`)).toBe(
+        `https://oj.example/${route}/:token`,
+      );
+    expect(redactCredentials('/api/internal/auth/activate/resend')).toBe(
+      '/api/internal/auth/activate/resend',
+    );
+    expect(redactCredentials('https://oj.example/problems/activate/x')).toBe(
+      'https://oj.example/problems/activate/x',
+    );
     expect(redactCredentials('/api/internal/contests/r42/ranking')).toBe(
       '/api/internal/contests/r42/ranking',
     );

@@ -90,6 +90,26 @@ describe('user activity capture', () => {
     expect(JSON.stringify(await rows())).not.toContain('s3cr3t');
   });
 
+  it('redacts password reset and activation tokens that arrive as referers', async () => {
+    await visit().set(
+      'Referer',
+      'https://oj.example/reset-password/r3set-secret',
+    );
+    await visit().set('Referer', 'https://oj.example/activate/4ctivate-secret');
+    await visit(CHROME, '/api/internal/auth/activate/resend').set(
+      'Referer',
+      'https://oj.example/activate/resend-secret',
+    );
+    await capture.flush();
+    const referers = (await rows()).map((row) => row.referer);
+    expect(referers).toEqual([
+      'https://oj.example/reset-password/:token',
+      'https://oj.example/activate/:token',
+      'https://oj.example/activate/:token',
+    ]);
+    expect(JSON.stringify(await rows())).not.toMatch(/secret/);
+  });
+
   it('truncates an oversized user agent to the stored maximum instead of failing the batch', async () => {
     await visit('A'.repeat(900)).expect(200);
     await visit().expect(200);
@@ -312,10 +332,17 @@ describe('user activity capture', () => {
     hanging.mockRestore();
   });
 
-  it('flushes the remainder on shutdown', async () => {
+  it('flushes the remainder when the http server closes', async () => {
     await capture.flush();
+    const written: ActivityRow[] = [];
+    jest
+      .spyOn(api.app.get(ActivityWriterRepository), 'write')
+      .mockImplementation((batch) => {
+        written.push(...batch);
+        return Promise.resolve();
+      });
     await visit().expect(200);
-    await capture.onModuleDestroy();
-    expect(await api.userActivities.countDocuments()).toBe(1);
+    await api.app.getHttpAdapter().getInstance().close();
+    expect(written.map((row) => row.path)).toEqual([TRACKED]);
   });
 });

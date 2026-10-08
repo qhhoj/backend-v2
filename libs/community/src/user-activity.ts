@@ -23,10 +23,14 @@ export const stripQuery = (url: string): string => {
   );
 };
 
-/** Path segments that are link credentials (`/public-rankings/<token>` grants read access): staff who read the log must not learn them. */
-const CREDENTIAL_SEGMENT = /(\/public-rankings\/)[^/]+/gi;
+/** Routes whose last segment is a link credential (ranking link, password reset and activation emails): staff who read the log must not learn it. ONE list, for both the API path (`/api/internal/public-rankings/<token>`) and the SPA route that arrives as `Referer` (`/reset-password/<token>`). Add new link-credential routes here. Anchored after the origin so `/api/internal/auth/activate/resend` is left alone. */
+const CREDENTIAL_ROUTES = ['public-rankings', 'reset-password', 'activate'];
+const CREDENTIAL_ROUTE = new RegExp(
+  `^((?:https?://[^/]+)?(?:/api/internal)?/(?:${CREDENTIAL_ROUTES.join('|')})/)[^/]+`,
+  'i',
+);
 export const redactCredentials = (path: string): string =>
-  path.replace(CREDENTIAL_SEGMENT, '$1:token');
+  path.replace(CREDENTIAL_ROUTE, '$1:token');
 
 const UNTRACKED_PREFIXES = [
   '/healthz',

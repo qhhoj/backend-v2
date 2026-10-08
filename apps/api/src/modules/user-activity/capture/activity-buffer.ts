@@ -10,7 +10,7 @@ interface BufferLimits {
   flushMs: number;
 }
 
-/** Bounded in-memory buffer (legacy `deque(maxlen=5000)`): the oldest rows go when it is full, a flush starts at `flushRows` rows or every `flushMs`, flushes never overlap, and a failed write drops its batch instead of growing memory. Both kinds of loss are reported through `onError` with the number of rows lost; `add` never waits. */
+/** Bounded in-memory buffer (legacy `deque(maxlen=5000)`): the oldest rows go when it is full, a flush starts at `flushRows` rows or every `flushMs`, flushes never overlap, and a failed write drops its batch instead of growing memory. Both kinds of loss are reported through `onError` with the number of rows lost; `add` never waits. A sink that gives up waiting (timeout) may still finish later, so writes can then overlap. */
 export class ActivityBuffer<Row> {
   private rows: Row[] = [];
   private overflowed = 0;
