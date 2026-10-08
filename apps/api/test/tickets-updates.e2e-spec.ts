@@ -12,7 +12,7 @@ import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import type { TicketDetailResponse } from '../src/modules/tickets/core/dto/ticket.response';
 import { clearContributionQueue } from './community-fixtures';
-import { authed } from './problem-fixtures';
+import { authed, createProblem, seedCatalog } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -49,6 +49,7 @@ describe('ticket updates', () => {
       ['outsider', {}],
       ['newAssignee', {}],
       ['inactive', { isActive: false }],
+      ['author', { permissions: ['judge.edit_own_problem'] }],
     ];
     for (const [name, extra] of accounts) {
       const { user, session } = await signedIn(api, name, extra);
@@ -121,8 +122,8 @@ describe('ticket updates', () => {
         patch('staff', ticket._id, { isContributive }).expect(200),
       ),
     );
-    const flag = (await stored(ticket._id))!.isContributive;
-    expect(typeof flag).toBe('boolean');
+    await patch('staff', ticket._id, { isContributive: true }).expect(200);
+    expect((await stored(ticket._id))!.isContributive).toBe(true);
     expect(new Set((await queuedUsers()).map((job) => job.userId))).toEqual(
       new Set([people.creator.id]),
     );
@@ -243,6 +244,47 @@ describe('ticket updates', () => {
     await patch('creator', ticket._id, { assignees: [] }).expect(403);
     await patch('staff', ticket._id, { assignees: [] }).expect(200);
     expect((await stored(ticket._id))!.assignees.map(uuidStr)).toEqual([]);
+  });
+
+  it('refuses an inactive user alone and leaves the assignees untouched', async () => {
+    const ticket = await createTicket(api, {
+      creator: people.creator.id,
+      assignees: [people.assignee.id],
+    });
+    const bad = await patch('staff', ticket._id, {
+      assignees: ['inactive'],
+    }).expect(400);
+    expect(
+      (
+        bad.body as {
+          error: { issues: Array<{ field: string; code: string }> };
+        }
+      ).error.issues,
+    ).toEqual([
+      expect.objectContaining({ field: 'assignees', code: 'assignee_unknown' }),
+    ]);
+    expect((await stored(ticket._id))!.assignees.map(uuidStr)).toEqual([
+      people.assignee.id,
+    ]);
+  });
+
+  it('lets a problem editor who is not an assignee close, but not edit notes or mark good', async () => {
+    const problem = await createProblem(api, await seedCatalog(api), {
+      code: 'editor_problem',
+      authors: [people.author.id],
+    });
+    const ticket = await createTicket(api, {
+      creator: people.creator.id,
+      problem: problem._id,
+    });
+    await patch('author', ticket._id, { isOpen: false }).expect(200);
+    await patch('author', ticket._id, { notes: 'x' }).expect(403);
+    await patch('author', ticket._id, { isContributive: true }).expect(403);
+    expect(await stored(ticket._id)).toMatchObject({
+      isOpen: false,
+      notes: '',
+      isContributive: false,
+    });
   });
 
   it('stores one assignee for names that differ only by case', async () => {
