@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { REDIS, startOfDayIn } from '@libs/common';
 import { profileQueries } from '@libs/database/testing';
 import type Redis from 'ioredis';
 import { createProblem, createUserWith, seedCatalog } from './problem-fixtures';
 import type { Catalog } from './problem-fixtures';
+import { createContest, hoursFromNow } from './contest-fixtures';
 import { dataOf } from './submission-fixtures';
 import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
@@ -71,6 +73,42 @@ describe('GET /submissions/stats', () => {
       judgedDate: today,
       casePoints: 1,
     });
+    // Leak classes that must not move any count: an organization-private problem, a contest whose
+    // list is hidden while it runs, and a frozen contest during its freeze.
+    const orgPrivateProblem = (
+      await createProblem(api, catalog, {
+        code: 'orgonly',
+        isPublic: true,
+        isOrganizationPrivate: true,
+        organizations: [randomUUID()],
+      })
+    )._id;
+    const hiddenContest = (
+      await createContest(api, { showSubmissionList: false })
+    )._id;
+    const frozenContest = (
+      await createContest(api, {
+        showSubmissionList: true,
+        formatName: 'icpc',
+        frozenLastMinutes: 30,
+        endTime: hoursFromNow(0.1),
+      })
+    )._id;
+    for (const hidingProblem of [
+      { problem: orgPrivateProblem },
+      { problem: publicProblem, contest: hiddenContest },
+      { problem: publicProblem, contest: frozenContest },
+    ]) {
+      const { problem, ...where } = hidingProblem;
+      await row(problem, {
+        status: 'D',
+        result: 'AC',
+        judgedDate: today,
+        casePoints: 1,
+        ...where,
+      });
+      await row(problem, { status: 'QU', ...where });
+    }
     await row(publicProblem, { status: 'QU' });
     await row(publicProblem, { status: 'P' });
     await row(publicProblem, { status: 'G' });

@@ -221,3 +221,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - nginx: `proxy_buffering off` and a long `proxy_read_timeout` on `/api/internal/events/`; set `TRUST_PROXY` to nginx's address — streams need it, per-IP limits are meaningless otherwise.
 - Docker Compose stack: apps, MongoDB replica set, Redis, nginx; one bridge instance; all sessions are invalidated once at cutover.
 - pandoc comes from the official static release (pinned, sha256-checked in CI), not apt: the Debian/Ubuntu build dies with "failed to create OS thread" under `prlimit --as=768MiB` while the static one runs down to 192 MiB; `assertAvailable` reports a start failure verbatim and says "not installed" only for a missing binary.
+- Submission stats are cached 30 s in Redis under a zone-agnostic key (`submissions:stats`), so a `site.timeZone` change or the midnight rollover can lag up to 30 s.
