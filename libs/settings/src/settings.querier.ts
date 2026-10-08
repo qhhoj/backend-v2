@@ -41,7 +41,7 @@ export class SettingsQuerier
 
   async resync() {
     const next = new Map<SettingKey, unknown>();
-    for (const row of await this.model.find().lean()) this.load(next, row);
+    for (const row of await this.loadAll(this.model)) this.load(next, row);
     this.values = next;
   }
 

@@ -36,7 +36,7 @@ export class GroupsQuerier
 
   async resync() {
     this.perms = new Map(
-      (await this.model.find().lean()).map((group) => [
+      (await this.loadAll(this.model)).map((group) => [
         uuidStr(group._id),
         group.permissions,
       ]),

@@ -1,5 +1,6 @@
 import type { Db } from 'mongodb';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { SNAPSHOT_LOAD_COMMENT } from './snapshot-load';
 
 export const startMongo = () =>
   MongoMemoryReplSet.create({
@@ -18,7 +19,11 @@ export interface ProfiledOperation {
   hasSortStage: boolean;
 }
 
-/** Runs `work` with the database profiler on and returns every operation the server saw: index assertions observe what Mongo did, not the query text. */
+/**
+ * Runs `work` with the database profiler on and returns every operation the server saw: index assertions observe what Mongo did, not the query text.
+ * One allowance: a querier's snapshot load (`loadAll`, tagged `SNAPSHOT_LOAD_COMMENT`) is dropped. It scans a tiny registry on purpose and its
+ * resync cron (settings every minute) can fire inside any window, so keeping it would fail index tests by wall-clock chance.
+ */
 export async function profileQueries(
   db: Db,
   work: () => Promise<unknown>,
@@ -40,12 +45,18 @@ export async function profileQueries(
     await db.command({ profile: 0 });
   }
   const entries = await db.collection('system.profile').find({}).toArray();
-  return entries.map((entry) => ({
-    collection: String(entry.ns).slice(db.databaseName.length + 1),
-    operation: String(entry.op),
-    planSummary: String(entry.planSummary ?? ''),
-    docsExamined: Number(entry.docsExamined ?? 0),
-    keysExamined: Number(entry.keysExamined ?? 0),
-    hasSortStage: Boolean(entry.hasSortStage),
-  }));
+  return entries
+    .filter(
+      (entry) =>
+        (entry.command as { comment?: unknown } | undefined)?.comment !==
+        SNAPSHOT_LOAD_COMMENT,
+    )
+    .map((entry) => ({
+      collection: String(entry.ns).slice(db.databaseName.length + 1),
+      operation: String(entry.op),
+      planSummary: String(entry.planSummary ?? ''),
+      docsExamined: Number(entry.docsExamined ?? 0),
+      keysExamined: Number(entry.keysExamined ?? 0),
+      hasSortStage: Boolean(entry.hasSortStage),
+    }));
 }

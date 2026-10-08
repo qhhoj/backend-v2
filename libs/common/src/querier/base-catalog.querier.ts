@@ -42,7 +42,7 @@ export abstract class BaseCatalogQuerier<Item extends { _id: string }>
 
   async resync() {
     this.items = new Map(
-      (await this.model.find().lean()).map((doc) => [
+      (await this.loadAll(this.model)).map((doc) => [
         uuidStr(doc._id),
         this.toItem(doc),
       ]),

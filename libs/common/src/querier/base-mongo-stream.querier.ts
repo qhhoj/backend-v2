@@ -8,6 +8,7 @@ import {
   ChangeStreamUpdateDocument,
   Timestamp,
 } from 'mongodb';
+import { SNAPSHOT_LOAD_COMMENT } from '@libs/database';
 import { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 
@@ -112,6 +113,11 @@ export abstract class BaseMongoStreamQuerier {
       stream.close().catch(() => {});
     });
     return stream;
+  }
+
+  /** Every row of a small collection, tagged so index profiling excuses this intended scan. */
+  protected loadAll<Doc>(model: Model<Doc>): Promise<Doc[]> {
+    return model.find().comment(SNAPSHOT_LOAD_COMMENT).lean<Doc[]>().exec();
   }
 
   forceResyncQuerier(resync: () => Promise<void>, cron: string) {
