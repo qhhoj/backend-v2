@@ -1,12 +1,10 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { JOB_RETENTION, withinTimeout } from '@libs/judging';
+import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
 import type { DiscordEvent, DiscordMessage } from './discord';
 
 export const COMMUNITY_ENQUEUE_TIMEOUT_MS = 1000;
-/** First retry delay of the queue's jobs; BullMQ doubles it per attempt. */
-const RETRY_BACKOFF_MS = 10_000;
 
 export const ORGANIZATION_POINTS_QUEUE = 'organization-points';
 export const ORGANIZATION_POINTS_JOB = 'recompute';
@@ -67,8 +65,7 @@ async function enqueueFlagged<Data>(
             name: job.jobName,
             data: job.dataOf(id),
             opts: {
-              attempts: 3,
-              backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
+              ...JOB_RETRY,
               ...JOB_RETENTION,
             },
           })),
@@ -162,8 +159,7 @@ export async function notifyDiscord(
   try {
     await withinTimeout(
       queue.add(DISCORD_WEBHOOK_JOB, job, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
+        ...JOB_RETRY,
         ...JOB_RETENTION,
       }),
       COMMUNITY_ENQUEUE_TIMEOUT_MS,

@@ -9,6 +9,11 @@ export const JOB_RETENTION = {
 };
 /** First retry delay of the queue's jobs; BullMQ doubles it per attempt. */
 const RETRY_BACKOFF_MS = 10_000;
+/** Effects are idempotent recomputes: three tries, 10 s then 20 s apart (BullMQ doubles the delay). */
+export const JOB_RETRY = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
+};
 
 export const SUBMISSION_GRADED_QUEUE = 'submission-graded';
 export const SUBMISSION_GRADED_JOB = 'graded';
@@ -37,8 +42,7 @@ export const enqueueGraded = async (
   job: SubmissionGradedJob,
 ): Promise<void> => {
   await queue.add(SUBMISSION_GRADED_JOB, job, {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
+    ...JOB_RETRY,
     ...JOB_RETENTION,
   });
 };
@@ -58,8 +62,7 @@ export const enqueueRescore = async (
     PROBLEM_RESCORE_JOB,
     { problemId },
     {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
+      ...JOB_RETRY,
       ...JOB_RETENTION,
     },
   );

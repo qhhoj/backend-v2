@@ -1,7 +1,7 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { SubmissionResult } from '@libs/database';
-import { JOB_RETENTION, withinTimeout } from '@libs/judging';
+import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
 import { finalSubmissionFormat } from './formats/final-submission';
 import type { FormatName } from './formats/format';
 
@@ -11,8 +11,6 @@ export const CONTEST_RESCORE_JOB = 'rescore';
 export interface ContestRescoreJob {
   contestId: string;
 }
-/** First retry delay of the contest jobs; BullMQ doubles it per attempt. */
-const RETRY_BACKOFF_MS = 10_000;
 /** Longest an edit waits for its job to reach Redis. */
 export const CONTEST_ENQUEUE_TIMEOUT_MS = 1000;
 
@@ -25,8 +23,7 @@ export const enqueueContestRescore = async (
     CONTEST_RESCORE_JOB,
     { contestId },
     {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
+      ...JOB_RETRY,
       ...JOB_RETENTION,
     },
   );
@@ -78,12 +75,6 @@ export const judgesAtEnd = (contest: FinalJudgeTarget): boolean =>
   contest.formatName === 'final_submission' &&
   finalSubmissionFormat.parseConfig(contest.formatConfig).autoJudge;
 
-const FINAL_JUDGE_OPTIONS = {
-  attempts: 3,
-  backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
-  ...JOB_RETENTION,
-};
-
 /** After a create or an edit: the previous end's job goes, the new end's comes (delay 0 once past). Never throws: the sweep judges any ended contest whose job was lost. */
 export async function rescheduleFinalJudge(
   queue: Queue<ContestFinalJudgeJob>,
@@ -110,7 +101,8 @@ export async function rescheduleFinalJudge(
             {
               jobId: finalJudgeJobId(next.id, next.endTime),
               delay: Math.max(0, next.endTime.getTime() - now),
-              ...FINAL_JUDGE_OPTIONS,
+              ...JOB_RETRY,
+              ...JOB_RETENTION,
             },
           );
       })(),
@@ -130,7 +122,7 @@ export const requestFinalJudge = async (
   await queue.add(
     CONTEST_FINAL_JUDGE_JOB,
     { contestId, manual: true },
-    FINAL_JUDGE_OPTIONS,
+    { ...JOB_RETRY, ...JOB_RETENTION },
   );
 };
 
@@ -149,8 +141,7 @@ export const enqueueContestRating = async (
     CONTEST_RATING_JOB,
     { contestId },
     {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: RETRY_BACKOFF_MS },
+      ...JOB_RETRY,
       ...JOB_RETENTION,
     },
   );
