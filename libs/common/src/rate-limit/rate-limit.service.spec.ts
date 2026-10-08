@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import Redis from 'ioredis';
+import { AppError } from '../errors/app.error';
 import { REDIS, RedisModule } from '../redis/redis.module';
 import { TEST_REDIS_URL } from '../testing';
 import { RateLimitService } from './rate-limit.service';
@@ -67,5 +68,29 @@ describe('RateLimitService', () => {
     ).rejects.toMatchObject({ code: 'rate_limited', status: 429 });
     expect(await redis.get('rate:reserve:c')).toBe('2');
     expect(await redis.get('rate:reserve:d')).toBe('1');
+  });
+  it('tells a refused caller how long until the window ends', async () => {
+    await limiter.reserve(['wait'], 1, 60);
+    const refused = await limiter
+      .reserve(['wait'], 1, 60)
+      .catch((error: AppError) => error);
+    expect(refused).toBeInstanceOf(AppError);
+    const seconds = Number((refused as AppError).headers?.['Retry-After']);
+    expect(seconds).toBeGreaterThan(55);
+    expect(seconds).toBeLessThanOrEqual(60);
+  });
+  it('waits for the longest window among the keys that are over the limit', async () => {
+    await limiter.reserve(['busy'], 1, 60);
+    await limiter.hit('fresh', 60);
+    await limiter.release('fresh');
+    await redis.expire('rate:busy', 10);
+    await limiter.reserve(['quiet'], 1, 60);
+    await redis.expire('rate:quiet', 50);
+    const refused = await limiter
+      .reserve(['busy', 'fresh', 'quiet'], 1, 60)
+      .catch((error: AppError) => error);
+    const seconds = Number((refused as AppError).headers?.['Retry-After']);
+    expect(seconds).toBeGreaterThan(40);
+    expect(seconds).toBeLessThanOrEqual(50);
   });
 });

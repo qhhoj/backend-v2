@@ -34,15 +34,25 @@ export class RateLimitService {
     const counts = await Promise.all(
       keys.map((key) => this.hit(key, windowSeconds)),
     );
-    if (counts.some((count) => count > limit))
-      throw new AppError(
-        'rate_limited',
-        429,
-        'Too many attempts; try again later',
-      );
+    const overLimit = keys.filter((_key, index) => counts[index] > limit);
+    if (overLimit.length > 0) throw await this.refusal(overLimit);
     return async () => {
       await Promise.all(keys.map((key) => this.release(key)));
     };
+  }
+
+  /** The 429 for keys over their limit; Retry-After is the longest wait until one of their windows ends. */
+  private async refusal(overLimit: string[]): Promise<AppError> {
+    const remainingSeconds = await Promise.all(
+      overLimit.map((key) => this.redis.ttl(rateKey(key))),
+    );
+    return new AppError(
+      'rate_limited',
+      429,
+      'Too many attempts; try again later',
+      undefined,
+      { 'Retry-After': String(Math.max(1, ...remainingSeconds)) },
+    );
   }
 
   /** Gives back one hit (never below zero), so only counted attempts consume budget. */
