@@ -163,6 +163,56 @@ describe('filing tickets and posting messages', () => {
     expect(await api.generalIssues.countDocuments()).toBe(1);
   });
 
+  it('trims the issue url and refuses credentials in it', async () => {
+    const general = (issueUrl: string) =>
+      post('filer', '/api/internal/tickets/general', {
+        title: 'Site bug',
+        body: 'blank',
+        issueUrl,
+      });
+    const ticket = dataOf<TicketDetailResponse>(
+      await general('  https://example.com/padded  ').expect(201),
+    );
+    expect(ticket.link.url).toBe('https://example.com/padded');
+    await general('https://user:pass@example.com/x')
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+  });
+
+  it('files on a private problem only while its contest is current, and not before it starts', async () => {
+    const secret = (await api.problems.findOne({ code: 'secret_one' }))!;
+    const contest = await createContest(api, {
+      authors: [people.contestAuthor.id],
+      problems: [contestProblem(secret._id, 1)],
+    });
+    const participation = await joinParticipation(
+      api,
+      contest._id,
+      people.filer.id,
+    );
+    await makeCurrent(api, people.filer.id, participation._id);
+    const inside = dataOf<TicketDetailResponse>(
+      await fileFor('filer', 'secret_one').expect(201),
+    );
+    expect(inside.assignees.map((assignee) => assignee.username)).toEqual([
+      'contestAuthor',
+    ]);
+    await makeCurrent(api, people.filer.id, null);
+    await fileFor('filer', 'secret_one').expect(404);
+    const upcoming = await createContest(api, {
+      startTime: new Date(Date.now() + 3_600_000),
+      endTime: new Date(Date.now() + 7_200_000),
+      problems: [contestProblem(secret._id, 1)],
+    });
+    await makeCurrent(
+      api,
+      people.filer.id,
+      (await joinParticipation(api, upcoming._id, people.filer.id))._id,
+    );
+    await fileFor('filer', 'secret_one').expect(404);
+    await makeCurrent(api, people.filer.id, null);
+  });
+
   it('refuses unknown or invisible problems, muted users and signed-out visitors', async () => {
     await fileFor('outsider', 'secret_one').expect(404);
     await fileFor('outsider', 'nope').expect(404);
@@ -177,6 +227,12 @@ describe('filing tickets and posting messages', () => {
       .expect(401);
     await fileFor('filer', 'sum_two', { title: '   ', body: 'y' }).expect(400);
     await fileFor('filer', 'sum_two', { title: 'x', body: '' }).expect(400);
+    await fileFor('filer', 'sum_two', { title: 'x'.repeat(101), body: 'y' })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    await fileFor('filer', 'sum_two', { title: 'x', body: 'y'.repeat(8193) })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
   });
 
   it('limits ticket creation and messages per user', async () => {
@@ -256,7 +312,7 @@ describe('filing tickets and posting messages', () => {
     ]);
   });
 
-  it('lets the creator, an assignee and staff-like readers post, even on a closed ticket, and nobody else', async () => {
+  it('lets the creator, an assignee and a problem editor post, even on a closed ticket, and nobody else', async () => {
     const ticket = await createTicket(api, {
       creator: people.filer.id,
       assignees: [people.assignee.id],
@@ -320,5 +376,33 @@ describe('filing tickets and posting messages', () => {
     await post('filer', ticketUrl(ticket._id, '/messages'), { body: 'over' })
       .expect(409)
       .expect(errorCode('conflict'));
+  });
+
+  it('spends message budget only on posts that are written', async () => {
+    const readable = await createTicket(api, { creator: people.filer.id });
+    const unreadable = await createTicket(api, { creator: people.author.id });
+    for (let count = 0; count < 31; count += 1)
+      await post('filer', ticketUrl(unreadable._id, '/messages'), {
+        body: 'no',
+      }).expect(403);
+    const full = Array.from({ length: 500 }, () => ({
+      _id: newId(),
+      user: people.filer.id,
+      body: 'x',
+      bodyHtml: '<p>x</p>',
+      createdAt: new Date(),
+    }));
+    const capped = await createTicket(api, {
+      creator: people.filer.id,
+      messages: full,
+      messageCount: 500,
+    });
+    for (let count = 0; count < 31; count += 1)
+      await post('filer', ticketUrl(capped._id, '/messages'), {
+        body: 'no',
+      }).expect(409);
+    await post('filer', ticketUrl(readable._id, '/messages'), {
+      body: 'yes',
+    }).expect(201);
   });
 });

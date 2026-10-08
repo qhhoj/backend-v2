@@ -25,6 +25,17 @@ describe('ticket texts', () => {
     expect(messageLine.startsWith('Message: ')).toBe(true);
   });
 
+  it('escapes link characters so a title cannot rewrite the link target', () => {
+    const description = newTicketDescription({
+      title: 'a](https://evil) [b',
+      ticketUrl: 'https://oj/ticket/1',
+      body: 'x',
+    });
+    expect(description.split('\n')[0]).toBe(
+      'Title: [a\\]\\(https://evil\\) \\[b](https://oj/ticket/1)',
+    );
+  });
+
   it('describes a reply with the prefixed, cut message', () => {
     expect(ticketMessageDescription('hello')).toBe('Message: hello');
     expect(Array.from(ticketMessageDescription('x'.repeat(500)))).toHaveLength(

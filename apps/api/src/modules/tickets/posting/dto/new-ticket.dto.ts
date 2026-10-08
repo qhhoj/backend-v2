@@ -23,7 +23,12 @@ export class NewTicketDto extends NewTicketMessageDto {
 
 /** `http(s)` only: the url becomes a link. */
 export class NewGeneralTicketDto extends NewTicketDto {
-  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  @Transform(trim)
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(TICKET_ISSUE_URL_MAX_LENGTH)
   issueUrl!: string;
 }

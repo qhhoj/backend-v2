@@ -19,7 +19,11 @@ export const problemPath = (code: string): string =>
 export const ticketMessageDescription = (body: string): string =>
   excerpt(`Message: ${body}`, 100);
 
-/** Legacy `on_new_ticket` description: the title line, then the cut message line. */
+/** A title must not close the link text and rewrite the target. */
+const escapeLinkText = (text: string): string =>
+  text.replace(/[[\]()]/g, '\\$&');
+
+/** Legacy `on_new_ticket` description (title brackets escaped): the title line, then the cut message line. */
 export const newTicketDescription = ({
   title,
   ticketUrl,
@@ -29,4 +33,4 @@ export const newTicketDescription = ({
   ticketUrl: string;
   body: string;
 }): string =>
-  `Title: [${title}](${ticketUrl})\n${ticketMessageDescription(body)}`;
+  `Title: [${escapeLinkText(title)}](${ticketUrl})\n${ticketMessageDescription(body)}`;
