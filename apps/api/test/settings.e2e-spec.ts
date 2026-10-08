@@ -25,6 +25,7 @@ describe('/api/internal/admin/settings', () => {
   let admin: TestSession;
   let superuser: TestSession;
   let member: TestSession;
+  let adminId: string;
   const patch = (key: string, value: unknown, session = admin) =>
     authed(api.http().patch(`${SETTINGS}/${key}`), session).send({ value });
   const restore = (key: string, revisionId: string, session = admin) =>
@@ -45,14 +46,11 @@ describe('/api/internal/admin/settings', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
-    admin = await loginAs(
-      api,
-      (
-        await createUserWith(api, 'ops', {
-          permissions: ['judge.change_settings'],
-        })
-      )._id,
-    );
+    const ops = await createUserWith(api, 'ops', {
+      permissions: ['judge.change_settings'],
+    });
+    adminId = ops._id;
+    admin = await loginAs(api, ops._id);
     superuser = await loginAs(
       api,
       (await createUserWith(api, 'root', { isSuperuser: true }))._id,
@@ -78,6 +76,11 @@ describe('/api/internal/admin/settings', () => {
     ).expect(403);
     await authed(api.http().get(SETTINGS), superuser).expect(200);
     await authed(api.http().get(SETTINGS), admin).expect(200);
+    await api
+      .http()
+      .post(`${SETTINGS}/mail.from/revisions/${v7()}/restore`)
+      .expect(401);
+    await restore('mail.from', v7(), member).expect(403);
   });
 
   it('lists every registered setting with its default', async () => {
@@ -283,14 +286,26 @@ describe('/api/internal/admin/settings', () => {
       clientSecret: 'gh-secret-1',
     });
     expect(JSON.stringify(await list())).not.toContain('gh-secret-1');
+    const [restoreRevision] = dataOf<
+      Array<{ actor: string; before: unknown; after: unknown }>
+    >(await revisionsOf('auth.github'));
+    expect(restoreRevision.actor).toBe(adminId);
+    expect(restoreRevision.after).toEqual(restored.value);
+    expect(JSON.stringify(restoreRevision)).not.toContain('gh-secret-1');
   });
 
-  it('refuses to restore a whole-secret setting with 409', async () => {
+  it('refuses to restore a whole-secret setting with 409 and writes no revision', async () => {
+    await patch('mail.smtpUrl', SMTP).expect(200);
+    await patch('discord.webhooks', {
+      default: 'https://discord.test/api/webhooks/tok-456',
+    }).expect(200);
     for (const key of ['mail.smtpUrl', 'discord.webhooks']) {
+      const revisionsBefore = await revisionTotal(key);
       const response = await restore(key, await newestRevisionId(key)).expect(
         409,
       );
       errorCode('secret_unrestorable')(response);
+      expect(await revisionTotal(key)).toBe(revisionsBefore);
     }
     expect(api.app.get(SettingsService).get('mail.smtpUrl')).toBe(SMTP);
   });
@@ -305,16 +320,5 @@ describe('/api/internal/admin/settings', () => {
     await restore('auth.google', await newestRevisionId('pdf.renderTimeoutMs'))
       .expect(404)
       .expect(errorCode('not_found'));
-  });
-
-  it('is for judge.change_settings holders only', async () => {
-    const revisionId = await newestRevisionId('pdf.renderTimeoutMs');
-    await api
-      .http()
-      .post(`${SETTINGS}/pdf.renderTimeoutMs/revisions/${revisionId}/restore`)
-      .expect(401);
-    await restore('pdf.renderTimeoutMs', revisionId, member)
-      .expect(403)
-      .expect(errorCode('forbidden'));
   });
 });

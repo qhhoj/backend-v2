@@ -74,7 +74,7 @@ export function redactSetting(
   };
 }
 
-/** A revision's `before` without its sealed parts, ready to patch back; null for a whole-secret setting (nothing restorable is stored). */
+/** A revision's `before` without its sealed parts, ready to patch back; null for a whole-secret setting (nothing restorable is stored). The merge keeps the current secret, so a restore never brings back an old one. */
 export function restorableValue(
   definition: SettingDefinition<unknown>,
   redactedBefore: unknown,
