@@ -1,19 +1,20 @@
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { envelopeResponses } from '@libs/common';
+import { untypeAnyJson } from './modules/settings/dto/any-json-value';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 export function setupOpenApi(app: NestFastifyApplication): void {
-  const document = envelopeResponses(
-    SwaggerModule.createDocument(
-      app,
-      new DocumentBuilder()
-        .setTitle('QHHOJ internal API')
-        .setVersion('1')
-        .addCookieAuth('qhhoj_session')
-        .addBearerAuth()
-        .build(),
-    ),
+  const generated = SwaggerModule.createDocument(
+    app,
+    new DocumentBuilder()
+      .setTitle('QHHOJ internal API')
+      .setVersion('1')
+      .addCookieAuth('qhhoj_session')
+      .addBearerAuth()
+      .build(),
   );
+  untypeAnyJson(generated);
+  const document = envelopeResponses(generated);
   app
     .getHttpAdapter()
     .getInstance()

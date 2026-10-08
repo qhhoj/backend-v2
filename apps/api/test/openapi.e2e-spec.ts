@@ -363,6 +363,20 @@ describe('OpenAPI document', () => {
       expect(body.required).toEqual(['code', 'message']);
     });
 
+    it('types a setting value and revision before/after as any JSON value', async () => {
+      const { schemas } = (await document()).components;
+      const anyValueProperties = [
+        schemas.SettingResponse.properties!.value,
+        schemas.SettingRevisionResponse.properties!.before,
+        schemas.SettingRevisionResponse.properties!.after,
+      ];
+      for (const property of anyValueProperties) {
+        expect(property).toBeDefined();
+        expect(property).not.toHaveProperty('type');
+        expect(property).not.toHaveProperty('additionalProperties');
+      }
+    });
+
     it('has a response schema for every JSON route, except the listed ones', async () => {
       const doc = await document();
       const missing = Object.entries(doc.paths).flatMap(([path, methods]) =>
