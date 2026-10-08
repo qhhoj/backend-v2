@@ -320,6 +320,31 @@ describe('comment pages', () => {
     }
   });
 
+  it('returns the markdown source only to the author and moderators', async () => {
+    const { user: author, session: authorSession } = await person();
+    const { session: otherSession } = await person();
+    const { session: moderatorSession } = await person({
+      permissions: ['judge.change_comment'],
+    });
+    const post = await createPost(api);
+    const comment = await createComment(api, {
+      page: { type: 'blog', id: post._id },
+      author: author._id,
+      body: '**bold**',
+      bodyHtml: '<p><strong>bold</strong></p>',
+    });
+    const bodyFor = async (session?: TestSession) =>
+      (await read('blog', post._id, session)).comments.find(
+        (item) => item.id === comment._id,
+      )?.body;
+    expect(await bodyFor(authorSession)).toBe('**bold**');
+    expect(await bodyFor(moderatorSession)).toBe('**bold**');
+    expect(await bodyFor(otherSession)).toBeNull();
+    expect(await bodyFor()).toBeNull();
+    const detail = await api.http().get(commentUrl(comment._id)).expect(200);
+    expect(dataOf<{ body: string | null }>(detail).body).toBeNull();
+  });
+
   it('counts visible comments on post lists', async () => {
     const { user: author } = await person();
     await api.blogPosts.deleteMany({});

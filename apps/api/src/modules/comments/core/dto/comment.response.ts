@@ -28,6 +28,8 @@ export class CommentResponse {
   createdAt!: Date;
   updatedAt!: Date;
   bodyHtml!: string;
+  /** Markdown source, for the edit form: the author and moderators only (`canEdit`), else null. */
+  body!: string | null;
   score!: number;
   /** Score at or below -5: the SPA folds it (legacy collapsed client-side). */
   collapsed!: boolean;
@@ -49,6 +51,7 @@ export class CommentResponse {
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
       bodyHtml: comment.bodyHtml,
+      body: canEdit ? comment.body : null,
       score: comment.score,
       collapsed: isCollapsed(comment.score),
       revisions: comment.revisions,
