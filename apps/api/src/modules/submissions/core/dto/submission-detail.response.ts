@@ -56,6 +56,8 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   cases!: SubmissionCaseResponse[] | null;
   /** Batch summaries when the problem shows only those (B). */
   batches!: SubmissionBatchResponse[] | null;
+  /** The problem's test case count; null whenever the viewer may not see case results. */
+  totalCases!: number | null;
 
   static withDetails(
     submission: Submission,
@@ -63,7 +65,12 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
     {
       visibility,
       showError,
-    }: { visibility: CaseVisibility; showError: boolean },
+      totalCases,
+    }: {
+      visibility: CaseVisibility;
+      showError: boolean;
+      totalCases: number | null;
+    },
   ): SubmissionDetailResponse {
     return {
       ...SubmissionListItemResponse.from(submission, refs),
@@ -83,6 +90,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
         visibility.cases === 'batches'
           ? batchSummaries(submission.cases)
           : null,
+      totalCases,
     };
   }
 }

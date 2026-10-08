@@ -6,7 +6,9 @@ import { LIVE } from '@libs/contests';
 import {
   Contest,
   ContestParticipation,
+  ContestSubmission,
   isUuid,
+  Submission,
   User,
   uuidStr,
 } from '@libs/database';
@@ -21,12 +23,31 @@ export class ParticipationsRepository {
     private readonly participations: Model<ContestParticipation>,
     @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(Contest.name) private readonly contests: Model<Contest>,
+    @InjectModel(Submission.name)
+    private readonly submissions: Model<Submission>,
+    @InjectModel(ContestSubmission.name)
+    private readonly contestSubmissions: Model<ContestSubmission>,
   ) {}
 
   findById(id: string): Promise<ParticipationDocument | null> {
     return isUuid(id)
       ? this.participations.findById(id).exec()
       : Promise.resolve(null);
+  }
+
+  /** Legacy `get_contest_submission_count`: the participation's submissions to the problem, IE and PD excluded. */
+  async countAttempts(
+    participationId: string,
+    problemId: string,
+  ): Promise<number> {
+    const ids = await this.contestSubmissions
+      .distinct('_id', { participation: participationId, problem: problemId })
+      .exec();
+    return ids.length
+      ? this.submissions
+          .countDocuments({ _id: { $in: ids }, status: { $nin: ['IE', 'PD'] } })
+          .exec()
+      : 0;
   }
 
   findOne(

@@ -47,11 +47,10 @@ export class CurrentContestService {
   }
 
   /** What the user's current contest does to problem access (`ProblemAccess`); null outside a contest. */
-  async scopeOf(
-    principal: Principal | null,
+  scopeFrom(
+    current: CurrentParticipation | null,
     now = new Date(),
-  ): Promise<ContestScope | null> {
-    const current = await this.current(principal, now);
+  ): ContestScope | null {
     return (
       current && {
         started: contestPhase(current.contest, now) !== 'upcoming',
@@ -60,5 +59,12 @@ export class CurrentContestService {
         ),
       }
     );
+  }
+
+  async scopeOf(
+    principal: Principal | null,
+    now = new Date(),
+  ): Promise<ContestScope | null> {
+    return this.scopeFrom(await this.current(principal, now), now);
   }
 }

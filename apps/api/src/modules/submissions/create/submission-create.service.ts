@@ -16,6 +16,7 @@ import {
   submissionEvent,
   SubmissionEventsService,
 } from '@libs/judging';
+import { ParticipationsRepository } from '../../contests/core/participations.repository';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import type { CurrentParticipation } from '../../contests/core/current-contest.service';
 import { JudgesRepository } from '../../judges/judges.repository';
@@ -62,6 +63,7 @@ export class SubmissionCreateService {
     private readonly events: SubmissionEventsService,
     private readonly rateLimit: RateLimitService,
     private readonly currentContest: CurrentContestService,
+    private readonly participations: ParticipationsRepository,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -111,7 +113,7 @@ export class SubmissionCreateService {
     const guarded = async () => {
       if (
         capped &&
-        (await this.submissions.countContestAttempts(
+        (await this.participations.countAttempts(
           plan.entry.participation,
           problem._id,
         )) >= plan.maxSubmissions!

@@ -2,9 +2,11 @@ import type { Problem, SubmissionCase } from '@libs/database';
 import {
   authed,
   createProblem,
+  dataFixture,
   createUserWith,
   loginAs,
   seedCatalog,
+  testCase,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
@@ -332,6 +334,50 @@ describe('submission read flow', () => {
       await as('owner', `${SUBMISSIONS}/${owned['vis_a']}`).expect(200);
       expect(casesLoaded()).toBe(1);
       findById.mockRestore();
+    });
+
+    it('reports the number of test cases, batch members included, markers excluded', async () => {
+      await api.problems.updateOne(
+        { code: 'res_b' },
+        {
+          data: dataFixture({
+            cases: [
+              testCase({ type: 'C' }),
+              testCase({ type: 'S' }),
+              testCase({ type: 'C' }),
+              testCase({ type: 'C' }),
+              testCase({ type: 'E' }),
+              testCase({ type: 'C' }),
+            ],
+          }),
+        },
+      );
+      const detail = dataOf<{ totalCases: number | null }>(
+        await as('owner', `${SUBMISSIONS}/${owned['res_b']}`).expect(200),
+      );
+      expect(detail.totalCases).toBe(4);
+    });
+
+    it('counts zero for a problem with no data', async () => {
+      expect(
+        dataOf<{ totalCases: number | null }>(
+          await as('owner', `${SUBMISSIONS}/${owned['vis_a']}`).expect(200),
+        ).totalCases,
+      ).toBe(0);
+    });
+
+    it('hides the count with the case results, except from those who see them', async () => {
+      await api.problems.updateOne(
+        { code: 'res_s' },
+        { data: dataFixture({ cases: [testCase({ type: 'C' })] }) },
+      );
+      const totalFor = async (who: string) =>
+        dataOf<{ totalCases: number | null }>(
+          await as(who, `${SUBMISSIONS}/${owned['res_s']}`).expect(200),
+        ).totalCases;
+      expect(await totalFor('owner')).toBeNull();
+      expect(await totalFor('editor')).toBeNull();
+      expect(await totalFor('root')).toBe(1);
     });
 
     it('needs a login and answers 404 for unknown and malformed ids', async () => {

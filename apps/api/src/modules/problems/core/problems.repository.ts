@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, dataVersionIs, isUuid, Problem, uuidStr } from '@libs/database';
+import {
+  CI,
+  dataVersionIs,
+  isUuid,
+  Problem,
+  toUuid,
+  uuidStr,
+} from '@libs/database';
 import type { ProblemData, ProblemTranslation } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
@@ -32,6 +39,26 @@ export class ProblemsRepository {
   /** `data` is `select: false` (it can hold thousands of cases); only the data editor loads it. */
   findByCodeWithData(code: string): Promise<ProblemDocument | null> {
     return this.problems.findOne({ code }).select('+data').exec();
+  }
+
+  /** Test cases of the problem (`C` rows: batch members included, `S`/`E` markers not), counted in the database so the 10000-row array never loads. */
+  async caseCount(problemId: string): Promise<number> {
+    const [row] = await this.problems.aggregate<{ count: number }>([
+      { $match: { _id: toUuid(problemId) } },
+      {
+        $project: {
+          count: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ['$data.cases', []] },
+                cond: { $eq: ['$$this.type', 'C'] },
+              },
+            },
+          },
+        },
+      },
+    ]);
+    return row?.count ?? 0;
   }
 
   findById(id: string): Promise<ProblemDocument | null> {

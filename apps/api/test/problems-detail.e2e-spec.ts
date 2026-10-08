@@ -1,4 +1,11 @@
 import {
+  contestProblem,
+  createContest,
+  joinParticipation,
+  makeCurrent,
+} from './contest-fixtures';
+import { seedSubmission } from './submission-fixtures';
+import {
   authed,
   Catalog,
   createProblem,
@@ -260,5 +267,129 @@ describe('problem detail and editorial', () => {
       detailOf(await api.http().get(`${PROBLEMS}/later`).expect(200))
         .hasEditorial,
     ).toBe(false);
+  });
+
+  describe('contest context', () => {
+    let racerId: string;
+    let racer: TestSession;
+    let rounds = 0;
+    const contestOf = async (code: string, viewer: TestSession = racer) =>
+      detailOf(
+        await authed(api.http().get(`${PROBLEMS}/${code}`), viewer).expect(200),
+      ).contest;
+    /** A fresh running contest the racer has joined and is in; it lists `capped` (3 submissions) and `uncapped`. */
+    const enterRound = async (extra: { virtual?: number } = {}) => {
+      const contest = await createContest(api, {
+        key: `round_${(rounds += 1)}`,
+        problems: [
+          contestProblem(capped._id, 0, { maxSubmissions: 3 }),
+          contestProblem(uncapped._id, 1),
+        ],
+      });
+      const participation = await joinParticipation(
+        api,
+        contest._id,
+        racerId,
+        extra,
+      );
+      await makeCurrent(api, racerId, participation._id);
+      return { contest, participation };
+    };
+    const attempt = async (
+      round: { contest: { _id: string }; participation: { _id: string } },
+      problemId: string,
+      fields: { status?: 'D' | 'IE' | 'PD'; user?: string } = {},
+    ) => {
+      const submission = await seedSubmission(api, {
+        user: fields.user ?? racerId,
+        problem: problemId,
+        language: catalog.languages.cpp,
+        ...(fields.status && { status: fields.status }),
+      });
+      await api.contestSubmissions.create({
+        _id: submission._id,
+        participation: round.participation._id,
+        contest: round.contest._id,
+        problem: problemId,
+      });
+    };
+    let capped: { _id: string };
+    let uncapped: { _id: string };
+
+    beforeAll(async () => {
+      racerId = (await createUserWith(api, 'racer'))._id;
+      racer = await loginAs(api, racerId);
+      capped = await createProblem(api, catalog, { code: 'capped' });
+      uncapped = await createProblem(api, catalog, { code: 'uncapped' });
+    });
+    beforeEach(() => makeCurrent(api, racerId, null));
+
+    it('is null outside a contest, for the signed-in and the anonymous', async () => {
+      expect(await contestOf('capped')).toBeNull();
+      expect(
+        detailOf(await api.http().get(`${PROBLEMS}/capped`).expect(200))
+          .contest,
+      ).toBeNull();
+    });
+
+    it('is null in a contest that does not list the problem', async () => {
+      const other = await createContest(api, { problems: [] });
+      await makeCurrent(
+        api,
+        racerId,
+        (await joinParticipation(api, other._id, racerId))._id,
+      );
+      expect(await contestOf('capped')).toBeNull();
+    });
+
+    it('names the contest and the attempts left while participating', async () => {
+      const round = await enterRound();
+      expect(await contestOf('capped')).toEqual({
+        contestKey: round.contest.key,
+        attemptsLeft: 3,
+      });
+      await attempt(round, capped._id);
+      expect(await contestOf('capped')).toEqual({
+        contestKey: round.contest.key,
+        attemptsLeft: 2,
+      });
+    });
+
+    it('counts only this participation, and not IE or PD submissions', async () => {
+      const round = await enterRound();
+      const rival = await enterRound();
+      const bystanderId = (await createUserWith(api, 'bystander'))._id;
+      const bystander = await joinParticipation(
+        api,
+        round.contest._id,
+        bystanderId,
+      );
+      await makeCurrent(api, racerId, round.participation._id);
+      await attempt(rival, capped._id);
+      await attempt({ ...round, participation: bystander }, capped._id, {
+        user: bystanderId,
+      });
+      await attempt(round, capped._id, { status: 'IE' });
+      await attempt(round, capped._id, { status: 'PD' });
+      expect((await contestOf('capped'))?.attemptsLeft).toBe(3);
+      await attempt(round, capped._id);
+      expect((await contestOf('capped'))?.attemptsLeft).toBe(2);
+    });
+
+    it('has no limit to report when the entry is uncapped', async () => {
+      const round = await enterRound();
+      await attempt(round, uncapped._id);
+      expect(await contestOf('uncapped')).toEqual({
+        contestKey: round.contest.key,
+        attemptsLeft: null,
+      });
+    });
+
+    it('never goes below zero', async () => {
+      const round = await enterRound();
+      for (let count = 0; count < 4; count += 1)
+        await attempt(round, capped._id);
+      expect((await contestOf('capped'))?.attemptsLeft).toBe(0);
+    });
   });
 });

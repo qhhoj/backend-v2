@@ -20,6 +20,7 @@ export interface ProblemDetailContext {
   canEdit: boolean;
   hasEditorial: boolean;
   viewerStatus: ViewerStatus;
+  contest: ProblemContestResponse | null;
   people: Map<string, UserDocument>;
   types: ProblemTypesQuerier;
   groups: ProblemGroupsQuerier;
@@ -84,6 +85,12 @@ export class ProblemEditorResponse {
   }
 }
 
+export class ProblemContestResponse {
+  contestKey!: string;
+  /** Null when the contest problem has no `maxSubmissions`. */
+  attemptsLeft!: number | null;
+}
+
 export class ProblemDetailResponse {
   id!: string;
   code!: string;
@@ -126,6 +133,8 @@ export class ProblemDetailResponse {
   canEdit!: boolean;
   /** For the signed-in viewer; null when anonymous or never submitted. */
   viewerStatus!: ViewerStatus;
+  /** The viewer's current contest when it lists this problem. */
+  contest!: ProblemContestResponse | null;
   editor!: ProblemEditorResponse | null;
 
   static from(
@@ -197,6 +206,7 @@ export class ProblemDetailResponse {
       acRate: problem.acRate,
       canEdit: context.canEdit,
       viewerStatus: context.viewerStatus,
+      contest: context.contest,
       editor: context.canEdit
         ? ProblemEditorResponse.from(problem, summaries)
         : null,

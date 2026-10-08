@@ -120,6 +120,10 @@ export class SubmissionsService {
       visibility.cases === 'none'
         ? viewed.submission
         : ((await this.submissions.findById(id, true)) ?? viewed.submission);
+    const totalCases =
+      visibility.cases === 'none'
+        ? null
+        : await this.problems.caseCount(problem._id);
     const [owner] = await this.users.findByIds([uuidStr(submission.user)]);
     return SubmissionDetailResponse.withDetails(
       submission,
@@ -131,6 +135,7 @@ export class SubmissionsService {
       {
         visibility,
         showError: canEdit || submission.status !== 'IE',
+        totalCases,
       },
     );
   }

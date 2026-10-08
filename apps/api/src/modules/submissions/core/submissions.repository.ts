@@ -75,21 +75,6 @@ export class SubmissionsRepository {
     return id;
   }
 
-  /** Legacy `get_contest_submission_count`: the participation's submissions to the problem, IE and PD excluded. */
-  async countContestAttempts(
-    participationId: string,
-    problemId: string,
-  ): Promise<number> {
-    const ids = await this.contestSubmissions
-      .distinct('_id', { participation: participationId, problem: problemId })
-      .exec();
-    return ids.length
-      ? this.submissions
-          .countDocuments({ _id: { $in: ids }, status: { $nin: ['IE', 'PD'] } })
-          .exec()
-      : 0;
-  }
-
   /** Legacy: rejudged submissions do not count against the user. */
   countUnfinished(userId: string): Promise<number> {
     return this.submissions

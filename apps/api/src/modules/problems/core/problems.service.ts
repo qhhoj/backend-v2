@@ -6,8 +6,13 @@ import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
+import type { CurrentParticipation } from '../../contests/core/current-contest.service';
+import { ParticipationsRepository } from '../../contests/core/participations.repository';
 import { EditorialResponse } from './dto/editorial.response';
-import { ProblemDetailResponse } from './dto/problem-detail.response';
+import {
+  ProblemContestResponse,
+  ProblemDetailResponse,
+} from './dto/problem-detail.response';
 import { UserSummaryResponse } from './dto/user-summary.response';
 import { ProblemListQueryDto } from './dto/problem-list.dto';
 import { ProblemListItemResponse } from './dto/problem-list.response';
@@ -50,6 +55,7 @@ export class ProblemsService {
     private readonly users: UsersRepository,
     private readonly viewerStatuses: ViewerStatusRepository,
     private readonly currentContest: CurrentContestService,
+    private readonly participations: ParticipationsRepository,
   ) {}
 
   meta(): ProblemMetaResponse {
@@ -101,12 +107,33 @@ export class ProblemsService {
     );
   }
 
+  private async contestContext(
+    current: CurrentParticipation | null,
+    problem: ProblemDocument,
+  ): Promise<ProblemContestResponse | null> {
+    const entry = current?.contest.problems.find(
+      (candidate) => uuidStr(candidate.problem) === problem._id,
+    );
+    if (!current || !entry) return null;
+    if (entry.maxSubmissions === null)
+      return { contestKey: current.contest.key, attemptsLeft: null };
+    const attempts = await this.participations.countAttempts(
+      current.participation._id,
+      problem._id,
+    );
+    return {
+      contestKey: current.contest.key,
+      attemptsLeft: Math.max(0, entry.maxSubmissions - attempts),
+    };
+  }
+
   async detail(
     principal: Principal | null,
     code: string,
     lang: StatementLanguage,
   ): Promise<ProblemDetailResponse> {
-    const scope = await this.currentContest.scopeOf(principal);
+    const current = await this.currentContest.current(principal);
+    const scope = this.currentContest.scopeFrom(current);
     const problem = await this.visibleUnder(principal, code, scope);
     const canEdit = this.canEdit(principal, problem);
     const personIds = [...problem.authors];
@@ -131,6 +158,7 @@ export class ProblemsService {
         (await this.viewerStatusesOf(principal, [problem._id])).get(
           problem._id,
         ) ?? null,
+      contest: await this.contestContext(current, problem),
       people,
       types: this.types,
       groups: this.groups,
