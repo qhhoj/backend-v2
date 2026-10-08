@@ -42,6 +42,7 @@ function acceptField(
   fields[part.fieldname] = String(part.value);
 }
 
+/** Also the TS narrowing for `asserts`; the `filename` rule is a backstop for busboy's `files: 1` limit. */
 function assertSingleFilePart(
   part: Multipart,
   filename: string | undefined,
@@ -88,6 +89,7 @@ async function withMultipartFile(
       assertSingleFilePart(part, filename);
       filename = part.filename;
       await consume(part);
+      // Guard for routes that turn off `throwFileSizeLimit`, where fastify no longer throws.
       if (part.file.truncated) throw tooLarge(maxBytes);
     }
   } catch (error) {

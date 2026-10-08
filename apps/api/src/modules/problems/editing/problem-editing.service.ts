@@ -38,24 +38,24 @@ interface ProblemEdit {
   isStatementRerendered: boolean;
 }
 
-/** Re-renders the description when it or the markup mode changed, and every translation when the mode flipped; true when anything was re-rendered. */
-function rerenderStatements(
+/** Renders into `fields` (mutating it): the description when it or the markup mode changed, and every translation when the mode flipped; true when anything was rendered. */
+function renderStatementsInto(
   fields: ProblemFields,
-  problem: ProblemDocument,
+  original: ProblemDocument,
   translations: Problem['translations'],
 ): boolean {
   const isMarkupFlipped =
     fields.isFullMarkup !== undefined &&
-    fields.isFullMarkup !== problem.isFullMarkup;
+    fields.isFullMarkup !== original.isFullMarkup;
   const isDescriptionChanged =
     fields.description !== undefined &&
-    fields.description !== problem.description;
+    fields.description !== original.description;
   if (!isDescriptionChanged && !isMarkupFlipped) return false;
   const style = styleOf({
-    isFullMarkup: fields.isFullMarkup ?? problem.isFullMarkup,
+    isFullMarkup: fields.isFullMarkup ?? original.isFullMarkup,
   });
   fields.descriptionHtml = renderField(
-    fields.description ?? problem.description,
+    fields.description ?? original.description,
     style,
     'description',
   );
@@ -155,27 +155,30 @@ export class ProblemEditingService {
     dto: UpdateProblemDto,
   ): Promise<ProblemDetailResponse> {
     const { principal } = auth;
-    const problem = await this.policy.editableProblem(principal, code);
-    const before = problem.toJSON() as unknown as Record<string, unknown>;
+    const original = await this.policy.editableProblem(principal, code);
+    const originalJson = original.toJSON() as unknown as Record<
+      string,
+      unknown
+    >;
     const fields = toFields(dto);
-    this.policy.assertFieldGates(principal, dto, fields, before);
+    this.policy.assertFieldGates(principal, dto, fields, originalJson);
     await this.policy.assertReferences(dto);
-    await this.assertDataDirectoryFree(fields, problem);
-    const isStatementRerendered = rerenderStatements(
+    await this.assertDataDirectoryFree(fields, original);
+    const isStatementRerendered = renderStatementsInto(
       fields,
-      problem,
-      before.translations as Problem['translations'],
+      original,
+      originalJson.translations as Problem['translations'],
     );
-    await withCodeTaken(() => this.repository.update(problem._id, fields));
-    const updated = await this.repository.findById(problem._id);
+    await withCodeTaken(() => this.repository.update(original._id, fields));
+    const updated = await this.repository.findById(original._id);
     if (!updated) throw new AppError('not_found', 404, 'No such problem');
     const changes = fieldDiff(
-      withoutRenderedHtml(before),
+      withoutRenderedHtml(originalJson),
       withoutRenderedHtml(updated.toJSON()),
     );
     if (Object.keys(changes).length)
-      await this.recordEdit(principal, {
-        original: problem,
+      await this.recordRevisionAndEmitEvents(principal, {
+        original,
         updated,
         changes,
         isStatementRerendered,
@@ -186,23 +189,20 @@ export class ProblemEditingService {
   /** A rename must not adopt the leftover test data directory of a deleted problem. */
   private async assertDataDirectoryFree(
     fields: ProblemFields,
-    problem: ProblemDocument,
+    original: ProblemDocument,
   ): Promise<void> {
-    if (
-      fields.code === undefined ||
-      fields.code === problem.code ||
-      !(await this.dataFiles.exists(fields.code))
-    )
-      return;
-    throw new AppError(
-      'validation_failed',
-      400,
-      'Problem data directory is taken',
-      { code: ['A test data directory for this code already exists.'] },
-    );
+    const newCode = fields.code;
+    const isRename = newCode !== undefined && newCode !== original.code;
+    if (isRename && (await this.dataFiles.exists(newCode)))
+      throw new AppError(
+        'validation_failed',
+        400,
+        'Problem data directory is taken',
+        { code: ['A test data directory for this code already exists.'] },
+      );
   }
 
-  private async recordEdit(
+  private async recordRevisionAndEmitEvents(
     principal: Principal,
     edit: ProblemEdit,
   ): Promise<void> {
