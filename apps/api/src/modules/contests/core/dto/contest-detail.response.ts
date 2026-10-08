@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import type { UserDocument } from '@libs/auth';
 import { participationEnd, problemLabel } from '@libs/contests';
 import type { ProblemCell } from '@libs/contests';
+import { unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type {
   Contest,
@@ -76,6 +77,12 @@ export class ContestViewerResponse extends ContestListViewerResponse {
   liveParticipation!: ParticipationSummaryResponse | null;
 }
 
+/** One contest problem's output-prefix override (null: the judge default). */
+export class ContestProblemOutputPrefixResponse {
+  problemId!: string;
+  outputPrefixOverride!: number | null;
+}
+
 /** Editors only. */
 export class ContestSettingsResponse {
   isVisible!: boolean;
@@ -94,8 +101,31 @@ export class ContestSettingsResponse {
   rateExclude!: string[];
   ratingFloor!: number | null;
   ratingCeiling!: number | null;
+  pushAnnouncements!: boolean;
+  /** Whether a ranking access code is set; the code itself is never returned. */
+  hasRankingAccessCode!: boolean;
+  problemOutputPrefixes!: ContestProblemOutputPrefixResponse[];
+  /** The users named by the id lists above, resolved to usernames. */
+  users!: UserSummaryResponse[];
 
-  static from(contest: Contest): ContestSettingsResponse {
+  /** Every user id the settings name, once each. */
+  static userIdsOf(contest: Contest): string[] {
+    return unique(
+      [
+        ...contest.privateContestants,
+        ...contest.curators,
+        ...contest.testers,
+        ...contest.bannedUsers,
+        ...contest.viewContestScoreboard,
+        ...contest.rateExclude,
+      ].map(uuidStr),
+    );
+  }
+
+  static from(
+    contest: Contest,
+    users: readonly UserDocument[],
+  ): ContestSettingsResponse {
     const ids = (values: readonly string[]) => values.map(uuidStr);
     return {
       isVisible: contest.isVisible,
@@ -114,6 +144,15 @@ export class ContestSettingsResponse {
       rateExclude: ids(contest.rateExclude),
       ratingFloor: contest.ratingFloor,
       ratingCeiling: contest.ratingCeiling,
+      pushAnnouncements: contest.pushAnnouncements,
+      hasRankingAccessCode: contest.rankingAccessCodeHash !== null,
+      problemOutputPrefixes: [...contest.problems]
+        .sort((left, right) => left.order - right.order)
+        .map((entry) => ({
+          problemId: uuidStr(entry.problem),
+          outputPrefixOverride: entry.outputPrefixOverride,
+        })),
+      users: users.map((user) => UserSummaryResponse.from(user)),
     };
   }
 }
@@ -189,6 +228,7 @@ export class ContestDetailResponse extends ContestSummaryResponse {
       authors: UserDocument[];
       problems: ContestProblemFacts | null;
       viewer: ContestViewerResponse;
+      settingsUsers: UserDocument[];
     },
   ): ContestDetailResponse {
     return {
@@ -209,7 +249,7 @@ export class ContestDetailResponse extends ContestSummaryResponse {
       problems: extras.problems && labelledProblems(contest, extras.problems),
       viewer: extras.viewer,
       settings: extras.viewer.canEdit
-        ? ContestSettingsResponse.from(contest)
+        ? ContestSettingsResponse.from(contest, extras.settingsUsers)
         : null,
     };
   }

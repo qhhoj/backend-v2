@@ -2,7 +2,9 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { CONTEST_RATING_QUEUE, CONTEST_RESCORE_QUEUE } from '@libs/contests';
 import type { ContestRatingJob, ContestRescoreJob } from '@libs/contests';
+import { sha256 } from '@libs/auth';
 import { newId } from '@libs/database';
+import { profileQueries } from '@libs/database/testing';
 import type { User } from '@libs/database';
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 import type { ContestListItemResponse } from '../src/modules/contests/core/dto/contest-list.response';
@@ -87,6 +89,9 @@ describe('contest CRUD', () => {
       ['tester', {}],
       ['author', {}],
       ['plain', {}],
+      ['dave', {}],
+      ['erin', {}],
+      ['frank', {}],
     ];
     for (const [name, extra] of roles) {
       users[name] = await createUserWith(api, name, extra);
@@ -388,6 +393,85 @@ describe('contest CRUD', () => {
       expect(
         (await detail(contest.key, 'plain')).viewer.liveParticipation,
       ).toMatchObject({ virtual: 0, isRegistered: false });
+    });
+
+    it('reads the settings back to editors only: usernames, flags and output prefixes, never a code', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+        pushAnnouncements: true,
+        rankingAccessCodeHash: sha256('ranking'),
+        curators: [users.tester._id, users.author._id],
+        bannedUsers: [users.plain._id],
+        privateContestants: [users.dave._id],
+        viewContestScoreboard: [users.erin._id],
+        rateExclude: [users.frank._id, users.dave._id],
+        problems: [
+          contestProblem(problems.second._id, 1),
+          contestProblem(problems.open._id, 0, { outputPrefixOverride: 7 }),
+        ],
+      });
+      const editor = await detail(contest.key, 'creator');
+      expect(editor.settings).toMatchObject({
+        pushAnnouncements: true,
+        hasRankingAccessCode: true,
+        curators: [users.tester._id, users.author._id],
+        bannedUsers: [users.plain._id],
+        problemOutputPrefixes: [
+          { problemId: problems.open._id, outputPrefixOverride: 7 },
+          { problemId: problems.second._id, outputPrefixOverride: null },
+        ],
+      });
+      expect(editor.settings!.users).toHaveLength(6);
+      expect(editor.settings!.users).toEqual(
+        expect.arrayContaining([
+          { id: users.tester._id, username: 'tester' },
+          { id: users.author._id, username: 'author' },
+          { id: users.plain._id, username: 'plain' },
+          { id: users.dave._id, username: 'dave' },
+          { id: users.erin._id, username: 'erin' },
+          { id: users.frank._id, username: 'frank' },
+        ]),
+      );
+      expect(JSON.stringify(editor)).not.toContain(sha256('ranking'));
+
+      const plain = await detail(contest.key, 'plain');
+      expect(plain.settings).toBeNull();
+      expect(plain.requiresRankingAccessCode).toBe(true);
+      const [row] = dataOf<ContestListItemResponse[]>(
+        await api.http().get(`${CONTESTS}?search=${contest.key}`).expect(200),
+      ).filter((listed) => listed.key === contest.key);
+      expect(row.requiresRankingAccessCode).toBe(true);
+    });
+
+    it('reads no settings users for a non-editor', async () => {
+      const usersReadsOf = async (key: string) =>
+        (
+          await profileQueries(api.db, () =>
+            authed(api.http().get(contestUrl(key)), sessions.plain).expect(200),
+          )
+        ).filter(({ collection }) => collection === 'users').length;
+      const bare = await createContest(api);
+      const named = await createContest(api, {
+        curators: [users.tester._id, users.author._id],
+        bannedUsers: [users.plain._id],
+      });
+      expect(await usersReadsOf(named.key)).toBe(await usersReadsOf(bare.key));
+    });
+
+    it('answers false for the ranking access code when the contest has none', async () => {
+      const open = await createContest(api, { authors: [users.creator._id] });
+      const editor = await detail(open.key, 'creator');
+      expect(editor.requiresRankingAccessCode).toBe(false);
+      expect(editor.settings).toMatchObject({
+        hasRankingAccessCode: false,
+        pushAnnouncements: false,
+        problemOutputPrefixes: [],
+        users: [],
+      });
+      const [row] = dataOf<ContestListItemResponse[]>(
+        await api.http().get(`${CONTESTS}?search=${open.key}`).expect(200),
+      ).filter((listed) => listed.key === open.key);
+      expect(row.requiresRankingAccessCode).toBe(false);
     });
   });
 

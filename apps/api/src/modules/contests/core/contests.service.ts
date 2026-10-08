@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
+import type { UserDocument } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, escapeRegExp, Paginated } from '@libs/common';
 import { contestPhase, liveStatusOf } from '@libs/contests';
@@ -14,6 +15,7 @@ import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
 import {
   ContestDetailResponse,
+  ContestSettingsResponse,
   ContestViewerResponse,
   ParticipationSummaryResponse,
 } from './dto/contest-detail.response';
@@ -89,8 +91,9 @@ export class ContestsService {
     const contest = await this.visibleContest(principal, key);
     const viewerFacts = await this.viewers.viewerOf(principal, contest, now);
     const viewer = this.viewerResponseOf(principal, contest, viewerFacts, now);
-    const [authors, problems] = await Promise.all([
+    const [authors, settingsUsers, problems] = await Promise.all([
       this.users.findByIds(ContestAccess.accessView(contest).authors),
+      this.settingsUsers(contest, viewer),
       this.isProblemListOpen(contest, viewer, now)
         ? this.problemFacts.factsFor(principal, contest, viewerFacts, now)
         : null,
@@ -100,7 +103,18 @@ export class ContestsService {
       authors,
       problems,
       viewer,
+      settingsUsers,
     });
+  }
+
+  /** The users the settings name, for editors only; nobody else reads them. */
+  private settingsUsers(
+    contest: Contest,
+    viewer: ContestViewerResponse,
+  ): Promise<UserDocument[]> {
+    return viewer.canEdit
+      ? this.users.findByIds(ContestSettingsResponse.userIdsOf(contest))
+      : Promise.resolve([]);
   }
 
   /** Problems show to whoever is in the contest, edits or tests it, and to everyone once it ended. */

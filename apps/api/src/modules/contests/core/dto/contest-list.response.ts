@@ -22,6 +22,8 @@ export class ContestSummaryResponse {
   isOrganizationPrivate!: boolean;
   /** Registering and joining (live or virtual) ask for the access code; editors skip it. */
   requiresAccessCode!: boolean;
+  /** The public ranking links ask for a ranking access code. */
+  requiresRankingAccessCode!: boolean;
   disallowVirtual!: boolean;
   /** Both null: the contest takes no registration. */
   registrationStart!: Date | null;
@@ -44,6 +46,7 @@ export class ContestSummaryResponse {
       isPrivate: contest.isPrivate,
       isOrganizationPrivate: contest.isOrganizationPrivate,
       requiresAccessCode: contest.accessCodeHash !== null,
+      requiresRankingAccessCode: contest.rankingAccessCodeHash !== null,
       disallowVirtual: contest.disallowVirtual,
       registrationStart: contest.registrationStart,
       registrationEnd: contest.registrationEnd,
