@@ -67,6 +67,38 @@ describe('loadEnv', () => {
     expect(roots('/srv/user-data', '/srv/contest-data')).not.toThrow();
   });
 
+  it('reports value problems before data-root problems', () =>
+    expect(() =>
+      loadEnv({
+        ...valid,
+        LOG_LEVEL: 'verbose',
+        MEDIA_ROOT: '/srv/media',
+        CONTEST_DATA_ROOT: '/srv/media/data',
+      }),
+    ).toThrow(
+      'Invalid environment: LOG_LEVEL must be one of fatal|error|warn|info|debug|trace|silent; CONTEST_DATA_ROOT must not be inside MEDIA_ROOT',
+    ));
+  it('reads problems, then value checks, then data-root checks, each alone', () => {
+    const messageFor = (overrides: Record<string, string>) => {
+      try {
+        loadEnv({ ...valid, ...overrides });
+      } catch (error) {
+        return (error as Error).message;
+      }
+    };
+    expect(messageFor({ ENCRYPTION_KEY: 'a'.repeat(63) })).toBe(
+      'Invalid environment: ENCRYPTION_KEY must be 64 hex chars',
+    );
+    expect(messageFor({ TOKEN_SECRET: 'a'.repeat(31) })).toBe(
+      'Invalid environment: TOKEN_SECRET must be at least 32 chars',
+    );
+    expect(messageFor({ TOKEN_SECRET: 'a'.repeat(32) })).toBeUndefined();
+    expect(
+      messageFor({ PORT: '0', ENCRYPTION_KEY: 'zz', LOG_LEVEL: 'x' }),
+    ).toBe(
+      'Invalid environment: PORT must be 1-65535; ENCRYPTION_KEY must be 64 hex chars; LOG_LEVEL must be one of fatal|error|warn|info|debug|trace|silent',
+    );
+  });
   it('no longer reads a MOSS key', () => {
     expect(loadEnv({ ...valid, MOSS_API_KEY: '123456' })).not.toHaveProperty(
       'mossApiKey',
