@@ -122,6 +122,30 @@ describe('profile', () => {
     });
   });
 
+  it('answers a stable issue code for each reference the user cannot set', async () => {
+    const issuesOf = async (body: object) => {
+      const { body: response } = (await (
+        await person()
+      )
+        .patch(body)
+        .expect(400)) as {
+        body: { error: { issues: Array<{ field: string; code: string }> } };
+      };
+      return response.error.issues.map(({ field, code }) => `${field}:${code}`);
+    };
+    const stranger = (await person()).user._id;
+    const outsider = await createOrganization(api, {});
+    expect(await issuesOf({ languageId: stranger })).toEqual([
+      'languageId:unknown_language',
+    ]);
+    expect(await issuesOf({ displayBadgeId: stranger })).toEqual([
+      'displayBadgeId:not_your_badge',
+    ]);
+    expect(await issuesOf({ organizations: [outsider._id] })).toEqual([
+      'organizations:organizations_not_editable',
+    ]);
+  });
+
   it('stores a personal appearance, returns it, replaces it as a whole and clears it with null', async () => {
     const { user, patch, get } = await person();
     expect(

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal, UserDocument } from '@libs/auth';
 import { UsersRepository } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, invalidField } from '@libs/common';
 import {
   canInteract,
   INTERACT_MIN_PROBLEM_COUNT,
@@ -21,8 +21,8 @@ import { renderField } from '../../problems/editing/problem-markup';
 import type { UpdateProfileDto } from './dto/profile.dto';
 import type { ProfileResponse } from './dto/profile.response';
 
-const invalid = (field: string, message: string) =>
-  new AppError('validation_failed', 400, message, { [field]: [message] });
+const invalid = (field: string, message: string, code: string) =>
+  invalidField(field, message, code);
 
 /** Appearance is replaced whole; `null` clears it. Absent means unchanged. */
 const appearanceChange = (
@@ -117,12 +117,16 @@ export class ProfileService {
   /** Throws a 400 for an unknown language or a display badge the user does not hold. */
   private assertReferences(user: UserDocument, dto: UpdateProfileDto): void {
     if (dto.languageId !== undefined && !this.languages.has(dto.languageId))
-      throw invalid('languageId', 'Unknown language.');
+      throw invalid('languageId', 'Unknown language.', 'unknown_language');
     if (
       dto.displayBadgeId &&
       !user.badges.map(uuidStr).includes(dto.displayBadgeId)
     )
-      throw invalid('displayBadgeId', 'Not one of your badges.');
+      throw invalid(
+        'displayBadgeId',
+        'Not one of your badges.',
+        'not_your_badge',
+      );
   }
 
   /** Legacy removed `about` and `first_name` from the form in official contest mode; superusers still edit. */
@@ -143,7 +147,11 @@ export class ProfileService {
     next: string[],
   ): Promise<void> {
     if (next.some((id) => !current.includes(id)))
-      throw invalid('organizations', 'Join organizations from their page.');
+      throw invalid(
+        'organizations',
+        'Join organizations from their page.',
+        'organizations_not_editable',
+      );
     const dropped = current.filter((id) => !next.includes(id));
     const administered = (await this.organizations.findByIds(dropped)).filter(
       (organization) =>
