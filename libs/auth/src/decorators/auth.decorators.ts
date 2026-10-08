@@ -7,7 +7,7 @@ import { FastifyRequest } from 'fastify';
 import { Permission } from '../principal/permissions';
 
 export const PUBLIC_ROUTE = 'auth:public';
-export const PARTIAL_AUTH_ROUTE = 'auth:partial';
+export const BEFORE_TWO_FACTOR_ROUTE = 'auth:before-two-factor';
 export const PWNED_PASSWORD_ROUTE = 'auth:pwned';
 export const SESSION_ONLY_ROUTE = 'auth:session-only';
 export const NO_IMPERSONATION_ROUTE = 'auth:no-impersonation';
@@ -15,8 +15,9 @@ export const REQUIRED_PERMISSION = 'auth:permission';
 
 /** No login required. */
 export const Public = () => SetMetadata(PUBLIC_ROUTE, true);
-/** Reachable before the second factor is verified (2FA endpoints, me, logout). */
-export const AllowPartialAuth = () => SetMetadata(PARTIAL_AUTH_ROUTE, true);
+/** The route serves a session that has not passed its second factor yet (2FA endpoints, me, logout). */
+export const AllowBeforeTwoFactor = () =>
+  SetMetadata(BEFORE_TWO_FACTOR_ROUTE, true);
 /** Reachable while the password is flagged as breached (password change, me, logout). */
 export const AllowPwnedPassword = () => SetMetadata(PWNED_PASSWORD_ROUTE, true);
 /** Management endpoints: API tokens (Bearer) are refused, a browser session is required. */

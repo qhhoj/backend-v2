@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
-  AllowPartialAuth,
+  AllowBeforeTwoFactor,
   AllowPwnedPassword,
   clearSessionCookie,
   CurrentAuth,
@@ -55,14 +55,14 @@ export class AuthController {
     return SessionResponse.from(user, principal, session);
   }
 
-  @AllowPartialAuth()
+  @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Get('me')
   me(@CurrentAuth() auth: AuthContext): SessionResponse {
     return SessionResponse.from(auth.user, auth.principal, auth.session);
   }
 
-  @AllowPartialAuth()
+  @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Post('logout')
   @HttpCode(204)

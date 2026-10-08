@@ -8,8 +8,8 @@ import { Reflector } from '@nestjs/core';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError, ENV, type Env } from '@libs/common';
 import {
+  BEFORE_TWO_FACTOR_ROUTE,
   NO_IMPERSONATION_ROUTE,
-  PARTIAL_AUTH_ROUTE,
   PUBLIC_ROUTE,
   PWNED_PASSWORD_ROUTE,
   REQUIRED_PERMISSION,
@@ -28,6 +28,8 @@ import { AuthContext } from './auth-context';
 
 const isBearerHeader = (header: string) => /^bearer/i.test(header);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** Reads a decorator's value, the handler's overriding the controller's. */
+type RouteMetadata = <Value>(key: string) => Value | undefined;
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -44,12 +46,37 @@ export class AuthGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const routeFlag = <T>(key: string) =>
-      this.reflector.getAllAndOverride<T | undefined>(key, [
+    const http = context.switchToHttp();
+    const request = http.getRequest<FastifyRequest>();
+    this.assertSameOrigin(request);
+    await this.authenticateAndRefreshCookie(
+      request,
+      http.getResponse<FastifyReply>(),
+    );
+    const routeMetadata: RouteMetadata = <Value>(key: string) =>
+      this.reflector.getAllAndOverride<Value | undefined>(key, [
         context.getHandler(),
         context.getClass(),
       ]);
-    const request = context.switchToHttp().getRequest<FastifyRequest>();
+    if (routeMetadata<boolean>(PUBLIC_ROUTE)) return true;
+    const { auth } = request;
+    if (!auth) throw new AppError('unauthorized', 401, 'Login required');
+    if (auth.viaToken && routeMetadata<boolean>(SESSION_ONLY_ROUTE))
+      throw new AppError(
+        'forbidden',
+        403,
+        'This endpoint requires a browser session',
+      );
+    if (auth.session)
+      this.assertSessionAllows(request, auth.session, routeMetadata);
+    const permission = routeMetadata<Permission>(REQUIRED_PERMISSION);
+    if (permission && !hasPermission(auth.principal, permission))
+      throw new AppError('forbidden', 403, 'Permission denied');
+    return true;
+  }
+
+  /** Cookie requests from another origin are refused before anything else, public routes included; bearer clients send no cookies, so CSRF cannot reach them. */
+  private assertSameOrigin(request: FastifyRequest): void {
     const { origin } = request.headers;
     if (
       !SAFE_METHODS.has(request.method) &&
@@ -58,53 +85,51 @@ export class AuthGuard implements CanActivate {
       origin !== this.siteOrigin
     )
       throw new AppError('csrf_failed', 403, 'Cross-origin request rejected');
+  }
+
+  /** Sets `request.auth` before the cookie refresh, so a failed refresh still leaves the request attributed. */
+  private async authenticateAndRefreshCookie(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
     request.auth =
       (await this.fromBearer(request)) ??
       (await this.fromSession(request)) ??
       undefined;
-    await this.refreshCookie(
-      context.switchToHttp().getResponse<FastifyReply>(),
-      request.auth,
-    );
-    if (routeFlag<boolean>(PUBLIC_ROUTE)) return true;
+    await this.refreshCookie(reply, request.auth);
+  }
 
-    const { auth } = request;
-    if (!auth) throw new AppError('unauthorized', 401, 'Login required');
-    if (auth.viaToken && routeFlag<boolean>(SESSION_ONLY_ROUTE))
-      throw new AppError(
-        'forbidden',
-        403,
-        'This endpoint requires a browser session',
-      );
-    const { session } = auth;
+  /** Browser-session rules, in the order users meet them: CSRF token, second factor, breached password, impersonation. */
+  private assertSessionAllows(
+    request: FastifyRequest,
+    session: NonNullable<AuthContext['session']>,
+    routeMetadata: RouteMetadata,
+  ): void {
     if (
-      session &&
       !SAFE_METHODS.has(request.method) &&
       !constantTimeEqual(request.headers['x-csrf-token'], session.csrf)
     )
       throw new AppError('csrf_failed', 403, 'Missing or invalid CSRF token');
     if (
-      session &&
       !session.twoFaPassed &&
-      !routeFlag<boolean>(PARTIAL_AUTH_ROUTE)
+      !routeMetadata<boolean>(BEFORE_TWO_FACTOR_ROUTE)
     )
       throw new AppError(
         'two_factor_required',
         403,
         'Two-factor authentication required',
       );
-    if (session?.passwordPwned && !routeFlag<boolean>(PWNED_PASSWORD_ROUTE))
+    if (session.passwordPwned && !routeMetadata<boolean>(PWNED_PASSWORD_ROUTE))
       throw new AppError(
         'password_change_required',
         403,
         'Your password appeared in a data breach; change it to continue',
       );
-    if (session?.impersonatorId && routeFlag<boolean>(NO_IMPERSONATION_ROUTE))
+    if (
+      session.impersonatorId &&
+      routeMetadata<boolean>(NO_IMPERSONATION_ROUTE)
+    )
       throw new AppError('forbidden', 403, 'Not allowed while impersonating');
-    const permission = routeFlag<Permission>(REQUIRED_PERMISSION);
-    if (permission && !hasPermission(auth.principal, permission))
-      throw new AppError('forbidden', 403, 'Permission denied');
-    return true;
   }
 
   private async refreshCookie(

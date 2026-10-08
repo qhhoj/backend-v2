@@ -7,7 +7,7 @@ import {
   Post,
 } from '@nestjs/common';
 import {
-  AllowPartialAuth,
+  AllowBeforeTwoFactor,
   AllowPwnedPassword,
   CurrentAuth,
   NoImpersonation,
@@ -48,7 +48,7 @@ export class WebauthnController {
   }
 
   @SessionOnly()
-  @AllowPartialAuth()
+  @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Post('login/options')
   loginOptions(
@@ -58,7 +58,7 @@ export class WebauthnController {
   }
 
   @SessionOnly()
-  @AllowPartialAuth()
+  @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Post('login/verify')
   @HttpCode(204)

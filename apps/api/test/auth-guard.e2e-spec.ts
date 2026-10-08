@@ -2,12 +2,13 @@ import { Controller, Get, Post } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import {
-  AllowPartialAuth,
+  AllowBeforeTwoFactor,
   AllowPwnedPassword,
   type AuthContext,
   CurrentAuth,
   generateApiToken,
   GroupsQuerier,
+  NoImpersonation,
   Public,
   RequirePermission,
   SessionOnly,
@@ -39,8 +40,11 @@ class GuardedController {
   @Get('context') context(@CurrentAuth() auth: AuthContext) {
     return { viaToken: auth.viaToken, hasSession: auth.sessionId !== null };
   }
-  @AllowPartialAuth() @AllowPwnedPassword() @Get('partial') partial() {
-    return 'partial';
+  @AllowBeforeTwoFactor()
+  @AllowPwnedPassword()
+  @Get('before-two-factor')
+  beforeTwoFactor() {
+    return 'before two-factor';
   }
   @SessionOnly() @Post('session-only') sessionOnly() {
     return 'managed';
@@ -48,13 +52,29 @@ class GuardedController {
   @RequirePermission('judge.edit_all_problem') @Get('editor') editor() {
     return 'editor';
   }
+  @SessionOnly()
+  @NoImpersonation()
+  @RequirePermission('judge.edit_all_problem')
+  @Get('account-security')
+  accountSecurity() {
+    return 'secured';
+  }
 }
+
+const errorMessage =
+  (message: string) =>
+  ({ body }: { body: { error: { message: string } } }) =>
+    expect(body.error.message).toBe(message);
 
 describe('AuthGuard', () => {
   let api: ApiTest;
   let userId: string;
   const login = async (
-    flags: Partial<{ twoFaPassed: boolean; passwordPwned: boolean }> = {},
+    flags: Partial<{
+      twoFaPassed: boolean;
+      passwordPwned: boolean;
+      impersonatorId: string | null;
+    }> = {},
     id = userId,
   ) =>
     await api.sessions.create({
@@ -70,6 +90,19 @@ describe('AuthGuard', () => {
     userId = (await createUser(api.users, {}))._id;
   });
   afterAll(() => api.teardown());
+  const createSuperuser = async (username: string) =>
+    (
+      await createUser(api.users, {
+        username,
+        email: `${username}@example.com`,
+        isSuperuser: true,
+      })
+    )._id;
+  const useApiToken = async (id = userId) => {
+    const { token, hash } = generateApiToken(id, TEST_ENV.TOKEN_SECRET);
+    await api.users.updateOne({ _id: id }, { apiTokenHash: hash });
+    return `Bearer ${token}`;
+  };
 
   it('lets anyone reach public routes and rejects anonymous private ones', async () => {
     await api.http().get('/guarded/public').expect(200, { data: 'open' });
@@ -118,7 +151,7 @@ describe('AuthGuard', () => {
       .expect(errorCode('two_factor_required'));
     await api
       .http()
-      .get('/guarded/partial')
+      .get('/guarded/before-two-factor')
       .set('Cookie', sessionCookie(pending.id))
       .expect(200);
     const pwned = await login({ passwordPwned: true });
@@ -130,7 +163,7 @@ describe('AuthGuard', () => {
       .expect(errorCode('password_change_required'));
     await api
       .http()
-      .get('/guarded/partial')
+      .get('/guarded/before-two-factor')
       .set('Cookie', sessionCookie(pwned.id))
       .expect(200);
   });
@@ -390,5 +423,142 @@ describe('AuthGuard', () => {
       webauthnChallenge: null,
       webauthnRegistrationChallenge: null,
     });
+  });
+
+  it('reports the first failing check: csrf, then two-factor, then the pwned password', async () => {
+    const both = await login({ twoFaPassed: false, passwordPwned: true });
+    await api
+      .http()
+      .post('/guarded/private')
+      .set('Cookie', sessionCookie(both.id))
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+    await api
+      .http()
+      .get('/guarded/private')
+      .set('Cookie', sessionCookie(both.id))
+      .expect(403)
+      .expect(errorCode('two_factor_required'));
+  });
+  it('asks for a login before checking permissions', async () => {
+    await api
+      .http()
+      .get('/guarded/editor')
+      .expect(401)
+      .expect(errorCode('unauthorized'));
+    await api
+      .http()
+      .post('/guarded/session-only')
+      .expect(401)
+      .expect(errorCode('unauthorized'));
+  });
+  it('applies the session rules before the permission check', async () => {
+    const pending = await login({ twoFaPassed: false });
+    await api
+      .http()
+      .get('/guarded/editor')
+      .set('Cookie', sessionCookie(pending.id))
+      .expect(403)
+      .expect(errorCode('two_factor_required'));
+  });
+  it('skips every session rule on public routes', async () => {
+    const pending = await login({ twoFaPassed: false, passwordPwned: true });
+    await api
+      .http()
+      .get('/guarded/public')
+      .set('Cookie', sessionCookie(pending.id))
+      .expect(200, { data: 'open' });
+    await api
+      .http()
+      .post('/guarded/public-write')
+      .set('Cookie', sessionCookie(pending.id))
+      .expect(201, { data: 'open' });
+  });
+  it('authenticates before deciding a route is public', async () => {
+    await api
+      .http()
+      .get('/guarded/public')
+      .set('Authorization', `Bearer ${'A'.repeat(64)}`)
+      .expect(401)
+      .expect(errorCode('unauthorized'));
+  });
+  it('treats an unknown session cookie as anonymous', async () => {
+    const unknown = sessionCookie('A'.repeat(43));
+    await api.http().get('/guarded/public').set('Cookie', unknown).expect(200);
+    await api
+      .http()
+      .get('/guarded/private')
+      .set('Cookie', unknown)
+      .expect(401)
+      .expect(errorCode('unauthorized'));
+  });
+  it('refuses a cross-origin request before reading the session', async () => {
+    const inactive = await createUser(api.users, {
+      username: 'oscar',
+      email: 'oscar@example.com',
+    });
+    const { id } = await login({}, inactive._id);
+    await api.users.updateOne({ _id: inactive._id }, { isActive: false });
+    await api
+      .http()
+      .post('/guarded/private')
+      .set('Cookie', sessionCookie(id))
+      .set('Origin', 'https://evil.example')
+      .expect(403)
+      .expect(errorCode('csrf_failed'));
+    expect(await api.sessions.get(id)).not.toBeNull();
+  });
+  it('re-issues an old session cookie on public routes too', async () => {
+    const { id } = await login();
+    await api.sessions.update(id, {
+      cookieIssuedAt: Date.now() - 25 * 60 * 60 * 1000,
+    });
+    const refreshed = await api
+      .http()
+      .get('/guarded/public')
+      .set('Cookie', sessionCookie(id))
+      .expect(200);
+    expect(String(refreshed.headers['set-cookie'])).toContain(
+      `qhhoj_session=${id}`,
+    );
+  });
+  it('checks bearer tokens against permissions', async () => {
+    await api
+      .http()
+      .get('/guarded/editor')
+      .set('Authorization', await useApiToken())
+      .expect(403)
+      .expect(errorCode('forbidden'))
+      .expect(errorMessage('Permission denied'));
+  });
+  it('reports the first failing check: session-only, pwned password, impersonation, then permission', async () => {
+    const impersonatorId = await createSuperuser('ivan');
+    const route = () => api.http().get('/guarded/account-security');
+    await route()
+      .set('Authorization', await useApiToken())
+      .expect(403)
+      .expect(errorMessage('This endpoint requires a browser session'));
+    const pwnedImpersonation = await login({
+      passwordPwned: true,
+      impersonatorId,
+    });
+    await route()
+      .set('Cookie', sessionCookie(pwnedImpersonation.id))
+      .expect(403)
+      .expect(errorCode('password_change_required'));
+    const impersonation = await login({ impersonatorId });
+    await route()
+      .set('Cookie', sessionCookie(impersonation.id))
+      .expect(403)
+      .expect(errorCode('forbidden'))
+      .expect(errorMessage('Not allowed while impersonating'));
+    await route()
+      .set('Cookie', sessionCookie((await login()).id))
+      .expect(403)
+      .expect(errorCode('forbidden'))
+      .expect(errorMessage('Permission denied'));
+    await route()
+      .set('Cookie', sessionCookie((await login({}, impersonatorId)).id))
+      .expect(200, { data: 'secured' });
   });
 });

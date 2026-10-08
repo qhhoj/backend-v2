@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import {
-  AllowPartialAuth,
+  AllowBeforeTwoFactor,
   AllowPwnedPassword,
   CurrentAuth,
   NoImpersonation,
@@ -40,7 +40,7 @@ export class TotpController {
   }
 
   @SessionOnly()
-  @AllowPartialAuth()
+  @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Post('verify')
   @HttpCode(204)
