@@ -48,15 +48,18 @@ const PASCAL: SimilarityFamily = {
 /** C is parsed with the C++ grammar so C pasted as C++ (and back) is still found: the two form one family. */
 const C_AND_CPP = syntax('cpp');
 
+const PYTHON = syntax('python');
+const JAVASCRIPT = syntax('javascript');
+
 /** Keyed by lower-cased `Language.commonName` (legacy catalog: C, C++, Pascal, Python, PyPy, Java, Kotlin, PHP, C#, Go, OCaml, JS, ...). Anything absent has no grammar and is skipped and listed in the run summary. */
 const FAMILIES = new Map<string, SimilarityFamily>([
   ['c', C_AND_CPP],
   ['c++', C_AND_CPP],
   ['java', syntax('java')],
-  ['python', syntax('python')],
-  ['pypy', syntax('python')],
-  ['js', syntax('javascript')],
-  ['javascript', syntax('javascript')],
+  ['python', PYTHON],
+  ['pypy', PYTHON],
+  ['js', JAVASCRIPT],
+  ['javascript', JAVASCRIPT],
   ['c#', syntax('c-sharp')],
   ['go', syntax('go')],
   ['rust', syntax('rust')],

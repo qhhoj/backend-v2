@@ -1,12 +1,16 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { tmpdir } from 'node:os';
 import {
   KNAPSACK,
   SIEVE,
   SIEVE_RENAMED,
   lineCount,
 } from '../../../test/similarity-fixtures';
+import { ENGINE_SOURCE } from './similarity-engine.script';
 import { familyOf } from './similarity-languages';
 import { SimilarityEngine, SimilarityEngineError } from './similarity-engine';
-import type { EngineRequest } from './similarity-engine';
+import type { EngineRequest, LineRange } from './similarity-engine';
 
 jest.setTimeout(60_000);
 
@@ -42,13 +46,16 @@ const isRunning = (pid: number): boolean => {
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** Enough files that the child is still busy a second after it started. */
-const slowGroup = (): EngineRequest['submissions'] =>
-  Array.from({ length: 300 }, (_unused, index) => ({
-    id: `sub-${index}`,
-    user: `user-${index}`,
-    source: index % 2 ? SIEVE : SIEVE_RENAMED,
-  }));
+const twoCopies = (): EngineRequest['submissions'] => [
+  { id: 'sub-1', user: 'ann', source: SIEVE },
+  { id: 'sub-2', user: 'bob', source: SIEVE_RENAMED },
+];
+
+/** Same two blocks in opposite order: the matches cannot merge into one fragment. */
+const swappedBlocks = (): EngineRequest['submissions'] => [
+  { id: 'sub-1', user: 'ann', source: SIEVE + KNAPSACK },
+  { id: 'sub-2', user: 'bob', source: KNAPSACK + SIEVE },
+];
 
 describe('SimilarityEngine', () => {
   const engine = new InspectableEngine();
@@ -177,20 +184,59 @@ describe('SimilarityEngine', () => {
   });
 
   it('kills the child at the deadline', async () => {
-    const comparison = engine.compare(request(slowGroup(), { timeoutMs: 500 }));
+    const comparison = engine.compare(request(twoCopies(), { timeoutMs: 1 }));
     const pid = engine.childPid()!;
     await expect(comparison).rejects.toMatchObject({ code: 'deadline' });
     await sleep(300);
     expect(isRunning(pid)).toBe(false);
   });
 
-  it('kills the child on application shutdown, failing the comparison', async () => {
-    const comparison = engine.compare(request(slowGroup()));
+  it('kills the child before application shutdown, failing the comparison', async () => {
+    const comparison = engine.compare(request(twoCopies()));
     const pid = engine.childPid()!;
-    engine.onApplicationShutdown();
+    engine.beforeApplicationShutdown();
     await expect(comparison).rejects.toMatchObject({ code: 'engine_failed' });
     await sleep(300);
     expect(isRunning(pid)).toBe(false);
+  });
+
+  it('child exits when the worker goes away, without waiting for the deadline', async () => {
+    const child = spawn(
+      process.execPath,
+      ['--input-type=module', '-e', ENGINE_SOURCE],
+      { stdio: ['pipe', 'ignore', 'ignore', 'ipc'] },
+    );
+    const exited = once(child, 'exit');
+    // Config only, stdin left open: the child is idle, as it is while the worker waits on it.
+    child.stdin!.write(JSON.stringify({ timeoutMs: 600_000 }) + '\n');
+    await sleep(500);
+    child.disconnect();
+    const exitCode = (await exited)[0] as number | null;
+    expect(exitCode).toBe(1);
+  });
+
+  it('does not depend on the working directory', async () => {
+    const original = process.cwd();
+    process.chdir(tmpdir());
+    try {
+      const pairs = await engine.compare(request(twoCopies()));
+      expect(pairs).toHaveLength(1);
+    } finally {
+      process.chdir(original);
+    }
+  });
+
+  it('keeps at most maxFragments ranges per pair, widest first', async () => {
+    const uncapped = await engine.compare(request(swappedBlocks()));
+    expect(uncapped[0].fragments.length).toBeGreaterThan(1);
+    const [capped] = await engine.compare(
+      request(swappedBlocks(), { maxFragments: 1 }),
+    );
+    expect(capped.fragments).toHaveLength(1);
+    const widest = (range: LineRange) => range.leftEnd - range.leftStart;
+    expect(widest(capped.fragments[0])).toBe(
+      Math.max(...uncapped[0].fragments.map(widest)),
+    );
   });
 
   it('reports engine_failed for a language the library cannot load', async () => {

@@ -1,20 +1,33 @@
 /**
- * Run as `node --input-type=module -e <ENGINE_SOURCE>` from the repo root (`@dodona/dolos-lib` resolves from the working directory's `node_modules`).
- * stdin: NDJSON; the first line is `{language, kgramLength, kgramsInWindow, minSimilarity, maxPairs, maxFragments}`, every other line `{id, user, source}`.
+ * Run as `node --input-type=module -e <ENGINE_SOURCE>` (`dolosEntry` is the library's file URL, resolved by the parent, so the working directory does not matter).
+ * stdin: NDJSON; the first line is `{dolosEntry, timeoutMs, language, kgramLength, kgramsInWindow, minSimilarity, maxPairs, maxFragments}`, every other line `{id, user, source}`.
  * stdout: one JSON line `{pairs}`; each pair has the lower submission id on the left, fragments swapped to match, capped at `maxFragments` (widest first, then in file order) so the output stays small.
  * Only files that share a fingerprint and belong to different users are compared (`getPair`); `allPairs()` would build every N x N pair object.
  */
 export const ENGINE_SOURCE = String.raw`
 import { createInterface } from 'node:readline';
-import { Dolos, File } from '@dodona/dolos-lib';
 
+// The IPC channel only exists to report the parent's death through 'disconnect'; it must not keep the process alive.
+process.channel?.unref();
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 let config = null;
 const submissions = [];
-for await (const line of input) {
-  if (config === null) config = JSON.parse(line);
-  else submissions.push(JSON.parse(line));
+
+// The worker may die without cleaning up (SIGKILL, OOM kill): never outlive it or the deadline.
+function exitWithParentOrDeadline(timeoutMs) {
+  process.on('disconnect', () => process.exit(1));
+  setTimeout(() => process.exit(1), timeoutMs).unref();
 }
+
+for await (const line of input) {
+  if (config !== null) submissions.push(JSON.parse(line));
+  else {
+    config = JSON.parse(line);
+    exitWithParentOrDeadline(config.timeoutMs);
+  }
+}
+
+const { Dolos, File } = await import(config.dolosEntry);
 
 const bySimilarity = (first, second) =>
   second.similarity - first.similarity || second.overlap - first.overlap;
@@ -46,6 +59,7 @@ function bestPairs(report, entries, submissionOf) {
       const pair = report.getPair(entries[left].file, entries[right].file);
       if (pair.similarity < threshold) continue;
       kept.push({ left, right, similarity: pair.similarity, longest: pair.longest, overlap: pair.overlap });
+      // Pruning at twice the limit keeps memory bounded at O(maxPairs) while sorting only once per maxPairs insertions.
       if (kept.length < 2 * config.maxPairs) continue;
       kept.sort(bySimilarity);
       kept.length = config.maxPairs;
@@ -69,18 +83,18 @@ function fragmentsOf(report, leftFile, rightFile, isSwapped) {
     .sort((first, second) => first.leftStart - second.leftStart);
 }
 
-function describe(report, entries, submissionOf, item) {
-  const leftFile = entries[item.left].file;
-  const rightFile = entries[item.right].file;
+function toEnginePair(report, entries, submissionOf, candidate) {
+  const leftFile = entries[candidate.left].file;
+  const rightFile = entries[candidate.right].file;
   const leftId = submissionOf.get(leftFile.id).id;
   const rightId = submissionOf.get(rightFile.id).id;
   const isSwapped = leftId > rightId;
   return {
     leftId: isSwapped ? rightId : leftId,
     rightId: isSwapped ? leftId : rightId,
-    similarity: item.similarity,
-    longest: item.longest,
-    overlap: item.overlap,
+    similarity: candidate.similarity,
+    longest: candidate.longest,
+    overlap: candidate.overlap,
     fragments: fragmentsOf(report, leftFile, rightFile, isSwapped),
   };
 }
@@ -95,7 +109,7 @@ async function compare() {
   }).analyze(files);
   const entries = report.index.entries();
   const submissionOf = new Map(files.map((file, index) => [file.id, submissions[index]]));
-  return bestPairs(report, entries, submissionOf).map((item) => describe(report, entries, submissionOf, item));
+  return bestPairs(report, entries, submissionOf).map((candidate) => toEnginePair(report, entries, submissionOf, candidate));
 }
 
 process.stdout.write(JSON.stringify({ pairs: await compare() }) + '\n');
