@@ -59,6 +59,6 @@ export class OrganizationRequestsController {
     @Param() { slug, id }: OrganizationRequestParamsDto,
     @Body() body: DecideOrganizationRequestDto,
   ): Promise<OrganizationRequestResponse> {
-    return this.requests.decide(auth.principal, slug, id, body);
+    return this.requests.decide(auth.principal, { slug, requestId: id }, body);
   }
 }

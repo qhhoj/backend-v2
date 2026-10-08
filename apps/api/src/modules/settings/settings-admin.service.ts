@@ -54,14 +54,13 @@ export class SettingsAdminService {
     return key as SettingKey;
   }
 
-  private view(key: SettingKey, row: Parameters<typeof SettingResponse.of>[4]) {
+  private view(key: SettingKey, row: Parameters<typeof SettingResponse.of>[3]) {
     const definition = definitionOf(key)!;
     const value = this.settings.get(key);
     return SettingResponse.of(
       key,
       definition,
-      value,
-      redactSetting(definition, value),
+      { value, redacted: redactSetting(definition, value) },
       row,
     );
   }

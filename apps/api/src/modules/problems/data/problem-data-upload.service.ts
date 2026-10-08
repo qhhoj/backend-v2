@@ -74,13 +74,11 @@ export class ProblemDataUploadService {
       );
       await this.dataFiles.commitUpload(problem.code, staged, name);
       await this.removeReplaced(problem.code, previous.archive, name);
-      await this.store.recordChange(
-        auth,
-        problem,
-        previous,
-        stored,
-        'archive uploaded',
-      );
+      await this.store.recordChange(auth, problem, {
+        before: previous,
+        after: stored,
+        comment: 'archive uploaded',
+      });
       return this.store.response(auth.principal, problem, stored, archiveFiles);
     } catch (error) {
       await rm(staged, { force: true });
@@ -117,13 +115,11 @@ export class ProblemDataUploadService {
       );
       await this.dataFiles.commitUpload(problem.code, staged, name);
       await this.removeReplaced(problem.code, previous[kind], name);
-      await this.store.recordChange(
-        auth,
-        problem,
-        previous,
-        stored,
-        `${kind} uploaded`,
-      );
+      await this.store.recordChange(auth, problem, {
+        before: previous,
+        after: stored,
+        comment: `${kind} uploaded`,
+      });
       return this.store.response(auth.principal, problem, stored, archiveFiles);
     } catch (error) {
       await rm(staged, { force: true });

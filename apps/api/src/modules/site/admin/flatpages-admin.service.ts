@@ -81,7 +81,11 @@ export class FlatpagesAdminService {
         registrationRequired: dto.registrationRequired ?? false,
       }),
     );
-    await this.record(principal, page, 'create', {}, page);
+    await this.record(principal, page, {
+      action: 'create',
+      before: {},
+      after: page,
+    });
     return FlatpageAdminResponse.from(page);
   }
 
@@ -98,14 +102,22 @@ export class FlatpagesAdminService {
       changes.contentHtml = renderField(dto.content, PAGE_STYLE, 'content');
     const after = await this.write(() => this.pages.update(id, changes));
     if (!after) throw notFound();
-    await this.record(principal, after, 'edit', before, after);
+    await this.record(principal, after, {
+      action: 'edit',
+      before,
+      after,
+    });
     return FlatpageAdminResponse.from(after);
   }
 
   async delete(principal: Principal, id: string): Promise<void> {
     const page = await this.pages.delete(id);
     if (!page) throw notFound();
-    await this.record(principal, page, 'delete', page, {});
+    await this.record(principal, page, {
+      action: 'delete',
+      before: page,
+      after: {},
+    });
   }
 
   /** The stored form of `raw`, or a 400 on `url`. */
@@ -131,10 +143,13 @@ export class FlatpagesAdminService {
   private async record(
     principal: Principal,
     page: Flatpage,
-    action: 'create' | 'edit' | 'delete',
-    before: Partial<Flatpage>,
-    after: Partial<Flatpage>,
+    change: {
+      action: 'create' | 'edit' | 'delete';
+      before: Partial<Flatpage>;
+      after: Partial<Flatpage>;
+    },
   ): Promise<void> {
+    const { action, before, after } = change;
     const changes = fieldDiff(revisionView(before), revisionView(after));
     if (action === 'edit' && !Object.keys(changes).length) return;
     await this.revisions.append({

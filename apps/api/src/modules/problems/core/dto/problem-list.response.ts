@@ -28,11 +28,14 @@ export class ProblemListItemResponse {
 
   static from(
     problem: ProblemDocument,
-    lang: StatementLanguage,
-    types: ProblemTypesQuerier,
-    groups: ProblemGroupsQuerier,
+    catalog: {
+      lang: StatementLanguage;
+      types: ProblemTypesQuerier;
+      groups: ProblemGroupsQuerier;
+    },
     viewerStatus: ViewerStatus,
   ): ProblemListItemResponse {
+    const { lang, types, groups } = catalog;
     const group = groups.byId(uuidStr(problem.groupId));
     return {
       id: problem._id,

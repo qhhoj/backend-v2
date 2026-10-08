@@ -15,10 +15,13 @@ export class EditorialResponse {
   static from(
     problem: ProblemDocument,
     solution: ProblemSolution,
-    lang: StatementLanguage,
-    authors: UserSummaryResponse[],
-    canEdit: boolean,
+    view: {
+      lang: StatementLanguage;
+      authors: UserSummaryResponse[];
+      canEdit: boolean;
+    },
   ): EditorialResponse {
+    const { lang, authors, canEdit } = view;
     return {
       problem: { code: problem.code, name: statementFor(problem, lang).name },
       isPublic: solution.isPublic,

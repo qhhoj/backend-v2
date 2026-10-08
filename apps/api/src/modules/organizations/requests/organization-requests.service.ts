@@ -137,11 +137,11 @@ export class OrganizationRequestsService {
   /** Legacy approval formset, one request at a time. A rejection is a compare-and-set; an approval runs under the organization's lock. */
   async decide(
     principal: Principal,
-    slug: string,
-    id: string,
+    target: { slug: string; requestId: string },
     { state }: DecideOrganizationRequestDto,
     now = new Date(),
   ): Promise<OrganizationRequestResponse> {
+    const { slug, requestId: id } = target;
     const organization = await this.organizationsService.administered(
       principal,
       slug,

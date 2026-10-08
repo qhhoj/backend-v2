@@ -18,16 +18,15 @@ export class SettingResponse {
   static of(
     key: string,
     definition: SettingDefinition<unknown>,
-    value: unknown,
-    redacted: unknown,
+    shown: { value: unknown; redacted: unknown },
     row: { updatedAt: Date; updatedBy: string | null } | undefined,
   ): SettingResponse {
     return {
       key,
       description: definition.description,
       hasSecret: definition.secret !== false,
-      value: redacted,
-      isDefault: sameJson(value, definition.default),
+      value: shown.redacted,
+      isDefault: sameJson(shown.value, definition.default),
       updatedAt: row?.updatedAt ?? null,
       updatedBy: row?.updatedBy ?? null,
     };

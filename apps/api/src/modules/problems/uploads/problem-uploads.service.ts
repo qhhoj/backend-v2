@@ -86,13 +86,11 @@ export class ProblemUploadsService {
       STATEMENT_MAX_BYTES,
     );
     if (!isPdf(content)) throw rejectFile('The statement must be a PDF file.');
-    const url = await this.replaceFile(
-      auth,
-      problem,
-      'pdfStatementUrl',
-      `pdf/${newId()}.pdf`,
+    const url = await this.replaceFile(auth, problem, {
+      field: 'pdfStatementUrl',
+      relativePath: `pdf/${newId()}.pdf`,
       content,
-    );
+    });
     return { url };
   }
 
@@ -110,13 +108,11 @@ export class ProblemUploadsService {
     const name = safeFileName(filename);
     if (!MATERIAL_EXTENSIONS.has(extensionOf(name)))
       throw rejectFile('This file type is not allowed as problem material.');
-    const url = await this.replaceFile(
-      auth,
-      problem,
-      'materialUrl',
-      `materials/${problem._id}/${name}`,
+    const url = await this.replaceFile(auth, problem, {
+      field: 'materialUrl',
+      relativePath: `materials/${problem._id}/${name}`,
       content,
-    );
+    });
     this.events.emit('statementChanged', problem._id);
     return { url };
   }
@@ -139,13 +135,20 @@ export class ProblemUploadsService {
   private async replaceFile(
     auth: AuthContext,
     problem: ProblemDocument,
-    field: 'pdfStatementUrl' | 'materialUrl',
-    relativePath: string,
-    content: Buffer,
+    upload: {
+      field: 'pdfStatementUrl' | 'materialUrl';
+      relativePath: string;
+      content: Buffer;
+    },
   ): Promise<string> {
+    const { field, relativePath, content } = upload;
     const url = await this.storage.save(relativePath, content);
     try {
-      await this.recordUpload(auth, problem._id, field, problem[field], url);
+      await this.recordUpload(auth, problem._id, {
+        field,
+        before: problem[field],
+        after: url,
+      });
     } catch (error) {
       await this.storage.delete(relativePath);
       throw error;
@@ -172,17 +175,20 @@ export class ProblemUploadsService {
   private async recordUpload(
     auth: AuthContext,
     problemId: string,
-    field: 'pdfStatementUrl' | 'materialUrl',
-    before: string | null,
-    url: string,
+    change: {
+      field: 'pdfStatementUrl' | 'materialUrl';
+      before: string | null;
+      after: string;
+    },
   ): Promise<void> {
-    await this.repository.update(problemId, { [field]: url });
+    const { field, before, after } = change;
+    await this.repository.update(problemId, { [field]: after });
     await this.revisions.append({
       entity: 'problem',
       entityId: problemId,
       action: 'upload',
       userId: auth.principal.userId,
-      changes: { [field]: { before, after: url } },
+      changes: { [field]: { before, after } },
       comment: `${field} uploaded`,
     });
   }

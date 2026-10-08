@@ -32,10 +32,9 @@ export class ProblemDataStore {
   async recordChange(
     auth: AuthContext,
     problem: ProblemDocument,
-    before: ProblemData,
-    after: ProblemData,
-    comment: string,
+    change: { before: ProblemData; after: ProblemData; comment: string },
   ): Promise<void> {
+    const { before, after, comment } = change;
     const changes = dataChanges(before, after);
     if (Object.keys(changes).length)
       await this.revisions.append({

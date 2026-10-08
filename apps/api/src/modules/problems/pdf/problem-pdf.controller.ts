@@ -65,10 +65,8 @@ export class ProblemPdfController {
   ): Promise<FastifyReply> {
     const location = await this.pdfs.locate(
       optionalPrincipal(auth),
-      request.ip,
-      code,
-      lang,
-      request.method !== 'HEAD',
+      { code, requestedLang: lang, ip: request.ip },
+      { shouldEnqueue: request.method !== 'HEAD' },
     );
     if (location.status === 'rendering')
       return reply

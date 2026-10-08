@@ -61,13 +61,11 @@ export class TicketCreationService {
       fromContest && current
         ? current.contest.authors.map(uuidStr)
         : view.authors;
-    return this.file(
-      principal,
-      dto,
-      { type: 'problem', id: view.id },
+    return this.file(principal, dto, {
+      link: { type: 'problem', id: view.id },
       assignees,
-      this.discord.link(problemPath(code)),
-    );
+      where: this.discord.link(problemPath(code)),
+    });
   }
 
   async general(
@@ -75,22 +73,19 @@ export class TicketCreationService {
     dto: NewGeneralTicketDto,
   ): Promise<TicketDetailResponse> {
     await this.gate.assertCanWrite(principal);
-    return this.file(
-      principal,
-      dto,
-      { type: 'general', issueUrl: dto.issueUrl },
-      [],
-      dto.issueUrl,
-    );
+    return this.file(principal, dto, {
+      link: { type: 'general', issueUrl: dto.issueUrl },
+      assignees: [],
+      where: dto.issueUrl,
+    });
   }
 
   private async file(
     principal: Principal,
     dto: NewTicketDto,
-    link: TicketLink,
-    assignees: string[],
-    where: string,
+    target: { link: TicketLink; assignees: string[]; where: string },
   ): Promise<TicketDetailResponse> {
+    const { link, assignees, where } = target;
     const bodyHtml = renderField(dto.body, 'user', 'body');
     const releaseHit = await this.rateLimits.reserve(
       [`ticket:${principal.userId}`],

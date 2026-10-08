@@ -53,13 +53,11 @@ export class ProblemDataService {
       },
       version,
     );
-    await this.store.recordChange(
-      auth,
-      problem,
-      previous,
-      stored,
-      'Data edited from site',
-    );
+    await this.store.recordChange(auth, problem, {
+      before: previous,
+      after: stored,
+      comment: 'Data edited from site',
+    });
     return this.store.response(auth.principal, problem, stored, archiveFiles);
   }
 
@@ -86,13 +84,11 @@ export class ProblemDataService {
     );
     const name = previous[kind];
     if (name) await this.dataFiles.removeFile(problem.code, name);
-    await this.store.recordChange(
-      auth,
-      problem,
-      previous,
-      stored,
-      `${kind} removed`,
-    );
+    await this.store.recordChange(auth, problem, {
+      before: previous,
+      after: stored,
+      comment: `${kind} removed`,
+    });
     return this.store.response(auth.principal, problem, stored, archiveFiles);
   }
 

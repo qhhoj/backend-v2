@@ -36,15 +36,14 @@ export class ProblemPdfService {
   /**
    * Cached file, or a render job (one per problem and language). A completed job is removed so a later request can enqueue again; a failed one is kept for `PDF_FAIL_WINDOW_SECONDS`, answering 503 with Retry-After instead of an endless 202. A statement change or rename removes it earlier (`ProblemDataLifecycleService`).
    * A pending or active job is answered for free; only a new enqueue spends the ip budget.
-   * `enqueue: false` (HEAD) only peeks at the cache: no job, no rate-limit budget.
+   * `shouldEnqueue: false` (HEAD) only peeks at the cache: no job, no rate-limit budget.
    */
   async locate(
     principal: Principal | null,
-    ip: string,
-    code: string,
-    requestedLang: StatementLanguage,
-    enqueue: boolean,
+    pdf: { code: string; requestedLang: StatementLanguage; ip: string },
+    { shouldEnqueue }: { shouldEnqueue: boolean },
   ): Promise<PdfLocation> {
+    const { code, requestedLang, ip } = pdf;
     const problem = await this.problems.visibleProblem(principal, code);
     const { language } = statementFor(problem, requestedLang);
     const file = await this.pdfCache.open(problem.code, language);
@@ -54,7 +53,7 @@ export class ProblemPdfService {
         file,
         filename: `${problem.code}.${language}.pdf`,
       };
-    if (enqueue) await this.enqueueRender(ip, problem.code, language);
+    if (shouldEnqueue) await this.enqueueRender(ip, problem.code, language);
     return { status: 'rendering' };
   }
 

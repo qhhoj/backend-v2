@@ -93,13 +93,16 @@ export class ProblemsService {
       principal,
       items.map((problem) => problem._id),
     );
+    const catalog = {
+      lang: query.lang,
+      types: this.types,
+      groups: this.groups,
+    };
     return new Paginated(
       items.map((problem) =>
         ProblemListItemResponse.from(
           problem,
-          query.lang,
-          this.types,
-          this.groups,
+          catalog,
           statuses.get(problem._id) ?? null,
         ),
       ),
@@ -181,7 +184,11 @@ export class ProblemsService {
     const authors = (
       await this.users.findByIds(solution.authors.map(uuidStr))
     ).map((user) => UserSummaryResponse.from(user));
-    return EditorialResponse.from(problem, solution, lang, authors, canEdit);
+    return EditorialResponse.from(problem, solution, {
+      lang,
+      authors,
+      canEdit,
+    });
   }
 
   /** 404 for malformed, unknown and invisible codes alike, so existence never leaks. */
