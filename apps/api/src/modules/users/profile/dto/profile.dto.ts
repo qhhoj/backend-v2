@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { ABOUT_MAX_LENGTH } from '@libs/community';
@@ -47,7 +48,8 @@ export const ACE_THEMES = [
   'vibrant_ink',
   'xcode',
 ] as const;
-export const SITE_THEMES = ['auto', 'light', 'dark'] as const;
+/** Theme ids are owned by the SPA's registry (unknown ids fall back to the OS scheme), so the API checks the shape only. */
+export const SITE_THEME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 export const MATH_ENGINES = ['tex', 'svg', 'mml', 'jax', 'auto'] as const;
 /** Legacy `user_script` max_length. */
 export const USER_SCRIPT_MAX_LENGTH = 65_536;
@@ -66,7 +68,7 @@ export class UpdateProfileDto {
   @IsOptional() @IsTimeZone() timezone?: string;
   @IsOptional() @IsUUID('7') languageId?: string;
   @IsOptional() @IsIn(ACE_THEMES) aceTheme?: string;
-  @IsOptional() @IsIn(SITE_THEMES) siteTheme?: string;
+  @IsOptional() @Matches(SITE_THEME_PATTERN) siteTheme?: string;
   @IsOptional() @IsIn(MATH_ENGINES) mathEngine?: string;
   @IsOptional()
   @IsString()

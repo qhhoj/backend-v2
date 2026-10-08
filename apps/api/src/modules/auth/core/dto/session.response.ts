@@ -1,4 +1,13 @@
+import { uuidStr } from '@libs/database';
 import { Principal, SessionData, UserDocument } from '@libs/auth';
+
+export type SecondFactorMethod = 'totp' | 'webauthn';
+
+/** All a password-only session may learn: enough to draw the second-factor page. */
+export class TwoFactorPendingResponse {
+  username!: string;
+  methods!: SecondFactorMethod[];
+}
 
 export class UserResponse {
   id!: string;
@@ -9,6 +18,8 @@ export class UserResponse {
   permissions!: string[];
   isTotpEnabled!: boolean;
   isWebauthnEnabled!: boolean;
+  siteTheme!: string;
+  languageId!: string | null;
 
   static from(user: UserDocument, principal: Principal): UserResponse {
     return {
@@ -20,6 +31,8 @@ export class UserResponse {
       permissions: [...principal.permissions].sort(),
       isTotpEnabled: user.isTotpEnabled,
       isWebauthnEnabled: user.isWebauthnEnabled,
+      siteTheme: user.siteTheme,
+      languageId: user.languageId === null ? null : uuidStr(user.languageId),
     };
   }
 }
@@ -28,6 +41,7 @@ export class SessionResponse {
   user!: UserResponse | null;
   csrfToken!: string | null;
   twoFactorRequired!: boolean;
+  twoFactor!: TwoFactorPendingResponse | null;
   passwordChangeRequired!: boolean;
   impersonatorId!: string | null;
 
@@ -41,6 +55,17 @@ export class SessionResponse {
       user: twoFactorRequired ? null : UserResponse.from(user, principal),
       csrfToken: session?.csrf ?? null,
       twoFactorRequired,
+      twoFactor: twoFactorRequired
+        ? {
+            username: user.username,
+            methods: [
+              user.isTotpEnabled && 'totp',
+              user.isWebauthnEnabled && 'webauthn',
+            ].filter(
+              (method): method is SecondFactorMethod => method !== false,
+            ),
+          }
+        : null,
       passwordChangeRequired: session?.passwordPwned ?? false,
       impersonatorId: session?.impersonatorId ?? null,
     };

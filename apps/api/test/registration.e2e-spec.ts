@@ -55,6 +55,9 @@ describe('registration', () => {
       .expect(403)
       .expect(errorCode('account_not_activated'));
     await activate(key).expect(204);
+    expect((await api.users.findOne({ username: 'newbie' }))!.siteTheme).toBe(
+      'auto',
+    );
     await activate(key).expect(400).expect(errorCode('invalid_token'));
     await api
       .http()

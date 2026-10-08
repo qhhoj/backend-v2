@@ -46,7 +46,7 @@ export class User {
   @Prop({ default: 0 }) vnojPoints!: number;
   @Prop({ default: 0 }) problemCount!: number;
   @Prop({ default: 'auto' }) aceTheme!: string;
-  @Prop({ default: 'light' }) siteTheme!: string;
+  @Prop({ default: 'auto' }) siteTheme!: string;
   @Prop({ type: Date, default: null }) lastAccess!: Date | null;
   @Prop({ type: String, default: null }) ip!: string | null;
   @Prop({ type: [UUID], default: [] }) badges!: string[];

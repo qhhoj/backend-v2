@@ -77,6 +77,10 @@ describe('profile', () => {
     await patch({ timezone: 'Mars/Base' }).expect(400);
     await patch({ languageId: badge }).expect(400);
     await patch({ aceTheme: 'neon' }).expect(400);
+    for (const siteTheme of ['glass', 'auto'])
+      await patch({ siteTheme }).expect(200);
+    for (const siteTheme of ['Dark', '1x', 'a b', 'a'.repeat(33), ''])
+      await patch({ siteTheme }).expect(400);
     await patch({ displayBadgeId: (await person()).user._id }).expect(400);
     const profile = dataOf<ProfileResponse>(
       await patch({

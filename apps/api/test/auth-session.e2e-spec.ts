@@ -1,5 +1,6 @@
 import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
 import { REDIS } from '@libs/common';
+import { newId } from '@libs/database';
 import Redis from 'ioredis';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
@@ -12,11 +13,17 @@ const ME = '/api/internal/auth/me';
 const cookieFrom = (headers: Record<string, unknown>) =>
   String((headers['set-cookie'] as string[])[0]).split(';')[0];
 
+const defaultLanguageId = newId();
+
 describe('auth session endpoints', () => {
   let api: ApiTest;
   beforeAll(async () => {
     api = await setupApiTest();
-    await createUser(api.users, { username: 'Alice' });
+    await createUser(api.users, {
+      username: 'Alice',
+      siteTheme: 'glass',
+      languageId: defaultLanguageId,
+    });
     await createUser(api.users, {
       username: 'carol',
       email: 'carol@example.com',
@@ -67,6 +74,56 @@ describe('auth session endpoints', () => {
         expect(sessionOf({ body }).user?.username).toBe('Alice'),
       );
   });
+  it('carries the theme and the default language on the session user', async () => {
+    const response = await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'Alice', password: 'correct horse battery' })
+      .expect(200);
+    expect(sessionOf(response).user).toMatchObject({
+      siteTheme: 'glass',
+      languageId: defaultLanguageId,
+    });
+    expect(sessionOf(response).twoFactor).toBeNull();
+  });
+
+  it('shows the pending second factors and the username, and still no user, on a partial session', async () => {
+    const login = await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'tina', password: 'correct horse battery' })
+      .expect(200);
+    const me = await api
+      .http()
+      .get(ME)
+      .set('Cookie', cookieFrom(login.headers))
+      .expect(200);
+    expect(sessionOf(me)).toMatchObject({
+      user: null,
+      twoFactorRequired: true,
+      twoFactor: { username: 'tina', methods: ['totp'] },
+    });
+    expect(Object.keys(sessionOf(me).twoFactor!).sort()).toEqual([
+      'methods',
+      'username',
+    ]);
+  });
+
+  it('lists both methods when both are enabled', async () => {
+    await createUser(api.users, {
+      username: 'both',
+      email: 'both@example.com',
+      isTotpEnabled: true,
+      isWebauthnEnabled: true,
+    });
+    const login = await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'both', password: 'correct horse battery' })
+      .expect(200);
+    expect(sessionOf(login).twoFactor?.methods).toEqual(['totp', 'webauthn']);
+  });
+
   it('upgrades weak password hashes on login', async () => {
     await createUser(api.users, { username: 'bob', email: 'bob@example.com' });
     const before = (await api.users.findOne({ username: 'bob' }))!.password;

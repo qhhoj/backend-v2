@@ -34,7 +34,7 @@ describe('user schema', () => {
       timezone: 'America/Toronto',
       allowTagging: true,
       aceTheme: 'auto',
-      siteTheme: 'light',
+      siteTheme: 'auto',
       displayRank: 'user',
       mathEngine: 'auto',
       points: 0,
