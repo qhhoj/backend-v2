@@ -221,7 +221,7 @@ describe('impersonation', () => {
     }
   });
 
-  it('refuses every account-security route while impersonating', async () => {
+  it('refuses every account-security and personal-data route while impersonating', async () => {
     const alice = await impersonate(aliceId);
     const routes = [
       ['post', `${AUTH}/2fa/totp/enroll`],
@@ -234,6 +234,8 @@ describe('impersonation', () => {
       ['delete', `${AUTH}/2fa/webauthn/credentials/abc`],
       ['post', `${AUTH}/token/regenerate`],
       ['post', `${AUTH}/password/change`],
+      ['post', '/api/internal/profile/data'],
+      ['get', '/api/internal/profile/data/download'],
     ] as const;
     for (const [method, path] of routes)
       await api
@@ -250,6 +252,13 @@ describe('impersonation', () => {
       .set('Cookie', alice.cookie)
       .expect(403)
       .expect(errorCode('forbidden'));
+    await api
+      .http()
+      .patch('/api/internal/profile')
+      .set('Cookie', alice.cookie)
+      .set('X-CSRF-Token', alice.csrf)
+      .send({})
+      .expect(200);
     await post(`${AUTH}/2fa/totp/enroll`, await login('bob'), {
       currentPassword: 'correct horse battery',
     }).expect(201);

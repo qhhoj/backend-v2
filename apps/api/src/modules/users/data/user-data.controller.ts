@@ -1,7 +1,7 @@
 import type { ReadStream } from 'node:fs';
 import { Controller, Get, HttpCode, Post, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
-import { CurrentAuth } from '@libs/auth';
+import { CurrentAuth, NoImpersonation } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RawResponse } from '@libs/common';
 import type { QueuedResponse } from '../../contests/core/dto/queued.response';
@@ -20,12 +20,14 @@ export class UserDataController {
 
   @Post()
   @HttpCode(202)
+  @NoImpersonation()
   prepare(@CurrentAuth() auth: AuthContext): Promise<QueuedResponse> {
     return this.data.prepare(auth.principal);
   }
 
   /** Always an attachment with `nosniff`; the username is not trusted to be ASCII. */
   @RawResponse()
+  @NoImpersonation()
   @Get('download')
   async download(
     @CurrentAuth() auth: AuthContext,
