@@ -20,7 +20,10 @@ import type { ActivityRow } from './activity-row';
 
 /** Error name and code only: driver messages can echo stored values. */
 const describe = (error: unknown): string => {
-  const { name, code } = error as { name?: string; code?: string | number };
+  const { name, code } = (error ?? {}) as {
+    name?: string;
+    code?: string | number;
+  };
   return `${name ?? 'Error'}${code === undefined ? '' : ` (${code})`}`;
 };
 

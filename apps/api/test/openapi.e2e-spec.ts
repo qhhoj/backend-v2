@@ -402,6 +402,20 @@ describe('OpenAPI document', () => {
       expect(form.properties!.file.format).toBe('binary');
     });
 
+    it('documents registrationRequired on the public flatpage', async () => {
+      const doc = await document();
+      const data = bodyOf(doc, '/api/internal/pages/{path}')!.properties!.data;
+      const name = data.$ref!.split('/').pop()!;
+      expect(Object.keys(doc.components.schemas[name].properties!)).toEqual(
+        expect.arrayContaining([
+          'url',
+          'title',
+          'contentHtml',
+          'registrationRequired',
+        ]),
+      );
+    });
+
     it('documents the PDF outcomes: file, rendering with the envelope, and the error envelope', async () => {
       const doc = await document();
       const { responses } = doc.paths['/api/internal/problems/{code}/pdf'].get;

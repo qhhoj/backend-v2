@@ -38,6 +38,7 @@ describe('site content', () => {
           url: '/about',
           title: 'About',
           contentHtml: '<p>About us</p>',
+          registrationRequired: false,
         },
       );
       expect(
@@ -54,6 +55,11 @@ describe('site content', () => {
         .expect(errorCode('unauthorized'));
       expect(JSON.stringify(response.body)).not.toContain('Members only');
       const { session } = await signedIn(api, 'reader');
+      expect(
+        dataOf<FlatpageResponse>(
+          await authed(page('members'), session).expect(200),
+        ).registrationRequired,
+      ).toBe(true);
       expect(
         dataOf<FlatpageResponse>(
           await authed(page('members'), session).expect(200),

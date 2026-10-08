@@ -28,6 +28,7 @@ describe('isSafeNavigationPath', () => {
     ['javascript:alert(1)', false],
     ['data:text/html,x', false],
     ['//evil.example', false],
+    ['/\\evil.example', false],
     ['problems', false],
     ['', false],
     ['/a b', false],

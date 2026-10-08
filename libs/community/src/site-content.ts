@@ -11,9 +11,9 @@ export function isValidNavigationRegex(source: string): boolean {
   }
 }
 
-const NAVIGATION_PATH = /^(\/(?!\/)|https?:\/\/)\S*$/;
+const NAVIGATION_PATH = /^(\/(?![/\\])|https?:\/\/)\S*$/;
 
-/** A site path (one `/`, not protocol-relative) or an http(s) URL, without whitespace: never `javascript:` or `data:`. */
+/** A site path (one `/`, not protocol-relative; `/\` counts, browsers read `\` as `/`) or an http(s) URL, without whitespace: never `javascript:` or `data:`. */
 export const isSafeNavigationPath = (path: string): boolean =>
   NAVIGATION_PATH.test(path);
 

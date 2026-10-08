@@ -23,8 +23,8 @@ import {
 } from './dto/flatpage-admin.response';
 
 const PAGE_SIZE = 50;
-/** Legacy flatpage url charset: nothing that needs escaping in a path. */
-const URL_CHARSET = /^[-\w/.~]+$/;
+/** Legacy flatpage url charset (Django `[-\w/.~]` with Unicode `\w`): nothing that needs escaping in a path. */
+const URL_CHARSET = /^[-\p{L}\p{N}_/.~]+$/u;
 /** Staff write the page, but it is public: the `blog` style (sanitised: no foreign iframes, fixed overlays or ids). */
 const PAGE_STYLE = 'blog';
 const notFound = () => new AppError('not_found', 404, 'No such page');

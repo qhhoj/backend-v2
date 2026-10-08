@@ -283,6 +283,17 @@ describe('site content administration', () => {
       expect(await api.flatpages.countDocuments({ url: '/dup' })).toBe(1);
     });
 
+    it('accepts a Unicode slug such as a Vietnamese one', async () => {
+      const created = dataOf<FlatpageAdminResponse>(
+        await create({
+          url: '/giới-thiệu',
+          title: 'Giới thiệu',
+          content: 'x',
+        }).expect(201),
+      );
+      expect(created.url).toBe('/giới-thiệu');
+    });
+
     it.each([
       ['a parent segment', '../x'],
       ['only slashes', '///'],

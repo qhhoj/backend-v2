@@ -19,6 +19,11 @@ export class FlatpagesService {
     if (!page) throw new AppError('not_found', 404, 'No such page');
     if (page.registrationRequired && !principal)
       throw new AppError('unauthorized', 401, 'Sign in to read this page');
-    return { url: page.url, title: page.title, contentHtml: page.contentHtml };
+    return {
+      url: page.url,
+      title: page.title,
+      contentHtml: page.contentHtml,
+      registrationRequired: page.registrationRequired,
+    };
   }
 }
