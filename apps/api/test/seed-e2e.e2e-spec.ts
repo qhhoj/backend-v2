@@ -1,0 +1,142 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { verifyPassword } from '@libs/auth';
+import { encryptionKey } from '@libs/common';
+import { TEST_ENV } from '@libs/common/testing';
+import {
+  Language,
+  LanguageSchema,
+  Problem,
+  ProblemSchema,
+  Setting,
+  SettingSchema,
+  User,
+  UserSchema,
+  uuidStr,
+} from '@libs/database';
+import { startMongo } from '@libs/database/testing';
+import { readSetting, SETTINGS, sealSetting } from '@libs/settings';
+import { createConnection } from 'mongoose';
+import type { Connection } from 'mongoose';
+import type { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { assertSeedAllowed, seedE2e } from '../src/seed/seed-e2e';
+
+describe('seed:e2e', () => {
+  let replSet: MongoMemoryReplSet;
+  let connection: Connection;
+  let root: string;
+  const key = encryptionKey(TEST_ENV.ENCRYPTION_KEY);
+  const options = () => ({
+    problemDataRoot: root,
+    adminPassword: 'admin-pass-123',
+    userPassword: 'user-pass-123',
+    encryptionKey: key,
+  });
+  const mailRow = () =>
+    connection
+      .model<Setting>(Setting.name, SettingSchema)
+      .findById('mail.smtpUrl')
+      .lean();
+
+  beforeAll(async () => {
+    replSet = await startMongo();
+    connection = await createConnection(replSet.getUri('seed')).asPromise();
+    root = mkdtempSync(join(tmpdir(), 'qhhoj-seed-'));
+  });
+  afterAll(async () => {
+    await connection.close();
+    await replSet.stop();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('refuses outside test and development', () => {
+    for (const bad of [undefined, '', 'production', 'staging', 'Test'])
+      expect(() => assertSeedAllowed(bad)).toThrow(/NODE_ENV/);
+    expect(() => assertSeedAllowed('test')).not.toThrow();
+    expect(() => assertSeedAllowed('development')).not.toThrow();
+  });
+
+  it('creates an admin, a user and a judge-ready problem, and a second run changes nothing', async () => {
+    const first = await seedE2e(connection, options());
+    expect(first).toEqual({
+      admin: 'e2e_admin',
+      user: 'e2e_user',
+      problem: 'e2e_sum',
+      language: 'PY3',
+    });
+    const users = connection.model(User.name, UserSchema);
+    const admin = await users.findOne({ username: 'e2e_admin' });
+    expect(admin).toMatchObject({
+      isSuperuser: true,
+      isStaff: true,
+      isActive: true,
+    });
+    expect(await verifyPassword('admin-pass-123', admin!.password)).toBe(true);
+    expect(
+      await verifyPassword(
+        'user-pass-123',
+        (await users.findOne({ username: 'e2e_user' }))!.password,
+      ),
+    ).toBe(true);
+    const problem = await connection
+      .model(Problem.name, ProblemSchema)
+      .findOne({ code: 'e2e_sum' })
+      .select('+data');
+    expect(problem).toMatchObject({ isPublic: true, points: 1000 });
+    expect(problem!.data!.cases).toHaveLength(1);
+    const language = await connection
+      .model(Language.name, LanguageSchema)
+      .findOne({ key: 'PY3' });
+    expect(problem!.allowedLanguages.map(uuidStr)).toEqual([
+      uuidStr(language!._id),
+    ]);
+    for (const file of ['1.in', '1.out', 'init.yml'])
+      expect(existsSync(join(root, 'e2e_sum', file))).toBe(true);
+    expect(readFileSync(join(root, 'e2e_sum', 'init.yml'), 'utf8')).toContain(
+      '1.in',
+    );
+
+    const row = await mailRow();
+    expect(row).not.toBeNull();
+    expect(JSON.stringify(row!.value)).not.toContain('smtp://');
+    expect(
+      readSetting('mail.smtpUrl', SETTINGS['mail.smtpUrl'], row!.value, key),
+    ).toBe('smtp://localhost:1025');
+
+    await users.updateOne(
+      { username: 'e2e_user' },
+      { password: 'changed-by-test' },
+    );
+    await seedE2e(connection, {
+      ...options(),
+      userPassword: 'another-one-123',
+    });
+    expect(await users.countDocuments({ username: /^e2e_/ })).toBe(2);
+    expect(
+      await connection
+        .model(Problem.name, ProblemSchema)
+        .countDocuments({ code: 'e2e_sum' }),
+    ).toBe(1);
+    expect((await users.findOne({ username: 'e2e_user' }))!.password).toBe(
+      'changed-by-test',
+    );
+  });
+
+  it('keeps a mail URL an admin already set', async () => {
+    const settings = connection.model<Setting>(Setting.name, SettingSchema);
+    await settings.deleteOne({ _id: 'mail.smtpUrl' });
+    const definition = SETTINGS['mail.smtpUrl'];
+    await settings.create({
+      _id: 'mail.smtpUrl',
+      value: sealSetting(definition, 'smtp://mail.example.org:587', key),
+      updatedBy: null,
+      updatedAt: new Date(),
+    });
+    await seedE2e(connection, options());
+    const row = await mailRow();
+    expect(readSetting('mail.smtpUrl', definition, row!.value, key)).toBe(
+      'smtp://mail.example.org:587',
+    );
+  });
+});

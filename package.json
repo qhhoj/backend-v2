@@ -21,7 +21,8 @@
     "start:prod:bridge": "node dist/apps/bridge/main",
     "lint": "eslint \"{apps,libs}/**/*.ts\"",
     "test": "jest --runInBand",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "seed:e2e": "TS_NODE_TRANSPILE_ONLY=true ts-node -r tsconfig-paths/register apps/api/src/seed/main.ts"
   },
   "dependencies": {
     "@fastify/cookie": "11.0.2",
