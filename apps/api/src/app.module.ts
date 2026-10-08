@@ -20,6 +20,7 @@ import { CommentsApiModule } from './modules/comments/comments-api.module';
 import { HomeApiModule } from './modules/home/home-api.module';
 import { ContributionsModule } from './modules/contributions/contributions.module';
 import { ContestsApiModule } from './modules/contests/contests-api.module';
+import { SimilarityApiModule } from './modules/similarity/similarity-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
 import { SettingsApiModule } from './modules/settings/settings-api.module';
 import { TicketsApiModule } from './modules/tickets/tickets-api.module';
@@ -46,6 +47,7 @@ import { HealthController } from './health.controller';
     JudgesApiModule,
     SubmissionsApiModule,
     ContestsApiModule,
+    SimilarityApiModule,
     OrganizationsApiModule,
     UsersApiModule,
     ContributionsModule,

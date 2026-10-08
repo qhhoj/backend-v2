@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   'judge.edit_own_contest',
   'judge.edit_all_contest',
   'judge.clone_contest',
+  // Code similarity runs and results; the codename is kept for migrated groups.
   'judge.moss_contest',
   'judge.contest_rating',
   'judge.contest_access_code',

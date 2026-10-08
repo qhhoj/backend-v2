@@ -170,6 +170,8 @@ describe('OpenAPI document', () => {
         '/api/internal/events/contests/{key}',
         '/api/internal/contests/{key}/stats',
         '/api/internal/contests/{key}/moss',
+        '/api/internal/similarity/runs',
+        '/api/internal/similarity/runs/{runId}',
         '/api/internal/contests/{key}/data',
         '/api/internal/contests/{key}/data/download',
         '/api/internal/contests/{key}/clone',
