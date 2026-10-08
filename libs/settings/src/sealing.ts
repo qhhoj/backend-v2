@@ -1,6 +1,6 @@
 import { decrypt, encrypt } from '@libs/common';
 import type { SettingDefinition } from './registry';
-import { isPlainObject } from './setting-types';
+import { isPlainObject, SettingError } from './setting-types';
 
 type Fields = Record<string, unknown>;
 const json = (value: unknown) => JSON.stringify(value);
@@ -23,32 +23,39 @@ export function sealSetting(
   };
 }
 
+/** Throws a fixed-text `SettingError` naming the key: the underlying decrypt or JSON error can quote decrypted text. */
 export function openSetting(
+  settingKey: string,
   definition: SettingDefinition<unknown>,
   stored: unknown,
   key: Buffer,
 ): unknown {
   const { secret } = definition;
-  if (secret === true) return JSON.parse(decrypt(stored as string, key));
-  if (secret === false) return stored;
-  const fields = stored as Fields;
-  return {
-    ...fields,
-    ...Object.fromEntries(
-      secret.map((field) => [
-        field,
-        JSON.parse(decrypt(fields[field] as string, key)),
-      ]),
-    ),
-  };
+  const open = (sealed: unknown) =>
+    JSON.parse(decrypt(sealed as string, key)) as unknown;
+  try {
+    if (secret === true) return open(stored);
+    if (secret === false) return stored;
+    const fields = stored as Fields;
+    return {
+      ...fields,
+      ...Object.fromEntries(
+        secret.map((field) => [field, open(fields[field])]),
+      ),
+    };
+  } catch {
+    throw new SettingError(`Setting ${settingKey} cannot be opened`);
+  }
 }
 
 /** Opens and validates a stored row; throws when it is corrupt, sealed with another key or no longer valid. */
 export const readSetting = (
+  settingKey: string,
   definition: SettingDefinition<unknown>,
   stored: unknown,
   key: Buffer,
-): unknown => definition.type.parse(openSetting(definition, stored, key));
+): unknown =>
+  definition.type.parse(openSetting(settingKey, definition, stored, key));
 
 /** What an admin or a revision row may see: a secret becomes `{set: boolean}` (set = differs from the default). */
 export function redactSetting(

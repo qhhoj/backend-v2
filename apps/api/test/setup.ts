@@ -39,6 +39,8 @@ import {
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import { SettingsService } from '@libs/settings';
+import type { SettingKey } from '@libs/settings';
 import Redis from 'ioredis';
 import type { Connection, Model } from 'mongoose';
 import request from 'supertest';
@@ -101,6 +103,7 @@ export async function setupApiTest({
     );
     await app.listen(0, '127.0.0.1');
     await app.get<Redis>(REDIS).flushdb();
+    await app.get(SettingsService).set('auth.pwnedApiUrl', '', null);
     // Queries that `.hint()` an index fail until its build finishes.
     const connection = app.get<Connection>(getConnectionToken());
     await Promise.all(
@@ -199,6 +202,9 @@ export async function setupApiTest({
     userDataRoot,
     sessions: readyApp.get(SessionService),
     mailer,
+    /** Writes through the real service, so readers see it at once. */
+    setSetting: (key: SettingKey, value: unknown) =>
+      readyApp.get(SettingsService).set(key, value, null),
     teardown: async () => {
       await readyApp.close();
       await replSet.stop();

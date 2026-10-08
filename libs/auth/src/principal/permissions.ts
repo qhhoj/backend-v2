@@ -55,6 +55,7 @@ export const PERMISSIONS = [
   'judge.edit_organization_post',
   'judge.mark_global_post',
   'judge.pin_post',
+  'judge.change_settings',
   // Django auto permissions the community code checks (legacy `has_perm('judge.change_comment')` etc.).
   'judge.add_organization',
   'judge.change_comment',

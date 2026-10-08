@@ -63,7 +63,7 @@ export class SettingsQuerier
     try {
       target.set(
         row._id as SettingKey,
-        readSetting(definition, row.value, this.key),
+        readSetting(row._id, definition, row.value, this.key),
       );
     } catch {
       target.delete(row._id as SettingKey);

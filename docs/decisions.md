@@ -210,6 +210,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `CommentResponse.canEdit` is true for a muted author whose edit is then 403 — muting is rare and the viewer's document is not read per page.
 - Accepted residuals: unhide's parent check is read-then-write (a racing hide can leave an orphan), and hide/unhide of a subtree is not one atomic step.
 - Planned (migrator deferred): comments map legacy `p:`/`s:`/`c:`/`b:`/`t:` pages to entity ids, build `path`/`threadId` from MPTT and render `bodyHtml`; posts render `contentHtml`/`summaryHtml`; `users.contributionPoints` are recomputed after the backfill — reads never render and one job writes the points.
+- `judge.change_settings` is operator-grade (grant it to superusers only): webhook and pwned URLs are admin-set, loopback and private targets are an accepted residual as the env rule was, and the pwned fetch refuses redirects.
 
 ## Deploy
 

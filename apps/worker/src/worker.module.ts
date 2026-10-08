@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import {
   EnvModule,
   QueueModule,
@@ -7,6 +8,7 @@ import {
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
+import { SettingsModule } from '@libs/settings';
 import { ContestDataModule } from './jobs/contest-data/contest-data.module';
 import { ContestFinalJudgeModule } from './jobs/contest-final-judge/contest-final-judge.module';
 import { ContestRatingModule } from './jobs/contest-rating/contest-rating.module';
@@ -29,6 +31,8 @@ import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.mod
     StorageModule,
     QueueModule,
     RedisModule,
+    ScheduleModule.forRoot(),
+    SettingsModule,
     ProblemFilesModule,
     PdfRenderModule,
     PolygonImportModule,

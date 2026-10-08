@@ -1,5 +1,6 @@
-import { encryptionKey } from '@libs/common';
+import { encrypt, encryptionKey } from '@libs/common';
 import { SETTINGS } from './registry';
+import { SettingError } from './setting-types';
 import {
   changedFields,
   openSetting,
@@ -24,14 +25,14 @@ describe('sealing', () => {
     const sealed = sealSetting(smtp, SMTP_URL, key);
     expect(typeof sealed).toBe('string');
     expect(JSON.stringify(sealed)).not.toContain('p4ssw0rd');
-    expect(readSetting(smtp, sealed, key)).toBe(SMTP_URL);
+    expect(readSetting('mail.smtpUrl', smtp, sealed, key)).toBe(SMTP_URL);
   });
 
   it('seals only the secret fields of an object value', () => {
     const sealed = sealSetting(google, client, key) as Record<string, unknown>;
     expect(sealed).toMatchObject({ enabled: true, clientId: 'public-id' });
     expect(JSON.stringify(sealed)).not.toContain('shh-secret');
-    expect(openSetting(google, sealed, key)).toEqual(client);
+    expect(openSetting('auth.google', google, sealed, key)).toEqual(client);
   });
 
   it('stores a plain setting as is', () => {
@@ -41,8 +42,22 @@ describe('sealing', () => {
   it('refuses a row sealed with another key', () => {
     const sealed = sealSetting(smtp, SMTP_URL, key);
     expect(() =>
-      readSetting(smtp, sealed, encryptionKey('cd'.repeat(32))),
+      readSetting('mail.smtpUrl', smtp, sealed, encryptionKey('cd'.repeat(32))),
     ).toThrow();
+  });
+
+  it('rejects an unopenable row with a fixed message that never quotes the underlying error', () => {
+    const wrongKey = encryptionKey('cd'.repeat(32));
+    const unparsable = encrypt('{not json p4ssw0rd', key);
+    for (const [definition, stored] of [
+      [smtp, sealSetting(smtp, SMTP_URL, wrongKey)],
+      [smtp, unparsable],
+      [smtp, 42],
+      [google, { ...client, clientSecret: unparsable }],
+    ] as const)
+      expect(() =>
+        openSetting('mail.smtpUrl', definition, stored, key),
+      ).toThrow(new SettingError('Setting mail.smtpUrl cannot be opened'));
   });
 
   it('redacts secrets and keeps public fields', () => {

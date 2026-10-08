@@ -28,6 +28,8 @@ import {
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import { SettingsService } from '@libs/settings';
+import type { SettingKey } from '@libs/settings';
 import Redis from 'ioredis';
 import type { Queue } from 'bullmq';
 import type { Connection, Model } from 'mongoose';
@@ -148,6 +150,9 @@ export async function setupWorkerTest({
     tagProblems: ready.get<Model<TagProblem>>(getModelToken(TagProblem.name)),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,
+    /** Writes through the real service, so readers see it at once. */
+    setSetting: (key: SettingKey, value: unknown) =>
+      ready.get(SettingsService).set(key, value, null),
     teardown: async () => {
       await ready.close();
       await cleanup();

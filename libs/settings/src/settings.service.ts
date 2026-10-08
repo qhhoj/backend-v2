@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Setting } from '@libs/database';
 import type { Connection, Model } from 'mongoose';
-import { SETTINGS } from './registry';
+import { definitionOf, SETTINGS } from './registry';
 import type { SettingKey, SettingValue } from './registry';
 import {
   changedFields,
@@ -81,10 +81,12 @@ export class SettingsService {
       .find({}, { updatedAt: 1, updatedBy: 1 })
       .lean();
     return new Map(
-      stored.map((row) => [
-        row._id,
-        { updatedAt: row.updatedAt, updatedBy: row.updatedBy },
-      ]),
+      stored
+        .filter((row) => definitionOf(row._id))
+        .map((row) => [
+          row._id,
+          { updatedAt: row.updatedAt, updatedBy: row.updatedBy },
+        ]),
     );
   }
 
@@ -94,7 +96,7 @@ export class SettingsService {
 
   private readOrDefault(key: SettingKey, stored: unknown): unknown {
     try {
-      return readSetting(SETTINGS[key], stored, this.key);
+      return readSetting(key, SETTINGS[key], stored, this.key);
     } catch {
       return SETTINGS[key].default;
     }

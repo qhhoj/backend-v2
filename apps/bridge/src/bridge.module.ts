@@ -1,11 +1,13 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { EnvModule, QueueModule, RedisModule } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import {
   SUBMISSION_GRADED_QUEUE,
   SubmissionEventsService,
 } from '@libs/judging';
+import { SettingsModule } from '@libs/settings';
 import { BRIDGE_TIMINGS, DEFAULT_BRIDGE_TIMINGS } from './bridge-timings';
 import { CommandsService } from './dispatch/commands.service';
 import { DispatchService } from './dispatch/dispatch.service';
@@ -21,6 +23,8 @@ import { SubmissionsRepository } from './submissions/submissions.repository';
     DatabaseModule,
     QueueModule,
     RedisModule,
+    ScheduleModule.forRoot(),
+    SettingsModule,
     BullModule.registerQueue({ name: SUBMISSION_GRADED_QUEUE }),
   ],
   providers: [

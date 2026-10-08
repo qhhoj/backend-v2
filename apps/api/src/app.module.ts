@@ -9,6 +9,7 @@ import {
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
 import { ProblemFilesModule } from '@libs/problems';
+import { SettingsModule } from '@libs/settings';
 import { AuthApiModule } from './modules/auth/auth-api.module';
 import { ApiV2Module } from './modules/api-v2/api-v2.module';
 import { JudgesApiModule } from './modules/judges/judges-api.module';
@@ -20,6 +21,7 @@ import { HomeApiModule } from './modules/home/home-api.module';
 import { ContributionsModule } from './modules/contributions/contributions.module';
 import { ContestsApiModule } from './modules/contests/contests-api.module';
 import { SubmissionsApiModule } from './modules/submissions/submissions-api.module';
+import { SettingsApiModule } from './modules/settings/settings-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
 import { UsersApiModule } from './modules/users/users-api.module';
 import { HealthController } from './health.controller';
@@ -29,6 +31,7 @@ import { HealthController } from './health.controller';
     EnvModule,
     DatabaseModule,
     RedisModule,
+    SettingsModule,
     QueueModule,
     MailModule,
     StorageModule,
@@ -46,6 +49,7 @@ import { HealthController } from './health.controller';
     BlogApiModule,
     CommentsApiModule,
     HomeApiModule,
+    SettingsApiModule,
     ApiV2Module,
   ],
   controllers: [HealthController],
