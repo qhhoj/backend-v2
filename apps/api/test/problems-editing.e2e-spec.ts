@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import {
   authed,
@@ -346,6 +348,76 @@ describe('problem create, suggest and edit', () => {
     await authed(api.http().get(`${PROBLEMS}/second`), setter).expect(404);
     await authed(api.http().get(`${PROBLEMS}/third`), setter).expect(200);
     expect(events).toContainEqual(['codeRenamed', 'second', 'third']);
+  });
+  it('refuses renaming onto the leftover data directory of a deleted problem, before writing anything', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: 'rename_src',
+      authors: [setterId],
+      isPublic: false,
+    });
+    mkdirSync(join(api.problemDataRoot, 'leftover'), { recursive: true });
+    const response = await authed(
+      api.http().patch(`${PROBLEMS}/rename_src`),
+      setter,
+    )
+      .send({ code: 'leftover', name: 'Changed' })
+      .expect(400)
+      .expect(errorCode('validation_failed'));
+    expect(fieldsOf(response)).toEqual({
+      code: ['A test data directory for this code already exists.'],
+    });
+    expect(await api.problems.findOne({ code: 'rename_src' })).toMatchObject({
+      name: 'RENAME_SRC',
+    });
+    expect(await api.revisions.countDocuments({ entityId: problem._id })).toBe(
+      0,
+    );
+    expect(events).toEqual([]);
+    mkdirSync(join(api.problemDataRoot, 'rename_src'), { recursive: true });
+    await authed(api.http().patch(`${PROBLEMS}/rename_src`), setter)
+      .send({ code: 'rename_src', name: 'Same code, own directory' })
+      .expect(200);
+  });
+  it('emits statementChanged for a description edit alone, and not for a rescore alone', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: 'statement_only',
+      authors: [setterId],
+      isPublic: false,
+      description: 'before',
+      points: 1000,
+    });
+    await authed(api.http().patch(`${PROBLEMS}/statement_only`), setter)
+      .send({ description: 'after' })
+      .expect(200);
+    expect(events).toEqual([['statementChanged', problem._id]]);
+    events.splice(0);
+    await authed(api.http().patch(`${PROBLEMS}/statement_only`), setter)
+      .send({ points: 1100 })
+      .expect(200);
+    expect(events).toEqual([['pointsChanged', problem._id]]);
+  });
+  it('emits events in order: rename, rescore, publicity, statement', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: 'ordered',
+      isPublic: false,
+      suggester: suggesterId,
+      description: 'before',
+      points: 1000,
+    });
+    await authed(api.http().patch(`${PROBLEMS}/ordered`), admin)
+      .send({
+        code: 'ordered_new',
+        points: 1100,
+        isPublic: true,
+        description: 'after',
+      })
+      .expect(200);
+    expect(events).toEqual([
+      ['codeRenamed', 'ordered', 'ordered_new'],
+      ['pointsChanged', problem._id],
+      ['publicityChanged', problem._id, suggesterId],
+      ['statementChanged', problem._id],
+    ]);
   });
   it('emits publicityChanged with the suggester and re-renders every statement when isFullMarkup flips', async () => {
     const problem = await createProblem(api, catalog, {

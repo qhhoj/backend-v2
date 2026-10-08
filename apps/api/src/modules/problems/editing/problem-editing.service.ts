@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AuthContext } from '@libs/auth';
+import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
@@ -17,7 +17,10 @@ import {
 } from './problem-edit-fields';
 import { ProblemEvents } from '../core/problem.events';
 import { renderField, styleOf } from './problem-markup';
-import { ProblemsRepository } from '../core/problems.repository';
+import {
+  ProblemsRepository,
+  type ProblemDocument,
+} from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
 import { RevisionsRepository } from '../core/revisions.repository';
 
@@ -25,6 +28,48 @@ import { RevisionsRepository } from '../core/revisions.repository';
 const RESCORE_FIELDS = ['points', 'partial', 'isOrganizationPrivate'] as const;
 /** Besides the statement text, the rendered PDF shows these. */
 const PDF_INPUT_FIELDS = ['name', 'timeLimit', 'memoryLimit', 'languageLimits'];
+
+type ProblemFields = ReturnType<typeof toFields>;
+type ProblemChanges = ReturnType<typeof fieldDiff>;
+interface ProblemEdit {
+  original: ProblemDocument;
+  updated: ProblemDocument;
+  changes: ProblemChanges;
+  isStatementRerendered: boolean;
+}
+
+/** Re-renders the description when it or the markup mode changed, and every translation when the mode flipped; true when anything was re-rendered. */
+function rerenderStatements(
+  fields: ProblemFields,
+  problem: ProblemDocument,
+  translations: Problem['translations'],
+): boolean {
+  const isMarkupFlipped =
+    fields.isFullMarkup !== undefined &&
+    fields.isFullMarkup !== problem.isFullMarkup;
+  const isDescriptionChanged =
+    fields.description !== undefined &&
+    fields.description !== problem.description;
+  if (!isDescriptionChanged && !isMarkupFlipped) return false;
+  const style = styleOf({
+    isFullMarkup: fields.isFullMarkup ?? problem.isFullMarkup,
+  });
+  fields.descriptionHtml = renderField(
+    fields.description ?? problem.description,
+    style,
+    'description',
+  );
+  if (isMarkupFlipped)
+    fields.translations = translations.map((translation) => ({
+      ...translation,
+      descriptionHtml: renderField(
+        translation.description,
+        style,
+        'translations',
+      ),
+    }));
+  return true;
+}
 
 @Injectable()
 export class ProblemEditingService {
@@ -115,44 +160,12 @@ export class ProblemEditingService {
     const fields = toFields(dto);
     this.policy.assertFieldGates(principal, dto, fields, before);
     await this.policy.assertReferences(dto);
-    if (
-      fields.code !== undefined &&
-      fields.code !== problem.code &&
-      (await this.dataFiles.exists(fields.code))
-    )
-      throw new AppError(
-        'validation_failed',
-        400,
-        'Problem data directory is taken',
-        { code: ['A test data directory for this code already exists.'] },
-      );
-    const markupFlipped =
-      fields.isFullMarkup !== undefined &&
-      fields.isFullMarkup !== problem.isFullMarkup;
-    const descriptionChanged =
-      fields.description !== undefined &&
-      fields.description !== problem.description;
-    if (descriptionChanged || markupFlipped) {
-      const style = styleOf({
-        isFullMarkup: fields.isFullMarkup ?? problem.isFullMarkup,
-      });
-      fields.descriptionHtml = renderField(
-        fields.description ?? problem.description,
-        style,
-        'description',
-      );
-      if (markupFlipped)
-        fields.translations = (
-          before.translations as Problem['translations']
-        ).map((translation) => ({
-          ...translation,
-          descriptionHtml: renderField(
-            translation.description,
-            style,
-            'translations',
-          ),
-        }));
-    }
+    await this.assertDataDirectoryFree(fields, problem);
+    const isStatementRerendered = rerenderStatements(
+      fields,
+      problem,
+      before.translations as Problem['translations'],
+    );
     await withCodeTaken(() => this.repository.update(problem._id, fields));
     const updated = await this.repository.findById(problem._id);
     if (!updated) throw new AppError('not_found', 404, 'No such problem');
@@ -160,32 +173,71 @@ export class ProblemEditingService {
       withoutRenderedHtml(before),
       withoutRenderedHtml(updated.toJSON()),
     );
-    if (!Object.keys(changes).length)
-      return this.problems.detail(principal, updated.code, 'en');
+    if (Object.keys(changes).length)
+      await this.recordEdit(principal, {
+        original: problem,
+        updated,
+        changes,
+        isStatementRerendered,
+      });
+    return this.problems.detail(principal, updated.code, 'en');
+  }
+
+  /** A rename must not adopt the leftover test data directory of a deleted problem. */
+  private async assertDataDirectoryFree(
+    fields: ProblemFields,
+    problem: ProblemDocument,
+  ): Promise<void> {
+    if (
+      fields.code === undefined ||
+      fields.code === problem.code ||
+      !(await this.dataFiles.exists(fields.code))
+    )
+      return;
+    throw new AppError(
+      'validation_failed',
+      400,
+      'Problem data directory is taken',
+      { code: ['A test data directory for this code already exists.'] },
+    );
+  }
+
+  private async recordEdit(
+    principal: Principal,
+    edit: ProblemEdit,
+  ): Promise<void> {
     await this.revisions.append({
       entity: 'problem',
-      entityId: problem._id,
+      entityId: edit.original._id,
       action: 'edit',
       userId: principal.userId,
-      changes,
+      changes: edit.changes,
       comment: 'Edited from site',
     });
+    this.emitChangeEvents(edit);
+  }
+
+  /** In this order: rename, rescore, publicity, statement (the PDF shows the name and limits too). */
+  private emitChangeEvents({
+    original,
+    updated,
+    changes,
+    isStatementRerendered,
+  }: ProblemEdit): void {
     if ('code' in changes)
-      this.events.emit('codeRenamed', problem.code, updated.code);
+      this.events.emit('codeRenamed', original.code, updated.code);
     if (RESCORE_FIELDS.some((field) => field in changes))
-      this.events.emit('pointsChanged', problem._id);
+      this.events.emit('pointsChanged', original._id);
     if ('isPublic' in changes)
       this.events.emit(
         'publicityChanged',
-        problem._id,
+        original._id,
         updated.suggester === null ? null : uuidStr(updated.suggester),
       );
     if (
-      descriptionChanged ||
-      markupFlipped ||
+      isStatementRerendered ||
       PDF_INPUT_FIELDS.some((field) => field in changes)
     )
-      this.events.emit('statementChanged', problem._id);
-    return this.problems.detail(principal, updated.code, 'en');
+      this.events.emit('statementChanged', original._id);
   }
 }
