@@ -1,4 +1,5 @@
 import { invalidField, MAX_UPLOAD_BYTES } from '@libs/common';
+import { LANGUAGE_EXTENSION_PATTERN } from '@libs/database';
 import type { Language } from '@libs/database';
 import { extensionOf, ZipArchive, ZipError } from '@libs/problems';
 import { tooLarge } from '../../problems/core/multipart';
@@ -15,11 +16,17 @@ type FileLanguage = Pick<
   'key' | 'extension' | 'fileOnly' | 'fileSizeLimit'
 >;
 
-/** Legacy `ProblemSubmitForm.check_submission`: the extension must be the language's, the file at most `fileSizeLimit` MB (0 = uploads off; clamped to the upload cap); a Scratch `.sb3` is reduced to its `project.json`. Returns the bytes to store. */
+/** Legacy `ProblemSubmitForm.check_submission`: the language's stored extension must match `LANGUAGE_EXTENSION_PATTERN` (rows written around the schema), the file's extension (any case) must be it, the file at most `fileSizeLimit` MB (0 = uploads off; clamped to the upload cap); a Scratch `.sb3` is reduced to its `project.json`. Returns the bytes to store. */
 export async function submittedFile(
   language: FileLanguage,
   { filename, content }: UploadedFile,
 ): Promise<Buffer> {
+  if (!LANGUAGE_EXTENSION_PATTERN.test(language.extension))
+    throw invalidField(
+      'language',
+      'This language has no usable file extension.',
+      'language_extension_invalid',
+    );
   if (language.fileSizeLimit <= 0)
     throw invalidField(
       'language',
@@ -30,7 +37,7 @@ export async function submittedFile(
     language.fileSizeLimit * BYTES_PER_MB,
     MAX_UPLOAD_BYTES,
   );
-  if (extensionOf(filename) !== language.extension.toLowerCase())
+  if (extensionOf(filename) !== language.extension)
     throw invalidField(
       'file',
       `This language takes a .${language.extension} file.`,

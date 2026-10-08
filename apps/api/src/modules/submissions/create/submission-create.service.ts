@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { hasPermission } from '@libs/auth';
@@ -14,7 +15,7 @@ import {
   withRedisLock,
 } from '@libs/common';
 import { contestPhase, LIVE } from '@libs/contests';
-import { newId, SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
+import { SUBMISSION_PRIORITY, uuidStr } from '@libs/database';
 import type { Language } from '@libs/database';
 import {
   BridgeCommandsService,
@@ -86,6 +87,7 @@ export class SubmissionCreateService {
     dto: SubmitDto,
   ): Promise<SubmitResponse> {
     const problem = await this.problems.visibleProblem(auth.principal, code);
+    await this.reserveSubmit(auth.principal);
     const language = this.assertLanguage(problem, dto.language, false);
     return this.create(auth, problem, language, dto.judgeId, {
       text: dto.source,
@@ -99,6 +101,7 @@ export class SubmissionCreateService {
     request: FastifyRequest,
   ): Promise<SubmitResponse> {
     const problem = await this.problems.visibleProblem(auth.principal, code);
+    await this.reserveSubmit(auth.principal);
     const upload = await readMultipartForm(
       request,
       MAX_UPLOAD_BYTES,
@@ -110,11 +113,20 @@ export class SubmissionCreateService {
     })) as SubmitFileDto;
     const language = this.assertLanguage(problem, dto.language, true);
     const file = await submittedFile(language, upload);
-    const path = `${SUBMISSION_FILE_DIR}/${problem.code}/${auth.principal.userId}/${newId()}.${language.extension}`;
+    const path = `${SUBMISSION_FILE_DIR}/${problem.code}/${auth.principal.userId}/${randomUUID()}.${language.extension}`;
     return this.create(auth, problem, language, dto.judgeId, { file, path });
   }
 
-  /** Not banned, a chosen judge only for editors and only when online with the problem; then the per-user rate, the contest's submission cap and the unfinished-submission limit. */
+  /** Every attempt spends the per-user submit budget, taken before an upload is read (never released). */
+  private async reserveSubmit(principal: Principal): Promise<void> {
+    await this.rateLimit.reserve(
+      [`submit:user:${principal.userId}`],
+      SUBMIT_LIMIT,
+      SUBMIT_WINDOW_SECONDS,
+    );
+  }
+
+  /** Not banned, a chosen judge only for editors and only when online with the problem; then the contest's submission cap and the unfinished-submission limit. */
   private async create(
     auth: AuthContext,
     problem: ProblemDocument,
@@ -134,11 +146,6 @@ export class SubmissionCreateService {
       );
     if (judgeId !== undefined)
       await this.assertJudge(principal, problem, judgeId, language.key);
-    await this.rateLimit.reserve(
-      [`submit:user:${principal.userId}`],
-      SUBMIT_LIMIT,
-      SUBMIT_WINDOW_SECONDS,
-    );
     const plan = this.contestPlan(
       await this.currentContest.current(principal),
       problem._id,
@@ -216,7 +223,7 @@ export class SubmissionCreateService {
     try {
       return await this.submissions.create(fields, url, contestEntry);
     } catch (error) {
-      await this.storage.delete(source.path);
+      await this.storage.delete(source.path).catch(() => undefined);
       throw error;
     }
   }

@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type Redis from 'ioredis';
+import { AppError, REDIS, StorageService } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { buildZip } from '@libs/problems/testing';
 import {
@@ -13,10 +15,12 @@ import type { Catalog, TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
+import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
+import { SUBMIT_LIMIT } from '../src/modules/submissions/core/rate-limits';
 
 const MIB = 1024 * 1024;
 const UUID =
-  '[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+  '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const PROJECT = Buffer.from('{"targets":[],"meta":{"semver":"3.0.0"}}');
 
 const issueCodes = (response: { body: unknown }) =>
@@ -31,7 +35,8 @@ describe('POST /api/internal/problems/:code/submit/file', () => {
   let session: TestSession;
   let banned: TestSession;
   let bannedId: string;
-  const languages: Record<'zip' | 'scratch' | 'off', string> = {
+  const languages: Record<'zip' | 'scratch' | 'off' | 'html', string> = {
+    html: '',
     zip: '',
     scratch: '',
     off: '',
@@ -65,11 +70,12 @@ describe('POST /api/internal/problems/:code/submit/file', () => {
       fileOnly: true,
       fileSizeLimit: limit,
     });
-    [languages.zip, languages.scratch, languages.off] = (
+    [languages.zip, languages.scratch, languages.off, languages.html] = (
       await api.languages.create([
         fileLanguage('ZIPPED', 'zip', 1),
         fileLanguage('SCRATCH', 'sb3', 1),
         fileLanguage('ZIP0', 'zip', 0),
+        fileLanguage('PAGE', 'htm', 1),
       ])
     ).map((language) => language._id);
     await api.resyncCatalog();
@@ -86,6 +92,12 @@ describe('POST /api/internal/problems/:code/submit/file', () => {
     bannedId = bannedUser._id;
     banned = await loginAs(api, bannedId);
   });
+  beforeEach(async () => {
+    const redis = api.app.get<Redis>(REDIS);
+    const spent = await redis.keys('rate:*');
+    if (spent.length) await redis.del(...spent);
+  });
+  afterEach(() => jest.restoreAllMocks());
   afterAll(() => api.teardown());
 
   it('stores the upload under submission_file and keeps its media URL as the source', async () => {
@@ -181,7 +193,14 @@ describe('POST /api/internal/problems/:code/submit/file', () => {
         api.http().post('/api/internal/problems/files/submit/file'),
         session,
       );
-    await post().attach('file', Buffer.from('x'), 'a.zip').expect(400);
+    const missing = await post()
+      .attach('file', Buffer.from('x'), 'a.zip')
+      .expect(400);
+    expect(
+      (
+        missing.body as { error: { issues: Array<{ field: string }> } }
+      ).error.issues.map((issue) => issue.field),
+    ).toEqual(['language']);
     await post().field('language', languages.zip).expect(400);
     await post()
       .field('language', languages.zip)
@@ -255,5 +274,62 @@ describe('POST /api/internal/problems/:code/submit/file', () => {
     await submitFile(languages.scratch, bomb, 'bomb.sb3')
       .expect(413)
       .expect(errorCode('file_too_large'));
+  });
+  it('spends the submit budget before reading the upload', async () => {
+    await api.app
+      .get<Redis>(REDIS)
+      .set(`rate:submit:user:${uploader._id}`, SUBMIT_LIMIT);
+    const files = storedFiles().length;
+    await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
+      .field('source', 'unexpected field, only seen when the body is read')
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    expect(storedFiles()).toHaveLength(files);
+  });
+
+  it('refuses a language whose stored extension is not plain alphanumeric', async () => {
+    await api.languages.updateOne(
+      { _id: languages.html },
+      { extension: 'HTM/..' },
+      { runValidators: false },
+    );
+    await api.resyncCatalog();
+    const files = storedFiles().length;
+    const response = await submitFile(
+      languages.html,
+      Buffer.from('<script>'),
+      'page.htm',
+    ).expect(400);
+    expect(issueCodes(response)).toEqual(['language_extension_invalid']);
+    expect(storedFiles()).toHaveLength(files);
+    expect(
+      await api.submissions.countDocuments({ language: languages.html }),
+    ).toBe(0);
+  });
+
+  it('removes the stored file when the row cannot be written', async () => {
+    const files = storedFiles().length;
+    jest
+      .spyOn(api.app.get(SubmissionsRepository), 'create')
+      .mockRejectedValueOnce(new AppError('insert_failed', 409, 'no row'));
+    await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
+      .expect(409)
+      .expect(errorCode('insert_failed'));
+    expect(storedFiles()).toHaveLength(files);
+  });
+
+  it('keeps the insert error when removing the file fails too', async () => {
+    jest
+      .spyOn(api.app.get(SubmissionsRepository), 'create')
+      .mockRejectedValueOnce(new AppError('insert_failed', 409, 'no row'));
+    jest
+      .spyOn(api.app.get(StorageService), 'delete')
+      .mockRejectedValueOnce(new Error('disk gone'));
+    await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
+      .expect(409)
+      .expect(errorCode('insert_failed'));
   });
 });
