@@ -31,19 +31,19 @@ export class CommentModerationService {
   async setHidden(
     principal: Principal,
     id: string,
-    hidden: boolean,
+    isHidden: boolean,
   ): Promise<CommentDetailResponse> {
     this.comments.assertOpen(principal);
     const { comment } = await this.comments.visibleComment(principal, id, {
       allowHidden: true,
     });
     if (
-      !hidden &&
+      !isHidden &&
       comment.parentId &&
       (await this.repository.hiddenBy(comment.parentId))
     )
       throw new AppError('conflict', 409, 'Unhide its parent first');
-    const authors = await (hidden
+    const authors = await (isHidden
       ? this.repository.hideSubtree(comment.path, uuidStr(comment._id))
       : this.repository.unhideSubtree(comment.path, uuidStr(comment._id)));
     await this.contributions.refresh(authors);
@@ -76,10 +76,10 @@ export class CommentModerationService {
     principal: Principal,
     type: CommentPageType,
     key: string,
-    locked: boolean,
+    isLocked: boolean,
   ): Promise<void> {
     this.comments.assertOpen(principal);
     const { page } = await this.pages.resolve(principal, type, key);
-    await (locked ? this.locks.lock(page) : this.locks.unlock(page));
+    await (isLocked ? this.locks.lock(page) : this.locks.unlock(page));
   }
 }

@@ -47,11 +47,11 @@ export class CommentsService {
     pageNumber: number,
   ): Promise<CommentPageResponse> {
     this.assertOpen(principal);
-    const info = await this.pages.resolve(principal, type, key);
-    const { roots, total } = this.hidesThread(principal, info)
+    const pageInfo = await this.pages.resolve(principal, type, key);
+    const { roots, total } = this.hidesThread(principal, pageInfo)
       ? { roots: [], total: 0 }
       : await this.comments.threads(
-          info.page,
+          pageInfo.page,
           pageNumber,
           COMMENT_THREADS_PAGE_SIZE,
         );
@@ -64,10 +64,10 @@ export class CommentsService {
         (reply) => uuidStr(reply.threadId) === uuidStr(root._id),
       ),
     ]);
-    const locked = await this.isLocked(principal, info);
+    const locked = await this.isLocked(principal, pageInfo);
     const viewer = principal && (await this.users.findById(principal.userId));
     return {
-      page: CommentPageLinkResponse.from(info),
+      page: CommentPageLinkResponse.from(pageInfo),
       locked,
       canComment: !locked && viewer !== null && canInteract(viewer),
       comments: await this.respond(principal, ordered),
@@ -85,13 +85,13 @@ export class CommentsService {
     id: string,
   ): Promise<CommentDetailResponse> {
     this.assertOpen(principal);
-    const { comment, info } = await this.visibleComment(principal, id, {
+    const { comment, pageInfo } = await this.visibleComment(principal, id, {
       allowHidden: true,
     });
     const [response] = await this.respond(principal, [comment]);
     return {
       ...response,
-      page: CommentPageLinkResponse.from(info),
+      page: CommentPageLinkResponse.from(pageInfo),
       hidden: comment.hidden,
     };
   }
@@ -101,18 +101,18 @@ export class CommentsService {
     principal: Principal | null,
     id: string,
     { allowHidden }: { allowHidden: boolean },
-  ): Promise<{ comment: CommentDocument; info: PageInfo }> {
+  ): Promise<{ comment: CommentDocument; pageInfo: PageInfo }> {
     const comment = await this.comments.findById(id);
     const moderates = moderatesComments(principal);
     const page = comment && pageOf(comment);
-    const info =
+    const pageInfo =
       comment &&
       page &&
       (!comment.hidden || (allowHidden && moderates)) &&
       (await this.pages.accessible(principal, [page])).get(pageRef(page));
-    if (!comment || !info || this.hidesThread(principal, info))
+    if (!comment || !pageInfo || this.hidesThread(principal, pageInfo))
       throw new AppError('not_found', 404, 'No such comment');
-    return { comment, info };
+    return { comment, pageInfo };
   }
 
   /** Authors in one read, the viewer's votes in one indexed read. */
@@ -157,8 +157,8 @@ export class CommentsService {
   }
 
   /** A contest problem's thread is hidden from its contestants (legacy showed the clarifications area instead), unless they hold `override_comment_lock`. A plain lock keeps the thread readable. */
-  hidesThread(principal: Principal | null, info: PageInfo): boolean {
-    return info.contestLocked && !this.overridesLock(principal);
+  hidesThread(principal: Principal | null, pageInfo: PageInfo): boolean {
+    return pageInfo.contestLocked && !this.overridesLock(principal);
   }
 
   private overridesLock(principal: Principal | null): boolean {
@@ -171,9 +171,9 @@ export class CommentsService {
   /** Legacy `is_comment_locked` plus the contest lock; `override_comment_lock` passes both. */
   async isLocked(
     principal: Principal | null,
-    info: PageInfo,
+    pageInfo: PageInfo,
   ): Promise<boolean> {
     if (this.overridesLock(principal)) return false;
-    return info.contestLocked || (await this.locks.isLocked(info.page));
+    return pageInfo.contestLocked || (await this.locks.isLocked(pageInfo.page));
   }
 }

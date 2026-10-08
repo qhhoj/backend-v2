@@ -164,7 +164,7 @@ describe('comment posting and editing', () => {
     await api.users.deleteOne({ _id: user._id });
     const posting = api.app.get(CommentPostingService);
     await expect(
-      posting.create(principal, 'blog', page._id, { body: 'x' }),
+      posting.create(principal, { type: 'blog', key: page._id }, { body: 'x' }),
     ).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
     await expect(posting.edit(principal, own._id, 'y')).rejects.toMatchObject({
       status: 401,
@@ -360,13 +360,22 @@ describe('comment posting and editing', () => {
     });
     const comments = api.app.get(CommentsRepository);
     expect(
-      await comments.updateBodyIfRevision(comment._id, 0, 'a', '<p>a</p>'),
+      await comments.updateBodyIfRevision(comment._id, 0, {
+        body: 'a',
+        bodyHtml: '<p>a</p>',
+      }),
     ).toBe(true);
     expect(
-      await comments.updateBodyIfRevision(comment._id, 0, 'b', '<p>b</p>'),
+      await comments.updateBodyIfRevision(comment._id, 0, {
+        body: 'b',
+        bodyHtml: '<p>b</p>',
+      }),
     ).toBe(false);
     expect(
-      await comments.updateBodyIfRevision(comment._id, 1, 'c', '<p>c</p>'),
+      await comments.updateBodyIfRevision(comment._id, 1, {
+        body: 'c',
+        bodyHtml: '<p>c</p>',
+      }),
     ).toBe(true);
     expect(await api.comments.findById(comment._id).lean()).toMatchObject({
       body: 'c',

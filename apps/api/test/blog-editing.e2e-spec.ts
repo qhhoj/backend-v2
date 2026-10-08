@@ -126,6 +126,17 @@ describe('blog editing', () => {
     await create(session, { publishOn: 'tomorrow' }).expect(400);
   });
 
+  it('checks the writer before the post flags, so a flag never reveals the solve gate', async () => {
+    const { session } = await person({ problemCount: 9 });
+    await create(session, { globalPost: true })
+      .expect(403)
+      .expect(({ body }: { body: { error: { message: string } } }) =>
+        expect(body.error.message).toBe(
+          'Solve at least 10 problems and stay unmuted to write a post',
+        ),
+      );
+  });
+
   it('lets organization admins with edit_organization_post post for their organization only', async () => {
     const admin = await person({
       problemCount: 0,

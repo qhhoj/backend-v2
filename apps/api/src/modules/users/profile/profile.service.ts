@@ -24,6 +24,20 @@ import type { ProfileResponse } from './dto/profile.response';
 const invalid = (field: string, message: string) =>
   new AppError('validation_failed', 400, message, { [field]: [message] });
 
+/** Appearance is replaced whole; `null` clears it. Absent means unchanged. */
+const appearanceChange = (
+  appearance: UpdateProfileDto['appearance'],
+): Partial<User> =>
+  appearance === undefined
+    ? {}
+    : {
+        appearance: appearance && {
+          accent: appearance.accent,
+          glass: appearance.glass,
+          glow: appearance.glow,
+        },
+      };
+
 @Injectable()
 export class ProfileService {
   constructor(
@@ -50,38 +64,13 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     const user = (await this.users.findById(principal.userId))!;
     const { about, firstName, organizations, appearance, ...fields } = dto;
-    const changes: Partial<User> = { ...fields };
-    if (appearance !== undefined)
-      changes.appearance = appearance && {
-        accent: appearance.accent,
-        glass: appearance.glass,
-        glow: appearance.glow,
-      };
-    const trimmedFirstName = firstName?.trim();
-    if (trimmedFirstName !== undefined && trimmedFirstName !== user.firstName) {
-      this.refuseInOfficialContest(principal);
-      changes.firstName = trimmedFirstName;
-    }
-    if (about !== undefined && about !== (user.about ?? '')) {
-      this.refuseInOfficialContest(principal);
-      if (!canInteract(user))
-        throw new AppError(
-          'forbidden',
-          403,
-          `Solve at least ${INTERACT_MIN_PROBLEM_COUNT} problems before editing your profile`,
-        );
-      Object.assign(changes, {
-        about,
-        aboutHtml: renderField(about, 'user', 'about'),
-      });
-    }
-    if (dto.languageId !== undefined && !this.languages.has(dto.languageId))
-      throw invalid('languageId', 'Unknown language.');
-    if (
-      dto.displayBadgeId &&
-      !user.badges.map(uuidStr).includes(dto.displayBadgeId)
-    )
-      throw invalid('displayBadgeId', 'Not one of your badges.');
+    const changes: Partial<User> = {
+      ...fields,
+      ...appearanceChange(appearance),
+      ...this.firstNameChange(principal, user, firstName),
+      ...this.aboutChange(principal, user, about),
+    };
+    this.assertReferences(user, dto);
     if (organizations !== undefined)
       await this.reorder(
         principal,
@@ -94,6 +83,46 @@ export class ProfileService {
       (await this.users.findById(principal.userId))!,
       principal,
     );
+  }
+
+  /** Returns the trimmed name when it differs from the stored one. Throws in official contest mode when it differs. Pure otherwise. */
+  private firstNameChange(
+    principal: Principal,
+    user: UserDocument,
+    firstName: string | undefined,
+  ): Partial<User> {
+    const trimmed = firstName?.trim();
+    if (trimmed === undefined || trimmed === user.firstName) return {};
+    this.refuseInOfficialContest(principal);
+    return { firstName: trimmed };
+  }
+
+  /** Returns `about` with its rendered HTML when it differs from the stored text. Throws in official contest mode, or below the interaction threshold, when it differs. Pure otherwise. */
+  private aboutChange(
+    principal: Principal,
+    user: UserDocument,
+    about: string | undefined,
+  ): Partial<User> {
+    if (about === undefined || about === (user.about ?? '')) return {};
+    this.refuseInOfficialContest(principal);
+    if (!canInteract(user))
+      throw new AppError(
+        'forbidden',
+        403,
+        `Solve at least ${INTERACT_MIN_PROBLEM_COUNT} problems before editing your profile`,
+      );
+    return { about, aboutHtml: renderField(about, 'user', 'about') };
+  }
+
+  /** Throws a 400 for an unknown language or a display badge the user does not hold. */
+  private assertReferences(user: UserDocument, dto: UpdateProfileDto): void {
+    if (dto.languageId !== undefined && !this.languages.has(dto.languageId))
+      throw invalid('languageId', 'Unknown language.');
+    if (
+      dto.displayBadgeId &&
+      !user.badges.map(uuidStr).includes(dto.displayBadgeId)
+    )
+      throw invalid('displayBadgeId', 'Not one of your badges.');
   }
 
   /** Legacy removed `about` and `first_name` from the form in official contest mode; superusers still edit. */

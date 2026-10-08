@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
-import type { Permission, Principal } from '@libs/auth';
+import type { Permission, Principal, UserDocument } from '@libs/auth';
 import { AppError, RateLimitService, unique } from '@libs/common';
 import {
   canWritePersonalPost,
@@ -16,6 +16,7 @@ import { fieldDiff } from '@libs/problems';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
+import type { OrganizationDocument } from '../../organizations/core/organizations.repository';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { renderField } from '../../problems/editing/problem-markup';
@@ -79,37 +80,12 @@ export class BlogEditingService {
       dto.organization === undefined
         ? null
         : await this.organizations.bySlug(dto.organization);
-    if (organization) {
-      if (
-        writer.mute ||
-        !OrganizationAccess.canAdminister(
-          principal,
-          OrganizationAccess.accessView(organization),
-        ) ||
-        !hasPermission(principal, 'judge.edit_organization_post')
-      )
-        throw forbidden(
-          'Only its admins with edit_organization_post write for this organization',
-        );
-    } else if (!canWritePersonalPost(writer))
-      throw forbidden(
-        'Solve at least 10 problems and stay unmuted to write a post',
-      );
+    this.assertCanWrite(principal, writer, organization);
     this.assertFlags(principal, dto, { globalPost: false, sticky: false });
     await this.reserveWrite(principal);
-    const post = await this.posts.create({
-      title: dto.title,
-      slug: postSlug(organization ? organization.slug : principal.username),
-      authors: [principal.userId],
-      organization: organization ? uuidStr(organization._id) : null,
-      visible: dto.visible ?? false,
-      globalPost: dto.globalPost ?? false,
-      sticky: dto.sticky ?? false,
-      publishOn: dto.publishOn ? new Date(dto.publishOn) : now,
-      ogImage: dto.ogImage ?? '',
-      ...this.renderedContent(dto.content),
-      ...this.renderedSummary(dto.summary ?? ''),
-    });
+    const post = await this.posts.create(
+      this.newPostFields(principal, dto, { organization, now }),
+    );
     await this.revisions.append({
       entity: 'blogPost',
       entityId: post._id,
@@ -124,6 +100,56 @@ export class BlogEditingService {
     )
       await this.announce(post, principal.username);
     return this.reads.createdPost(principal, post);
+  }
+
+  /** Throws unless the writer may post: an organization post needs an unmuted admin with `edit_organization_post`; a personal one needs `canWritePersonalPost`. */
+  private assertCanWrite(
+    principal: Principal,
+    writer: UserDocument,
+    organization: OrganizationDocument | null,
+  ): void {
+    if (!organization) {
+      if (!canWritePersonalPost(writer))
+        throw forbidden(
+          'Solve at least 10 problems and stay unmuted to write a post',
+        );
+      return;
+    }
+    if (
+      writer.mute ||
+      !OrganizationAccess.canAdminister(
+        principal,
+        OrganizationAccess.accessView(organization),
+      ) ||
+      !hasPermission(principal, 'judge.edit_organization_post')
+    )
+      throw forbidden(
+        'Only its admins with edit_organization_post write for this organization',
+      );
+  }
+
+  /** The stored fields of a new post; `publishOn` defaults to `now`. Pure: writes nothing. */
+  private newPostFields(
+    principal: Principal,
+    dto: CreatePostDto,
+    {
+      organization,
+      now,
+    }: { organization: OrganizationDocument | null; now: Date },
+  ) {
+    return {
+      title: dto.title,
+      slug: postSlug(organization ? organization.slug : principal.username),
+      authors: [principal.userId],
+      organization: organization ? uuidStr(organization._id) : null,
+      visible: dto.visible ?? false,
+      globalPost: dto.globalPost ?? false,
+      sticky: dto.sticky ?? false,
+      publishOn: dto.publishOn ? new Date(dto.publishOn) : now,
+      ogImage: dto.ogImage ?? '',
+      ...this.renderedContent(dto.content),
+      ...this.renderedSummary(dto.summary ?? ''),
+    };
   }
 
   /** Legacy `BlogPostEdit` (plus the summary, image and authors legacy left to the admin site). */

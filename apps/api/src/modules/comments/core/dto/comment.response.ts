@@ -10,8 +10,12 @@ export class CommentPageLinkResponse {
   key!: string;
   title!: string;
 
-  static from(info: PageInfo): CommentPageLinkResponse {
-    return { type: info.page.type, key: info.key, title: info.title };
+  static from(pageInfo: PageInfo): CommentPageLinkResponse {
+    return {
+      type: pageInfo.page.type,
+      key: pageInfo.key,
+      title: pageInfo.title,
+    };
   }
 }
 

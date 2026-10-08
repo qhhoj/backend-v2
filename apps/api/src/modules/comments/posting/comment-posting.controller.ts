@@ -21,7 +21,7 @@ export class CommentPostingController {
     @Param() { type, key }: CommentPageParamsDto,
     @Body() body: NewCommentDto,
   ): Promise<CommentResponse> {
-    return this.posting.create(auth.principal, type, key, body);
+    return this.posting.create(auth.principal, { type, key }, body);
   }
 
   @Patch(':id')

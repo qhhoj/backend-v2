@@ -63,6 +63,24 @@ describe('profile', () => {
       .expect(200);
   });
 
+  it('checks the about gate before the language and badge references', async () => {
+    const unknownId = (await person()).user._id;
+    const { patch } = await person({ problemCount: 4 });
+    await patch({ about: 'x', languageId: unknownId }).expect(403);
+  });
+
+  it('reports the language before the badge when both references are unknown', async () => {
+    const unknownId = (await person()).user._id;
+    const { patch } = await person();
+    const { body } = (await patch({
+      languageId: unknownId,
+      displayBadgeId: unknownId,
+    }).expect(400)) as {
+      body: { error: { fields: Record<string, string[]> } };
+    };
+    expect(Object.keys(body.error.fields)).toEqual(['languageId']);
+  });
+
   it('trims the full name, caps it at 30 characters and returns it', async () => {
     const { patch } = await person();
     const profile = dataOf<ProfileResponse>(
@@ -305,6 +323,18 @@ describe('profile in official contest mode', () => {
     await api.setSetting('contest.officialMode', true);
   });
   afterAll(() => api.teardown());
+
+  it('locks a changed full name, but not one that is unchanged once trimmed', async () => {
+    const namer = await createUserWith(api, 'namer', {
+      problemCount: 100,
+      firstName: 'Ada',
+    });
+    const session = await loginAs(api, namer._id);
+    const patch = (body: object) =>
+      authed(api.http().patch('/api/internal/profile'), session).send(body);
+    await patch({ firstName: '  Ada  ' }).expect(200);
+    await patch({ firstName: 'Grace' }).expect(403);
+  });
 
   it('refuses about edits to everyone but superusers', async () => {
     const solver = await createUserWith(api, 'solver', { problemCount: 100 });

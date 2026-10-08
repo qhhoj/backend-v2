@@ -109,18 +109,17 @@ export class CommentsRepository {
   async updateBodyIfRevision(
     id: string,
     revisions: number,
-    body: string,
-    bodyHtml: string,
+    { body, bodyHtml }: { body: string; bodyHtml: string },
     session?: ClientSession,
   ): Promise<boolean> {
-    const result = await this.comments
+    const { modifiedCount } = await this.comments
       .updateOne(
         { _id: id, revisions },
         { $set: { body, bodyHtml }, $inc: { revisions: 1 } },
         { session },
       )
       .exec();
-    return result.modifiedCount === 1;
+    return modifiedCount === 1;
   }
 
   /** Hides the comment at `path` and the visible descendants (through `{path}`), recording `hiddenBy` on each; returns the subtree's distinct authors. Rows already hidden keep their own `hiddenBy`, so the hide of an ancestor never takes them over. */

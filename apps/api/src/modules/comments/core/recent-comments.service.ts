@@ -47,7 +47,7 @@ export class RecentCommentsService {
     const scope = principal
       ? await this.currentContest.scopeOf(principal, now)
       : null;
-    const picked: Array<{ comment: Comment; info: PageInfo }> = [];
+    const picked: Array<{ comment: Comment; pageInfo: PageInfo }> = [];
     let cursor = before;
     for (let batch = 0; batch < RECENT_SCAN_BATCHES; batch += 1) {
       const rows = await this.comments.newestVisible(
@@ -62,9 +62,9 @@ export class RecentCommentsService {
       );
       for (const comment of rows) {
         cursor = uuidStr(comment._id);
-        const info = readable.get(pageRef(pageOf(comment)));
-        if (info && !this.reads.hidesThread(principal, info))
-          picked.push({ comment, info });
+        const pageInfo = readable.get(pageRef(pageOf(comment)));
+        if (pageInfo && !this.reads.hidesThread(principal, pageInfo))
+          picked.push({ comment, pageInfo });
         if (picked.length === limit)
           return this.respond(principal, picked, cursor);
       }
@@ -76,7 +76,7 @@ export class RecentCommentsService {
 
   private async respond(
     principal: Principal | null,
-    picked: ReadonlyArray<{ comment: Comment; info: PageInfo }>,
+    picked: ReadonlyArray<{ comment: Comment; pageInfo: PageInfo }>,
     nextBefore: string | null,
   ): Promise<{ items: RecentCommentResponse[]; nextBefore: string | null }> {
     const responses = await this.reads.respond(
@@ -86,7 +86,7 @@ export class RecentCommentsService {
     return {
       items: responses.map((response, index) => ({
         ...response,
-        page: CommentPageLinkResponse.from(picked[index].info),
+        page: CommentPageLinkResponse.from(picked[index].pageInfo),
       })),
       nextBefore,
     };

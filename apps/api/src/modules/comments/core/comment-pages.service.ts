@@ -55,13 +55,13 @@ export class CommentPagesService {
     key: string,
   ): Promise<PageInfo> {
     const id = await this.idOf(type, key);
-    const info =
+    const pageInfo =
       id &&
       (await this.accessible(principal, [{ type, id }])).get(
         pageRef({ type, id }),
       );
-    if (!info) throw new AppError('not_found', 404, 'No such page');
-    return info;
+    if (!pageInfo) throw new AppError('not_found', 404, 'No such page');
+    return pageInfo;
   }
 
   /** The readable ones among `pages`, keyed by `pageRef`; one read per page type whatever the count. A caller scanning in batches passes the viewer's `scope` (null: outside any contest) so it is computed once. */
@@ -98,14 +98,14 @@ export class CommentPagesService {
       ...tagProblems.map((tagProblem) => this.tagProblemPage(tagProblem)),
     ];
     const byRef = new Map(
-      found.flatMap((info) =>
-        info ? [[pageRef(info.page), info] as const] : [],
+      found.flatMap((pageInfo) =>
+        pageInfo ? [[pageRef(pageInfo.page), pageInfo] as const] : [],
       ),
     );
     return new Map(
       pages.flatMap((page) => {
-        const info = byRef.get(pageRef(page));
-        return info ? [[pageRef(page), info] as const] : [];
+        const pageInfo = byRef.get(pageRef(page));
+        return pageInfo ? [[pageRef(page), pageInfo] as const] : [];
       }),
     );
   }

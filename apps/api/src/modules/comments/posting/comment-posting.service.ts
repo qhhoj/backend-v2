@@ -52,21 +52,20 @@ export class CommentPostingService {
   /** Legacy `CommentedDetailView.post` and `CommentForm.clean`. */
   async create(
     principal: Principal,
-    type: CommentPageType,
-    key: string,
+    { type, key }: { type: CommentPageType; key: string },
     dto: NewCommentDto,
     now = new Date(),
   ): Promise<CommentResponse> {
     this.reads.assertOpen(principal);
-    const info = await this.pages.resolve(principal, type, key);
-    if (await this.reads.isLocked(principal, info))
+    const pageInfo = await this.pages.resolve(principal, type, key);
+    if (await this.reads.isLocked(principal, pageInfo))
       throw forbidden('Comments on this page are locked');
     if (!canInteract(await this.users.signedIn(principal)))
       throw forbidden(
         `Solve at least ${INTERACT_MIN_PROBLEM_COUNT} problems and stay unmuted to comment`,
       );
     const parent = dto.parentId
-      ? await this.parentOf(principal, info, dto.parentId, now)
+      ? await this.parentOf(principal, pageInfo, dto.parentId, now)
       : null;
     const releaseHit = await this.rateLimits.reserve(
       [`comment:${principal.userId}`],
@@ -79,7 +78,7 @@ export class CommentPostingService {
       const path = childPath(parent ? parent.path : null, commentId);
       comment = await this.comments.create({
         _id: commentId,
-        page: info.page,
+        page: pageInfo.page,
         author: principal.userId,
         parentId: parent ? parent._id : null,
         threadId: rootOf(path),
@@ -98,8 +97,8 @@ export class CommentPostingService {
       await this.comments.hideSubtree(comment.path, hiddenBy);
       comment.hidden = true;
     }
-    if (info.isPublic && !comment.hidden)
-      await this.announce(principal, info, comment);
+    if (pageInfo.isPublic && !comment.hidden)
+      await this.announce(principal, pageInfo, comment);
     const [response] = await this.reads.respond(principal, [comment]);
     return response;
   }
@@ -126,8 +125,7 @@ export class CommentPostingService {
         !(await this.comments.updateBodyIfRevision(
           id,
           comment.revisions,
-          body,
-          bodyHtml,
+          { body, bodyHtml },
           session,
         ))
       )
@@ -182,7 +180,7 @@ export class CommentPostingService {
   /** Same page, visible, at most 365 days old unless `change_comment`, and not past the depth cap. */
   private async parentOf(
     principal: Principal,
-    info: PageInfo,
+    pageInfo: PageInfo,
     parentId: string,
     now: Date,
   ): Promise<CommentDocument> {
@@ -190,8 +188,8 @@ export class CommentPostingService {
     if (
       !parent ||
       parent.hidden ||
-      parent.page.type !== info.page.type ||
-      uuidStr(parent.page.id) !== info.page.id
+      parent.page.type !== pageInfo.page.type ||
+      uuidStr(parent.page.id) !== pageInfo.page.id
     )
       throw new AppError('not_found', 404, 'No such parent comment');
     if (!canReplyAfter(parent.createdAt, now, moderatesComments(principal)))
@@ -206,11 +204,11 @@ export class CommentPostingService {
   /** Legacy `on_new_comment`, only for pages everyone can read (legacy sent every page). */
   private announce(
     principal: Principal,
-    info: PageInfo,
+    pageInfo: PageInfo,
     comment: CommentDocument,
   ): Promise<void> {
     return this.discord.notify('on_new_comment', {
-      title: `New comment ${this.discord.link(commentLink(info.page.type, info.key, uuidStr(comment._id)))}`,
+      title: `New comment ${this.discord.link(commentLink(pageInfo.page.type, pageInfo.key, uuidStr(comment._id)))}`,
       description: excerpt(comment.body, 200),
       author: this.discord.author(principal.username),
     });
