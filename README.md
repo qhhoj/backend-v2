@@ -9,6 +9,7 @@ Backend of the QHHOJ online judge: NestJS 11 (Fastify) + Mongoose 8 on MongoDB, 
 - Redis >= 7
 - Optional: MariaDB 11 (legacy source for the migrator and its tests only)
 - Worker only: official static `pandoc` >= 3 (the Debian/Ubuntu build cannot start threads under the 768 MiB `prlimit` cap), util-linux `prlimit`, Chromium (`npx playwright install --with-deps chromium`)
+- Build (`npm ci`, worker image and CI): `python3`, `make`, `g++` for the tree-sitter grammars of the similarity engine; the worker runs one similarity job at a time
 
 `docker compose up -d mongo redis mailpit` starts the local services (`mariadb` too if you need it).
 
@@ -100,7 +101,7 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | `contest-rescore`     | recompute every participation of a contest                              |
 | `contest-final-judge` | requeue `PD` rows of a final-submission contest at its end              |
 | `contest-rating`      | Elo-MMR rating run                                                      |
-| `contest-moss`        | MOSS plagiarism run                                                     |
+| `similarity`          | code-similarity run (Dolos) per problem or contest                      |
 | `contest-data`        | contest data zip                                                        |
 | `organization-points` | organization PP and member counts                                       |
 | `user-data`           | user data export zips, hourly expiry sweep                              |
@@ -121,6 +122,7 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | Which comment pages a viewer may read (and comment page types) | `modules/comments/core/comment-pages.service.ts`                                                                                                                                                                        |
 | Votes, contribution points                                     | `modules/contributions/`, `libs/community/src/contribution.ts`, job in `apps/worker/src/jobs/contribution-points`                                                                                                       |
 | Homepage data, RSS/Atom feeds                                  | `apps/api/src/modules/home/`                                                                                                                                                                                            |
+| Code similarity                                                | modules/similarity/, job in apps/worker/src/jobs/similarity, language families in similarity-languages.ts                                                                                                               |
 | Discord webhooks                                               | `libs/community/src/discord.ts`, `modules/discord/`, job in `apps/worker/src/jobs/discord-webhook`                                                                                                                      |
 | Who can see/edit a ticket                                      | `modules/tickets/core/ticket-access.ts` (list filter: `ProblemAccess.editableFilter`)                                                                                                                                   |
 | Ticket events (SSE) and Discord texts                          | `modules/tickets/streams/`, `libs/community/src/ticket-events.ts`, `libs/community/src/tickets.ts`                                                                                                                      |

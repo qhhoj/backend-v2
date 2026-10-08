@@ -23,7 +23,7 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts, modules/ (feature modules incl. `mail/` (SMTP mailer) and `settings/` (admin API)), seed/ (`npm run seed:e2e`)
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data, organization-points, user-data, contribution-points, discord-webhook)
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, organization-points, user-data, contribution-points, discord-webhook)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
   common/     http layer (AppError and its subclasses, filter, interceptor, pipes), bootstrap, env, BaseMongoStreamQuerier, `runCoalesced`, AES-GCM helper (`crypto/`), time zones (`text/time-zone.ts`), OpenAPI helpers (`openapi/`), mail contract (`Mailer`, `MAILER`, `InMemoryMailer`)
@@ -31,8 +31,8 @@ libs/
   settings/   runtime settings: `registry`, `setting-types`, `sealing`, `settings.querier`, `settings.service`, `settings.module`, `testing` (`fakeSettings`)
   auth/       groups, password, token, session, principal, users, guards, decorators, legacy Fernet `crypto` (no AES), AuthModule
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
-  judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
-  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
+  judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep, similarity), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
+  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
   community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, tickets (limits, Discord texts), ticket-events contract, flatpage urls, user activity rules (session keys, user agent classifier, CSV cells), queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
@@ -67,7 +67,7 @@ contests/
   ranking/         board, ranking links, official ranking
   rating/          rate endpoint, ratings.repository
   announcements/   announcements, contest-events (SSE pushes)
-  stats/  moss/  data/  submissions/
+  stats/  data/  submissions/
   editing/         create/update, clone
 problems/
   problems-api.module.ts
@@ -106,6 +106,7 @@ settings/          flat: admin settings API (`GET`/`PATCH /api/internal/admin/se
 mail/              flat: `SmtpMailer` behind the `MAILER` token
 contributions/     flat: vote ledger (votes.repository), vote gates and limit, contribution-points enqueuer
 discord/           flat: Discord webhook enqueuer
+similarity/        core/ start/ runs/ pairs/: code-similarity runs and pairs (`judge.moss_contest` + edit rights)
 home/              flat: homepage data, RSS/Atom feeds
 tickets/
   tickets-api.module.ts
@@ -134,7 +135,7 @@ api-v2/            legacy shapes, grouped like the features
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-moss`, `contest-data`) and `libs/community/src/queues.ts` (`organization-points`, `user-data`, `contribution-points`, `discord-webhook`)
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`, `similarity`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-data`) and `libs/community/src/queues.ts` (`organization-points`, `user-data`, `contribution-points`, `discord-webhook`)
 - `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
@@ -157,8 +158,8 @@ api-v2/            legacy shapes, grouped like the features
 
 ## Runtime settings
 
-- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `LEGACY_MYSQL_URL`, `LEGACY_SECRET_KEY`, `TEST_MYSQL_URL`, `TEST_REDIS_URL` (and `MOSS_API_KEY` until the similarity plan replaces it)
-- Settings (the admin edits them, no restart): `site.timeZone`, `contest.officialMode`, `contest.banAfterDisqualifications`, `discord.webhooks`, `mail.from`, `mail.smtpUrl`, `auth.pwnedApiUrl`, `auth.google`, `auth.github`, `auth.facebook`, `pdf.renderTimeoutMs`, `pdf.maxBytes`
+- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `LEGACY_MYSQL_URL`, `LEGACY_SECRET_KEY`, `TEST_MYSQL_URL`, `TEST_REDIS_URL`
+- Settings (the admin edits them, no restart): `site.timeZone`, `contest.officialMode`, `contest.banAfterDisqualifications`, `discord.webhooks`, `mail.from`, `mail.smtpUrl`, `auth.pwnedApiUrl`, `auth.google`, `auth.github`, `auth.facebook`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `similarity.minPercent`, `similarity.maxPairs`, `similarity.maxSubmissions`
 - Add one: a `define({ type, default, description, secret, combine? })` entry in `SETTINGS` (`libs/settings/src/registry.ts`), `type` from `setting-types.ts` (add a type there when none fits); no other file changes, the admin API and revisions pick it up. `secret: true` encrypts the whole value, `secret: ['clientSecret']` those top-level fields; `combine` merges a PATCH into the stored object (the `auth.*` clients), without it the patch replaces the value
 - Read: inject `SettingsService` and call `settings.get('<key>')` where the value is used, never cache it (it is a synchronous read of an in-memory snapshot kept fresh by change stream plus a one-minute resync, so a change reaches api, worker and bridge within seconds); a consumer that builds something expensive keys it by the value (the mailer keeps its SMTP transport per URL)
 - Write: only `SettingsService.set(key, patch, actorId)` (one transaction: combine, validate, seal, upsert, revision); over HTTP `GET /api/internal/admin/settings`, `PATCH /api/internal/admin/settings/:key` with `{ value }`, `GET .../:key/revisions`, all needing `judge.change_settings` (grant it to superusers only, it can point the server at outbound URLs). `null` is refused: clear with `{}` (webhooks), `''` (URLs, SMTP) or `enabled: false`
@@ -309,7 +310,7 @@ api-v2/            legacy shapes, grouped like the features
 
 ## Contests
 
-- Layout: `apps/api/src/modules/contests/` (`/api/internal/contests`), formats and ranking helpers in `libs/contests`, worker jobs `contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-moss` and `contest-data`
+- Layout: `apps/api/src/modules/contests/` (`/api/internal/contests`), formats and ranking helpers in `libs/contests`, worker jobs `contest-rescore`, `contest-final-judge`, `contest-rating` and `contest-data`
 - Collections: `contests` (problems embedded, `accessCodeHash` sha256, `bannedJudges` judge names), `contestParticipations` (`virtual`: 0 live, -1 spectate, n virtual; `isRegistered` until the first join; live and frozen results), `contestSubmissions` (`_id` = submission id, points scaled to the contest problem); `users.currentParticipation`
 - Rules live in `ContestAccess` (`core/contest-access.ts`): `canSee`, `canEdit`, `visibleFilter`, scoreboard and `canSeeFullSubmissionList` checks; viewer facts come from `ContestViewerService`; invisible or unknown contest -> 404 (also a malformed key), state conflicts -> 409
 - Current participation is checked on read (`CurrentContestService.current`): ended or invisible contest -> pointer cleared (compare-and-set). Its scope feeds `ProblemAccess.canSee/visibleFilter`: before the start every problem is hidden, after it the contest's problems are visible. `/api/v2` applies no contest scope (legacy parity)
@@ -334,10 +335,24 @@ api-v2/            legacy shapes, grouped like the features
 - Official ranking: CMS CSV parsed at write (`ranking/official-ranking.ts`: 1 MiB, 10 000 rows, 105 columns) or a URL
 - Announcements: rendered at save; pushed as ids on Redis `contest-events` to `GET /api/internal/events/contests/:key` (the one SSE hub, `contestTotal` cap, shared with the other contest events); pushes limited per contest
 - Stats: `GET /contests/:key/stats`, gated by `canSeeFullSubmissionList` (never during a freeze for non-editors)
-- MOSS: `MOSS_API_KEY` (unset -> 404); one run per contest (`jobId`), results replaced only after every batch succeeded; the client settles when the server closes the socket; `MOSS_API_KEY` is set on the api (gates the routes) and the worker (runs the job) and never enters job data or logs; clearing results answers 409 while the job exists
+- Similarity: see "Similarity" below
 - Data: `CONTEST_DATA_ROOT` (unset -> 404); one prepare per contest per 24 h unless the zip is missing; zip written to a per-run temp name, streamed with lazily fetched sources, capped in bytes and entries; download streamed by the api
 - Clone: `POST /contests/:key/clone` (`judge.clone_contest` + edit rights on the source), hidden, cloner as only author
 - `/api/v2/contests|contest/:key|participations`: legacy shapes; participations use `ContestAccess.scoreboardFilter` like contest detail, so hidden boards list no scores to non-editors (stricter than legacy) and standings are frozen for non-editors
+
+## Similarity
+
+Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
+
+- Where: api `apps/api/src/modules/similarity/` (`core/` access, rate limits, runs repository; `start/` `POST /api/internal/similarity/runs`; `runs/` list and detail; `pairs/` `GET /runs/:runId/pairs`, `GET /pairs/:pairId`); worker `apps/worker/src/jobs/similarity/` (`similarity-engine.ts` parent, `similarity-engine.script.ts` child, `similarity-languages.ts` families); queue contract `SIMILARITY_QUEUE` in `libs/judging/src/queues.ts`
+- Access: `judge.moss_contest` and edit rights on the problem or contest; unknown, not-visible and visible-but-not-editable scopes are all 404, a missing permission is 403
+- Start: one active run per scope (partial unique index on `similarityRuns.active`), 10 starts per user per hour (given back on 409 or an enqueue failure), a run active 3 hours is abandoned at the next start; an abandoned run never overwrites results
+- Comparison: per problem and language family; C and C++ are one family (C++ grammar); Pascal is compared as text (weaker against renamed identifiers); languages without a grammar are listed in `unsupported`; CE, IE, AB, RJ and unjudged submissions are excluded; sources over 64 KiB or empty are skipped; newest `similarity.maxSubmissions` per family; every submission against every other of another user, a user's own pair is never built or stored
+- Limits: `similarity.minPercent`, `similarity.maxPairs` (per run, most similar first), `similarity.maxSubmissions` are snapshotted into the run; 50 fragments per pair (1-based inclusive line ranges per side); deadline 30 minutes
+- Engine: a child process per group (the library is ESM-only with native addons) with a V8 heap cap of 2 GiB; the parent kills it on the deadline and on shutdown; a failing group is skipped and flagged `failed: true`
+- Run lifecycle: a success replaces the scope's earlier runs and pairs in one transaction; a failed run keeps them; a stalled redelivery fails the run; a shutdown mid-run fails it (`internal_error`) and keeps earlier results
+- Pairs: the list omits problems the viewer cannot see; the problem-only and language-only filters read through the `{run, similarity, _id}` index; pair sources follow the normal submission source rules (`SubmissionsService.viewable`) for each side, else 404
+- Legacy: `judge_contestmoss` rows (the `contestMoss` collection) are not migrated and legacy MOSS results are gone with them (the Stanford URLs expired); rows already in the database are left there, unreachable
 
 ## Organizations and users
 
@@ -409,6 +424,8 @@ Work on the migrator is paused; the framework exists.
 - `node dist/apps/migrator/main verify [jobs...]`: compares Mongo vs MariaDB, exit code 1 on mismatch
 - Ids are stable: legacy `table:id` -> UUIDv7 stored in `migrationIdMap` (`apps/migrator/src/id-map.repository.ts`)
 
+Not migrated: `judge_contestmoss` (no mapper; see Similarity).
+
 Add a job:
 
 1. `apps/migrator/src/mappers/<collection>.mapper.ts`: `@Injectable() class <Name>Mapper implements Mapper<Row>` (template: `groups.mapper.ts`)
@@ -435,6 +452,7 @@ Add a job:
 - Index use is asserted with `profileQueries` (`@libs/database/testing`): no `COLLSCAN`, documents examined bounded; worker effects fixtures in `apps/worker/test/effects-fixtures.ts`; SSE through `apps/api/test/sse-client.ts` (supertest cannot read streams); `recordSubmissionEvents` (`@libs/judging/testing`)
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`
 - Playwright specs skip without Chromium; the pandoc spec skips locally and fails in CI without pandoc
+- Similarity specs spawn the real engine (about 1 s each); they need the grammars compiled by `npm ci`
 - Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
 
 ## Commands
@@ -462,7 +480,6 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env); the migrator reads only `MONGO_URL` and `LEGACY_*`
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart
-- `MOSS_API_KEY` goes on the api and the worker; without it on the api every MOSS route answers 404
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
 - `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`
 - The `contest.officialMode` setting (on) locks profile `about` and `firstName`, comment pages, posting, comment votes and blog writing for non-superusers
@@ -472,8 +489,9 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - nginx: serve `/media/submission_file/` with `Content-Disposition: attachment`, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` (file submissions are user bytes stored under their language's extension, which may be `html`, `svg` or `xml`; `nosniff` alone does not stop those). Judges must reach `SITE_URL` + `MEDIA_URL` over HTTP(S): the bridge sends the absolute file URL
 - nginx: map the legacy `/feed/<blog|comment|problems>/<rss|atom>/` to `/api/internal/feeds/<blog|comments|problems>/<rss|atom>`
 - The `.hint()` queries (organization members, submissions, comment threads) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`); the leaderboards are not hinted but are only fast with theirs
-- The worker needs outbound TCP to `moss.stanford.edu:7690` when `MOSS_API_KEY` is set
-- Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
+- Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc), plus up to 2 GiB for the similarity engine child (V8 heap cap, not a hard cap; native parser memory comes on top)
+- The worker runs one similarity job at a time (queue concurrency 1)
+- Worker image and CI need `python3`, `make` and `g++` at `npm ci`: the tree-sitter grammars of `@dodona/dolos-parsers` are compiled by node-gyp (never `--ignore-scripts`); the child resolves `@dodona/dolos-lib` itself, so the worker does not depend on its working directory
 - Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); exactly one instance
 - The bridge port must be reachable only from judge hosts (firewall)
 - Judge containers need a restart policy (the judge-server fork exits on a broken connection)
