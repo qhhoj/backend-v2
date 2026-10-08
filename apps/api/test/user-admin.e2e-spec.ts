@@ -57,9 +57,9 @@ describe('staff user list', () => {
   });
   afterAll(() => api.teardown());
 
-  it('matches usernames by case-insensitive prefix', async () => {
-    expect(await names('?search=ali')).toEqual(['alice2', 'alice1']);
-    expect(await names('?search=ALI')).toEqual(['alice2', 'alice1']);
+  it('matches usernames by case-insensitive prefix, in username order', async () => {
+    expect(await names('?search=ali')).toEqual(['alice1', 'alice2']);
+    expect(await names('?search=ALI')).toEqual(['alice1', 'alice2']);
     expect(await names('?search=lice')).toEqual([]);
   });
 
@@ -76,8 +76,18 @@ describe('staff user list', () => {
     ).toEqual([['mallory', 'spam']]);
   });
 
+  it('lists only users who are not banned when banned=false', async () => {
+    expect(await names('?banned=false')).toEqual([
+      'bob',
+      'alice2',
+      'alice1',
+      'moderator',
+    ]);
+  });
+
   it('combines the search with the banned filter', async () => {
     expect(await names('?search=mal&banned=true')).toEqual(['mallory']);
+    expect(await names('?search=mal&banned=false')).toEqual([]);
     expect(await names('?search=ali&banned=true')).toEqual([]);
   });
 
@@ -103,25 +113,67 @@ describe('staff user list', () => {
     await api.http().get(BASE).expect(401);
   });
 
-  it('rejects a page size above 100', async () => {
+  it('rejects a page size above 100 and a page above 500', async () => {
     await authed(api.http().get(`${BASE}?pageSize=101`), moderator).expect(400);
+    await authed(api.http().get(`${BASE}?page=501`), moderator).expect(400);
   });
 
-  it('serves the search and the banned filter from indexes', async () => {
-    for (const query of [
-      '?search=ali',
-      '?search=ALI&banned=true',
-      '?banned=true',
-    ]) {
+  /** Counts are `COUNT_SCAN` on the same key; finds are `IXSCAN`. */
+  const onIndex = (key: string) =>
+    new RegExp(`(IXSCAN|COUNT_SCAN) \\{ ${key}: 1 \\}`);
+
+  it('serves each filter and order from its index', async () => {
+    // The auth guard reads the session's user by _id (an EXPRESS plan) on every request; the list's own reads are not express.
+    const cases: Array<{
+      query: string;
+      find: RegExp;
+      mayUseSort: boolean;
+      count: RegExp | null;
+    }> = [
+      {
+        query: '?search=ali',
+        find: /IXSCAN \{ username: 1 \}/,
+        mayUseSort: false,
+        count: onIndex('username'),
+      },
+      {
+        query: '?search=ALI&banned=true',
+        // The planner may pick the small banned index; its sort then covers only banned users.
+        find: /IXSCAN \{ (username|banReason): 1 \}/,
+        mayUseSort: true,
+        count: onIndex('(username|banReason)'),
+      },
+      {
+        query: '?banned=true',
+        find: /IXSCAN \{ banReason: 1 \}/,
+        mayUseSort: true,
+        count: onIndex('banReason'),
+      },
+      {
+        // Not banned has no index of its own: the find walks _id, and the count is the whole collection's, as the unfiltered list's is.
+        query: '?banned=false',
+        find: /IXSCAN \{ _id: 1 \}/,
+        mayUseSort: false,
+        count: null,
+      },
+    ];
+    for (const { query, find, mayUseSort, count } of cases) {
       const operations = await profileQueries(api.db, () =>
         authed(api.http().get(`${BASE}${query}`), moderator).expect(200),
       );
       const reads = operations.filter(
-        ({ collection }) => collection === 'users',
+        ({ collection, planSummary }) =>
+          collection === 'users' && !planSummary.startsWith('EXPRESS_'),
       );
-      expect(reads.length).toBeGreaterThan(0);
-      for (const read of reads)
-        expect(`${query} ${read.planSummary}`).toMatch(/IXSCAN|COUNT_SCAN/);
+      const finds = reads.filter(({ operation }) => operation === 'query');
+      expect(finds.length).toBe(1);
+      expect(`${query} ${finds[0].planSummary}`).toMatch(find);
+      if (!mayUseSort) expect(finds[0].hasSortStage).toBe(false);
+      if (count)
+        for (const read of reads.filter(
+          ({ operation }) => operation !== 'query',
+        ))
+          expect(`${query} ${read.planSummary}`).toMatch(count);
     }
   });
 });

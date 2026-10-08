@@ -527,6 +527,14 @@ describe('user pages', () => {
       isSuperuser: true,
       banReason: null,
     });
+    const superuser = await loginAs(
+      api,
+      (await createUserWith(api, 'page_superuser', { isSuperuser: true }))._id,
+    );
+    expect(await staffOf('banned_page', superuser)).toEqual({
+      isSuperuser: false,
+      banReason: 'spam',
+    });
     expect(await staffOf('banned_page')).toBeNull();
     expect(await staffOf('banned_page', ordinary)).toBeNull();
   });

@@ -30,35 +30,47 @@ const PROJECTION = {
   lastAccess: 1,
 };
 
-/** The U+FFFF sentinel sorts after every username that starts with the search. */
+/** Sorts after every username that starts with the search, so the range `[search, search + PREFIX_END)` covers the prefix. */
 const PREFIX_END = '￿';
 
 export interface StaffUserFilter {
   search?: string;
+  /** Unset: everyone. True: banned only. False: not banned only. */
   banned?: boolean;
 }
+
+const searchFilter = (search?: string): FilterQuery<User> =>
+  search ? { username: { $gte: search, $lt: `${search}${PREFIX_END}` } } : {};
+
+const bannedFilter = (banned?: boolean): FilterQuery<User> => {
+  if (banned === undefined) return {};
+  // `banReason` is null (or missing) for users who are not banned.
+  return { banReason: banned ? { $type: 'string' } : null };
+};
+
+/** A search is ordered by username so the username index serves the order; otherwise newest first. */
+const orderOf = (search?: string): Record<string, 1 | -1> =>
+  search ? { username: 1 } : { _id: -1 };
 
 @Injectable()
 export class UserAdminRepository {
   constructor(@InjectModel(User.name) private readonly users: Model<User>) {}
 
-  /** Newest first. The search is a collated range over the username index, never a regex. */
+  /** The search is a collated range over the username index, never a regex. */
   async page(
     { search, banned }: StaffUserFilter,
     page: number,
     pageSize: number,
   ): Promise<{ items: StaffUserRow[]; total: number }> {
     const filter: FilterQuery<User> = {
-      ...(search
-        ? { username: { $gte: search, $lt: `${search}${PREFIX_END}` } }
-        : {}),
-      ...(banned ? { banReason: { $type: 'string' } } : {}),
+      ...searchFilter(search),
+      ...bannedFilter(banned),
     };
     const options = search ? { collation: CI } : {};
     const [items, total] = await Promise.all([
       this.users
         .find(filter, PROJECTION, options)
-        .sort({ _id: -1 })
+        .sort(orderOf(search))
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean<StaffUserRow[]>()
