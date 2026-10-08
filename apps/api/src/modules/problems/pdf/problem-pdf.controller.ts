@@ -64,6 +64,7 @@ export class ProblemPdfController {
       return reply
         .code(202)
         .header('Retry-After', String(RENDERING_RETRY_AFTER_SECONDS))
+        .header('Cache-Control', 'no-store')
         .send({ data: { status: 'rendering' } });
     const { file, filename } = location;
     try {

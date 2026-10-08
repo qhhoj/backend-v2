@@ -35,6 +35,7 @@ export class ProblemPdfService {
 
   /**
    * Cached file, or a render job (one per problem and language). A completed job is removed so a later request can enqueue again; a failed one is kept for `PDF_FAIL_WINDOW_SECONDS`, answering 503 with Retry-After instead of an endless 202. A statement change or rename removes it earlier (`ProblemDataLifecycleService`).
+   * A pending or active job is answered for free; only a new enqueue spends the ip budget.
    * `enqueue: false` (HEAD) only peeks at the cache: no job, no rate-limit budget.
    */
   async locate(
@@ -62,11 +63,6 @@ export class ProblemPdfService {
     code: string,
     lang: StatementLanguage,
   ): Promise<void> {
-    await this.rateLimit.reserve(
-      [`pdf-render:ip:${ip}`],
-      PDF_RENDER_LIMIT,
-      PDF_RENDER_WINDOW_SECONDS,
-    );
     const jobId = pdfJobId(code, lang);
     const previous = await this.queue.getJob(jobId);
     if (previous && (await previous.isFailed())) {
@@ -77,10 +73,15 @@ export class ProblemPdfService {
           503,
           'The PDF could not be rendered; try again later',
           undefined,
-          { 'Retry-After': String(retryAfter) },
+          { 'Retry-After': String(retryAfter), 'Cache-Control': 'no-store' },
         );
       await previous.remove();
-    }
+    } else if (previous) return; // pending or active: polling is free
+    await this.rateLimit.reserve(
+      [`pdf-render:ip:${ip}`],
+      PDF_RENDER_LIMIT,
+      PDF_RENDER_WINDOW_SECONDS,
+    );
     await this.queue.add(
       'render',
       { code, lang },

@@ -85,8 +85,8 @@ describe('GET /api/internal/problems/:code/pdf', () => {
   it('answers 202 and enqueues one job per problem and language, deduplicated', async () => {
     const pending = await api.http().get(`${PROBLEMS}/sum/pdf`).expect(202);
     expect(pending.body).toEqual({ data: { status: 'rendering' } });
-    expect(pending.headers['retry-after']).toMatch(/^\d+$/);
-    expect(Number(pending.headers['retry-after'])).toBeGreaterThan(0);
+    expect(pending.headers['retry-after']).toBe('3');
+    expect(pending.headers['cache-control']).toBe('no-store');
     await api.http().get(`${PROBLEMS}/sum/pdf`).expect(202);
     await api.http().get(`${PROBLEMS}/duo/pdf?lang=vi`).expect(202);
     await api.http().get(`${PROBLEMS}/sum/pdf?lang=vi`).expect(202);
@@ -158,18 +158,24 @@ describe('GET /api/internal/problems/:code/pdf', () => {
       .expect(400)
       .expect(errorCode('validation_failed'));
   });
-  it('rate limits enqueue attempts per ip', async () => {
-    const redis = api.app.get<Redis>(REDIS);
-    const spent = await redis.keys('rate:*');
-    if (spent.length) await redis.del(...spent);
-    for (let attempt = 0; attempt < 30; attempt += 1)
+  it('rate limits new renders per ip, never polls of a pending one', async () => {
+    await resetBudget();
+    const spamCodes = Array.from(
+      { length: 30 },
+      (_unused, index) => `spam${index}`,
+    );
+    for (const code of spamCodes) await createProblem(api, catalog, { code });
+    for (let poll = 0; poll < 40; poll += 1)
       await api.http().get(`${PROBLEMS}/busy/pdf`).expect(202);
+    for (const code of ['busy', ...spamCodes.slice(0, 29)])
+      await api.http().get(`${PROBLEMS}/${code}/pdf`).expect(202);
     await api
       .http()
-      .get(`${PROBLEMS}/busy/pdf`)
+      .get(`${PROBLEMS}/${spamCodes[29]}/pdf`)
       .expect(429)
       .expect(errorCode('rate_limited'));
-  });
+    await queue.obliterate({ force: true });
+  }, 60000);
   it('answers 503 with Retry-After after a failed render, until the statement changes', async () => {
     await resetBudget();
     const worker = await failingWorker();
@@ -185,6 +191,7 @@ describe('GET /api/internal/problems/:code/pdf', () => {
       .expect(503)
       .expect(errorCode('pdf_unavailable'));
     const retryAfter = Number(refused.headers['retry-after']);
+    expect(refused.headers['cache-control']).toBe('no-store');
     expect(retryAfter).toBeGreaterThan(0);
     expect(retryAfter).toBeLessThanOrEqual(600);
     await authed(api.http().patch(`${PROBLEMS}/edited`), editor)
