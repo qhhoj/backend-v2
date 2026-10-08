@@ -243,13 +243,12 @@ describe('impersonation', () => {
         .send({})
         .expect(403)
         .expect(errorCode('forbidden'));
-    for (const path of [`${AUTH}/2fa/webauthn/credentials`])
-      await api
-        .http()
-        .get(path)
-        .set('Cookie', alice.cookie)
-        .expect(403)
-        .expect(errorCode('forbidden'));
+    await api
+      .http()
+      .get(`${AUTH}/2fa/webauthn/credentials`)
+      .set('Cookie', alice.cookie)
+      .expect(403)
+      .expect(errorCode('forbidden'));
     await post(`${AUTH}/2fa/totp/enroll`, await login('bob'), {
       currentPassword: 'correct horse battery',
     }).expect(201);

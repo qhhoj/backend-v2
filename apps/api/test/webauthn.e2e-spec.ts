@@ -128,6 +128,9 @@ describe('webauthn endpoints', () => {
     await post('register/options', pending, CURRENT_PASSWORD)
       .expect(403)
       .expect(errorCode('two_factor_required'));
+    await listKeys(pending)
+      .expect(403)
+      .expect(errorCode('two_factor_required'));
     const requestOptions = await loginOptions(pending);
     expect(requestOptions.allowCredentials).toEqual([
       { id: fake.id, type: 'public-key' },
@@ -530,6 +533,21 @@ describe('webauthn endpoints', () => {
 
   it('lists the own keys oldest first, never the credential id', async () => {
     const laptop = await register(authenticator(), 'Laptop');
+    await createUser(api.users, { username: 'bob', email: 'bob@example.com' });
+    await api.users.updateOne(
+      { username: 'bob' },
+      {
+        $push: {
+          webauthnCredentials: {
+            _id: '01900000-0000-7000-8000-000000000004',
+            name: 'Bob key',
+            credId: 'bob-cred',
+            publicKey: 'AA',
+            counter: 0,
+          },
+        },
+      },
+    );
     // A second API registration would need the second factor first; a stored row is enough to pin the order.
     await api.users.updateOne(
       { username: 'alice' },

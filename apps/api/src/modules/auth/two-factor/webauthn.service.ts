@@ -17,13 +17,18 @@ import { SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, ENV, isDuplicateKey } from '@libs/common';
 import type { Env } from '@libs/common';
-import { newId, type WebauthnCredential } from '@libs/database';
+import {
+  newId,
+  type WebauthnCredential as StoredWebauthnCredential,
+} from '@libs/database';
 import { AuthService } from '../core/auth.service';
 import { WebauthnCredentialResponse } from './dto/webauthn.response';
 import { SecondFactorService } from './second-factor.service';
 
 const RP_NAME = 'QHHOJ';
 const USER_HANDLE_BYTES = 32;
+
+type ChallengeField = 'webauthnChallenge' | 'webauthnRegistrationChallenge';
 
 const failed = (message = 'WebAuthn verification failed') =>
   new AppError('webauthn_failed', 400, message);
@@ -72,13 +77,33 @@ export class WebauthnService {
     name: string,
     response: Record<string, unknown>,
   ): Promise<WebauthnCredentialResponse> {
-    // Atomic read+clear: a challenge authorizes exactly one verification.
-    const challenge = await this.sessions.consume(
+    const challenge = await this.consumeChallenge(
       auth.sessionId!,
       'webauthnRegistrationChallenge',
     );
+    const credentialInfo = await this.verifyRegistration(response, challenge);
+    const stored = await this.storeCredential(
+      auth.user._id,
+      name,
+      credentialInfo,
+    );
+    return WebauthnCredentialResponse.from(stored);
+  }
+
+  /** Atomic read+clear: a challenge authorizes exactly one verification. */
+  private async consumeChallenge(
+    sessionId: string,
+    field: ChallengeField,
+  ): Promise<string> {
+    const challenge = await this.sessions.consume(sessionId, field);
     if (!challenge) throw failed('No pending WebAuthn challenge');
-    let credentialInfo: WebAuthnCredential;
+    return challenge;
+  }
+
+  private async verifyRegistration(
+    response: Record<string, unknown>,
+    challenge: string,
+  ): Promise<WebAuthnCredential> {
     try {
       const { verified, registrationInfo } = await verifyRegistrationResponse({
         response: response as unknown as RegistrationResponseJSON,
@@ -88,11 +113,18 @@ export class WebauthnService {
         requireUserVerification: false,
       });
       if (!verified || !registrationInfo) throw failed();
-      credentialInfo = registrationInfo.credential;
+      return registrationInfo.credential;
     } catch {
       throw failed();
     }
-    const stored: WebauthnCredential = {
+  }
+
+  private async storeCredential(
+    userId: string,
+    name: string,
+    credentialInfo: WebAuthnCredential,
+  ): Promise<StoredWebauthnCredential> {
+    const stored: StoredWebauthnCredential = {
       _id: newId(),
       name,
       credId: credentialInfo.id,
@@ -100,18 +132,18 @@ export class WebauthnService {
       counter: credentialInfo.counter,
     };
     try {
-      await this.users.addWebauthnCredential(auth.user._id, stored);
+      await this.users.addWebauthnCredential(userId, stored);
     } catch (error) {
       // credId is unique across users: registering an already-known authenticator.
       if (isDuplicateKey(error)) throw failed('WebAuthn registration failed');
       throw error;
     }
-    return WebauthnCredentialResponse.from(stored);
+    return stored;
   }
 
   /** Registration order, oldest first: the array keeps the order it was stored in. */
   list(auth: AuthContext): WebauthnCredentialResponse[] {
-    return [...auth.user.webauthnCredentials].map((credential) =>
+    return auth.user.webauthnCredentials.map((credential) =>
       WebauthnCredentialResponse.from(credential),
     );
   }
