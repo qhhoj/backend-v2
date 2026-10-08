@@ -8,7 +8,7 @@ Backend of the QHHOJ online judge: NestJS 11 (Fastify) + Mongoose 8 on MongoDB, 
 - MongoDB 8 as a **replica set** (transactions, change streams)
 - Redis >= 7
 - Optional: MariaDB 11 (legacy source for the migrator and its tests only)
-- Worker only: `pandoc` >= 3, util-linux `prlimit`, Chromium (`npx playwright install --with-deps chromium`)
+- Worker only: official static `pandoc` >= 3 (the Debian/Ubuntu build cannot start threads under the 768 MiB `prlimit` cap), util-linux `prlimit`, Chromium (`npx playwright install --with-deps chromium`)
 
 `docker compose up -d mongo redis mailpit` starts the local services (`mariadb` too if you need it).
 

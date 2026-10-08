@@ -11,6 +11,13 @@ class PrlimitMissingError extends PolygonImportError {
     super('prlimit (util-linux) is required to run pandoc but was not found');
   }
 }
+/** prlimit exits 127 when the program it should exec does not exist. */
+const PRLIMIT_EXEC_FAILED = 127;
+class PandocNotFoundError extends PolygonImportError {
+  constructor() {
+    super('pandoc not installed');
+  }
+}
 const OUT_OF_MEMORY = /out of memory|heap (exhausted|overflow)/i;
 const FILTER_FILE = 'filter.lua';
 const VERSION_TIMEOUT_MS = 10_000;
@@ -223,6 +230,7 @@ export class PandocService {
     }
   }
 
+  /** null only when the binary does not exist; a pandoc that exists but cannot start throws its own stderr. */
   async version(): Promise<number[] | null> {
     try {
       const banner = await this.run(
@@ -233,14 +241,14 @@ export class PandocService {
       );
       return banner.split('\n')[0].split(' ')[1].split('.').map(Number);
     } catch (error) {
-      if (error instanceof PrlimitMissingError) throw error;
-      return null;
+      if (error instanceof PandocNotFoundError) return null;
+      throw error;
     }
   }
 
   async assertAvailable(): Promise<void> {
     const version = await this.version();
-    if (!version) throw new PolygonImportError('pandoc not installed');
+    if (!version) throw new PandocNotFoundError();
     if (version[0] < MINIMUM_MAJOR_VERSION)
       throw new PolygonImportError('pandoc version must be at least 3.0.0');
   }
@@ -307,6 +315,13 @@ export class PandocService {
         clearTimeout(timer);
         if (failure) return settle();
         if (code === 0) return resolve(Buffer.concat(chunks).toString('utf8'));
+        if (
+          code === PRLIMIT_EXEC_FAILED &&
+          /failed to execute/.test(errorText)
+        ) {
+          failure = new PandocNotFoundError();
+          return settle();
+        }
         failure = new PolygonImportError(
           OUT_OF_MEMORY.test(errorText)
             ? 'statement conversion ran out of memory'

@@ -39,7 +39,14 @@ jobs:
       - run: pip install pyyaml==6.0.3
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: sudo apt-get update && sudo apt-get install -y pandoc && pandoc --version
+      # Official static build: the Debian/Ubuntu pandoc fails to start threads under the worker's `prlimit --as=768MiB` cap.
+      - name: Install pandoc 3.1.3
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/pandoc.tar.gz" https://github.com/jgm/pandoc/releases/download/3.1.3/pandoc-3.1.3-linux-amd64.tar.gz
+          echo "74bc434908e4d858b3edbfd6271d2e9e499477837e5df1d630df4e62f113803d  $RUNNER_TEMP/pandoc.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/pandoc.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/pandoc-3.1.3/bin" >> "$GITHUB_PATH"
+      - run: pandoc --version
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

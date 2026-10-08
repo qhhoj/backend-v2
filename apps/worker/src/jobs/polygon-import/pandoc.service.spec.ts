@@ -171,6 +171,12 @@ describe('PandocService process handling', () => {
       'pandoc not installed',
     );
   });
+  it('reports a pandoc that exists but fails to start with its own error', async () => {
+    const broken = fakePandoc('echo "failed to create OS thread" >&2; exit 1');
+    await expect(broken.assertAvailable()).rejects.toThrow(
+      'pandoc failed: failed to create OS thread',
+    );
+  });
   it('rejects pandoc older than 3', async () => {
     await expect(
       fakePandoc('echo "pandoc 2.9.2"').assertAvailable(),
