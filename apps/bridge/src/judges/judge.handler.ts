@@ -29,12 +29,12 @@ export const MAX_PACKETS_PER_SECOND = 1000;
 /** Legacy: the reported ping is the mean of the last 6 round trips. */
 const PING_SAMPLES = 6;
 const HEADER_BYTES = 4;
-/** Packets of a running grading: ignored until this connection saw `grading-begin`. */
 type GradingBeginPacket = Extract<SubmissionPacket, { name: 'grading-begin' }>;
 type TestCaseStatusPacket = Extract<
   SubmissionPacket,
   { name: 'test-case-status' }
 >;
+/** Packets of a running grading: ignored until this connection saw `grading-begin`. */
 const AFTER_GRADING_BEGIN: ReadonlySet<string> = new Set([
   'grading-end',
   'test-case-status',

@@ -229,7 +229,7 @@ describe('JudgeHandler on test-case packets', () => {
       'submission-id': 'sub-1',
       cases: [caseOf(1)],
     });
-    await state.handler.finished;
+    await waitUntil(() => state.handler.isClosed);
     expect(state.handler.isClosed).toBe(true);
   });
 
