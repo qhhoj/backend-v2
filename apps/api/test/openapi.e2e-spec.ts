@@ -442,6 +442,40 @@ describe('OpenAPI document', () => {
       );
     });
 
+    it("documents the contest join rules and the viewer's state on list rows and the detail viewer", async () => {
+      const { schemas } = (await document()).components;
+      expect(Object.keys(schemas.ContestListItemResponse.properties!)).toEqual(
+        expect.arrayContaining([
+          'requiresAccessCode',
+          'disallowVirtual',
+          'registrationStart',
+          'registrationEnd',
+          'viewer',
+        ]),
+      );
+      expect(
+        schemas.ContestListViewerResponse.properties!.liveStatus,
+      ).toMatchObject({
+        enum: ['registered', 'participating', 'finished'],
+        nullable: true,
+      });
+      expect(Object.keys(schemas.ContestViewerResponse.properties!)).toEqual(
+        expect.arrayContaining([
+          'liveStatus',
+          'isCurrent',
+          'canEdit',
+          'liveParticipation',
+        ]),
+      );
+      expect(Object.keys(schemas.ContestDetailResponse.properties!)).toEqual(
+        expect.arrayContaining([
+          'requiresAccessCode',
+          'registrationStart',
+          'problems',
+        ]),
+      );
+    });
+
     it('documents the PDF outcomes: file, rendering with the envelope, and the error envelope', async () => {
       const doc = await document();
       const { responses } = doc.paths['/api/internal/problems/{code}/pdf'].get;

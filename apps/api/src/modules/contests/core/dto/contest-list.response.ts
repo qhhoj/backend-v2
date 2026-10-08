@@ -1,8 +1,10 @@
-import { contestPhase } from '@libs/contests';
-import type { ContestPhase } from '@libs/contests';
+import { ApiProperty } from '@nestjs/swagger';
+import { contestPhase, LIVE_STATUSES } from '@libs/contests';
+import type { ContestPhase, LiveStatus } from '@libs/contests';
 import type { Contest, ContestFormatName } from '@libs/database';
 
-export class ContestListItemResponse {
+/** What every contest view shows of the contest itself. */
+export class ContestSummaryResponse {
   key!: string;
   name!: string;
   summary!: string;
@@ -18,8 +20,14 @@ export class ContestListItemResponse {
   virtualCount!: number;
   isPrivate!: boolean;
   isOrganizationPrivate!: boolean;
+  /** Registering and joining (live or virtual) ask for the access code; editors skip it. */
+  requiresAccessCode!: boolean;
+  disallowVirtual!: boolean;
+  /** Both null: the contest takes no registration. */
+  registrationStart!: Date | null;
+  registrationEnd!: Date | null;
 
-  static from(contest: Contest, now: Date): ContestListItemResponse {
+  static from(contest: Contest, now: Date): ContestSummaryResponse {
     return {
       key: contest.key,
       name: contest.name,
@@ -35,6 +43,32 @@ export class ContestListItemResponse {
       virtualCount: contest.virtualCount,
       isPrivate: contest.isPrivate,
       isOrganizationPrivate: contest.isOrganizationPrivate,
+      requiresAccessCode: contest.accessCodeHash !== null,
+      disallowVirtual: contest.disallowVirtual,
+      registrationStart: contest.registrationStart,
+      registrationEnd: contest.registrationEnd,
     };
+  }
+}
+
+/** The signed-in viewer's own state in one contest. */
+export class ContestListViewerResponse {
+  /** Their live participation (`liveStatusOf`); null when they have none. */
+  @ApiProperty({ enum: [...LIVE_STATUSES], nullable: true, type: String })
+  liveStatus!: LiveStatus | null;
+  /** Their current contest (`GET /contests/current`) is this one, and that participation has not ended. */
+  isCurrent!: boolean;
+}
+
+export class ContestListItemResponse extends ContestSummaryResponse {
+  /** Null for a signed-out visitor. */
+  viewer!: ContestListViewerResponse | null;
+
+  static withViewer(
+    contest: Contest,
+    now: Date,
+    viewer: ContestListViewerResponse | null,
+  ): ContestListItemResponse {
+    return { ...ContestSummaryResponse.from(contest, now), viewer };
   }
 }

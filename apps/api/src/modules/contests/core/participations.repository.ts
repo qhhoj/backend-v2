@@ -16,6 +16,12 @@ import { VIRTUAL_JOIN_ATTEMPTS } from '../core/rate-limits';
 
 export type ParticipationDocument = HydratedDocument<ContestParticipation>;
 
+/** The fields `liveStatusOf` and `hasParticipationEnded` read, plus the ids a list page matches on. */
+export type OwnParticipationRow = Pick<
+  ContestParticipation,
+  '_id' | 'contest' | 'virtual' | 'realStart' | 'isRegistered'
+>;
+
 @Injectable()
 export class ParticipationsRepository {
   constructor(
@@ -75,6 +81,22 @@ export class ParticipationsRepository {
     return this.participations
       .find({ user: userId, contest: { $in: contestIds }, virtual: LIVE })
       .lean<ContestParticipation[]>()
+      .exec();
+  }
+
+  /** The user's rows (live, spectating, virtual) in these contests: `$in` on the first field of the unique `{contest, user, virtual}` index reads only the matching keys. */
+  ownRowsIn(
+    userId: string,
+    contestIds: readonly string[],
+  ): Promise<OwnParticipationRow[]> {
+    if (!contestIds.length) return Promise.resolve([]);
+    return this.participations
+      .find(
+        { contest: { $in: [...contestIds] }, user: userId },
+        { contest: 1, virtual: 1, realStart: 1, isRegistered: 1 },
+      )
+      .hint({ contest: 1, user: 1, virtual: 1 })
+      .lean<OwnParticipationRow[]>()
       .exec();
   }
 

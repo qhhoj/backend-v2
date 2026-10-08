@@ -9,7 +9,10 @@ import type {
   ScoreboardVisibility,
 } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
-import { ContestListItemResponse } from './contest-list.response';
+import {
+  ContestListViewerResponse,
+  ContestSummaryResponse,
+} from './contest-list.response';
 
 export class ContestProblemResponse {
   problemId!: string;
@@ -46,7 +49,7 @@ export class ParticipationSummaryResponse {
   }
 }
 
-export class ContestViewerResponse {
+export class ContestViewerResponse extends ContestListViewerResponse {
   canEdit!: boolean;
   isEditor!: boolean;
   isTester!: boolean;
@@ -96,12 +99,36 @@ export class ContestSettingsResponse {
   }
 }
 
-export class ContestDetailResponse extends ContestListItemResponse {
+/** The contest's problems in order, labelled, skipping any whose summary is missing. */
+function labelledProblems(
+  contest: Contest,
+  summaries: Array<{ _id: string; code: string; name: string }>,
+): ContestProblemResponse[] {
+  const summaryOf = new Map(summaries.map((problem) => [problem._id, problem]));
+  return [...contest.problems]
+    .sort((left, right) => left.order - right.order)
+    .flatMap((entry, index) => {
+      const problem = summaryOf.get(uuidStr(entry.problem));
+      if (!problem) return [];
+      return [
+        {
+          problemId: problem._id,
+          code: problem.code,
+          name: problem.name,
+          label: problemLabel(index, contest.labelStyle),
+          points: entry.points,
+          partial: entry.partial,
+          isPretested: entry.isPretested,
+          maxSubmissions: entry.maxSubmissions,
+        },
+      ];
+    });
+}
+
+export class ContestDetailResponse extends ContestSummaryResponse {
   description!: string;
   descriptionHtml!: string;
   authors!: UserSummaryResponse[];
-  registrationStart!: Date | null;
-  registrationEnd!: Date | null;
   frozenLastMinutes!: number;
   scoreboardVisibility!: ScoreboardVisibility;
   showSubmissionList!: boolean;
@@ -116,8 +143,6 @@ export class ContestDetailResponse extends ContestListItemResponse {
     additionalProperties: { oneOf: [{ type: 'number' }, { type: 'boolean' }] },
   })
   formatConfig!: Record<string, unknown>;
-  disallowVirtual!: boolean;
-  requiresAccessCode!: boolean;
   /** Null until the viewer may see them (in the contest, ended, editor or tester). */
   problems!: ContestProblemResponse[] | null;
   viewer!: ContestViewerResponse;
@@ -132,16 +157,11 @@ export class ContestDetailResponse extends ContestListItemResponse {
       viewer: ContestViewerResponse;
     },
   ): ContestDetailResponse {
-    const problemOf = new Map(
-      (extras.problems ?? []).map((problem) => [problem._id, problem]),
-    );
     return {
-      ...ContestListItemResponse.from(contest, extras.now),
+      ...ContestSummaryResponse.from(contest, extras.now),
       description: contest.description,
       descriptionHtml: contest.descriptionHtml,
       authors: extras.authors.map((author) => UserSummaryResponse.from(author)),
-      registrationStart: contest.registrationStart,
-      registrationEnd: contest.registrationEnd,
       frozenLastMinutes: contest.frozenLastMinutes,
       scoreboardVisibility: contest.scoreboardVisibility,
       showSubmissionList: contest.showSubmissionList,
@@ -152,29 +172,7 @@ export class ContestDetailResponse extends ContestListItemResponse {
       showShortDisplay: contest.showShortDisplay,
       labelStyle: contest.labelStyle,
       formatConfig: contest.formatConfig,
-      disallowVirtual: contest.disallowVirtual,
-      requiresAccessCode: contest.accessCodeHash !== null,
-      problems:
-        extras.problems &&
-        [...contest.problems]
-          .sort((left, right) => left.order - right.order)
-          .flatMap((entry, index) => {
-            const problem = problemOf.get(uuidStr(entry.problem));
-            return problem
-              ? [
-                  {
-                    problemId: problem._id,
-                    code: problem.code,
-                    name: problem.name,
-                    label: problemLabel(index, contest.labelStyle),
-                    points: entry.points,
-                    partial: entry.partial,
-                    isPretested: entry.isPretested,
-                    maxSubmissions: entry.maxSubmissions,
-                  },
-                ]
-              : [];
-          }),
+      problems: extras.problems && labelledProblems(contest, extras.problems),
       viewer: extras.viewer,
       settings: extras.viewer.canEdit
         ? ContestSettingsResponse.from(contest)

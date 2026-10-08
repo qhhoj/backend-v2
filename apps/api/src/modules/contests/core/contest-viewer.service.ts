@@ -6,19 +6,41 @@ import {
   contestPhase,
   hasParticipationEnded,
   LIVE,
+  liveStatusOf,
   SPECTATE,
 } from '@libs/contests';
 import { CONTEST_KEY_PATTERN, uuidStr } from '@libs/database';
+import type { Contest } from '@libs/database';
 import { ContestAccess, NO_FACTS } from './contest-access';
 import type { ViewerFacts } from './contest-access';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
 import { ParticipationsRepository } from './participations.repository';
-import type { ParticipationDocument } from './participations.repository';
+import type {
+  OwnParticipationRow,
+  ParticipationDocument,
+} from './participations.repository';
+import type { ContestListViewerResponse } from './dto/contest-list.response';
 
 export interface ContestViewer extends ViewerFacts {
   live: ParticipationDocument | null;
   current: ParticipationDocument | null;
+}
+
+/** `isCurrent` follows `viewerOf`'s rule: a pointer at a participation that has ended no longer counts, before any read clears it. */
+function listViewerOf(
+  contest: Contest,
+  rows: readonly OwnParticipationRow[],
+  pointer: string | null,
+  now: Date,
+): ContestListViewerResponse {
+  const live = rows.find((row) => row.virtual === LIVE) ?? null;
+  const current = rows.find((row) => uuidStr(row._id) === pointer);
+  return {
+    liveStatus: liveStatusOf(contest, live, now),
+    isCurrent:
+      current !== undefined && !hasParticipationEnded(contest, current, now),
+  };
 }
 
 /** The viewer's participations in one contest, and the facts `ContestAccess` needs from them. */
@@ -110,5 +132,30 @@ export class ContestViewerService {
       live,
       current: currentHere,
     };
+  }
+
+  /** Per contest id, the viewer's own state on a list page: one read of their rows in these contests and one of their current pointer; empty for a signed-out visitor. */
+  async listViewersOf(
+    principal: Principal | null,
+    contests: readonly Contest[],
+    now: Date,
+  ): Promise<Map<string, ContestListViewerResponse>> {
+    if (!principal) return new Map();
+    const contestIds = contests.map((contest) => uuidStr(contest._id));
+    const [rows, pointer] = await Promise.all([
+      this.participations.ownRowsIn(principal.userId, contestIds),
+      this.participations.currentIdOf(principal.userId),
+    ]);
+    return new Map(
+      contests.map((contest, index) => [
+        contestIds[index],
+        listViewerOf(
+          contest,
+          rows.filter((row) => uuidStr(row.contest) === contestIds[index]),
+          pointer,
+          now,
+        ),
+      ]),
+    );
   }
 }
