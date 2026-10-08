@@ -19,11 +19,10 @@ export class ContestRankingController {
     @CurrentAuth() auth: AuthContext | undefined,
     @Req() request: FastifyRequest,
   ): Promise<RankingResponse> {
-    return this.rankings.ranking(
-      optionalPrincipal(auth),
-      key,
-      virtual,
-      code === undefined ? undefined : { code, ip: request.ip },
-    );
+    return this.rankings.ranking(optionalPrincipal(auth), key, {
+      withVirtual: virtual,
+      rankingAccess:
+        code === undefined ? undefined : { accessCode: code, ip: request.ip },
+    });
   }
 }

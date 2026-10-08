@@ -13,14 +13,14 @@ export class ParticipationResponse extends ParticipationSummaryResponse {
   @ApiProblemCells()
   cells!: Record<string, ProblemCell>;
 
-  /** `frozen`: the frozen fields only (`standingOf`). */
+  /** `isFrozenView`: the frozen fields only (`standingOf`). */
   static withUser(
     participation: ContestParticipation,
     contest: Contest,
     user: UserSummaryResponse,
-    frozen: boolean,
+    isFrozenView: boolean,
   ): ParticipationResponse {
-    const standing = standingOf(participation, frozen);
+    const standing = standingOf(participation, isFrozenView);
     return {
       ...ParticipationSummaryResponse.from(participation, contest),
       user,

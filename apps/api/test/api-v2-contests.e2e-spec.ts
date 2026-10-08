@@ -288,6 +288,23 @@ describe('/api/v2 contests and participations', () => {
     expect(rows.map((row: Row) => row.user)).toEqual(['alice', 'bob']);
   });
 
+  it('ranks live rows only in contest detail, never a virtual one even when it scores higher', async () => {
+    const withVirtualRow = await createContest(api, {
+      startTime: hoursFromNow(-6),
+      endTime: hoursFromNow(-4),
+    });
+    await joinParticipation(api, withVirtualRow._id, users.alice._id);
+    await joinParticipation(api, withVirtualRow._id, users.bob._id, {
+      virtual: 1,
+      score: 100,
+    });
+    const rows = (await bodyOf(get(`/api/v2/contest/${withVirtualRow.key}`)))
+      .data.object.rankings;
+    expect(rows.map((row: Row) => [row.user, row.score])).toEqual([
+      ['alice', 0],
+    ]);
+  });
+
   it('shows non-editors only frozen standings in contest detail and participations, editors the live ones', async () => {
     const anonymous = (await bodyOf(get(`/api/v2/contest/${frozen.key}`))).data
       .object;

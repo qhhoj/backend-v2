@@ -225,10 +225,12 @@ export class ApiV2ContestsService {
   private async rankings(
     contest: ContestDocument,
     problemIds: string[],
-    frozen: boolean,
+    isFrozenView: boolean,
   ): Promise<Array<Record<string, unknown>>> {
-    const rows = (await this.participations.rankingRows(contest._id, false))
-      .map((row) => ({ row, standing: standingOf(row, frozen) }))
+    const rows = (
+      await this.participations.rankingRows(contest._id, { withVirtual: false })
+    )
+      .map((row) => ({ row, standing: standingOf(row, isFrozenView) }))
       .sort(
         (left, right) =>
           compareStandings(left.standing, right.standing) ||
@@ -248,8 +250,10 @@ export class ApiV2ContestsService {
       cumulative_time: standing.cumtime,
       tiebreaker: standing.tiebreaker,
       // Ratings follow the live standings: a frozen board must not reveal them.
-      old_rating: frozen ? null : (oldRatings.get(uuidStr(row.user)) ?? null),
-      new_rating: frozen
+      old_rating: isFrozenView
+        ? null
+        : (oldRatings.get(uuidStr(row.user)) ?? null),
+      new_rating: isFrozenView
         ? null
         : (newRatings.get(uuidStr(row._id))?.rating ?? null),
       is_disqualified: row.isDisqualified,

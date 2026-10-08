@@ -289,7 +289,7 @@ export class ParticipationsRepository {
   /** Live rows, plus virtual ones on request; spectators never (legacy `virtual__gt=SPECTATE`). Sorted by the caller. */
   rankingRows(
     contestId: string,
-    withVirtual: boolean,
+    { withVirtual }: { withVirtual: boolean },
   ): Promise<ContestParticipation[]> {
     return this.participations
       .find({

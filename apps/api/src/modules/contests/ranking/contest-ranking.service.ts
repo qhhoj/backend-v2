@@ -27,6 +27,21 @@ import {
   ACCESS_CODE_WINDOW_SECONDS,
 } from '../core/rate-limits';
 
+export interface RankingRequest {
+  withVirtual: boolean;
+  /** The plaintext ranking access code and the caller's address (its wrong guesses are rate-limited). */
+  rankingAccess?: { accessCode: string; ip: string };
+  now?: Date;
+}
+
+export interface BoardView {
+  withVirtual: boolean;
+  /** Frozen standings only, never mixed with live ones. */
+  isFrozenView: boolean;
+  /** Never for editors: their board may differ from the shared one. */
+  isCacheable: boolean;
+}
+
 /** Legacy `ContestRanking`, as JSON (the frontend renders cells from `formatData`). */
 @Injectable()
 export class ContestRankingService {
@@ -45,62 +60,59 @@ export class ContestRankingService {
   async ranking(
     principal: Principal | null,
     key: string,
-    withVirtual: boolean,
-    access?: { code: string; ip: string },
-    now = new Date(),
+    { withVirtual, rankingAccess, now = new Date() }: RankingRequest,
   ): Promise<RankingResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
-    const view = ContestAccess.accessView(contest);
-    const canEdit = ContestAccess.canEdit(principal, view);
+    const accessView = ContestAccess.accessView(contest);
+    const canEdit = ContestAccess.canEdit(principal, accessView);
     // Non-editors only ever see frozen standings during a freeze, their own row included.
-    const frozen = isFrozen(contest, now) && !canEdit;
-    if (access) {
-      await this.assertRankingCode(contest, access);
-      return this.board(contest, withVirtual, frozen, !canEdit);
+    const isFrozenView = isFrozen(contest, now) && !canEdit;
+    const boardView: BoardView = {
+      withVirtual,
+      isFrozenView,
+      isCacheable: !canEdit,
+    };
+    if (rankingAccess) {
+      await this.assertRankingCode(contest, rankingAccess);
+      return this.board(contest, boardView);
     }
     const viewer = await this.viewers.viewerOf(principal, contest, now);
-    if (!ContestAccess.canSeeOwnScoreboard(principal, view, now, viewer))
+    if (!ContestAccess.canSeeOwnScoreboard(principal, accessView, now, viewer))
       throw new AppError(
         'forbidden',
         403,
         'The ranking of this contest is hidden',
       );
-    if (!ContestAccess.canSeeFullScoreboard(principal, view, now, viewer))
-      return this.build(
+    if (!ContestAccess.canSeeFullScoreboard(principal, accessView, now, viewer))
+      return this.buildBoard(
         contest,
         viewer.live ? [viewer.live.toObject()] : [],
-        frozen,
-        false,
+        { isFrozenView, isRanked: false },
       );
-    return this.board(contest, withVirtual, frozen, !canEdit);
+    return this.board(contest, boardView);
   }
 
   /**
-   * Every row, ranked: cached under `rankingCacheKey` for `scoreboardCacheTimeout` seconds when `cacheable` (never for editors).
+   * Every row, ranked: cached under `rankingCacheKey` for `scoreboardCacheTimeout` seconds when `isCacheable` (never for editors).
    * The public link and the ranking code read the same keys: a non-editor's board does not depend on who asks.
    */
   async board(
     contest: ContestDocument,
-    withVirtual: boolean,
-    frozen: boolean,
-    cacheable: boolean,
+    boardView: BoardView,
   ): Promise<RankingResponse> {
-    if (contest.scoreboardCacheTimeout <= 0 || !cacheable)
-      return this.build(
+    const { withVirtual, isFrozenView, isCacheable } = boardView;
+    if (contest.scoreboardCacheTimeout <= 0 || !isCacheable)
+      return this.buildBoard(
         contest,
-        await this.participations.rankingRows(contest._id, withVirtual),
-        frozen,
-        true,
+        await this.participations.rankingRows(contest._id, { withVirtual }),
+        { isFrozenView, isRanked: true },
       );
-    const cacheKey = rankingCacheKey(contest._id, withVirtual, frozen);
+    const cacheKey = rankingCacheKey(contest._id, withVirtual, isFrozenView);
     const inFlight = this.builds.get(cacheKey);
     if (inFlight) return inFlight;
-    const build = this.cachedBoard(
-      contest,
-      cacheKey,
-      withVirtual,
-      frozen,
-    ).finally(() => this.builds.delete(cacheKey));
+    const build = this.cachedBoard(contest, cacheKey, boardView).finally(() =>
+      this.builds.delete(cacheKey),
+    );
     this.builds.set(cacheKey, build);
     return build;
   }
@@ -109,16 +121,14 @@ export class ContestRankingService {
   private async cachedBoard(
     contest: ContestDocument,
     cacheKey: string,
-    withVirtual: boolean,
-    frozen: boolean,
+    { withVirtual, isFrozenView }: BoardView,
   ): Promise<RankingResponse> {
     const hit = await this.redis.get(cacheKey);
     if (hit) return JSON.parse(hit) as RankingResponse;
-    const ranking = await this.build(
+    const ranking = await this.buildBoard(
       contest,
-      await this.participations.rankingRows(contest._id, withVirtual),
-      frozen,
-      true,
+      await this.participations.rankingRows(contest._id, { withVirtual }),
+      { isFrozenView, isRanked: true },
     );
     await this.redis.set(
       cacheKey,
@@ -132,7 +142,7 @@ export class ContestRankingService {
   /** Legacy `ContestPublicRanking`: a plaintext code compared in constant time against the stored hash; wrong codes spend the IP's budget. */
   private async assertRankingCode(
     contest: ContestDocument,
-    { code, ip }: { code: string; ip: string },
+    { accessCode, ip }: { accessCode: string; ip: string },
   ): Promise<void> {
     const release = await this.rateLimit.reserve(
       [`ranking-code:ip:${ip}`],
@@ -141,7 +151,7 @@ export class ContestRankingService {
     );
     if (
       contest.rankingAccessCodeHash === null ||
-      !constantTimeEqual(sha256(code), contest.rankingAccessCodeHash)
+      !constantTimeEqual(sha256(accessCode), contest.rankingAccessCodeHash)
     )
       throw new AppError('forbidden', 403, 'Wrong ranking code');
     await release();
@@ -152,17 +162,16 @@ export class ContestRankingService {
    * Legacy's fifth sort key (`-submission_count`) is dropped: it needs a count per participation over the submissions
    * and only reorders rows that already share a rank, so those fall back to participation id order, stable across requests.
    */
-  private async build(
+  private async buildBoard(
     contest: ContestDocument,
     rows: ContestParticipation[],
-    frozen: boolean,
-    ranked: boolean,
+    { isFrozenView, isRanked }: { isFrozenView: boolean; isRanked: boolean },
   ): Promise<RankingResponse> {
     const standings = rows
       .map((row) => ({
         row,
         id: uuidStr(row._id),
-        standing: standingOf(row, frozen),
+        standing: standingOf(row, isFrozenView),
       }))
       .sort(
         (left, right) =>
@@ -196,7 +205,7 @@ export class ContestRankingService {
       })),
     );
     return {
-      frozen,
+      frozen: isFrozenView,
       problems: ordered.map((entry, index) => {
         const problemId = uuidStr(entry.problem);
         return {
@@ -210,7 +219,7 @@ export class ContestRankingService {
       rows: standings.map(({ row, id, standing }, index) => {
         const userId = uuidStr(row.user);
         return {
-          rank: ranked ? ranks[index] : null,
+          rank: isRanked ? ranks[index] : null,
           participationId: id,
           user: {
             id: userId,

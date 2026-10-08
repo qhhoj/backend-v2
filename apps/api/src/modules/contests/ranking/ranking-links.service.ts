@@ -114,12 +114,11 @@ export class RankingLinksService {
         startTime: contest.startTime.toISOString(),
         endTime: contest.endTime.toISOString(),
       },
-      ranking: await this.rankings.board(
-        contest,
-        false,
-        isFrozen(contest, now),
-        true,
-      ),
+      ranking: await this.rankings.board(contest, {
+        withVirtual: false,
+        isFrozenView: isFrozen(contest, now),
+        isCacheable: true,
+      }),
     };
   }
 

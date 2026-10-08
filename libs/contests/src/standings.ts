@@ -33,9 +33,9 @@ export const DISQUALIFIED_SCORE = -9999;
 
 export const standingOf = (
   results: ParticipationResults,
-  frozen: boolean,
+  isFrozenView: boolean,
 ): Standing =>
-  frozen
+  isFrozenView
     ? {
         score: results.frozenScore,
         cumtime: results.frozenCumtime,
