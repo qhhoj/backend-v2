@@ -8,6 +8,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { trim } from '../../../problems/core/dto/transforms';
 import { MEMBER_SORTS } from '../organization-members.repository';
 import type { MemberSort } from '../organization-members.repository';
 
@@ -17,10 +18,9 @@ export class OrganizationSlugParamDto {
 }
 
 export class OrganizationListQueryDto {
+  /** Substring over name, shortName and slug; surrounding spaces are dropped. 50 bounds a name; the user search allows 64. */
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() : value,
-  )
+  @Transform(trim)
   @IsString()
   @Length(1, 50)
   search?: string;

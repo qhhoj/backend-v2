@@ -31,6 +31,7 @@ import {
   OrganizationRequestListQueryDto,
 } from './dto/organization-request.dto';
 import { OrganizationRequestResponse } from './dto/organization-request.response';
+import { usernamesById } from './request-usernames';
 
 const conflict = (message: string) => new AppError('conflict', 409, message);
 const DUPLICATE_MESSAGE =
@@ -101,10 +102,9 @@ export class OrganizationRequestsService {
       page,
       ORGANIZATION_REQUEST_PAGE_SIZE,
     );
-    const usernames = new Map(
-      (await this.users.findByIds(items.map((row) => uuidStr(row.user)))).map(
-        (user) => [uuidStr(user._id), user.username],
-      ),
+    const usernames = await usernamesById(
+      this.users,
+      items.map((row) => uuidStr(row.user)),
     );
     return new Paginated(
       items.map((row) =>

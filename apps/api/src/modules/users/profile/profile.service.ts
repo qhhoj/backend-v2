@@ -21,9 +21,6 @@ import { renderField } from '../../problems/editing/problem-markup';
 import type { UpdateProfileDto } from './dto/profile.dto';
 import type { ProfileResponse } from './dto/profile.response';
 
-const invalid = (field: string, message: string, code: string) =>
-  invalidField(field, message, code);
-
 /** Appearance is replaced whole; `null` clears it. Absent means unchanged. */
 const appearanceChange = (
   appearance: UpdateProfileDto['appearance'],
@@ -117,12 +114,12 @@ export class ProfileService {
   /** Throws a 400 for an unknown language or a display badge the user does not hold. */
   private assertReferences(user: UserDocument, dto: UpdateProfileDto): void {
     if (dto.languageId !== undefined && !this.languages.has(dto.languageId))
-      throw invalid('languageId', 'Unknown language.', 'unknown_language');
+      throw invalidField('languageId', 'Unknown language.', 'unknown_language');
     if (
       dto.displayBadgeId &&
       !user.badges.map(uuidStr).includes(dto.displayBadgeId)
     )
-      throw invalid(
+      throw invalidField(
         'displayBadgeId',
         'Not one of your badges.',
         'not_your_badge',
@@ -147,7 +144,7 @@ export class ProfileService {
     next: string[],
   ): Promise<void> {
     if (next.some((id) => !current.includes(id)))
-      throw invalid(
+      throw invalidField(
         'organizations',
         'Join organizations from their page.',
         'organizations_not_editable',

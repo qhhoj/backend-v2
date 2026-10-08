@@ -8,6 +8,7 @@ import {
 } from '../core/organization-requests.repository';
 import { OrganizationsRepository } from '../core/organizations.repository';
 import { OrganizationRequestListQueryDto } from './dto/organization-request.dto';
+import { usernamesById } from './request-usernames';
 import { OrganizationRequestResponse } from './dto/organization-request.response';
 
 @Injectable()
@@ -30,20 +31,20 @@ export class OrganizationRequestQueueService {
       page,
       ORGANIZATION_REQUEST_PAGE_SIZE,
     );
-    const [organizations, users] = await Promise.all([
+    const [organizations, usernameById] = await Promise.all([
       this.organizations.findByIds(
         unique(items.map((row) => uuidStr(row.organization))),
       ),
-      this.users.findByIds(unique(items.map((row) => uuidStr(row.user)))),
+      usernamesById(
+        this.users,
+        items.map((row) => uuidStr(row.user)),
+      ),
     ]);
     const slugById = new Map(
       organizations.map((organization) => [
         uuidStr(organization._id),
         organization.slug,
       ]),
-    );
-    const usernameById = new Map(
-      users.map((user) => [uuidStr(user._id), user.username]),
     );
     return new Paginated(
       items.map((row) =>

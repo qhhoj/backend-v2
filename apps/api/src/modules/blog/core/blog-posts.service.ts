@@ -133,6 +133,7 @@ export class BlogPostsService {
       : new Paginated([], { page, pageSize: BLOG_PAGE_SIZE, total: 0 });
   }
 
+  /** The caller must already have applied the access rule to `filter`; this adds none (only the staff moderation list relies on the permission guard instead). */
   async pageOf(
     principal: Principal | null,
     filter: FilterQuery<BlogPost>,

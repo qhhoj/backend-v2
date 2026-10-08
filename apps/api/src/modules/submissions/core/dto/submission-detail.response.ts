@@ -45,7 +45,7 @@ const caseResponse = (
 });
 
 /** What the signed-in viewer may do here; each flag is the rule its action endpoint checks. */
-export class SubmissionViewerResponse {
+export class SubmissionViewerResponse implements SubmissionActions {
   canAbort!: boolean;
   canRejudge!: boolean;
   canReject!: boolean;
@@ -95,11 +95,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       judgedDate: submission.judgedDate,
       rejudgedDate: submission.rejudgedDate,
       lockedAfter,
-      viewer: {
-        canAbort: actions.canAbort,
-        canRejudge: actions.canRejudge,
-        canReject: actions.canReject,
-      },
+      viewer: actions,
       cases:
         visibility.cases === 'all'
           ? submission.cases.map((testCase) =>
