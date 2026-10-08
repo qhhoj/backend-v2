@@ -26,6 +26,7 @@ import type { Env } from '@libs/common';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { RegenerateTokenResponse } from './dto/token.response';
 import { SessionResponse } from './dto/session.response';
 
 @Controller('api/internal/auth')
@@ -105,7 +106,7 @@ export class AuthController {
   @Post('token/regenerate')
   regenerateToken(
     @CurrentAuth() auth: AuthContext,
-  ): Promise<{ token: string }> {
+  ): Promise<RegenerateTokenResponse> {
     return this.auth.regenerateApiToken(auth.principal.userId);
   }
 }

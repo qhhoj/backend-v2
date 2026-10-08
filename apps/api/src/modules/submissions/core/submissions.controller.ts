@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import {
   SubmissionDetailResponse,
@@ -21,6 +22,7 @@ export class SubmissionsController {
   ) {}
 
   @Public()
+  @ApiPaginatedResponse(SubmissionListItemResponse)
   @Get()
   list(
     @Query() query: SubmissionListQueryDto,

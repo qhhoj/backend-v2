@@ -52,4 +52,6 @@ jobs:
       - run: npm run typecheck
       # --forceExit: one leaked handle must not hang the job until the timeout.
       - run: npm test -- --forceExit
+      # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config.
+      - run: npm run test:openapi -- --forceExit
       - run: npm run build && npx nest build migrator && npx nest build worker && npx nest build bridge

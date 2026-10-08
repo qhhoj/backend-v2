@@ -1,3 +1,4 @@
+import { ApiProblemCells } from '../../core/dto/api-problem-cells';
 import type { ProblemCell } from '@libs/contests';
 
 export class RankingUserResponse {
@@ -30,6 +31,7 @@ export class RankingRowResponse {
   cumtime!: number;
   tiebreaker!: number;
   /** Per problem id, the format's cell; the frozen cells while frozen. */
+  @ApiProblemCells()
   cells!: Record<string, ProblemCell>;
 }
 

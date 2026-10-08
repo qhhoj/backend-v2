@@ -1,4 +1,5 @@
 import { Body, Controller, Param, Post, Req } from '@nestjs/common';
+import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -21,6 +22,25 @@ export class SubmissionCreateController {
   }
 
   /** Multipart: `language`, optional `judgeId`, and one `file` (file-only languages). */
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['language', 'file'],
+      properties: {
+        language: {
+          type: 'string',
+          format: 'uuid',
+          description: "Language id; one of the problem's allowed languages.",
+        },
+        judgeId: {
+          type: 'string',
+          description: 'Judge name; problem editors only.',
+        },
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
   @Post(':code/submit/file')
   submitFile(
     @CurrentAuth() auth: AuthContext,

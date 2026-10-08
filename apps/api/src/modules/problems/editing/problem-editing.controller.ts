@@ -14,6 +14,7 @@ import { CloneProblemDto } from './dto/clone.dto';
 import { PutEditorialDto } from './dto/editorial.dto';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
 import { RenderPreviewDto } from './dto/render-preview.dto';
+import { RenderPreviewResponse } from './dto/render-preview.response';
 import { PutTranslationDto, TranslationParamsDto } from './dto/translation.dto';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
@@ -92,7 +93,7 @@ export class ProblemEditingController {
   preview(
     @CurrentAuth() auth: AuthContext,
     @Body() body: RenderPreviewDto,
-  ): Promise<{ html: string }> {
+  ): Promise<RenderPreviewResponse> {
     return this.statements.preview(auth, body);
   }
 }

@@ -181,7 +181,7 @@ api-v2/            legacy shapes, grouped like the features
 - Social login (`GET /auth/social/{google|facebook|github}/start|callback`, `POST /auth/social/complete`): a provider is enabled by its `auth.google|facebook|github` setting (`enabled`, `clientId`, `clientSecret`) and disappears from `GET /providers` and 404s at start and callback the moment it is disabled; state is bound to the browser by the `oauth_state` cookie, and the signup continuation by the `oauth_pending` cookie (set by the callback, must equal the `complete` token, else 400 `invalid_token` without spending it); `start` is limited to 30 per IP per 600 s. Stored legacy provider names: `google-oauth2`, `facebook`, `github-secure`
 - Impersonation (`POST /auth/impersonate/{userId}`, `/stop`): active superusers only, never onto a superuser or nested; `lastLogin` is untouched; the guard rechecks the impersonator on every request and ends the session if they lost superuser rights; credential routes are `@NoImpersonation()`
 - Test overrides: `setupApiTest({ overrides: [{ provide, useValue }] })` (the harness already swaps `MAILER` for an `InMemoryMailer`); clear `rate:*` Redis keys in tests that need a fresh budget
-- OpenAPI: `GET /api/internal/openapi.json` (raw JSON, no auth)
+- OpenAPI: `GET /api/internal/openapi.json` (raw JSON, no auth). Every JSON route returns a class from a `*.response.ts` (paginated: `@ApiPaginatedResponse(Item)`); `npm run test:openapi` fails for a route without a schema
 
 ## Problems
 

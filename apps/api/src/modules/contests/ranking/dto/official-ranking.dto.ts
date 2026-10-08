@@ -14,8 +14,16 @@ export class SetOfficialRankingDto {
   url?: string;
 }
 
+export class OfficialRankingRowResponse implements OfficialRankingRow {
+  rank!: number;
+  username!: string;
+  fullName!: string;
+  scores!: number[];
+  totalScore!: number;
+}
+
 export class OfficialRankingResponse {
   url!: string | null;
   problems!: string[];
-  rows!: Array<OfficialRankingRow & { rank: number }>;
+  rows!: OfficialRankingRowResponse[];
 }

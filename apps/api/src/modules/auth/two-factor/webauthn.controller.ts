@@ -19,6 +19,7 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/server';
 import { CurrentPasswordDto } from '../core/dto/current-password.dto';
+import { WebauthnCredentialResponse } from './dto/webauthn.response';
 import { WebauthnLoginDto, WebauthnRegisterDto } from './dto/webauthn.dto';
 import { WebauthnService } from './webauthn.service';
 
@@ -42,7 +43,7 @@ export class WebauthnController {
   register(
     @CurrentAuth() auth: AuthContext,
     @Body() body: WebauthnRegisterDto,
-  ): Promise<{ id: string; name: string }> {
+  ): Promise<WebauthnCredentialResponse> {
     return this.webauthn.register(auth, body.name, body.response);
   }
 

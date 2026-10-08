@@ -8,7 +8,11 @@
     "plugins": [
       {
         "name": "@nestjs/swagger",
-        "options": { "classValidatorShim": true, "introspectComments": true }
+        "options": {
+          "classValidatorShim": true,
+          "introspectComments": true,
+          "dtoFileNameSuffix": [".dto.ts", ".response.ts"]
+        }
       }
     ],
     "tsConfigPath": "apps/api/tsconfig.app.json"

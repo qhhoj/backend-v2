@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { OrganizationSlugParamDto } from '../core/dto/organization-params.dto';
 import {
@@ -17,7 +18,7 @@ import {
   OrganizationRequestListQueryDto,
   OrganizationRequestParamsDto,
 } from './dto/organization-request.dto';
-import type { OrganizationRequestResponse } from './dto/organization-request.response';
+import { OrganizationRequestResponse } from './dto/organization-request.response';
 import { OrganizationRequestsService } from './organization-requests.service';
 
 @Controller('api/internal/organizations')
@@ -33,6 +34,7 @@ export class OrganizationRequestsController {
     return this.requests.create(auth.principal, slug, body);
   }
 
+  @ApiPaginatedResponse(OrganizationRequestResponse)
   @Get(':slug/requests')
   list(
     @CurrentAuth() auth: AuthContext,

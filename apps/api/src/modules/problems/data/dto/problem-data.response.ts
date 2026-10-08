@@ -20,6 +20,11 @@ export class TestCaseResponse implements ProblemTestCase {
   outputLimit!: number | null;
 }
 
+export class ProblemDataLimitsResponse {
+  softCases!: number;
+  maxCases!: number;
+}
+
 export class ProblemDataResponse {
   archive!: string | null;
   generator!: string | null;
@@ -40,7 +45,7 @@ export class ProblemDataResponse {
   /** Members of the archive, for the editor's file pickers; empty when there is no readable archive. */
   archiveFiles!: string[];
   hasInit!: boolean;
-  limits!: { softCases: number; maxCases: number };
+  limits!: ProblemDataLimitsResponse;
 
   static from(
     data: ProblemData,

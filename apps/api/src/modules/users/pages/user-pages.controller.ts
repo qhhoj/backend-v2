@@ -1,19 +1,20 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
-import type { RecentCommentResponse } from '../../comments/core/dto/recent-comment.response';
+import { RecentCommentResponse } from '../../comments/core/dto/recent-comment.response';
 import { RecentCommentsService } from '../../comments/core/recent-comments.service';
 import { BlogPostsService } from '../../blog/core/blog-posts.service';
 import { PostPageQueryDto } from '../../blog/core/dto/post-list.dto';
-import type { PostListItemResponse } from '../../blog/core/dto/post.response';
+import { PostListItemResponse } from '../../blog/core/dto/post.response';
 import { UsernameParamDto } from '../core/dto/username-params.dto';
 import {
   ActivityQueryDto,
   PpBreakdownQueryDto,
   UserCommentsQueryDto,
 } from './dto/user-page.dto';
-import type {
+import {
   ActivityResponse,
   PpEntryResponse,
   RatingHistoryEntryResponse,
@@ -52,6 +53,7 @@ export class UserPagesController {
     return this.pages.solved(username);
   }
 
+  @ApiPaginatedResponse(PpEntryResponse)
   @Get('pp-breakdown')
   ppBreakdown(
     @Param() { username }: UsernameParamDto,
@@ -69,6 +71,7 @@ export class UserPagesController {
     return this.pages.activity(optionalPrincipal(auth), username, query);
   }
 
+  @ApiPaginatedResponse(PostListItemResponse)
   @Get('blog')
   blog(
     @CurrentAuth() auth: AuthContext | undefined,
@@ -78,6 +81,7 @@ export class UserPagesController {
     return this.blogPosts.userPosts(optionalPrincipal(auth), username, page);
   }
 
+  @ApiPaginatedResponse(RecentCommentResponse)
   @Get('comments')
   comments(
     @CurrentAuth() auth: AuthContext | undefined,

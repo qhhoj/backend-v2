@@ -1,7 +1,8 @@
 import { Controller, Get, Param, Query, Req, Res } from '@nestjs/common';
+import { ErrorResponse } from '@libs/common';
 import {
+  ApiExtension,
   ApiExtraModels,
-  ApiProduces,
   ApiResponse,
   getSchemaPath,
 } from '@nestjs/swagger';
@@ -27,9 +28,16 @@ export class ProblemPdfController {
    * 200 the PDF (`application/pdf`, inline); 202 `{ data: { status: 'rendering' } }` with `Retry-After` while the render is pending, poll the same URL;
    * 503 `pdf_unavailable` with `Retry-After` when the render failed; 404 when the problem is not visible.
    */
-  @ApiProduces('application/pdf', 'application/json')
+  // The 202 below spells out its `{ data }` envelope itself.
+  @ApiExtension('x-enveloped', true)
   @ApiExtraModels(PdfRenderingResponse)
-  @ApiResponse({ status: 200, description: 'The PDF.' })
+  @ApiResponse({
+    status: 200,
+    description: 'The PDF.',
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiResponse({
     status: 202,
     description: 'Rendering; poll the same URL (see Retry-After).',
@@ -41,7 +49,9 @@ export class ProblemPdfController {
   })
   @ApiResponse({
     status: 503,
-    description: 'The render failed; retry after Retry-After.',
+    description:
+      'The render failed (`pdf_unavailable`); retry after Retry-After.',
+    type: ErrorResponse,
   })
   /** Plain `@Res()`: Nest's `reply()` applies the route's status (200) after a passthrough handler, which would clobber the 202; exceptions thrown before `send` still reach the filter. */
   @Public()

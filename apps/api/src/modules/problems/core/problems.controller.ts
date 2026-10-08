@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { EditorialResponse } from './dto/editorial.response';
 import { ProblemDetailResponse } from './dto/problem-detail.response';
@@ -24,6 +25,7 @@ export class ProblemsController {
   }
 
   @Public()
+  @ApiPaginatedResponse(ProblemListItemResponse)
   @Get()
   list(
     @Query() query: ProblemListQueryDto,

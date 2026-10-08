@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { ContestsService } from './contests.service';
 import { ContestDetailResponse } from './dto/contest-detail.response';
@@ -13,6 +14,7 @@ export class ContestsController {
   constructor(private readonly contests: ContestsService) {}
 
   @Public()
+  @ApiPaginatedResponse(ContestListItemResponse)
   @Get()
   list(
     @Query() query: ContestListQueryDto,

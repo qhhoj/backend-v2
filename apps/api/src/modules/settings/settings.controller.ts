@@ -1,7 +1,11 @@
 import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { Paginated, RefuseNullFieldsPipe } from '@libs/common';
+import {
+  ApiPaginatedResponse,
+  Paginated,
+  RefuseNullFieldsPipe,
+} from '@libs/common';
 import { SettingKeyParamDto } from './dto/setting-params.dto';
 import { SettingRevisionsQueryDto } from './dto/setting-revisions.dto';
 import { SettingResponse } from './dto/setting.response';
@@ -28,6 +32,7 @@ export class SettingsController {
     return this.settings.update(key, value, auth.principal.userId);
   }
 
+  @ApiPaginatedResponse(SettingRevisionResponse)
   @Get(':key/revisions')
   revisions(
     @Param() { key }: SettingKeyParamDto,

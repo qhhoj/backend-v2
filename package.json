@@ -21,6 +21,7 @@
     "start:prod:bridge": "node dist/apps/bridge/main",
     "lint": "eslint \"{apps,libs}/**/*.ts\"",
     "test": "jest --runInBand",
+    "test:openapi": "jest --config jest.openapi.config.js --runInBand",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "seed:e2e": "TS_NODE_TRANSPILE_ONLY=true ts-node -r tsconfig-paths/register apps/api/src/seed/main.ts"
   },
@@ -103,6 +104,10 @@
     ],
     "rootDir": ".",
     "testRegex": ".*\\.(spec|e2e-spec)\\.ts$",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/openapi\\.e2e-spec\\.ts$"
+    ],
     "transform": {
       "^.+\\.ts$": "ts-jest"
     },

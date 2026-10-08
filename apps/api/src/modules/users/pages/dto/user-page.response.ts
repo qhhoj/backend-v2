@@ -1,4 +1,12 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { ProblemRefResponse } from '../../../problems/core/dto/problem-ref.response';
 import { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
+
+export class RatingSummaryResponse {
+  min!: number;
+  max!: number;
+  contests!: number;
+}
 
 export class UserPageResponse {
   id!: string;
@@ -15,7 +23,7 @@ export class UserPageResponse {
   rank!: number;
   /** Null while the user is unrated. */
   ratingRank!: number | null;
-  ratingSummary!: { min: number; max: number; contests: number } | null;
+  ratingSummary!: RatingSummaryResponse | null;
   organizations!: OrganizationSummaryResponse[];
   dateJoined!: Date;
 }
@@ -48,21 +56,23 @@ export class SolvedResponse {
   groups!: SolvedGroupResponse[];
 }
 
+export class PpSubmissionResponse {
+  id!: string;
+  date!: string;
+  casePoints!: number;
+  caseTotal!: number;
+  result!: string | null;
+  language!: string;
+}
+
 export class PpEntryResponse {
   rank!: number;
   /** Percent of the points counted, 100 for the best problem. */
   weight!: number;
   points!: number;
   scaledPoints!: number;
-  problem!: { code: string; name: string };
-  submission!: {
-    id: string;
-    date: string;
-    casePoints: number;
-    caseTotal: number;
-    result: string | null;
-    language: string;
-  };
+  problem!: ProblemRefResponse;
+  submission!: PpSubmissionResponse;
 }
 
 export class ActivityResponse {
@@ -70,5 +80,6 @@ export class ActivityResponse {
   /** ISO; identical whether served from the cache or not. */
   since!: string;
   /** `YYYY-MM-DD` in `timezone` to submission count. */
+  @ApiProperty({ type: 'object', additionalProperties: { type: 'number' } })
   days!: Record<string, number>;
 }

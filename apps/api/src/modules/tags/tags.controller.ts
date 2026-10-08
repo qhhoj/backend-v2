@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { CurrentAuth, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { AssignTagsDto } from './dto/tag-assign.dto';
 import { CreateTagProblemDto } from './dto/tag-problem-create.dto';
@@ -26,6 +27,7 @@ export class TagsController {
   constructor(private readonly tags: TagsService) {}
 
   @Public()
+  @ApiPaginatedResponse(TagProblemListItemResponse)
   @Get()
   list(
     @Query() query: TagProblemListQueryDto,

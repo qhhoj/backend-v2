@@ -15,6 +15,7 @@ import {
   ImportJobParamDto,
   PolygonImportQueryDto,
 } from './dto/problem-import.dto';
+import { ImportJobStartedResponse } from './dto/import-job-started.response';
 import { ProblemImportsService } from './problem-imports.service';
 
 @RequirePermission('judge.import_polygon_package')
@@ -28,7 +29,7 @@ export class ProblemImportsController {
     @CurrentAuth() auth: AuthContext,
     @Query() query: PolygonImportQueryDto,
     @Req() request: FastifyRequest,
-  ): Promise<{ jobId: string }> {
+  ): Promise<ImportJobStartedResponse> {
     return this.imports.start(auth, query, request);
   }
 

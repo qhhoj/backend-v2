@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import type { UserDocument } from '@libs/auth';
 import { participationEnd, problemLabel } from '@libs/contests';
 import { uuidStr } from '@libs/database';
@@ -110,6 +111,10 @@ export class ContestDetailResponse extends ContestListItemResponse {
   hideProblemAuthors!: boolean;
   showShortDisplay!: boolean;
   labelStyle!: LabelStyle;
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { oneOf: [{ type: 'number' }, { type: 'boolean' }] },
+  })
   formatConfig!: Record<string, unknown>;
   disallowVirtual!: boolean;
   requiresAccessCode!: boolean;

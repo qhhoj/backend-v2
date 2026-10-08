@@ -8,6 +8,10 @@ import {
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { CodeDto } from './dto/code.dto';
+import {
+  ScratchCodesResponse,
+  TotpEnrollmentResponse,
+} from './dto/totp.response';
 import { CurrentPasswordDto } from '../core/dto/current-password.dto';
 import { TotpService } from './totp.service';
 
@@ -21,7 +25,7 @@ export class TotpController {
   enroll(
     @CurrentAuth() auth: AuthContext,
     @Body() body: CurrentPasswordDto,
-  ): Promise<{ secret: string; otpauthUrl: string }> {
+  ): Promise<TotpEnrollmentResponse> {
     return this.totp.enroll(auth, body.currentPassword);
   }
 
@@ -31,7 +35,7 @@ export class TotpController {
   confirm(
     @CurrentAuth() auth: AuthContext,
     @Body() body: CodeDto,
-  ): Promise<{ scratchCodes: string[] }> {
+  ): Promise<ScratchCodesResponse> {
     return this.totp.confirm(auth, body.code);
   }
 
@@ -58,7 +62,7 @@ export class TotpController {
   regenerateScratchCodes(
     @CurrentAuth() auth: AuthContext,
     @Body() body: CodeDto,
-  ): Promise<{ scratchCodes: string[] }> {
+  ): Promise<ScratchCodesResponse> {
     return this.totp.regenerateScratchCodes(auth, body.code);
   }
 }

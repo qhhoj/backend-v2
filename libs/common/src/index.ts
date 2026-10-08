@@ -29,3 +29,7 @@ export * from './collections/unique';
 export * from './collections/same-json';
 export * from './crypto/aes-gcm';
 export * from './text/time-zone';
+export * from './openapi/api-paginated-response';
+export * from './openapi/envelope-responses';
+export * from './openapi/page-meta.response';
+export * from './openapi/error.response';

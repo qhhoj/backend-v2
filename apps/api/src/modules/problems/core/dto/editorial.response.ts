@@ -1,10 +1,11 @@
 import type { ProblemSolution, StatementLanguage } from '@libs/database';
 import type { ProblemDocument } from '../problems.repository';
 import { statementFor } from '@libs/problems';
+import { ProblemRefResponse } from './problem-ref.response';
 import { UserSummaryResponse } from './user-summary.response';
 
 export class EditorialResponse {
-  problem!: { code: string; name: string };
+  problem!: ProblemRefResponse;
   isPublic!: boolean;
   publishOn!: string;
   authors!: UserSummaryResponse[];

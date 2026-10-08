@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
+import { UploadedFileResponse } from './dto/uploaded-file.response';
 import { ProblemUploadsService } from './problem-uploads.service';
 
 @Controller('api/internal/problems')
@@ -13,7 +14,7 @@ export class ProblemUploadsController {
   uploadImage(
     @CurrentAuth() auth: AuthContext,
     @Req() request: FastifyRequest,
-  ): Promise<{ url: string }> {
+  ): Promise<UploadedFileResponse> {
     return this.uploads.uploadImage(auth, request);
   }
 
@@ -23,7 +24,7 @@ export class ProblemUploadsController {
     @CurrentAuth() auth: AuthContext,
     @Param() { code }: ProblemCodeParamDto,
     @Req() request: FastifyRequest,
-  ): Promise<{ url: string }> {
+  ): Promise<UploadedFileResponse> {
     return this.uploads.uploadStatement(auth, code, request);
   }
 
@@ -33,7 +34,7 @@ export class ProblemUploadsController {
     @CurrentAuth() auth: AuthContext,
     @Param() { code }: ProblemCodeParamDto,
     @Req() request: FastifyRequest,
-  ): Promise<{ url: string }> {
+  ): Promise<UploadedFileResponse> {
     return this.uploads.uploadMaterial(auth, code, request);
   }
 }

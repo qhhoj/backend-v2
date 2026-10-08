@@ -8,9 +8,11 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import { ApiExtraModels, ApiOkResponse, getSchemaPath } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { ContestParticipationService } from './contest-participation.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
@@ -30,6 +32,14 @@ import {
 export class ContestParticipationController {
   constructor(private readonly participation: ContestParticipationService) {}
 
+  @ApiExtraModels(CurrentParticipationResponse)
+  @ApiOkResponse({
+    description: 'Null when the viewer is in no contest.',
+    schema: {
+      nullable: true,
+      allOf: [{ $ref: getSchemaPath(CurrentParticipationResponse) }],
+    },
+  })
   @Get('current')
   current(
     @CurrentAuth() auth: AuthContext,
@@ -80,6 +90,7 @@ export class ContestParticipationController {
     return this.participation.disqualify(auth.principal, key, id, disqualified);
   }
 
+  @ApiPaginatedResponse(ParticipationResponse)
   @Get(':key/participations')
   participations(
     @CurrentAuth() auth: AuthContext,

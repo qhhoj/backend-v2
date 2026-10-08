@@ -30,19 +30,29 @@ export interface ProblemDetailContext {
 
 type Summaries = (ids: unknown[]) => UserSummaryResponse[];
 
+export class LanguageLimitResponse {
+  language!: string;
+  timeLimit!: number;
+  memoryLimit!: number;
+}
+
+export class ProblemTranslationResponse {
+  language!: StatementLanguage;
+  name!: string;
+  description!: string;
+}
+
+export class ProblemEditorialDraftResponse {
+  isPublic!: boolean;
+  publishOn!: string;
+  authors!: UserSummaryResponse[];
+  content!: string;
+}
+
 export class ProblemEditorResponse {
   description!: string;
-  translations!: Array<{
-    language: StatementLanguage;
-    name: string;
-    description: string;
-  }>;
-  solution!: {
-    isPublic: boolean;
-    publishOn: string;
-    authors: UserSummaryResponse[];
-    content: string;
-  } | null;
+  translations!: ProblemTranslationResponse[];
+  solution!: ProblemEditorialDraftResponse | null;
   curators!: UserSummaryResponse[];
   testers!: UserSummaryResponse[];
   bannedUsers!: UserSummaryResponse[];
@@ -115,11 +125,7 @@ export class ProblemDetailResponse {
   license!: LicenseResponse | null;
   authors!: UserSummaryResponse[];
   allowedLanguages!: LanguageResponse[];
-  languageLimits!: Array<{
-    language: string;
-    timeLimit: number;
-    memoryLimit: number;
-  }>;
+  languageLimits!: LanguageLimitResponse[];
   pdfStatementUrl!: string | null;
   materialUrl!: string | null;
   availableTranslations!: StatementLanguage[];

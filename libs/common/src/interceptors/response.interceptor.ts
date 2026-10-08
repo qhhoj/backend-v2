@@ -1,4 +1,5 @@
 import {
+  applyDecorators,
   CallHandler,
   ExecutionContext,
   Injectable,
@@ -6,10 +7,12 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ApiExtension } from '@nestjs/swagger';
 import { map } from 'rxjs';
 
 const RAW_RESPONSE = 'rawResponse';
-export const RawResponse = () => SetMetadata(RAW_RESPONSE, true);
+export const RawResponse = () =>
+  applyDecorators(SetMetadata(RAW_RESPONSE, true), ApiExtension('x-raw', true));
 
 export class Paginated<T> {
   constructor(

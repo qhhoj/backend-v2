@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { MemberResponse } from './dto/member.response';
 import {
@@ -19,6 +20,7 @@ import { OrganizationsService } from './organizations.service';
 export class OrganizationsController {
   constructor(private readonly organizations: OrganizationsService) {}
 
+  @ApiPaginatedResponse(OrganizationListItemResponse)
   @Get()
   list(
     @CurrentAuth() auth: AuthContext | undefined,
@@ -35,6 +37,7 @@ export class OrganizationsController {
     return this.organizations.detail(optionalPrincipal(auth), slug);
   }
 
+  @ApiPaginatedResponse(MemberResponse)
   @Get(':slug/members')
   members(
     @Param() { slug }: OrganizationSlugParamDto,
