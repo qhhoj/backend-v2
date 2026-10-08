@@ -7,12 +7,25 @@ import {
   Matches,
   Max,
   Min,
+  ValidateBy,
 } from 'class-validator';
-import { MISC_CONFIG_KEY_MAX } from '@libs/database';
+import { isUuid, MISC_CONFIG_KEY_MAX } from '@libs/database';
 
 /** Unvalidated: a malformed id is a 404. */
 export class SiteIdParamDto {
   @IsString() id!: string;
+}
+
+/** A malformed id is a 400 here: a history read is by id only, so the id must be a real one. */
+export class FlatpageIdParamDto {
+  @ValidateBy({
+    name: 'isStoredUuid',
+    validator: {
+      validate: (value) => typeof value === 'string' && isUuid(value),
+      defaultMessage: () => 'Not a valid id.',
+    },
+  })
+  id!: string;
 }
 
 export class ConfigKeyParamDto {

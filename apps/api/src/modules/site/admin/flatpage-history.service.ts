@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { Paginated, RateLimitService, unique } from '@libs/common';
-import { isUuid, uuidStr } from '@libs/database';
+import {
+  Paginated,
+  RateLimitService,
+  RenderPreviewResponse,
+  unique,
+} from '@libs/common';
+import { uuidStr } from '@libs/database';
 import type { Revision } from '@libs/database';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import {
@@ -10,14 +15,12 @@ import {
   RENDER_PREVIEW_WINDOW_SECONDS,
 } from '../../problems/core/rate-limits';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
-import { RenderPreviewResponse } from '../../problems/editing/dto/render-preview.response';
 import { renderField } from '../../problems/editing/problem-markup';
 import type { FlatpagePreviewDto } from './dto/flatpage-preview.dto';
 import { FlatpageRevisionResponse } from './dto/flatpage-revision.response';
+import { PAGE_STYLE } from './flatpage-markup';
 
 const PAGE_SIZE = 20;
-/** The style `FlatpagesAdminService` saves pages with, so a preview matches the public page. */
-const PAGE_STYLE = 'blog';
 
 /** Read-only history of flatpages and the sanitised preview for their editors. */
 @Injectable()
@@ -33,9 +36,12 @@ export class FlatpageHistoryService {
     id: string,
     page: number,
   ): Promise<Paginated<FlatpageRevisionResponse>> {
-    const { items, total } = isUuid(id)
-      ? await this.revisions.page('flatpage', id, page, PAGE_SIZE)
-      : { items: [], total: 0 };
+    const { items, total } = await this.revisions.page(
+      'flatpage',
+      id,
+      page,
+      PAGE_SIZE,
+    );
     const editors = await this.editorsOf(items);
     return new Paginated(
       items.map((row) =>

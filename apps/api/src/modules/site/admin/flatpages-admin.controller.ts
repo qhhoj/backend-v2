@@ -11,7 +11,11 @@ import {
 } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ApiPaginatedResponse, RefuseNullFieldsPipe } from '@libs/common';
+import {
+  ApiPaginatedResponse,
+  RefuseNullFieldsPipe,
+  RenderPreviewResponse,
+} from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { CreateFlatpageDto, UpdateFlatpageDto } from './dto/flatpage-admin.dto';
 import {
@@ -20,10 +24,13 @@ import {
 } from './dto/flatpage-admin.response';
 import { FlatpagePreviewDto } from './dto/flatpage-preview.dto';
 import { FlatpageRevisionResponse } from './dto/flatpage-revision.response';
-import { PageListQueryDto, SiteIdParamDto } from './dto/site-admin-params.dto';
+import {
+  FlatpageIdParamDto,
+  PageListQueryDto,
+  SiteIdParamDto,
+} from './dto/site-admin-params.dto';
 import { FlatpageHistoryService } from './flatpage-history.service';
 import { FlatpagesAdminService } from './flatpages-admin.service';
-import { RenderPreviewResponse } from '../../problems/editing/dto/render-preview.response';
 
 @Controller('api/internal/admin/site/pages')
 export class FlatpagesAdminController {
@@ -55,7 +62,7 @@ export class FlatpagesAdminController {
   @RequirePermission('flatpages.change_flatpage')
   @Get(':id/revisions')
   revisions(
-    @Param() { id }: SiteIdParamDto,
+    @Param() { id }: FlatpageIdParamDto,
     @Query() { page }: PageListQueryDto,
   ): Promise<Paginated<FlatpageRevisionResponse>> {
     return this.history.history(id, page);

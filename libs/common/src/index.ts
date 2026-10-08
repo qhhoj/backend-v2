@@ -35,3 +35,4 @@ export * from './openapi/has-more-page-meta.response';
 export * from './openapi/envelope-responses';
 export * from './openapi/page-meta.response';
 export * from './openapi/error.response';
+export * from './openapi/render-preview.response';

@@ -9,12 +9,11 @@ import {
 } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { RefuseNullFieldsPipe } from '@libs/common';
+import { RefuseNullFieldsPipe, RenderPreviewResponse } from '@libs/common';
 import { CloneProblemDto } from './dto/clone.dto';
 import { PutEditorialDto } from './dto/editorial.dto';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
 import { RenderPreviewDto } from './dto/render-preview.dto';
-import { RenderPreviewResponse } from './dto/render-preview.response';
 import { PutTranslationDto, TranslationParamsDto } from './dto/translation.dto';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';

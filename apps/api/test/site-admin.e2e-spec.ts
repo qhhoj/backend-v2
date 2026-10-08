@@ -477,6 +477,7 @@ describe('site content administration', () => {
   });
 
   describe('page history and preview', () => {
+    const NEVER_A_PAGE = '019d0000-0000-7000-8000-000000000000';
     const historian = async () =>
       signedIn(api, unique('historian'), {
         permissions: [
@@ -576,12 +577,18 @@ describe('site content administration', () => {
       expect(second.data.map(({ action }) => action)).toEqual(['create']);
     });
 
-    it('answers an empty history for an id that was never a page', async () => {
+    it('answers an empty history for a well-formed id that was never a page', async () => {
       const { data, meta } = bodyOf(
-        await revisions('not-an-id', pageEditor).expect(200),
+        await revisions(NEVER_A_PAGE, pageEditor).expect(200),
       );
       expect(data).toEqual([]);
       expect(meta.total).toBe(0);
+    });
+
+    it('answers 400 for a malformed id on the history route', async () => {
+      await revisions('not-an-id', pageEditor)
+        .expect(400)
+        .expect(errorCode('validation_failed'));
     });
 
     it('refuses the history to a user without change_flatpage', async () => {

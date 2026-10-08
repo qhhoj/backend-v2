@@ -21,12 +21,11 @@ import {
   FlatpageAdminListItemResponse,
   FlatpageAdminResponse,
 } from './dto/flatpage-admin.response';
+import { PAGE_STYLE } from './flatpage-markup';
 
 const PAGE_SIZE = 50;
 /** Legacy flatpage url charset (Django `[-\w/.~]` with Unicode `\w`): nothing that needs escaping in a path. */
 const URL_CHARSET = /^[-\p{L}\p{N}_/.~]+$/u;
-/** Staff write the page, but it is public: the `blog` style (sanitised: no foreign iframes, fixed overlays or ids). */
-const PAGE_STYLE = 'blog';
 const notFound = () => new AppError('not_found', 404, 'No such page');
 const REVISION_FIELDS = [
   'url',
