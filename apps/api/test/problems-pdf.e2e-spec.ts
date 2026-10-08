@@ -69,6 +69,7 @@ describe('GET /api/internal/problems/:code/pdf', () => {
       'peek',
       'raced',
       'warm',
+      'rendered',
     ])
       await createProblem(api, catalog, { code, authors: [editorUser._id] });
     await createProblem(api, catalog, {
@@ -82,9 +83,10 @@ describe('GET /api/internal/problems/:code/pdf', () => {
   afterAll(() => api.teardown());
 
   it('answers 202 and enqueues one job per problem and language, deduplicated', async () => {
-    expect(
-      (await api.http().get(`${PROBLEMS}/sum/pdf`).expect(202)).body,
-    ).toEqual({ data: { status: 'rendering' } });
+    const pending = await api.http().get(`${PROBLEMS}/sum/pdf`).expect(202);
+    expect(pending.body).toEqual({ data: { status: 'rendering' } });
+    expect(pending.headers['retry-after']).toMatch(/^\d+$/);
+    expect(Number(pending.headers['retry-after'])).toBeGreaterThan(0);
     await api.http().get(`${PROBLEMS}/sum/pdf`).expect(202);
     await api.http().get(`${PROBLEMS}/duo/pdf?lang=vi`).expect(202);
     await api.http().get(`${PROBLEMS}/sum/pdf?lang=vi`).expect(202);
@@ -237,6 +239,39 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     expect(await queue.getJob(pdfJobId('busy', 'vi'))).toBeUndefined();
     expect(await redis.keys('rate:*pdf-render*')).toEqual([]);
   });
+  it('answers 200 on the same URL once the render job has written the file', async () => {
+    await resetBudget();
+    const worker = new Worker<PdfRenderJob>(
+      PDF_QUEUE,
+      (job) => {
+        cachePdf(`${job.data.code}.${job.data.lang}.pdf`, '%PDF-1.4 rendered');
+        return Promise.resolve('rendered');
+      },
+      { connection: { url: TEST_REDIS_URL } },
+    );
+    await worker.waitUntilReady();
+    const completed = new Promise<void>((resolve) =>
+      worker.on(
+        'completed',
+        (job) => job.id === pdfJobId('rendered', 'en') && resolve(),
+      ),
+    );
+    try {
+      const pending = await api
+        .http()
+        .get(`${PROBLEMS}/rendered/pdf`)
+        .expect(202);
+      expect(pending.headers['retry-after']).toMatch(/^\d+$/);
+      await completed;
+    } finally {
+      await worker.close();
+    }
+    const ready = await api.http().get(`${PROBLEMS}/rendered/pdf`).expect(200);
+    expect(ready.headers['content-type']).toBe('application/pdf');
+    expect(ready.headers['content-disposition']).toBe(
+      'inline; filename="rendered.en.pdf"',
+    );
+  }, 30000);
   it('falls back to rendering when the file vanishes before it is opened', async () => {
     await resetBudget();
     cachePdf('raced.en.pdf');
