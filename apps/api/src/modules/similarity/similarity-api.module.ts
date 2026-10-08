@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { RateLimitService } from '@libs/common';
 import { SIMILARITY_QUEUE } from '@libs/judging';
+import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { SimilarityAccessService } from './core/similarity-access.service';
 import { SimilarityRunsRepository } from './core/similarity-runs.repository';
 import { SimilarityPairsController } from './pairs/similarity-pairs.controller';
@@ -13,9 +14,16 @@ import { SimilarityLaunchService } from './start/similarity-launch.service';
 import { SimilarityStartController } from './start/similarity-start.controller';
 import { SimilarityStartService } from './start/similarity-start.service';
 
-/** Code similarity runs: core/ (access, repository, shared dto), start/ (start a run), runs/ (list and detail), pairs/ (a run's pairs, and one pair with both sources). */
+/**
+ * Code similarity runs: core/ (access, repository, shared dto), start/ (start a
+ * run), runs/ (list and detail), pairs/ (a run's pairs, and one pair with both
+ * sources).
+ */
 @Module({
-  imports: [BullModule.registerQueue({ name: SIMILARITY_QUEUE })],
+  imports: [
+    BullModule.registerQueue({ name: SIMILARITY_QUEUE }),
+    SubmissionsApiModule,
+  ],
   controllers: [
     SimilarityStartController,
     SimilarityRunsController,

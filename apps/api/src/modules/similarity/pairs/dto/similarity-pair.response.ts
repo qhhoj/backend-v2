@@ -7,7 +7,10 @@ export class SimilaritySideResponse {
   username!: string;
 }
 
-/** The fields the pair list and the pair detail share. */
+/**
+ * The fields the pair list and the pair detail share. Responses are built by
+ * the functions below each class.
+ */
 export class SimilarityPairFieldsResponse {
   id!: string;
   runId!: string;
@@ -56,17 +59,17 @@ export class SimilarityPairResponse extends SimilarityPairFieldsResponse {
   fragmentCount!: number;
   left!: SimilaritySideResponse;
   right!: SimilaritySideResponse;
+}
 
-  static from(
-    pair: SimilarityPair,
-    problemCode: string,
-    usernames: Map<string, string>,
-  ): SimilarityPairResponse {
-    return {
-      ...pairFieldsResponse(pair, problemCode),
-      fragmentCount: pair.fragments.length,
-      left: sideResponse(pair.left, usernames),
-      right: sideResponse(pair.right, usernames),
-    };
-  }
+export function pairResponse(
+  pair: SimilarityPair,
+  problemCode: string,
+  usernames: Map<string, string>,
+): SimilarityPairResponse {
+  return {
+    ...pairFieldsResponse(pair, problemCode),
+    fragmentCount: pair.fragments.length,
+    left: sideResponse(pair.left, usernames),
+    right: sideResponse(pair.right, usernames),
+  };
 }

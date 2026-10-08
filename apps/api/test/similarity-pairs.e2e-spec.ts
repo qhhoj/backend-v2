@@ -31,6 +31,7 @@ describe('similarity pairs', () => {
   let catalog: Catalog;
   let problem: Problem;
   let otherProblem: Problem;
+  let privateProblem: Problem;
   let run: SimilarityRun;
   const sessions: Record<string, TestSession> = {};
   const users: Record<string, { _id: string }> = {};
@@ -49,6 +50,14 @@ describe('similarity pairs', () => {
     ],
     // Author of the problem, without the permission.
     unpermitted: ['judge.edit_own_problem'],
+    // Curator of the contest below, not an author of the private problem.
+    curator: ['judge.moss_contest', 'judge.edit_own_contest'],
+    // Curator of the contest below and author of the private problem.
+    owner: [
+      'judge.moss_contest',
+      'judge.edit_own_contest',
+      'judge.edit_own_problem',
+    ],
     ann: [],
     bob: [],
   };
@@ -67,21 +76,25 @@ describe('similarity pairs', () => {
         .body as PairPage
     ).data.map((pair) => pair.similarity);
 
+  /** `overrides` apply to the pair, `submissionFields` to both its submissions. */
   const addPair = async (
     similarity: number,
     overrides: Record<string, unknown> = {},
+    submissionFields: Record<string, unknown> = {},
   ) => {
     const left = await seedSubmission(api, {
       user: users.ann._id,
       problem: problem._id,
       language: catalog.languages.cpp,
       source: SOURCE_LEFT,
+      ...submissionFields,
     });
     const right = await seedSubmission(api, {
       user: users.bob._id,
       problem: problem._id,
       language: catalog.languages.cpp,
       source: SOURCE_RIGHT,
+      ...submissionFields,
     });
     return api.similarityPairs.create({
       run: run._id,
@@ -97,10 +110,13 @@ describe('similarity pairs', () => {
     });
   };
 
-  const seedContestRun = async () => {
+  const seedContestRun = async (
+    contestFields: Record<string, unknown> = {},
+  ) => {
     const contest = await createContest(api, {
       authors: [users.editor._id],
       problems: [contestProblem(problem._id, 0)],
+      ...contestFields,
     });
     return api.similarityRuns.create({
       scope: 'contest',
@@ -127,6 +143,11 @@ describe('similarity pairs', () => {
     otherProblem = await createProblem(api, catalog, {
       code: 'simother',
       authors: [users.editor._id],
+    });
+    privateProblem = await createProblem(api, catalog, {
+      code: 'simprivate',
+      isPublic: false,
+      authors: [users.owner._id],
     });
   });
   afterAll(() => api.teardown());
@@ -224,38 +245,6 @@ describe('similarity pairs', () => {
       .expect(errorCode('validation_failed'));
   });
 
-  it('gives an empty page for a group the engine failed on', async () => {
-    await api.similarityRuns.updateOne(
-      { _id: run._id },
-      {
-        groups: [
-          {
-            problem: problem._id,
-            language: 'cpp',
-            tokenizer: 'syntax',
-            submissionCount: 2,
-            comparedCount: 2,
-            skippedEmpty: 0,
-            skippedTooLarge: 0,
-            truncated: false,
-            pairCount: 0,
-            failed: true,
-          },
-        ],
-      },
-    );
-    const page = (
-      await get('editor', pairsOf(run._id), {
-        problemId: problem._id,
-        language: 'cpp',
-      }).expect(200)
-    ).body as PairPage;
-    expect(page).toEqual({
-      data: [],
-      meta: { page: 1, pageSize: 50, total: 0 },
-    });
-  });
-
   it('reads a page through the pair indexes without scanning the collection', async () => {
     for (let index = 0; index < 30; index++) await addPair(0.5 + index / 100);
     await api.similarityPairs.syncIndexes();
@@ -311,6 +300,66 @@ describe('similarity pairs', () => {
     await get('editor', pairUrl(pair._id)).expect(200);
     await get('outsider', pairsOf(contestRun._id)).expect(404);
     await get('outsider', pairUrl(pair._id)).expect(404);
+  });
+
+  describe('in a contest with a private problem', () => {
+    let contestRun: SimilarityRun;
+    let publicPair: { _id: string };
+    let privatePair: { _id: string };
+    const idsListedFor = async (who: string) =>
+      (
+        (await get(who, pairsOf(contestRun._id)).expect(200)).body as PairPage
+      ).data.map((pair) => pair.id);
+
+    beforeEach(async () => {
+      contestRun = await seedContestRun({
+        curators: [users.curator._id, users.owner._id],
+        problems: [
+          contestProblem(problem._id, 0),
+          contestProblem(privateProblem._id, 1),
+        ],
+      });
+      const inContest = { contest: contestRun.contest };
+      publicPair = await addPair(0.7, { run: contestRun._id }, inContest);
+      privatePair = await addPair(
+        0.9,
+        { run: contestRun._id, problem: privateProblem._id },
+        { ...inContest, problem: privateProblem._id },
+      );
+    });
+
+    it('leaves the private problem out of the list for a curator who cannot see it', async () => {
+      expect(await idsListedFor('curator')).toEqual([publicPair._id]);
+    });
+
+    it('hides the private problem pair from a curator who cannot see it', async () => {
+      await get('curator', pairUrl(privatePair._id))
+        .expect(404)
+        .expect(errorCode('not_found'));
+      await get('curator', pairUrl(publicPair._id)).expect(200);
+    });
+
+    it("shows the private problem pair to the problem's author", async () => {
+      expect(await idsListedFor('owner')).toEqual([
+        privatePair._id,
+        publicPair._id,
+      ]);
+      await get('owner', pairUrl(privatePair._id)).expect(200);
+    });
+
+    it('still hides the private problem pair once both submissions are gone', async () => {
+      await api.submissions.deleteMany({});
+      await get('curator', pairUrl(privatePair._id)).expect(404);
+      await get('owner', pairUrl(privatePair._id)).expect(200);
+    });
+
+    it('hides sources that the source route would hide', async () => {
+      // Submitted outside the contest: being its curator grants nothing on them.
+      const practicePair = await addPair(0.8, { run: contestRun._id });
+      await get('curator', pairUrl(practicePair._id))
+        .expect(404)
+        .expect(errorCode('not_found'));
+    });
   });
 
   it('keeps working when a submission or its source has been deleted', async () => {

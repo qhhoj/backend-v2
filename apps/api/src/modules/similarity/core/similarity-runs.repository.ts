@@ -46,6 +46,12 @@ export class SimilarityRunsRepository {
       : Promise.resolve(null);
   }
 
+  /** The given problems that still exist. */
+  findProblemsByIds(ids: string[]): Promise<Problem[]> {
+    if (!ids.length) return Promise.resolve([]);
+    return this.problems.find({ _id: { $in: ids } }).exec();
+  }
+
   findContestByKey(key: string): Promise<Contest | null> {
     return this.contests.findOne({ key }).exec();
   }

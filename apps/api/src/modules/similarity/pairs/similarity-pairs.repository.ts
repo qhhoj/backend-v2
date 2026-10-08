@@ -11,7 +11,8 @@ import {
 } from '@libs/database';
 
 export interface PairFilter {
-  problemId?: string;
+  /** Any of these problems. */
+  problemIds?: string[];
   language?: string;
   minSimilarity?: number;
 }
@@ -34,7 +35,13 @@ export class SimilarityPairsRepository {
     @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
-  /** Best first; the `{run, similarity, _id}` and `{run, problem, language, similarity, _id}` indexes serve both the page and the count. */
+  /**
+   * Best first. With no filter, or a problem and a language, an index serves
+   * the sort and the count (`{run, similarity, _id}`, `{run, problem, language,
+   * similarity, _id}`). A problem-only or language-only filter reads through
+   * `{run, similarity, _id}` and filters after: bounded by the run's
+   * `maxPairs`, not by the page size.
+   */
   async pairsPage(
     runId: string,
     filter: PairFilter,
@@ -42,7 +49,7 @@ export class SimilarityPairsRepository {
     pageSize: number,
   ): Promise<{ items: SimilarityPair[]; total: number }> {
     const query: FilterQuery<SimilarityPair> = { run: runId };
-    if (filter.problemId) query.problem = filter.problemId;
+    if (filter.problemIds) query.problem = { $in: filter.problemIds };
     if (filter.language) query.language = filter.language;
     if (filter.minSimilarity !== undefined)
       query.similarity = { $gte: filter.minSimilarity };
@@ -56,6 +63,14 @@ export class SimilarityPairsRepository {
       this.pairs.countDocuments(query).exec(),
     ]);
     return { items, total };
+  }
+
+  /** The problems the run has pairs on. */
+  async problemIdsOf(runId: string): Promise<string[]> {
+    const problemIds = await this.pairs
+      .distinct('problem', { run: runId })
+      .exec();
+    return problemIds.map((problemId) => uuidStr(problemId));
   }
 
   /** Null for a malformed id, like an unknown one. */

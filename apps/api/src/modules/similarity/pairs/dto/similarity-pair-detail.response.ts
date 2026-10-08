@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { SimilarityFragment } from '@libs/database';
+import type { SubmissionFacts } from '../similarity-pairs.repository';
 import {
   SimilarityPairFieldsResponse,
   SimilaritySideResponse,
@@ -26,6 +27,21 @@ export class SimilarityPairSourceResponse extends SimilaritySideResponse {
   source!: string;
 }
 
+/** A deleted submission keeps its side: null facts, empty source. */
+export function sourceSideResponse(
+  side: SimilaritySideResponse,
+  facts: SubmissionFacts | undefined,
+  source: string | undefined,
+): SimilarityPairSourceResponse {
+  return {
+    ...side,
+    date: facts?.date ?? null,
+    result: facts?.result ?? null,
+    points: facts?.points ?? null,
+    source: source ?? '',
+  };
+}
+
 export class SimilarityPairDetailResponse extends SimilarityPairFieldsResponse {
   left!: SimilarityPairSourceResponse;
   right!: SimilarityPairSourceResponse;
@@ -33,11 +49,13 @@ export class SimilarityPairDetailResponse extends SimilarityPairFieldsResponse {
   fragments!: SimilarityFragmentResponse[];
 }
 
-export const fragmentResponse = (
+export function fragmentResponse(
   fragment: SimilarityFragment,
-): SimilarityFragmentResponse => ({
-  leftStart: fragment.leftStart,
-  leftEnd: fragment.leftEnd,
-  rightStart: fragment.rightStart,
-  rightEnd: fragment.rightEnd,
-});
+): SimilarityFragmentResponse {
+  return {
+    leftStart: fragment.leftStart,
+    leftEnd: fragment.leftEnd,
+    rightStart: fragment.rightStart,
+    rightEnd: fragment.rightEnd,
+  };
+}

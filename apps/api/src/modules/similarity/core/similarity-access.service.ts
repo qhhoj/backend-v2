@@ -10,6 +10,7 @@ import type {
 } from '@libs/database';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ProblemAccess } from '../../problems/core/problem-access';
+import type { ContestScope } from '../../problems/core/problem-access';
 import type { ScopeQueryDto } from './dto/scope-query.dto';
 import { SimilarityRunsRepository } from './similarity-runs.repository';
 
@@ -29,7 +30,15 @@ const canEditProblem = (principal: Principal, problem: Problem) =>
 const canEditContest = (principal: Principal, contest: Contest) =>
   ContestAccess.canEdit(principal, ContestAccess.accessView(contest));
 
-/** Who may use similarity results: `judge.moss_contest` (checked by the guard) plus edit rights on the scope. Unknown and not editable are both 404, so nothing tells a staff member which problems and contests exist. Edit rights also settle the sources: problem and contest editors always see every submission's detail (`detailAccess` in `submissions/core/submission-access.ts`). */
+/**
+ * Who may use similarity results: `judge.moss_contest` (checked by the guard)
+ * plus edit rights on the scope. Unknown and not editable are both 404, so
+ * nothing tells a staff member which problems and contests exist. Edit rights
+ * on the scope do not settle the sources: a contest editor may not see every
+ * problem of the contest. The pair routes also apply the problem visibility
+ * (`visibleProblemIds`) and the source route's own rules
+ * (`SubmissionsService.viewable`).
+ */
 @Injectable()
 export class SimilarityAccessService {
   constructor(private readonly runs: SimilarityRunsRepository) {}
@@ -49,7 +58,10 @@ export class SimilarityAccessService {
     );
   }
 
-  /** The run, when the viewer may see it and its pairs; 404 for an unknown, malformed or hidden id alike. */
+  /**
+   * The run, when the viewer may see it and its pairs; 404 for an unknown,
+   * malformed or hidden id alike.
+   */
   async viewableRun(
     principal: Principal,
     runId: string,
@@ -58,6 +70,22 @@ export class SimilarityAccessService {
     if (!run || !(await this.canView(principal, run)))
       throw similarityNotFound();
     return run;
+  }
+
+  /**
+   * The given problems the viewer may see, by the rule the submission routes
+   * use (`ProblemAccess.canSee`).
+   */
+  async visibleProblemIds(
+    principal: Principal,
+    problemIds: string[],
+    scope: ContestScope | null,
+  ): Promise<Set<string>> {
+    const problems = await this.runs.findProblemsByIds(problemIds);
+    const visible = problems.filter((problem) =>
+      ProblemAccess.canSee(principal, ProblemAccess.accessView(problem), scope),
+    );
+    return new Set(visible.map((problem) => uuidStr(problem._id)));
   }
 
   /** Whether the viewer may see this run and its pairs. */
