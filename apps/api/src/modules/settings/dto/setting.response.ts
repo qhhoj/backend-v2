@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ANY_JSON_VALUE } from './any-json-value';
 import { sameJson } from '@libs/common';
+import { redactSetting } from '@libs/settings';
 import type { SettingDefinition } from '@libs/settings';
 
 export class SettingResponse {
@@ -10,6 +11,9 @@ export class SettingResponse {
   hasSecret!: boolean;
   @ApiProperty(ANY_JSON_VALUE)
   value!: unknown;
+  /** The registry default, redacted like `value`: a secret default reads `{set: boolean}`. */
+  @ApiProperty(ANY_JSON_VALUE)
+  default!: unknown;
   /** True while the value equals the registry default (also after a patch back to it). */
   isDefault!: boolean;
   updatedAt!: Date | null;
@@ -26,6 +30,7 @@ export class SettingResponse {
       description: definition.description,
       hasSecret: definition.secret !== false,
       value: shown.redacted,
+      default: redactSetting(definition, definition.default),
       isDefault: sameJson(shown.value, definition.default),
       updatedAt: row?.updatedAt ?? null,
       updatedBy: row?.updatedBy ?? null,

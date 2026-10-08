@@ -6,6 +6,7 @@ import {
   openSetting,
   readSetting,
   redactSetting,
+  restorableValue,
   sealSetting,
 } from './sealing';
 
@@ -91,5 +92,21 @@ describe('sealing', () => {
     expect(
       changedFields({ default: 'u1' }, { default: 'u1', on_new_comment: 'u2' }),
     ).toEqual(['on_new_comment']);
+  });
+
+  it('restores a plain setting as its revision stored it', () => {
+    expect(restorableValue(officialMode, true)).toBe(true);
+  });
+
+  it('restores an object setting without its secret fields, so a merge keeps the stored secret', () => {
+    const redacted = redactSetting(google, client);
+    expect(restorableValue(google, redacted)).toEqual({
+      enabled: true,
+      clientId: 'public-id',
+    });
+  });
+
+  it('has nothing to restore for a whole-value secret', () => {
+    expect(restorableValue(smtp, redactSetting(smtp, SMTP_URL))).toBeNull();
   });
 });

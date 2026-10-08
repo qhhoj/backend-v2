@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Setting } from '@libs/database';
+import { Setting, SettingRevision } from '@libs/database';
 import type { Connection, Model } from 'mongoose';
 import { definitionOf, SETTINGS } from './registry';
 import type { SettingKey, SettingValue } from './registry';
@@ -92,6 +92,15 @@ export class SettingsService {
 
   revisionsOf(key: SettingKey, page: number, pageSize: number) {
     return this.revisions.list(key, page, pageSize);
+  }
+
+  /** The revision of this setting only: another setting's revision reads as missing. */
+  async revisionOf(
+    key: SettingKey,
+    revisionId: string,
+  ): Promise<SettingRevision | null> {
+    const revision = await this.revisions.findById(revisionId);
+    return revision?.key === key ? revision : null;
   }
 
   private readOrDefault(key: SettingKey, stored: unknown): unknown {

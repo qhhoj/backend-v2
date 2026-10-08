@@ -3,6 +3,7 @@ import { AppError, invalidField, Paginated } from '@libs/common';
 import {
   definitionOf,
   redactSetting,
+  restorableValue,
   SettingError,
   SETTING_KEYS,
   SettingsService,
@@ -34,6 +35,25 @@ export class SettingsAdminService {
       throw error;
     }
     return this.view(known, (await this.settings.rows()).get(known));
+  }
+
+  /** Writes the revision's `before` back through `update`, so the restore is a new revision; sealed parts are never restored. */
+  async restore(
+    key: string,
+    revisionId: string,
+    actorId: string,
+  ): Promise<SettingResponse> {
+    const known = this.known(key);
+    const revision = await this.settings.revisionOf(known, revisionId);
+    if (!revision) throw new AppError('not_found', 404, 'No such revision');
+    const value = restorableValue(definitionOf(known)!, revision.before);
+    if (value === null)
+      throw new AppError(
+        'secret_unrestorable',
+        409,
+        'Secret values are not stored in revisions',
+      );
+    return this.update(known, value, actorId);
   }
 
   async revisions(key: string, page: number, pageSize: number) {

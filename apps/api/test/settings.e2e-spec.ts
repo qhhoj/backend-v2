@@ -2,6 +2,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { SettingsService } from '@libs/settings';
 import { Setting, SettingRevision } from '@libs/database';
 import type { Model } from 'mongoose';
+import { v7 } from 'uuid';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
@@ -14,6 +15,7 @@ const SMTP = 'smtp://mailer:s3cret-pass@mail.test:587';
 interface SettingView {
   key: string;
   value: unknown;
+  default: unknown;
   isDefault: boolean;
   hasSecret: boolean;
 }
@@ -25,6 +27,17 @@ describe('/api/internal/admin/settings', () => {
   let member: TestSession;
   const patch = (key: string, value: unknown, session = admin) =>
     authed(api.http().patch(`${SETTINGS}/${key}`), session).send({ value });
+  const restore = (key: string, revisionId: string, session = admin) =>
+    authed(
+      api.http().post(`${SETTINGS}/${key}/revisions/${revisionId}/restore`),
+      session,
+    );
+  const revisionsOf = (key: string) =>
+    authed(api.http().get(`${SETTINGS}/${key}/revisions`), admin).expect(200);
+  const newestRevisionId = async (key: string) =>
+    dataOf<Array<{ id: string }>>(await revisionsOf(key))[0].id;
+  const revisionTotal = async (key: string) =>
+    ((await revisionsOf(key)).body as { meta: { total: number } }).meta.total;
   const list = async () =>
     dataOf<SettingView[]>(
       await authed(api.http().get(SETTINGS), admin).expect(200),
@@ -208,5 +221,100 @@ describe('/api/internal/admin/settings', () => {
     expect(body.meta.total).toBe(2);
     expect(body.data[0].changedFields).toEqual(['clientId']);
     expect(body.data[0].actor).not.toBeNull();
+  });
+
+  it('answers every setting with its default, a secret default redacted', async () => {
+    const settings = await list();
+    for (const setting of settings) expect(setting).toHaveProperty('default');
+    const google = settings.find((setting) => setting.key === 'auth.google')!;
+    expect(google.default).toMatchObject({ clientSecret: { set: false } });
+    const smtp = settings.find((setting) => setting.key === 'mail.smtpUrl')!;
+    expect(smtp.default).toEqual({ set: false });
+    expect(
+      settings.find((setting) => setting.key === 'pdf.renderTimeoutMs'),
+    ).toMatchObject({ default: 30_000 });
+    expect(JSON.stringify(settings)).not.toMatch(
+      /google-secret-1|s3cret-pass|tok-123/,
+    );
+  });
+
+  it('restores a revision: the value is back, the restore is a new revision and the querier sees it', async () => {
+    await patch('pdf.renderTimeoutMs', 45_000).expect(200);
+    const revisionsBefore = await revisionTotal('pdf.renderTimeoutMs');
+    const restored = dataOf<SettingView>(
+      await restore(
+        'pdf.renderTimeoutMs',
+        await newestRevisionId('pdf.renderTimeoutMs'),
+      ).expect(200),
+    );
+    expect(restored).toMatchObject({
+      value: 30_000,
+      default: 30_000,
+      isDefault: true,
+    });
+    expect(api.app.get(SettingsService).get('pdf.renderTimeoutMs')).toBe(
+      30_000,
+    );
+    expect(await revisionTotal('pdf.renderTimeoutMs')).toBe(
+      revisionsBefore + 1,
+    );
+  });
+
+  it('restores an object setting and keeps its stored secret', async () => {
+    await patch('auth.github', {
+      enabled: true,
+      clientId: 'gh-1',
+      clientSecret: 'gh-secret-1',
+    }).expect(200);
+    await patch('auth.github', { clientId: 'gh-2' }).expect(200);
+    const restored = dataOf<SettingView>(
+      await restore(
+        'auth.github',
+        await newestRevisionId('auth.github'),
+      ).expect(200),
+    );
+    expect(restored.value).toEqual({
+      enabled: true,
+      clientId: 'gh-1',
+      clientSecret: { set: true },
+    });
+    expect(api.app.get(SettingsService).get('auth.github')).toMatchObject({
+      clientId: 'gh-1',
+      clientSecret: 'gh-secret-1',
+    });
+    expect(JSON.stringify(await list())).not.toContain('gh-secret-1');
+  });
+
+  it('refuses to restore a whole-secret setting with 409', async () => {
+    for (const key of ['mail.smtpUrl', 'discord.webhooks']) {
+      const response = await restore(key, await newestRevisionId(key)).expect(
+        409,
+      );
+      errorCode('secret_unrestorable')(response);
+    }
+    expect(api.app.get(SettingsService).get('mail.smtpUrl')).toBe(SMTP);
+  });
+
+  it('answers 404 for an unknown key, an unknown revision and a revision of another key', async () => {
+    await restore('no.such.key', await newestRevisionId('pdf.renderTimeoutMs'))
+      .expect(404)
+      .expect(errorCode('not_found'));
+    await restore('pdf.renderTimeoutMs', v7())
+      .expect(404)
+      .expect(errorCode('not_found'));
+    await restore('auth.google', await newestRevisionId('pdf.renderTimeoutMs'))
+      .expect(404)
+      .expect(errorCode('not_found'));
+  });
+
+  it('is for judge.change_settings holders only', async () => {
+    const revisionId = await newestRevisionId('pdf.renderTimeoutMs');
+    await api
+      .http()
+      .post(`${SETTINGS}/pdf.renderTimeoutMs/revisions/${revisionId}/restore`)
+      .expect(401);
+    await restore('pdf.renderTimeoutMs', revisionId, member)
+      .expect(403)
+      .expect(errorCode('forbidden'));
   });
 });

@@ -20,6 +20,10 @@ export class SettingRevisionsRepository {
     await this.revisions.create([entry], { session });
   }
 
+  findById(revisionId: string): Promise<SettingRevision | null> {
+    return this.revisions.findById(revisionId).lean<SettingRevision>().exec();
+  }
+
   async list(key: string, page: number, pageSize: number) {
     const [items, total] = await Promise.all([
       this.revisions

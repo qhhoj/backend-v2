@@ -74,6 +74,19 @@ export function redactSetting(
   };
 }
 
+/** A revision's `before` without its sealed parts, ready to patch back; null for a whole-secret setting (nothing restorable is stored). */
+export function restorableValue(
+  definition: SettingDefinition<unknown>,
+  redactedBefore: unknown,
+): unknown {
+  const { secret } = definition;
+  if (secret === true) return null;
+  if (secret === false) return redactedBefore;
+  const fields = { ...(redactedBefore as Fields) };
+  for (const field of secret) delete fields[field];
+  return fields;
+}
+
 /** Top-level fields whose value differs (`['value']` for a scalar): a rotated secret is visible without its value. */
 export function changedFields(before: unknown, after: unknown): string[] {
   if (isPlainObject(before) && isPlainObject(after))
