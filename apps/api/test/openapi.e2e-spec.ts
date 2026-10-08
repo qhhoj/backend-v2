@@ -148,6 +148,7 @@ describe('OpenAPI document', () => {
         '/api/internal/contests/{key}/submissions',
         '/api/internal/contests/{key}/rescore',
         '/api/internal/contests/{key}/judge-final',
+        '/api/internal/contests/{key}/actions',
       ]),
     );
   });
@@ -248,6 +249,14 @@ describe('OpenAPI document', () => {
         '/api/internal/admin/site/navigation',
         '/api/internal/admin/site/navigation/{id}',
         '/api/internal/admin/site/config/{key}',
+        '/api/internal/admin/site/pages/{id}/revisions',
+        '/api/internal/admin/site/pages/render-preview',
+        '/api/internal/admin/users',
+        '/api/internal/admin/languages',
+        '/api/internal/admin/languages/{id}',
+        '/api/internal/admin/organization-requests',
+        '/api/internal/admin/posts',
+        '/api/internal/admin/settings/{key}/revisions/{revisionId}/restore',
       ]),
     );
   });

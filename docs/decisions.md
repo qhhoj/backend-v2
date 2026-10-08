@@ -44,6 +44,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `withRedisLock` is fail-fast (409 on contention) — a double click gets a conflict instead of queueing behind itself.
 - ESLint `id-length` minimum 2 and one class per file named `<name>.<role>.ts` — readability rule for a team.
 - Backup codes left come from `GET /auth/2fa/totp/scratch-codes` (`{ remaining }`), not a `/me` field — counting needs decryption, and a stored count could drift from the set.
+- 429 from `RateLimitService.reserve` sends `Retry-After` from the longest TTL among the over-limit keys — clients can back off without guessing, and under-limit keys never extend the wait.
 
 ## Migrator
 
@@ -73,6 +74,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Polygon import runs in the worker with pandoc under `prlimit --as=768MiB`, one job at a time, and reports through the job id — conversion cannot exhaust the box; a missing `prlimit` fails closed.
 - Statement PDFs: Playwright job in the worker, cache `PDF_CACHE_ROOT/<code>.<lang>.pdf`, 202 while rendering, 503 with `Retry-After` on failure — render cost stays off the API.
 - Tagging needs `allowTagging` plus `judge.add_tagproblem` or rating >= 1900; no external OJ calls — legacy rule, no outbound dependency.
+- Languages admin has no delete and no key rename — judges report languages by key and submissions, problems and judges reference them; a rename or delete would orphan them.
 
 ## Judging and bridge
 
@@ -99,6 +101,9 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Bulk rejudge counts first (more than 10 needs `judge.rejudge_submission_lot`), then streams ids in chunks of at most 1000, skips locked rows without `force` — no full materialisation.
 - The bridge is a single instance; the API and bridge refuse to boot while Redis is down (boot ping) — the orchestrator restarts them.
 - Judge containers need a restart policy — the fork exits on a dropped socket.
+- Bulk rejudge `dryRun` counts with the same filter and never throws for the lot limit (`allowed` tells the UI), so the confirm dialog can show the number first.
+- Submission detail action flags come from the same pure rules the action endpoints enforce (`submissionActions`), so the UI cannot drift from the 403/409s.
+- Submission `lockedAfter` is returned to editors only — the lock time is moderation information; an owner sees the lock as `canRejudge: false`.
 
 ## Effects and realtime
 
@@ -156,6 +161,8 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Register, join and leave refusals have one code each (legacy's distinct messages) with unchanged statuses — the SPA maps codes, never messages.
 - No unregister — legacy has none (`ContestLeave` only clears the current contest); YAGNI.
 - Announcements get no author and no server read state — neither the schema nor legacy has an author; ids are time-ordered, so the SPA keeps the last seen id.
+- Contest settings echo `pushAnnouncements`, `hasRankingAccessCode`, per-problem output prefixes and a `users` lookup (ids stay, wire fields never change); `requiresRankingAccessCode` mirrors `requiresAccessCode`; the ranking code itself is never returned, only the boolean.
+- Contest action status scans live queue jobs (no per-contest job id by design); there is no failed state because jobs are removed when they end.
 
 ## Organizations and users
 
@@ -184,6 +191,9 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - New organization admins join the `Org Admin` group on update as well as create — legacy granted it on create only; it is never revoked, like legacy.
 - `/api/v2/user` hides contest ratings of re-frozen boards from non-editors — a frozen board must not leak through the rating.
 - One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; `/users/:username/ratings` and `/api/v2/user` both use it: `/api/v2/user` drops the boards the viewer cannot see, while the internal route keeps the entry. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
+- Organization summaries carry `isOpen`; home users carry the first listed organization through `OrganizationsService.firstListedByUser`, shared with the leaderboard — one rule, so the two lists cannot disagree.
+- Staff user list uses a CI-collated username range (an `i` regex cannot use the index) and a partial `banReason` index; ban duration is deferred because it needs an expiry sweep.
+- A searched staff user list is ordered by username along the same CI index (no in-memory sort), `page` is capped at 500 to bound the skip cost, and `banned=false` means not banned (no `banReason`).
 
 ## Blog and comments
 
@@ -222,6 +232,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Planned (migrator deferred): comments map legacy `p:`/`s:`/`c:`/`b:`/`t:` pages to entity ids, build `path`/`threadId` from MPTT and render `bodyHtml`; posts render `contentHtml`/`summaryHtml`; `users.contributionPoints` are recomputed after the backfill — reads never render and one job writes the points.
 - `judge.change_settings` is operator-grade (grant it to superusers only): webhook and pwned URLs are admin-set, so in production they must be https and may not be `localhost` or a literal loopback/private/link-local IP, and the pwned fetch refuses redirects; the accepted residual is a hostname that resolves to an internal address (blind SSRF, an operator could already reach it).
 - Registration takes one optional `organizationId` (open and listed only, never private or unlisted) and `languageId`; legacy allowed several open organizations without the unlisted filter — a signup must not reach hidden schools, more are joined afterwards through the usual membership caps. `activate/resend` always answers 204 and is limited per IP and per email so it cannot enumerate accounts or flood mailboxes.
+- Comment `body` is returned only with `canEdit`, so the edit form never needs a second request and readers never get sources.
 
 ## Tickets and site content
 
@@ -235,6 +246,9 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Flatpage urls match `^[-\p{L}\p{N}_/.~]+$` (Django's Unicode `\w`, so Vietnamese slugs round-trip): no query, fragment, dot segment ambiguity or encoded tricks reach another page.
 - `judge.change_miscconfig` is operator-grade: the analytics snippet and announcement are raw staff HTML served to every visitor, so grant it like `judge.change_settings` (superusers only).
 - Planned (migrator deferred): tickets map `content_type` to `linkedItem.type`, inline `general_issue.issue_url` into `generalIssues`, embed messages ordered by time (more than 500 imported whole and reported), copy assignees and `is_contributive`, render bodies in the `user` style, and stamp v7 ids with the legacy creation time so `_id` order stays newest-first; flatpages copy `registration_required`, strip the trailing slash from `url` and render `content` with the `blog` style (legacy urls with non-ASCII characters are accepted by the admin charset); navigation items copy `order`, `parent_id` and `hidden`, and each `regex` is checked with `new RegExp` (legacy Python `re.VERBOSE` patterns need whitespace and comments stripped, or are reported); misc config keeps the last row per key (`home_page_top` and `top_notification` are Django templates rendered by `render_django`: convert or report them); after the backfill run `syncIndexes` before serving, then recompute contribution points so good tickets count.
+- Ticket `open` filters both ways; absent means both — the closed-ticket view needs `open=false` and the default list must not change.
+- Flatpage preview is its own route (`flatpages.change_flatpage`) rather than loosening the problems preview, which needs `edit_own_problem`; it shares the `render-preview:user:<id>` budget with the statement preview, so one per-user limit covers both.
+- Flatpage revisions answer 400 for a malformed page id, but the existing `/pages/:id` routes keep 404 — the ruling kept the older routes unchanged rather than align them.
 
 ## Settings
 
@@ -261,6 +275,8 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `npm run seed:e2e` is an api-side script (`apps/api/src/seed/`) that upserts by natural key and refuses unless `NODE_ENV` is `test` or `development` (B23); the e2e problem is `e2e_sum` (the code `e2e-sum` fails the code pattern) — real-backend frontend tests need known users and a problem without a hand-built database.
 - Submission stats (B24) count only what a signed-out viewer may see, with hinted count queries so yesterday's rows are never read — a public counter must not leak private or frozen rows.
 - Not done: B4 (a `ranking` event on `contest-events`) and B22 (structured samples, tied to the problem-editor work); B7 (weekly top board) dropped — legacy had none (`judge/views/blog.py` shows top PP and top contributors only), the SPA already shows "Top rating" from the leaderboard, and a weekly figure needs a new per-submission aggregation with no legacy parity.
+- Settings restore patches the revision's `before` minus sealed fields; whole-secret keys answer 409 because revisions never hold secrets, and the current secret is kept.
+- Setting `default` is redacted like the value, so a secret default never leaks through `GET`.
 
 ## Similarity
 

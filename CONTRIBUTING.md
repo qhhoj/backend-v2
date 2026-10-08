@@ -94,10 +94,12 @@ users/
   users-api.module.ts
   core/            listed-users, rate-limits, shared dto (username param, time zone)
   pages/  leaderboards/  profile/  moderation/  data/
+  admin/           staff user list (`judge.ban_user`): username prefix search, `banned` filter, never e-mail
 blog/
   blog-api.module.ts
   core/            BlogAccess (blog-access.ts), BlogAccessModule (posts repository + visibility, imported by comments), lists, detail, organization posts, dto
   editing/  votes/
+  moderation/      staff lists of hidden and scheduled posts (`judge.edit_all_post`)
 comments/
   comments-api.module.ts
   core/            CommentPagesService (the one page-access decision), threads, counts, locks, recent comments, rate-limits, dto
@@ -202,7 +204,8 @@ api-v2/            legacy shapes, grouped like the features
 - Login rate limiting is reserve-then-release, per IP plus per resolved account; unknown usernames are limited per NFKC-lowercased name
 - Behind nginx set `TRUST_PROXY` to its address (e.g. the container network CIDR); otherwise every client shares one IP and the per-IP limits (login, streams) become global
 - `@fastify/cookie` is pinned at 11.0.2: 11.1.1+ depends on ESM-only `cookie` 2, which breaks Jest CJS; do not bump
-- New permissions: add the codename to `libs/auth/src/principal/permissions.ts`
+- New permissions: add the codename to `libs/auth/src/principal/permissions.ts`; legacy Django names are kept as they are (`judge.add_language`, `judge.change_language`, `flatpages.change_flatpage`)
+- 429 from `RateLimitService.reserve` carries `Retry-After`: the longest TTL among the keys over their limit (at least 1 s); under-limit keys never extend it
 - Account flows live in `apps/api/src/modules/auth/<flow>/<flow>.controller.ts` + `<flow>.service.ts` + `dto/` (registration, password-reset, social); totp and webauthn share `auth/two-factor/` (`totp.controller.ts`, `webauthn.controller.ts`, `second-factor.service.ts`) and `impersonation/` has no `dto/`; add new flows the same way and list their paths in `apps/api/test/openapi.e2e-spec.ts`
 - Mail goes through the `MAILER` token (`@libs/common`; `SmtpMailer` in `apps/api/src/modules/mail/`): SMTP from the `mail.smtpUrl` setting, sender `mail.from`, both read per message (a new URL gets a new transport, the old one is closed); `InMemoryMailer` in tests; a send failure, or no `mail.smtpUrl` set, is `mail_unavailable` 503
 - Uploads go through `StorageService` (`@libs/common`): files live under `MEDIA_ROOT` (a volume nginx serves at `MEDIA_URL`), paths are checked to stay inside it, and callers never pass client-supplied names unsanitised; file type is decided from the bytes (exception: a file submission keeps its language's extension, which `LANGUAGE_EXTENSION_PATTERN` limits to `[a-z0-9]{1,10}`, as legacy did)
@@ -244,6 +247,7 @@ api-v2/            legacy shapes, grouped like the features
 - Public routes: `@Public()` + `@CurrentAuth()` + `optionalPrincipal(auth)`; invisible or unknown problem -> 404, visible but not editable -> 403
 - Events (`ProblemEvents`): `pointsChanged`, `publicityChanged`, `codeRenamed`, `statementChanged`; listeners run synchronously after the write
 - Rate limits: `problems/core/rate-limits.ts`
+- Languages admin (`/api/internal/admin/languages`, `catalog/languages-admin.*`): list, create and update only (`judge.add_language`, `judge.change_language`); no delete and no key rename; every write resyncs the local `LanguagesQuerier`
 - Rendering styles: `problem`, `problem-full`, `solution` (editorials), `blog` (posts), `user` (raw HTML escaped; profile and organization `about`, comments); one `styleOf` picks the style per problem
 - `blog` is `solution` made safe for strangers: author HTML is sanitized first, then KaTeX is spliced in through nonce slots, so author markup cannot forge math; author CSS is strict (no `position`, offsets, `transform`, `z-index`, `opacity`, negative margins, viewport units; units from an allow-list), classes need the `user-` prefix, iframes only from YouTube/Vimeo and sandboxed, no author MathML/SVG
 - User-authored styles (`blog`, `user`) cut KaTeX down: `maxExpand` 50, `maxSize` 50, sizes beyond ±50em refused on the parse tree, macros with parameters refused (hex colours allowed only after colour commands), 20k parse-node cap, 500 ms of KaTeX per render in total (the first formula past it is a `math-error`, later ones show as source); `katex` stays pinned to exactly 0.19.0 because the limits use the internal `katex.__parse`
@@ -333,6 +337,7 @@ api-v2/            legacy shapes, grouped like the features
 
 ## Contest extras
 
+- Action status: `GET /contests/:key/actions` (editors only) scans the live queue jobs for rescore, judge-final (manual only) and rating; there is no failed state, since jobs are removed when they end
 - Rating: `POST /contests/:key/rate` (`judge.contest_rating` + edit rights, ended contest, 409 while the board is frozen; the worker also skips a frozen target and leaves frozen contests out of the re-rate chain and `/api/v2` rankings hide ratings on a frozen board; a rescore of a contest with ratings is the follow-up trigger) queues `contest-rating` (global concurrency 1); the job deletes every rating from the earliest of the target's end, its stored ratings' end and any moved contest's end, re-rates every rated contest from there in end order, then refreshes `users.rating`; `libs/contests/src/rating/elo-mmr.ts` is the legacy Python ported line for line
 - Elo-MMR goldens: `python3 -I tools/legacy/elo_mmr_goldens.py <online-judge>/judge/ratings.py libs/contests/src/rating/elo-mmr.goldens.json`; generated, never hand-edited
 - Public ranking: links (`/contests/:key/ranking-link`, `/public-rankings/:token`, 18-char tokens, misses limited per IP) and the ranking code (`?code=`); both serve `ContestRankingService.board`, frozen while frozen
@@ -370,6 +375,7 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - Leaderboards (`/users`, `/contributors`, `/users/:username/rank`) count listed, active users (`LISTED_USERS`); ties share a rank and pages continue it; each row carries the user's `rating` (null when unrated) and first listed `organization` (whoever views); rely on the `{isUnlisted, isActive, <field>, _id}` indexes, which the query planner picks (no `.hint()`), so they must exist (see Env and deploy)
 - `/users/:username/pp-breakdown` is its own paged route; the first `PP_ENTRIES` rows are cached 600 s per user (`user-pp:<userId>`), so a newly private problem can show for up to 600 s
 - Heatmap: last 365 days per day in `?timezone=`, else the viewer's zone, else UTC (`$dateToString` with the zone; a zone Mongo rejects falls back to UTC), cached 10 minutes per user and zone
+- Staff lists: `GET /admin/users` (username prefix with the CI collation, `banned` filter via the partial `banReason` index, never e-mail), `GET /admin/organization-requests`, `GET /admin/posts?state=hidden|scheduled`
 - Ban (`judge.ban_user`, never yourself or a superuser): compare-and-set on `banReason`, unlisted, inactive, every session destroyed; the reserved automatic cheating reason cannot be used; unban restores rank `user`, listed and active whatever the user had before (legacy)
 - User data: `USER_DATA_ROOT` (unset -> 404, muted -> 404); 3 prepares per user per day, one per 24 h while a fresh zip exists (`canPrepare`); zip (profile whitelist, own submissions with sources and `info.json`) kept 7 days, removed by the hourly sweep
 - `/api/v2/organizations|users|user/:username`: legacy shapes, counted pages; unlisted organizations hidden like `canList`; contest ratings of frozen boards are `null` for non-editors
