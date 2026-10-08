@@ -65,14 +65,19 @@ export default tseslint.config(
   {
     // `libs/<lib>/src/testing.ts` is the lib's test-support entry; production code never imports it.
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
-    ignores: ['**/*.spec.ts', '**/*.e2e-spec.ts', 'libs/*/src/testing.ts'],
+    ignores: [
+      '**/*.spec.ts',
+      '**/*.e2e-spec.ts',
+      'libs/*/src/testing.ts',
+      'libs/*/src/testing/**',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              group: ['@libs/*/testing'],
+              group: ['@libs/*/testing', '**/testing', '**/testing/*'],
               message: 'Test-support entry: import it from specs and apps/*/test only.',
             },
           ],

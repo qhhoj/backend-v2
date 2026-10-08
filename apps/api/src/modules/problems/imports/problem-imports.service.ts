@@ -26,8 +26,9 @@ import { ProblemsRepository } from '../core/problems.repository';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from '../core/rate-limits';
 
 export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
-const JOB_RETENTION_SECONDS = 24 * 60 * 60;
-const JOB_RETENTION = { age: JOB_RETENTION_SECONDS };
+/** A finished import job stays readable for a day, so the staff member can see its outcome. */
+const IMPORT_JOB_KEEP_SECONDS = 24 * 60 * 60;
+const IMPORT_JOB_KEEP = { age: IMPORT_JOB_KEEP_SECONDS };
 /** Longest import error shown; worker messages can echo problem.xml text. */
 const MAX_SHOWN_REASON = 1000;
 const GENERIC_FAILURE = 'Import failed';
@@ -64,8 +65,8 @@ export class ProblemImportsService {
       await this.assertPackage(packagePath);
       await this.queue.add('import', job, {
         jobId,
-        removeOnComplete: JOB_RETENTION,
-        removeOnFail: JOB_RETENTION,
+        removeOnComplete: IMPORT_JOB_KEEP,
+        removeOnFail: IMPORT_JOB_KEEP,
       });
     } catch (error) {
       await rm(packagePath, { force: true });

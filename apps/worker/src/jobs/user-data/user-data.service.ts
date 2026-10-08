@@ -93,7 +93,7 @@ export class UserDataService {
   /** Legacy `prepare_user_data` plus the profile, own comments (hidden included) and blog posts. The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
   async prepare(userId: string): Promise<number> {
     const root = this.root();
-    const [path, temporary] = [
+    const [path, temporaryPath] = [
       userDataPath(root, userId),
       userDataTempPath(root, userId, randomUUID()),
     ];
@@ -154,7 +154,7 @@ export class UserDataService {
       },
       {
         path,
-        temporaryPath: temporary,
+        temporaryPath,
         maxBytes: this.limits.maxBytes,
         tooLarge: () =>
           new UserDataError(`Your data passes ${this.limits.maxBytes} bytes`),

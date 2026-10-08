@@ -31,7 +31,7 @@ export class ContestDataService {
     const root = this.env.contestDataRoot;
     if (!root)
       throw new ContestDataError('Contest data download is not configured');
-    const [path, temporary] = [
+    const [path, temporaryPath] = [
       contestDataPath(root, contestId),
       contestDataTempPath(root, contestId, randomUUID()),
     ];
@@ -61,7 +61,7 @@ export class ContestDataService {
       ),
       {
         path,
-        temporaryPath: temporary,
+        temporaryPath,
         maxBytes: this.limits.maxBytes,
         tooLarge: () =>
           new ContestDataError(

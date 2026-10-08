@@ -56,7 +56,6 @@ describe('contest rating', () => {
       ...extra,
     });
     await seedContestSubmission(worker, participation, problemId, {
-      fields: {},
       points: score,
     });
     return participation;

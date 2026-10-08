@@ -64,7 +64,7 @@ export class TicketCreationService {
     return this.file(principal, dto, {
       link: { type: 'problem', id: view.id },
       assignees,
-      where: this.discord.link(problemPath(code)),
+      subjectLink: this.discord.link(problemPath(code)),
     });
   }
 
@@ -76,16 +76,16 @@ export class TicketCreationService {
     return this.file(principal, dto, {
       link: { type: 'general', issueUrl: dto.issueUrl },
       assignees: [],
-      where: dto.issueUrl,
+      subjectLink: dto.issueUrl,
     });
   }
 
   private async file(
     principal: Principal,
     dto: NewTicketDto,
-    target: { link: TicketLink; assignees: string[]; where: string },
+    target: { link: TicketLink; assignees: string[]; subjectLink: string },
   ): Promise<TicketDetailResponse> {
-    const { link, assignees, where } = target;
+    const { link, assignees, subjectLink } = target;
     const bodyHtml = renderField(dto.body, 'user', 'body');
     const releaseHit = await this.rateLimits.reserve(
       [`ticket:${principal.userId}`],
@@ -125,7 +125,7 @@ export class TicketCreationService {
       open: null,
     });
     await this.discord.notify('on_new_ticket', {
-      title: `New ticket on ${where}`,
+      title: `New ticket on ${subjectLink}`,
       description: newTicketDescription({
         title: dto.title,
         ticketUrl: this.discord.link(ticketPath(ticketId)),

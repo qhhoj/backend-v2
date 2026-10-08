@@ -252,7 +252,6 @@ describe('contest effects', () => {
     const { problem, contest, participation } = await contestOn({});
     const kept = await seedProblem(worker, { points: 1000, partial: true });
     await seedContestSubmission(worker, participation, problem._id, {
-      fields: {},
       points: 100,
     });
     await worker.contests.updateOne(

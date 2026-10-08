@@ -464,7 +464,7 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 | Durations | a `Ms` or `Seconds` suffix on every number; a library option key (`delay`, `age`) takes a suffixed constant | bare `timeout`, `delay`, `ttl` |
 | Problem limits | `timeLimit` in seconds, `memoryLimit` in KiB (schema and wire names) | other units without a suffix |
 | Booleans | `isX`, `hasX`, `canX`, `shouldX`, `wasX`; a read that loads more takes `{ withX: true }` | adjective-only names (`hidden`, `frozen`), literal `true`/`false` as a positional argument |
-| Pretests | `isPretested` (problem, contest problem, submission), `pretestsOnly` (judge request) | `pretested` outside the judge packet |
+| Pretests | `isPretested` (problem, contest problem, submission); `isPretest` (test case and contest-submission schema fields, init.yml `is_pretest`: kept DB names); `runPretestsOnly` (contest flag); `pretestsOnly` (judge request) | `pretested` outside the judge packet |
 
 ## Readability rules
 
@@ -476,6 +476,7 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 - Booleans read as questions: `isX`, `hasX`, `canX`, `shouldX`, `wasX`; never pass a literal `true`/`false` positionally — use `{ withCases: true }`. A `setX(…, value)` setter is the one exception.
 - Guard clauses first: refuse or return early, then the main path at one indentation level.
 - Comments say why (a legacy rule, a race, a bound), never what the next line does.
+- Options objects: destructure in the signature when every key is used; take the object whole when it is passed on.
 
 ## Testing
 
