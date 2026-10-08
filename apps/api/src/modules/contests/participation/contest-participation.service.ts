@@ -29,6 +29,7 @@ import { ContestsService } from '../core/contests.service';
 import { CurrentContestService } from '../core/current-contest.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import type { ParticipationListQueryDto } from './dto/participation.dto';
+import { refusal } from './participation-refusals';
 import {
   CurrentParticipationResponse,
   ParticipationResponse,
@@ -45,7 +46,6 @@ import {
 export const CONTEST_CHEATING_BAN_REASON =
   'Banned for multiple cheating offenses during contests';
 
-const conflict = (message: string) => new AppError('conflict', 409, message);
 const forbidden = (message: string) => new AppError('forbidden', 403, message);
 
 /** What a register or join request brings besides the contest: the access code it typed and its address (rate limits). */
@@ -79,102 +79,141 @@ export class ContestParticipationService {
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
-    const view = ContestAccess.accessView(contest);
-    if (
-      ContestAccess.isEditor(principal, view) ||
-      ContestAccess.isTester(principal, view)
-    )
-      throw conflict('Editors and testers cannot register.');
-    this.assertNotBanned(principal, contest);
-    if (!requiresRegistration(contest))
-      throw conflict('Registration is not required for this contest.');
-    if (
-      !isRegistrationOpen(contest, now) ||
-      contestPhase(contest, now) === 'ended'
-    )
-      throw conflict('Registration is closed.');
+    this.assertMayRegister(principal, contest, now);
     if (
       await this.participationRows.findOne(contest._id, principal.userId, LIVE)
     )
-      throw conflict('You have already registered for this contest.');
+      throw refusal('already_registered');
     await this.assertAccessCode(principal, contest, accessCode, ip);
     const participation = await this.participationRows.register(
       contest._id,
       principal.userId,
       contest.startTime,
     );
-    if (!participation)
-      throw conflict('You have already registered for this contest.');
+    if (!participation) throw refusal('already_registered');
     await this.refreshCounts(contest._id);
     return ParticipationSummaryResponse.from(participation, contest);
+  }
+
+  /** Legacy `ContestRegister` refusals, in legacy order. */
+  private assertMayRegister(
+    principal: Principal,
+    contest: ContestDocument,
+    now: Date,
+  ): void {
+    const view = ContestAccess.accessView(contest);
+    if (
+      ContestAccess.isEditor(principal, view) ||
+      ContestAccess.isTester(principal, view)
+    )
+      throw refusal('editor_cannot_register');
+    this.assertNotBanned(principal, contest);
+    if (!requiresRegistration(contest))
+      throw refusal('registration_not_required');
+    if (!isRegistrationOpen(contest, now)) throw refusal('registration_closed');
+    if (contestPhase(contest, now) === 'ended') throw refusal('contest_ended');
   }
 
   /** Legacy `join_contest`: a virtual run after the end, else the live (or, for editors and testers, spectating) participation; it becomes the current one. */
   async join(
     principal: Principal,
     key: string,
-    { accessCode, ip }: JoinCredentials,
+    credentials: JoinCredentials,
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
     const view = ContestAccess.accessView(contest);
     const phase = contestPhase(contest, now);
-    const onlySpectates =
+    const isSpectatorOnly =
       ContestAccess.isEditor(principal, view) ||
       ContestAccess.isTester(principal, view);
-    if (phase === 'upcoming' && !onlySpectates)
-      throw conflict('The contest has not started.');
+    if (phase === 'upcoming' && !isSpectatorOnly)
+      throw refusal('contest_not_started');
     this.assertNotBanned(principal, contest);
-    let participation: ParticipationDocument;
-    if (phase === 'ended') {
-      if (contest.disallowVirtual)
-        throw conflict('Virtual joining is not allowed for this contest.');
-      await this.assertAccessCode(principal, contest, accessCode, ip);
-      participation = await this.participationRows.createVirtual(
-        contest._id,
-        principal.userId,
-        now,
-      );
-    } else {
-      const virtual = onlySpectates ? SPECTATE : LIVE;
-      const existing = await this.participationRows.findOne(
-        contest._id,
-        principal.userId,
-        virtual,
-      );
-      if (!existing) {
-        if (
-          requiresRegistration(contest) &&
-          !isRegistrationOpen(contest, now) &&
-          !onlySpectates
-        )
-          throw conflict('You are not registered for this contest.');
-        await this.assertAccessCode(principal, contest, accessCode, ip);
-        participation = await this.participationRows.findOrCreate(
-          contest._id,
-          principal.userId,
-          virtual,
-          now,
-        );
-      } else {
-        participation = existing.isRegistered
-          ? await this.participationRows.start(existing, now)
-          : existing;
-        if (hasParticipationEnded(contest, participation, now))
-          participation = await this.participationRows.findOrCreate(
-            contest._id,
-            principal.userId,
-            SPECTATE,
+    const participation =
+      phase === 'ended'
+        ? await this.joinVirtual(principal, contest, credentials, now)
+        : await this.joinRunning(
+            principal,
+            contest,
+            { isSpectatorOnly, credentials },
             now,
           );
-      }
-    }
     await this.participationRows.setCurrent(
       principal.userId,
       participation._id,
     );
     await this.refreshCounts(contest._id);
     return ParticipationSummaryResponse.from(participation, contest);
+  }
+
+  private async joinVirtual(
+    principal: Principal,
+    contest: ContestDocument,
+    { accessCode, ip }: JoinCredentials,
+    now: Date,
+  ): Promise<ParticipationDocument> {
+    if (contest.disallowVirtual) throw refusal('virtual_disallowed');
+    await this.assertAccessCode(principal, contest, accessCode, ip);
+    return this.participationRows.createVirtual(
+      contest._id,
+      principal.userId,
+      now,
+    );
+  }
+
+  /** Re-enters an existing row, else creates one behind the registration and access-code checks. */
+  private async joinRunning(
+    principal: Principal,
+    contest: ContestDocument,
+    {
+      isSpectatorOnly,
+      credentials,
+    }: { isSpectatorOnly: boolean; credentials: JoinCredentials },
+    now: Date,
+  ): Promise<ParticipationDocument> {
+    const virtual = isSpectatorOnly ? SPECTATE : LIVE;
+    const existing = await this.participationRows.findOne(
+      contest._id,
+      principal.userId,
+      virtual,
+    );
+    if (existing) return this.reenter(principal, contest, existing, now);
+    const isRegistrationOver =
+      requiresRegistration(contest) && !isRegistrationOpen(contest, now);
+    if (isRegistrationOver && !isSpectatorOnly) throw refusal('not_registered');
+    await this.assertAccessCode(
+      principal,
+      contest,
+      credentials.accessCode,
+      credentials.ip,
+    );
+    return this.participationRows.findOrCreate(
+      contest._id,
+      principal.userId,
+      virtual,
+      now,
+    );
+  }
+
+  /** The first join after registering starts the clock; a participation whose time ran out continues as a spectator. */
+  private async reenter(
+    principal: Principal,
+    contest: ContestDocument,
+    existing: ParticipationDocument,
+    now: Date,
+  ): Promise<ParticipationDocument> {
+    const started = existing.isRegistered
+      ? await this.participationRows.start(existing, now)
+      : existing;
+    return hasParticipationEnded(contest, started, now)
+      ? this.participationRows.findOrCreate(
+          contest._id,
+          principal.userId,
+          SPECTATE,
+          now,
+        )
+      : started;
   }
 
   /** Legacy `set_disqualified`, with an explicit value instead of a toggle: rescored at -9999 (or back) by the worker, banned from (or allowed back into) the contest and moved out of it, then the cheating ban. */
@@ -248,7 +287,7 @@ export class ContestParticipationService {
       !participation ||
       uuidStr(participation.contest) !== contest._id
     )
-      throw new AppError('not_found', 404, `You are not in contest "${key}"`);
+      throw refusal('not_in_contest');
     await this.participationRows.clearCurrent(principal.userId, pointer);
   }
 
@@ -329,7 +368,7 @@ export class ContestParticipationService {
       !principal.isSuperuser &&
       contest.bannedUsers.map(uuidStr).includes(principal.userId)
     )
-      throw forbidden('You are banned from joining this contest.');
+      throw refusal('banned_from_contest');
   }
 
   /** Editors skip the code; a missing code costs nothing; each wrong code spends the user's and the IP's budget, a right one gives it back. */
@@ -344,8 +383,7 @@ export class ContestParticipationService {
       ContestAccess.canEdit(principal, ContestAccess.accessView(contest))
     )
       return;
-    if (accessCode === undefined)
-      throw forbidden('This contest needs an access code.');
+    if (accessCode === undefined) throw refusal('access_code_required');
     const releaseUser = await this.rateLimit.reserve(
       [`contest-code:user:${principal.userId}`],
       ACCESS_CODE_USER_LIMIT,
@@ -357,7 +395,7 @@ export class ContestParticipationService {
       ACCESS_CODE_WINDOW_SECONDS,
     );
     if (!constantTimeEqual(sha256(accessCode), contest.accessCodeHash))
-      throw forbidden('Wrong access code.');
+      throw refusal('wrong_access_code');
     await Promise.all([releaseUser(), releaseIp()]);
   }
 

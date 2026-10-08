@@ -124,7 +124,7 @@ describe('contest participation', () => {
       });
       await post('alice', ended.key, 'join')
         .expect(409)
-        .expect(errorCode('conflict'));
+        .expect(errorCode('virtual_disallowed'));
     });
 
     it('lets only editors and testers in before the start, as spectators', async () => {
@@ -133,7 +133,9 @@ describe('contest participation', () => {
         endTime: hoursFromNow(3),
         authors: [users.author._id],
       });
-      await post('alice', upcoming.key, 'join').expect(409);
+      await post('alice', upcoming.key, 'join')
+        .expect(409)
+        .expect(errorCode('contest_not_started'));
       expect(
         dataOf<ParticipationSummaryResponse>(
           await post('author', upcoming.key, 'join').expect(201),
@@ -195,7 +197,7 @@ describe('contest participation', () => {
       });
       await post('carol', contest.key, 'join')
         .expect(403)
-        .expect(errorCode('forbidden'));
+        .expect(errorCode('banned_from_contest'));
       await post('root', contest.key, 'join').expect(201);
     });
 
@@ -220,9 +222,12 @@ describe('contest participation', () => {
       });
       for (let attempt = 0; attempt < 12; attempt += 1)
         await post('alice', contest.key, 'join').expect(403);
+      await post('alice', contest.key, 'join')
+        .expect(403)
+        .expect(errorCode('access_code_required'));
       await post('alice', contest.key, 'join', { accessCode: 'wrong' })
         .expect(403)
-        .expect(errorCode('forbidden'));
+        .expect(errorCode('wrong_access_code'));
       await post('alice', contest.key, 'join', {
         accessCode: 'opensesame',
       }).expect(201);
@@ -316,7 +321,7 @@ describe('contest participation', () => {
       expect(new Date(registered.endTime)).toEqual(contest.endTime);
       await post('alice', contest.key, 'register')
         .expect(409)
-        .expect(errorCode('conflict'));
+        .expect(errorCode('already_registered'));
       expect((await api.contests.findById(contest._id).lean())!.userCount).toBe(
         1,
       );
@@ -338,11 +343,11 @@ describe('contest participation', () => {
       // Registration closed: an unregistered user cannot join.
       await post('bob', contest.key, 'join')
         .expect(409)
-        .expect(errorCode('conflict'));
+        .expect(errorCode('not_registered'));
     });
 
     it.each([
-      ['not required', {}, 'alice'],
+      ['not required', {}, 'alice', 'registration_not_required'],
       [
         'closed',
         {
@@ -350,9 +355,20 @@ describe('contest participation', () => {
           registrationEnd: hoursFromNow(-2),
         },
         'alice',
+        'registration_closed',
       ],
-      ['an editor', { registrationEnd: hoursFromNow(0.5) }, 'author'],
-      ['a tester', { registrationEnd: hoursFromNow(0.5) }, 'tester'],
+      [
+        'an editor',
+        { registrationEnd: hoursFromNow(0.5) },
+        'author',
+        'editor_cannot_register',
+      ],
+      [
+        'a tester',
+        { registrationEnd: hoursFromNow(0.5) },
+        'tester',
+        'editor_cannot_register',
+      ],
       [
         'over, with an open-ended window',
         {
@@ -361,17 +377,34 @@ describe('contest participation', () => {
           registrationStart: hoursFromNow(-6),
         },
         'alice',
+        'contest_ended',
       ],
-    ])('refuses a registration that is %s', async (_case, fields, who) => {
-      const contest = await createContest(api, {
-        startTime: hoursFromNow(1),
-        endTime: hoursFromNow(3),
-        authors: [users.author._id],
-        testers: [users.tester._id],
-        ...fields,
-      });
-      await post(who, contest.key, 'register').expect(409);
-    });
+      [
+        'over, with a window that closed too',
+        {
+          startTime: hoursFromNow(-5),
+          endTime: hoursFromNow(-1),
+          registrationStart: hoursFromNow(-6),
+          registrationEnd: hoursFromNow(-5.5),
+        },
+        'alice',
+        'registration_closed',
+      ],
+    ])(
+      'refuses a registration that is %s',
+      async (_case, fields, who, code) => {
+        const contest = await createContest(api, {
+          startTime: hoursFromNow(1),
+          endTime: hoursFromNow(3),
+          authors: [users.author._id],
+          testers: [users.tester._id],
+          ...fields,
+        });
+        await post(who, contest.key, 'register')
+          .expect(409)
+          .expect(errorCode(code));
+      },
+    );
 
     it('keeps banned users from registering', async () => {
       const contest = await createContest(api, {
@@ -382,7 +415,7 @@ describe('contest participation', () => {
       });
       await post('carol', contest.key, 'register')
         .expect(403)
-        .expect(errorCode('forbidden'));
+        .expect(errorCode('banned_from_contest'));
     });
   });
 
@@ -391,7 +424,9 @@ describe('contest participation', () => {
       const contest = await createContest(api);
       const other = await createContest(api);
       await post('carol', contest.key, 'join').expect(201);
-      await post('carol', other.key, 'leave').expect(404);
+      await post('carol', other.key, 'leave')
+        .expect(404)
+        .expect(errorCode('not_in_contest'));
       await post('carol', contest.key, 'leave').expect(204);
       expect(await pointerOf('carol')).toBeNull();
     });
