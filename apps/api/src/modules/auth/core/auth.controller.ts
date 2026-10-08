@@ -75,6 +75,7 @@ export class AuthController {
   }
 
   @SessionOnly()
+  @NoImpersonation()
   @Post('logout-all')
   @HttpCode(204)
   async logoutAll(

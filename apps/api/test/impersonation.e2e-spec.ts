@@ -234,6 +234,7 @@ describe('impersonation', () => {
       ['delete', `${AUTH}/2fa/webauthn/credentials/abc`],
       ['post', `${AUTH}/token/regenerate`],
       ['post', `${AUTH}/password/change`],
+      ['post', `${AUTH}/logout-all`],
       ['post', '/api/internal/profile/data'],
       ['get', '/api/internal/profile/data/download'],
     ] as const;
@@ -262,5 +263,26 @@ describe('impersonation', () => {
     await post(`${AUTH}/2fa/totp/enroll`, await login('bob'), {
       currentPassword: 'correct horse battery',
     }).expect(201);
+  });
+
+  it('refuses sign-out-everywhere while impersonating and keeps the target sessions', async () => {
+    const aliceOwn = await login('alice');
+    const alice = await impersonate(aliceId);
+    await post(`${AUTH}/logout-all`, alice)
+      .expect(403)
+      .expect(errorCode('forbidden'))
+      .expect(({ body }: { body: { error: { message: string } } }) =>
+        expect(body.error.message).toBe('Not allowed while impersonating'),
+      );
+    await me(alice).expect(200);
+    await me(aliceOwn).expect(200);
+  });
+
+  it('lets a normal session sign out everywhere', async () => {
+    const first = await login('alice');
+    const second = await login('alice');
+    await post(`${AUTH}/logout-all`, first).expect(204);
+    await me(first).expect(401);
+    await me(second).expect(401);
   });
 });
