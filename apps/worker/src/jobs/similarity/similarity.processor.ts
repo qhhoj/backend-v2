@@ -49,6 +49,14 @@ export class SimilarityProcessor
     error: Error,
   ): Promise<void> {
     this.logger.error(`Similarity job ${job?.id} failed: ${error.message}`);
-    if (job) await this.similarity.markFailed(job.data.runId, 'internal_error');
+    if (!job) return;
+    try {
+      await this.similarity.markFailed(job.data.runId, 'internal_error');
+    } catch (markError) {
+      const { name, message } = markError as Error;
+      this.logger.error(
+        `Could not mark similarity run ${job.data.runId} failed (${name}): ${message}`,
+      );
+    }
   }
 }
