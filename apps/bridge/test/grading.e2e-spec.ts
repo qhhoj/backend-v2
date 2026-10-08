@@ -214,6 +214,24 @@ describe('Grading (bridge Mongo layer)', () => {
     });
   });
 
+  it('finishes as IE, with its graded job, a claimed submission whose problem vanished', async () => {
+    const problem = await seedProblem(bridge, catalog, { code: nextCode() });
+    const submission = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+    });
+    const [queued] = await repository.loadQueued([submission._id]);
+    await bridge.problems.deleteOne({ _id: problem._id });
+    expect(await grading.claim(queued, JUDGE)).toBeNull();
+    expect(await stored(submission._id)).toMatchObject({
+      status: 'IE',
+      result: 'IE',
+      error: 'Submission data is missing',
+    });
+    expect(
+      (await bridge.gradedJobs()).map((job) => job.submissionId),
+    ).toContain(submission._id);
+  });
+
   it('grades a batched run: worst case, batch minimum, points scaled for a partial problem', async () => {
     const { id, problem } = await claimed({ points: 1000, partial: true });
     await grading.beginGrading(id, JUDGE, false);

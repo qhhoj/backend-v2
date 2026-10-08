@@ -32,7 +32,7 @@ export interface DispatchTarget extends JudgeState {
   readonly authKeyHash: string;
   submit(request: SubmissionRequest): void;
   terminate(): void;
-  disconnect(force: boolean): void;
+  disconnect({ isForced }: { isForced: boolean }): void;
 }
 
 /** Legacy `can_judge` + banned judges; a requested judge is matched by name even when disabled. */

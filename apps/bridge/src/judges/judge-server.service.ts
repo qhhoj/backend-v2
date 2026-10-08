@@ -101,7 +101,7 @@ export class JudgeServerService {
     );
     for (const socket of this.held) socket.destroy();
     const handlers = [...this.handlers];
-    for (const handler of handlers) handler.disconnect(true);
+    for (const handler of handlers) handler.disconnect({ isForced: true });
     await Promise.all(handlers.map((handler) => handler.finished));
     await stopped;
   }

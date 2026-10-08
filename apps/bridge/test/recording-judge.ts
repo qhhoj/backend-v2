@@ -29,7 +29,7 @@ export class RecordingJudge implements DispatchTarget {
     this.terminations += 1;
   }
 
-  disconnect(force: boolean): void {
-    this.disconnects.push(force);
+  disconnect({ isForced }: { isForced: boolean }): void {
+    this.disconnects.push(isForced);
   }
 }

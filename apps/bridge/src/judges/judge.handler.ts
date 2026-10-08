@@ -30,6 +30,11 @@ export const MAX_PACKETS_PER_SECOND = 1000;
 const PING_SAMPLES = 6;
 const HEADER_BYTES = 4;
 /** Packets of a running grading: ignored until this connection saw `grading-begin`. */
+type GradingBeginPacket = Extract<SubmissionPacket, { name: 'grading-begin' }>;
+type TestCaseStatusPacket = Extract<
+  SubmissionPacket,
+  { name: 'test-case-status' }
+>;
 const AFTER_GRADING_BEGIN: ReadonlySet<string> = new Set([
   'grading-end',
   'test-case-status',
@@ -117,8 +122,8 @@ export class JudgeHandler implements DispatchTarget {
     this.send({ name: 'terminate-submission' });
   }
 
-  disconnect(force: boolean): void {
-    if (force) this.close('force-disconnected');
+  disconnect({ isForced }: { isForced: boolean }): void {
+    if (isForced) this.close('force-disconnected');
     else this.send({ name: 'disconnect' });
   }
 
@@ -326,48 +331,40 @@ export class JudgeHandler implements DispatchTarget {
     await this.services.dispatch.offerWork(this);
   }
 
+  /** Packets for another submission are ignored (an acknowledgement of one is fatal); the old run's tail is ignored until this run's `grading-begin`. */
   private async onSubmissionPacket(packet: SubmissionPacket): Promise<void> {
-    const { submissionId } = packet;
-    if (submissionId !== this.workingOn) {
-      if (packet.name === 'submission-acknowledged')
-        return this.rejectForeign(packet.name);
-      return this.logger.warn(
-        `${this.label()}: ignoring ${packet.name} for ${submissionId}, working on ${this.workingOn}`,
-      );
-    }
+    if (packet.submissionId !== this.workingOn)
+      return this.onForeignPacket(packet);
     if (!this.gradingBegun && AFTER_GRADING_BEGIN.has(packet.name))
       return this.logger.warn(
-        `${this.label()}: ignoring ${packet.name} before grading-begin of ${submissionId}`,
+        `${this.label()}: ignoring ${packet.name} before grading-begin of ${packet.submissionId}`,
       );
+    return this.applySubmissionPacket(packet);
+  }
+
+  private async onForeignPacket(packet: SubmissionPacket): Promise<void> {
+    if (packet.name === 'submission-acknowledged')
+      return this.rejectForeign(packet.name);
+    this.logger.warn(
+      `${this.label()}: ignoring ${packet.name} for ${packet.submissionId}, working on ${this.workingOn}`,
+    );
+  }
+
+  private async applySubmissionPacket(packet: SubmissionPacket): Promise<void> {
+    const { submissionId } = packet;
     const { grading } = this.services;
     switch (packet.name) {
       case 'submission-acknowledged':
         return clearTimeout(this.ackTimer);
       case 'grading-begin':
-        this.gradingBegun = true;
-        this.batchNumber = null;
-        this.inBatch = false;
-        return grading.beginGrading(submissionId, this.name, packet.pretested);
+        return this.onGradingBegin(packet);
       case 'batch-begin':
-        if (this.batchNumber === null)
-          await grading.markBatched(submissionId, this.name);
-        this.batchNumber = (this.batchNumber ?? 0) + 1;
-        this.inBatch = true;
-        return;
+        return this.onBatchBegin(submissionId);
       case 'batch-end':
         this.inBatch = false;
         return;
-      case 'test-case-status': {
-        const batch = this.inBatch ? this.batchNumber : null;
-        const outcome = await grading.addCases(
-          submissionId,
-          this.name,
-          packet.cases.map((report) => ({ ...report, batch })),
-        );
-        if (outcome === 'full')
-          throw new ProtocolError('more test cases than a submission may have');
-        return;
-      }
+      case 'test-case-status':
+        return this.onTestCaseStatus(packet);
       case 'compile-message':
         return grading.compileMessage(submissionId, this.name, packet.log);
       case 'grading-end':
@@ -385,12 +382,45 @@ export class JudgeHandler implements DispatchTarget {
     }
   }
 
+  private resetBatchState(): void {
+    this.batchNumber = null;
+    this.inBatch = false;
+  }
+
+  private onGradingBegin(packet: GradingBeginPacket): Promise<void> {
+    this.gradingBegun = true;
+    this.resetBatchState();
+    return this.services.grading.beginGrading(
+      packet.submissionId,
+      this.name,
+      packet.pretested,
+    );
+  }
+
+  /** The first batch marks the submission batched; batches are numbered from 1 in arrival order. */
+  private async onBatchBegin(submissionId: string): Promise<void> {
+    if (this.batchNumber === null)
+      await this.services.grading.markBatched(submissionId, this.name);
+    this.batchNumber = (this.batchNumber ?? 0) + 1;
+    this.inBatch = true;
+  }
+
+  private async onTestCaseStatus(packet: TestCaseStatusPacket): Promise<void> {
+    const batch = this.inBatch ? this.batchNumber : null;
+    const outcome = await this.services.grading.addCases(
+      packet.submissionId,
+      this.name,
+      packet.cases.map((report) => ({ ...report, batch })),
+    );
+    if (outcome === 'full')
+      throw new ProtocolError('more test cases than a submission may have');
+  }
+
   /** Frees the judge first, like legacy `_free_self`, so the next submission is sent while this result is written. */
   private async finish(write: () => Promise<void>): Promise<void> {
     clearTimeout(this.ackTimer);
     this.gradingBegun = false;
-    this.batchNumber = null;
-    this.inBatch = false;
+    this.resetBatchState();
     /** Caught at once: if `write` throws first, an unobserved rejection would crash the process. */
     const next = this.services.dispatch
       .judgeFree(this)

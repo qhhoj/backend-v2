@@ -76,12 +76,12 @@ export class JudgesService {
     return this.one(name);
   }
 
-  async disconnect(name: string, force: boolean): Promise<void> {
+  async disconnect(name: string, isForced: boolean): Promise<void> {
     await this.one(name);
     await this.commands.publish({
       type: 'disconnect-judge',
       judgeName: name,
-      force,
+      force: isForced,
     });
   }
 

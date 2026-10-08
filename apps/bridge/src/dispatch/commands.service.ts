@@ -156,7 +156,9 @@ export class CommandsService {
       case 'abort':
         return this.dispatch.abort(command.submissionId);
       case 'disconnect-judge':
-        return this.dispatch.disconnect(command.judgeName, command.force);
+        return this.dispatch.disconnect(command.judgeName, {
+          isForced: command.force,
+        });
       case 'disable-judge':
         return this.dispatch.setDisabled(command.judgeName, command.isDisabled);
     }

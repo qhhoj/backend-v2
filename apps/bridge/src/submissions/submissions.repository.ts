@@ -46,6 +46,51 @@ export const REQUEUE_RESET = {
   error: null,
 } as const;
 
+/** The claimed row's fields, as `claimIfQueued` projects them. */
+type ClaimedSubmission = Pick<
+  Submission,
+  'user' | 'problem' | 'language' | 'date' | 'contest'
+> & { _id: string };
+
+/** What `loadJudgingInputs` reads besides the claimed row. */
+interface JudgingInputs {
+  problem: Pick<
+    Problem,
+    'timeLimit' | 'memoryLimit' | 'partial' | 'languageLimits'
+  >;
+  source: string;
+  language: Pick<Language, 'fileOnly' | 'fileSizeLimit'> | null;
+  earlierAttempts: number;
+  contestMeta: ContestMeta | undefined;
+}
+
+/** The judge's request for a claimed submission: limits (a per-language override wins), the source, short-circuiting for non-partial problems, contest meta and the attempt number. Pure. */
+function submissionRequest(
+  queued: QueuedSubmission,
+  submission: ClaimedSubmission,
+  { problem, source, language, earlierAttempts, contestMeta }: JudgingInputs,
+): SubmissionRequest {
+  const languageId = uuidStr(submission.language);
+  const limit = problem.languageLimits.find(
+    (entry) => uuidStr(entry.languageId) === languageId,
+  );
+  return {
+    submissionId: queued.id,
+    problemCode: queued.problemCode,
+    languageKey: queued.languageKey,
+    source,
+    timeLimit: limit?.timeLimit ?? problem.timeLimit,
+    memoryLimit: limit?.memoryLimit ?? problem.memoryLimit,
+    shortCircuit: !problem.partial,
+    pretestsOnly: contestMeta?.pretestsOnly ?? false,
+    inContest: contestMeta?.virtual ?? null,
+    attemptNo: earlierAttempts + 1,
+    userId: uuidStr(submission.user),
+    fileOnly: language?.fileOnly ?? false,
+    fileSizeLimit: language?.fileSizeLimit ?? 0,
+  };
+}
+
 const IN_FLIGHT = { $in: [...IN_FLIGHT_STATUSES] };
 const ABSOLUTE_URL = /^https?:\/\//i;
 
@@ -248,9 +293,24 @@ export class SubmissionsRepository {
     queued: QueuedSubmission,
     judgeName: string,
   ): Promise<ClaimOutcome | null> {
-    const submission = await this.submissions
+    const submission = await this.claimIfQueued(queued.id, judgeName);
+    if (!submission) return null;
+    const inputs = await this.loadJudgingInputs(queued.id, submission);
+    if (!inputs) return this.finishMissingDataAsIE(queued.id, judgeName);
+    return {
+      request: submissionRequest(queued, submission, inputs),
+      subject: gradedJobOf(submission),
+    };
+  }
+
+  /** Writes P and `judgedOn` on the row, but only while it is still QU. */
+  private async claimIfQueued(
+    submissionId: string,
+    judgeName: string,
+  ): Promise<ClaimedSubmission | null> {
+    return this.submissions
       .findOneAndUpdate(
-        { _id: queued.id, status: 'QU' },
+        { _id: submissionId, status: 'QU' },
         { $set: { status: 'P', judgedOn: judgeName } },
         {
           new: true,
@@ -258,7 +318,13 @@ export class SubmissionsRepository {
         },
       )
       .lean();
-    if (!submission) return null;
+  }
+
+  /** The five reads run together, as one `Promise.all`; null when the problem or the source is gone. */
+  private async loadJudgingInputs(
+    submissionId: string,
+    submission: ClaimedSubmission,
+  ): Promise<JudgingInputs | null> {
     const [problem, source, language, earlierAttempts, metaOf] =
       await Promise.all([
         this.problems
@@ -269,47 +335,40 @@ export class SubmissionsRepository {
             languageLimits: 1,
           })
           .lean(),
-        this.sources.findById(queued.id).lean(),
+        this.sources.findById(submissionId).lean(),
         this.languages
           .findById(submission.language, { fileOnly: 1, fileSizeLimit: 1 })
           .lean(),
         this.countEarlierAttempts(submission),
         submission.contest
-          ? this.contestMetaOf([queued.id])
+          ? this.contestMetaOf([submissionId])
           : Promise.resolve(new Map<string, ContestMeta>()),
       ]);
-    if (!problem || !source) {
-      this.logger.error(`Submission ${queued.id} lost its problem or source`);
-      const failed = await this.finishWith(
-        queued.id,
-        judgeName,
-        'IE',
-        'Submission data is missing',
-      );
-      return failed && { failed };
-    }
-    const languageId = uuidStr(submission.language);
-    const limit = problem.languageLimits.find(
-      (entry) => uuidStr(entry.languageId) === languageId,
-    );
-    const request: SubmissionRequest = {
-      submissionId: queued.id,
-      problemCode: queued.problemCode,
-      languageKey: queued.languageKey,
+    if (!problem || !source) return null;
+    return {
+      problem,
       source: language?.fileOnly
         ? this.absoluteFileUrl(source.source)
         : source.source,
-      timeLimit: limit?.timeLimit ?? problem.timeLimit,
-      memoryLimit: limit?.memoryLimit ?? problem.memoryLimit,
-      shortCircuit: !problem.partial,
-      pretestsOnly: metaOf.get(queued.id)?.pretestsOnly ?? false,
-      inContest: metaOf.get(queued.id)?.virtual ?? null,
-      attemptNo: earlierAttempts + 1,
-      userId: uuidStr(submission.user),
-      fileOnly: language?.fileOnly ?? false,
-      fileSizeLimit: language?.fileSizeLimit ?? 0,
+      language,
+      earlierAttempts,
+      contestMeta: metaOf.get(submissionId),
     };
-    return { request, subject: gradedJobOf(submission) };
+  }
+
+  /** The claimed row lost its problem or source: writes IE (if still claimed by `judgeName`) and returns its graded job, which still goes out. */
+  private async finishMissingDataAsIE(
+    submissionId: string,
+    judgeName: string,
+  ): Promise<ClaimOutcome | null> {
+    this.logger.error(`Submission ${submissionId} lost its problem or source`);
+    const failed = await this.finishWith(
+      submissionId,
+      judgeName,
+      'IE',
+      'Submission data is missing',
+    );
+    return failed && { failed };
   }
 
   /** Legacy `get_absolute_submission_file_url`: a file source is a media URL, site-relative unless MEDIA_URL is absolute; the judge downloads it. */
@@ -331,14 +390,14 @@ export class SubmissionsRepository {
   async beginGrading(
     submissionId: string,
     judgeName: string,
-    pretested: boolean,
+    isPretested: boolean,
   ): Promise<boolean> {
     const { modifiedCount } = await this.submissions.updateOne(
       { _id: submissionId, judgedOn: judgeName, status: 'P' },
       {
         $set: {
           status: 'G',
-          isPretested: pretested,
+          isPretested,
           currentTestcase: 1,
           batch: false,
           judgedDate: new Date(),

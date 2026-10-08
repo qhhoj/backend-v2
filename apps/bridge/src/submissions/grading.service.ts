@@ -94,9 +94,11 @@ export class GradingService {
   async beginGrading(
     submissionId: string,
     judgeName: string,
-    pretested: boolean,
+    isPretested: boolean,
   ): Promise<void> {
-    if (await this.submissions.beginGrading(submissionId, judgeName, pretested))
+    if (
+      await this.submissions.beginGrading(submissionId, judgeName, isPretested)
+    )
       this.publishTracked(submissionId, 'grading-begin', 'G');
   }
 

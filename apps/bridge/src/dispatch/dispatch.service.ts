@@ -28,7 +28,7 @@ export class DispatchService {
   async register(judge: DispatchTarget): Promise<void> {
     const previous = this.judges.get(judge.name);
     this.judges.set(judge.name, judge);
-    if (previous && previous !== judge) previous.disconnect(true);
+    if (previous && previous !== judge) previous.disconnect({ isForced: true });
     await this.offerWork(judge);
   }
 
@@ -120,14 +120,14 @@ export class DispatchService {
         stored.isBlocked ||
         stored.authKeyHash !== judge.authKeyHash
       )
-        judge.disconnect(true);
+        judge.disconnect({ isForced: true });
       else if (stored.isDisabled !== judge.isDisabled)
         await this.setDisabled(name, stored.isDisabled);
     }
   }
 
-  disconnect(name: string, force: boolean): void {
-    this.judges.get(name)?.disconnect(force);
+  disconnect(name: string, { isForced }: { isForced: boolean }): void {
+    this.judges.get(name)?.disconnect({ isForced });
   }
 
   /** Submissions a registered judge works on, a claim still in flight included (`workingOn` is set before the claim). A closing judge counts until its close is handled. */
