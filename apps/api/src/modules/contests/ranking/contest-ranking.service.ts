@@ -11,6 +11,7 @@ import {
   problemSummaries,
   rankingCacheKey,
   standingOf,
+  type Standing,
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { ContestParticipation } from '@libs/database';
@@ -41,6 +42,32 @@ export interface BoardView {
   /** Never for editors: their board may differ from the shared one. */
   isCacheable: boolean;
 }
+
+interface RankedStanding {
+  row: ContestParticipation;
+  id: string;
+  standing: Standing;
+}
+
+/** Each row's standing, sorted and ranked: ties share a rank, and equal standings fall back to participation id order. */
+const rankedStandings = (
+  rows: ContestParticipation[],
+  isFrozenView: boolean,
+): { standings: RankedStanding[]; ranks: number[] } => {
+  const standings = rows
+    .map((row) => ({
+      row,
+      id: uuidStr(row._id),
+      standing: standingOf(row, isFrozenView),
+    }))
+    .sort(
+      (left, right) =>
+        compareStandings(left.standing, right.standing) ||
+        left.id.localeCompare(right.id),
+    );
+  const ranks = competitionRanks(standings.map(({ standing }) => standing));
+  return { standings, ranks };
+};
 
 /** Legacy `ContestRanking`, as JSON (the frontend renders cells from `formatData`). */
 @Injectable()
@@ -110,11 +137,11 @@ export class ContestRankingService {
     const cacheKey = rankingCacheKey(contest._id, withVirtual, isFrozenView);
     const inFlight = this.builds.get(cacheKey);
     if (inFlight) return inFlight;
-    const build = this.cachedBoard(contest, cacheKey, boardView).finally(() =>
-      this.builds.delete(cacheKey),
+    const pendingBoard = this.cachedBoard(contest, cacheKey, boardView).finally(
+      () => this.builds.delete(cacheKey),
     );
-    this.builds.set(cacheKey, build);
-    return build;
+    this.builds.set(cacheKey, pendingBoard);
+    return pendingBoard;
   }
 
   /** Redis hit, or one build and write; concurrent misses on a key share this call (`builds`). */
@@ -167,21 +194,37 @@ export class ContestRankingService {
     rows: ContestParticipation[],
     { isFrozenView, isRanked }: { isFrozenView: boolean; isRanked: boolean },
   ): Promise<RankingResponse> {
-    const standings = rows
-      .map((row) => ({
-        row,
-        id: uuidStr(row._id),
-        standing: standingOf(row, isFrozenView),
-      }))
-      .sort(
-        (left, right) =>
-          compareStandings(left.standing, right.standing) ||
-          left.id.localeCompare(right.id),
-      );
-    const ranks = competitionRanks(standings.map(({ standing }) => standing));
+    const { standings, ranks } = rankedStandings(rows, isFrozenView);
     const users = await this.rankingUsers.rankingUsersOf(
       unique(rows.map((row) => uuidStr(row.user))),
     );
+    const problems = await this.problemColumns(contest, standings);
+    return {
+      frozen: isFrozenView,
+      problems,
+      rows: standings.map(({ row, id, standing }, index) => {
+        const userId = uuidStr(row.user);
+        return {
+          rank: isRanked ? ranks[index] : null,
+          participationId: id,
+          user: {
+            id: userId,
+            username: users.get(userId)?.username ?? '',
+            rating: users.get(userId)?.rating ?? null,
+            organization: users.get(userId)?.organization ?? null,
+          },
+          virtual: row.virtual,
+          ...standing,
+        };
+      }),
+    };
+  }
+
+  /** The contest's problem columns in order, with their codes and per-problem summaries over the standings. */
+  private async problemColumns(
+    contest: ContestDocument,
+    standings: RankedStanding[],
+  ): Promise<RankingResponse['problems']> {
     const ordered = [...contest.problems].sort(
       (left, right) => left.order - right.order,
     );
@@ -204,33 +247,15 @@ export class ContestRankingService {
         cells: standing.cells,
       })),
     );
-    return {
-      frozen: isFrozenView,
-      problems: ordered.map((entry, index) => {
-        const problemId = uuidStr(entry.problem);
-        return {
-          problemId,
-          code: codes.get(problemId) ?? '',
-          label: problemLabel(index, contest.labelStyle),
-          points: entry.points,
-          ...summaries.get(problemId)!,
-        };
-      }),
-      rows: standings.map(({ row, id, standing }, index) => {
-        const userId = uuidStr(row.user);
-        return {
-          rank: isRanked ? ranks[index] : null,
-          participationId: id,
-          user: {
-            id: userId,
-            username: users.get(userId)?.username ?? '',
-            rating: users.get(userId)?.rating ?? null,
-            organization: users.get(userId)?.organization ?? null,
-          },
-          virtual: row.virtual,
-          ...standing,
-        };
-      }),
-    };
+    return ordered.map((entry, index) => {
+      const problemId = uuidStr(entry.problem);
+      return {
+        problemId,
+        code: codes.get(problemId) ?? '',
+        label: problemLabel(index, contest.labelStyle),
+        points: entry.points,
+        ...summaries.get(problemId)!,
+      };
+    });
   }
 }
