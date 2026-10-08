@@ -1,11 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, ENV, Paginated } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, Paginated } from '@libs/common';
 import { officialContestLocks, pageOf, pageRef } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
+import { SettingsService } from '@libs/settings';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import { CommentPagesService } from './comment-pages.service';
 import type { PageInfo } from './comment-pages.service';
@@ -22,7 +22,7 @@ export const USER_COMMENTS_PAGE_SIZE = 10;
 @Injectable()
 export class RecentCommentsService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    private readonly settings: SettingsService,
     private readonly comments: CommentsRepository,
     private readonly pages: CommentPagesService,
     private readonly reads: CommentsService,
@@ -39,7 +39,9 @@ export class RecentCommentsService {
       limit,
     }: { authorId?: string; before?: string | null; limit: number },
   ): Promise<{ items: RecentCommentResponse[]; nextBefore: string | null }> {
-    if (officialContestLocks(this.env.officialContestMode, principal))
+    if (
+      officialContestLocks(this.settings.get('contest.officialMode'), principal)
+    )
       return { items: [], nextBefore: null };
     const now = new Date();
     const scope = principal

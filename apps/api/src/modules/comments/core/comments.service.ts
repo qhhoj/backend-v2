@@ -1,8 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, ENV, unique } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, unique } from '@libs/common';
 import {
   canInteract,
   COMMENT_THREADS_PAGE_SIZE,
@@ -11,6 +10,7 @@ import {
   pageRef,
 } from '@libs/community';
 import type { CommentPageType, VoteScore } from '@libs/community';
+import { SettingsService } from '@libs/settings';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
 import { VotesRepository } from '../../contributions/votes.repository';
@@ -31,7 +31,7 @@ import {
 @Injectable()
 export class CommentsService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    private readonly settings: SettingsService,
     private readonly comments: CommentsRepository,
     private readonly locks: CommentLocksRepository,
     private readonly pages: CommentPagesService,
@@ -146,7 +146,9 @@ export class CommentsService {
 
   /** Legacy hid the comment area in official contest mode; superusers keep it. */
   assertOpen(principal: Principal | null): void {
-    if (officialContestLocks(this.env.officialContestMode, principal))
+    if (
+      officialContestLocks(this.settings.get('contest.officialMode'), principal)
+    )
       throw new AppError(
         'forbidden',
         403,

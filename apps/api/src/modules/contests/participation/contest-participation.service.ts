@@ -4,14 +4,7 @@ import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { constantTimeEqual, sha256, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import {
-  AppError,
-  ENV,
-  Paginated,
-  RateLimitService,
-  REDIS,
-} from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, Paginated, RateLimitService, REDIS } from '@libs/common';
 import {
   CONTEST_RESCORE_QUEUE,
   contestPhase,
@@ -27,6 +20,7 @@ import {
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { ContestParticipation } from '@libs/database';
+import { SettingsService } from '@libs/settings';
 import type { FilterQuery } from 'mongoose';
 import { ContestAccess } from '../core/contest-access';
 import { ContestsRepository } from '../core/contests.repository';
@@ -69,7 +63,7 @@ export class ContestParticipationService {
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
     @Inject(REDIS) private readonly redis: Redis,
-    @Inject(ENV) private readonly env: Env,
+    private readonly settings: SettingsService,
   ) {}
 
   async register(
@@ -214,9 +208,9 @@ export class ContestParticipationService {
     return ParticipationSummaryResponse.from(updated, contest);
   }
 
-  /** Legacy `check_ban`, off unless `CONTEST_BAN_AFTER_DISQUALIFICATIONS` is set: at the threshold the account is banned (and unlisted, and signed out: `isActive` is what the session guard checks); below it, only this ban is lifted. */
+  /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned (and unlisted, and signed out: `isActive` is what the session guard checks); below it, only this ban is lifted. */
   private async checkCheatingBan(userId: string): Promise<void> {
-    const limit = this.env.contestBanAfterDisqualifications;
+    const limit = this.settings.get('contest.banAfterDisqualifications');
     if (!limit) return;
     const [count, user] = await Promise.all([
       this.participationRows.countOpenDisqualifications(userId),

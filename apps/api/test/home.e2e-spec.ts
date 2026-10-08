@@ -1,6 +1,5 @@
 import type Redis from 'ioredis';
-import { ENV, REDIS } from '@libs/common';
-import type { Env } from '@libs/common';
+import { REDIS } from '@libs/common';
 import { profileQueries } from '@libs/database/testing';
 import type { RecentCommentResponse } from '../src/modules/comments/core/dto/recent-comment.response';
 import type { HomeResponse } from '../src/modules/home/dto/home.response';
@@ -94,12 +93,11 @@ describe('homepage and user comments', () => {
     expect(
       Math.max(...reads.map(({ docsExamined }) => docsExamined)),
     ).toBeLessThanOrEqual(20);
-    const env = api.app.get<Env>(ENV);
-    env.officialContestMode = true;
+    await api.setSetting('contest.officialMode', true);
     try {
       expect((await home()).recentComments).toEqual([]);
     } finally {
-      env.officialContestMode = false;
+      await api.setSetting('contest.officialMode', false);
     }
   });
 

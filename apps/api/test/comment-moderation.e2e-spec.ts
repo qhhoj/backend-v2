@@ -1,8 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { ENV, REDIS } from '@libs/common';
-import type { Env } from '@libs/common';
+import { REDIS } from '@libs/common';
 import { CONTRIBUTION_POINTS_QUEUE } from '@libs/community';
 import type { ContributionPointsJob } from '@libs/community';
 import { uuidStr } from '@libs/database';
@@ -92,12 +91,11 @@ describe('comment votes and moderation', () => {
     await api.commentLocks.create({ page: { type: 'blog', id: page._id } });
     await vote(comment._id, session, 1).expect(200);
     await api.commentLocks.deleteMany({ 'page.id': page._id });
-    const env = api.app.get<Env>(ENV);
-    env.officialContestMode = true;
+    await api.setSetting('contest.officialMode', true);
     try {
       await vote(comment._id, session, 1).expect(403);
     } finally {
-      env.officialContestMode = false;
+      await api.setSetting('contest.officialMode', false);
     }
   });
 
@@ -259,8 +257,7 @@ describe('comment votes and moderation', () => {
       page: { type: 'blog', id: page._id },
       author: author._id,
     });
-    const env = api.app.get<Env>(ENV);
-    env.officialContestMode = true;
+    await api.setSetting('contest.officialMode', true);
     try {
       await hide(comment._id, moderator, true).expect(403);
       await authed(
@@ -272,7 +269,7 @@ describe('comment votes and moderation', () => {
         moderator,
       ).expect(403);
     } finally {
-      env.officialContestMode = false;
+      await api.setSetting('contest.officialMode', false);
     }
     expect((await api.comments.findById(comment._id).lean())?.hidden).toBe(
       false,

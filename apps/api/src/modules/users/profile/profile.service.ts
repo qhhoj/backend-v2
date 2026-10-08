@@ -1,8 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { Principal, UserDocument } from '@libs/auth';
 import { UsersRepository } from '@libs/auth';
-import { AppError, ENV } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError } from '@libs/common';
 import {
   canInteract,
   INTERACT_MIN_PROBLEM_COUNT,
@@ -10,6 +9,7 @@ import {
 } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
+import { SettingsService } from '@libs/settings';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
 import { OrganizationMembersRepository } from '../../organizations/core/organization-members.repository';
 import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
@@ -27,7 +27,7 @@ const invalid = (field: string, message: string) =>
 @Injectable()
 export class ProfileService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    private readonly settings: SettingsService,
     private readonly users: UsersRepository,
     private readonly organizations: OrganizationsRepository,
     private readonly organizationsService: OrganizationsService,
@@ -92,7 +92,9 @@ export class ProfileService {
 
   /** Legacy removed `about` and `first_name` from the form in official contest mode; superusers still edit. */
   private refuseInOfficialContest(principal: Principal): void {
-    if (officialContestLocks(this.env.officialContestMode, principal))
+    if (
+      officialContestLocks(this.settings.get('contest.officialMode'), principal)
+    )
       throw new AppError(
         'forbidden',
         403,

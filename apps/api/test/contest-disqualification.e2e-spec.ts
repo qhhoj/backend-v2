@@ -39,8 +39,8 @@ describe('disqualification', () => {
     (await api.users.findById(userId).lean())!;
 
   beforeAll(async () => {
-    process.env.CONTEST_BAN_AFTER_DISQUALIFICATIONS = '2';
     api = await setupApiTest();
+    await api.setSetting('contest.banAfterDisqualifications', 2);
     rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
     editorId = (
       await createUserWith(api, 'dq_editor', {
@@ -50,7 +50,7 @@ describe('disqualification', () => {
     editor = await loginAs(api, editorId);
   });
   afterAll(async () => {
-    delete process.env.CONTEST_BAN_AFTER_DISQUALIFICATIONS;
+    await api.setSetting('contest.banAfterDisqualifications', 0);
     await api.teardown();
   });
   beforeEach(() => rescores.obliterate({ force: true }));
@@ -217,8 +217,8 @@ describe('disqualification', () => {
 describe('disqualification with the account ban off (default)', () => {
   let api: ApiTest;
   beforeAll(async () => {
-    delete process.env.CONTEST_BAN_AFTER_DISQUALIFICATIONS;
     api = await setupApiTest();
+    await api.setSetting('contest.banAfterDisqualifications', 0);
   });
   afterAll(() => api.teardown());
 

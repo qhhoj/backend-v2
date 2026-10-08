@@ -1,8 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { AppError, ENV, RateLimitService, unique } from '@libs/common';
-import type { Env } from '@libs/common';
+import { AppError, RateLimitService, unique } from '@libs/common';
 import {
   canWritePersonalPost,
   excerpt,
@@ -12,6 +11,7 @@ import {
 } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { BlogPost } from '@libs/database';
+import { SettingsService } from '@libs/settings';
 import { fieldDiff } from '@libs/problems';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
@@ -55,7 +55,7 @@ const WRITE_WINDOW_SECONDS = 60 * 60;
 @Injectable()
 export class BlogEditingService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    private readonly settings: SettingsService,
     private readonly posts: BlogPostsRepository,
     private readonly visibility: BlogVisibilityService,
     private readonly reads: BlogPostsService,
@@ -238,7 +238,9 @@ export class BlogEditingService {
   }
 
   private refuseInOfficialContest(principal: Principal): void {
-    if (officialContestLocks(this.env.officialContestMode, principal))
+    if (
+      officialContestLocks(this.settings.get('contest.officialMode'), principal)
+    )
       throw forbidden('Blog posts are locked during the official contest');
   }
 

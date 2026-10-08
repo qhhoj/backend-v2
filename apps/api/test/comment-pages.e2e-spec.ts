@@ -1,5 +1,3 @@
-import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
 import { COMMENT_THREADS_PAGE_SIZE } from '@libs/community';
 import type { CommentPageType } from '@libs/community';
 import { profileQueries } from '@libs/database/testing';
@@ -313,13 +311,12 @@ describe('comment pages', () => {
       locked: false,
       canComment: true,
     });
-    const env = api.app.get<Env>(ENV);
-    env.officialContestMode = true;
+    await api.setSetting('contest.officialMode', true);
     try {
       expect(await status('blog', post._id, session)).toBe(403);
       expect(await status('blog', post._id, root)).toBe(200);
     } finally {
-      env.officialContestMode = false;
+      await api.setSetting('contest.officialMode', false);
     }
   });
 

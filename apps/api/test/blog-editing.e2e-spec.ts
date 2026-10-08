@@ -1,8 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
-import { ENV, REDIS } from '@libs/common';
-import type { Env } from '@libs/common';
+import { REDIS } from '@libs/common';
 import {
   CONTRIBUTION_POINTS_QUEUE,
   DISCORD_WEBHOOK_QUEUE,
@@ -204,15 +203,14 @@ describe('blog editing', () => {
   });
 
   it('locks blog writing for non-superusers in official contest mode', async () => {
-    const env = api.app.get<Env>(ENV);
     const { session } = await person();
     const { session: root } = await person({ isSuperuser: true });
-    env.officialContestMode = true;
+    await api.setSetting('contest.officialMode', true);
     try {
       await create(session, {}).expect(403);
       await create(root, {}).expect(201);
     } finally {
-      env.officialContestMode = false;
+      await api.setSetting('contest.officialMode', false);
     }
   });
 
@@ -266,14 +264,13 @@ describe('blog editing', () => {
   });
 
   it('refuses edits in official contest mode and to muted authors, and unknown author ids', async () => {
-    const env = api.app.get<Env>(ENV);
     const { user, session } = await person();
     const { session: root } = await person({ isSuperuser: true });
     const { session: staff } = await person({
       permissions: ['judge.edit_all_post'],
     });
     const post = await createPost(api, { authors: [user._id], title: 'Kept' });
-    env.officialContestMode = true;
+    await api.setSetting('contest.officialMode', true);
     try {
       await patch(post._id, session, { title: 'Locked' }).expect(403);
       expect((await api.blogPosts.findById(post._id).lean())!.title).toBe(
@@ -281,7 +278,7 @@ describe('blog editing', () => {
       );
       await patch(post._id, root, { title: 'Root' }).expect(200);
     } finally {
-      env.officialContestMode = false;
+      await api.setSetting('contest.officialMode', false);
     }
     const { user: muted, session: mutedSession } = await person({ mute: true });
     const mutedPost = await createPost(api, { authors: [muted._id] });

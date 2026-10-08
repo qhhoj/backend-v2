@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { ENV, REDIS } from '@libs/common';
-import type { Env } from '@libs/common';
+import { REDIS } from '@libs/common';
 import type { Principal } from '@libs/auth';
 import { officialContestLocks, RECENT_COMMENTS_COUNT } from '@libs/community';
 import type { LeaderboardField } from '@libs/database';
+import { SettingsService } from '@libs/settings';
 import type { RecentCommentResponse } from '../comments/core/dto/recent-comment.response';
 import { RecentCommentsService } from '../comments/core/recent-comments.service';
 import { LanguagesQuerier } from '../problems/catalog/languages.querier';
@@ -22,7 +22,7 @@ export const ANONYMOUS_RECENT_COMMENTS_SECONDS = 60;
 @Injectable()
 export class HomeService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
+    private readonly settings: SettingsService,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly repository: HomeRepository,
     private readonly recentComments: RecentCommentsService,
@@ -63,7 +63,10 @@ export class HomeService {
           limit: RECENT_COMMENTS_COUNT,
         })
       ).items;
-    if (principal || officialContestLocks(this.env.officialContestMode, null))
+    if (
+      principal ||
+      officialContestLocks(this.settings.get('contest.officialMode'), null)
+    )
       return newest();
     const cached = await this.redis.get(ANONYMOUS_RECENT_COMMENTS_KEY);
     if (cached !== null) return JSON.parse(cached) as RecentCommentResponse[];

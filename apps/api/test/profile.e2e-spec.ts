@@ -172,7 +172,8 @@ describe('profile', () => {
 describe('profile in official contest mode', () => {
   let api: ApiTest;
   beforeAll(async () => {
-    api = await setupApiTest({ env: { OFFICIAL_CONTEST_MODE: 'true' } });
+    api = await setupApiTest();
+    await api.setSetting('contest.officialMode', true);
   });
   afterAll(() => api.teardown());
 

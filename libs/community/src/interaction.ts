@@ -20,7 +20,7 @@ export const hasEnoughSolves = (user: Interactor): boolean =>
 export const canInteract = (user: Interactor): boolean =>
   !user.mute && hasEnoughSolves(user);
 
-/** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: public text (about, blog editing, comments) is locked for everyone but superusers. */
+/** Official contest mode (`contest.officialMode` setting): public text (about, blog editing, comments) is locked for everyone but superusers. */
 export const officialContestLocks = (
   enabled: boolean,
   viewer: { isSuperuser: boolean } | null,

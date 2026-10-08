@@ -1,7 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { ENV } from '@libs/common';
-import type { Env } from '@libs/common';
 import { COMMENT_MAX_DEPTH, DISCORD_WEBHOOK_QUEUE } from '@libs/community';
 import type { DiscordWebhookJob } from '@libs/community';
 import { CommentPostingService } from '../src/modules/comments/posting/comment-posting.service';
@@ -201,12 +199,11 @@ describe('comment posting and editing', () => {
       { body: 'x' },
     ).expect(201);
     const open = await createPost(api);
-    const env = api.app.get<Env>(ENV);
-    env.officialContestMode = true;
+    await api.setSetting('contest.officialMode', true);
     try {
       await post(open._id, session, { body: 'x' }).expect(403);
     } finally {
-      env.officialContestMode = false;
+      await api.setSetting('contest.officialMode', false);
     }
   });
 
