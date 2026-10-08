@@ -5,6 +5,7 @@ import {
   isUuid,
   SocialAuth,
   User,
+  uuidStr,
   WebauthnCredential,
 } from '@libs/database';
 import { AppError } from '@libs/common';
@@ -90,29 +91,39 @@ export class UsersRepository {
     await this.users.deleteOne({ _id: id }).exec();
   }
 
-  /** Conditional delete of an abandoned signup (see `stalePendingFilter`); false when it does not qualify. */
-  async deleteStalePendingUser(id: string, cutoff: Date): Promise<boolean> {
-    const { deletedCount } = await this.users
-      .deleteOne({ _id: id, ...stalePendingFilter(cutoff) })
+  /** Conditional delete of an abandoned signup (see `stalePendingFilter`); the organizations it belonged to, or null when it does not qualify. */
+  async deleteStalePendingUser(
+    id: string,
+    cutoff: Date,
+  ): Promise<string[] | null> {
+    const deleted = await this.users
+      .findOneAndDelete(
+        { _id: id, ...stalePendingFilter(cutoff) },
+        { projection: { organizations: 1 } },
+      )
+      .lean()
       .exec();
-    return deletedCount === 1;
+    return deleted ? (deleted.organizations ?? []).map(uuidStr) : null;
   }
 
-  /** Free, or taken only by an abandoned signup that registration would reclaim. */
+  /** Free, or taken only by abandoned signups that registration would reclaim; looks at every case-insensitive match. */
   async isUsernameFree(username: string, cutoff: Date): Promise<boolean> {
-    const existing = await this.findByUsername(username, { _id: 1 });
-    return (
-      !existing ||
-      (await this.users
-        .countDocuments({ _id: existing._id, ...stalePendingFilter(cutoff) })
-        .exec()) === 1
-    );
+    return !(await this.users
+      .exists({ username, $nor: [stalePendingFilter(cutoff)] })
+      .collation(CI)
+      .exec());
   }
 
-  /** Signups waiting for activation (resend): inactive, no ban, never logged in. */
-  findPendingByEmail(email: string): Promise<UserDocument[]> {
+  /** Signups waiting for activation (resend): inactive, no ban, never logged in, not yet abandoned (`dateJoined` after `cutoff`). */
+  findPendingByEmail(email: string, cutoff: Date): Promise<UserDocument[]> {
     return this.users
-      .find({ email, isActive: false, banReason: null, lastLogin: null })
+      .find({
+        email,
+        isActive: false,
+        banReason: null,
+        lastLogin: null,
+        dateJoined: { $gte: cutoff },
+      })
       .collation(CI)
       .exec();
   }

@@ -1,4 +1,7 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import { REDIS } from '@libs/common';
+import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { RegistrationService } from '../src/modules/auth/registration/registration.service';
 import { OAuthProvidersService } from '../src/modules/auth/social/oauth-providers.service';
@@ -53,6 +56,7 @@ const cookieValue = (headers: Record<string, unknown>, name: string) =>
 
 describe('social login', () => {
   let api: ApiTest;
+  let queue: Queue<{ organizationId: string }>;
   let redis: Redis;
 
   /** Runs `start` and returns the state with the cookie header a browser would send back. */
@@ -89,10 +93,14 @@ describe('social login', () => {
       overrides: [{ provide: OAuthProvidersService, useValue: providers }],
     });
     redis = api.app.get<Redis>(REDIS);
+    queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
   });
   afterAll(() => api.teardown());
   beforeEach(async () => {
     await api.users.deleteMany({});
+    await queue.drain();
+    const pending = await redis.keys('organization-points:pending:*');
+    if (pending.length) await redis.del(...pending);
     github.identities.clear();
     google.identities.clear();
     const keys = await redis.keys('rate:*');
@@ -425,6 +433,9 @@ describe('social login', () => {
     const user = (await api.users.findOne({ username: 'socialite' }).lean())!;
     expect(user.languageId?.toString()).toBe(language._id);
     expect(user.organizations.map(String)).toEqual([open._id]);
+    expect(
+      (await queue.getJobs(['waiting'])).map((job) => job.data.organizationId),
+    ).toEqual([open._id]);
   });
 
   it('binds the pending token to the browser through the oauth_pending cookie', async () => {

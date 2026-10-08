@@ -11,7 +11,6 @@ import {
 import type { UserDocument } from '@libs/auth';
 import {
   AppError,
-  ENV,
   isDuplicateKey,
   MAILER,
   RateLimitService,
@@ -19,7 +18,7 @@ import {
   ValidationFailedError,
   withRedisLock,
 } from '@libs/common';
-import type { Env, FieldIssue, Mailer } from '@libs/common';
+import type { FieldIssue, Mailer } from '@libs/common';
 import { ActivationKey, Language, Organization, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import Redis from 'ioredis';
@@ -53,7 +52,6 @@ export class RegistrationService {
     private readonly organizations: Model<Organization>,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(MAILER) private readonly mailer: Mailer,
-    @Inject(ENV) private readonly env: Env,
   ) {}
 
   register(body: RegisterDto, ip: string): Promise<void> {
@@ -205,9 +203,13 @@ export class RegistrationService {
   ): Promise<boolean> {
     const cutoff = new Date(Date.now() - ACTIVATION_DAYS * 86_400_000);
     for (let existing = await find(); existing; existing = await find()) {
-      if (!(await this.users.deleteStalePendingUser(existing._id, cutoff)))
-        return true;
+      const organizationIds = await this.users.deleteStalePendingUser(
+        existing._id,
+        cutoff,
+      );
+      if (!organizationIds) return true;
       await this.activationKeys.deleteMany({ userId: existing._id }).exec();
+      await this.organizationPoints.refresh(organizationIds);
     }
     return false;
   }

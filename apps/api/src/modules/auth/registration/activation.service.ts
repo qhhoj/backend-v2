@@ -61,7 +61,10 @@ export class ActivationService {
       ACTIVATION_RESEND_EMAIL_LIMIT,
       ACTIVATION_RESEND_WINDOW_SECONDS,
     );
-    for (const user of await this.users.findPendingByEmail(email))
+    for (const user of await this.users.findPendingByEmail(
+      email,
+      new Date(Date.now() - ACTIVATION_DAYS * 86_400_000),
+    ))
       void this.reissue(user).catch((error: unknown) =>
         this.logger.error(
           `Activation resend for ${user._id} failed: ${(error as Error).message}`,

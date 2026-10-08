@@ -1,4 +1,7 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import { REDIS } from '@libs/common';
+import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { createUserWith } from './problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -13,6 +16,9 @@ describe('registration extras', () => {
   let openOrg: string;
   let privateOrg: string;
   let unlistedOrg: string;
+  let queue: Queue<{ organizationId: string }>;
+  const queuedOrganizations = async () =>
+    (await queue.getJobs(['waiting'])).map((job) => job.data.organizationId);
   const register = (overrides: object = {}) =>
     api
       .http()
@@ -32,6 +38,7 @@ describe('registration extras', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
+    queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
     languageId = (
       await api.languages.create({
         key: 'PY3',
@@ -74,6 +81,7 @@ describe('registration extras', () => {
     await api.users.deleteMany({
       username: { $in: ['newbie', 'pending', 'stale'] },
     });
+    await queue.drain();
     await api.app.get<Redis>(REDIS).flushdb();
     api.mailer.sent.length = 0;
   });
@@ -84,6 +92,25 @@ describe('registration extras', () => {
       const user = await api.users.findOne({ username: 'newbie' }).lean();
       expect(user?.languageId?.toString()).toBe(languageId);
       expect(user?.organizations.map(String)).toEqual([openOrg]);
+      expect(await queuedOrganizations()).toEqual([openOrg]);
+    });
+
+    it('queues no points job without an organization', async () => {
+      await register().expect(204);
+      expect(await queuedOrganizations()).toEqual([]);
+    });
+
+    it('queues the points job of the organization a reclaimed abandoned signup belonged to', async () => {
+      await api.users.create({
+        username: 'stale',
+        email: 's@example.com',
+        password: '!',
+        isActive: false,
+        organizations: [openOrg],
+        dateJoined: new Date(Date.now() - 8 * 86_400_000),
+      });
+      await register({ username: 'stale' }).expect(204);
+      expect(await queuedOrganizations()).toEqual([openOrg]);
     });
 
     it('stays optional', async () => {
@@ -206,6 +233,19 @@ describe('registration extras', () => {
         'banned@example.com',
       ])
         await resend(email).expect(204);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(api.mailer.sent).toHaveLength(0);
+    });
+
+    it('sends nothing to a signup abandoned past the reclaim cutoff', async () => {
+      await api.users.create({
+        username: 'stale',
+        email: 's@example.com',
+        password: '!',
+        isActive: false,
+        dateJoined: new Date(Date.now() - 8 * 86_400_000),
+      });
+      await resend('s@example.com').expect(204);
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(api.mailer.sent).toHaveLength(0);
     });
