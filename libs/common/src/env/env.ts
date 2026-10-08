@@ -47,7 +47,7 @@ export interface Env {
   contestDataRoot: string | null;
   /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
   userDataRoot: string | null;
-  /** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: non-superusers cannot edit their `about` or `firstName` (5b: blog edits and comments). */
+  /** Legacy `VNOJ_OFFICIAL_CONTEST_MODE`: non-superusers cannot edit `about` or `firstName`, read or write comments, vote on comments, or write blog posts. */
   officialContestMode: boolean;
   /** `DISCORD_WEBHOOK_URLS`: legacy event name (or `default`) to webhook URL; empty disables the webhooks. Secrets: never logged or put in job data. */
   discordWebhookUrls: Readonly<Record<string, string>>;

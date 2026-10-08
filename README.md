@@ -82,6 +82,8 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | `contest-data` | contest data zip |
 | `organization-points` | organization PP and member counts |
 | `user-data` | user data export zips, hourly expiry sweep |
+| `contribution-points` | users' contribution points (votes, hidden comments, posts, suggestions) |
+| `discord-webhook` | Discord announcements |
 | `pdf-render` | statement PDFs (Playwright) |
 | `polygon-import` | Polygon package import |
 
@@ -93,7 +95,12 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | Who can see/edit a problem or contest | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts` |
 | A contest scoring format | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts` |
 | Who can see/administer an organization | `modules/organizations/core/organization-access.ts` |
-| Org PP, ranks, interaction gate | `libs/community/src` |
+| Who can see/edit a blog post | `modules/blog/core/blog-access.ts` |
+| Which comment pages a viewer may read (and comment page types) | `modules/comments/core/comment-pages.service.ts` |
+| Votes, contribution points | `modules/contributions/`, `libs/community/src/contribution.ts`, job in `apps/worker/src/jobs/contribution-points` |
+| Homepage data, RSS/Atom feeds | `apps/api/src/modules/home/` |
+| Discord webhooks | `libs/community/src/discord.ts`, `modules/discord/`, job in `apps/worker/src/jobs/discord-webhook` |
+| Org PP, ranks, interaction gate, comment and blog rules | `libs/community/src` |
 | Rating | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating` |
 | Points, PP, problem stats | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects` |
 | Judge protocol, dispatch, grading | `apps/bridge/src/{protocol,dispatch,judges,submissions}` |

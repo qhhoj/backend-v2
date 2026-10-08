@@ -16,7 +16,7 @@ export const hasEnoughSolves = (user: Interactor): boolean =>
   user.isSuperuser ||
   user.problemCount >= INTERACT_MIN_PROBLEM_COUNT;
 
-/** Editing `about`, and in 5b commenting and voting: enough solves and not muted. */
+/** Editing `about`, commenting and voting: enough solves and not muted. */
 export const canInteract = (user: Interactor): boolean =>
   !user.mute && hasEnoughSolves(user);
 

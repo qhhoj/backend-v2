@@ -175,6 +175,41 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `/api/v2/user` hides contest ratings of re-frozen boards from non-editors — a frozen board must not leak through the rating.
 - One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; `/users/:username/ratings` and `/api/v2/user` both use it: `/api/v2/user` drops the boards the viewer cannot see, while the internal route keeps the entry. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
 
+## Blog and comments
+
+- Comment pages store the entity id with a type (`problem`, `editorial`, `contest`, `blog`, `tagProblem`); the API takes natural keys — a problem rename never orphans a thread.
+- One `CommentPagesService` decides page access by reusing `ProblemAccess` (with the contest scope), the editorial rule, `ContestAccess` and `BlogAccess` — comments, votes, recent comments, feeds and the user tab cannot drift from the pages they belong to.
+- A problem of the viewer's started contest shows no thread and takes no comment, like legacy's clarifications area; a plain `commentLocks` lock keeps the thread readable — an open thread would leak hints during the contest.
+- Threads: roots newest first, replies in `path` order, depth <= 100, all replies of a page of roots loaded — legacy MPTT put siblings newest first and had no cap; the 10-comments-per-5-minutes limit bounds growth.
+- Subtree hide and unhide filter with an `$or` of equality and a prefix regex — a single `^path(/|$)` regex has no index bounds and scans the whole `path` index.
+- Comment-thread reads `.hint()` `{threadId, hidden, path}` — the indexes must be built before serving.
+- Unhiding under a hidden parent is 409 — otherwise a visible orphan shows in lists, counts and points.
+- Votes are changeable and withdrawable; the vote row and the target's score change in one transaction, and a vanished target aborts it — legacy allowed one vote ever, and parallel votes must not lose a point.
+- Contribution points are recomputed by a job coalesced per user on every trigger, never incremented — the spec's "incremental on votes" would drift against a concurrent recompute.
+- Locks are managed by `judge.change_comment` — legacy had only the Django admin.
+- Org-private and unpublished posts never reach feeds, the homepage, other users' tabs or outsider votes; feeds are a signed-out viewer's view — legacy leaked them through the feed, the sitemap and `vote_blog`.
+- Posts render in the new `blog` style, comments in `user` — legacy `blog` was a sanitized staff style and `comment` safe mode; posts are strangers' HTML, so `solution` is not safe enough.
+- `blog` sanitizes author HTML first and splices KaTeX in afterwards through nonce slots — KaTeX output carries inline styles the sanitizer must otherwise allow, which would let authors forge overlays.
+- `blog` author CSS is strict (no `position`, offsets, `transform`, `z-index`, `opacity`, negative margins or viewport units; unit allow-list; `user-` class prefix; no author MathML or SVG; iframes only YouTube/Vimeo, sandboxed) — a post must not cover the page.
+- The frontend must contain every user-authored HTML container (`overflow: clip; contain: paint; isolation: isolate; min-width: 0; contain: inline-size`, `.katex-display { overflow-x: auto }`) — in-flow overflow cannot be stopped by the sanitizer; this covers posts, comments, profile and organization `about` and ticket messages.
+- User-authored KaTeX (`blog`, `user`): `maxExpand` 50, `maxSize` 50, sizes beyond ±50em refused on the parse tree, parametered macros refused (hex colours allowed only after colour commands), 20k parse-node cap, 500 ms budget per formula — a stranger's `\def` chain cost seconds per formula; worst accepted formula is about 350 ms.
+- `katex` is pinned to exactly 0.19.0 — the size and node checks call the internal `katex.__parse`.
+- `font-size` multipliers scale after the size check — accepted, container containment covers the overflow.
+- Muted users cannot write or edit posts; staff do not bypass the 10-solve gate — muting silences public text; legacy let superusers only bypass.
+- `publishOn` may be set on create (default now) — legacy overwrote it, which made scheduling impossible; a scheduled post is announced on Discord only once published.
+- Deleting a post deletes its votes, comments and lock — legacy orphaned the comments; a comment created during the delete may survive unreadable (its page is 404).
+- Blog writes are limited to 10 per hour per user, comments to 10 per 5 minutes, votes to 60 per minute across posts and comments — legacy had no limits; moderators share the blog budget.
+- Official-contest mode closes comment pages, posting, editing, comment votes and blog writing for non-superusers (moderation routes refuse before writing); blog reads and votes stay — legacy hid the comment area and the editor.
+- Recent comments scan at most 10 batches of 2 x the page size with one contest scope and continue by id — bounded work even when most recent comments sit on unreadable pages; the anonymous slice is cached 60 s.
+- Homepage contests come from `GET /contests?phase=`, not `/home` — one source for contest lists.
+- Feeds (blog, comments, problems) carry 25 items, cached 5 minutes, chronological — legacy fed every post with sticky ones first.
+- The data export keeps hidden own comments (legacy) and adds own and co-authored posts, streamed — a large history must not sit in memory.
+- `DISCORD_WEBHOOK_URLS` uses legacy event names as `event=url` pairs, https only (http for localhost); the URL stays in env (never job data or logs); payloads allow no mentions, a 4xx is not retried and redirects are refused — a bad URL must not retry-storm or leak the token.
+- Discord announcements: comments only for pages a signed-out viewer can read, posts only when published and personal — the channel may be public; organization and suggested problems announce their name and a statement excerpt on create (spec, legacy content); a problem's announcer is its creator — in suggest mode the suggester, otherwise a curator, where legacy used `suggester or authors.first()`.
+- `CommentResponse.canEdit` is true for a muted author whose edit is then 403 — muting is rare and the viewer's document is not read per page.
+- Accepted residuals: unhide's parent check is read-then-write (a racing hide can leave an orphan), and hide/unhide of a subtree is not one atomic step.
+- Planned (migrator deferred): comments map legacy `p:`/`s:`/`c:`/`b:`/`t:` pages to entity ids, build `path`/`threadId` from MPTT and render `bodyHtml`; posts render `contentHtml`/`summaryHtml`; `users.contributionPoints` are recomputed after the backfill — reads never render and one job writes the points.
+
 ## Deploy
 
 - Worker image needs pandoc >= 3, util-linux `prlimit` and Chromium; plan about 2 GB of memory per job of concurrency — PDF and Polygon conversions are memory hungry.

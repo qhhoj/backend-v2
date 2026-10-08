@@ -215,4 +215,31 @@ describe('OpenAPI document', () => {
       ]),
     );
   });
+
+  it('lists the blog, comment, homepage and feed endpoints', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as { paths: Record<string, unknown> };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/posts',
+        '/api/internal/posts/{id}',
+        '/api/internal/posts/{id}/vote',
+        '/api/internal/organizations/{slug}/posts',
+        '/api/internal/users/{username}/blog',
+        '/api/internal/users/{username}/comments',
+        '/api/internal/comments/pages/{type}/{key}',
+        '/api/internal/comments/pages/{type}/{key}/lock',
+        '/api/internal/comments/{id}',
+        '/api/internal/comments/{id}/revisions',
+        '/api/internal/comments/{id}/vote',
+        '/api/internal/comments/{id}/hidden',
+        '/api/internal/comments/{id}/votes',
+        '/api/internal/home',
+        '/api/internal/feeds/{kind}/{format}',
+      ]),
+    );
+  });
 });

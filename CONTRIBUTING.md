@@ -22,7 +22,7 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data, organization-points, user-data)
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data, organization-points, user-data, contribution-points, discord-webhook)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
   common/     http layer (AppError, filter, interceptor, pipe), bootstrap, BaseMongoStreamQuerier, `runCoalesced`
@@ -31,8 +31,8 @@ libs/
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
   contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-moss, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
-  community/  org PP, ranks, interaction gate, time zones, user-data paths, queue contracts (`queues.ts`: organization-points, user-data)
-  render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer); pure functions, golden fixtures in src/fixtures
+  community/  org PP, ranks, interaction gate, time zones, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook)
+  render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
 ```
@@ -90,6 +90,17 @@ users/
   users-api.module.ts
   core/            listed-users, rate-limits, shared dto (username param, time zone)
   pages/  leaderboards/  profile/  moderation/  data/
+blog/
+  blog-api.module.ts
+  core/            BlogAccess (blog-access.ts), BlogAccessModule (posts repository + visibility, imported by comments), lists, detail, organization posts, dto
+  editing/  votes/
+comments/
+  comments-api.module.ts
+  core/            CommentPagesService (the one page-access decision), threads, counts, locks, recent comments, rate-limits, dto
+  posting/  votes/  moderation/
+contributions/     flat: vote ledger (votes.repository), vote gates and limit, contribution-points enqueuer
+discord/           flat: Discord webhook enqueuer
+home/              flat: homepage data, RSS/Atom feeds
 api-v2/            legacy shapes, grouped like the features
   api-v2.module.ts
   core/            envelope, exception filter, query and filter helpers
@@ -102,7 +113,7 @@ api-v2/            legacy shapes, grouped like the features
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
-- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-moss`, `contest-data`) and `libs/community/src/queues.ts` (`organization-points`, `user-data`)
+- Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-moss`, `contest-data`) and `libs/community/src/queues.ts` (`organization-points`, `user-data`, `contribution-points`, `discord-webhook`)
 - `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
@@ -159,7 +170,7 @@ api-v2/            legacy shapes, grouped like the features
 - Mail goes through the `MAILER` token (`@libs/common`): SMTP via `SMTP_URL`/`MAIL_FROM` (Mailpit in dev), `InMemoryMailer` in tests; a send failure is `mail_unavailable` 503
 - Uploads go through `StorageService` (`@libs/common`): files live under `MEDIA_ROOT` (a volume nginx serves at `MEDIA_URL`), paths are checked to stay inside it, and callers never pass client-supplied names unsanitised; file type is decided from the bytes
 - Deploy requirement for the nginx `/media` location: send `X-Content-Type-Options: nosniff`; `/media/materials/` uses `default_type application/octet-stream` and `Content-Disposition: attachment`; `/media/images/` and `/media/materials/` add `Content-Security-Policy: sandbox`
-- Frontend routes embedded in mails/redirects (SPA contract): `/activate/<key>`, `/reset-password/<token>`, `/login`, `/login/2fa`, `/register/social?token=<token>`, `/`
+- Frontend routes embedded in mails/redirects (SPA contract): `/activate/<key>`, `/reset-password/<token>`, `/login`, `/login/2fa`, `/register/social?token=<token>`, `/`, `/post/<id>`, `/problem/<code>`, `/problem/<code>/editorial`, `/contest/<key>`, `/tagproblem/<code>`, `/user/<username>`, `#comment-<id>` (Discord links and feeds)
 - Registration: usernames `^\w+$` (max 30), email unique case-insensitively (checked in code); activation keys are stored as sha256 hashes
 - 2FA enrolment (`totp/enroll`, `webauthn/register/options`) and removing a WebAuthn credential require `currentPassword` and share the `password-confirm` failure budget; WebAuthn registration and login use separate session challenges
 - Password reset also works for active accounts with an unusable (`!`) hash (migrated social-only users): it sets their first password; the token is bound to the stored hash, so it is single-use either way
@@ -181,7 +192,10 @@ api-v2/            legacy shapes, grouped like the features
 - Public routes: `@Public()` + `@CurrentAuth()` + `optionalPrincipal(auth)`; invisible or unknown problem -> 404, visible but not editable -> 403
 - Events (`ProblemEvents`): `pointsChanged`, `publicityChanged`, `codeRenamed`, `statementChanged`; listeners run synchronously after the write
 - Rate limits: `problems/core/rate-limits.ts`
-- Rendering styles: `problem`, `problem-full`, `solution`, `user` (raw HTML escaped; profile and organization `about`); one `styleOf` picks the style per problem
+- Rendering styles: `problem`, `problem-full`, `solution` (editorials), `blog` (posts), `user` (raw HTML escaped; profile and organization `about`, comments); one `styleOf` picks the style per problem
+- `blog` is `solution` made safe for strangers: author HTML is sanitized first, then KaTeX is spliced in through nonce slots, so author markup cannot forge math; author CSS is strict (no `position`, offsets, `transform`, `z-index`, `opacity`, negative margins, viewport units; units from an allow-list), classes need the `user-` prefix, iframes only from YouTube/Vimeo and sandboxed, no author MathML/SVG
+- User-authored styles (`blog`, `user`) cut KaTeX down: `maxExpand` 50, `maxSize` 50, sizes beyond ±50em refused on the parse tree, macros with parameters refused (hex colours allowed only after colour commands), 20k parse-node cap, 500 ms render budget per formula; `katex` stays pinned to exactly 0.19.0 because the limits use the internal `katex.__parse`
+- Frontend requirement (load-bearing): every container of user-authored HTML (posts, comments, profile and organization `about`, ticket messages) needs `overflow: clip; contain: paint; isolation: isolate; min-width: 0; contain: inline-size`, and `.katex-display { overflow-x: auto }`; the sanitizer cannot stop in-flow overflow, containment does
 - HTML is rendered and stored at save; reads never render
 - `problem-full` HTML is unsanitized; writing statement text on a full-markup problem needs `judge.problem_full_markup`
 - Markdown is capped at 200000 chars (`MAX_MARKDOWN_LENGTH`); render budgets per render: 2000 formulas of at most 1000 chars and 1.5 MB of KaTeX output (excess stays as source text), 200000 opening tags, nesting depth 500, 2 MB of HTML; past the tag, depth or HTML limit `renderMarkdown` throws `RenderLimitError` -> 400 `validation_failed` on the rendered field
@@ -281,7 +295,7 @@ api-v2/            legacy shapes, grouped like the features
 - Create (`judge.add_organization`): unlisted until staff lists it, `shortName = slug[:20]`, creator always admin; at most 3 admin roles per user unless `judge.spam_organization`; new admins join the `Org Admin` group when it exists; `isUnlisted`, `slots`, `shortName` need `judge.edit_all_organization`
 - PATCH bodies go through `RefuseNullFieldsPipe` with a per-DTO nullable allowlist: `null` on any other field is 400, never stored
 - Org PP and `memberCount` are written only by the `organization-points` job, queued by membership changes and by `recomputeUser` when a member's PP changed; enqueues coalesce per organization through a Redis NX pending flag; a failed enqueue is logged and lost until the next change
-- `about` (users and organizations) renders at save in the `user` style (raw HTML escaped); editing a profile `about` needs >= 5 solved, staff or superuser, and not muted (an organization `about` needs only `canAdminister`); a profile `about` is locked for non-superusers when `OFFICIAL_CONTEST_MODE=true`; other profile settings stay editable while muted; `firstName` (<= 30) is blocked in official-contest mode
+- `about` (users and organizations) renders at save in the `user` style (raw HTML escaped); editing a profile `about` needs >= 5 solved, staff or superuser, and not muted (an organization `about` needs only `canAdminister`); a profile `about` is locked for non-superusers when `OFFICIAL_CONTEST_MODE=true` (so are comments and blog writing, see Blog and comments); other profile settings stay editable while muted; `firstName` (<= 30) is blocked in official-contest mode
 - Leaderboards (`/users`, `/contributors`, `/users/:username/rank`) count listed, active users (`LISTED_USERS`); ties share a rank and pages continue it; rely on the `{isUnlisted, isActive, <field>, _id}` indexes, which the query planner picks (no `.hint()`), so they must exist (see Env and deploy)
 - `/users/:username/pp-breakdown` is its own paged route; the first `PP_ENTRIES` rows are cached 600 s per user (`user-pp:<userId>`), so a newly private problem can show for up to 600 s
 - Heatmap: last 365 days per day in `?timezone=`, else the viewer's zone, else UTC (`$dateToString` with the zone; a zone Mongo rejects falls back to UTC), cached 10 minutes per user and zone
@@ -289,6 +303,24 @@ api-v2/            legacy shapes, grouped like the features
 - User data: `USER_DATA_ROOT` (unset -> 404, muted -> 404); 3 prepares per user per day, one per 24 h while a fresh zip exists (`canPrepare`); zip (profile whitelist, own submissions with sources and `info.json`) kept 7 days, removed by the hourly sweep
 - `/api/v2/organizations|users|user/:username`: legacy shapes, counted pages; unlisted organizations hidden like `canList`; contest ratings of frozen boards are `null` for non-editors
 - Tests: `setupApiTest` exposes `organizations`, `organizationRequests`, `userDataRoot`; `setupWorkerTest` exposes `organizations`, `userDataRoot`
+
+## Blog and comments
+
+- Posts: `blogPosts` (`organization` null = personal), `blogVotes`; rules in `BlogAccess` (`blog/core/blog-access.ts`): `canSee` (published personal posts public; published organization posts to members; anything else to editors), `canEdit` (`judge.edit_all_post`; authors; organization posts: author + admin + `judge.edit_organization_post`), `canDelete` (+ `judge.delete_blogpost`); lists use its filters, never their own
+- Writing: >= 10 solved or superuser and not muted (`canWritePersonalPost`), organization posts by their admins with `judge.edit_organization_post`; `globalPost` needs `judge.mark_global_post`, `sticky` `judge.pin_post`; `authorIds` `judge.edit_all_post`; rendered at save in the `blog` style; revisions `entity: 'blogPost'`; delete takes the post's votes, comments (and their votes) and lock in one transaction; creates and edits share 10 writes per hour per user (`blog-write:user:<id>`, moderators included)
+- Comments: page `{type, id}` with `type` `problem | editorial | contest | blog | tagProblem` and the entity id; the API takes natural keys (`/comments/pages/:type/:key`). Every page check goes through `CommentPagesService.accessible`/`resolve`, which reuses `ProblemAccess` (with the current contest scope), `ProblemsService.editorialReadable` (never inside a contest), `ContestAccess.canSee` and `BlogAccess.canSee`; add a page type there and nowhere else
+- Threads: `parentId`, `threadId` (root), `path` (ids joined by `/`, depth <= 100); roots newest first, 20 per page, replies in `path` order (all replies of the page's roots); hidden comments never listed; `collapsed` at score <= -5; a problem of the viewer's started contest shows no thread (`CommentsService.hidesThread`: empty page, 404 on detail, votes, revisions and edit, skipped in recent comments) unless `judge.override_comment_lock`
+- Posting needs >= 5 solved or staff, not muted (`canInteract`), an unlocked page (`commentLocks`, `judge.override_comment_lock` passes; a problem of the viewer's started contest is locked too), a visible same-page parent younger than 365 days (`judge.change_comment` replies to older ones); 10 comments per 5 min per user; body <= 8192, `user` style (raw HTML escaped); edits are compare-and-set on `revisions` with a `revisions` row (`entity: 'comment'`)
+- `judge.change_comment`: hide/unhide a subtree (`POST /comments/:id/hidden`; unhiding under a hidden parent is 409), vote list, `PUT|DELETE /comments/pages/:type/:key/lock`; subtree writes use `subtreeFilter` (an `$or` of equality and a prefix regex, so the `path` index bounds it)
+- Votes: `PUT .../vote {score: 1 | -1 | 0}` on posts and comments through `VotesService` (not own, `canInteract`, 60 per minute per user across both) and `VotesRepository.cast` (row and target `score` in one transaction; a vanished target is 404 and aborts); the route answers 404 for an invisible post or hidden comment before `cast`
+- Contribution points: written only by the `contribution-points` job (coalesced per user, always recomputed and `$set`, never incremented), queued by votes, hide/unhide, post visibility/authors/deletion and a suggested problem's `publicityChanged`; the good-tickets term is 0 until 5c
+- Official-contest mode (`OFFICIAL_CONTEST_MODE=true`): non-superusers get 403 on comment pages, posting, editing and comment votes and on blog create/edit (also for moderation routes, before any write); blog reads and post votes stay; recent comments are empty
+- Homepage `GET /home`: 10 recent comments (batched scan, <= 10 batches of 2 x limit, readable pages only, one contest scope per call; the anonymous slice is cached 60 s as `home:recent-comments`), 7 new public problems, top 5 by PP and by contribution, counts; contests come from `GET /contests?phase=`
+- Feeds `GET /feeds/:kind/:format` (`blog|comments|problems`, `rss|atom`): a signed-out viewer's view only, 25 items, cached 300 s (`feed:<kind>:<format>`); superagent buffers the feed content types, so tests call `.buffer(true)` to read `.text`
+- Discord: `DiscordWebhooksService.notify(event, message)` (api) queues `discord-webhook` only when `DISCORD_WEBHOOK_URLS` has a URL for the event or `default`; the worker reads the URL from its env, never from job data or logs; payloads set `allowed_mentions` to none, a 4xx is not retried, redirects are refused; comments announce only pages a signed-out viewer can read, posts only once published and personal; organization and suggested problems on create
+- User-data export includes the user's own comments (hidden ones too) and own or co-authored posts, streamed into the zip
+- Tests: `setupApiTest` exposes `blogPosts`, `blogVotes`, `comments`, `commentVotes`, `commentLocks`; `setupWorkerTest` `blogPosts`, `comments`; fixtures in `apps/api/test/community-fixtures.ts`
+- Accepted residuals: the unhide-parent check is read-then-write (P9 race); hide/unhide is not atomic across the subtree and the vote scores; moderators share the blog write budget; `font-size` multipliers scale after the size check (containment covers it)
 
 ## Data conventions
 
@@ -365,8 +397,10 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `MOSS_API_KEY` goes on the api and the worker; without it on the api every MOSS route answers 404
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
 - `USER_DATA_ROOT` is shared by the api and the worker; boot rejects it under `MEDIA_ROOT` or overlapping `CONTEST_DATA_ROOT`
-- `OFFICIAL_CONTEST_MODE=true` locks profile `about` and `firstName` for non-superusers
-- The `.hint()` queries (organization members, submissions) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`); the leaderboards are not hinted but are only fast with theirs
+- `OFFICIAL_CONTEST_MODE=true` locks profile `about` and `firstName`, comment pages, posting, comment votes and blog writing for non-superusers
+- `DISCORD_WEBHOOK_URLS` (api and worker): `event=url` pairs (`default`, `on_new_comment`, `on_new_blogpost`, `on_new_problem`, `on_new_suggested_problem`, `on_new_ticket`, `on_new_ticket_message`), each event once, https only (http only for `localhost`/`127.0.0.1`); unset sends nothing; the worker needs outbound HTTPS to Discord
+- nginx: map the legacy `/feed/<blog|comment|problems>/<rss|atom>/` to `/api/internal/feeds/<blog|comments|problems>/<rss|atom>`
+- The `.hint()` queries (organization members, submissions, comment threads) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`); the leaderboards are not hinted but are only fast with theirs
 - The worker needs outbound TCP to `moss.stanford.edu:7690` when `MOSS_API_KEY` is set
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc)
 - Bridge: `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT` (default 9999); exactly one instance
