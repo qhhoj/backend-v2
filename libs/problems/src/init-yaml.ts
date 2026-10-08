@@ -175,99 +175,148 @@ function applyCaseOptions(
   else testCase.checkerArgs = null;
 }
 
-/** Port of legacy `ProblemDataCompiler.make_init`: null yaml when there is nothing to write; `cases` are the normalised rows to store back. */
-export function compileInitYaml(
-  data: ProblemData,
+/** The cases grouped so far: top-level entries, the batch still open, and the points counted. */
+interface Grouping {
+  topLevel: InitCase[];
+  openBatch: Batch | null;
+  totalPoints: number;
+}
+interface CaseFiles {
+  hasGenerator: boolean;
+  archiveEntries: ReadonlySet<string>;
+}
+
+function closeBatch(grouping: Grouping, batch: Batch): void {
+  if (!batch.batched.length)
+    throw new ProblemDataError('Empty batches not allowed.');
+  grouping.topLevel.push(batch);
+  grouping.openBatch = null;
+}
+
+/** Without a generator every case names files that must be in the archive. */
+function assertCaseFiles(
+  testCase: ProblemTestCase,
+  index: number,
   archiveEntries: ReadonlySet<string>,
-): CompiledInit {
-  const cases = data.cases.map((testCase) => ({ ...testCase }));
-  if (!cases.length) return { yaml: null, cases };
-  const top: InitCase[] = [];
-  let batch: Batch | null = null;
-  let totalPoints = 0;
-  const endBatch = (open: Batch) => {
-    if (!open.batched.length)
-      throw new ProblemDataError('Empty batches not allowed.');
-    top.push(open);
-    batch = null;
+): void {
+  if (!archiveEntries.has(testCase.input))
+    throw new ProblemDataError(
+      `Input file for case ${index} does not exist: ${testCase.input}`,
+    );
+  if (!archiveEntries.has(testCase.output))
+    throw new ProblemDataError(
+      `Output file for case ${index} does not exist: ${testCase.output}`,
+    );
+}
+
+/** A `C` row: inside a batch it loses its points and takes the batch's pretest flag; outside one it must carry points. */
+function addPlainCase(
+  grouping: Grouping,
+  testCase: ProblemTestCase,
+  index: number,
+  { hasGenerator, archiveEntries }: CaseFiles,
+): void {
+  const entry: InitCase = {};
+  const batch = grouping.openBatch;
+  if (batch) {
+    testCase.points = null;
+    testCase.isPretest = batch.is_pretest;
+  } else {
+    if (testCase.points === null)
+      throw new ProblemDataError(
+        `Points must be defined for non-batch case #${index}.`,
+      );
+    entry.is_pretest = testCase.isPretest;
+  }
+  if (!hasGenerator) assertCaseFiles(testCase, index, archiveEntries);
+  if (testCase.input) entry.in = testCase.input;
+  if (testCase.output) entry.out = testCase.output;
+  if (testCase.points !== null) {
+    entry.points = testCase.points;
+    grouping.totalPoints += testCase.points;
+  }
+  applyCaseOptions(entry, testCase, index);
+  (batch ? batch.batched : grouping.topLevel).push(entry);
+}
+
+/** An `S` row closes any open batch and opens a new one; the row itself keeps no files. */
+function startBatch(
+  grouping: Grouping,
+  testCase: ProblemTestCase,
+  index: number,
+): void {
+  if (grouping.openBatch) closeBatch(grouping, grouping.openBatch);
+  if (testCase.points === null)
+    throw new ProblemDataError(`Batch start case #${index} requires points.`);
+  grouping.totalPoints += testCase.points;
+  const batch: Batch = {
+    points: testCase.points,
+    batched: [],
+    is_pretest: testCase.isPretest,
   };
+  grouping.openBatch = batch;
+  applyCaseOptions(batch, testCase, index);
+  testCase.input = '';
+  testCase.output = '';
+}
+
+/** An `E` row closes the open batch and is cleared of everything a case could carry. */
+function endBatch(
+  grouping: Grouping,
+  testCase: ProblemTestCase,
+  index: number,
+): void {
+  const batch = grouping.openBatch;
+  if (!batch)
+    throw new ProblemDataError(
+      `Attempt to end batch outside of one in case #${index}.`,
+    );
+  Object.assign(testCase, {
+    isPretest: batch.is_pretest,
+    input: '',
+    output: '',
+    generatorArgs: '',
+    checker: '',
+    checkerArgs: null,
+  });
+  closeBatch(grouping, batch);
+}
+
+/** Legacy row walk: C, S and E rows become top-level cases and batches; the total is checked before a trailing batch is closed. */
+function groupCases(cases: ProblemTestCase[], files: CaseFiles): InitCase[] {
+  const grouping: Grouping = { topLevel: [], openBatch: null, totalPoints: 0 };
   cases.forEach((testCase, position) => {
     const index = position + 1;
     integerOrNull(testCase.points, `Case #${index}: points`);
-    if (testCase.type === 'C') {
-      const entry: InitCase = {};
-      if (batch) {
-        testCase.points = null;
-        testCase.isPretest = batch.is_pretest;
-      } else {
-        if (testCase.points === null)
-          throw new ProblemDataError(
-            `Points must be defined for non-batch case #${index}.`,
-          );
-        entry.is_pretest = testCase.isPretest;
-      }
-      if (!data.generator) {
-        if (!archiveEntries.has(testCase.input))
-          throw new ProblemDataError(
-            `Input file for case ${index} does not exist: ${testCase.input}`,
-          );
-        if (!archiveEntries.has(testCase.output))
-          throw new ProblemDataError(
-            `Output file for case ${index} does not exist: ${testCase.output}`,
-          );
-      }
-      if (testCase.input) entry.in = testCase.input;
-      if (testCase.output) entry.out = testCase.output;
-      if (testCase.points !== null) {
-        entry.points = testCase.points;
-        totalPoints += testCase.points;
-      }
-      applyCaseOptions(entry, testCase, index);
-      (batch ? batch.batched : top).push(entry);
-    } else if (testCase.type === 'S') {
-      if (batch) endBatch(batch);
-      if (testCase.points === null)
-        throw new ProblemDataError(
-          `Batch start case #${index} requires points.`,
-        );
-      totalPoints += testCase.points;
-      batch = {
-        points: testCase.points,
-        batched: [],
-        is_pretest: testCase.isPretest,
-      };
-      applyCaseOptions(batch, testCase, index);
-      testCase.input = '';
-      testCase.output = '';
-    } else {
-      if (!batch)
-        throw new ProblemDataError(
-          `Attempt to end batch outside of one in case #${index}.`,
-        );
-      Object.assign(testCase, {
-        isPretest: batch.is_pretest,
-        input: '',
-        output: '',
-        generatorArgs: '',
-        checker: '',
-        checkerArgs: null,
-      });
-      endBatch(batch);
-    }
+    if (testCase.type === 'C') addPlainCase(grouping, testCase, index, files);
+    else if (testCase.type === 'S') startBatch(grouping, testCase, index);
+    else endBatch(grouping, testCase, index);
   });
-  if (totalPoints <= 0)
+  if (grouping.totalPoints <= 0)
     throw new ProblemDataError('Total points must be greater than 0.');
-  if (batch) endBatch(batch);
+  if (grouping.openBatch) closeBatch(grouping, grouping.openBatch);
+  return grouping.topLevel;
+}
 
-  const takePretest = (entry: InitCase) => {
-    const flag = entry.is_pretest as boolean;
-    delete entry.is_pretest;
-    return flag;
-  };
+/** `is_pretest` is a routing marker, not an init.yml key: it picks the list and is removed. */
+function splitPretestsAndDropMarker(entries: InitCase[]): {
+  pretests: InitCase[];
+  tests: InitCase[];
+} {
   const pretests: InitCase[] = [];
   const tests: InitCase[] = [];
-  for (const entry of top) (takePretest(entry) ? pretests : tests).push(entry);
+  for (const entry of entries) {
+    const isPretest = entry.is_pretest as boolean;
+    delete entry.is_pretest;
+    (isPretest ? pretests : tests).push(entry);
+  }
+  return { pretests, tests };
+}
 
+function buildInit(
+  data: ProblemData,
+  { pretests, tests }: { pretests: InitCase[]; tests: InitCase[] },
+): InitCase {
   const init: InitCase = {};
   if (data.archive) init.archive = data.archive;
   if (data.generator) init.generator = data.generator;
@@ -284,5 +333,22 @@ export function compileInitYaml(
     ...(data.nobigmath ? ['nobigmath'] : []),
   ];
   if (hints.length) init.hints = hints;
-  return { yaml: emitYaml(init), cases };
+  return init;
+}
+
+/** Port of legacy `ProblemDataCompiler.make_init`: null yaml when there is nothing to write; `cases` are the normalised rows to store back. */
+export function compileInitYaml(
+  data: ProblemData,
+  archiveEntries: ReadonlySet<string>,
+): CompiledInit {
+  const cases = data.cases.map((testCase) => ({ ...testCase }));
+  if (!cases.length) return { yaml: null, cases };
+  const topLevel = groupCases(cases, {
+    hasGenerator: Boolean(data.generator),
+    archiveEntries,
+  });
+  return {
+    yaml: emitYaml(buildInit(data, splitPretestsAndDropMarker(topLevel))),
+    cases,
+  };
 }

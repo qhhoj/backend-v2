@@ -63,6 +63,94 @@ const METHOD_DEFLATE = 8;
 const REGULAR_FILE = 0o100644;
 const SYMLINK = 0o120777;
 
+/** An entry's bytes and header values once its test overrides are applied. */
+interface ResolvedEntry {
+  name: Buffer;
+  data: Buffer;
+  method: number;
+  flags: number;
+  declaredSize: number;
+  checksum: number;
+  centralExtra: Buffer;
+}
+/** Where the central directory sits, for the end records. */
+interface ZipLayout {
+  count: number;
+  centralSize: number;
+  centralOffset: number;
+  recordOffset: number;
+}
+
+function resolveEntry(entry: ZipTestEntry): ResolvedEntry {
+  const content = Buffer.isBuffer(entry.content)
+    ? entry.content
+    : Buffer.from(entry.content ?? '', 'utf8');
+  const isDeflated = entry.method === 'deflate';
+  return {
+    name: Buffer.from(entry.name, 'utf8'),
+    data: entry.data ?? (isDeflated ? deflateRawSync(content) : content),
+    method: entry.methodNumber ?? (isDeflated ? METHOD_DEFLATE : METHOD_STORE),
+    flags: UTF8_NAMES_FLAG | (entry.encrypted ? ENCRYPTED_FLAG : 0),
+    declaredSize: entry.declaredSize ?? content.length,
+    checksum: entry.checksum ?? crc32(content),
+    centralExtra: entry.centralExtra ?? Buffer.alloc(0),
+  };
+}
+
+function localHeader(resolved: ResolvedEntry): Buffer {
+  const header = Buffer.alloc(30 + resolved.name.length);
+  header.writeUInt32LE(LOCAL_HEADER, 0);
+  header.writeUInt16LE(20, 4);
+  header.writeUInt16LE(resolved.flags, 6);
+  header.writeUInt16LE(resolved.method, 8);
+  header.writeUInt32LE(resolved.checksum, 14);
+  header.writeUInt32LE(resolved.data.length, 18);
+  header.writeUInt32LE(resolved.declaredSize, 22);
+  header.writeUInt16LE(resolved.name.length, 26);
+  resolved.name.copy(header, 30);
+  return header;
+}
+
+function centralHeader(
+  entry: ZipTestEntry,
+  resolved: ResolvedEntry,
+  localOffset: number,
+): Buffer {
+  const { name, centralExtra } = resolved;
+  const header = Buffer.alloc(46 + name.length + centralExtra.length);
+  header.writeUInt32LE(CENTRAL_HEADER, 0);
+  header.writeUInt16LE(MADE_BY_UNIX, 4);
+  header.writeUInt16LE(20, 6);
+  header.writeUInt16LE(resolved.flags, 8);
+  header.writeUInt16LE(resolved.method, 10);
+  header.writeUInt32LE(resolved.checksum, 16);
+  header.writeUInt32LE(
+    entry.declaredCompressedSize ?? resolved.data.length,
+    20,
+  );
+  header.writeUInt32LE(resolved.declaredSize, 24);
+  header.writeUInt16LE(name.length, 28);
+  header.writeUInt16LE(centralExtra.length, 30);
+  header.writeUInt32LE(
+    ((entry.symlink ? SYMLINK : REGULAR_FILE) << 16) >>> 0,
+    38,
+  );
+  header.writeUInt32LE(entry.localHeaderOffset ?? localOffset, 42);
+  name.copy(header, 46);
+  centralExtra.copy(header, 46 + name.length);
+  return header;
+}
+
+function endRecord(layout: ZipLayout, options: ZipTestOptions): Buffer {
+  const record = Buffer.alloc(22);
+  record.writeUInt32LE(END_RECORD, 0);
+  record.writeUInt16LE(options.zip64 ? 0xffff : layout.count, 8);
+  record.writeUInt16LE(options.zip64 ? 0xffff : layout.count, 10);
+  record.writeUInt32LE(layout.centralSize, 12);
+  record.writeUInt32LE(options.zip64 ? 0xffffffff : layout.centralOffset, 16);
+  return record;
+}
+
 /** Hand-written zip: tests need names, attributes and sizes real zip writers refuse (`..`, absolute paths, symlinks, lying sizes). Fewer than 65535 entries. */
 export function buildZip(
   entries: ZipTestEntry[],
@@ -72,91 +160,49 @@ export function buildZip(
   const centrals: Buffer[] = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer.from(entry.name, 'utf8');
-    const content = Buffer.isBuffer(entry.content)
-      ? entry.content
-      : Buffer.from(entry.content ?? '', 'utf8');
-    const deflated = entry.method === 'deflate';
-    const data = entry.data ?? (deflated ? deflateRawSync(content) : content);
-    const method =
-      entry.methodNumber ?? (deflated ? METHOD_DEFLATE : METHOD_STORE);
-    const flags = UTF8_NAMES_FLAG | (entry.encrypted ? ENCRYPTED_FLAG : 0);
-    const declared = entry.declaredSize ?? content.length;
-    const checksum = entry.checksum ?? crc32(content);
-    const extra = entry.centralExtra ?? Buffer.alloc(0);
-    const local = Buffer.alloc(30 + name.length);
-    local.writeUInt32LE(LOCAL_HEADER, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(flags, 6);
-    local.writeUInt16LE(method, 8);
-    local.writeUInt32LE(checksum, 14);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(declared, 22);
-    local.writeUInt16LE(name.length, 26);
-    name.copy(local, 30);
-    const central = Buffer.alloc(46 + name.length + extra.length);
-    central.writeUInt32LE(CENTRAL_HEADER, 0);
-    central.writeUInt16LE(MADE_BY_UNIX, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(flags, 8);
-    central.writeUInt16LE(method, 10);
-    central.writeUInt32LE(checksum, 16);
-    central.writeUInt32LE(entry.declaredCompressedSize ?? data.length, 20);
-    central.writeUInt32LE(declared, 24);
-    central.writeUInt16LE(name.length, 28);
-    central.writeUInt16LE(extra.length, 30);
-    central.writeUInt32LE(
-      ((entry.symlink ? SYMLINK : REGULAR_FILE) << 16) >>> 0,
-      38,
-    );
-    central.writeUInt32LE(entry.localHeaderOffset ?? offset, 42);
-    name.copy(central, 46);
-    extra.copy(central, 46 + name.length);
-    locals.push(local, data);
-    centrals.push(central);
-    offset += local.length + data.length;
+    const resolved = resolveEntry(entry);
+    const local = localHeader(resolved);
+    locals.push(local, resolved.data);
+    centrals.push(centralHeader(entry, resolved, offset));
+    offset += local.length + resolved.data.length;
   }
   const centralSize = centrals.reduce((sum, buffer) => sum + buffer.length, 0);
-  const count = options.declaredEntryCount ?? entries.length;
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(END_RECORD, 0);
-  end.writeUInt16LE(options.zip64 ? 0xffff : count, 8);
-  end.writeUInt16LE(options.zip64 ? 0xffff : count, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(options.zip64 ? 0xffffffff : offset, 16);
-  const zip64 = options.zip64
-    ? zip64Tail(count, centralSize, offset, offset + centralSize, options)
-    : Buffer.alloc(0);
-  return Buffer.concat([...locals, ...centrals, zip64, end]);
+  const layout: ZipLayout = {
+    count: options.declaredEntryCount ?? entries.length,
+    centralSize,
+    centralOffset: offset,
+    recordOffset: offset + centralSize,
+  };
+  const zip64 = options.zip64 ? zip64Tail(layout, options) : Buffer.alloc(0);
+  return Buffer.concat([
+    ...locals,
+    ...centrals,
+    zip64,
+    endRecord(layout, options),
+  ]);
 }
 
 const ZIP64_RECORD = 0x06064b50;
 const ZIP64_LOCATOR = 0x07064b50;
 
 /** The zip64 end-of-central-directory record followed by its locator. */
-function zip64Tail(
-  count: number,
-  centralSize: number,
-  centralOffset: number,
-  recordOffset: number,
-  options: ZipTestOptions,
-): Buffer {
+function zip64Tail(layout: ZipLayout, options: ZipTestOptions): Buffer {
   const record = Buffer.alloc(56);
   record.writeUInt32LE(ZIP64_RECORD, 0);
   record.writeBigUInt64LE(44n, 4);
   record.writeUInt16LE(45, 12);
   record.writeUInt16LE(45, 14);
-  record.writeBigUInt64LE(BigInt(count), 24);
-  record.writeBigUInt64LE(BigInt(count), 32);
-  record.writeBigUInt64LE(BigInt(centralSize), 40);
+  record.writeBigUInt64LE(BigInt(layout.count), 24);
+  record.writeBigUInt64LE(BigInt(layout.count), 32);
+  record.writeBigUInt64LE(BigInt(layout.centralSize), 40);
   record.writeBigUInt64LE(
-    options.zip64CentralOffset ?? BigInt(centralOffset),
+    options.zip64CentralOffset ?? BigInt(layout.centralOffset),
     48,
   );
   const locator = Buffer.alloc(20);
   locator.writeUInt32LE(ZIP64_LOCATOR, 0);
   locator.writeBigUInt64LE(
-    options.zip64RecordOffset ?? BigInt(recordOffset),
+    options.zip64RecordOffset ?? BigInt(layout.recordOffset),
     8,
   );
   locator.writeUInt32LE(1, 16);

@@ -140,6 +140,10 @@ describe('compileInitYaml', () => {
       ],
     ],
     ['Total points must be greater than 0.', [plain(1, { points: 0 })]],
+    [
+      'Total points must be greater than 0.',
+      [testCase({ type: 'S', points: 0 })],
+    ],
     ['Input file for case 1 does not exist: 9.in', [plain(9)]],
     [
       'Output file for case 2 does not exist: 9.out',

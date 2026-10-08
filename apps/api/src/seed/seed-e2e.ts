@@ -52,17 +52,21 @@ async function ensure<Row extends { _id: string }>(
   model: Model<Row>,
   filter: FilterQuery<Row>,
   fields: Partial<Row>,
-  caseInsensitive = false,
+  { isCaseInsensitive = false }: { isCaseInsensitive?: boolean } = {},
 ): Promise<Row> {
   const query = model.findOne(filter);
-  const existing = await (caseInsensitive ? query.collation(CI) : query).exec();
+  const existing = await (
+    isCaseInsensitive ? query.collation(CI) : query
+  ).exec();
   return existing ?? (await model.create(fields));
 }
 
-export async function seedE2e(
+const SAMPLE_PROBLEM_CODE = 'e2e_sum';
+
+async function seedUsers(
   connection: Connection,
-  options: SeedOptions,
-): Promise<SeedSummary> {
+  { adminPassword, userPassword }: SeedOptions,
+): Promise<{ admin: User; user: User }> {
   const users = connection.model<User>(User.name, UserSchema);
   const admin = await ensure(
     users,
@@ -73,9 +77,9 @@ export async function seedE2e(
       isActive: true,
       isStaff: true,
       isSuperuser: true,
-      password: await hashPassword(options.adminPassword),
+      password: await hashPassword(adminPassword),
     },
-    true,
+    { isCaseInsensitive: true },
   );
   const user = await ensure(
     users,
@@ -84,10 +88,15 @@ export async function seedE2e(
       username: 'e2e_user',
       email: 'e2e_user@example.com',
       isActive: true,
-      password: await hashPassword(options.userPassword),
+      password: await hashPassword(userPassword),
     },
-    true,
+    { isCaseInsensitive: true },
   );
+  return { admin, user };
+}
+
+/** The language, type and group the sample problem needs. */
+async function seedCatalog(connection: Connection) {
   const language = await ensure(
     connection.model<Language>(Language.name, LanguageSchema),
     { key: 'PY3' },
@@ -100,7 +109,7 @@ export async function seedE2e(
       extension: 'py',
       includeInProblem: true,
     },
-    true,
+    { isCaseInsensitive: true },
   );
   const type = await ensure(
     connection.model<ProblemType>(ProblemType.name, ProblemTypeSchema),
@@ -112,6 +121,13 @@ export async function seedE2e(
     { name: 'Uncategorized' },
     { name: 'Uncategorized', fullName: 'Uncategorized' },
   );
+  return { language, type, group };
+}
+
+async function seedMailSetting(
+  connection: Connection,
+  encryptionKey: Buffer,
+): Promise<void> {
   await ensure(
     connection.model<Setting>(Setting.name, SettingSchema),
     { _id: 'mail.smtpUrl' },
@@ -120,13 +136,27 @@ export async function seedE2e(
       value: sealSetting(
         SETTINGS['mail.smtpUrl'],
         MAILPIT_SMTP_URL,
-        options.encryptionKey,
+        encryptionKey,
       ),
       updatedBy: null,
       updatedAt: new Date(),
     },
   );
+}
 
+/** A plus B with one test case, its row and its judge files under `problemDataRoot`. */
+async function seedSampleProblem(
+  connection: Connection,
+  {
+    catalog,
+    authorId,
+    problemDataRoot,
+  }: {
+    catalog: Awaited<ReturnType<typeof seedCatalog>>;
+    authorId: string;
+    problemDataRoot: string;
+  },
+): Promise<void> {
   const sample = {
     ...emptyProblemData(),
     cases: [
@@ -140,22 +170,22 @@ export async function seedE2e(
     ],
   };
   const compiled = compileInitYaml(sample, new Set(['1.in', '1.out']));
-  const data = { ...sample, cases: compiled.cases };
+  const problemData = { ...sample, cases: compiled.cases };
   await ensure(
     connection.model<Problem>(Problem.name, ProblemSchema),
-    { code: 'e2e_sum' },
+    { code: SAMPLE_PROBLEM_CODE },
     {
-      code: 'e2e_sum',
+      code: SAMPLE_PROBLEM_CODE,
       name: 'A plus B',
       timeLimit: 1,
       memoryLimit: 262144,
       points: 1000,
       isPublic: true,
       date: new Date(),
-      typeIds: [type._id],
-      groupId: group._id,
-      authors: [admin._id],
-      allowedLanguages: [language._id],
+      typeIds: [catalog.type._id],
+      groupId: catalog.group._id,
+      authors: [authorId],
+      allowedLanguages: [catalog.language._id],
       description: 'Read two integers, print their sum.',
       descriptionHtml: '<p>Read two integers, print their sum.</p>',
       translations: [
@@ -166,19 +196,32 @@ export async function seedE2e(
           descriptionHtml: '<p>Read two integers, print their sum.</p>',
         },
       ],
-      data,
+      data: problemData,
     },
   );
-
-  const directory = join(options.problemDataRoot, 'e2e_sum');
+  const directory = join(problemDataRoot, SAMPLE_PROBLEM_CODE);
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, '1.in'), '1 2\n');
   await writeFile(join(directory, '1.out'), '3\n');
   await writeFile(join(directory, 'init.yml'), compiled.yaml ?? '');
+}
+
+export async function seedE2e(
+  connection: Connection,
+  options: SeedOptions,
+): Promise<SeedSummary> {
+  const { admin, user } = await seedUsers(connection, options);
+  const catalog = await seedCatalog(connection);
+  await seedMailSetting(connection, options.encryptionKey);
+  await seedSampleProblem(connection, {
+    catalog,
+    authorId: admin._id,
+    problemDataRoot: options.problemDataRoot,
+  });
   return {
     admin: admin.username,
     user: user.username,
-    problem: 'e2e_sum',
-    language: language.key,
+    problem: SAMPLE_PROBLEM_CODE,
+    language: catalog.language.key,
   };
 }
