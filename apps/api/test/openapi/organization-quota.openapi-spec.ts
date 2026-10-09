@@ -1,4 +1,5 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
+import { USAGE_SORTS } from '../../src/modules/organizations/usage/dto/usage.dto';
 import { BULK_ACTIONS } from '../../src/modules/organizations/problems/dto/bulk.dto';
 import { ARCHIVE_FILTERS } from '../../src/modules/organizations/problems/dto/organization-problem.dto';
 import { RESERVED_ORGANIZATION_SLUG_PATTERN } from '../../src/modules/organizations/editing/dto/organization-edit.dto';
@@ -107,5 +108,44 @@ describe('organization problem tags, archive and quota schemas', () => {
       operationOf(document, '/api/internal/problems/{code}/archived-in', 'get')
         .responses['200'],
     ).toBeDefined();
+  });
+
+  it('documents the usage overview query, the nullable quota fields and the named response parts', () => {
+    const route = {
+      route: '/api/internal/organizations/usage',
+      method: 'get',
+    } as const;
+    expect(parameterOf(document, route, 'page')).toMatchObject({
+      required: false,
+      schema: { type: 'number' },
+    });
+    expect(
+      JSON.stringify(parameterOf(document, route, 'sort').schema),
+    ).toContain('#/components/schemas/OrganizationUsageSort');
+    expect(schema('OrganizationUsageSort').enum).toHaveLength(
+      USAGE_SORTS.length,
+    );
+    expect(schema('UpdateQuotaDto').properties).toMatchObject({
+      quotaMonthlyCredits: { type: 'number', nullable: true },
+      quotaStorageBytes: { type: 'number', nullable: true },
+    });
+    expect(schema('UsageQuotaResponse').properties).toMatchObject({
+      monthlyCredits: { type: 'number', nullable: true },
+      storageBytes: { type: 'number', nullable: true },
+    });
+    expect(
+      Object.keys(schema('UsageOrganizationResponse').properties ?? {}).sort(),
+    ).toEqual(['name', 'slug']);
+  });
+
+  it('documents the credit entry actor as a nullable named object', () => {
+    const entry = schema('CreditEntryResponse');
+    expect(JSON.stringify(entry.properties?.actor)).toContain(
+      '#/components/schemas/CreditActorResponse',
+    );
+    expect(entry.properties?.actor).toMatchObject({ nullable: true });
+    expect(
+      Object.keys(schema('CreditActorResponse').properties ?? {}).sort(),
+    ).toEqual(['id', 'username']);
   });
 });

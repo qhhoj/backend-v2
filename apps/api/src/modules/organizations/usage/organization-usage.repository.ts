@@ -1,0 +1,111 @@
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Organization, OrganizationCreditEntry, uuidStr } from '@libs/database';
+import type { Model, PipelineStage } from 'mongoose';
+import type { UsageSort } from './dto/usage.dto';
+
+export interface OverviewRow {
+  id: string;
+  slug: string;
+  name: string;
+  creditsUsed: number;
+  quotaMonthlyCredits: number | null;
+  quotaStorageBytes: number | null;
+}
+
+export interface QuotaChanges {
+  quotaMonthlyCredits?: number | null;
+  quotaStorageBytes?: number | null;
+}
+
+const RECENT_ENTRIES = 20;
+
+interface OverviewQuery {
+  sort: UsageSort;
+  page: number;
+  pageSize: number;
+}
+
+/** Typed on purpose: a ternary of two object literals is not a valid `$sort` for the compiler. */
+const OVERVIEW_SORTS: Record<UsageSort, Record<string, 1 | -1>> = {
+  credits: { creditsUsed: -1, name: 1 },
+  name: { name: 1 },
+};
+
+/** Every organization with its credits used in `month` (0 without a usage row), one sorted page. */
+function overviewPipeline(
+  month: string,
+  query: OverviewQuery,
+): PipelineStage[] {
+  return [
+    {
+      $lookup: {
+        from: 'organizationUsage',
+        let: { id: '$_id' },
+        pipeline: [
+          { $match: { month, $expr: { $eq: ['$organization', '$$id'] } } },
+        ],
+        as: 'usage',
+      },
+    },
+    {
+      $addFields: {
+        creditsUsed: { $ifNull: [{ $first: '$usage.creditsUsed' }, 0] },
+      },
+    },
+    { $sort: OVERVIEW_SORTS[query.sort] },
+    { $skip: (query.page - 1) * query.pageSize },
+    { $limit: query.pageSize },
+    {
+      $project: {
+        slug: 1,
+        name: 1,
+        creditsUsed: 1,
+        quotaMonthlyCredits: 1,
+        quotaStorageBytes: 1,
+      },
+    },
+  ];
+}
+
+@Injectable()
+export class OrganizationUsageRepository {
+  constructor(
+    @InjectModel(Organization.name)
+    private readonly organizations: Model<Organization>,
+    @InjectModel(OrganizationCreditEntry.name)
+    private readonly ledger: Model<OrganizationCreditEntry>,
+  ) {}
+
+  recentEntries(organizationId: string): Promise<OrganizationCreditEntry[]> {
+    return this.ledger
+      .find({ organization: organizationId })
+      .sort({ _id: -1 })
+      .limit(RECENT_ENTRIES)
+      .lean()
+      .exec();
+  }
+
+  async setQuota(organizationId: string, changes: QuotaChanges): Promise<void> {
+    await this.organizations
+      .updateOne({ _id: organizationId }, { $set: changes })
+      .exec();
+  }
+
+  /** One page of organizations with this month's credits, sorted by name or by credits used (heaviest first). */
+  async overview(
+    month: string,
+    query: OverviewQuery,
+  ): Promise<{ rows: OverviewRow[]; total: number }> {
+    const [rows, total] = await Promise.all([
+      this.organizations.aggregate<OverviewRow & { _id: unknown }>(
+        overviewPipeline(month, query),
+      ),
+      this.organizations.countDocuments({}).exec(),
+    ]);
+    return {
+      rows: rows.map((row) => ({ ...row, id: uuidStr(row._id as string) })),
+      total,
+    };
+  }
+}
