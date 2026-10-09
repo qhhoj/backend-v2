@@ -1,4 +1,4 @@
-// The 20 parity problems and their 55 runs (judge-v2 cutover Task 5; scripts/judge/parity/README.md).
+// The 21 parity problems and their 58 runs (judge-v2 cutover Task 5; scripts/judge/parity/README.md).
 import { EMPTY_TEST_CASE } from '@libs/database';
 import type { ProblemData, ProblemTestCase } from '@libs/database';
 
@@ -507,6 +507,21 @@ export const PARITY_PROBLEMS: ParityProblem[] = [
         name: 'wrong-on-test-2-only',
         source: PY_SUM_UNLESS('(2, 2)'),
       },
+    ],
+  },
+  {
+    // A 0-point sample in test_cases (Polygon imports keep them): DMOJ documents that failing a 0-point case skips the rest.
+    code: 'par_zero_sample',
+    data: { cases: [plain(1, 0), plain(2, 50), plain(3, 50)] },
+    caseFiles: sums([
+      [1, 1],
+      [2, 2],
+      [3, 3],
+    ]),
+    runs: [
+      { language: 'PY3', name: 'ac', source: PY_SUM },
+      { language: 'PY3', name: 'fail-sample', source: PY_SUM_UNLESS('(1, 1)') },
+      { language: 'PY3', name: 'fail-case-2', source: PY_SUM_UNLESS('(2, 2)') },
     ],
   },
   {
