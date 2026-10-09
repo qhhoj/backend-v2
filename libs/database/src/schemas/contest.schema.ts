@@ -44,6 +44,24 @@ export const ContestProblemSchema =
   SchemaFactory.createForClass(ContestProblem);
 
 // `minimize: false` keeps an empty `formatConfig` stored.
+export const CONTEST_RULES_MAX = 8192;
+export const AUTO_PUBLISH_STATUSES = ['published', 'failed'] as const;
+
+/** What the automatic publish after the end did; set once, by the worker. */
+@Schema({ _id: false })
+export class ContestAutoPublishOutcome {
+  @Prop({ type: Date, required: true }) at!: Date;
+  @Prop({ type: String, required: true, enum: AUTO_PUBLISH_STATUSES })
+  status!: (typeof AUTO_PUBLISH_STATUSES)[number];
+  /** Empty on success; `no_permission` or `actor_unavailable` on a failure. */
+  @Prop({ default: '' }) reason!: string;
+  @Prop({ default: 0 }) published!: number;
+  @Prop({ default: 0 }) skipped!: number;
+}
+export const ContestAutoPublishOutcomeSchema = SchemaFactory.createForClass(
+  ContestAutoPublishOutcome,
+);
+
 @Schema({ ...baseSchemaOptions, collection: 'contests', minimize: false })
 export class Contest {
   @IdProp() _id!: string;
@@ -102,6 +120,18 @@ export class Contest {
   @Prop({ default: false }) hideProblemAuthors!: boolean;
   @Prop({ default: false }) showShortDisplay!: boolean;
   @Prop({ default: false }) pushAnnouncements!: boolean;
+  /** Markdown rules a participant accepts at every new participation; empty: none. */
+  @Prop({ default: '', maxlength: CONTEST_RULES_MAX }) rules!: string;
+  /** `rules` rendered and sanitised at save. */
+  @Prop({ default: '' }) rulesHtml!: string;
+  /** Bumped when the rules text changes; each acceptance stores the revision it saw. */
+  @Prop({ default: 0, min: 0 }) rulesRevision!: number;
+  /** Publish the problems and editorials when the contest ends. */
+  @Prop({ default: false }) publishAfterEnd!: boolean;
+  /** The editor who switched `publishAfterEnd` on: their rights are re-checked when the job runs. */
+  @Prop({ type: UUID, default: null }) publishAfterEndBy!: string | null;
+  @Prop({ type: ContestAutoPublishOutcomeSchema, default: null })
+  autoPublishOutcome!: ContestAutoPublishOutcome | null;
   @Prop({ type: String, default: 'numeric', enum: LABEL_STYLES })
   labelStyle!: LabelStyle;
   @Prop({ default: false }) isRated!: boolean;

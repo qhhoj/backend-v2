@@ -34,6 +34,10 @@ export class ContestParticipation {
   @Prop({ default: false }) isDisqualified!: boolean;
   /** Registered and not joined yet (legacy: `real_start` 1970-01-01). */
   @Prop({ default: false }) isRegistered!: boolean;
+  /** When the user accepted the contest rules for this participation; null: none were asked. */
+  @Prop({ type: Date, default: null }) rulesAcceptedAt!: Date | null;
+  /** `Contest.rulesRevision` the user saw. */
+  @Prop({ type: Number, default: null }) rulesAcceptedRevision!: number | null;
 }
 
 export const ContestParticipationSchema =

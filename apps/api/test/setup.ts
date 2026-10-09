@@ -23,6 +23,7 @@ import {
   ContestParticipation,
   ContestPublicRankingLink,
   ContestSubmission,
+  ContestTag,
   Group,
   Judge,
   Language,
@@ -156,6 +157,9 @@ export async function setupApiTest({
     contests: readyApp.get<Model<Contest>>(getModelToken(Contest.name)),
     participations: readyApp.get<Model<ContestParticipation>>(
       getModelToken(ContestParticipation.name),
+    ),
+    contestTags: readyApp.get<Model<ContestTag>>(
+      getModelToken(ContestTag.name),
     ),
     contestSubmissions: readyApp.get<Model<ContestSubmission>>(
       getModelToken(ContestSubmission.name),

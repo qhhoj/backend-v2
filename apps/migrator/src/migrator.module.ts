@@ -9,6 +9,12 @@ import { RecomputeCommand } from './commands/recompute.command';
 import { FinishCommand } from './commands/finish.command';
 import { VerifyCommand } from './commands/verify.command';
 import { FileCheckService } from './file-check.service';
+import { GrantPermissionsCommand } from './commands/grant-permissions.command';
+import {
+  GrantPermissionsService,
+  PERMISSION_GRANTS_TOKEN,
+} from './grant-permissions.service';
+import { PERMISSION_GRANTS } from './permission-grants';
 import { IdMapRepository } from './id-map.repository';
 import { IntegrityCheckService } from './integrity-check.service';
 import { LegacySourceService } from './legacy-source.service';
@@ -36,6 +42,9 @@ import { RecomputeService } from './recompute.service';
     CheckFilesCommand,
     IntegrityCheckService,
     CheckIntegrityCommand,
+    GrantPermissionsService,
+    GrantPermissionsCommand,
+    { provide: PERMISSION_GRANTS_TOKEN, useValue: PERMISSION_GRANTS },
   ],
 })
 export class MigratorModule {}

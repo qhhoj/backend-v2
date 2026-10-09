@@ -6,6 +6,7 @@ import { CommentLock, CommentLockSchema } from './comment-lock.schema';
 import { CommentVote, CommentVoteSchema } from './comment-vote.schema';
 import { Comment, CommentSchema } from './comment.schema';
 import { Contest, ContestSchema } from './contest.schema';
+import { ContestTag, ContestTagSchema } from './contest-tag.schema';
 import {
   ContestParticipation,
   ContestParticipationSchema,
@@ -75,6 +76,7 @@ export * from './contest-official-ranking.schema';
 export * from './contest-participation.schema';
 export * from './contest-public-ranking-link.schema';
 export * from './contest-submission.schema';
+export * from './contest-tag.schema';
 export * from './contest.schema';
 export * from './flatpage.schema';
 export * from './general-issue.schema';
@@ -128,6 +130,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: Contest.name, schema: ContestSchema },
   { name: ContestParticipation.name, schema: ContestParticipationSchema },
   { name: ContestSubmission.name, schema: ContestSubmissionSchema },
+  { name: ContestTag.name, schema: ContestTagSchema },
   { name: Group.name, schema: GroupSchema },
   { name: Judge.name, schema: JudgeSchema },
   { name: Language.name, schema: LanguageSchema },

@@ -29,6 +29,7 @@ export const PERMISSIONS = [
   'judge.change_contest_visibility',
   'judge.contest_problem_label',
   'judge.lock_contest',
+  'judge.change_contest_tag',
   'judge.abort_any_submission',
   'judge.rejudge_submission',
   'judge.reject_submission',

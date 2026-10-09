@@ -8,6 +8,7 @@ services:
       interval: 5s
   redis:
     image: redis:7
+    command: ["redis-server", "--databases", "64"]
     ports: ["6379:6379"]
   mailpit:
     image: axllent/mailpit
