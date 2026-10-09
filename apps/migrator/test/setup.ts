@@ -1,10 +1,26 @@
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { startMongo } from '@libs/database/testing';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createConnection } from 'mysql2/promise';
+import { UUID } from 'mongodb';
 import { Connection } from 'mongoose';
+import { toUuid } from '@libs/database';
+import { IdMapRepository } from '../src/id-map.repository';
 import { MigratorModule } from '../src/migrator.module';
+
+const FIXTURES = 'test/fixtures';
+/** The schema dump plus every lane's synthetic rows (`legacy-<area>.sql`, ids in the lane's range). */
+const fixtureSql = () =>
+  [
+    'legacy.sql',
+    ...readdirSync(FIXTURES)
+      .filter((name) => /^legacy-.+\.sql$/.test(name))
+      .sort(),
+  ]
+    .map((name) => readFileSync(join(FIXTURES, name), 'utf8'))
+    .join('\n');
 
 export const TEST_SECRET = 'qhhoj-test-secret';
 export const TEST_KEY =
@@ -15,7 +31,7 @@ export async function setupMigratorTest() {
   const name = `legacy_${process.pid}_${Date.now()}`;
   const admin = await createConnection({ uri: base, multipleStatements: true });
   await admin.query(
-    `CREATE DATABASE ${name}; USE ${name}; ${readFileSync('test/fixtures/legacy.sql', 'utf8')}`,
+    `CREATE DATABASE ${name}; USE ${name}; ${fixtureSql()}\n SET SESSION sql_mode = '';`,
   );
   const replSet = await startMongo();
   Object.assign(process.env, {
@@ -23,6 +39,7 @@ export async function setupMigratorTest() {
     MONGO_URL: replSet.getUri('qhhoj'),
     LEGACY_SECRET_KEY: TEST_SECRET,
     ENCRYPTION_KEY: TEST_KEY,
+    MEDIA_URL: '/media',
   });
   const testingModule = await Test.createTestingModule({
     imports: [MigratorModule],
@@ -30,8 +47,19 @@ export async function setupMigratorTest() {
   testingModule.useLogger(false);
   await testingModule.init();
   const db = testingModule.get<Connection>(getConnectionToken()).db!;
+  const uuidOf = async (table: string, legacyId: number) => {
+    const ids = testingModule.get(IdMapRepository);
+    await ids.load([table]);
+    return toUuid(ids.get(table, legacyId));
+  };
+  const docOf = async (collection: string, table: string, legacyId: number) =>
+    db
+      .collection<{ _id: UUID }>(collection)
+      .findOne({ _id: await uuidOf(table, legacyId) });
   return {
     testingModule,
+    uuidOf,
+    docOf,
     db,
     mysql: admin,
     name,

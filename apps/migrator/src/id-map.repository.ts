@@ -69,6 +69,11 @@ export class IdMapRepository {
       );
   }
 
+  /** Like `get`, but undefined for a legacy id with no entry (a dangling reference). */
+  find(table: string, legacyId: number): string | undefined {
+    return this.cache.get(table)?.get(legacyId);
+  }
+
   get(table: string, legacyId: number): string {
     const id = this.cache.get(table)?.get(legacyId);
     if (!id) throw new Error(`no uuid for ${table}:${legacyId}`);

@@ -101,7 +101,9 @@ describe('migrator framework', () => {
   });
 
   it('selects jobs by name', async () => {
-    await expect(migration.backfill(['groups'])).resolves.toBeUndefined();
+    await expect(migration.backfill(['groups'])).resolves.toEqual({
+      groups: [],
+    });
     await expect(migration.backfill(['nope'])).rejects.toThrow(
       'unknown job: nope',
     );

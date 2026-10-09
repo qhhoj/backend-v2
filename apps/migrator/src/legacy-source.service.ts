@@ -17,6 +17,8 @@ export class LegacySourceService implements OnModuleDestroy {
 
   async *stream<T>(sql: string): AsyncGenerator<T> {
     const connection = await this.pool.getConnection();
+    // A batch pauses the stream while Mongo writes; the default 60 s write timeout would cut a long pause.
+    await connection.query('SET SESSION net_write_timeout = 3600');
     try {
       const callbackConnection =
         connection.connection as unknown as CallbackConnection;
