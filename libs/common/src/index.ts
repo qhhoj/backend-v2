@@ -1,4 +1,5 @@
 export * from './errors/app.error';
+export * from './errors/conflict-issue';
 export * from './errors/invalid-field';
 export * from './errors/validation-failed.error';
 export * from './errors/document-too-large';

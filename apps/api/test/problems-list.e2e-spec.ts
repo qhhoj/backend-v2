@@ -207,6 +207,20 @@ describe('GET /api/internal/problems', () => {
       .get(`${LIST}?q=${'x'.repeat(101)}`)
       .expect(400);
   });
+  it('never lets q surface a problem the viewer cannot see', async () => {
+    const find = async (query: string, session?: TestSession) =>
+      codesOf(
+        session
+          ? await authed(api.http().get(`${LIST}?${query}`), session)
+          : await api.http().get(`${LIST}?${query}`),
+      );
+    expect(await find('q=secret')).toEqual([]);
+    expect(await find('q=secret', plain)).toEqual([]);
+    expect(await find('q=secret&visibility=all', plain)).toEqual([]);
+    expect(await find('q=secret&visibility=all', author)).toEqual(['secret']);
+    expect(await find('q=orgonly&visibility=all')).toEqual([]);
+    expect(await find('q=orgonly&visibility=all', plain)).toEqual([]);
+  });
   it('escapes regex metacharacters in short queries and accepts "C++"', async () => {
     expect(
       codesOf(

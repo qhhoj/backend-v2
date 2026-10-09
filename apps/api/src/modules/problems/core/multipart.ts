@@ -7,7 +7,7 @@ import type { FastifyRequest } from 'fastify';
 import { createWriteStream } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '@libs/common';
+import { AppError, ValidationFailedError } from '@libs/common';
 
 export interface UploadedFile {
   filename: string;
@@ -24,14 +24,7 @@ const FIELD_MAX_BYTES = 256;
 
 /** A 400 on field `file` with a stable snake_case `code` in `issues` (documented in docs/decisions.md); the English message stays. */
 export const rejectFile = (message: string, code: string) =>
-  new AppError(
-    'validation_failed',
-    400,
-    message,
-    { file: [message] },
-    undefined,
-    { issues: [{ field: 'file', code, message }] },
-  );
+  new ValidationFailedError(message, [{ field: 'file', code, message }]);
 export const tooLarge = (maxBytes: number) =>
   new AppError('file_too_large', 413, `The file exceeds ${maxBytes} bytes`);
 

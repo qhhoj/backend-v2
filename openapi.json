@@ -2636,6 +2636,27 @@
         ],
         "type": "object"
       },
+      "FlatpageDeletedResponse": {
+        "properties": {
+          "deletedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "description": "The url the page had when it was deleted.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "deletedAt"
+        ],
+        "type": "object"
+      },
       "FlatpagePreviewDto": {
         "properties": {
           "content": {
@@ -3314,6 +3335,10 @@
           "bots": {
             "type": "number"
           },
+          "hasMore": {
+            "description": "True when a later `page` has more signed-in users (measured on the live set, so a user without an account still counts).",
+            "type": "boolean"
+          },
           "users": {
             "description": "Signed-in users, most recently seen first.",
             "items": {
@@ -3330,7 +3355,8 @@
           "authenticatedUsers",
           "anonymousVisitors",
           "bots",
-          "users"
+          "users",
+          "hasMore"
         ],
         "type": "object"
       },
@@ -4619,6 +4645,10 @@
             },
             "type": "array"
           },
+          "baseName": {
+            "description": "The base (default-language) name, whatever `lang` the detail was read in; the detail's own `name` follows `lang`.",
+            "type": "string"
+          },
           "curators": {
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
@@ -4679,6 +4709,7 @@
           }
         },
         "required": [
+          "baseName",
           "description",
           "translations",
           "solution",
@@ -6398,6 +6429,13 @@
           "lastAccess"
         ],
         "type": "object"
+      },
+      "StaffUserSort": {
+        "enum": [
+          "lastAccess",
+          "-lastAccess"
+        ],
+        "type": "string"
       },
       "StartedSimilarityRunResponse": {
         "properties": {
@@ -8620,12 +8658,17 @@
             "nullable": true,
             "type": "string"
           },
+          "isActive": {
+            "description": "False for a never-activated account as well as a banned one; only an active account can be impersonated.",
+            "type": "boolean"
+          },
           "isSuperuser": {
             "type": "boolean"
           }
         },
         "required": [
           "isSuperuser",
+          "isActive",
           "banReason"
         ],
         "type": "object"
@@ -9825,6 +9868,75 @@
         ]
       }
     },
+    "/api/internal/admin/site/pages/deleted": {
+      "get": {
+        "operationId": "FlatpagesAdminController_deleted",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/FlatpageDeletedResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Declared before `:id`, which would take `deleted` for an id.",
+        "tags": [
+          "FlatpagesAdmin"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/admin/site/pages/render-preview": {
       "post": {
         "operationId": "FlatpagesAdminController_preview",
@@ -10630,6 +10742,15 @@
       "get": {
         "operationId": "UserAdminController_list",
         "parameters": [
+          {
+            "description": "`lastAccess` oldest first, `-lastAccess` most recent first; users who never visited sort as the oldest. Unset: a search by username, otherwise newest account first.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StaffUserSort"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -12856,6 +12977,17 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Key or name substring, case-insensitive; at most 100 characters. ANDed with `search`, which stays.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^[^\\0]*$",
+              "type": "string"
             }
           },
           {
@@ -16972,6 +17104,17 @@
           {
             "in": "query",
             "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^[^\\0]*$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Case-insensitive substring of the code or any title; at most 100 characters.",
+            "in": "query",
+            "name": "q",
             "required": false,
             "schema": {
               "maxLength": 100,

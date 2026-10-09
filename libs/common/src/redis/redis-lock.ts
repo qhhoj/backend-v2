@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type Redis from 'ioredis';
-import { AppError } from '../errors/app.error';
+import { conflictIssue } from '../errors/conflict-issue';
 
 export const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
@@ -16,9 +16,7 @@ export async function withRedisLock<Result>(
   const { key, ttlSeconds, busyMessage } = lock;
   const token = randomBytes(16).toString('hex');
   if ((await redis.set(key, token, 'EX', ttlSeconds, 'NX')) !== 'OK')
-    throw new AppError('conflict', 409, busyMessage, undefined, undefined, {
-      issues: [{ field: 'lock', code: 'busy', message: busyMessage }],
-    });
+    throw conflictIssue('lock', 'busy', busyMessage);
   try {
     return await work();
   } finally {

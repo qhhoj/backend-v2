@@ -137,6 +137,18 @@ describe('staff user list', () => {
         count: onIndex('username'),
       },
       {
+        query: '?sort=-lastAccess',
+        find: /IXSCAN \{ lastAccess: 1, _id: 1 \}/,
+        mayUseSort: false,
+        count: null,
+      },
+      {
+        query: '?sort=lastAccess',
+        find: /IXSCAN \{ lastAccess: 1, _id: 1 \}/,
+        mayUseSort: false,
+        count: null,
+      },
+      {
         query: '?search=ALI&banned=true',
         // The planner may pick the small banned index; its sort then covers only banned users.
         find: /IXSCAN \{ (username|banReason): 1 \}/,

@@ -3,6 +3,7 @@ import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
   AppError,
+  conflictIssue,
   isDuplicateKey,
   Paginated,
   RateLimitService,
@@ -33,11 +34,9 @@ import {
 import { OrganizationRequestResponse } from './dto/organization-request.response';
 import { usernamesById } from './request-usernames';
 
-/** A 409 whose `issues: [{ field, code, message }]` carry the stable code (documented in docs/decisions.md). */
+/** A 409 with a stable issue code (documented in docs/decisions.md). */
 const conflict = (message: string, field: string, code: string) =>
-  new AppError('conflict', 409, message, undefined, undefined, {
-    issues: [{ field, code, message }],
-  });
+  conflictIssue(field, code, message);
 const duplicateRequest = () =>
   conflict(
     'You already have a pending request to join this organization',

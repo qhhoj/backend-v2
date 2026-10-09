@@ -308,6 +308,10 @@ describe('contest CRUD', () => {
       expect(await keysOf('&rated=true')).toEqual([live.key]);
       expect(await keysOf('&search=fUtUrE')).toEqual([future.key]);
       expect(await keysOf('&q=fUtUrE')).toEqual([future.key]);
+      // q and search both apply; neither reaches the hidden contest.
+      expect(await keysOf('&q=Cup&search=fut')).toEqual([future.key]);
+      expect(await keysOf('&q=Hidden')).toEqual([]);
+      expect(await keysOf('&search=Hidden&q=Cup')).toEqual([]);
       expect(await keysOf(`&q=${encodeURIComponent('.*')}`)).toEqual([]);
       const page = await api
         .http()

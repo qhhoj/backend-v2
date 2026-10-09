@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, HydratedDocument, Model, SortOrder } from 'mongoose';
-import { AppError, isDuplicateKey } from '@libs/common';
+import { conflictIssue, isDuplicateKey } from '@libs/common';
 import { FREEZE_FORMATS, LIVE } from '@libs/contests';
 import {
   Contest,
@@ -123,21 +123,10 @@ export class ContestsRepository {
       return await this.contests.create(fields);
     } catch (error) {
       if (isDuplicateKey(error, 'key'))
-        throw new AppError(
-          'conflict',
-          409,
+        throw conflictIssue(
+          'key',
+          'key_taken',
           'A contest with this key exists',
-          undefined,
-          undefined,
-          {
-            issues: [
-              {
-                field: 'key',
-                code: 'key_taken',
-                message: 'A contest with this key exists',
-              },
-            ],
-          },
         );
       throw error;
     }

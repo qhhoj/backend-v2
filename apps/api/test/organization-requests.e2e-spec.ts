@@ -230,13 +230,11 @@ describe('organization join requests', () => {
     const requests = [];
     for (let index = 0; index < 10; index++)
       requests.push(await request(organization.slug, (await person()).session));
-    const responses = (
-      await Promise.all(
-        requests.map((row) =>
-          decide(organization.slug, row.id, ownerSession, 'A'),
-        ),
-      )
-    ).map((response) => response);
+    const responses = await Promise.all(
+      requests.map((row) =>
+        decide(organization.slug, row.id, ownerSession, 'A'),
+      ),
+    );
     const statuses = responses.map((response) => response.status);
     expect(statuses.filter((status) => status === 200)).toHaveLength(1);
     expect(statuses.filter((status) => status === 409)).toHaveLength(9);

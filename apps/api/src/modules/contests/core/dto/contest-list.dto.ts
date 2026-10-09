@@ -39,7 +39,7 @@ export class ContestListQueryDto {
   @IsOptional() @Matches(CONTEST_TAG_PATTERN) tag?: string;
   @IsOptional() @IsUUID('7') organization?: string;
   @IsOptional() @Transform(toBoolean) @IsBoolean() rated?: boolean;
-  /** Key or name substring, case-insensitive; at most 100 characters. Same match as `search`, which stays. */
+  /** Key or name substring, case-insensitive; at most 100 characters. ANDed with `search`, which stays. */
   @IsOptional()
   @IsString()
   @MaxLength(100)
