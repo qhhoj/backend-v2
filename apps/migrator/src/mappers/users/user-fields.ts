@@ -4,9 +4,9 @@ import { UserRow } from './user-row';
 /** D4: shown at login and in the staff banned list; keeps the account out of the stale-pending reclaim. */
 export const LEGACY_DEACTIVATED_REASON = 'Account deactivated on the old site.';
 
-/** D4: inactive, no ban reason and not a pending signup (activation not done). Pending signups stay reclaimable. */
+/** D4: inactive, no ban reason and not a pending signup (activation not done and never logged in: a login means it was used, then deactivated). Pending signups stay reclaimable. */
 export function isLegacyDeactivated(row: UserRow): boolean {
-  const pending = row.registration_activated === 0;
+  const pending = row.registration_activated === 0 && row.last_login == null;
   return !row.ban_reason && !Number(row.is_active) && !pending;
 }
 

@@ -4,6 +4,7 @@ import { uuidStr } from '@libs/database';
 import { Binary, Document } from 'mongodb';
 import { readFileSync } from 'node:fs';
 import { LEGACY_DEACTIVATED_REASON } from '../src/mappers/users/user-fields';
+import { AuditService } from '../src/audit.service';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest, TEST_KEY } from './setup';
 
@@ -114,6 +115,10 @@ describe('users job', () => {
       'staff flags kept on deactivated auth_user:1005',
     );
     expect((await user(1002))!.isSuperuser).toBe(false);
+    expect(await user(1006)).toMatchObject({
+      banReason: LEGACY_DEACTIVATED_REASON,
+      isActive: false,
+    });
     expect(await user(1003)).toMatchObject({
       banReason: null,
       isUnlisted: false,
@@ -162,5 +167,45 @@ describe('users job', () => {
     } finally {
       process.env.LEGACY_SECRET_KEY = key;
     }
+  });
+
+  it('lists deactivated superusers in the audit warnings', async () => {
+    const { warnings } = await harness.testingModule.get(AuditService).run();
+    expect(warnings).toContainEqual(
+      expect.stringMatching(/^auth_user deactivated superusers .*: 1 /),
+    );
+  });
+
+  describe('canary without TOTP keys', () => {
+    const wrongKey = async <T>(run: () => Promise<T>) => {
+      const key = process.env.LEGACY_SECRET_KEY;
+      process.env.LEGACY_SECRET_KEY = 'wrong';
+      try {
+        return await run();
+      } finally {
+        process.env.LEGACY_SECRET_KEY = key;
+      }
+    };
+
+    it('falls back to a scratch-code canary', async () => {
+      await harness.mysql.query(
+        `UPDATE ${harness.name}.judge_profile SET totp_key = NULL`,
+      );
+      await wrongKey(() =>
+        expect(migration.backfill(['users'])).rejects.toThrow(
+          'LEGACY_SECRET_KEY does not decrypt legacy secrets',
+        ),
+      );
+    });
+
+    it('skips the canary with a report line when no secret exists', async () => {
+      await harness.mysql.query(
+        `UPDATE ${harness.name}.judge_profile SET scratch_codes = NULL`,
+      );
+      const skipped = await wrongKey(() => migration.backfill(['users']));
+      expect(skipped.users).toContain(
+        'no legacy secret to test LEGACY_SECRET_KEY against (canary skipped)',
+      );
+    });
   });
 });

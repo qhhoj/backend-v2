@@ -5,14 +5,17 @@ INSERT INTO auth_user (id, password, last_login, is_superuser, username, first_n
  (1002,'pbkdf2_sha256$870000$s$h',NULL,0,'deact','','','deact@example.com',1,0,'2019-01-01 00:00:00'),
  (1003,'pbkdf2_sha256$870000$s$h',NULL,0,'pend','','','pend@example.com',0,0,'2019-01-01 00:00:00'),
  (1004,'pbkdf2_sha256$870000$s$h',NULL,0,'banned','','','banned@example.com',0,0,'2019-01-01 00:00:00'),
- (1005,'pbkdf2_sha256$870000$s$h',NULL,0,'norow','','','norow@example.com',0,0,'2019-01-01 00:00:00');
+ (1005,'pbkdf2_sha256$870000$s$h',NULL,0,'norow','','','norow@example.com',0,0,'2019-01-01 00:00:00'),
+ (1006,'pbkdf2_sha256$870000$s$h','2024-05-06 07:08:09',0,'used','','','used@example.com',0,0,'2019-01-01 00:00:00'),
+ (1007,'pbkdf2_sha256$870000$s$h',NULL,1,'deadroot','','','deadroot@example.com',1,0,'2019-01-01 00:00:00');
 INSERT INTO judge_profile (id, user_id, about, timezone, points, performance_points, problem_count, display_rank, rating, current_contest_id, language_id, ban_reason, site_theme, ace_theme, math_engine, allow_tagging, display_badge_id) VALUES
  (1001,1001,'**hi**','Asia/Ho_Chi_Minh',12.5,30.25,3,'user',1500,1999,4,NULL,'dark','auto','auto',1,NULL),
  (1002,1002,NULL,'UTC',0,0,0,'user',NULL,NULL,NULL,NULL,'auto','auto','auto',1,NULL),
  (1003,1003,NULL,'UTC',0,0,0,'user',NULL,NULL,NULL,'','auto','auto','auto',1,NULL),
  (1004,1004,NULL,'UTC',0,0,0,'user',NULL,NULL,NULL,'cheating','auto','auto','auto',1,1),
- (1005,1005,NULL,'UTC',0,0,0,'user',NULL,NULL,NULL,NULL,'auto','auto','auto',1,NULL);
-INSERT INTO registration_registrationprofile (id, activation_key, user_id, activated) VALUES (1002,'k1',1002,1),(1003,'k2',1003,0);
+ (1005,1005,NULL,'UTC',0,0,0,'user',NULL,NULL,NULL,NULL,'auto','auto','auto',1,NULL),
+ (1006,1006,NULL,'UTC',0,0,0,'user',NULL,NULL,NULL,NULL,'auto','auto','auto',1,NULL);
+INSERT INTO registration_registrationprofile (id, activation_key, user_id, activated) VALUES (1002,'k1',1002,1),(1003,'k2',1003,0),(1006,'k3',1006,0);
 INSERT INTO auth_user_groups (id, user_id, group_id) VALUES (1001,1001,1),(1002,1001,1998);
 INSERT INTO auth_user_user_permissions (id, user_id, permission_id) VALUES (1001,1001,9);
 INSERT INTO judge_profile_organizations (id, sort_value, profile_id, organization_id) VALUES (1001,2,1001,1),(1002,1,1001,2);

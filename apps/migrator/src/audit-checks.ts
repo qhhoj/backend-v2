@@ -25,6 +25,9 @@ const utf16Over = (column: string, max: number) =>
   `LENGTH(CONVERT(\`${column}\` USING utf16)) / 2 > ${max}`;
 const BOUND = true;
 const NOTE = false;
+/** D4: inactive, no ban reason, and not a pending signup (never activated and never logged in). */
+const DEACTIVATED =
+  "auth_user u LEFT JOIN judge_profile p ON p.user_id = u.id LEFT JOIN registration_registrationprofile r ON r.user_id = u.id WHERE u.is_active = 0 AND COALESCE(p.ban_reason, '') = '' AND NOT (COALESCE(r.activated, 1) = 0 AND u.last_login IS NULL)";
 
 /**
  * [what, SQL returning `total`, bound]: counts only.
@@ -283,9 +286,12 @@ export const RANGE_CHECKS: readonly [string, string, boolean][] = [
   ],
   [
     'auth_user deactivated, not pending (migrated as banned, D4)',
-    count(
-      "auth_user u LEFT JOIN judge_profile p ON p.user_id = u.id LEFT JOIN registration_registrationprofile r ON r.user_id = u.id WHERE u.is_active = 0 AND COALESCE(p.ban_reason, '') = '' AND COALESCE(r.activated, 1) = 1",
-    ),
+    count(`${DEACTIVATED} AND u.is_superuser = 0`),
+    NOTE,
+  ],
+  [
+    'auth_user deactivated superusers (migrated banned; staff cannot unban them, clear by hand per the runbook)',
+    count(`${DEACTIVATED} AND u.is_superuser = 1`),
     NOTE,
   ],
   [

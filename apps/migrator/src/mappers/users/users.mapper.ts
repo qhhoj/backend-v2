@@ -38,14 +38,18 @@ export class UsersMapper implements Mapper<UserRow> {
   sql = USERS_SQL;
   private readonly relations = new UserRelations();
   private secrets!: LegacySecrets;
+  private canarySkipped = false;
+  private canaryReported = false;
 
   async prepare(source: LegacySourceService) {
     this.secrets = LegacySecrets.fromEnv();
-    await this.secrets.assertKey(source);
+    this.canarySkipped = !(await this.secrets.assertKey(source));
+    this.canaryReported = false;
     await this.relations.load(source);
   }
 
   map(row: UserRow, ctx: MapCtx): MappedDocument {
+    this.reportSkippedCanary(ctx);
     const relations = this.relations.fieldsOf(row, ctx);
     this.relations.reportBadges(row, ctx);
     if (
@@ -73,6 +77,15 @@ export class UsersMapper implements Mapper<UserRow> {
       totpKey: this.secrets.open(doc.totpKey),
       scratchCodes: this.secrets.open(doc.scratchCodes),
     };
+  }
+
+  /** `prepare` has no report handle, so the first row carries the line. */
+  private reportSkippedCanary(ctx: MapCtx): void {
+    if (!this.canarySkipped || this.canaryReported) return;
+    this.canaryReported = true;
+    ctx.report(
+      'no legacy secret to test LEGACY_SECRET_KEY against (canary skipped)',
+    );
   }
 
   private secondFactor(row: UserRow, ctx: MapCtx) {

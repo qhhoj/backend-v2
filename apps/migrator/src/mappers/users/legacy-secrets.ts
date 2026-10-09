@@ -19,17 +19,23 @@ export class LegacySecrets {
     );
   }
 
-  /** The canary: a wrong key would otherwise import every TOTP account with 2FA off and derive every WebAuthn handle wrong, and `verify` (same key) would still say 0. */
-  async assertKey(source: LegacySourceService): Promise<void> {
-    const [canary] = await source.query<{ totp_key: Buffer | string }>(
-      'SELECT totp_key FROM judge_profile WHERE totp_key IS NOT NULL AND LENGTH(totp_key) > 0 ORDER BY id LIMIT 1',
+  /**
+   * The canary: a wrong key would otherwise import every TOTP account with 2FA off and derive every WebAuthn handle wrong, and `verify` (same key) would still say 0.
+   * Uses the first `totp_key`, else the first `scratch_codes`. Returns false when there is no token to test.
+   */
+  async assertKey(source: LegacySourceService): Promise<boolean> {
+    const [canary] = await source.query<{ token: Buffer | string }>(
+      `SELECT COALESCE(NULLIF(totp_key, ''), NULLIF(scratch_codes, '')) AS token FROM judge_profile
+       WHERE LENGTH(totp_key) > 0 OR LENGTH(scratch_codes) > 0
+       ORDER BY LENGTH(totp_key) > 0 DESC, id LIMIT 1`,
     );
-    if (!canary) return;
+    if (!canary) return false;
     try {
-      legacyFernetDecrypt(canary.totp_key.toString(), this.legacyKey);
+      legacyFernetDecrypt(canary.token.toString(), this.legacyKey);
     } catch {
       throw new Error('LEGACY_SECRET_KEY does not decrypt legacy secrets');
     }
+    return true;
   }
 
   /** A legacy Fernet token (longblob bytes) sealed for v2; null when empty or undecryptable (reported). */
