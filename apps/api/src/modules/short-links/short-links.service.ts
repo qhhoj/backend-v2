@@ -65,6 +65,8 @@ export class ShortLinksService {
       );
     if (dto.code !== undefined && isReservedShortCode(dto.code))
       throw invalidField('code', 'This code is reserved.');
+    if (dto.expiresAt !== undefined && new Date(dto.expiresAt) <= new Date())
+      throw invalidField('expiresAt', 'The expiry must be in the future.');
     const release = await this.reserveCreate(principal);
     try {
       const { link, isNew } = isChosen

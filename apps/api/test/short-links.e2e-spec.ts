@@ -171,6 +171,23 @@ describe('short links', () => {
       await create(staff, { path: fresh(), code: 'ab' }).expect(400);
     });
 
+    it('refuses an expiry that is not in the future, on the expiresAt field', async () => {
+      for (const expiresAt of [
+        new Date(Date.now() - 60_000).toISOString(),
+        new Date(Date.now()).toISOString(),
+      ]) {
+        const refused = await create(staff, {
+          path: fresh(),
+          expiresAt,
+        }).expect(400);
+        expect(
+          (refused.body as { error: { issues: unknown[] } }).error.issues,
+        ).toContainEqual(
+          expect.objectContaining({ field: 'expiresAt', code: 'invalid' }),
+        );
+      }
+    });
+
     it('gives the allowance back when a chosen code is taken', async () => {
       await create(staff, { path: fresh(), code: 'refund-me' }).expect(201);
       const spender = await loginAs(
