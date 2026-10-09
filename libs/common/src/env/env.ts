@@ -26,10 +26,13 @@ export interface Env {
   pdfCacheRoot: string;
   /** Worker: PDF renders running at once. */
   pdfConcurrency: number;
-  /** Bridge: judges connect to this TCP port (DMOJ judge protocol); 0 picks a free port (tests). */
+  /** Bridge: judges connect to this port (gRPC `qhhoj.judge.v1`); 0 picks a free port (tests). */
   judgeBridgePort: number;
-  /** Bridge: interface the judge port listens on. */
+  /** Bridge: interface the judge port listens on; loopback by default. Any other address needs the TLS pair below. */
   judgeBridgeHost: string;
+  /** Bridge: PEM certificate chain and private key of the judge port; both or neither. Without them the bridge serves only on loopback. */
+  judgeBridgeTlsCert: string | null;
+  judgeBridgeTlsKey: string | null;
   /** Contest data zips, shared by the api (serves) and the worker (writes); null disables data download. Not under MEDIA_ROOT (served publicly). */
   contestDataRoot: string | null;
   /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
@@ -141,7 +144,9 @@ function readEnv(reader: EnvReader): Env {
     pdfCacheRoot: reader.required('PDF_CACHE_ROOT'),
     pdfConcurrency: reader.positiveInteger('PDF_CONCURRENCY', 2),
     judgeBridgePort: reader.portNumber('JUDGE_BRIDGE_PORT', 9999, 0),
-    judgeBridgeHost: reader.nonBlankOr('JUDGE_BRIDGE_HOST', '0.0.0.0'),
+    judgeBridgeHost: reader.nonBlankOr('JUDGE_BRIDGE_HOST', '127.0.0.1'),
+    judgeBridgeTlsCert: reader.nonBlankOr('JUDGE_BRIDGE_TLS_CERT', null),
+    judgeBridgeTlsKey: reader.nonBlankOr('JUDGE_BRIDGE_TLS_KEY', null),
     contestDataRoot: reader.nonBlankOr('CONTEST_DATA_ROOT', null),
     userDataRoot: reader.nonBlankOr('USER_DATA_ROOT', null),
   };
@@ -156,6 +161,8 @@ function checkValues(env: Env): string[] {
     problems.push('TOKEN_SECRET must be at least 32 chars');
   if (!LOG_LEVELS.includes(env.logLevel))
     problems.push(`LOG_LEVEL must be one of ${LOG_LEVELS.join('|')}`);
+  if ((env.judgeBridgeTlsCert === null) !== (env.judgeBridgeTlsKey === null))
+    problems.push('JUDGE_BRIDGE_TLS_CERT and JUDGE_BRIDGE_TLS_KEY go together');
   return problems;
 }
 

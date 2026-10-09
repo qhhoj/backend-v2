@@ -30,7 +30,9 @@ describe('loadEnv', () => {
       pdfCacheRoot: valid.PDF_CACHE_ROOT,
       pdfConcurrency: 2,
       judgeBridgePort: 9999,
-      judgeBridgeHost: '0.0.0.0',
+      judgeBridgeHost: '127.0.0.1',
+      judgeBridgeTlsCert: null,
+      judgeBridgeTlsKey: null,
       mediaUrl: '/media',
       contestDataRoot: null,
       userDataRoot: null,
@@ -190,6 +192,20 @@ describe('loadEnv', () => {
     for (const port of ['65536', '-1', '1.5', 'nine'])
       expect(() => loadEnv({ ...valid, JUDGE_BRIDGE_PORT: port })).toThrow(
         'JUDGE_BRIDGE_PORT must be 0-65535',
+      );
+  });
+  it('reads the judge port TLS pair and refuses half of it', () => {
+    const pair = {
+      JUDGE_BRIDGE_TLS_CERT: '/etc/qhhoj/bridge.crt',
+      JUDGE_BRIDGE_TLS_KEY: '/etc/qhhoj/bridge.key',
+    };
+    expect(loadEnv({ ...valid, ...pair })).toMatchObject({
+      judgeBridgeTlsCert: '/etc/qhhoj/bridge.crt',
+      judgeBridgeTlsKey: '/etc/qhhoj/bridge.key',
+    });
+    for (const half of ['JUDGE_BRIDGE_TLS_CERT', 'JUDGE_BRIDGE_TLS_KEY'])
+      expect(() => loadEnv({ ...valid, [half]: '/etc/qhhoj/x.pem' })).toThrow(
+        'JUDGE_BRIDGE_TLS_CERT and JUDGE_BRIDGE_TLS_KEY go together',
       );
   });
   it('strips the trailing slash of MEDIA_URL', () =>
