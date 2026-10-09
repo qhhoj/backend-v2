@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomToken, sha256 } from '@libs/auth';
-import { AppError, isDuplicateKey } from '@libs/common';
+import { AppError, conflictIssue, isDuplicateKey } from '@libs/common';
 import { JUDGE_NAME_PATTERN } from '@libs/database';
 import { BridgeCommandsService } from '@libs/judging';
 import type { CreateJudgeDto, UpdateJudgeDto } from './dto/judge.dto';
@@ -12,7 +12,12 @@ import type {
 import { JudgesRepository } from './judges.repository';
 import type { JudgeChanges } from './judges.repository';
 
-const notFound = () => new AppError('not_found', 404, 'No such judge');
+const notFound = () =>
+  new AppError('not_found', 404, 'No such judge', undefined, undefined, {
+    issues: [
+      { field: 'name', code: 'judge_not_found', message: 'No such judge' },
+    ],
+  });
 
 /** Legacy `Judge` admin: keys are random, shown once and stored hashed; state changes reach a connected judge through bridge commands. */
 @Injectable()
@@ -36,9 +41,7 @@ export class JudgesService {
       });
     } catch (error) {
       if (isDuplicateKey(error, 'name'))
-        throw new AppError('conflict', 409, 'A judge with this name exists', {
-          name: ['This name is taken.'],
-        });
+        throw conflictIssue('name', 'name_taken', 'This name is taken.');
       throw error;
     }
     return { judge: await this.one(dto.name), authKey };

@@ -36,6 +36,9 @@ describe('POST /api/internal/problems/:code/submit', () => {
     Object.keys(
       (response as { error: { fields?: object } }).error.fields ?? {},
     );
+  const issueCodeOf = ({ body }: { body: unknown }) =>
+    (body as { error: { issues: Array<{ code: string }> } }).error.issues[0]
+      .code;
   const idOf = (response: { body: unknown }) =>
     dataOf<{ id: string }>(response).id;
 
@@ -76,23 +79,20 @@ describe('POST /api/internal/problems/:code/submit', () => {
         name: 'judge-on',
         authKeyHash: 'h',
         online: true,
-        problems: ['sum'],
         runtimes: [{ language: 'CPP17', name: 'g++', version: '11.4' }],
       },
       {
         name: 'judge-py-only',
         authKeyHash: 'h',
         online: true,
-        problems: ['sum'],
         runtimes: [{ language: 'PY3', name: 'python', version: '3.12' }],
       },
       {
         name: 'judge-other',
         authKeyHash: 'h',
         online: true,
-        problems: ['mul'],
       },
-      { name: 'judge-off', authKeyHash: 'h', online: false, problems: ['sum'] },
+      { name: 'judge-off', authKeyHash: 'h', online: false },
     ]);
   });
   beforeEach(async () => {
@@ -194,17 +194,22 @@ describe('POST /api/internal/problems/:code/submit', () => {
       await submit('spammer').expect(201);
   });
 
-  it('lets only editors pick a judge, and only one that is online with the problem', async () => {
-    await submit('alice', 'sum', { judgeId: 'judge-on' }).expect(403);
+  it('lets only editors pick a judge, and only one that is online and runs the language', async () => {
+    await submit('alice', 'sum', { judgeId: 'judge-on' })
+      .expect(403)
+      .expect((response) =>
+        expect(issueCodeOf(response)).toBe('judge_choice_forbidden'),
+      );
     for (const judgeId of [
       'judge-off',
       'judge-other',
       'judge-py-only',
       'ghost',
-    ])
-      expect(
-        fieldsOf(await submit('editor', 'sum', { judgeId }).expect(400)),
-      ).toEqual(['judgeId']);
+    ]) {
+      const refused = await submit('editor', 'sum', { judgeId }).expect(400);
+      expect(fieldsOf(refused)).toEqual(['judgeId']);
+      expect(issueCodeOf(refused)).toBe('judge_unavailable');
+    }
     const chosen = idOf(
       await submit('editor', 'sum', { judgeId: 'judge-on' }).expect(201),
     );

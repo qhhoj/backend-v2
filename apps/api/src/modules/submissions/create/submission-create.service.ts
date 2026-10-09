@@ -28,7 +28,6 @@ import type { CurrentParticipation } from '../../contests/core/current-contest.s
 import { JudgesRepository } from '../../judges/judges.repository';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { ProblemAccess } from '../../problems/core/problem-access';
-import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
 import { ProblemsService } from '../../problems/core/problems.service';
 import { readMultipartForm } from '../../problems/core/multipart';
@@ -87,7 +86,6 @@ function assertNotBanned(principal: Principal, problem: ProblemDocument): void {
 export class SubmissionCreateService {
   constructor(
     private readonly problems: ProblemsService,
-    private readonly problemsRepository: ProblemsRepository,
     private readonly languages: LanguagesQuerier,
     private readonly judges: JudgesRepository,
     private readonly submissions: SubmissionsRepository,
@@ -344,7 +342,7 @@ export class SubmissionCreateService {
     return language;
   }
 
-  /** Legacy `judge_choices`: editors only, among online judges that have the problem (a mirror: its root) and run the language. */
+  /** Legacy `judge_choices`: editors only, among online judges that run the language (judges no longer report problems: every judge sees the whole data root). */
   private async assertJudge(
     principal: Principal,
     problem: ProblemDocument,
@@ -356,17 +354,23 @@ export class SubmissionCreateService {
         'forbidden',
         403,
         'Only problem editors can choose a judge',
+        undefined,
+        undefined,
+        {
+          issues: [
+            {
+              field: 'judgeId',
+              code: 'judge_choice_forbidden',
+              message: 'Only problem editors can choose a judge',
+            },
+          ],
+        },
       );
-    const judged = problem.mirrorRoot
-      ? await this.problemsRepository.findById(uuidStr(problem.mirrorRoot))
-      : problem;
-    if (
-      !judged ||
-      !(await this.judges.isOnlineFor(judgeName, judged.code, languageKey))
-    )
+    if (!(await this.judges.isOnlineFor(judgeName, languageKey)))
       throw invalidField(
         'judgeId',
-        'That judge is offline, or lacks this problem or language.',
+        'That judge is offline, or does not run this language.',
+        'judge_unavailable',
       );
   }
 }

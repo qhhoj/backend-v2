@@ -10,6 +10,8 @@ import { sha256 } from '@libs/auth';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { JudgeError, Status } from '@libs/judge-proto';
 import { BridgeCommandsService } from '@libs/judging';
+import { JudgesRepository } from '../../api/src/modules/judges/judges.repository';
+import { JudgesService } from '../../api/src/modules/judges/judges.service';
 import { FakeJudge } from './fake-judge';
 import {
   seedCatalog,
@@ -234,6 +236,72 @@ describe('Judge link (gRPC)', () => {
       force: true,
     });
     expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
+  });
+
+  describe('driven by the api judges service (admin path)', () => {
+    const admin = () =>
+      new JudgesService(new JudgesRepository(bridge.judges), commands);
+
+    it('rotating the key closes the judge, refuses the old key and serves the new one', async () => {
+      await seedJudge(bridge, 'admin-rot', 'admin-rot-key');
+      const fake = await FakeJudge.online(
+        bridge.judgePort(),
+        judge('admin-rot'),
+      );
+      // a session still before its Hello is ended by the revoke alone
+      const handshaking = FakeJudge.open(
+        bridge.judgePort(),
+        judge('admin-rot'),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const { authKey } = await admin().rotateKey('admin-rot');
+      expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
+      expect((await handshaking.closed).code).toBe(status.PERMISSION_DENIED);
+      const old = FakeJudge.open(bridge.judgePort(), judge('admin-rot'));
+      old.hello();
+      expect((await old.closed).code).toBe(status.UNAUTHENTICATED);
+      const renewed = await FakeJudge.online(
+        bridge.judgePort(),
+        judge('admin-rot', { key: authKey }),
+      );
+      await renewed.close();
+    });
+
+    it('blocking closes the judge and keeps it out until it is unblocked', async () => {
+      await seedJudge(bridge, 'admin-block', 'admin-block-key');
+      const fake = await FakeJudge.online(
+        bridge.judgePort(),
+        judge('admin-block'),
+      );
+      // a session still before its Hello is ended by the revoke alone
+      const handshaking = FakeJudge.open(
+        bridge.judgePort(),
+        judge('admin-block'),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await admin().update('admin-block', { isBlocked: true });
+      expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
+      expect((await handshaking.closed).code).toBe(status.PERMISSION_DENIED);
+      const refused = FakeJudge.open(bridge.judgePort(), judge('admin-block'));
+      refused.hello();
+      expect((await refused.closed).code).toBe(status.UNAUTHENTICATED);
+      await admin().update('admin-block', { isBlocked: false });
+      const back = await FakeJudge.online(
+        bridge.judgePort(),
+        judge('admin-block'),
+      );
+      await back.close();
+    });
+
+    it('a forced disconnect closes the judge', async () => {
+      await seedJudge(bridge, 'admin-bye', 'admin-bye-key');
+      const fake = await FakeJudge.online(
+        bridge.judgePort(),
+        judge('admin-bye'),
+      );
+      await admin().disconnect('admin-bye', true);
+      expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
+    });
   });
 
   it('ends every session with UNAVAILABLE when the bridge stops', async () => {

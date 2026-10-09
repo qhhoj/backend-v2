@@ -4,10 +4,8 @@ import type { HydratedDocument, Model } from 'mongoose';
 import { Judge } from '@libs/database';
 
 export type JudgeDocument = HydratedDocument<Judge>;
-/** A judge without its problem codes (up to 100000) and key hash, with the number of problems. */
-export type JudgeListRow = Omit<Judge, 'problems' | 'authKeyHash'> & {
-  problemCount: number;
-};
+/** A judge without its key hash. */
+export type JudgeListRow = Omit<Judge, 'authKeyHash'>;
 export type JudgeChanges = Partial<
   Pick<Judge, 'authKeyHash' | 'isBlocked' | 'isDisabled' | 'description'>
 >;
@@ -31,8 +29,7 @@ export class JudgesRepository {
     return this.judges
       .aggregate<JudgeListRow>([
         ...(name === undefined ? [] : [{ $match: { name } }]),
-        { $addFields: { problemCount: { $size: '$problems' } } },
-        { $project: { problems: 0, authKeyHash: 0 } },
+        { $project: { authKeyHash: 0 } },
         { $sort: { name: 1 } },
       ])
       .exec();
@@ -52,17 +49,12 @@ export class JudgesRepository {
     return matchedCount === 1;
   }
 
-  /** Submit with `judgeId`: the judge is connected, reported the problem's (mirror root's) code and runs the language. */
-  async isOnlineFor(
-    name: string,
-    problemCode: string,
-    languageKey: string,
-  ): Promise<boolean> {
+  /** Submit with `judgeId`: the judge is connected and runs the language (every judge sees the whole data root). */
+  async isOnlineFor(name: string, languageKey: string): Promise<boolean> {
     return (
       (await this.judges.exists({
         name,
         online: true,
-        problems: problemCode,
         'runtimes.language': languageKey,
       })) !== null
     );

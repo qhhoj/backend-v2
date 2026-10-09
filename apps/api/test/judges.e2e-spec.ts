@@ -10,6 +10,11 @@ import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 const JUDGES = '/api/internal/judges';
+/** Asserts the refusal's `error.issues[].code` list. */
+const issueCodes =
+  (...codes: string[]) =>
+  ({ body }: { body: { error: { issues: Array<{ code: string }> } } }) =>
+    expect(body.error.issues.map((issue) => issue.code)).toEqual(codes);
 
 describe('/api/internal/judges', () => {
   let api: ApiTest;
@@ -56,8 +61,11 @@ describe('/api/internal/judges', () => {
       online: false,
       isBlocked: false,
       isDisabled: false,
-      problemCount: 0,
       runtimes: [],
+      slots: 0,
+      busy: 0,
+      build: '',
+      features: [],
     });
     expect(authKey.length).toBeGreaterThanOrEqual(32);
     expect(await storedHash('judge-a')).toBe(sha256(authKey));
@@ -73,7 +81,8 @@ describe('/api/internal/judges', () => {
     await authed(api.http().post(JUDGES), admin)
       .send({ name: 'judge-dup' })
       .expect(409)
-      .expect(errorCode('conflict'));
+      .expect(errorCode('conflict'))
+      .expect(issueCodes('name_taken'));
     for (const name of ['', 'has space', 'x'.repeat(51)])
       await authed(api.http().post(JUDGES), admin)
         .send({ name })
@@ -81,14 +90,18 @@ describe('/api/internal/judges', () => {
         .expect(errorCode('validation_failed'));
   });
 
-  it('lists online state, ping, load, runtimes and how many problems each judge has', async () => {
+  it('lists online state, ping, load, runtimes and slots, and what the judge reported in its Hello', async () => {
     await api.judges.create({
       name: 'judge-live',
       authKeyHash: sha256('k'),
       online: true,
       ping: 0.02,
       load: 0.4,
-      problems: ['sum', 'mul'],
+      slots: 4,
+      busy: 1,
+      build: 'qhhoj-judge 0.1.0',
+      protocolMinor: 0,
+      features: ['interactive'],
       runtimes: [
         { language: 'CPP17', name: 'g++', version: '11.4', priority: 0 },
       ],
@@ -100,7 +113,11 @@ describe('/api/internal/judges', () => {
       online: true,
       ping: 0.02,
       load: 0.4,
-      problemCount: 2,
+      slots: 4,
+      busy: 1,
+      build: 'qhhoj-judge 0.1.0',
+      protocolMinor: 0,
+      features: ['interactive'],
       runtimes: [
         { language: 'CPP17', name: 'g++', version: '11.4', priority: 0 },
       ],
@@ -185,8 +202,12 @@ describe('/api/internal/judges', () => {
         admin,
       )
         .send({ isDisabled: true })
-        .expect(404);
-    await authed(api.http().post(`${JUDGES}/ghost/key`), admin).expect(404);
+        .expect(404)
+        .expect(errorCode('not_found'))
+        .expect(issueCodes('judge_not_found'));
+    await authed(api.http().post(`${JUDGES}/ghost/key`), admin)
+      .expect(404)
+      .expect(issueCodes('judge_not_found'));
     await authed(api.http().post(`${JUDGES}/ghost/disconnect`), admin)
       .send({})
       .expect(404);

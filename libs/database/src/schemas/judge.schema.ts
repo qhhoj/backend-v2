@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
 
-/** Hostname-style, as the judge-server sends it in its handshake `id`. */
+/** Hostname-style, as the judge sends it in `x-judge-name`. */
 export const JUDGE_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,50}$/;
 
 @Schema({ _id: false })
@@ -28,8 +28,6 @@ export class Judge {
   @Prop({ type: Number, default: null }) ping!: number | null;
   @Prop({ type: Number, default: null }) load!: number | null;
   @Prop({ type: String, default: null }) lastIp!: string | null;
-  /** Problem codes the judge reported (handshake or `supported-problems`). */
-  @Prop({ type: [String], default: [] }) problems!: string[];
   @Prop({ type: [SchemaFactory.createForClass(JudgeRuntime)], default: [] })
   runtimes!: JudgeRuntime[];
   /** Assignments the judge runs at once (`Hello.slots`); kept after it goes offline. */

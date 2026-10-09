@@ -20,8 +20,14 @@ export class JudgeResponse {
   ping!: number | null;
   load!: number | null;
   lastIp!: string | null;
-  problemCount!: number;
   runtimes!: JudgeRuntimeResponse[];
+  /** Assignments it runs at once. */
+  slots!: number;
+  /** Slots in use at its last pong; 0 while offline. */
+  busy!: number;
+  build!: string;
+  protocolMinor!: number;
+  features!: string[];
 
   static from(judge: JudgeListRow): JudgeResponse {
     return {
@@ -35,13 +41,17 @@ export class JudgeResponse {
       ping: judge.ping,
       load: judge.load,
       lastIp: judge.lastIp,
-      problemCount: judge.problemCount,
       runtimes: judge.runtimes.map(({ language, name, version, priority }) => ({
         language,
         name,
         version,
         priority,
       })),
+      slots: judge.slots,
+      busy: judge.busy,
+      build: judge.build,
+      protocolMinor: judge.protocolMinor,
+      features: judge.features,
     };
   }
 }

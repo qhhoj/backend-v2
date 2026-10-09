@@ -24,7 +24,6 @@ describe('Judge schema', () => {
       isDisabled: false,
       ping: null,
       load: null,
-      problems: [],
       runtimes: [],
       slots: 0,
       busy: 0,
