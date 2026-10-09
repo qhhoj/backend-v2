@@ -46,3 +46,15 @@ export function startOfDayIn(timeZone: string, now: Date): Date {
   const firstGuess = midnight - offsetAt(new Date(midnight));
   return new Date(midnight - offsetAt(new Date(firstGuess)));
 }
+
+/** `YYYY-MM` of the zone's calendar month that contains `now`: the quota month key. */
+export function monthKeyIn(timeZone: string, now: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+  const field = (type: string) =>
+    parts.find((part) => part.type === type)!.value;
+  return `${field('year')}-${field('month')}`;
+}

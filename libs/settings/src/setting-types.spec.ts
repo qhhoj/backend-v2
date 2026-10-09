@@ -3,6 +3,7 @@ import {
   integerType,
   mailFromType,
   oauthClientType,
+  oneOfType,
   optionalDatetimeType,
   optionalUrlType,
   SettingError,
@@ -219,5 +220,17 @@ describe('optionalDatetimeType', () => {
       expect(messageOf(() => optionalDatetimeType.parse(bad))).toContain(
         'ISO 8601',
       );
+  });
+});
+
+describe('oneOfType', () => {
+  const mode = oneOfType(['warn', 'enforce'] as const);
+  it('accepts a listed value and refuses everything else', () => {
+    expect(mode.parse('enforce')).toBe('enforce');
+    expect(messageOf(() => mode.parse('Enforce'))).toBe(
+      'Must be one of: warn, enforce.',
+    );
+    expect(messageOf(() => mode.parse(1))).toContain('Must be one of');
+    expect(messageOf(() => mode.parse(null))).toContain('Must be one of');
   });
 });

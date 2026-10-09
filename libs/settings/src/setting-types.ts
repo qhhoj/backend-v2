@@ -26,6 +26,16 @@ export const integerType = (min: number, max: number): SettingType<number> => ({
       : fail(`Must be an integer from ${min} to ${max}.`),
 });
 
+/** One of a fixed list of strings (modes, policies). */
+export const oneOfType = <Value extends string>(
+  values: readonly Value[],
+): SettingType<Value> => ({
+  parse: (raw) =>
+    values.includes(raw as Value)
+      ? (raw as Value)
+      : fail(`Must be one of: ${values.join(', ')}.`),
+});
+
 /**
  * Addresses a production server must not be pointed at: loopback, private, link-local, unspecified
  * and IPv4-mapped IPv6. Two lists: a BlockList mixing families matches IPv4 against the IPv6 ranges.

@@ -3,6 +3,7 @@ import {
   integerType,
   mailFromType,
   oauthClientType,
+  oneOfType,
   optionalDatetimeType,
   optionalUrlType,
   smtpUrlType,
@@ -71,6 +72,44 @@ export const SETTINGS = {
     default: 0,
     description:
       'Disqualifications (in contests that are not organization-private) that ban an account; 0 turns the ban off.',
+    secret: false,
+  }),
+  'quota.enforce': define({
+    type: oneOfType(['warn', 'enforce'] as const),
+    default: 'warn',
+    description:
+      'Organization quota: warn only logs and shows overages; enforce refuses them. Enforce takes effect only after the problem data size backfill has finished.',
+    secret: false,
+  }),
+  'quota.defaultMonthlyCredits': define({
+    type: integerType(0, 1_000_000),
+    default: 200,
+    description: 'Monthly credits of an organization with no staff-set limit.',
+    secret: false,
+  }),
+  'quota.defaultStorageBytes': define({
+    type: integerType(0, 1_099_511_627_776),
+    default: 536_870_912,
+    description:
+      'Test-data bytes an organization may keep when it has no staff-set limit (default 512 MiB).',
+    secret: false,
+  }),
+  'quota.cost.problem': define({
+    type: integerType(0, 1000),
+    default: 10,
+    description: 'Credits to create or clone an organization problem.',
+    secret: false,
+  }),
+  'quota.cost.contest': define({
+    type: integerType(0, 1000),
+    default: 20,
+    description: 'Credits to create or clone an organization contest.',
+    secret: false,
+  }),
+  'quota.cost.dataPer10MiB': define({
+    type: integerType(0, 1000),
+    default: 1,
+    description: 'Credits per 10 MiB (started) of an uploaded data archive.',
     secret: false,
   }),
   'problem.deleteGraceDays': define({

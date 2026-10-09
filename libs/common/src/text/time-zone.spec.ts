@@ -1,4 +1,9 @@
-import { canonicalTimeZone, isTimeZone, startOfDayIn } from './time-zone';
+import {
+  canonicalTimeZone,
+  isTimeZone,
+  monthKeyIn,
+  startOfDayIn,
+} from './time-zone';
 
 describe('canonicalTimeZone', () => {
   it('gives one ID per zone whatever the spelling or alias', () => {
@@ -71,5 +76,25 @@ describe('startOfDayIn', () => {
     expect(
       startOfDayIn('Europe/Paris', new Date(start.getTime() - 1)).getTime(),
     ).toBeLessThan(start.getTime());
+  });
+});
+
+describe('monthKeyIn', () => {
+  it('names the zone calendar month, not the UTC one', () => {
+    const lastMinuteOfSeptemberUtc = new Date('2026-09-30T23:59:00Z');
+    expect(monthKeyIn('UTC', lastMinuteOfSeptemberUtc)).toBe('2026-09');
+    expect(monthKeyIn('Asia/Ho_Chi_Minh', lastMinuteOfSeptemberUtc)).toBe(
+      '2026-10',
+    );
+    expect(
+      monthKeyIn('America/Toronto', new Date('2026-10-01T03:00:00Z')),
+    ).toBe('2026-09');
+  });
+  it('rolls the year over in the zone, ahead of or behind UTC', () => {
+    const newYearsEveUtc = new Date('2025-12-31T23:59:59Z');
+    expect(monthKeyIn('Pacific/Kiritimati', newYearsEveUtc)).toBe('2026-01');
+    expect(
+      monthKeyIn('Pacific/Honolulu', new Date('2026-01-01T05:00:00Z')),
+    ).toBe('2025-12');
   });
 });
