@@ -12,7 +12,7 @@ export class ProblemTagResponse {
   /** A colour token key (`tag-1`..`tag-8`), never a hex. */
   @ApiProperty({
     enum: ORGANIZATION_TAG_COLORS,
-    enumName: 'OrganizationTagColor',
+    enumName: 'ContestTagColor',
   })
   color!: OrganizationTagColor;
 

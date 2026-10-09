@@ -1,8 +1,9 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
+import { BULK_ACTIONS } from '../../src/modules/organizations/problems/dto/bulk.dto';
 import { ARCHIVE_FILTERS } from '../../src/modules/organizations/problems/dto/organization-problem.dto';
 import { RESERVED_ORGANIZATION_SLUG_PATTERN } from '../../src/modules/organizations/editing/dto/organization-edit.dto';
 import { ORGANIZATION_TAG_COLORS } from '@libs/database';
-import { loadDocument, parameterOf } from './document';
+import { loadDocument, operationOf, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';
 
 /** Route prefixes and schema-name prefixes of the files this plan owns. */
@@ -45,8 +46,8 @@ describe('organization problem tags, archive and quota schemas', () => {
       });
   });
 
-  it('names the tag colour set once, with exactly the palette keys', () => {
-    expect(schema('OrganizationTagColor').enum).toHaveLength(
+  it('shares the contest tag colour component, which has exactly the palette keys', () => {
+    expect(schema('ContestTagColor').enum).toHaveLength(
       ORGANIZATION_TAG_COLORS.length,
     );
     expect(
@@ -86,5 +87,25 @@ describe('organization problem tags, archive and quota schemas', () => {
       updatedAt: { type: 'string', format: 'date-time' },
     });
     expect(response.required).toContain('updatedAt');
+  });
+
+  it('documents the bulk body action as a named enum and the archived-in route', () => {
+    const properties = schema('BulkProblemsDto').properties as Record<
+      string,
+      SchemaObject
+    >;
+    expect(JSON.stringify(properties.action)).toContain(
+      '#/components/schemas/OrganizationProblemBulkAction',
+    );
+    expect(schema('OrganizationProblemBulkAction').enum).toHaveLength(
+      BULK_ACTIONS.length,
+    );
+    expect(
+      Object.keys(schema('BulkResultResponse').properties ?? {}).sort(),
+    ).toEqual(['code', 'outcome', 'reason']);
+    expect(
+      operationOf(document, '/api/internal/problems/{code}/archived-in', 'get')
+        .responses['200'],
+    ).toBeDefined();
   });
 });

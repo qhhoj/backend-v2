@@ -22,10 +22,10 @@ export class CreateProblemTagDto {
   })
   slug!: string;
   @IsString() @Length(1, 40) name!: string;
-  /** The palette token keys; `OrganizationTagColor` is named once (create, update, response). */
+  /** The palette token keys; the component is the contest tags' `ContestTagColor` (identical palette; one enumeration, one component). */
   @ApiPropertyOptional({
     enum: ORGANIZATION_TAG_COLORS,
-    enumName: 'OrganizationTagColor',
+    enumName: 'ContestTagColor',
   })
   @IsOptional()
   @IsIn(ORGANIZATION_TAG_COLORS)
