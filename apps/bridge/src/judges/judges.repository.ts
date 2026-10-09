@@ -4,7 +4,6 @@ import type { Model } from 'mongoose';
 import { constantTimeEqual, sha256 } from '@libs/auth';
 import { Judge, JUDGE_NAME_PATTERN } from '@libs/database';
 import type { HelloRuntime } from '../link/messages';
-import type { Runtime } from '../protocol/judge-packets';
 
 /** What a judge row holds while no connection serves it; written by `markOffline` and by the bridge's start-up sweep. */
 export const OFFLINE_FIELDS = {
@@ -69,36 +68,8 @@ export class JudgesRepository {
       .lean();
   }
 
-  async markOnline(
-    name: string,
-    startTime: Date,
-    details: { problems: string[]; runtimes: Runtime[]; lastIp: string | null },
-  ): Promise<void> {
-    await this.judges.updateOne(
-      { name },
-      { $set: { online: true, startTime, ping: null, load: null, ...details } },
-    );
-  }
-
   async markOffline(name: string, startTime: Date): Promise<void> {
     await this.judges.updateOne({ name, startTime }, { $set: OFFLINE_FIELDS });
-  }
-
-  async updatePing(
-    name: string,
-    startTime: Date,
-    ping: number,
-    load: number | null,
-  ): Promise<void> {
-    await this.judges.updateOne({ name, startTime }, { $set: { ping, load } });
-  }
-
-  async updateProblems(
-    name: string,
-    startTime: Date,
-    problems: string[],
-  ): Promise<void> {
-    await this.judges.updateOne({ name, startTime }, { $set: { problems } });
   }
 
   /** A session said Hello: the row shows it online with what it reported; `startTime` names the session. An older session's late write never displaces a newer one. */

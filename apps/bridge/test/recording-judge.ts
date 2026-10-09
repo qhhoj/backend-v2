@@ -1,35 +1,46 @@
-import type { DispatchTarget } from '../src/dispatch/dispatch';
-import type { SubmissionRequest } from '../src/protocol/judge-packets';
+import { newId } from '@libs/database';
+import type { AssignmentRef } from '@libs/judge-proto';
+import type { DispatchTarget } from '../src/dispatch/slots';
+import type { AssignRequest } from '../src/submissions/assign-request';
 
-/** A judge connection without a socket: records what the dispatcher sends it. */
+/** A judge session without a stream: records what the dispatcher sends it. */
 export class RecordingJudge implements DispatchTarget {
-  workingOn: string | null = null;
+  readonly id = newId();
+  readonly inFlight = new Map<string, number>();
+  readonly winding = new Set<string>();
   isDisabled = false;
+  isDraining = false;
   isClosed = false;
   authKeyHash = '';
-  problems: ReadonlySet<string>;
   executors: ReadonlySet<string> = new Set(['CPP17', 'PY3']);
-  readonly received: SubmissionRequest[] = [];
-  terminations = 0;
+  readonly received: AssignRequest[] = [];
+  readonly aborts: AssignmentRef[] = [];
   readonly disconnects: boolean[] = [];
+  wasReplaced = false;
 
   constructor(
     readonly name: string,
-    problems: string[],
-    public load = 0,
-  ) {
-    this.problems = new Set(problems);
-  }
+    public slots = 1,
+  ) {}
 
-  submit(request: SubmissionRequest): void {
+  assign(request: AssignRequest): void {
     this.received.push(request);
   }
 
-  terminate(): void {
-    this.terminations += 1;
+  abort(ref: AssignmentRef): void {
+    this.aborts.push(ref);
   }
 
   disconnect({ isForced }: { isForced: boolean }): void {
     this.disconnects.push(isForced);
+  }
+
+  replaced(): void {
+    this.wasReplaced = true;
+  }
+
+  /** The submission ids of its runs (claims in flight included). */
+  holding(): string[] {
+    return [...this.inFlight.keys()];
   }
 }

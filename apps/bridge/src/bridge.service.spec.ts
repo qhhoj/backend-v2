@@ -3,7 +3,7 @@ import { BridgeService } from './bridge.service';
 
 const RESYNC_MS = 300;
 
-/** Collaborators that record every call in order; `loadQueued` and `inFlightClaims` are what a test varies. */
+/** Collaborators that record every call in order; `loadQueued` and `inFlightRuns` are what a test varies. */
 function setup() {
   const calls: string[] = [];
   const record =
@@ -13,22 +13,21 @@ function setup() {
       return Promise.resolve(result);
     };
   const loadQueued = jest.fn(record('loadQueued', []));
-  const inFlightClaims = jest.fn(
-    record('inFlightClaims', [] as Array<{ id: string; judgedOn: string }>),
+  const inFlightRuns = jest.fn(
+    record(
+      'inFlightRuns',
+      [] as Array<{ id: string; judgedOn: string; generation: number }>,
+    ),
   );
-  const resetStranded = jest.fn(record('resetStranded', []));
+  const resetStrandedRuns = jest.fn(record('resetStrandedRuns', []));
   const heldIds = jest.fn((): string[] => []);
   const services = {
     judges: { setAllOffline: record('setAllOffline', undefined) },
-    submissions: {
-      resetInFlight: record('resetInFlight', []),
-      loadQueued,
-      inFlightClaims,
-      resetStranded,
-    },
-    grading: { announceRequeued: jest.fn() },
+    submissions: { loadQueued, inFlightRuns, resetStrandedRuns },
+    runs: { announceRequeued: jest.fn() },
     dispatch: {
       enqueue: record('enqueue', undefined),
+      clearRetryBans: record('clearRetryBans', undefined),
       hasQueued: () => false,
       heldIds,
       connectedNames: () => [] as string[],
@@ -52,7 +51,7 @@ function setup() {
     services.server as never,
     services.judges as never,
     services.submissions as never,
-    services.grading as never,
+    services.runs as never,
   );
   return { bridge, calls, services };
 }
@@ -71,13 +70,12 @@ describe('BridgeService', () => {
   });
   const tick = (times = 1) => jest.advanceTimersByTimeAsync(RESYNC_MS * times);
 
-  it('binds the port first, sweeps Mongo, reads the stream position before the rebuild, and serves judges last', async () => {
+  it('binds the port first, marks judges offline, leaves P/G rows to resume, reads the stream position before the rebuild, and serves judges last', async () => {
     const { bridge, calls } = setup();
     await bridge.onApplicationBootstrap();
     expect(calls).toEqual([
       'listen',
       'setAllOffline',
-      'resetInFlight',
       'position',
       'loadQueued',
       'enqueue',
@@ -137,29 +135,40 @@ describe('BridgeService', () => {
   });
 
   describe('P/G rows no judge holds', () => {
-    const ghost = { id: 'ghost', judgedOn: 'gone' };
-    const held = { id: 'held', judgedOn: 'busy' };
+    const ghost = { id: 'ghost', judgedOn: 'gone', generation: 1 };
+    const held = { id: 'held', judgedOn: 'busy', generation: 2 };
 
     it('are requeued only after two consecutive ticks without a holder', async () => {
       const { bridge, services } = setup();
-      services.submissions.inFlightClaims.mockResolvedValue([ghost, held]);
+      services.submissions.inFlightRuns.mockResolvedValue([ghost, held]);
       services.dispatch.heldIds.mockReturnValue(['held']);
       await bridge.onApplicationBootstrap();
       await tick();
-      expect(services.submissions.resetStranded).not.toHaveBeenCalled();
+      expect(services.submissions.resetStrandedRuns).not.toHaveBeenCalled();
       await tick();
-      expect(services.submissions.resetStranded).toHaveBeenCalledWith([ghost]);
+      expect(services.submissions.resetStrandedRuns).toHaveBeenCalledWith([
+        ghost,
+      ]);
+      await bridge.onModuleDestroy();
+    });
+
+    it('clear RETRY bans on every tick', async () => {
+      const { bridge, calls } = setup();
+      await bridge.onApplicationBootstrap();
+      calls.length = 0;
+      await tick(2);
+      expect(calls.filter((call) => call === 'clearRetryBans')).toHaveLength(2);
       await bridge.onModuleDestroy();
     });
 
     it('are left alone when a judge holds them on the second tick', async () => {
       const { bridge, services } = setup();
-      services.submissions.inFlightClaims.mockResolvedValue([ghost]);
+      services.submissions.inFlightRuns.mockResolvedValue([ghost]);
       await bridge.onApplicationBootstrap();
       await tick();
       services.dispatch.heldIds.mockReturnValue(['ghost']);
       await tick(3);
-      expect(services.submissions.resetStranded).not.toHaveBeenCalled();
+      expect(services.submissions.resetStrandedRuns).not.toHaveBeenCalled();
       await bridge.onModuleDestroy();
     });
   });

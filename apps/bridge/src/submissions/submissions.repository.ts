@@ -16,13 +16,10 @@ import {
   SubmissionSource,
   uuidStr,
 } from '@libs/database';
-import type { SubmissionCase } from '@libs/database';
-import { gradeCases, gradedJobOf, submissionPoints } from '@libs/judging';
+import { gradedJobOf } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import type { QueuedSubmission } from '../dispatch/slots';
-import { MAX_SUBMISSION_CASES } from '../protocol/judge-packets';
-import type { SubmissionRequest } from '../protocol/judge-packets';
 import type { AssignRequest } from './assign-request';
 import { submissionFilePath } from './submission-file-path';
 
@@ -30,24 +27,16 @@ import { submissionFilePath } from './submission-file-path';
 export const MAX_REQUEUES = 1;
 /** The IE message of a claimed row whose problem, source or uploaded file is gone. */
 const MISSING_DATA_MESSAGE = 'Submission data is missing';
-/** `failed`: the submission's data vanished, so it was finished as IE and still needs its graded job. */
-export type ClaimOutcome =
-  | { request: SubmissionRequest; subject: SubmissionGradedJob }
-  | { failed: SubmissionGradedJob };
-/** A P/G row and the judge it names. */
-export interface InFlightClaim {
+/** A P/G row, the judge it names and the generation it runs. */
+export interface InFlightRun {
   id: string;
   judgedOn: string | null;
-}
-/** A P/G row, the judge it names and the generation it runs. */
-export interface InFlightRun extends InFlightClaim {
   generation: number;
 }
 /** `failed`: the submission's data vanished, so it was finished as IE and still needs its graded job. */
 export type RunClaimOutcome =
   | { request: AssignRequest; subject: SubmissionGradedJob }
   | { failed: SubmissionGradedJob };
-export type CasesOutcome = 'appended' | 'stale' | 'full';
 
 /** Back to the queue with partial results dropped; the `$set` of every requeue and reset-in-flight write. */
 export const REQUEUE_RESET = {
@@ -60,9 +49,6 @@ export const REQUEUE_RESET = {
   error: null,
   judgeSeq: 0,
 } as const;
-
-/** What a claim needs of a queued entry. */
-type ClaimTarget = Pick<QueuedSubmission, 'id' | 'problemCode' | 'languageKey'>;
 
 /** The claimed row's fields, as `claimIfQueued` projects them. */
 type ClaimedSubmission = Pick<
@@ -85,33 +71,6 @@ interface JudgingInputs {
   language: Pick<Language, 'fileOnly' | 'fileSizeLimit'> | null;
   earlierAttempts: number;
   contestMeta: ContestMeta | undefined;
-}
-
-/** The judge's request for a claimed submission: limits (a per-language override wins), the source, short-circuiting for non-partial problems, contest meta and the attempt number. Pure. */
-function submissionRequest(
-  queued: ClaimTarget,
-  submission: ClaimedSubmission,
-  { problem, source, language, earlierAttempts, contestMeta }: JudgingInputs,
-): SubmissionRequest {
-  const languageId = uuidStr(submission.language);
-  const limit = problem.languageLimits.find(
-    (entry) => uuidStr(entry.languageId) === languageId,
-  );
-  return {
-    submissionId: queued.id,
-    problemCode: queued.problemCode,
-    languageKey: queued.languageKey,
-    source,
-    timeLimit: limit?.timeLimit ?? problem.timeLimit,
-    memoryLimit: limit?.memoryLimit ?? problem.memoryLimit,
-    shortCircuit: !problem.partial,
-    pretestsOnly: contestMeta?.pretestsOnly ?? false,
-    inContest: contestMeta?.virtual ?? null,
-    attemptNo: earlierAttempts + 1,
-    userId: uuidStr(submission.user),
-    fileOnly: language?.fileOnly ?? false,
-    fileSizeLimit: language?.fileSizeLimit ?? 0,
-  };
 }
 
 /** What a claimed run adds to `JudgingInputs`. */
@@ -164,7 +123,6 @@ const runOf = (ref: AssignmentRef, judgeName: string) => ({
 });
 
 const IN_FLIGHT = { $in: [...IN_FLIGHT_STATUSES] };
-const ABSOLUTE_URL = /^https?:\/\//i;
 
 /** What a contest submission adds to dispatch and to the judge's request. */
 export interface ContestMeta {
@@ -176,7 +134,7 @@ export interface ContestMeta {
   pretestsOnly: boolean;
 }
 
-/** Every write a judge packet causes filters on the submission's judge and status, so stale, duplicate or replayed packets change nothing. */
+/** Queue reads, claims and the run transitions that need no judge message (release, requeue, finish, resume, resync); the writes judge messages cause are `RunWritesRepository`'s. */
 @Injectable()
 export class SubmissionsRepository {
   private readonly logger = new Logger(SubmissionsRepository.name);
@@ -368,24 +326,6 @@ export class SubmissionsRepository {
     });
   }
 
-  /** Compare-and-set QU → P for `judgeName`, then what the judge needs. Null when it is no longer queued (aborted, rejudged, claimed by another judge). */
-  async claim(
-    queued: ClaimTarget,
-    judgeName: string,
-  ): Promise<ClaimOutcome | null> {
-    const submission = await this.claimIfQueued(queued.id, judgeName);
-    if (!submission) return null;
-    const inputs = await this.loadJudgingInputs(queued.id, submission);
-    if (!inputs) return this.finishMissingDataAsIE(queued.id, judgeName);
-    const source = inputs.language?.fileOnly
-      ? this.absoluteFileUrl(inputs.source)
-      : inputs.source;
-    return {
-      request: submissionRequest(queued, submission, { ...inputs, source }),
-      subject: gradedJobOf(submission),
-    };
-  }
-
   /** Compare-and-set QU → P for `judgeName` with the next generation, then the Assign. Null when it is no longer queued (aborted, rejudged, claimed by another judge). */
   async claimRun(
     queued: QueuedSubmission,
@@ -513,206 +453,6 @@ export class SubmissionsRepository {
       earlierAttempts,
       contestMeta: metaOf.get(submissionId),
     };
-  }
-
-  /** The claimed row lost its problem or source: writes IE (if still claimed by `judgeName`) and returns its graded job, which still goes out. */
-  private async finishMissingDataAsIE(
-    submissionId: string,
-    judgeName: string,
-  ): Promise<ClaimOutcome | null> {
-    this.logger.error(`Submission ${submissionId} lost its problem or source`);
-    const failed = await this.finishWith(
-      submissionId,
-      judgeName,
-      'IE',
-      MISSING_DATA_MESSAGE,
-    );
-    return failed && { failed };
-  }
-
-  /** Legacy `get_absolute_submission_file_url`: a file source is a media URL, site-relative unless MEDIA_URL is absolute; the judge downloads it. */
-  private absoluteFileUrl(source: string): string {
-    return ABSOLUTE_URL.test(source)
-      ? source
-      : new URL(source, this.env.siteUrl).href;
-  }
-
-  /** The judge vanished between the claim and the request: back to the queue without spending the requeue (the judge never saw it). */
-  async release(submissionId: string, judgeName: string): Promise<boolean> {
-    const { modifiedCount } = await this.submissions.updateOne(
-      { _id: submissionId, judgedOn: judgeName, status: 'P' },
-      { $set: { status: 'QU', judgedOn: null } },
-    );
-    return modifiedCount === 1;
-  }
-
-  async beginGrading(
-    submissionId: string,
-    judgeName: string,
-    isPretested: boolean,
-  ): Promise<boolean> {
-    const { modifiedCount } = await this.submissions.updateOne(
-      { _id: submissionId, judgedOn: judgeName, status: 'P' },
-      {
-        $set: {
-          status: 'G',
-          isPretested,
-          currentTestcase: 1,
-          batch: false,
-          judgedDate: new Date(),
-          cases: [],
-        },
-      },
-    );
-    return modifiedCount === 1;
-  }
-
-  async markBatched(submissionId: string, judgeName: string): Promise<void> {
-    await this.submissions.updateOne(
-      { _id: submissionId, judgedOn: judgeName, status: 'G' },
-      { $set: { batch: true } },
-    );
-  }
-
-  /** `$push` only while fewer than `MAX_SUBMISSION_CASES - cases.length` are stored; `full` tells a hostile judge apart from a stale packet. */
-  async appendCases(
-    submissionId: string,
-    judgeName: string,
-    cases: SubmissionCase[],
-  ): Promise<CasesOutcome> {
-    if (!cases.length) return 'stale';
-    const grading = { _id: submissionId, judgedOn: judgeName, status: 'G' };
-    const { matchedCount } = await this.submissions.updateOne(
-      {
-        ...grading,
-        [`cases.${MAX_SUBMISSION_CASES - cases.length}`]: { $exists: false },
-      },
-      {
-        $push: { cases: { $each: cases } },
-        $set: {
-          currentTestcase:
-            Math.max(...cases.map((testCase) => testCase.position)) + 1,
-        },
-      },
-    );
-    if (matchedCount === 1) return 'appended';
-    return (await this.submissions.exists(grading)) ? 'full' : 'stale';
-  }
-
-  async setCompileMessage(
-    submissionId: string,
-    judgeName: string,
-    log: string,
-  ): Promise<void> {
-    await this.submissions.updateOne(
-      { _id: submissionId, judgedOn: judgeName, status: IN_FLIGHT },
-      { $set: { error: log } },
-    );
-  }
-
-  /** Legacy `on_grading_end`: totals from the stored cases, points from the problem's current points. */
-  async finishGrading(
-    submissionId: string,
-    judgeName: string,
-  ): Promise<SubmissionGradedJob | null> {
-    const grading = { _id: submissionId, judgedOn: judgeName, status: 'G' };
-    const submission = await this.submissions
-      .findOne(grading, { user: 1, problem: 1, cases: 1 })
-      .lean();
-    if (!submission) return null;
-    const problem = await this.problems
-      .findById(submission.problem, { points: 1, partial: 1 })
-      .lean();
-    if (!problem)
-      this.logger.warn(
-        `Submission ${submissionId} graded with 0 points: its problem is gone, rescore it once restored`,
-      );
-    const totals = gradeCases(submission.cases);
-    const { modifiedCount } = await this.submissions.updateOne(grading, {
-      $set: {
-        status: 'D',
-        ...totals,
-        points: problem
-          ? submissionPoints(
-              totals.casePoints,
-              totals.caseTotal,
-              problem.points,
-              problem.partial,
-            )
-          : 0,
-      },
-    });
-    return modifiedCount === 1 ? gradedJobOf(submission) : null;
-  }
-
-  /** compile-error (CE + log), internal-error (IE + message) or submission-terminated (AB, no points). */
-  async finishWith(
-    submissionId: string,
-    judgeName: string,
-    status: 'CE' | 'IE' | 'AB',
-    error: string | null,
-  ): Promise<SubmissionGradedJob | null> {
-    const submission = await this.submissions
-      .findOneAndUpdate(
-        { _id: submissionId, judgedOn: judgeName, status: IN_FLIGHT },
-        {
-          $set:
-            status === 'AB'
-              ? { status, result: status, points: 0 }
-              : { status, result: status, error },
-        },
-        { projection: { user: 1, problem: 1 } },
-      )
-      .lean();
-    return submission && gradedJobOf(submission);
-  }
-
-  /** First judge loss while in flight: back to QU with partial results dropped and the requeue spent; false once it is spent or the submission is no longer this judge's. */
-  async requeue(submissionId: string, judgeName: string): Promise<boolean> {
-    const { modifiedCount } = await this.submissions.updateOne(
-      {
-        _id: submissionId,
-        judgedOn: judgeName,
-        status: IN_FLIGHT,
-        requeueCount: { $not: { $gte: MAX_REQUEUES } },
-      },
-      {
-        $set: REQUEUE_RESET,
-        $inc: { requeueCount: 1 },
-      },
-    );
-    return modifiedCount === 1;
-  }
-
-  /** Bridge start: whatever was handed to a judge before the stop goes back to the queue, and is returned so its requeue can be announced. Not a judge failure, so `requeueCount` is untouched and nothing becomes IE. */
-  async resetInFlight(): Promise<SubmissionGradedJob[]> {
-    return this.resetStranded(await this.inFlightClaims());
-  }
-
-  async inFlightClaims(): Promise<InFlightClaim[]> {
-    const rows = await this.submissions
-      .find({ status: IN_FLIGHT }, { judgedOn: 1 })
-      .lean();
-    return rows.map((row) => ({
-      id: uuidStr(row._id),
-      judgedOn: row.judgedOn,
-    }));
-  }
-
-  /** Resync: P/G rows no connected judge works on go back to QU like a start-up reset; those that did are returned. Each write still requires the row to be in flight under the judge it was read with, so a row that moved on meanwhile is left alone. */
-  async resetStranded(claims: InFlightClaim[]): Promise<SubmissionGradedJob[]> {
-    const rows = await Promise.all(
-      claims.map(({ id, judgedOn }) =>
-        this.submissions
-          .findOneAndUpdate(
-            { _id: id, status: IN_FLIGHT, judgedOn },
-            { $set: REQUEUE_RESET },
-            { projection: { user: 1, problem: 1 } },
-          )
-          .lean(),
-      ),
-    );
-    return rows.flatMap((row) => (row ? [gradedJobOf(row)] : []));
   }
 
   /** A run its judge never accepted (accept timeout) or never received: back to QU without spending the requeue. */

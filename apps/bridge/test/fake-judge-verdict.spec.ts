@@ -1,3 +1,4 @@
+import { Status } from '@libs/judge-proto';
 import { casesFor, verdictFor } from './fake-judge-verdict';
 
 describe('fake judge verdicts', () => {
@@ -19,18 +20,20 @@ describe('fake judge verdicts', () => {
     const cases = casesFor(2, 'WA');
     expect(cases.map((testCase) => testCase.position)).toEqual([1, 2]);
     expect(
-      cases.every((testCase) => testCase.status === 1 && testCase.points === 0),
+      cases.every(
+        (testCase) =>
+          testCase.status === Status.STATUS_WA && testCase.points === 0,
+      ),
     ).toBe(true);
   });
 
   it('gives full points to every case on AC', () => {
-    expect(casesFor(1, 'AC')).toEqual([
-      expect.objectContaining({
-        position: 1,
-        status: 0,
-        points: 1,
-        'total-points': 1,
-      }),
-    ]);
+    const [only] = casesFor(1, 'AC');
+    expect(only).toMatchObject({
+      position: 1,
+      status: Status.STATUS_AC,
+      points: 1,
+      total: 1,
+    });
   });
 });

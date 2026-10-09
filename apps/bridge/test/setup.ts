@@ -1,11 +1,11 @@
 import { tmpdir } from 'node:os';
 import { getQueueToken } from '@nestjs/bullmq';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import type { Model } from 'mongoose';
+import type { Connection, Model } from 'mongoose';
 import { TEST_ENV, TEST_REDIS_URL } from '@libs/common/testing';
 import {
   Contest,
@@ -24,13 +24,12 @@ import type { SubmissionGradedJob } from '@libs/judging';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
 import type { BridgeTimings } from '../src/bridge-timings';
-import { JudgeServerService } from '../src/judges/judge-server.service';
+import { JudgeLinkServer } from '../src/link/judge-link.server';
 
 /** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). */
 export const FAST_TIMINGS: BridgeTimings = {
   handshakeMs: 500,
   idleMs: 1500,
-  ackMs: 500,
   pingIntervalMs: 200,
   resyncMs: 60_000,
   acceptMs: 500,
@@ -39,7 +38,12 @@ export const FAST_TIMINGS: BridgeTimings = {
 
 export async function setupBridgeTest({
   timings = {},
-}: { timings?: Partial<BridgeTimings> } = {}) {
+  env = {},
+}: {
+  timings?: Partial<BridgeTimings>;
+  /** Extra environment, e.g. the judge port's TLS pair. */
+  env?: Record<string, string>;
+} = {}) {
   const replSet = await startMongo();
   Object.assign(process.env, TEST_ENV, {
     MONGO_URL: replSet.getUri('qhhoj'),
@@ -48,6 +52,9 @@ export async function setupBridgeTest({
     PDF_CACHE_ROOT: tmpdir(),
     JUDGE_BRIDGE_HOST: '127.0.0.1',
     JUDGE_BRIDGE_PORT: '0',
+    JUDGE_BRIDGE_TLS_CERT: '',
+    JUDGE_BRIDGE_TLS_KEY: '',
+    ...env,
   });
   const compile = async (): Promise<TestingModule> => {
     const compiled = await Test.createTestingModule({ imports: [BridgeModule] })
@@ -115,12 +122,20 @@ export async function setupBridgeTest({
       return graded();
     },
     /** The port the current module's judge server listens on (`JUDGE_BRIDGE_PORT=0`). */
-    judgePort: () => current.get(JudgeServerService).port(),
+    judgePort: () => current.get(JudgeLinkServer).port(),
     /** Nothing consumes the queue in 2a, so every job waits. */
     gradedJobs: async (): Promise<SubmissionGradedJob[]> =>
       (await graded().getJobs(['waiting'])).map((job) => job.data),
-    /** A bridge process restart: same Mongo and Redis, fresh in-memory state. */
-    restart: async () => {
+    /** Empties every collection and the graded queue (between conformance scenarios). */
+    reset: async () => {
+      const connection = current.get<Connection>(getConnectionToken());
+      for (const collection of await connection.db!.collections())
+        await collection.deleteMany({});
+      await graded().obliterate({ force: true });
+    },
+    /** A bridge process restart: same Mongo and Redis, fresh in-memory state; `timings` replaces the overrides from here on. */
+    restart: async (nextTimings?: Partial<BridgeTimings>) => {
+      if (nextTimings) timings = nextTimings;
       await current.close();
       currentClosed = true;
       current = await compile();

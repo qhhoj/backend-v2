@@ -3,10 +3,10 @@ import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { BRIDGE_TIMINGS } from './bridge-timings';
 import type { BridgeTimings } from './bridge-timings';
 import { CommandsService } from './dispatch/commands.service';
-import { DispatchService } from './dispatch/dispatch.service';
-import { JudgeServerService } from './judges/judge-server.service';
+import { DispatcherService } from './dispatch/dispatcher.service';
 import { JudgesRepository } from './judges/judges.repository';
-import { GradingService } from './submissions/grading.service';
+import { JudgeLinkServer } from './link/judge-link.server';
+import { RunsService } from './submissions/runs.service';
 import { SubmissionsRepository } from './submissions/submissions.repository';
 
 /** Start and stop order of the bridge, in one place. Mongo is the queue's truth: a start rebuilds the in-memory queue from it and a resync keeps reading it. */
@@ -19,20 +19,18 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
 
   constructor(
     @Inject(BRIDGE_TIMINGS) private readonly timings: BridgeTimings,
-    private readonly dispatch: DispatchService,
+    private readonly dispatch: DispatcherService,
     private readonly commands: CommandsService,
-    private readonly server: JudgeServerService,
+    private readonly server: JudgeLinkServer,
     private readonly judges: JudgesRepository,
     private readonly submissions: SubmissionsRepository,
-    private readonly grading: GradingService,
+    private readonly runs: RunsService,
   ) {}
 
-  /** The port is bound first, so a second process dies on EADDRINUSE before touching Mongo; connecting judges wait. Then judges offline and P/G back to QU; the stream position is read before the queue is rebuilt, so a command published meanwhile is not missed; judges are served last. */
+  /** The port is bound first, so a second process dies on EADDRINUSE before touching Mongo; connecting judges wait. Judges are marked offline before any is served, so the sweep never clobbers one that resumes. P/G rows are left alone: their judges resume them, and the resync requeues the rest after two ticks without spending a requeue. The stream position is read before the queue is rebuilt, so a command published meanwhile is not missed; judges are served last. */
   async onApplicationBootstrap(): Promise<void> {
     const port = await this.server.listen();
     await this.judges.setAllOffline();
-    const requeued = await this.submissions.resetInFlight();
-    this.grading.announceRequeued(requeued);
     const position = await this.commands.position();
     await this.dispatch.enqueue(await this.submissions.loadQueued());
     this.commands.start(position);
@@ -41,12 +39,10 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
       this.timings.resyncMs,
     );
     this.server.acceptJudges();
-    this.logger.log(
-      `Judges connect on port ${port}; ${requeued.length} interrupted submissions requeued`,
-    );
+    this.logger.log(`Judges connect on port ${port}`);
   }
 
-  /** Dispatching stops first, so judges dropped by the shutdown leave their submissions P/G for the next start instead of spending their requeue; judges are marked offline once their sockets are gone. */
+  /** Dispatching stops first, so sessions ended by the shutdown leave their rows P/G (no grace, no requeue spent) for a resume or the next start; judges are marked offline once their sessions are gone. */
   async onModuleDestroy(): Promise<void> {
     clearInterval(this.resyncTimer);
     this.dispatch.stop();
@@ -55,13 +51,14 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.judges.setAllOffline();
   }
 
-  /** Mongo is the truth: queued submissions no command announced (Redis failure, trimmed stream) still reach a judge, and P/G rows no judge works on go back to the queue. the tick enqueues only ids not yet queued, `enqueue` skips running ids and `claim` is a compare-and-set, so a tick racing a dispatch changes nothing. A tick still running when the next fires is skipped; a failure waits for the next tick. */
+  /** Mongo is the truth: queued submissions no command announced (Redis failure, trimmed stream) still reach a judge, P/G rows nobody holds go back to the queue, and RETRY bans end. A tick still running when the next fires is skipped; a failure waits for the next tick. */
   private async resync(): Promise<void> {
     if (this.resyncing) return;
     this.resyncing = true;
     try {
       await this.reconcileJudges();
       await this.requeueStranded();
+      await this.dispatch.clearRetryBans();
       const rows = await this.submissions.loadQueued();
       // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it
       await this.dispatch.enqueue(
@@ -81,16 +78,21 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
       await this.dispatch.reconcile(await this.judges.accessOf(names));
   }
 
-  /** A P/G row no judge works on (a lost judge's requeue failed, a write was lost) would never be sent again. A judge frees itself before its result write lands, so a row counts as stranded only when it was unheld on two consecutive ticks; `requeueCount` is not spent, the judge did not fail. */
+  /** A P/G run no session and no grace holds (its judge never came back after a bridge restart, a write was lost) would never be sent again. A session frees a slot before the next row is claimed, so a run counts as stranded only when it was unheld on two consecutive ticks; `requeueCount` is not spent, the judge did not fail. */
   private async requeueStranded(): Promise<void> {
-    const inFlight = await this.submissions.inFlightClaims();
+    const inFlight = await this.submissions.inFlightRuns();
     const held = new Set(this.dispatch.heldIds());
-    const unheld = inFlight.filter((claim) => !held.has(claim.id));
-    const stranded = unheld.filter((claim) => this.unheldBefore.has(claim.id));
-    this.unheldBefore = new Set(unheld.map((claim) => claim.id));
+    const unheld = inFlight.filter((run) => !held.has(run.id));
+    const stranded = unheld.filter((run) => this.unheldBefore.has(run.id));
+    this.unheldBefore = new Set(unheld.map((run) => run.id));
     if (!stranded.length) return;
-    const requeued = await this.submissions.resetStranded(stranded);
-    this.grading.announceRequeued(requeued);
+    const requeued = await this.submissions.resetStrandedRuns(stranded);
+    this.runs.announceRequeued(requeued);
+    await this.dispatch.enqueue(
+      await this.submissions.loadQueued(
+        requeued.map((job) => job.submissionId),
+      ),
+    );
     this.logger.warn(
       `Resync requeued ${requeued.length} submissions no judge held`,
     );

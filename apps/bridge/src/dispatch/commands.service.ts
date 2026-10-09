@@ -5,7 +5,7 @@ import type { Env } from '@libs/common';
 import { BRIDGE_COMMANDS_STREAM, parseBridgeCommand } from '@libs/judging';
 import type { BridgeCommand } from '@libs/judging';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
-import { DispatchService } from './dispatch.service';
+import { DispatcherService } from './dispatcher.service';
 
 const READ_BLOCK_MS = 5000;
 const READ_BATCH = 100;
@@ -30,7 +30,7 @@ export class CommandsService {
 
   constructor(
     @Inject(ENV) private readonly env: Env,
-    private readonly dispatch: DispatchService,
+    private readonly dispatch: DispatcherService,
     private readonly submissions: SubmissionsRepository,
   ) {}
 
