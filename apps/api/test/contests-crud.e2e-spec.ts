@@ -452,6 +452,29 @@ describe('contest CRUD', () => {
       expect(row.requiresRankingAccessCode).toBe(true);
     });
 
+    it('sets balloons and the volunteer list, reads them back to editors, and refuses an unknown volunteer', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      await patch('creator', contest.key, {
+        balloons: true,
+        balloonStaff: [users.dave._id],
+      }).expect(200);
+      const settings = (await detail(contest.key, 'creator')).settings!;
+      expect(settings).toMatchObject({
+        balloons: true,
+        balloonStaff: [users.dave._id],
+      });
+      expect(settings.users).toEqual(
+        expect.arrayContaining([{ id: users.dave._id, username: 'dave' }]),
+      );
+      expect((await detail(contest.key, 'plain')).settings).toBeNull();
+      await patch('creator', contest.key, { balloonStaff: [newId()] }).expect(
+        400,
+      );
+      await patch('plain', contest.key, { balloons: false }).expect(403);
+    });
+
     it('reads no settings users for a non-editor', async () => {
       const usersReadsOf = async (key: string) =>
         (

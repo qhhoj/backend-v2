@@ -93,6 +93,7 @@ export class UserPagesRepository {
               curators: 1,
               testers: 1,
               viewContestScoreboard: 1,
+              balloonStaff: 1,
               scoreboardVisibility: 1,
             },
           )

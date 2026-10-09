@@ -14,6 +14,8 @@ import {
   ContestAnnouncement,
   ContestGhost,
   ContestReplayChunk,
+  ContestBalloon,
+  ContestFeedKey,
   ContestReplayHead,
   Notification,
   SimilarityPair,
@@ -143,6 +145,12 @@ export async function setupWorkerTest({
     ),
     contestSubmissions: ready.get<Model<ContestSubmission>>(
       getModelToken(ContestSubmission.name),
+    ),
+    balloonDeliveries: ready.get<Model<ContestBalloon>>(
+      getModelToken(ContestBalloon.name),
+    ),
+    feedKeys: ready.get<Model<ContestFeedKey>>(
+      getModelToken(ContestFeedKey.name),
     ),
     replayHeads: ready.get<Model<ContestReplayHead>>(
       getModelToken(ContestReplayHead.name),

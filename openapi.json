@@ -1583,6 +1583,15 @@
       },
       "ContestSettingsResponse": {
         "properties": {
+          "balloonStaff": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "balloons": {
+            "type": "boolean"
+          },
           "bannedJudges": {
             "items": {
               "type": "string"
@@ -1706,6 +1715,8 @@
           "ratingFloor",
           "ratingCeiling",
           "pushAnnouncements",
+          "balloons",
+          "balloonStaff",
           "publishAfterEnd",
           "publishAfterEndBy",
           "hasRankingAccessCode",
@@ -1787,6 +1798,10 @@
           "canEdit": {
             "type": "boolean"
           },
+          "canViewBalloons": {
+            "description": "The balloon screen is on for this contest and the viewer may use it (editors, listed volunteers).",
+            "type": "boolean"
+          },
           "inContest": {
             "type": "boolean"
           },
@@ -1827,6 +1842,7 @@
           "isTester",
           "inContest",
           "liveParticipation",
+          "canViewBalloons",
           "isCurrent"
         ],
         "type": "object"
@@ -1888,6 +1904,16 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "balloonStaff": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "balloons": {
+            "type": "boolean"
           },
           "bannedJudges": {
             "items": {
@@ -8434,6 +8460,16 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "balloonStaff": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "balloons": {
+            "type": "boolean"
           },
           "bannedJudges": {
             "items": {

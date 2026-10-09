@@ -16,6 +16,7 @@ export interface ContestAccessView extends ContestTimes {
   curators: string[];
   testers: string[];
   viewContestScoreboard: string[];
+  balloonStaff: string[];
   scoreboardVisibility: ScoreboardVisibility;
   showSubmissionList: boolean;
 }
@@ -43,6 +44,7 @@ function accessView(contest: Contest): ContestAccessView {
     curators: ids(contest.curators),
     testers: ids(contest.testers),
     viewContestScoreboard: ids(contest.viewContestScoreboard),
+    balloonStaff: ids(contest.balloonStaff),
     scoreboardVisibility: contest.scoreboardVisibility,
     showSubmissionList: contest.showSubmissionList,
     startTime: contest.startTime,
@@ -71,6 +73,37 @@ const canEdit = (principal: Principal | null, contest: ContestAccessView) =>
   has(principal, 'judge.edit_all_contest') ||
   (has(principal, 'judge.edit_own_contest') && isEditor(principal, contest));
 
+/** The balloon screen: editors, and balloon volunteers (`balloonStaff`) the editors listed. Whether the contest has balloons on is the caller's check. */
+const canViewBalloons = (
+  principal: Principal | null,
+  contest: ContestAccessView,
+) =>
+  canEdit(principal, contest) ||
+  (principal !== null && contest.balloonStaff.includes(principal.userId));
+
+/** Seen regardless of visibility: whoever sees every contest, edits it or tests it. */
+const isInsider = (principal: Principal, contest: ContestAccessView) =>
+  seesEveryContest(principal) ||
+  isEditor(principal, contest) ||
+  isTester(principal, contest);
+
+/** Staff roles the editors listed by name: they see a visible private contest. */
+const isListedStaff = (userId: string, contest: ContestAccessView) =>
+  contest.viewContestScoreboard.includes(userId) ||
+  contest.balloonStaff.includes(userId);
+
+/** Whether a signed-in user passes the organization and private-list gates of a visible contest. */
+function isInvited(principal: Principal, contest: ContestAccessView): boolean {
+  const inOrganization = contest.organizations.some((organizationId) =>
+    principal.organizationIds.includes(organizationId),
+  );
+  const listed = contest.privateContestants.includes(principal.userId);
+  return (
+    (!contest.isOrganizationPrivate || inOrganization) &&
+    (!contest.isPrivate || listed)
+  );
+}
+
 /** Legacy `access_check`. */
 function canSee(
   principal: Principal | null,
@@ -80,22 +113,11 @@ function canSee(
     return (
       contest.isVisible && !contest.isPrivate && !contest.isOrganizationPrivate
     );
-  if (
-    seesEveryContest(principal) ||
-    isEditor(principal, contest) ||
-    isTester(principal, contest)
-  )
-    return true;
+  if (isInsider(principal, contest)) return true;
   if (!contest.isVisible) return false;
   if (!contest.isPrivate && !contest.isOrganizationPrivate) return true;
-  if (contest.viewContestScoreboard.includes(principal.userId)) return true;
-  const inOrganization = contest.organizations.some((organizationId) =>
-    principal.organizationIds.includes(organizationId),
-  );
-  const listed = contest.privateContestants.includes(principal.userId);
   return (
-    (!contest.isOrganizationPrivate || inOrganization) &&
-    (!contest.isPrivate || listed)
+    isListedStaff(principal.userId, contest) || isInvited(principal, contest)
   );
 }
 
@@ -111,6 +133,7 @@ function visibleFilter(principal: Principal | null): FilterQuery<Contest> {
         isVisible: true,
         $or: [
           { viewContestScoreboard: userId },
+          { balloonStaff: userId },
           { isPrivate: false, isOrganizationPrivate: false },
           {
             isPrivate: true,
@@ -224,6 +247,7 @@ export const ContestAccess = {
   isEditor,
   isTester,
   canEdit,
+  canViewBalloons,
   canSee,
   visibleFilter,
   boardVisible,

@@ -38,6 +38,7 @@ const view = (
   curators: [],
   testers: [],
   viewContestScoreboard: [],
+  balloonStaff: [],
   scoreboardVisibility: 'V',
   showSubmissionList: false,
   startTime: hours(-1),
@@ -170,6 +171,55 @@ describe('ContestAccess.canSee (legacy access_check)', () => {
   ])('%s', (_case, who, contest, expected) =>
     expect(ContestAccess.canSee(PRINCIPALS[who], contest)).toBe(expected),
   );
+});
+
+describe('ContestAccess.canViewBalloons', () => {
+  const editorView = view({ authors: [USER] });
+  it.each([
+    [
+      'an editor with the edit permission',
+      principalWith({}, 'judge.edit_own_contest'),
+      editorView,
+      true,
+    ],
+    [
+      'a listed volunteer who is not an editor',
+      principalWith(),
+      view({ balloonStaff: [USER] }),
+      true,
+    ],
+    [
+      'a user who is neither',
+      principalWith(),
+      view({ balloonStaff: [OTHER] }),
+      false,
+    ],
+    [
+      'an author without the edit permission',
+      principalWith(),
+      editorView,
+      false,
+    ],
+    ['a visitor', null, view({ balloonStaff: [USER] }), false],
+  ])('%s', (_who, principal, contestView, expected) =>
+    expect(ContestAccess.canViewBalloons(principal, contestView)).toBe(
+      expected,
+    ),
+  );
+
+  it('lets a listed volunteer see a visible private contest, as it does for scoreboard viewers', () => {
+    const privateView = view({ isPrivate: true, balloonStaff: [USER] });
+    expect(ContestAccess.canSee(principalWith(), privateView)).toBe(true);
+    expect(
+      ContestAccess.canSee(principalWith(), view({ isPrivate: true })),
+    ).toBe(false);
+    expect(
+      ContestAccess.canSee(
+        principalWith(),
+        view({ isVisible: false, isPrivate: true, balloonStaff: [USER] }),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('ContestAccess.canEdit (legacy is_editable_by)', () => {
@@ -441,6 +491,7 @@ describe('ContestAccess.visibleFilter', () => {
       { privateContestants: [USER] },
       { privateContestants: [OTHER] },
       { viewContestScoreboard: [USER] },
+      { balloonStaff: [USER] },
       { authors: [OTHER] },
     ];
     let index = 0;
@@ -477,6 +528,7 @@ describe('ContestAccess.visibleFilter', () => {
       curators: [OTHER],
       testers: [ORG],
       viewContestScoreboard: [OTHER, USER],
+      balloonStaff: [OTHER],
       scoreboardVisibility: 'H',
       showSubmissionList: true,
       timeLimit: 3600,

@@ -227,6 +227,42 @@ describe('user pages', () => {
     ).toMatchObject({ contestName: null });
   });
 
+  it('names a private rated contest to a listed balloon volunteer but not to a stranger', async () => {
+    const rated = await createUserWith(api, 'rated_balloon', { rating: 1400 });
+    const secret = await createContest(api, {
+      name: 'Balloon secret',
+      isPrivate: true,
+      startTime: hoursFromNow(-30),
+      endTime: hoursFromNow(-28),
+    });
+    await api.ratings.create({
+      user: rated._id,
+      contest: secret._id,
+      participation: newId(),
+      contestEndTime: secret.endTime,
+      rank: 1,
+      rating: 1400,
+      mean: 1400,
+      performance: 1400,
+      lastRated: new Date(),
+    });
+    const volunteer = await createUserWith(api, 'balloon_volunteer', {});
+    const stranger = await createUserWith(api, 'balloon_stranger', {});
+    await api.contests.updateOne(
+      { _id: secret._id },
+      { balloonStaff: [volunteer._id] },
+    );
+    const nameFor = async (user: { _id: string }) =>
+      dataOf<RatingHistoryEntryResponse[]>(
+        await get(
+          '/api/internal/users/rated_balloon/ratings',
+          await loginAs(api, user._id),
+        ).expect(200),
+      )[0].contestName;
+    expect(await nameFor(volunteer)).toBe('Balloon secret');
+    expect(await nameFor(stranger)).toBeNull();
+  });
+
   it('nulls rank, performance and rating of hidden and re-frozen boards for viewers who may not read them', async () => {
     const rated = await createUserWith(api, 'rated_boards', { rating: 1600 });
     const author = await createUserWith(api, 'board_author', {

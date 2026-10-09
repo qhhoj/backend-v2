@@ -87,6 +87,8 @@ export class ContestViewerResponse extends ContestListViewerResponse {
   isTester!: boolean;
   inContest!: boolean;
   liveParticipation!: ParticipationSummaryResponse | null;
+  /** The balloon screen is on for this contest and the viewer may use it (editors, listed volunteers). */
+  canViewBalloons!: boolean;
 }
 
 /** One contest problem's output-prefix override (null: the judge default). */
@@ -114,6 +116,8 @@ export class ContestSettingsResponse {
   ratingFloor!: number | null;
   ratingCeiling!: number | null;
   pushAnnouncements!: boolean;
+  balloons!: boolean;
+  balloonStaff!: string[];
   publishAfterEnd!: boolean;
   /** The editor whose rights the automatic publish re-checks at the end. */
   publishAfterEndBy!: string | null;
@@ -132,6 +136,7 @@ export class ContestSettingsResponse {
         ...contest.testers,
         ...contest.bannedUsers,
         ...contest.viewContestScoreboard,
+        ...contest.balloonStaff,
         ...contest.rateExclude,
       ].map(uuidStr),
     );
@@ -160,6 +165,8 @@ export class ContestSettingsResponse {
       ratingFloor: contest.ratingFloor,
       ratingCeiling: contest.ratingCeiling,
       pushAnnouncements: contest.pushAnnouncements,
+      balloons: contest.balloons,
+      balloonStaff: ids(contest.balloonStaff),
       publishAfterEnd: contest.publishAfterEnd,
       publishAfterEndBy:
         contest.publishAfterEndBy === null

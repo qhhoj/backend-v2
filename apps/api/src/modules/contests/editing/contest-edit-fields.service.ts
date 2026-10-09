@@ -27,6 +27,7 @@ const USER_FIELDS = [
   'privateContestants',
   'bannedUsers',
   'viewContestScoreboard',
+  'balloonStaff',
   'rateExclude',
 ] as const;
 

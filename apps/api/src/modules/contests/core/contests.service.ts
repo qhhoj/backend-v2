@@ -145,6 +145,8 @@ export class ContestsService {
       canEdit: ContestAccess.canEdit(principal, view),
       isEditor: ContestAccess.isEditor(principal, view),
       isTester: ContestAccess.isTester(principal, view),
+      canViewBalloons:
+        contest.balloons && ContestAccess.canViewBalloons(principal, view),
       inContest: viewer.inContest,
       liveParticipation:
         viewer.live && ParticipationSummaryResponse.from(viewer.live, contest),

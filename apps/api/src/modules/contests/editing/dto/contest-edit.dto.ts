@@ -114,6 +114,8 @@ export class CreateContestDto {
   @IsOptional() @IsBoolean() hideProblemAuthors?: boolean;
   @IsOptional() @IsBoolean() showShortDisplay?: boolean;
   @IsOptional() @IsBoolean() pushAnnouncements?: boolean;
+  @IsOptional() @IsBoolean() balloons?: boolean;
+  @IsOptional() @IsUUID('7', { each: true }) balloonStaff?: string[];
   @IsOptional() @IsBoolean() publishAfterEnd?: boolean;
   @ApiPropertyOptional({ enum: LABEL_STYLES, enumName: 'ContestLabelStyle' })
   @IsOptional()

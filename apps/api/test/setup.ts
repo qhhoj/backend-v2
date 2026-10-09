@@ -21,6 +21,8 @@ import {
   TicketCannedReply,
   UserActivity,
   UserSession,
+  ContestBalloon,
+  ContestFeedKey,
   ContestOfficialRanking,
   ContestGhost,
   ContestReplayChunk,
@@ -185,6 +187,12 @@ export async function setupApiTest({
     ),
     officialRankings: readyApp.get<Model<ContestOfficialRanking>>(
       getModelToken(ContestOfficialRanking.name),
+    ),
+    balloonDeliveries: readyApp.get<Model<ContestBalloon>>(
+      getModelToken(ContestBalloon.name),
+    ),
+    feedKeys: readyApp.get<Model<ContestFeedKey>>(
+      getModelToken(ContestFeedKey.name),
     ),
     replayHeads: readyApp.get<Model<ContestReplayHead>>(
       getModelToken(ContestReplayHead.name),

@@ -113,6 +113,8 @@ export class ContestEditingService {
       lockedAfter: null,
       dataPreparedAt: null,
       managedBy: null,
+      balloonStaff: [],
+      exportPreparedAt: null,
       organizations: ids(copied.organizations),
       privateContestants: ids(copied.privateContestants),
       viewContestScoreboard: ids(copied.viewContestScoreboard),

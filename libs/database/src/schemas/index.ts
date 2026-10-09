@@ -19,6 +19,11 @@ import {
   ContestAnnouncement,
   ContestAnnouncementSchema,
 } from './contest-announcement.schema';
+import { ContestBalloon, ContestBalloonSchema } from './contest-balloon.schema';
+import {
+  ContestFeedKey,
+  ContestFeedKeySchema,
+} from './contest-feed-key.schema';
 import {
   ContestOfficialRanking,
   ContestOfficialRankingSchema,
@@ -91,6 +96,8 @@ export * from './comment-lock.schema';
 export * from './comment-vote.schema';
 export * from './comment.schema';
 export * from './contest-announcement.schema';
+export * from './contest-balloon.schema';
+export * from './contest-feed-key.schema';
 export * from './contest-ghost.schema';
 export * from './contest-official-ranking.schema';
 export * from './contest-participation.schema';
@@ -146,6 +153,8 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: UserSession.name, schema: UserSessionSchema },
   { name: ContestAnnouncement.name, schema: ContestAnnouncementSchema },
   { name: ContestOfficialRanking.name, schema: ContestOfficialRankingSchema },
+  { name: ContestBalloon.name, schema: ContestBalloonSchema },
+  { name: ContestFeedKey.name, schema: ContestFeedKeySchema },
   { name: ContestGhost.name, schema: ContestGhostSchema },
   { name: ContestReplayChunk.name, schema: ContestReplayChunkSchema },
   { name: ContestReplayHead.name, schema: ContestReplayHeadSchema },

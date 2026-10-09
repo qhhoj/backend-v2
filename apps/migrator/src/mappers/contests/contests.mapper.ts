@@ -17,6 +17,9 @@ const V2_ONLY_DEFAULTS = {
   publishAfterEnd: false,
   publishAfterEndBy: null,
   autoPublishOutcome: null,
+  balloons: false,
+  balloonStaff: [],
+  exportPreparedAt: null,
 };
 
 @Injectable()

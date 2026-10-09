@@ -74,6 +74,31 @@ describe('contest viewer fields', () => {
   });
   afterAll(() => api.teardown());
 
+  it('tells who may use the balloon screen: listed volunteers and editors, only while balloons are on', async () => {
+    const contest = await createContest(api, {
+      authors: [users.author._id],
+      balloons: true,
+      balloonStaff: [users.alice._id],
+    });
+    expect((await detail(contest.key, 'alice')).viewer.canViewBalloons).toBe(
+      true,
+    );
+    expect((await detail(contest.key, 'author')).viewer.canViewBalloons).toBe(
+      true,
+    );
+    expect((await detail(contest.key, 'bob')).viewer.canViewBalloons).toBe(
+      false,
+    );
+    expect((await detail(contest.key)).viewer.canViewBalloons).toBe(false);
+    await api.contests.updateOne({ _id: contest._id }, { balloons: false });
+    expect((await detail(contest.key, 'alice')).viewer.canViewBalloons).toBe(
+      false,
+    );
+    expect((await detail(contest.key, 'author')).viewer.canViewBalloons).toBe(
+      false,
+    );
+  });
+
   describe('list rows', () => {
     it("shows each row the contest's join rules and, to a signed-in viewer, their live state and current contest", async () => {
       const upcoming = await createContest(api, {

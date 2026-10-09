@@ -120,6 +120,12 @@ export class Contest {
   @Prop({ default: false }) hideProblemAuthors!: boolean;
   @Prop({ default: false }) showShortDisplay!: boolean;
   @Prop({ default: false }) pushAnnouncements!: boolean;
+  /** On-site balloon deliveries are tracked for this contest. */
+  @Prop({ default: false }) balloons!: boolean;
+  /** Balloon volunteers: users who may use the balloon screen; they do not become editors. */
+  @Prop({ type: [UUID], default: [] }) balloonStaff!: string[];
+  /** When an editor last asked for the submissions export (once a day while a zip exists). */
+  @Prop({ type: Date, default: null }) exportPreparedAt!: Date | null;
   /** Markdown rules a participant accepts at every new participation; empty: none. */
   @Prop({ default: '', maxlength: CONTEST_RULES_MAX }) rules!: string;
   /** `rules` rendered and sanitised at save. */
@@ -181,6 +187,7 @@ ContestSchema.index({ endTime: -1 });
 ContestSchema.index({ authors: 1 });
 ContestSchema.index({ curators: 1 });
 ContestSchema.index({ testers: 1 });
+ContestSchema.index({ balloonStaff: 1 });
 ContestSchema.index({ organizations: 1 });
 // Only client-managed rows: Mongoose writes `managedBy: null` on every contest, which a sparse index would still include. A query uses it only when it also states `$type: 'binData'` (equality alone does not imply the type to the planner).
 ContestSchema.index(
