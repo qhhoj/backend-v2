@@ -110,6 +110,21 @@ describe('pickJudge', () => {
       pickJudge([judge('a', { slots: 2 })], queued({ priority: 3 })),
     ).not.toBeNull();
   });
+  it('counts a winding slot as opening for the hold-back: a rejudge takes the spare slot beside it, not the last one', () => {
+    const windingOne = judge('a', {
+      slots: 2,
+      winding: new Set([windingKey({ submissionId: newId(), generation: 1 })]),
+    });
+    expect(pickJudge([windingOne], queued({ priority: 2 }))).toBe(windingOne);
+    const liveOne = judge('a', { slots: 2, inFlight: busyWith(1) });
+    expect(pickJudge([liveOne], queued({ priority: 2 }))).toBeNull();
+    const windingTwo = judge('a', {
+      slots: 3,
+      inFlight: busyWith(1),
+      winding: new Set(['x.1']),
+    });
+    expect(pickJudge([windingTwo], queued({ priority: 2 }))).toBe(windingTwo);
+  });
 });
 
 describe('insertQueued', () => {

@@ -33,6 +33,8 @@ export const FAST_TIMINGS: BridgeTimings = {
   ackMs: 500,
   pingIntervalMs: 200,
   resyncMs: 60_000,
+  acceptMs: 500,
+  resumeGraceMs: 300,
 };
 
 export async function setupBridgeTest({

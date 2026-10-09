@@ -7,6 +7,8 @@ const TIMINGS = {
   ackMs: 60_000,
   pingIntervalMs: 60_000,
   resyncMs: 60_000,
+  acceptMs: 20_000,
+  resumeGraceMs: 30_000,
 };
 
 describe('JudgeServerService start-up', () => {

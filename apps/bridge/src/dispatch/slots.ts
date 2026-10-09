@@ -77,7 +77,11 @@ export const canJudge = (
 const sum = (values: number[]): number =>
   values.reduce((total, value) => total + value, 0);
 
-/** Rejudges (priority ≥ 2) leave the last free slot to new submissions whenever the candidates have more than one slot in all. */
+/** Slots no live run holds: free ones and winding ones, which open at the judge's `Final{ABORTED}`; none while draining. */
+const openingSlots = (judge: JudgeState): number =>
+  judge.isDraining ? 0 : Math.max(0, judge.slots - judge.inFlight.size);
+
+/** Rejudges (priority ≥ 2) leave the last slot no live run holds to new submissions whenever the candidates have more than one slot in all. A winding slot counts as opening, so a rejudge that voided its own run still takes the spare slot (conformance 21). */
 const heldBack = (
   submission: QueuedSubmission,
   candidates: JudgeState[],
@@ -86,7 +90,7 @@ const heldBack = (
   sum(
     candidates.filter((judge) => !judge.isDraining).map((judge) => judge.slots),
   ) > 1 &&
-  sum(candidates.map(freeSlots)) === 1;
+  sum(candidates.map(openingSlots)) === 1;
 
 /** The candidate with a free slot and the lowest load, ties broken by `random`; null keeps the submission queued. */
 export function pickJudge<Judge extends JudgeState>(

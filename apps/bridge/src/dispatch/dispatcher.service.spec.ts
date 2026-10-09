@@ -1,0 +1,393 @@
+import { newId } from '@libs/database';
+import { Resume_Action } from '@libs/judge-proto';
+import type { AssignmentRef } from '@libs/judge-proto';
+import type { BridgeTimings } from '../bridge-timings';
+import type { AssignRequest } from '../submissions/assign-request';
+import type { RunsService } from '../submissions/runs.service';
+import type { SubmissionsRepository } from '../submissions/submissions.repository';
+import { DispatcherService } from './dispatcher.service';
+import type { DispatchTarget, QueuedSubmission } from './slots';
+
+/** A session without a stream: records what the dispatcher tells it. */
+class Target implements DispatchTarget {
+  readonly id = newId();
+  readonly inFlight = new Map<string, number>();
+  readonly winding = new Set<string>();
+  executors: ReadonlySet<string> = new Set(['CPP17']);
+  isDisabled = false;
+  isDraining = false;
+  isClosed = false;
+  authKeyHash = 'hash';
+  readonly assigned: AssignRequest[] = [];
+  readonly aborted: AssignmentRef[] = [];
+  wasReplaced = false;
+  constructor(
+    readonly name: string,
+    public slots = 1,
+  ) {}
+  assign(request: AssignRequest): void {
+    this.assigned.push(request);
+  }
+  abort(ref: AssignmentRef): void {
+    this.aborted.push(ref);
+  }
+  disconnect(): void {
+    this.isClosed = true;
+  }
+  replaced(): void {
+    this.wasReplaced = true;
+  }
+}
+
+const TIMINGS = { resumeGraceMs: 30_000 } as BridgeTimings;
+const entry = (fields: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
+  id: newId(),
+  problemCode: 'sum',
+  languageKey: 'CPP17',
+  priority: 1,
+  generation: 0,
+  judgeName: null,
+  bannedJudges: [],
+  retryBannedJudges: [],
+  ...fields,
+});
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+describe('DispatcherService', () => {
+  /** Mongo stand-in: the generation of every row, bumped by each claim. */
+  let generations: Map<string, number>;
+  let rows: Map<string, QueuedSubmission>;
+  let stored: Map<string, number | null>;
+  let expired: Array<{ ref: AssignmentRef; abortRequested: boolean }>;
+  let dispatcher: DispatcherService;
+  const runs = {
+    claim: (queued: QueuedSubmission) => {
+      const generation = (generations.get(queued.id) ?? 0) + 1;
+      generations.set(queued.id, generation);
+      return Promise.resolve({
+        request: {
+          ref: { submissionId: queued.id, generation },
+        } as AssignRequest,
+        subject: { submissionId: queued.id, userId: 'u', problemId: 'p' },
+      });
+    },
+    sent: () => undefined,
+    release: () => Promise.resolve(true),
+    resumableSeq: (ref: AssignmentRef) =>
+      Promise.resolve(
+        stored.get(`${ref.submissionId}.${ref.generation}`) ?? null,
+      ),
+    graceExpired: (
+      ref: AssignmentRef,
+      _judge: string,
+      abortRequested: boolean,
+    ) => {
+      expired.push({ ref, abortRequested });
+      return Promise.resolve(abortRequested ? 'aborted' : 'requeued');
+    },
+  } as unknown as RunsService;
+  const submissions = {
+    loadQueued: (ids: string[]) =>
+      Promise.resolve(
+        ids.flatMap((id) => {
+          const row = rows.get(id);
+          return row ? [{ ...row, generation: generations.get(id) ?? 0 }] : [];
+        }),
+      ),
+  } as unknown as SubmissionsRepository;
+  const queue = async (...entries: QueuedSubmission[]) => {
+    for (const queued of entries) rows.set(queued.id, queued);
+    await dispatcher.enqueue(entries);
+  };
+  const online = async (target: Target) => {
+    await dispatcher.resume(target, []);
+    await dispatcher.register(target);
+    return target;
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    generations = new Map();
+    rows = new Map();
+    stored = new Map();
+    expired = [];
+    dispatcher = new DispatcherService(submissions, runs, TIMINGS);
+  });
+  afterEach(() => {
+    dispatcher.stop();
+    jest.useRealTimers();
+  });
+
+  it('fills the least busy judge slot by slot, and queues what no slot can take', async () => {
+    const big = await online(new Target('big', 2));
+    const small = await online(new Target('small', 1));
+    const [first, second, third, fourth] = [entry(), entry(), entry(), entry()];
+    await queue(first, second, third, fourth);
+    expect(big.assigned).toHaveLength(2);
+    expect(small.assigned).toHaveLength(1);
+    expect(dispatcher.queuedIds()).toEqual([fourth.id]);
+    expect(dispatcher.heldIds().sort()).toEqual(
+      [first.id, second.id, third.id].sort(),
+    );
+  });
+
+  it('gives a draining judge nothing new', async () => {
+    const judge = await online(new Target('j1', 4));
+    judge.isDraining = true;
+    await queue(entry());
+    expect(judge.assigned).toEqual([]);
+  });
+
+  it('voids a run when its row is rejudged: the judge is told to stop and the new generation is assigned', async () => {
+    // three slots: the winding run keeps one, and a rejudge never takes the last free one
+    const judge = await online(new Target('j1', 3));
+    const submission = entry();
+    await queue(submission);
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1,
+    ]);
+    await queue({ ...submission, priority: 2, generation: 1 });
+    expect(judge.aborted).toEqual([
+      { submissionId: submission.id, generation: 1 },
+    ]);
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1, 2,
+    ]);
+    expect(judge.inFlight.get(submission.id)).toBe(2);
+    expect([...judge.winding]).toEqual([`${submission.id}.1`]);
+  });
+
+  it('assigns a rejudge to the spare slot of a two-slot judge at once, beside its winding run (conformance 21)', async () => {
+    const judge = await online(new Target('j1', 2));
+    const submission = entry();
+    await queue(submission);
+    await queue({ ...submission, priority: 2, generation: 1 });
+    expect(judge.aborted).toEqual([
+      { submissionId: submission.id, generation: 1 },
+    ]);
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1, 2,
+    ]);
+    expect([...judge.winding]).toEqual([`${submission.id}.1`]);
+  });
+
+  it('keeps a voided run’s slot until the judge’s Final for it (one slot: the new generation waits)', async () => {
+    const judge = await online(new Target('j1', 1));
+    const submission = entry();
+    await queue(submission);
+    await queue({ ...submission, priority: 2, generation: 1 });
+    expect(judge.aborted).toEqual([
+      { submissionId: submission.id, generation: 1 },
+    ]);
+    expect(judge.assigned).toHaveLength(1);
+    expect(dispatcher.queuedIds()).toEqual([submission.id]);
+    await dispatcher.windingEnded(judge, {
+      submissionId: submission.id,
+      generation: 1,
+    });
+    expect(judge.winding.size).toBe(0);
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1, 2,
+    ]);
+    await dispatcher.windingEnded(judge, {
+      submissionId: submission.id,
+      generation: 1,
+    });
+    expect(judge.assigned).toHaveLength(2);
+    judge.winding.add('stale.1');
+    await dispatcher.judgeLost(judge);
+    expect(judge.winding.size).toBe(0);
+  });
+
+  it('keeps a run claimed after the row was read (a resync racing a dispatch)', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.enqueue([{ ...submission, generation: 0 }]);
+    expect(judge.aborted).toEqual([]);
+    expect(judge.inFlight.get(submission.id)).toBe(1);
+  });
+
+  it('holds a lost judge’s runs in grace and resumes them on reconnect without a requeue', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.judgeLost(judge);
+    expect(dispatcher.heldIds()).toEqual([submission.id]);
+    stored.set(`${submission.id}.1`, 3);
+    const back = new Target('j1');
+    const plan = await dispatcher.resume(back, [
+      { ref: { submissionId: submission.id, generation: 1 }, lastSeqSent: 3 },
+    ]);
+    expect(plan).toEqual({
+      resume: [
+        {
+          ref: { submissionId: submission.id, generation: 1 },
+          action: Resume_Action.ACTION_CONTINUE,
+          fromSeq: 4,
+        },
+      ],
+      abort: [],
+    });
+    await dispatcher.register(back);
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(expired).toEqual([]);
+    expect(back.inFlight.get(submission.id)).toBe(1);
+  });
+
+  it('drops a run Mongo no longer gives the judge, and expires at once what the judge no longer lists', async () => {
+    const judge = await online(new Target('j1', 2));
+    const [kept, forgotten] = [entry(), entry()];
+    await queue(kept, forgotten);
+    await dispatcher.judgeLost(judge);
+    const back = new Target('j1', 2);
+    const plan = await dispatcher.resume(back, [
+      { ref: { submissionId: kept.id, generation: 1 }, lastSeqSent: 1 },
+    ]);
+    expect(plan.resume).toEqual([
+      expect.objectContaining({ action: Resume_Action.ACTION_DROP }),
+    ]);
+    expect([...back.winding]).toEqual([`${kept.id}.1`]);
+    await flush();
+    expect(expired).toEqual([
+      {
+        ref: { submissionId: forgotten.id, generation: 1 },
+        abortRequested: false,
+      },
+    ]);
+  });
+
+  it('requeues a run whose judge stays away past the grace, to another judge', async () => {
+    const lost = await online(new Target('lost'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.judgeLost(lost);
+    const other = await online(new Target('other'));
+    expect(other.assigned).toEqual([]);
+    jest.advanceTimersByTime(30_000);
+    await flush();
+    expect(expired).toEqual([
+      {
+        ref: { submissionId: submission.id, generation: 1 },
+        abortRequested: false,
+      },
+    ]);
+    expect(other.assigned.map((request) => request.ref)).toEqual([
+      { submissionId: submission.id, generation: 2 },
+    ]);
+  });
+
+  it('records an abort sent during the grace: sent after a resume, AB on expiry', async () => {
+    const judge = await online(new Target('j1', 2));
+    const [resumed, expiring] = [entry(), entry()];
+    await queue(resumed, expiring);
+    await dispatcher.judgeLost(judge);
+    dispatcher.abort(resumed.id);
+    dispatcher.abort(expiring.id);
+    stored.set(`${resumed.id}.1`, 1);
+    const plan = await dispatcher.resume(new Target('j1', 2), [
+      { ref: { submissionId: resumed.id, generation: 1 }, lastSeqSent: 1 },
+      { ref: { submissionId: expiring.id, generation: 1 }, lastSeqSent: 1 },
+    ]);
+    expect(plan.abort).toEqual([{ submissionId: resumed.id, generation: 1 }]);
+    expect(plan.resume[1].action).toBe(Resume_Action.ACTION_DROP);
+    const fresh = new Target('j2');
+    await online(fresh);
+    jest.advanceTimersByTime(30_000);
+    await flush();
+    expect(expired).toEqual([]);
+  });
+
+  it('expires an aborted run in grace as an abort', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.judgeLost(judge);
+    dispatcher.abort(submission.id);
+    jest.advanceTimersByTime(30_000);
+    await flush();
+    expect(expired).toEqual([
+      {
+        ref: { submissionId: submission.id, generation: 1 },
+        abortRequested: true,
+      },
+    ]);
+  });
+
+  it('moves the runs of a replaced session to the new one', async () => {
+    const first = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    stored.set(`${submission.id}.1`, 2);
+    const second = new Target('j1');
+    const plan = await dispatcher.resume(second, [
+      { ref: { submissionId: submission.id, generation: 1 }, lastSeqSent: 2 },
+    ]);
+    expect(first.wasReplaced).toBe(true);
+    expect(plan.resume[0]).toMatchObject({
+      action: Resume_Action.ACTION_CONTINUE,
+      fromSeq: 3,
+    });
+    await dispatcher.register(second);
+    await dispatcher.judgeLost(first);
+    expect(dispatcher.connectedNames()).toEqual(['j1']);
+    expect(second.inFlight.get(submission.id)).toBe(1);
+  });
+
+  it('releases an unaccepted Assign alone and hands it to a free slot', async () => {
+    const judge = await online(new Target('j1', 2));
+    const [slow, fine] = [entry(), entry()];
+    await queue(slow, fine);
+    await dispatcher.acceptTimedOut(judge, {
+      submissionId: slow.id,
+      generation: 1,
+    });
+    expect(judge.aborted).toEqual([{ submissionId: slow.id, generation: 1 }]);
+    // judge-v2 frees the slot only when the aborted run's process returns: no Assign until its Final{ABORTED}
+    expect(judge.assigned).toHaveLength(2);
+    expect(dispatcher.queuedIds()).toEqual([slow.id]);
+    await dispatcher.windingEnded(judge, {
+      submissionId: slow.id,
+      generation: 1,
+    });
+    expect(judge.assigned.map((request) => request.ref)).toEqual([
+      { submissionId: slow.id, generation: 1 },
+      { submissionId: fine.id, generation: 1 },
+      { submissionId: slow.id, generation: 2 },
+    ]);
+    await dispatcher.acceptTimedOut(judge, {
+      submissionId: slow.id,
+      generation: 1,
+    });
+    expect(judge.aborted).toHaveLength(1);
+  });
+
+  it('keeps a RETRY away from the judge that answered it until the next resync tick', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.runEnded(
+      judge,
+      { submissionId: submission.id, generation: 1 },
+      { retried: true },
+    );
+    expect(judge.assigned).toHaveLength(1);
+    expect(dispatcher.queuedIds()).toEqual([submission.id]);
+    await dispatcher.clearRetryBans();
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it('leaves the rows of judges lost while stopping alone, and fires no grace after stop', async () => {
+    const judge = await online(new Target('j1'));
+    await queue(entry());
+    dispatcher.stop();
+    await dispatcher.judgeLost(judge);
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(expired).toEqual([]);
+    expect(dispatcher.heldIds()).toHaveLength(1);
+  });
+});
