@@ -3059,6 +3059,109 @@
         ],
         "type": "object"
       },
+      "GhostCellResponse": {
+        "properties": {
+          "minute": {
+            "type": "number"
+          },
+          "points": {
+            "nullable": true,
+            "type": "number"
+          },
+          "problemCode": {
+            "type": "string"
+          },
+          "rejectedBefore": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "problemCode",
+          "minute",
+          "rejectedBefore",
+          "points"
+        ],
+        "type": "object"
+      },
+      "GhostGap": {
+        "description": "R3: `GhostGap` is a union alias, which the plugin drops without an explicit enum.",
+        "enum": [
+          "points",
+          "rejectedBefore"
+        ],
+        "type": "string"
+      },
+      "GhostImportResponse": {
+        "properties": {
+          "ghosts": {
+            "items": {
+              "$ref": "#/components/schemas/GhostResponse"
+            },
+            "type": "array"
+          },
+          "stored": {
+            "description": "False for a `dryRun`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stored",
+          "ghosts"
+        ],
+        "type": "object"
+      },
+      "GhostListResponse": {
+        "properties": {
+          "ghosts": {
+            "items": {
+              "$ref": "#/components/schemas/GhostResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ghosts"
+        ],
+        "type": "object"
+      },
+      "GhostResponse": {
+        "properties": {
+          "caption": {
+            "type": "string"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/GhostCellResponse"
+            },
+            "type": "array"
+          },
+          "gap": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GhostGap"
+              }
+            ],
+            "description": "R3: `GhostGap` is a union alias, which the plugin drops without an explicit enum.",
+            "nullable": true
+          },
+          "isUnranked": {
+            "description": "Derived from the contest's format on every read; unranked ghosts are shown last.",
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "gap",
+          "label",
+          "caption",
+          "isUnranked",
+          "cells"
+        ],
+        "type": "object"
+      },
       "HasMorePageMetaResponse": {
         "properties": {
           "hasMore": {
@@ -3227,6 +3330,26 @@
           "performancePoints",
           "contributionPoints",
           "organization"
+        ],
+        "type": "object"
+      },
+      "ImportGhostsDto": {
+        "properties": {
+          "anonymize": {
+            "description": "Replace every label by \"Ghost 001\", ...: labels may be real students' names.",
+            "type": "boolean"
+          },
+          "csv": {
+            "maxLength": 1048576,
+            "type": "string"
+          },
+          "dryRun": {
+            "description": "Validate and preview without storing.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "csv"
         ],
         "type": "object"
       },
@@ -14953,6 +15076,220 @@
         "summary": "Always an attachment with `nosniff`; the file name is the contest key (`[a-z0-9_]`), nothing to escape.",
         "tags": [
           "ContestData"
+        ],
+        "x-raw": true
+      }
+    },
+    "/api/internal/contests/{key}/ghosts": {
+      "delete": {
+        "operationId": "GhostsController_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Ghosts"
+        ]
+      },
+      "get": {
+        "operationId": "GhostsController_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GhostListResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Ghosts"
+        ]
+      },
+      "put": {
+        "operationId": "GhostsController_importCsv",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportGhostsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GhostImportResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The whole request body is capped at `GHOST_CSV_MAX_BYTES` (Fastify answers 413 beyond it).",
+        "tags": [
+          "Ghosts"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/ghosts/csv": {
+      "get": {
+        "operationId": "GhostsController_csv",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file, as an attachment."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Ghosts"
         ],
         "x-raw": true
       }
