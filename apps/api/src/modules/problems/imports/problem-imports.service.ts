@@ -2,7 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { FastifyRequest } from 'fastify';
-import { rm } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, RateLimitService, unique } from '@libs/common';
@@ -24,6 +24,7 @@ import { rejectFile, saveMultipartFile } from '../core/multipart';
 import { ProblemDataStore } from '../data/problem-data.store';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
+import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from '../core/rate-limits';
 
 export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
@@ -42,6 +43,7 @@ export class ProblemImportsService {
     private readonly repository: ProblemsRepository,
     private readonly dataFiles: ProblemDataFilesService,
     private readonly rateLimit: RateLimitService,
+    private readonly storage: ProblemStorageQuota,
     @InjectQueue(POLYGON_QUEUE)
     private readonly queue: Queue<PolygonImportJob, PolygonImportResult>,
   ) {}
@@ -64,6 +66,7 @@ export class ProblemImportsService {
     try {
       await saveMultipartFile(request, POLYGON_PACKAGE_MAX_BYTES, packagePath);
       await this.assertPackage(packagePath);
+      await this.assertStorage(auth, query, packagePath);
       await this.queue.add('import', job, {
         jobId,
         removeOnComplete: IMPORT_JOB_KEEP,
@@ -157,6 +160,23 @@ export class ProblemImportsService {
       (await this.repository.findByCode(code)) ||
       (await this.repository.findDeletedByCode(code)) ||
       (await this.dataFiles.exists(code)),
+    );
+  }
+
+  /** An update of an organization problem must fit its organization's storage: the package size (an upper bound of the data it brings) against what the problem holds now. A create has no organization yet; no credits are spent because the job's outcome is unknown here. */
+  private async assertStorage(
+    auth: AuthContext,
+    query: PolygonImportQueryDto,
+    packagePath: string,
+  ): Promise<void> {
+    if (query.mode !== 'update') return;
+    const problem = await this.store.writableProblem(
+      auth.principal,
+      query.code,
+    );
+    await this.storage.assertFits(
+      this.storage.organizationOf(auth.principal, problem),
+      { addedBytes: (await stat(packagePath)).size - problem.dataBytes },
     );
   }
 

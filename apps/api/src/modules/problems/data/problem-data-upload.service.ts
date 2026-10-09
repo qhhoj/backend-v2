@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { rm } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import type { AuthContext } from '@libs/auth';
 import { RateLimitService, writeFileAtomically } from '@libs/common';
 import { DATA_FILE_KINDS } from '@libs/database';
@@ -20,6 +20,9 @@ import {
   rejectFile,
   saveMultipartFile,
 } from '../core/multipart';
+import { QuotaService } from '../../organizations/quota/quota.service';
+import type { ProblemDocument } from '../core/problems.repository';
+import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 import { ProblemDataStore } from './problem-data.store';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from '../core/rate-limits';
 
@@ -38,6 +41,8 @@ export class ProblemDataUploadService {
     private readonly store: ProblemDataStore,
     private readonly dataFiles: ProblemDataFilesService,
     private readonly rateLimit: RateLimitService,
+    private readonly quota: QuotaService,
+    private readonly storage: ProblemStorageQuota,
   ) {}
 
   /**
@@ -65,13 +70,42 @@ export class ProblemDataUploadService {
             );
         },
       );
-      const name = safeFileName(filename);
       await this.assertZip(staged);
-      const { data: previous, version } = await this.store.loadData(problem);
-      this.assertNameFree(previous, 'archive', name);
-      const { stored, archiveFiles } = await this.store.withDataWrite(
-        problem,
-        async () => {
+      return await this.storeArchive(auth, problem, {
+        staged,
+        name: safeFileName(filename),
+      });
+    } catch (error) {
+      await rm(staged, { force: true });
+      throw error;
+    }
+  }
+
+  /** Storage check, then the credits are spent around the whole locked write (compile, commit of the staged file, stamp) and given back if any of it throws. */
+  private async storeArchive(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    upload: { staged: string; name: string },
+  ): Promise<ProblemDataResponse> {
+    const { staged, name } = upload;
+    const { data: previous, version } = await this.store.loadData(problem);
+    this.assertNameFree(previous, 'archive', name);
+    const bytes = (await stat(staged)).size;
+    const organizationId = this.storage.organizationOf(auth.principal, problem);
+    await this.assertStorageFits(organizationId, problem, {
+      bytes,
+      replaced: previous.archive,
+    });
+    const { stored, archiveFiles } = await this.quota.charged(
+      organizationId,
+      {
+        kind: 'upload',
+        userId: auth.principal.userId,
+        ref: problem.code,
+        bytes,
+      },
+      () =>
+        this.store.withDataWrite(problem, async () => {
           const written = await this.store.compileAndStore(
             problem,
             { ...previous, archive: name },
@@ -80,20 +114,16 @@ export class ProblemDataUploadService {
           );
           await this.dataFiles.commitUpload(problem.code, staged, name);
           await this.removeReplaced(problem.code, previous.archive, name);
-          await this.store.stampVersion(problem, version);
+          await this.store.finishDataWrite(problem, version);
           return written;
-        },
-      );
-      await this.store.recordChange(auth, problem, {
-        before: previous,
-        after: stored,
-        comment: 'archive uploaded',
-      });
-      return this.store.response(auth.principal, problem, stored, archiveFiles);
-    } catch (error) {
-      await rm(staged, { force: true });
-      throw error;
-    }
+        }),
+    );
+    await this.store.recordChange(auth, problem, {
+      before: previous,
+      after: stored,
+      comment: 'archive uploaded',
+    });
+    return this.store.response(auth.principal, problem, stored, archiveFiles);
   }
 
   async uploadSource(
@@ -117,32 +147,71 @@ export class ProblemDataUploadService {
     const staged = await this.dataFiles.stageUpload(problem.code);
     try {
       await writeFileAtomically(staged, content);
-      const { data: previous, version } = await this.store.loadData(problem);
-      this.assertNameFree(previous, kind, name);
-      const { stored, archiveFiles } = await this.store.withDataWrite(
-        problem,
-        async () => {
-          const written = await this.store.compileAndStore(
-            problem,
-            { ...previous, [kind]: name },
-            version,
-          );
-          await this.dataFiles.commitUpload(problem.code, staged, name);
-          await this.removeReplaced(problem.code, previous[kind], name);
-          await this.store.stampVersion(problem, version);
-          return written;
-        },
-      );
-      await this.store.recordChange(auth, problem, {
-        before: previous,
-        after: stored,
-        comment: `${kind} uploaded`,
+      return await this.storeSource(auth, problem, {
+        kind,
+        name,
+        staged,
+        bytes: content.length,
       });
-      return this.store.response(auth.principal, problem, stored, archiveFiles);
     } catch (error) {
       await rm(staged, { force: true });
       throw error;
     }
+  }
+
+  /** Source files are small: they are metered for storage but cost no credits. */
+  private async storeSource(
+    auth: AuthContext,
+    problem: ProblemDocument,
+    upload: {
+      kind: SourceFileKind;
+      name: string;
+      staged: string;
+      bytes: number;
+    },
+  ): Promise<ProblemDataResponse> {
+    const { kind, name, staged, bytes } = upload;
+    const { data: previous, version } = await this.store.loadData(problem);
+    this.assertNameFree(previous, kind, name);
+    await this.assertStorageFits(
+      this.storage.organizationOf(auth.principal, problem),
+      problem,
+      { bytes, replaced: previous[kind] },
+    );
+    const { stored, archiveFiles } = await this.store.withDataWrite(
+      problem,
+      async () => {
+        const written = await this.store.compileAndStore(
+          problem,
+          { ...previous, [kind]: name },
+          version,
+        );
+        await this.dataFiles.commitUpload(problem.code, staged, name);
+        await this.removeReplaced(problem.code, previous[kind], name);
+        await this.store.finishDataWrite(problem, version);
+        return written;
+      },
+    );
+    await this.store.recordChange(auth, problem, {
+      before: previous,
+      after: stored,
+      comment: `${kind} uploaded`,
+    });
+    return this.store.response(auth.principal, problem, stored, archiveFiles);
+  }
+
+  private async assertStorageFits(
+    organizationId: string | null,
+    problem: ProblemDocument,
+    write: { bytes: number; replaced: string | null },
+  ): Promise<void> {
+    const replacedBytes = await this.storage.replacedBytes(
+      problem.code,
+      write.replaced,
+    );
+    await this.storage.assertFits(organizationId, {
+      addedBytes: write.bytes - replacedBytes,
+    });
   }
 
   private reserveUpload(auth: AuthContext): Promise<() => Promise<void>> {

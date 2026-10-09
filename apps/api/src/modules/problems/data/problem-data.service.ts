@@ -56,7 +56,7 @@ export class ProblemDataService {
           },
           version,
         );
-        await this.store.stampVersion(problem, version);
+        await this.store.finishDataWrite(problem, version);
         return written;
       },
     );
@@ -94,7 +94,7 @@ export class ProblemDataService {
         );
         const name = previous[kind];
         if (name) await this.dataFiles.removeFile(problem.code, name);
-        await this.store.stampVersion(problem, version);
+        await this.store.finishDataWrite(problem, version);
         return written;
       },
     );

@@ -81,9 +81,16 @@ export class ProblemDataStore {
     return this.dataFiles.withDataWrite(problem.code, work);
   }
 
-  /** Last step of every data change, after init.yml and every file move or removal: stamps `<code>/.data-version` with the version `compileAndStore` wrote (`expected + 1`), the judges' cache key. If a step fails after the Mongo write the stamp stays old, so judges wait and the problem fails closed until the next save. */
-  stampVersion(problem: ProblemDocument, expected: number): Promise<void> {
-    return this.dataFiles.writeDataVersion(problem.code, expected + 1);
+  /** Last step of every data change, after init.yml and every file move or removal: stamps `<code>/.data-version` with the version `compileAndStore` wrote (`expected + 1`), the judges' cache key, then records `dataBytes` from the directory (the storage quota's meter). If a step fails after the Mongo write the stamp stays old, so judges wait and the problem fails closed until the next save. Call it inside `withDataWrite`, so the measured directory is not changing. */
+  async finishDataWrite(
+    problem: ProblemDocument,
+    expected: number,
+  ): Promise<void> {
+    await this.dataFiles.writeDataVersion(problem.code, expected + 1);
+    await this.repository.setDataBytes(
+      problem._id,
+      await this.dataFiles.bytesOf(problem.code),
+    );
   }
 
   /** The stored data as a plain object, with the version to compare-and-set against. `data` is `select: false`, so it is loaded explicitly; the problem from the access check never carries it. */

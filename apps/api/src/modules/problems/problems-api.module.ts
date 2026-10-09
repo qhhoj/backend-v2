@@ -38,6 +38,7 @@ import { ProblemPackageController } from './package/problem-package.controller';
 import { ProblemPackageService } from './package/problem-package.service';
 import { ProblemPdfController } from './pdf/problem-pdf.controller';
 import { ProblemPdfService } from './pdf/problem-pdf.service';
+import { ProblemStorageQuota } from './quota/problem-storage-quota.service';
 import { ProblemUploadsController } from './uploads/problem-uploads.controller';
 import { ProblemUploadsService } from './uploads/problem-uploads.service';
 import { ProblemEvents } from './core/problem.events';
@@ -100,6 +101,7 @@ const repositories = [
     ProblemDataStore,
     ProblemDataService,
     ProblemDataUploadService,
+    ProblemStorageQuota,
     ProblemDataLifecycleService,
     ProblemImportsService,
     ProblemPdfService,
