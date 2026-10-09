@@ -1,4 +1,5 @@
 import { Transform, Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsInt,
@@ -24,16 +25,18 @@ export class UserAdminQueryDto {
   search?: string;
   /** True: banned users only. False: users who are not banned only. Unset: everyone. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() banned?: boolean;
+  @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(STAFF_USER_PAGE_MAX)
-  page = 1;
+  page: number = 1;
+  @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(STAFF_USER_PAGE_SIZE_MAX)
-  pageSize = STAFF_USER_PAGE_SIZE;
+  pageSize: number = STAFF_USER_PAGE_SIZE;
 }

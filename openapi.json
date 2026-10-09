@@ -3744,12 +3744,11 @@
             "type": "string"
           },
           "state": {
-            "enum": [
-              "P",
-              "A",
-              "R"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrganizationRequestState"
+              }
+            ]
           },
           "userId": {
             "type": "string"
@@ -3759,17 +3758,25 @@
           }
         },
         "required": [
+          "state",
           "id",
           "organizationSlug",
           "userId",
           "username",
-          "state",
           "reason",
           "createdAt",
           "decidedBy",
           "decidedAt"
         ],
         "type": "object"
+      },
+      "OrganizationRequestState": {
+        "enum": [
+          "P",
+          "A",
+          "R"
+        ],
+        "type": "string"
       },
       "OrganizationSummaryResponse": {
         "properties": {
@@ -8713,30 +8720,20 @@
           {
             "in": "query",
             "name": "state",
-            "required": true,
+            "required": false,
             "schema": {
-              "default": "P",
-              "enum": [
-                "P",
-                "A",
-                "R"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/OrganizationRequestState"
             }
           },
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -10402,6 +10399,28 @@
         "operationId": "UserAdminController_list",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
             "description": "Case-insensitive username prefix; surrounding spaces are dropped.",
             "in": "query",
             "name": "search",
@@ -10419,36 +10438,6 @@
             "required": false,
             "schema": {
               "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 1,
-              "maximum": 500,
-              "minimum": 1
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 50,
-              "maximum": 100,
-              "minimum": 1
             }
           }
         ],
@@ -10924,6 +10913,8 @@
                 "schema": {
                   "properties": {
                     "data": {
+                      "additionalProperties": true,
+                      "nullable": true,
                       "type": "object"
                     }
                   },
@@ -11025,6 +11016,7 @@
                 "schema": {
                   "properties": {
                     "data": {
+                      "additionalProperties": true,
                       "type": "object"
                     }
                   },
@@ -14744,31 +14736,23 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 100,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -15438,6 +15422,28 @@
         "operationId": "OrganizationsController_list",
         "parameters": [
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
             "description": "Substring over name, shortName and slug; surrounding spaces are dropped. 50 bounds a name; the user search allows 64.",
             "in": "query",
             "name": "search",
@@ -15446,36 +15452,6 @@
               "maxLength": 50,
               "minLength": 1,
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 100,
-              "maximum": 100,
-              "minimum": 1
             }
           }
         ],
@@ -15859,6 +15835,28 @@
           },
           {
             "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": true,
             "schema": {
@@ -15870,36 +15868,6 @@
                 "rating"
               ],
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 100,
-              "maximum": 100,
-              "minimum": 1
             }
           }
         ],
@@ -16050,30 +16018,20 @@
           {
             "in": "query",
             "name": "state",
-            "required": true,
+            "required": false,
             "schema": {
-              "default": "P",
-              "enum": [
-                "P",
-                "A",
-                "R"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/OrganizationRequestState"
             }
           },
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -18992,13 +18950,14 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "application/zip": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReadStream"
+                  "format": "binary",
+                  "type": "string"
                 }
               }
             },
-            "description": ""
+            "description": "The file, as an attachment."
           },
           "default": {
             "content": {
@@ -20731,6 +20690,28 @@
         "parameters": [
           {
             "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": true,
             "schema": {
@@ -20742,36 +20723,6 @@
                 "problemCount"
               ],
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 100,
-              "maximum": 100,
-              "minimum": 1
             }
           }
         ],
@@ -21170,31 +21121,23 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 300,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 10,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],

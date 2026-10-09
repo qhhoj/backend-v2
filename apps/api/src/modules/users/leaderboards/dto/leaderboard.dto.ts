@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { LEADERBOARD_FIELDS } from '@libs/database';
 import type { LeaderboardField } from '@libs/database';
@@ -14,13 +15,20 @@ export const USER_SORTS = [
 export type UserSort = (typeof USER_SORTS)[number];
 
 export class ContributorListQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+  @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(LEADERBOARD_PAGE_SIZE)
-  pageSize = LEADERBOARD_PAGE_SIZE;
+  pageSize: number = LEADERBOARD_PAGE_SIZE;
 }
 
 export class UserListQueryDto extends ContributorListQueryDto {

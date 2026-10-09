@@ -1,4 +1,5 @@
-import { uuidStr } from '@libs/database';
+import { ApiProperty } from '@nestjs/swagger';
+import { ORGANIZATION_REQUEST_STATES, uuidStr } from '@libs/database';
 import type {
   OrganizationRequest,
   OrganizationRequestState,
@@ -9,6 +10,10 @@ export class OrganizationRequestResponse {
   organizationSlug!: string;
   userId!: string;
   username!: string;
+  @ApiProperty({
+    enum: ORGANIZATION_REQUEST_STATES,
+    enumName: 'OrganizationRequestState',
+  })
   state!: OrganizationRequestState;
   reason!: string;
   createdAt!: Date;

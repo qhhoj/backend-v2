@@ -15,6 +15,8 @@ import {
   SessionOnly,
 } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiCreatedResponse } from '@nestjs/swagger';
+import { OPAQUE_JSON_OBJECT } from '@libs/common';
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
@@ -37,6 +39,7 @@ export class WebauthnController {
 
   @SessionOnly()
   @NoImpersonation()
+  @ApiCreatedResponse({ schema: OPAQUE_JSON_OBJECT })
   @Post('register/options')
   registrationOptions(
     @CurrentAuth() auth: AuthContext,
@@ -58,6 +61,7 @@ export class WebauthnController {
   @SessionOnly()
   @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
+  @ApiCreatedResponse({ schema: { ...OPAQUE_JSON_OBJECT, nullable: true } })
   @Post('login/options')
   loginOptions(
     @CurrentAuth() auth: AuthContext,

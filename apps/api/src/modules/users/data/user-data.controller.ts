@@ -3,7 +3,7 @@ import { Controller, Get, HttpCode, Post, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { CurrentAuth, NoImpersonation } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { RawResponse } from '@libs/common';
+import { ApiFileResponse, RawResponse } from '@libs/common';
 import type { QueuedResponse } from '../../contests/core/dto/queued.response';
 import { attachmentHeader } from './attachment-header';
 import type { UserDataStatusResponse } from './dto/user-data.response';
@@ -26,6 +26,7 @@ export class UserDataController {
   }
 
   /** Always an attachment with `nosniff`; the username is not trusted to be ASCII. */
+  @ApiFileResponse('application/zip')
   @RawResponse()
   @NoImpersonation()
   @Get('download')

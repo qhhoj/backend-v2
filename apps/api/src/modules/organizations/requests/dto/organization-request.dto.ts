@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
   IsInt,
@@ -23,10 +24,20 @@ export class CreateOrganizationRequestDto {
 }
 
 export class OrganizationRequestListQueryDto {
+  @ApiPropertyOptional({
+    enum: ORGANIZATION_REQUEST_STATES,
+    enumName: 'OrganizationRequestState',
+  })
   @IsOptional()
   @IsIn(ORGANIZATION_REQUEST_STATES)
   state: OrganizationRequestState = 'P';
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
 }
 
 export class DecideOrganizationRequestDto {
