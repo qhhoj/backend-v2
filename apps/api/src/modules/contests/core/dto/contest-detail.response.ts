@@ -58,6 +58,11 @@ export class ParticipationSummaryResponse {
   isDisqualified!: boolean;
   realStart!: Date;
   endTime!: Date;
+  /** When this participation accepted the contest rules; null when the contest had no rules then (or the row predates rules). */
+  @ApiProperty({ type: Date, nullable: true }) rulesAcceptedAt!: Date | null;
+  /** The rules revision accepted: it may be older than the contest's current `rulesRevision`. */
+  @ApiProperty({ type: Number, nullable: true })
+  rulesAcceptedRevision!: number | null;
 
   static from(
     participation: ContestParticipation,
@@ -70,6 +75,8 @@ export class ParticipationSummaryResponse {
       isDisqualified: participation.isDisqualified,
       realStart: participation.realStart,
       endTime: participationEnd(contest, participation),
+      rulesAcceptedAt: participation.rulesAcceptedAt ?? null,
+      rulesAcceptedRevision: participation.rulesAcceptedRevision ?? null,
     };
   }
 }

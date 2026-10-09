@@ -18,7 +18,7 @@ import { ContestParticipationService } from './contest-participation.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import {
-  AccessCodeDto,
+  JoinBodyDto,
   DisqualifyDto,
   ParticipationListQueryDto,
   ParticipationParamsDto,
@@ -51,11 +51,12 @@ export class ContestParticipationController {
   register(
     @CurrentAuth() auth: AuthContext,
     @Param() { key }: ContestKeyParamDto,
-    @Body() { accessCode }: AccessCodeDto,
+    @Body() { accessCode, acceptRules }: JoinBodyDto,
     @Req() request: FastifyRequest,
   ): Promise<ParticipationSummaryResponse> {
     return this.participation.register(auth.principal, key, {
       accessCode,
+      acceptRules: acceptRules === true,
       ip: request.ip,
     });
   }
@@ -64,11 +65,12 @@ export class ContestParticipationController {
   join(
     @CurrentAuth() auth: AuthContext,
     @Param() { key }: ContestKeyParamDto,
-    @Body() { accessCode }: AccessCodeDto,
+    @Body() { accessCode, acceptRules }: JoinBodyDto,
     @Req() request: FastifyRequest,
   ): Promise<ParticipationSummaryResponse> {
     return this.participation.join(auth.principal, key, {
       accessCode,
+      acceptRules: acceptRules === true,
       ip: request.ip,
     });
   }

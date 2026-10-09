@@ -14,6 +14,11 @@ export class AccessCodeDto {
   @IsOptional() @IsString() @MaxLength(255) accessCode?: string;
 }
 
+/** Body of register and join: the access code and the rules acceptance a new participation needs. */
+export class JoinBodyDto extends AccessCodeDto {
+  @IsOptional() @IsBoolean() acceptRules?: boolean;
+}
+
 export class ParticipationListQueryDto {
   @ApiPropertyOptional()
   @IsOptional()

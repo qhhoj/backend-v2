@@ -1,6 +1,6 @@
 import { AppError } from '@libs/common';
 
-/** Every refusal of register, join and leave, in one table: legacy's distinct cases, each with its own code so the SPA shows its own text (CONTRIBUTING lists them). Statuses: 409 state conflicts, 403 bans and access codes, 404 leaving a contest one is not in. */
+/** Every refusal of register, join and leave, in one table: legacy's distinct cases, each with its own code so the SPA shows its own text (CONTRIBUTING lists them). Statuses: 409 state conflicts, 403 bans and access codes, 400 rules not accepted, 404 leaving a contest one is not in. */
 const REFUSALS = {
   editor_cannot_register: [409, 'Editors and testers cannot register.'],
   banned_from_contest: [403, 'You are banned from joining this contest.'],
@@ -16,6 +16,7 @@ const REFUSALS = {
   not_registered: [409, 'You are not registered for this contest.'],
   access_code_required: [403, 'This contest needs an access code.'],
   wrong_access_code: [403, 'Wrong access code.'],
+  rules_not_accepted: [400, 'Accept the contest rules to take part.'],
   not_in_contest: [404, 'You are not in this contest.'],
 } as const satisfies Record<string, readonly [number, string]>;
 

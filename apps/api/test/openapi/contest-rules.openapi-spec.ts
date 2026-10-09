@@ -1,6 +1,6 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
 import { CONTEST_RULES_MAX } from '@libs/database';
-import { loadDocument } from './document';
+import { loadDocument, operationOf } from './document';
 import { looseSites } from './schema-scans';
 
 const OWN_SITE =
@@ -38,5 +38,35 @@ describe('contest rules, acceptance and auto-publish schemas', () => {
       rulesHtml: { type: 'string' },
       rulesRevision: { type: 'number' },
     });
+  });
+
+  it('takes acceptRules on register and join and reports the acceptance', () => {
+    for (const route of [
+      '/api/internal/contests/{key}/register',
+      '/api/internal/contests/{key}/join',
+    ])
+      expect(operationOf(document, route, 'post').requestBody).toMatchObject({
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/JoinBodyDto' },
+          },
+        },
+      });
+    expect(properties('JoinBodyDto')).toMatchObject({
+      accessCode: { type: 'string' },
+      acceptRules: { type: 'boolean' },
+    });
+    for (const name of [
+      'ParticipationSummaryResponse',
+      'ParticipationResponse',
+    ])
+      expect(properties(name)).toMatchObject({
+        rulesAcceptedAt: {
+          type: 'string',
+          format: 'date-time',
+          nullable: true,
+        },
+        rulesAcceptedRevision: { type: 'number', nullable: true },
+      });
   });
 });

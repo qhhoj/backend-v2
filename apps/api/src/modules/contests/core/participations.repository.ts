@@ -25,6 +25,18 @@ export type OwnParticipationRow = Pick<
   '_id' | 'contest' | 'virtual' | 'realStart' | 'isRegistered'
 >;
 
+/** What a participation stores when the user accepted the contest rules. */
+export interface RulesAcceptance {
+  rulesAcceptedAt: Date;
+  rulesAcceptedRevision: number;
+}
+
+export interface ParticipationKey {
+  contestId: string;
+  userId: string;
+  virtual: number;
+}
+
 @Injectable()
 export class ParticipationsRepository {
   constructor(
@@ -189,25 +201,27 @@ export class ParticipationsRepository {
     return rows.filter((row) => open.has(uuidStr(row.contest))).length;
   }
 
-  /** Live or spectating: the unique index makes concurrent joins meet on one row. */
+  /** Live or spectating: the unique index makes concurrent joins meet on one row; the acceptance is stored with the insert, so a row never exists without it. */
   async findOrCreate(
-    contestId: string,
-    userId: string,
-    virtual: number,
-    now: Date,
+    key: ParticipationKey,
+    entry: { now: Date; acceptance: RulesAcceptance | null },
   ): Promise<ParticipationDocument> {
-    const key = { contest: contestId, user: userId, virtual };
+    const filter = {
+      contest: key.contestId,
+      user: key.userId,
+      virtual: key.virtual,
+    };
     try {
       return await this.participations
         .findOneAndUpdate(
-          key,
-          { $setOnInsert: { realStart: now } },
+          filter,
+          { $setOnInsert: { realStart: entry.now, ...entry.acceptance } },
           { upsert: true, new: true },
         )
         .exec();
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
-      return (await this.participations.findOne(key).exec())!;
+      return (await this.participations.findOne(filter).exec())!;
     }
   }
 
@@ -216,6 +230,7 @@ export class ParticipationsRepository {
     contestId: string,
     userId: string,
     now: Date,
+    acceptance: RulesAcceptance | null,
   ): Promise<ParticipationDocument> {
     for (let attempt = 0; attempt < VIRTUAL_JOIN_ATTEMPTS; attempt += 1) {
       const [highest] = await this.participations
@@ -229,6 +244,7 @@ export class ParticipationsRepository {
           user: userId,
           virtual: Math.max((highest?.virtual ?? 0) + 1, 1),
           realStart: now,
+          ...acceptance,
         });
       } catch (error) {
         if (!isDuplicateKey(error)) throw error;
@@ -242,6 +258,7 @@ export class ParticipationsRepository {
     contestId: string,
     userId: string,
     placeholder: Date,
+    acceptance: RulesAcceptance | null,
   ): Promise<ParticipationDocument | null> {
     try {
       return await this.participations.create({
@@ -250,6 +267,7 @@ export class ParticipationsRepository {
         virtual: LIVE,
         realStart: placeholder,
         isRegistered: true,
+        ...acceptance,
       });
     } catch (error) {
       if (isDuplicateKey(error)) return null;

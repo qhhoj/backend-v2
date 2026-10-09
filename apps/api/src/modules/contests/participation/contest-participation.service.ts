@@ -35,7 +35,10 @@ import {
   ParticipationResponse,
 } from './dto/participation.response';
 import { ParticipationsRepository } from '../core/participations.repository';
-import type { ParticipationDocument } from '../core/participations.repository';
+import type {
+  ParticipationDocument,
+  RulesAcceptance,
+} from '../core/participations.repository';
 import {
   ACCESS_CODE_IP_LIMIT,
   ACCESS_CODE_USER_LIMIT,
@@ -51,6 +54,8 @@ const forbidden = (message: string) => new AppError('forbidden', 403, message);
 /** What a register or join request brings besides the contest: the access code it typed and its address (rate limits). */
 export interface JoinCredentials {
   accessCode: string | undefined;
+  /** Whether the request ticked the rules box. */
+  acceptRules: boolean;
   ip: string;
 }
 
@@ -75,7 +80,7 @@ export class ContestParticipationService {
   async register(
     principal: Principal,
     key: string,
-    { accessCode, ip }: JoinCredentials,
+    credentials: JoinCredentials,
     now = new Date(),
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.visibleContest(principal, key);
@@ -84,11 +89,22 @@ export class ContestParticipationService {
       await this.participationRows.findOne(contest._id, principal.userId, LIVE)
     )
       throw refusal('already_registered');
-    await this.assertAccessCode(principal, contest, accessCode, ip);
+    await this.assertAccessCode(
+      principal,
+      contest,
+      credentials.accessCode,
+      credentials.ip,
+    );
+    const acceptance = this.acceptanceFor(
+      contest,
+      credentials.acceptRules,
+      now,
+    );
     const participation = await this.participationRows.register(
       contest._id,
       principal.userId,
       contest.startTime,
+      acceptance,
     );
     if (!participation) throw refusal('already_registered');
     await this.refreshCounts(contest._id);
@@ -154,15 +170,21 @@ export class ContestParticipationService {
   private async joinVirtual(
     principal: Principal,
     contest: ContestDocument,
-    { accessCode, ip }: JoinCredentials,
+    credentials: JoinCredentials,
     now: Date,
   ): Promise<ParticipationDocument> {
     if (contest.disallowVirtual) throw refusal('virtual_disallowed');
-    await this.assertAccessCode(principal, contest, accessCode, ip);
+    await this.assertAccessCode(
+      principal,
+      contest,
+      credentials.accessCode,
+      credentials.ip,
+    );
     return this.participationRows.createVirtual(
       contest._id,
       principal.userId,
       now,
+      this.acceptanceFor(contest, credentials.acceptRules, now),
     );
   }
 
@@ -192,12 +214,27 @@ export class ContestParticipationService {
       credentials.accessCode,
       credentials.ip,
     );
+    const acceptance = isSpectatorOnly
+      ? null
+      : this.acceptanceFor(contest, credentials.acceptRules, now);
     return this.participationRows.findOrCreate(
-      contest._id,
-      principal.userId,
-      virtual,
-      now,
+      { contestId: contest._id, userId: principal.userId, virtual },
+      { now, acceptance },
     );
+  }
+
+  /** The acceptance to store with a new row: none when the contest has no rules; `rules_not_accepted` when it has and the request did not tick the box. */
+  private acceptanceFor(
+    contest: ContestDocument,
+    acceptRules: boolean,
+    now: Date,
+  ): RulesAcceptance | null {
+    if (contest.rules === '') return null;
+    if (!acceptRules) throw refusal('rules_not_accepted');
+    return {
+      rulesAcceptedAt: now,
+      rulesAcceptedRevision: contest.rulesRevision,
+    };
   }
 
   /** The first join after registering starts the clock; a participation whose time ran out continues as a spectator. */
@@ -212,10 +249,12 @@ export class ContestParticipationService {
       : existing;
     return hasParticipationEnded(contest, started, now)
       ? this.participationRows.findOrCreate(
-          contest._id,
-          principal.userId,
-          SPECTATE,
-          now,
+          {
+            contestId: contest._id,
+            userId: principal.userId,
+            virtual: SPECTATE,
+          },
+          { now, acceptance: null },
         )
       : started;
   }
