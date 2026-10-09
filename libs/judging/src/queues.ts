@@ -36,16 +36,22 @@ export const gradedJobOf = (submission: {
   problemId: uuidStr(submission.problem),
 });
 
-/** Shared by the bridge and the api so every producer uses the same job name, retention and retry policy (effects are idempotent recomputes, so a transient failure is retried). No deterministic `jobId` on purpose: BullMQ would drop the job of a rejudge finishing while the previous one is still active, leaving stale stats. */
+/** Shared by the bridge and the api so every producer uses the same job name, retention and retry policy (effects are idempotent recomputes, so a transient failure is retried). The api passes no `jobId`. The bridge passes `gradedJobId(submissionId, generation)`: a judge that resends its Final after a bridge crash enqueues the same id, which BullMQ drops while the first job still waits, and a rejudge is a new generation, so it is never dropped as a duplicate of the run it replaced. */
 export const enqueueGraded = async (
   queue: Queue<SubmissionGradedJob>,
   job: SubmissionGradedJob,
+  jobId?: string,
 ): Promise<void> => {
   await queue.add(SUBMISSION_GRADED_JOB, job, {
     ...JOB_RETRY,
     ...JOB_RETENTION,
+    ...(jobId && { jobId }),
   });
 };
+
+/** One job id per judge run; BullMQ refuses `:` in custom ids. */
+export const gradedJobId = (submissionId: string, generation: number) =>
+  `${submissionId}.${generation}`;
 
 export const PROBLEM_RESCORE_QUEUE = 'problem-rescore';
 export const PROBLEM_RESCORE_JOB = 'rescore';

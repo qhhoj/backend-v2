@@ -7,6 +7,7 @@ import {
   SUBMISSION_GRADED_QUEUE,
   enqueueGraded,
   enqueueRescore,
+  gradedJobId,
   gradedJobOf,
 } from './queues';
 import type { ProblemRescoreJob, SubmissionGradedJob } from './queues';
@@ -72,5 +73,19 @@ describe('retried judging jobs', () => {
         removeOnComplete: true,
       });
     }
+  });
+
+  it('drops a second graded job of the same run while the first waits, and keeps another run', async () => {
+    await queues.graded.obliterate({ force: true });
+    const job = { submissionId: newId(), userId: newId(), problemId: newId() };
+    const firstRun = gradedJobId(job.submissionId, 1);
+    await enqueueGraded(queues.graded, job, firstRun);
+    await enqueueGraded(queues.graded, job, firstRun);
+    await enqueueGraded(queues.graded, job, gradedJobId(job.submissionId, 2));
+    const waiting = await queues.graded.getJobs(['waiting']);
+    expect(waiting.map((queued) => queued.id).sort()).toEqual([
+      `${job.submissionId}.1`,
+      `${job.submissionId}.2`,
+    ]);
   });
 });
