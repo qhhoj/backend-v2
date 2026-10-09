@@ -34,8 +34,10 @@ class Target implements DispatchTarget {
   disconnect(): void {
     this.isClosed = true;
   }
+  /** A replaced `JudgeSession` ends its stream at once. */
   replaced(): void {
     this.wasReplaced = true;
+    this.isClosed = true;
   }
 }
 
@@ -58,6 +60,8 @@ describe('DispatcherService', () => {
   let generations: Map<string, number>;
   let rows: Map<string, QueuedSubmission>;
   let stored: Map<string, number | null>;
+  /** `resumableSeq` of these submissions waits on their promise: a handshake held open mid-resume. */
+  let resumeGates: Map<string, Promise<void>>;
   let expired: Array<{ ref: AssignmentRef; abortRequested: boolean }>;
   let dispatcher: DispatcherService;
   const runs = {
@@ -73,10 +77,10 @@ describe('DispatcherService', () => {
     },
     sent: () => undefined,
     release: () => Promise.resolve(true),
-    resumableSeq: (ref: AssignmentRef) =>
-      Promise.resolve(
-        stored.get(`${ref.submissionId}.${ref.generation}`) ?? null,
-      ),
+    resumableSeq: async (ref: AssignmentRef) => {
+      await resumeGates.get(ref.submissionId);
+      return stored.get(`${ref.submissionId}.${ref.generation}`) ?? null;
+    },
     graceExpired: (
       ref: AssignmentRef,
       _judge: string,
@@ -110,6 +114,7 @@ describe('DispatcherService', () => {
     generations = new Map();
     rows = new Map();
     stored = new Map();
+    resumeGates = new Map();
     expired = [];
     dispatcher = new DispatcherService(submissions, runs, TIMINGS);
   });
@@ -333,6 +338,107 @@ describe('DispatcherService', () => {
     await dispatcher.judgeLost(first);
     expect(dispatcher.connectedNames()).toEqual(['j1']);
     expect(second.inFlight.get(submission.id)).toBe(1);
+  });
+
+  it('counts runs resumed by a session still in its handshake as held, and routes aborts for them through its Welcome or to the judge', async () => {
+    const judge = await online(new Target('j1', 3));
+    const [waiting, resumed, late] = [entry(), entry(), entry()];
+    await queue(waiting, resumed, late);
+    await dispatcher.judgeLost(judge);
+    for (const { id } of [waiting, resumed, late]) stored.set(`${id}.1`, 1);
+    let open: () => void = () => undefined;
+    resumeGates.set(waiting.id, new Promise((resolve) => (open = resolve)));
+    const back = new Target('j1', 3);
+    const resuming = dispatcher.resume(
+      back,
+      [resumed, waiting, late].map(({ id }) => ({
+        ref: { submissionId: id, generation: 1 },
+        lastSeqSent: 1,
+      })),
+    );
+    await flush();
+    // `resumed` is resumed already, `waiting` is still read in grace
+    dispatcher.abort(resumed.id);
+    dispatcher.abort(waiting.id);
+    open();
+    const plan = await resuming;
+    expect(plan.abort.map((ref) => ref.submissionId).sort()).toEqual(
+      [resumed.id, waiting.id].sort(),
+    );
+    expect(dispatcher.heldIds().sort()).toEqual(
+      [waiting.id, resumed.id, late.id].sort(),
+    );
+    dispatcher.abort(late.id);
+    expect(back.aborted).toEqual([{ submissionId: late.id, generation: 1 }]);
+    await dispatcher.register(back);
+    expect(dispatcher.connectedNames()).toEqual(['j1']);
+  });
+
+  it('lets the newer of two overlapping handshakes of a judge win, and resumes the runs there', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.judgeLost(judge);
+    stored.set(`${submission.id}.1`, 1);
+    const listed = [
+      { ref: { submissionId: submission.id, generation: 1 }, lastSeqSent: 1 },
+    ];
+    let open: () => void = () => undefined;
+    resumeGates.set(submission.id, new Promise((resolve) => (open = resolve)));
+    const older = new Target('j1');
+    const olderResume = dispatcher.resume(older, listed);
+    await flush();
+    resumeGates.clear();
+    const newer = new Target('j1');
+    expect((await dispatcher.resume(newer, listed)).resume).toEqual([
+      expect.objectContaining({ action: Resume_Action.ACTION_CONTINUE }),
+    ]);
+    expect(older.wasReplaced).toBe(true);
+    open();
+    await olderResume;
+    await dispatcher.register(older);
+    await dispatcher.register(newer);
+    expect(newer.wasReplaced).toBe(false);
+    expect(dispatcher.sessionOf('j1')).toBe(newer);
+    expect(older.inFlight.size).toBe(0);
+    expect(newer.inFlight.get(submission.id)).toBe(1);
+    jest.advanceTimersByTime(30_000);
+    await flush();
+    expect(expired).toEqual([]);
+  });
+
+  it('leaves a run in grace, with its abort, when reading it for a resume fails', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.judgeLost(judge);
+    dispatcher.abort(submission.id);
+    resumeGates.set(submission.id, Promise.reject(new Error('Mongo down')));
+    await expect(
+      dispatcher.resume(new Target('j1'), [
+        { ref: { submissionId: submission.id, generation: 1 }, lastSeqSent: 1 },
+      ]),
+    ).rejects.toThrow('Mongo down');
+    resumeGates.clear();
+    jest.advanceTimersByTime(30_000);
+    await flush();
+    expect(expired).toEqual([
+      {
+        ref: { submissionId: submission.id, generation: 1 },
+        abortRequested: true,
+      },
+    ]);
+  });
+
+  it('keeps a RETRY ban when a resync queued the row first', async () => {
+    const judge = await online(new Target('j1'));
+    await dispatcher.setDisabled('j1', true);
+    const submission = entry({ generation: 1 });
+    await queue(submission);
+    await dispatcher.enqueue([{ ...submission, retryBannedJudges: ['j1'] }]);
+    await dispatcher.setDisabled('j1', false);
+    expect(judge.assigned).toEqual([]);
+    expect(dispatcher.queuedIds()).toEqual([submission.id]);
   });
 
   it('releases an unaccepted Assign alone and hands it to a free slot', async () => {

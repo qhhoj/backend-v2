@@ -240,6 +240,23 @@ describe('JudgeSession', () => {
     expect(calls.acceptTimedOut).toEqual([[session, ref]]);
   });
 
+  it('keeps the accept clock of a run when an older generation of its submission is aborted', async () => {
+    const id = newId();
+    const current = run(id, 2);
+    await holding(current);
+    await receive(
+      JudgeMessage.fromPartial({
+        body: { $case: 'started', started: { ref: run(id, 1), seq: 2 } },
+      }),
+    );
+    expect(call.bodies('abort')).toEqual([
+      { $case: 'abort', abort: { ref: run(id, 1) } },
+    ]);
+    jest.advanceTimersByTime(TIMINGS.acceptMs);
+    await settle();
+    expect(calls.acceptTimedOut).toEqual([[session, current]]);
+  });
+
   it('answers messages of a run it does not hold with one Abort, and closes on Accepted for one', async () => {
     await online();
     const stale = run(newId(), 7);

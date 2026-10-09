@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { unique } from '@libs/common';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef, Resume } from '@libs/judge-proto';
 import { BRIDGE_TIMINGS } from '../bridge-timings';
@@ -28,7 +29,14 @@ export interface ResumePlan {
 const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.priority === right.priority &&
   left.judgeName === right.judgeName &&
-  left.bannedJudges.join() === right.bannedJudges.join();
+  left.bannedJudges.join() === right.bannedJudges.join() &&
+  left.retryBannedJudges.join() === right.retryBannedJudges.join();
+
+/** A session between Hello and `register`: it holds the runs it resumed; `plan` is open until its Welcome goes out. */
+interface Resuming {
+  judge: DispatchTarget;
+  plan: ResumePlan | null;
+}
 
 /** The bridge's in-memory view (legacy `JudgeList`): connected judges by name with the runs each holds, runs waiting in grace, and the queue in dispatch order. Mongo stays the truth: nothing is sent before the claim moved QU → P. */
 @Injectable()
@@ -37,6 +45,8 @@ export class DispatcherService {
   private readonly judges = new Map<string, DispatchTarget>();
   private readonly queue: QueuedSubmission[] = [];
   private readonly queued = new Map<string, QueuedSubmission>();
+  /** Sessions still in their handshake, by judge name. */
+  private readonly resuming = new Map<string, Resuming>();
   private readonly grace: GraceRegistry;
   private stopped = false;
 
@@ -58,16 +68,22 @@ export class DispatcherService {
   ): Promise<ResumePlan> {
     this.replace(judge);
     const plan: ResumePlan = { resume: [], abort: [] };
+    const resuming: Resuming = { judge, plan };
+    this.resuming.set(judge.name, resuming);
     for (const { ref } of listed) await this.resumeOne(judge, ref, plan);
     const listedIds = new Set(listed.map(({ ref }) => ref.submissionId));
     for (const entry of this.grace.of(judge.name))
       if (!listedIds.has(entry.ref.submissionId))
         this.grace.expireNow(entry.ref.submissionId);
+    // the session sends Welcome in this same turn: later aborts go to the judge directly
+    resuming.plan = null;
     return plan;
   }
 
   /** The judge said Hello and got its Welcome: it takes work from now on. */
   async register(judge: DispatchTarget): Promise<void> {
+    if (judge.isClosed) return;
+    this.endHandshake(judge);
     this.replace(judge);
     this.judges.set(judge.name, judge);
     await this.offerWork(judge);
@@ -134,6 +150,7 @@ export class DispatcherService {
   async judgeLost(judge: DispatchTarget): Promise<void> {
     if (this.stopped) return;
     if (this.judges.get(judge.name) === judge) this.judges.delete(judge.name);
+    this.endHandshake(judge);
     this.holdInGrace(judge);
     for (const other of this.connected()) await this.offerWork(other);
   }
@@ -144,6 +161,7 @@ export class DispatcherService {
       const generation = judge.inFlight.get(submissionId);
       if (generation) return judge.abort({ submissionId, generation });
     }
+    if (this.abortResumed(submissionId)) return;
     if (this.grace.requestAbort(submissionId)) return;
     this.removeQueued(submissionId);
   }
@@ -204,11 +222,9 @@ export class DispatcherService {
     return [...this.judges.keys()];
   }
 
-  /** Runs a registered judge holds (a claim in flight included) and runs waiting in grace: the resync never requeues these. */
+  /** Runs a registered or handshaking judge holds (a claim in flight included) and runs waiting in grace: the resync never requeues these. */
   heldIds(): string[] {
-    const live = [...this.judges.values()].flatMap((judge) => [
-      ...judge.inFlight.keys(),
-    ]);
+    const live = this.sessions().flatMap((judge) => [...judge.inFlight.keys()]);
     return [...live, ...this.grace.ids()];
   }
 
@@ -261,8 +277,10 @@ export class DispatcherService {
     ref: AssignmentRef,
     plan: ResumePlan,
   ): Promise<void> {
-    const waiting = this.grace.take(ref, judge.name);
     const stored = await this.runs.resumableSeq(ref, judge.name);
+    // taken only now: while Mongo is read the entry stays in grace, where an abort or a failed read leaves it
+    if (judge.isClosed) return;
+    const waiting = this.grace.take(ref, judge.name);
     if (stored === null) {
       // judge-v2 ends a dropped run with Final{ABORTED}; until then it holds a slot
       judge.winding.add(windingKey(ref));
@@ -278,22 +296,65 @@ export class DispatcherService {
     if (waiting?.abortRequested) plan.abort.push(ref);
   }
 
-  /** A newer session of the same judge takes over: the old one's runs wait in grace for it to resume them. */
+  /** A newer session of the same judge takes over (the registered one, or one still in its handshake): the old one's runs wait in grace for it to resume them. */
   private replace(judge: DispatchTarget): void {
-    const previous = this.judges.get(judge.name);
-    if (!previous || previous === judge) return;
-    this.judges.delete(judge.name);
-    this.holdInGrace(previous);
-    previous.replaced();
+    const earlier = [
+      this.judges.get(judge.name),
+      this.resuming.get(judge.name)?.judge,
+    ];
+    for (const previous of new Set(earlier)) {
+      if (!previous || previous === judge) continue;
+      if (this.judges.get(judge.name) === previous)
+        this.judges.delete(judge.name);
+      this.endHandshake(previous);
+      this.holdInGrace(previous);
+      previous.replaced();
+    }
   }
 
-  /** Held runs wait in grace; winding runs are over for the bridge, and the session that counted them is gone. */
+  private endHandshake(judge: DispatchTarget): void {
+    if (this.resuming.get(judge.name)?.judge === judge)
+      this.resuming.delete(judge.name);
+  }
+
+  /** An abort for a run a handshaking session resumed: into its Welcome's abort list while that is open, else straight to the judge. */
+  private abortResumed(submissionId: string): boolean {
+    for (const { judge, plan } of this.resuming.values()) {
+      const generation = judge.inFlight.get(submissionId);
+      if (!generation) continue;
+      const ref = { submissionId, generation };
+      if (!plan) judge.abort(ref);
+      else if (
+        !plan.abort.some((listed) => listed.submissionId === submissionId)
+      )
+        plan.abort.push(ref);
+      return true;
+    }
+    return false;
+  }
+
+  /** Held runs wait in grace, unless a newer session of the judge already resumed them; winding runs are over for the bridge, and the session that counted them is gone. */
   private holdInGrace(judge: DispatchTarget): void {
     for (const [submissionId, generation] of judge.inFlight)
-      if (generation > 0)
+      if (generation > 0 && !this.heldElsewhere(judge, submissionId))
         this.grace.hold({ submissionId, generation }, judge.name);
     judge.inFlight.clear();
     judge.winding.clear();
+  }
+
+  private heldElsewhere(except: DispatchTarget, submissionId: string): boolean {
+    return this.sessions().some(
+      (judge) =>
+        judge !== except && !judge.isClosed && judge.inFlight.has(submissionId),
+    );
+  }
+
+  /** Registered sessions and sessions in their handshake. */
+  private sessions(): DispatchTarget[] {
+    return unique([
+      ...this.judges.values(),
+      ...[...this.resuming.values()].map(({ judge }) => judge),
+    ]);
   }
 
   private async graceExpired(entry: GraceEntry): Promise<void> {

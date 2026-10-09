@@ -33,8 +33,16 @@ import { flood, ProtocolError, seqGap } from './protocol-error';
 
 /** Legacy: the reported ping is the mean of the last 6 round trips. */
 const PING_SAMPLES = 6;
-/** Ended runs a session remembers, so a Final resent before its ack arrived is re-acked rather than aborted (conformance 37). */
-const ENDED_REMEMBERED = 1024;
+/** Runs a session remembers as ended or aborted (a Final resent before its ack, a late Accepted, a second Abort): enough for any replay window, bounded for a session that lives for weeks. */
+const RUNS_REMEMBERED = 1024;
+
+/** Adds `key`, forgetting the oldest beyond `RUNS_REMEMBERED` (a Set keeps insertion order). */
+function remember(keys: Set<string>, key: string): void {
+  keys.add(key);
+  if (keys.size <= RUNS_REMEMBERED) return;
+  const [oldest] = keys;
+  keys.delete(oldest);
+}
 
 export type SessionCall = ServerDuplexStream<
   DecodedJudgeMessage,
@@ -92,8 +100,9 @@ export class JudgeSession implements DispatchTarget {
   private nonce = 0;
   private readonly pingsSent = new Map<number, number>();
   private readonly roundTrips: number[] = [];
+  /** Accept clocks of assigned runs, by `windingKey`. */
   private readonly acceptTimers = new Map<string, NodeJS.Timeout>();
-  /** Refs answered with Abort once already (`ref` key `id.generation`). */
+  /** Refs this session sent an Abort for (`windingKey`s, oldest first). */
   private readonly aborted = new Set<string>();
   /** `windingKey`s of runs whose Final this session stored (or found stored) and acked, oldest first. */
   private readonly ended = new Set<string>();
@@ -126,7 +135,7 @@ export class JudgeSession implements DispatchTarget {
     this.send({ $case: 'assign', assign: assignOf(request) });
     const { ref } = request;
     this.acceptTimers.set(
-      ref.submissionId,
+      windingKey(ref),
       setTimeout(
         () => void this.acceptTimedOut(ref),
         this.services.timings.acceptMs,
@@ -135,8 +144,8 @@ export class JudgeSession implements DispatchTarget {
   }
 
   abort(ref: AssignmentRef): void {
-    this.aborted.add(windingKey(ref));
-    this.clearAcceptTimer(ref.submissionId);
+    remember(this.aborted, windingKey(ref));
+    this.clearAcceptTimer(ref);
     this.send({ $case: 'abort', abort: { ref } });
   }
 
@@ -239,7 +248,7 @@ export class JudgeSession implements DispatchTarget {
         this.isDraining = true;
         return;
       default:
-        return this.onRunMessage(body);
+        await this.onRunMessage(body);
     }
   }
 
@@ -290,34 +299,28 @@ export class JudgeSession implements DispatchTarget {
     });
   }
 
-  private onRunMessage(body: RunBody): Promise<void> {
+  private onRunMessage(body: RunBody): Promise<unknown> {
     const { runs } = this.services;
     switch (body.$case) {
       case 'accepted':
-        return this.store(body.accepted, (key) => runs.accepted(key), true);
+        return this.handleRun(body.accepted, (key) => runs.accepted(key), true);
       case 'compiled': {
         const log = clipBytes(body.compiled.log, MAX_LOG_BYTES);
-        return this.store(body.compiled, (key) => runs.compiled(key, log));
+        return this.handleRun(body.compiled, (key) => runs.compiled(key, log));
       }
       case 'started': {
         const { pretested } = body.started;
-        return this.store(body.started, (key) => runs.started(key, pretested));
+        return this.handleRun(body.started, (key) =>
+          runs.started(key, pretested),
+        );
       }
       case 'cases': {
         const rows = caseRowsOf(body.cases.cases);
-        return this.store(body.cases, (key) => runs.cases(key, rows));
+        return this.handleRun(body.cases, (key) => runs.cases(key, rows));
       }
       case 'final':
         return this.onFinal(body.final);
     }
-  }
-
-  private async store(
-    message: { ref?: AssignmentRef; seq: number },
-    write: (key: RunKey) => Promise<WriteOutcome>,
-    isAccept = false,
-  ): Promise<void> {
-    await this.handleRun(message, write, isAccept);
   }
 
   /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick. A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */
@@ -333,7 +336,7 @@ export class JudgeSession implements DispatchTarget {
     if (handled?.outcome === 'stale')
       return this.services.dispatch.windingEnded(this, handled.ref);
     if (handled?.outcome === 'applied' || handled?.outcome === 'duplicate') {
-      this.rememberEnded(handled.ref);
+      remember(this.ended, windingKey(handled.ref));
       await this.services.dispatch.runEnded(this, handled.ref, {
         retried: report.kind === 'retry' && handled.outcome === 'applied',
       });
@@ -352,13 +355,6 @@ export class JudgeSession implements DispatchTarget {
     this.abortOnce(ref);
   }
 
-  private rememberEnded(ref: AssignmentRef): void {
-    this.ended.add(windingKey(ref));
-    if (this.ended.size <= ENDED_REMEMBERED) return;
-    const [oldest] = this.ended;
-    this.ended.delete(oldest);
-  }
-
   /** judge-v2 ends every run it kills with `Final{ABORTED}`: not stored, not acked (plan A: the run is over for both sides), no Abort echo; the slot is freed. */
   private async windingFinal(ref: AssignmentRef): Promise<void> {
     await this.services.dispatch.windingEnded(this, ref);
@@ -373,7 +369,7 @@ export class JudgeSession implements DispatchTarget {
     const ref = refOf(message.ref);
     const seq = seqOf(message.seq);
     if (!this.holds(ref)) return this.onUnheld(ref, isAccept);
-    if (seq === 1) this.clearAcceptTimer(ref.submissionId);
+    if (seq === 1) this.clearAcceptTimer(ref);
     const outcome = await write({ ref, judgeName: this.name, seq });
     this.afterWrite(ref, seq, outcome);
     return { ref, outcome };
@@ -455,7 +451,7 @@ export class JudgeSession implements DispatchTarget {
   }
 
   private async acceptTimedOut(ref: AssignmentRef): Promise<void> {
-    this.acceptTimers.delete(ref.submissionId);
+    this.acceptTimers.delete(windingKey(ref));
     try {
       await this.services.dispatch.acceptTimedOut(this, ref);
     } catch (error) {
@@ -465,9 +461,10 @@ export class JudgeSession implements DispatchTarget {
     }
   }
 
-  private clearAcceptTimer(submissionId: string): void {
-    clearTimeout(this.acceptTimers.get(submissionId));
-    this.acceptTimers.delete(submissionId);
+  private clearAcceptTimer(ref: AssignmentRef): void {
+    const key = windingKey(ref);
+    clearTimeout(this.acceptTimers.get(key));
+    this.acceptTimers.delete(key);
   }
 
   private async onClose(): Promise<void> {
