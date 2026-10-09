@@ -6,6 +6,7 @@ import {
   NotificationsModule,
   ORGANIZATION_POINTS_QUEUE,
 } from '@libs/community';
+import { ProblemsApiModule } from '../problems/problems-api.module';
 import { OrganizationEditingController } from './editing/organization-editing.controller';
 import { OrganizationEditingService } from './editing/organization-editing.service';
 import { OrganizationRequestQueueController } from './requests/organization-request-queue.controller';
@@ -20,11 +21,26 @@ import { OrganizationPointsService } from './core/organization-points.service';
 import { OrganizationsController } from './core/organizations.controller';
 import { OrganizationsRepository } from './core/organizations.repository';
 import { OrganizationsService } from './core/organizations.service';
+import { OrganizationQuotaModule } from './quota/organization-quota.module';
+import {
+  ORGANIZATION_PROBLEM_CONTROLLERS,
+  ORGANIZATION_PROBLEM_PROVIDERS,
+} from './problems/wiring';
+import {
+  PROBLEM_TAG_CONTROLLERS,
+  PROBLEM_TAG_PROVIDERS,
+} from './problem-tags/wiring';
+import {
+  ORGANIZATION_USAGE_CONTROLLERS,
+  ORGANIZATION_USAGE_PROVIDERS,
+} from './usage/wiring';
 
 @Module({
   imports: [
     AuthModule,
     NotificationsModule,
+    ProblemsApiModule,
+    OrganizationQuotaModule,
     BullModule.registerQueue({ name: ORGANIZATION_POINTS_QUEUE }),
   ],
   controllers: [
@@ -33,6 +49,9 @@ import { OrganizationsService } from './core/organizations.service';
     MembershipController,
     OrganizationRequestsController,
     OrganizationRequestQueueController,
+    ...PROBLEM_TAG_CONTROLLERS,
+    ...ORGANIZATION_PROBLEM_CONTROLLERS,
+    ...ORGANIZATION_USAGE_CONTROLLERS,
   ],
   providers: [
     OrganizationsRepository,
@@ -45,6 +64,9 @@ import { OrganizationsService } from './core/organizations.service';
     OrganizationRequestsService,
     OrganizationRequestQueueService,
     RateLimitService,
+    ...PROBLEM_TAG_PROVIDERS,
+    ...ORGANIZATION_PROBLEM_PROVIDERS,
+    ...ORGANIZATION_USAGE_PROVIDERS,
   ],
   exports: [
     OrganizationsRepository,
@@ -52,6 +74,7 @@ import { OrganizationsService } from './core/organizations.service';
     OrganizationMembersRepository,
     OrganizationPointsService,
     OrganizationsService,
+    OrganizationQuotaModule,
   ],
 })
 export class OrganizationsApiModule {}
