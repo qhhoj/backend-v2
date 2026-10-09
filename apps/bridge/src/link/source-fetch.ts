@@ -30,7 +30,25 @@ function heldRef(
 ): AssignmentRef | null {
   if (!holder || !ref || !isUuid(ref.submissionId)) return null;
   if (sessionId !== holder.id) return null;
+  // Generation 0 is a claim still in flight, not yet a run of this session.
+  if (ref.generation === 0) return null;
   return holder.inFlight.get(ref.submissionId) === ref.generation ? ref : null;
+}
+
+/** Waits for the judge to drain the call; false when the call ends first (grpc-js emits only `close` on a cancel, which `once(call, 'drain')` would wait on forever). */
+async function drained(call: SourceCall): Promise<boolean> {
+  const stop = new AbortController();
+  const ended = ['cancelled', 'close', 'error'].map((event) =>
+    once(call, event, { signal: stop.signal }).then(() => false),
+  );
+  try {
+    return await Promise.race([
+      once(call, 'drain', { signal: stop.signal }).then(() => true),
+      ...ended,
+    ]);
+  } finally {
+    stop.abort();
+  }
 }
 
 /** FetchSource: the file of a file-only submission, only for a run the calling judge's live session holds (otherwise any judge key could read any user's upload). Judges need no HTTP access to the site. */
@@ -55,11 +73,12 @@ export class SourceFetch {
         'not a run of this session',
       );
     const path = await this.pathOf(ref.submissionId);
-    const handle = path ? await this.openUpload(path) : null;
-    if (!path || !handle)
+    const upload = path ? await this.openUpload(path) : null;
+    if (!path || !upload)
       return this.refuse(call, status.NOT_FOUND, 'no uploaded file');
+    const { handle, size } = upload;
     try {
-      if ((await handle.stat()).size > MAX_UPLOAD_BYTES)
+      if (size > MAX_UPLOAD_BYTES)
         return this.refuse(
           call,
           status.FAILED_PRECONDITION,
@@ -77,7 +96,9 @@ export class SourceFetch {
   }
 
   /** A regular file whose parent resolves inside `submission_file/`, opened without following a symlink at the last component; the size check and the stream use this one handle (no reopen between check and read). Null otherwise. */
-  private async openUpload(path: string): Promise<FileHandle | null> {
+  private async openUpload(
+    path: string,
+  ): Promise<{ handle: FileHandle; size: number } | null> {
     const missing = () => null;
     const root = await realpath(
       join(this.env.mediaRoot, 'submission_file'),
@@ -89,7 +110,8 @@ export class SourceFetch {
       constants.O_RDONLY | constants.O_NOFOLLOW,
     ).catch(missing);
     if (!handle) return null;
-    if ((await handle.stat()).isFile()) return handle;
+    const stats = await handle.stat();
+    if (stats.isFile()) return { handle, size: stats.size };
     await handle.close();
     return null;
   }
@@ -107,7 +129,7 @@ export class SourceFetch {
     try {
       for await (const data of file as AsyncIterable<Buffer>) {
         if (call.cancelled) return;
-        if (!call.write({ data })) await once(call, 'drain');
+        if (!call.write({ data }) && !(await drained(call))) return;
       }
       call.end();
     } catch (error) {

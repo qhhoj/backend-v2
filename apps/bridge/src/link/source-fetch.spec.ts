@@ -3,6 +3,8 @@ import { EventEmitter } from 'node:events';
 import {
   mkdirSync,
   mkdtempSync,
+  readdirSync,
+  readlinkSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -10,6 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Env } from '@libs/common';
+import { waitUntil } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import type { Chunk, FetchSourceRequest } from '@libs/judge-proto';
 import type { SubmissionsRepository } from '../submissions/submissions.repository';
@@ -20,13 +23,15 @@ class FakeSourceCall extends EventEmitter {
   readonly chunks: Chunk[] = [];
   readonly statuses: Array<{ code: status }> = [];
   ended = false;
+  /** When set, write() reports a full buffer, as HTTP/2 flow control does. */
+  backpressure = false;
   cancelled = false;
   constructor(readonly request: FetchSourceRequest) {
     super();
   }
   write(chunk: Chunk): boolean {
     this.chunks.push(chunk);
-    return true;
+    return !this.backpressure;
   }
   end(): void {
     this.ended = true;
@@ -38,6 +43,15 @@ class FakeSourceCall extends EventEmitter {
     return true;
   }
 }
+
+const openFds = (name: string): number =>
+  readdirSync('/proc/self/fd').filter((fd) => {
+    try {
+      return readlinkSync(`/proc/self/fd/${fd}`).endsWith(name);
+    } catch {
+      return false;
+    }
+  }).length;
 
 describe('SourceFetch', () => {
   const mediaRoot = mkdtempSync(join(tmpdir(), 'qhhoj-source-fetch-'));
@@ -83,6 +97,29 @@ describe('SourceFetch', () => {
     ]);
   });
 
+  it('stops and closes the file when the judge cancels while waiting for drain', async () => {
+    const id = newId();
+    sources.set(id, '/media/submission_file/sum/u1/big.zip');
+    const call = new FakeSourceCall({
+      ref: { submissionId: id, generation: 1 },
+      sessionId: 'session-1',
+    });
+    call.backpressure = true;
+    const served = fetcher.serve(call as unknown as SourceCall, held(id));
+    await waitUntil(() => call.chunks.length === 1);
+    expect(openFds('big.zip')).toBe(1);
+    call.cancelled = true;
+    call.emit('close');
+    await expect(
+      Promise.race([
+        served.then(() => 'returned'),
+        new Promise((resolve) => setTimeout(resolve, 1000, 'hung')),
+      ]),
+    ).resolves.toBe('returned');
+    expect(call.chunks).toHaveLength(1);
+    expect(openFds('big.zip')).toBe(0);
+  });
+
   it('refuses a run the session does not hold: no session, another generation, another session id, an unknown ref', async () => {
     const id = newId();
     sources.set(id, '/media/submission_file/sum/u1/big.zip');
@@ -92,6 +129,7 @@ describe('SourceFetch', () => {
       [{ ref: { ...ref, generation: 2 }, sessionId: 'session-1' }, held(id)],
       [{ ref, sessionId: 'session-9' }, held(id)],
       [{ ref, sessionId: '' }, held(id)],
+      [{ ref: { ...ref, generation: 0 }, sessionId: 'session-1' }, held(id, 0)],
       [{ ref: undefined, sessionId: 'session-1' }, held(id)],
       [
         { ref: { ...ref, submissionId: newId() }, sessionId: 'session-1' },
