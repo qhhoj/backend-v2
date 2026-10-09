@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Queue } from 'bullmq';
+import { NotificationsService } from '@libs/community';
 import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import { POLYGON_QUEUE, ProblemDataFilesService } from '@libs/problems';
@@ -40,6 +41,7 @@ describe('problem data quota', () => {
   let authorId: string;
   let author: TestSession;
   let counter = 0;
+  const notify = jest.fn(() => Promise.resolve());
   const orgProblem = async (
     extra: Record<string, unknown> = {},
     orgExtra: Record<string, unknown> = {},
@@ -85,7 +87,9 @@ describe('problem data quota', () => {
     ).map(({ reason, amount }) => [reason, amount]);
 
   beforeAll(async () => {
-    api = await setupApiTest();
+    api = await setupApiTest({
+      overrides: [{ provide: NotificationsService, useValue: { notify } }],
+    });
     catalog = await seedCatalog(api);
     usage = api.app.get(getModelToken(OrganizationUsage.name));
     ledger = api.app.get(getModelToken(OrganizationCreditEntry.name));
@@ -126,6 +130,20 @@ describe('problem data quota', () => {
     ).expect(200);
     expect(await dataBytesOf(problem._id)).toBe(directoryBytes(problem.code));
     expect(await dataBytesOf(problem._id)).toBeLessThan(afterSource!);
+  });
+
+  it('warns the organization admins when an upload takes storage past 80 percent', async () => {
+    await api.setSetting('quota.enforce', 'warn');
+    const admin = (await createUserWith(api, 'dqadmin'))._id;
+    const { problem } = await orgProblem(
+      {},
+      { adminIds: [admin], quotaStorageBytes: 1 },
+    );
+    await uploadArchive(problem.code, buildZip(tests(1))).expect(201);
+    expect(notify).toHaveBeenCalledWith(
+      [admin],
+      expect.objectContaining({ kind: 'quota-warning' }),
+    );
   });
 
   it('charges one credit for a small archive of an organization problem and nothing for a public one', async () => {

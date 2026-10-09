@@ -10,6 +10,7 @@ export const NOTIFICATION_KINDS = [
   'ticket-new',
   'contest-announcement',
   'organization-request-decided',
+  'quota-warning',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export const NOTIFICATION_PRIORITIES = ['normal', 'high'] as const;

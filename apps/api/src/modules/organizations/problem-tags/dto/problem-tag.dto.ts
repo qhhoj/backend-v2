@@ -1,9 +1,6 @@
 import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
-import {
-  ORGANIZATION_TAG_COLORS,
-  ORGANIZATION_TAG_SLUG_PATTERN,
-} from '@libs/database';
-import type { OrganizationTagColor } from '@libs/database';
+import { TAG_COLORS, ORGANIZATION_TAG_SLUG_PATTERN } from '@libs/database';
+import type { TagColor } from '@libs/database';
 import { Type } from 'class-transformer';
 import {
   IsIn,
@@ -22,14 +19,14 @@ export class CreateProblemTagDto {
   })
   slug!: string;
   @IsString() @Length(1, 40) name!: string;
-  /** The palette token keys; the component is the contest tags' `ContestTagColor` (identical palette; one enumeration, one component). */
+  /** The palette token keys, shared with the contest tags (`TagColor`). */
   @ApiPropertyOptional({
-    enum: ORGANIZATION_TAG_COLORS,
-    enumName: 'ContestTagColor',
+    enum: TAG_COLORS,
+    enumName: 'TagColor',
   })
   @IsOptional()
-  @IsIn(ORGANIZATION_TAG_COLORS)
-  color?: OrganizationTagColor;
+  @IsIn(TAG_COLORS)
+  color?: TagColor;
 }
 
 /** The slug is the tag's identity in URLs and filters: it never changes. */

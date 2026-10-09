@@ -4,8 +4,8 @@ import {
   OmitType,
   PartialType,
 } from '@nestjs/swagger';
-import { CONTEST_TAG_COLORS, CONTEST_TAG_PATTERN } from '@libs/database';
-import type { ContestTagColor } from '@libs/database';
+import { TAG_COLORS, CONTEST_TAG_PATTERN } from '@libs/database';
+import type { TagColor } from '@libs/database';
 import { Type } from 'class-transformer';
 import {
   IsIn,
@@ -51,9 +51,9 @@ export class CreateContestTagDto {
   name!: string;
 
   /** A union alias: the plugin drops it without the explicit decorator (R3). */
-  @ApiProperty({ enum: CONTEST_TAG_COLORS, enumName: 'ContestTagColor' })
-  @IsIn(CONTEST_TAG_COLORS)
-  color!: ContestTagColor;
+  @ApiProperty({ enum: TAG_COLORS, enumName: 'TagColor' })
+  @IsIn(TAG_COLORS)
+  color!: TagColor;
 
   @IsOptional()
   @IsString()

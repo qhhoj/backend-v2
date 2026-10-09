@@ -37,6 +37,15 @@ export class ProblemStorageQuota {
     });
   }
 
+  /** After a data write: warns the organization's admins once it passes 80% of storage. */
+  async afterWrite(organizationId: string | null): Promise<void> {
+    if (organizationId === null) return;
+    await this.quota.afterStorageWrite(
+      organizationId,
+      await this.problems.sumDataBytes(organizationId),
+    );
+  }
+
   /** Size of the file an upload will replace (0 when there is none or it is gone). */
   async replacedBytes(
     code: string,

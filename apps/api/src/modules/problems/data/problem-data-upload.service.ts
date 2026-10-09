@@ -124,6 +124,7 @@ export class ProblemDataUploadService {
       after: stored,
       comment: 'archive uploaded',
     });
+    await this.storage.afterWrite(organizationId);
     return this.store.response(auth.principal, problem, stored, archiveFiles);
   }
 
@@ -174,11 +175,11 @@ export class ProblemDataUploadService {
     const { kind, name, staged, bytes } = upload;
     const { data: previous, version } = await this.store.loadData(problem);
     this.assertNameFree(previous, kind, name);
-    await this.assertStorageFits(
-      this.storage.organizationOf(auth.principal, problem),
-      problem,
-      { bytes, replaced: previous[kind] },
-    );
+    const organizationId = this.storage.organizationOf(auth.principal, problem);
+    await this.assertStorageFits(organizationId, problem, {
+      bytes,
+      replaced: previous[kind],
+    });
     const { stored, archiveFiles } = await this.store.withDataWrite(
       problem,
       async () => {
@@ -198,6 +199,7 @@ export class ProblemDataUploadService {
       after: stored,
       comment: `${kind} uploaded`,
     });
+    await this.storage.afterWrite(organizationId);
     return this.store.response(auth.principal, problem, stored, archiveFiles);
   }
 

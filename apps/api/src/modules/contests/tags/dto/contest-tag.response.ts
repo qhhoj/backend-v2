@@ -1,14 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CONTEST_TAG_COLORS } from '@libs/database';
-import type { ContestTag, ContestTagColor } from '@libs/database';
+import { TAG_COLORS } from '@libs/database';
+import type { ContestTag, TagColor } from '@libs/database';
 
 export class ContestTagResponse {
   slug!: string;
   name!: string;
 
   /** A theme token key (`tag-1`..`tag-8`), never a hex. */
-  @ApiProperty({ enum: CONTEST_TAG_COLORS, enumName: 'ContestTagColor' })
-  color!: ContestTagColor;
+  @ApiProperty({ enum: TAG_COLORS, enumName: 'TagColor' })
+  color!: TagColor;
 
   description!: string;
   order!: number;

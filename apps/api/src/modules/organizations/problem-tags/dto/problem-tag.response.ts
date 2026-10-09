@@ -1,9 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ORGANIZATION_TAG_COLORS, uuidStr } from '@libs/database';
-import type {
-  OrganizationProblemTag,
-  OrganizationTagColor,
-} from '@libs/database';
+import { TAG_COLORS, uuidStr } from '@libs/database';
+import type { OrganizationProblemTag, TagColor } from '@libs/database';
 
 export class ProblemTagResponse {
   id!: string;
@@ -11,10 +8,10 @@ export class ProblemTagResponse {
   name!: string;
   /** A colour token key (`tag-1`..`tag-8`), never a hex. */
   @ApiProperty({
-    enum: ORGANIZATION_TAG_COLORS,
-    enumName: 'ContestTagColor',
+    enum: TAG_COLORS,
+    enumName: 'TagColor',
   })
-  color!: OrganizationTagColor;
+  color!: TagColor;
 
   static from(tag: OrganizationProblemTag): ProblemTagResponse {
     return {

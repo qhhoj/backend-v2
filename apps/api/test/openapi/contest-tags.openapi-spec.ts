@@ -1,10 +1,10 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
-import { CONTEST_TAG_COLORS } from '@libs/database';
+import { TAG_COLORS } from '@libs/database';
 import { loadDocument, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';
 
 const OWN_SITE = /\/api\/internal\/contest-tags\b|ContestTag/;
-const COLOR_REF = { $ref: '#/components/schemas/ContestTagColor' };
+const COLOR_REF = { $ref: '#/components/schemas/TagColor' };
 
 describe('contest tag schemas', () => {
   let document: OpenAPIObject;
@@ -41,17 +41,15 @@ describe('contest tag schemas', () => {
       });
   });
 
-  it('names ContestTagColor once, on the request and the response', () => {
+  it('names TagColor once, on the request and the response', () => {
     // One enumName reused for another set would merge them silently: the member count catches it.
-    expect(schema('ContestTagColor').enum).toHaveLength(
-      CONTEST_TAG_COLORS.length,
-    );
+    expect(schema('TagColor').enum).toHaveLength(TAG_COLORS.length);
     expect(refOf(properties('CreateContestTagDto').color)).toEqual(
       COLOR_REF.$ref,
     );
     expect(refOf(properties('ContestTagResponse').color)).toEqual(
       COLOR_REF.$ref,
     );
-    expect(owned(inlineEnumSites(document, CONTEST_TAG_COLORS))).toEqual([]);
+    expect(owned(inlineEnumSites(document, TAG_COLORS))).toEqual([]);
   });
 });

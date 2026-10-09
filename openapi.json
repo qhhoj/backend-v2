@@ -2014,26 +2014,12 @@
         ],
         "type": "object"
       },
-      "ContestTagColor": {
-        "description": "A colour token key (`tag-1`..`tag-8`), never a hex.",
-        "enum": [
-          "tag-1",
-          "tag-2",
-          "tag-3",
-          "tag-4",
-          "tag-5",
-          "tag-6",
-          "tag-7",
-          "tag-8"
-        ],
-        "type": "string"
-      },
       "ContestTagResponse": {
         "properties": {
           "color": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/ContestTagColor"
+                "$ref": "#/components/schemas/TagColor"
               }
             ],
             "description": "A theme token key (`tag-1`..`tag-8`), never a hex."
@@ -2402,7 +2388,7 @@
           "color": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/ContestTagColor"
+                "$ref": "#/components/schemas/TagColor"
               }
             ],
             "description": "A union alias: the plugin drops it without the explicit decorator (R3)."
@@ -2916,10 +2902,10 @@
           "color": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/ContestTagColor"
+                "$ref": "#/components/schemas/TagColor"
               }
             ],
-            "description": "The palette token keys; the component is the contest tags' `ContestTagColor` (identical palette; one enumeration, one component)."
+            "description": "The palette token keys, shared with the contest tags (`TagColor`)."
           },
           "name": {
             "maxLength": 40,
@@ -4801,6 +4787,7 @@
         "enum": [
           "contest-announcement",
           "organization-request-decided",
+          "quota-warning",
           "ticket-message",
           "ticket-new",
           "ticket-status"
@@ -6399,7 +6386,7 @@
           "color": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/ContestTagColor"
+                "$ref": "#/components/schemas/TagColor"
               }
             ],
             "description": "A colour token key (`tag-1`..`tag-8`), never a hex."
@@ -9327,6 +9314,20 @@
         ],
         "type": "object"
       },
+      "TagColor": {
+        "description": "A colour token key (`tag-1`..`tag-8`), never a hex.",
+        "enum": [
+          "tag-1",
+          "tag-2",
+          "tag-3",
+          "tag-4",
+          "tag-5",
+          "tag-6",
+          "tag-7",
+          "tag-8"
+        ],
+        "type": "string"
+      },
       "TagGroupResponse": {
         "properties": {
           "code": {
@@ -10278,7 +10279,7 @@
           "color": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/ContestTagColor"
+                "$ref": "#/components/schemas/TagColor"
               }
             ],
             "description": "A union alias: the plugin drops it without the explicit decorator (R3)."
@@ -10692,10 +10693,10 @@
           "color": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/ContestTagColor"
+                "$ref": "#/components/schemas/TagColor"
               }
             ],
-            "description": "The palette token keys; the component is the contest tags' `ContestTagColor` (identical palette; one enumeration, one component)."
+            "description": "The palette token keys, shared with the contest tags (`TagColor`)."
           },
           "name": {
             "maxLength": 40,

@@ -3,7 +3,7 @@ import { USAGE_SORTS } from '../../src/modules/organizations/usage/dto/usage.dto
 import { BULK_ACTIONS } from '../../src/modules/organizations/problems/dto/bulk.dto';
 import { ARCHIVE_FILTERS } from '../../src/modules/organizations/problems/dto/organization-problem.dto';
 import { RESERVED_ORGANIZATION_SLUG_PATTERN } from '../../src/modules/organizations/editing/dto/organization-edit.dto';
-import { ORGANIZATION_TAG_COLORS } from '@libs/database';
+import { TAG_COLORS } from '@libs/database';
 import { loadDocument, operationOf, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';
 
@@ -48,11 +48,9 @@ describe('organization problem tags, archive and quota schemas', () => {
   });
 
   it('shares the contest tag colour component, which has exactly the palette keys', () => {
-    expect(schema('ContestTagColor').enum).toHaveLength(
-      ORGANIZATION_TAG_COLORS.length,
-    );
+    expect(schema('TagColor').enum).toHaveLength(TAG_COLORS.length);
     expect(
-      inlineEnumSites(document, ORGANIZATION_TAG_COLORS).filter(
+      inlineEnumSites(document, TAG_COLORS).filter(
         (site) => !site.startsWith('/components/schemas/'),
       ),
     ).toEqual([]);

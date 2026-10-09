@@ -11,6 +11,7 @@ import {
 } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { meterOf } from './quota-meter';
+import { QuotaWarningNotifier } from './quota-warning.notifier';
 import {
   BYTES_PER_COST_UNIT,
   QUOTA_BACKFILL_DONE_KEY,
@@ -38,6 +39,7 @@ export class QuotaService implements OnApplicationBootstrap {
     @InjectModel(OrganizationCreditEntry.name)
     private readonly ledger: Model<OrganizationCreditEntry>,
     @Inject(REDIS) private readonly redis: Redis,
+    private readonly warnings: QuotaWarningNotifier,
   ) {}
 
   /** The backfill flag lives in Redis only, so a Redis flush or restart silently turns `enforce` back into `warn`: say so at boot (re-run the backfill by removing the job `problem-databytes-backfill-v1` from the `problem-databytes` queue and restarting the worker). */
@@ -114,12 +116,36 @@ export class QuotaService implements OnApplicationBootstrap {
     const key = { organizationId, month: this.monthKeyOf(now) };
     const charge = { ...request, amount };
     await this.spend(key, charge);
+    let result: Result;
     try {
-      return await work();
+      result = await work();
     } catch (error) {
       await this.refund(key, charge);
       throw error;
     }
+    await this.warnIfCreditsNear(key);
+    return result;
+  }
+
+  /** The once-a-month 80% credit warning; it sits outside the refund `try`, so a failure here can never refund finished work. */
+  private async warnIfCreditsNear(key: UsageKey): Promise<void> {
+    const { credits } = await this.limitsOf(key.organizationId);
+    const used = await this.creditsUsed(key);
+    if (meterOf(used, credits).isNearLimit)
+      await this.warnings.warnOnce(key, 'credits');
+  }
+
+  /** The storage meter's counterpart: called after a data write with the organization's new total. */
+  async afterStorageWrite(
+    organizationId: string,
+    usedBytes: number,
+    now = new Date(),
+  ): Promise<void> {
+    const { storageBytes } = await this.limitsOf(organizationId);
+    if (!meterOf(usedBytes, storageBytes).isNearLimit) return;
+    const key = { organizationId, month: this.monthKeyOf(now) };
+    await this.ensureUsageRow(key);
+    await this.warnings.warnOnce(key, 'storage');
   }
 
   /** The atomic spend. (1) In enforce mode a price above the limit is refused up front. (2) An upsert with `$setOnInsert` only creates the month's row, so it can never hit a duplicate key on an over-limit month. (3) A guarded `$inc` without upsert applies the limit, including on the month's first spend; a miss is `quota_exceeded`. */

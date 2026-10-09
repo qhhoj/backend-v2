@@ -135,6 +135,7 @@ export * from './navigation-item.schema';
 export * from './notification.schema';
 export * from './organization-credit-entry.schema';
 export * from './organization-problem-tag.schema';
+export * from './tag-color';
 export * from './organization-problem.schema';
 export * from './organization-request.schema';
 export * from './organization-usage.schema';
