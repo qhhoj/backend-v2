@@ -1,4 +1,10 @@
-import { depthOf, isCollapsed } from '@libs/community';
+import { ApiProperty } from '@nestjs/swagger';
+import {
+  COMMENT_PAGE_TYPES,
+  depthOf,
+  isCollapsed,
+  VOTE_SCORES,
+} from '@libs/community';
 import type { CommentPageType, VoteScore } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
@@ -6,6 +12,7 @@ import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.res
 import type { PageInfo } from '../comment-pages.service';
 
 export class CommentPageLinkResponse {
+  @ApiProperty({ enum: COMMENT_PAGE_TYPES, enumName: 'CommentPageType' })
   type!: CommentPageType;
   key!: string;
   title!: string;
@@ -34,6 +41,7 @@ export class CommentResponse {
   /** Score at or below -5: the SPA folds it (legacy collapsed client-side). */
   collapsed!: boolean;
   revisions!: number;
+  @ApiProperty({ enum: VOTE_SCORES, enumName: 'VoteScore' })
   viewerVote!: VoteScore;
   canEdit!: boolean;
 

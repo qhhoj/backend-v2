@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -11,7 +12,13 @@ import {
 import { toArray, toBoolean } from '../../../problems/core/dto/transforms';
 
 export class TicketPageQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
 }
 
 /** Legacy `TicketList` filters; `user` and `assignee` repeat (`user=a&user=b`) and are usernames. */

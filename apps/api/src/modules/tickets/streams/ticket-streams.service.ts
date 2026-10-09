@@ -15,12 +15,22 @@ import type { StreamLimits } from '../../events/stream-limits';
 import { TicketAccess } from '../core/ticket-access';
 import { TicketContextService } from '../core/ticket-context.service';
 import { TicketsRepository } from '../core/tickets.repository';
+import type { TicketEventResponse } from './dto/ticket-stream-frames.response';
 
 interface TicketStream extends OpenStream {
   /** Null on the feed of every readable ticket. */
   ticketId: string | null;
   /** Refreshed by the hub's recheck: an event is judged with the viewer's current permissions. */
   principal: Principal;
+}
+
+/** The `data` of every ticket frame, whatever its event. */
+export function ticketEventData(event: TicketEvent): TicketEventResponse {
+  return {
+    ticketId: event.ticketId,
+    messageId: event.messageId,
+    open: event.open,
+  };
 }
 
 /** The `ticket-events` channel. Access depends on the ticket (creator, assignees, linked problem), so each event reads the ticket once and every candidate stream is judged by `TicketAccess.canSee`. */
@@ -173,11 +183,7 @@ export class TicketStreamsService implements EventChannel {
       const ticket = await this.tickets.findById(event.ticketId);
       if (!ticket) return;
       const view = await this.context.accessView(ticket);
-      const frame = sseFrame(event.type, {
-        ticketId: event.ticketId,
-        messageId: event.messageId,
-        open: event.open,
-      });
+      const frame = sseFrame(event.type, ticketEventData(event));
       for (const entry of targets)
         if (TicketAccess.canSee(entry.principal, view))
           entry.stream.send(frame);

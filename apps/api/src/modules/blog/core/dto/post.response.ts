@@ -1,5 +1,7 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { uuidStr } from '@libs/database';
 import type { BlogPost } from '@libs/database';
+import { VOTE_SCORES } from '@libs/community';
 import type { VoteScore } from '@libs/community';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 import { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
@@ -16,6 +18,7 @@ export class PostListItemResponse {
   /** The summary, else the content (legacy list rendering). */
   summaryHtml!: string;
   score!: number;
+  @ApiProperty({ enum: VOTE_SCORES, enumName: 'VoteScore' })
   viewerVote!: VoteScore;
   /** Visible comments. */
   commentCount!: number;

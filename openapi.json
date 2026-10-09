@@ -529,9 +529,17 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "viewerVote": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteScore"
+              }
+            ]
           }
         },
         "required": [
+          "viewerVote",
           "id",
           "parentId",
           "depth",
@@ -558,14 +566,11 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "problem",
-              "contest",
-              "blog",
-              "editorial",
-              "tagProblem"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentPageType"
+              }
+            ]
           }
         },
         "required": [
@@ -607,6 +612,16 @@
           "pagination"
         ],
         "type": "object"
+      },
+      "CommentPageType": {
+        "enum": [
+          "problem",
+          "editorial",
+          "contest",
+          "blog",
+          "tagProblem"
+        ],
+        "type": "string"
       },
       "CommentPaginationResponse": {
         "properties": {
@@ -677,9 +692,17 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "viewerVote": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteScore"
+              }
+            ]
           }
         },
         "required": [
+          "viewerVote",
           "id",
           "parentId",
           "depth",
@@ -4057,11 +4080,19 @@
           "title": {
             "type": "string"
           },
+          "viewerVote": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteScore"
+              }
+            ]
+          },
           "visible": {
             "type": "boolean"
           }
         },
         "required": [
+          "viewerVote",
           "id",
           "title",
           "slug",
@@ -4121,11 +4152,19 @@
           "title": {
             "type": "string"
           },
+          "viewerVote": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteScore"
+              }
+            ]
+          },
           "visible": {
             "type": "boolean"
           }
         },
         "required": [
+          "viewerVote",
           "id",
           "title",
           "slug",
@@ -5467,9 +5506,17 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "viewerVote": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteScore"
+              }
+            ]
           }
         },
         "required": [
+          "viewerVote",
           "page",
           "id",
           "parentId",
@@ -7249,6 +7296,49 @@
         ],
         "type": "object"
       },
+      "TicketEventFrame": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TicketEventResponse"
+          },
+          "event": {
+            "enum": [
+              "new-ticket",
+              "ticket-message",
+              "ticket-status"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
+      "TicketEventResponse": {
+        "properties": {
+          "messageId": {
+            "description": "The new message on `ticket-message`, else null.",
+            "nullable": true,
+            "type": "string"
+          },
+          "open": {
+            "description": "The new state on `ticket-status`, else null.",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "ticketId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticketId",
+          "messageId",
+          "open"
+        ],
+        "type": "object"
+      },
       "TicketLinkResponse": {
         "properties": {
           "id": {
@@ -8168,8 +8258,8 @@
       "UpdateSettingDto": {
         "properties": {
           "value": {
-            "description": "The new value (merged into the stored one for object settings such as `auth.google`).",
-            "type": "object"
+            "description": "Any JSON value; its shape is the setting definition.",
+            "nullable": true
           }
         },
         "required": [
@@ -8457,7 +8547,18 @@
         "type": "object"
       },
       "VoteDto": {
-        "properties": {},
+        "properties": {
+          "score": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteScore"
+              }
+            ]
+          }
+        },
+        "required": [
+          "score"
+        ],
         "type": "object"
       },
       "VoteResponse": {
@@ -8470,6 +8571,14 @@
           "score"
         ],
         "type": "object"
+      },
+      "VoteScore": {
+        "enum": [
+          -1,
+          0,
+          1
+        ],
+        "type": "number"
       },
       "WebauthnCredentialResponse": {
         "properties": {
@@ -8795,6 +8904,17 @@
         "parameters": [
           {
             "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "state",
             "required": true,
             "schema": {
@@ -8803,21 +8923,6 @@
                 "scheduled"
               ],
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1
             }
           }
         ],
@@ -9008,31 +9113,23 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 20,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -9440,16 +9537,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -9796,16 +9889,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -9901,16 +9990,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 200,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -9964,17 +10049,24 @@
         "parameters": [
           {
             "in": "query",
-            "name": "page",
-            "required": true,
+            "name": "days",
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
               "default": 1,
               "maximum": 200,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
@@ -10002,21 +10094,6 @@
             "schema": {
               "maxLength": 200,
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "days",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 7,
-              "maximum": 90,
-              "minimum": 1
             }
           }
         ],
@@ -10078,6 +10155,17 @@
         "parameters": [
           {
             "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "user",
             "required": false,
             "schema": {
@@ -10101,21 +10189,6 @@
             "schema": {
               "maxLength": 200,
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "days",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 7,
-              "maximum": 90,
-              "minimum": 1
             }
           }
         ],
@@ -10214,17 +10287,24 @@
           },
           {
             "in": "query",
-            "name": "page",
-            "required": true,
+            "name": "days",
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
               "default": 1,
               "maximum": 200,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
@@ -10252,21 +10332,6 @@
             "schema": {
               "maxLength": 200,
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "days",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 7,
-              "maximum": 90,
-              "minimum": 1
             }
           }
         ],
@@ -10337,16 +10402,12 @@
           {
             "in": "query",
             "name": "days",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 90,
               "maximum": 90,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -11953,14 +12014,7 @@
             "name": "type",
             "required": true,
             "schema": {
-              "enum": [
-                "problem",
-                "editorial",
-                "contest",
-                "blog",
-                "tagProblem"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/CommentPageType"
             }
           },
           {
@@ -11974,16 +12028,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -12038,14 +12088,7 @@
             "name": "type",
             "required": true,
             "schema": {
-              "enum": [
-                "problem",
-                "editorial",
-                "contest",
-                "blog",
-                "tagProblem"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/CommentPageType"
             }
           },
           {
@@ -12120,14 +12163,7 @@
             "name": "type",
             "required": true,
             "schema": {
-              "enum": [
-                "problem",
-                "editorial",
-                "contest",
-                "blog",
-                "tagProblem"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/CommentPageType"
             }
           },
           {
@@ -12175,14 +12211,7 @@
             "name": "type",
             "required": true,
             "schema": {
-              "enum": [
-                "problem",
-                "editorial",
-                "contest",
-                "blog",
-                "tagProblem"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/CommentPageType"
             }
           },
           {
@@ -14948,7 +14977,21 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TicketEventFrame"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResyncFrame"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A stream of frames; `event` names each one."
           },
           "default": {
             "content": {
@@ -14991,7 +15034,21 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TicketEventFrame"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResyncFrame"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A stream of frames; `event` names each one."
           },
           "default": {
             "content": {
@@ -15938,16 +15995,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -16350,7 +16403,7 @@
           {
             "in": "query",
             "name": "feed",
-            "required": true,
+            "required": false,
             "schema": {
               "default": "global",
               "enum": [
@@ -16363,16 +16416,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -18551,16 +18600,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -20331,6 +20376,17 @@
         "parameters": [
           {
             "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "open",
             "required": false,
             "schema": {
@@ -20367,21 +20423,6 @@
               },
               "maxItems": 10,
               "type": "array"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1
             }
           }
         ],
@@ -20967,16 +21008,12 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
