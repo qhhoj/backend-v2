@@ -8,6 +8,8 @@ import { CheckIntegrityCommand } from './commands/check-integrity.command';
 import { RecomputeCommand } from './commands/recompute.command';
 import { FinishCommand } from './commands/finish.command';
 import { VerifyCommand } from './commands/verify.command';
+import { StampDataVersionsCommand } from './commands/stamp-data-versions.command';
+import { CountDataShapesCommand } from './commands/count-data-shapes.command';
 import { FileCheckService } from './file-check.service';
 import { GrantPermissionsCommand } from './commands/grant-permissions.command';
 import {
@@ -34,6 +36,8 @@ import { RecomputeService } from './recompute.service';
     BackfillCommand,
     FinishCommand,
     VerifyCommand,
+    StampDataVersionsCommand,
+    CountDataShapesCommand,
     AuditService,
     AuditCommand,
     RecomputeService,
