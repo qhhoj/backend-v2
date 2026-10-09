@@ -502,6 +502,7 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush); migrator e2e also needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
+- Each jest worker flushes its own Redis db: `TEST_REDIS_URL`'s db plus `JEST_WORKER_ID - 1` (`redisUrlForWorker`, `@libs/common/testing`). A base db plus `--maxWorkers` must fit the server's `databases` (16 by default, 64 on the lane Redis); CI runs `--runInBand`, so it stays on db 15
 - Bridge e2e: `setupBridgeTest` (`apps/bridge/test/setup.ts`, millisecond `FAST_TIMINGS`, `restart()`), `FakeJudge` (real TCP), `RecordingJudge` (no socket); api specs read the command stream through `apps/api/test/submission-fixtures.ts`
 - Index use is asserted with `profileQueries` (`@libs/database/testing`): no `COLLSCAN`, documents examined bounded; worker effects fixtures in `apps/worker/test/effects-fixtures.ts`; SSE through `apps/api/test/sse-client.ts` (supertest cannot read streams); `recordSubmissionEvents` (`@libs/judging/testing`)
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`

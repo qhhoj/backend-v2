@@ -26,8 +26,23 @@ export async function createTestApp(
   await app.getHttpAdapter().getInstance().ready();
   return app;
 }
-export const TEST_REDIS_URL =
-  process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6379/15';
+/**
+ * `baseUrl` with its db index moved up by `workerId - 1`, so concurrent jest
+ * workers each `flushdb` their own db. Under `--runInBand` the worker id is 1
+ * and the db stays the base. Redis rejects an index past its `databases` count,
+ * so a base db plus `--maxWorkers` must fit the server (16 by default).
+ */
+export function redisUrlForWorker(baseUrl: string, workerId: string): string {
+  const url = new URL(baseUrl);
+  const baseDb = Number(url.pathname.slice(1) || 0);
+  url.pathname = `/${baseDb + Number(workerId) - 1}`;
+  return url.toString();
+}
+
+export const TEST_REDIS_URL = redisUrlForWorker(
+  process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6379/15',
+  process.env.JEST_WORKER_ID ?? '1',
+);
 
 export const TEST_ENV = {
   REDIS_URL: TEST_REDIS_URL,
