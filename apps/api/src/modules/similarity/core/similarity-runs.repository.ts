@@ -43,20 +43,20 @@ export class SimilarityRunsRepository {
   ) {}
 
   findProblemByCode(code: string): Promise<Problem | null> {
-    return this.problems.findOne({ code }).exec();
+    return this.problems.findOne({ code, deletedAt: null }).exec();
   }
 
   /** Null for a malformed id, like an unknown one. */
   findProblemById(id: string): Promise<Problem | null> {
     return isUuid(id)
-      ? this.problems.findById(id).exec()
+      ? this.problems.findOne({ _id: id, deletedAt: null }).exec()
       : Promise.resolve(null);
   }
 
   /** The given problems that still exist. */
   findProblemsByIds(ids: string[]): Promise<Problem[]> {
     if (!ids.length) return Promise.resolve([]);
-    return this.problems.find({ _id: { $in: ids } }).exec();
+    return this.problems.find({ _id: { $in: ids }, deletedAt: null }).exec();
   }
 
   findContestByKey(key: string): Promise<Contest | null> {
@@ -142,7 +142,7 @@ export class SimilarityRunsRepository {
     return isUuid(id) ? this.runs.findById(id).exec() : Promise.resolve(null);
   }
 
-  /** Problem id to code, for the given ids that still exist. */
+  /** Problem id to code, for the given ids that still exist. Deliberately S: runs and pairs of a deleted problem are kept, and their rows keep naming it. */
   async problemCodes(ids: string[]): Promise<Map<string, string>> {
     if (!ids.length) return new Map();
     const rows = await this.problems

@@ -15,6 +15,7 @@ import {
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { IMPORT_LIMIT } from '../src/modules/problems/core/rate-limits';
+import { softDelete, tombstone } from './deleted-problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -206,6 +207,18 @@ describe('Polygon import routes', () => {
             await upload(`code=${code}&mode=${mode}`, creator).expect(400),
           ),
         ).toHaveProperty('code');
+    expect(storedPackages()).toHaveLength(before);
+  });
+  it('treats the code of a deleted or purged problem as taken before queueing anything', async () => {
+    const before = storedPackages().length;
+    const deleted = await createProblem(api, catalog, { code: 'imp_deleted' });
+    await softDelete(api, deleted._id);
+    const purged = await createProblem(api, catalog, { code: 'imp_purged' });
+    await tombstone(api, purged._id);
+    for (const code of ['imp_deleted', 'imp_purged'])
+      expect(
+        fieldsOf(await upload(`code=${code}`, creator).expect(400)),
+      ).toHaveProperty('code');
     expect(storedPackages()).toHaveLength(before);
   });
   it('validates the query strictly before storing anything', async () => {

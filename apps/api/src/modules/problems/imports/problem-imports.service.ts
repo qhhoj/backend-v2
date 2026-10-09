@@ -143,16 +143,21 @@ export class ProblemImportsService {
         403,
         'Creating a problem requires judge.add_problem',
       );
-    if (
-      (await this.repository.findByCode(query.code)) ||
-      (await this.dataFiles.exists(query.code))
-    )
-      throw codeTakenError();
+    if (await this.isCodeTaken(query.code)) throw codeTakenError();
     return {
       ...options,
       curators: unique([...(query.curators ?? []), principal.userId]),
       isFullMarkup: false,
     };
+  }
+
+  /** Live, deleted (restorable) and purged codes are all taken; a purge removes the data directory, so the tombstone row is what blocks the code. */
+  private async isCodeTaken(code: string): Promise<boolean> {
+    return Boolean(
+      (await this.repository.findByCode(code)) ||
+      (await this.repository.findDeletedByCode(code)) ||
+      (await this.dataFiles.exists(code)),
+    );
   }
 
   private async assertPackage(packagePath: string): Promise<void> {

@@ -4,10 +4,11 @@ import type { Model } from 'mongoose';
 import { Contest, Problem, Submission, User } from '@libs/database';
 import { ContestAccess } from '../contests/core/contest-access';
 
-/** Legacy `Problem.get_public_problems()`. */
+/** Legacy `Problem.get_public_problems()`, minus soft-deleted problems. */
 const PUBLIC_PROBLEMS = {
   isPublic: true,
   isOrganizationPrivate: false,
+  deletedAt: null,
 } as const;
 
 /** `date` is null until a problem is published; those never reach the newest list. */

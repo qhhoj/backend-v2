@@ -32,14 +32,20 @@ export interface SolvedRow {
   problem: { code: string; name: string; points: number; groupId: unknown };
 }
 
-/** Public, non-organization-private problems: what legacy counts on user pages. */
+/** Public, non-organization-private, not-deleted problems: what legacy counts on user pages. */
 const publicProblem = (from: string, project: Record<string, 0 | 1>) => ({
   $lookup: {
     from,
     localField: '_id',
     foreignField: '_id',
     pipeline: [
-      { $match: { isPublic: true, isOrganizationPrivate: false } },
+      {
+        $match: {
+          isPublic: true,
+          isOrganizationPrivate: false,
+          deletedAt: null,
+        },
+      },
       { $project: { _id: 0, ...project } },
     ],
     as: 'problem',
