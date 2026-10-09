@@ -13,6 +13,7 @@ const run = (fields: Partial<StoredRun> = {}): StoredRun => ({
   judgeSeq: 4,
   status: 'G',
   caseCount: 0,
+  retryCount: 0,
   ...fields,
 });
 const grading = { statuses: ['G'] as const, addsCases: 0 };
@@ -44,5 +45,24 @@ describe('classifyMiss', () => {
     const adding = { statuses: ['G'] as const, addsCases: 2 };
     expect(classifyMiss(key, run({ caseCount: 9999 }), adding)).toBe('full');
     expect(classifyMiss(key, run({ caseCount: 9998 }), adding)).toBe('stale');
+  });
+  it('calls a replay of a RETRY Final a duplicate once its row is back in the queue, until a rejudge or a new claim', () => {
+    const retried = run({
+      judgedOn: null,
+      status: 'QU',
+      judgeSeq: 5,
+      retryCount: 1,
+    });
+    expect(classifyMiss(key, retried, grading)).toBe('duplicate');
+    expect(classifyMiss({ ...key, seq: 6 }, retried, grading)).toBe('stale');
+    expect(classifyMiss(key, { ...retried, retryCount: 0 }, grading)).toBe(
+      'stale',
+    );
+    expect(classifyMiss(key, { ...retried, judgeSeq: 0 }, grading)).toBe(
+      'stale',
+    );
+    expect(classifyMiss(key, { ...retried, judgeGeneration: 4 }, grading)).toBe(
+      'stale',
+    );
   });
 });

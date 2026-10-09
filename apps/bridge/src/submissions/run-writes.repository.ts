@@ -164,7 +164,11 @@ export class RunWritesRepository {
           ...runFilter(key, IN_FLIGHT),
           retryCount: { $not: { $gte: MAX_RETRIES - 1 } },
         },
-        { $set: REQUEUE_RESET, $inc: { retryCount: 1 } },
+        // the run's seq stays, so a replay of this Final is classified a duplicate (the next claim resets it)
+        {
+          $set: { ...REQUEUE_RESET, judgeSeq: key.seq },
+          $inc: { retryCount: 1 },
+        },
         { projection: GRADED_JOB_FIELDS },
       )
       .lean();
@@ -233,6 +237,7 @@ export class RunWritesRepository {
           judgeSeq: { $ifNull: ['$judgeSeq', 0] },
           status: 1,
           caseCount: { $size: { $ifNull: ['$cases', []] } },
+          retryCount: { $ifNull: ['$retryCount', 0] },
         },
       },
     ]);
