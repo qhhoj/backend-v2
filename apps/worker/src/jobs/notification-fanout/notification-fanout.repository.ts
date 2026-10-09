@@ -44,21 +44,29 @@ const textFields = (draft: NotificationDraft) => ({
   priority: draft.priority,
 });
 
-/** A retried upsert loses against the row its first run wrote (unique partial index): that is the idempotent outcome, not an error. */
-function onlyDuplicateKeys(error: unknown): boolean {
-  const { writeErrors } = error as { writeErrors?: unknown };
-  const list = Array.isArray(writeErrors)
-    ? writeErrors
-    : writeErrors
-      ? [writeErrors]
-      : [];
-  return (
-    list.length > 0 &&
-    list.every(
-      (entry) => (entry as { code?: number }).code === MONGO_DUPLICATE_KEY,
-    )
-  );
+interface WriteFailure {
+  index: number;
+  code?: number;
 }
+
+/** The failed writes of a bulk error, or none when it is another kind of error. */
+function writeFailures(error: unknown): WriteFailure[] {
+  const { writeErrors } = error as { writeErrors?: unknown };
+  if (!writeErrors) return [];
+  return (
+    Array.isArray(writeErrors) ? writeErrors : [writeErrors]
+  ) as WriteFailure[];
+}
+
+/** One announcement as written to inboxes: `at` orders rows and text (the announcement's creation), `now` is the processing time that rows expire from. */
+export interface AnnouncementStamp {
+  ref: string;
+  at: Date;
+  now: Date;
+}
+
+/** Merge rounds per chunk: a user whose insert lost to a concurrent writer merges into the row that writer made. */
+const MERGE_ROUNDS = 3;
 
 @Injectable()
 export class NotificationFanoutRepository {
@@ -116,15 +124,45 @@ export class NotificationFanoutRepository {
     return new Set(rows.map((row) => uuidStr(row.user)));
   }
 
-  /** Per user, an announcement made at `at`: merge into the unread row of the group, else insert (the filter names `unread: true`, the partial unique index). `lastActivityAt` only moves forward and the texts follow only the newest announcement, so a reordered run puts nothing older on top. Call it for users `appliedUsers` did not return. Unordered, so one lost race does not stop the chunk. */
+  /** Per user: merge into the unread row of the group, else insert (the filter names `unread: true`, the partial unique index). A user whose insert lost to a concurrent writer is merged again, up to `MERGE_ROUNDS`. Then the texts follow the newest announcement only: `lastActivityAt` moves forward with `$max`, so a reordered run puts nothing older on top. Call it for users `appliedUsers` did not return. */
   async upsertRows(
     userIds: readonly string[],
     draft: NotificationDraft,
-    ref: string,
-    at: Date,
+    stamp: AnnouncementStamp,
   ): Promise<void> {
+    let pending = userIds;
+    for (let round = 1; pending.length; round += 1) {
+      const lost = await this.mergeCounts(pending, draft, stamp);
+      const done = await this.appliedUsers(lost, stamp.ref);
+      pending = lost.filter((user) => !done.has(user));
+      if (pending.length && round >= MERGE_ROUNDS)
+        throw new Error(
+          `Fan-out of ${stamp.ref}: ${pending.length} inserts keep losing`,
+        );
+    }
+    await this.notifications.bulkWrite(
+      userIds.map((user) => ({
+        updateOne: {
+          filter: {
+            user,
+            groupKey: draft.groupKey,
+            unread: true,
+            lastActivityAt: stamp.at,
+          },
+          update: { $set: textFields(draft) },
+        },
+      })),
+      { ordered: false },
+    );
+  }
+
+  /** Returns the users whose insert lost on the unique partial index (to be merged again); any other error is thrown. */
+  private async mergeCounts(
+    userIds: readonly string[],
+    draft: NotificationDraft,
+    { ref, at, now }: AnnouncementStamp,
+  ): Promise<string[]> {
     try {
-      await this.mergeCounts(userIds, draft, ref, at);
       await this.notifications.bulkWrite(
         userIds.map((user) => ({
           updateOne: {
@@ -132,49 +170,34 @@ export class NotificationFanoutRepository {
               user,
               groupKey: draft.groupKey,
               unread: true,
-              lastActivityAt: at,
+              refs: { $ne: ref },
             },
-            update: { $set: textFields(draft) },
+            update: {
+              $inc: { count: 1 },
+              $max: { lastActivityAt: at, expiresAt: notificationExpiry(now) },
+              $push: { refs: { $each: [ref], $slice: -REFS_KEPT } },
+              $setOnInsert: {
+                _id: newId(),
+                ...textFields(draft),
+                readAt: null,
+                createdAt: at,
+              },
+            },
+            upsert: true,
+            setDefaultsOnInsert: false,
           },
         })),
         { ordered: false },
       );
+      return [];
     } catch (error) {
-      if (!onlyDuplicateKeys(error)) throw error;
+      const failures = writeFailures(error);
+      if (
+        !failures.length ||
+        failures.some((failure) => failure.code !== MONGO_DUPLICATE_KEY)
+      )
+        throw error;
+      return failures.map((failure) => userIds[failure.index]);
     }
-  }
-
-  private mergeCounts(
-    userIds: readonly string[],
-    draft: NotificationDraft,
-    ref: string,
-    at: Date,
-  ) {
-    return this.notifications.bulkWrite(
-      userIds.map((user) => ({
-        updateOne: {
-          filter: {
-            user,
-            groupKey: draft.groupKey,
-            unread: true,
-            refs: { $ne: ref },
-          },
-          update: {
-            $inc: { count: 1 },
-            $max: { lastActivityAt: at, expiresAt: notificationExpiry(at) },
-            $push: { refs: { $each: [ref], $slice: -REFS_KEPT } },
-            $setOnInsert: {
-              _id: newId(),
-              ...textFields(draft),
-              readAt: null,
-              createdAt: at,
-            },
-          },
-          upsert: true,
-          setDefaultsOnInsert: false,
-        },
-      })),
-      { ordered: false },
-    );
   }
 }

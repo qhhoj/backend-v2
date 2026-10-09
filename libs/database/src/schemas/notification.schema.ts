@@ -67,8 +67,6 @@ NotificationSchema.index({ user: 1, lastActivityAt: -1, _id: -1 });
 NotificationSchema.index({ user: 1, unread: 1, lastActivityAt: -1, _id: -1 });
 // "Did this user already take announcement X", read rows included (the fan-out's idempotency check).
 NotificationSchema.index({ user: 1, refs: 1 });
-// The nightly trim's scan for users active since a time; `user` rides along so the scan is covered.
-NotificationSchema.index({ lastActivityAt: -1, user: 1 });
 // One unread row per user and group: the merge target.
 NotificationSchema.index(
   { user: 1, groupKey: 1 },

@@ -7,6 +7,7 @@ import {
 } from '@libs/community';
 import { newId } from '@libs/database';
 import type { Contest, ContestParticipation } from '@libs/database';
+import { NotificationFanoutRepository } from '../src/jobs/notification-fanout/notification-fanout.repository';
 import { NotificationFanoutService } from '../src/jobs/notification-fanout/notification-fanout.service';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
@@ -186,6 +187,63 @@ describe('notification fan-out', () => {
     await fanout.announce(older._id);
     const [row] = await rowsOf(user);
     expect(row).toMatchObject({ count: 2, body: 'Newer' });
+  });
+
+  it('merges a user whose insert lost to a concurrent writer, and still writes the texts of the rest of the chunk', async () => {
+    const round = await contest();
+    const [loser, other] = [newId(), newId()];
+    await join(round._id, loser);
+    await join(round._id, other);
+    const older = await announcement(round._id, 'Older', minutesFromNow(-5));
+    const newer = await announcement(round._id, 'Newer');
+    await fanout.announce(older._id);
+    const loserOlderRow = await worker.notifications.findOne({ user: loser });
+    await worker.notifications.deleteMany({ user: loser });
+    // The first merge of `newer` loses for `loser`: the competing row appears between its match check and its insert.
+    const model = Reflect.get(
+      worker.module.get(NotificationFanoutRepository),
+      'notifications',
+    ) as typeof worker.notifications;
+    const bulkWrite = model.bulkWrite.bind(model);
+    jest
+      .spyOn(model, 'bulkWrite')
+      .mockImplementationOnce(async (ops, options) => {
+        const index = ops.findIndex(
+          (op) => 'updateOne' in op && op.updateOne.filter.user === loser,
+        );
+        await bulkWrite(
+          ops.filter((_op, at) => at !== index),
+          options,
+        );
+        await worker.notifications.create(loserOlderRow!.toObject());
+        throw Object.assign(new Error('E11000'), {
+          writeErrors: [{ index, code: 11000 }],
+        });
+      });
+    await fanout.announce(newer._id);
+    jest.restoreAllMocks();
+    for (const user of [loser, other]) {
+      const rows = await rowsOf(user);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ count: 2, body: 'Newer' });
+    }
+  });
+
+  it('expires a row 90 days after processing, even for an old announcement', async () => {
+    const round = await contest();
+    const user = newId();
+    await join(round._id, user);
+    const old = await announcement(
+      round._id,
+      'Old',
+      minutesFromNow(-100 * 1440),
+    );
+    await fanout.announce(old._id);
+    const [row] = await rowsOf(user);
+    expect(row.expiresAt.getTime()).toBeGreaterThan(
+      Date.now() + 80 * 86_400_000,
+    );
+    expect(row.lastActivityAt).toEqual(old.createdAt);
   });
 
   it('writes every recipient of a large contest across chunks', async () => {

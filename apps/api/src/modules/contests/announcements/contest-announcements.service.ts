@@ -76,7 +76,7 @@ export class ContestAnnouncementsService {
     return AnnouncementResponse.from(announcement);
   }
 
-  /** Legacy admin `resend_view`. */
+  /** Legacy admin `resend_view`: pushes again to the open streams; inboxes keep one entry per announcement, so only users the first fan-out missed are notified. */
   async resend(principal: Principal, key: string, id: string): Promise<void> {
     const contest = await this.contestsService.editableContest(principal, key);
     if (!(await this.announcements.findInContest(contest._id, id)))
