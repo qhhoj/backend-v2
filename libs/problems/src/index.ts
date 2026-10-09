@@ -13,3 +13,5 @@ export * from './field-diff';
 export * from './lifecycle-queues';
 export * from './problem-access';
 export * from './problem-publish';
+export * from './package-manifest';
+export * from './package-cache.service';

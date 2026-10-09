@@ -50,6 +50,11 @@ export class StorageService {
     return `${this.urlBase}/${relativePath}`;
   }
 
+  /** The absolute path of a stored file, for a reader that streams it (the package job); same escape check as every write. */
+  absolutePathOf(relativePath: string): string {
+    return this.resolveInside(relativePath);
+  }
+
   private resolveInside(relativePath: string): string {
     const target = resolve(this.root, relativePath);
     if (!target.startsWith(this.root + sep))
