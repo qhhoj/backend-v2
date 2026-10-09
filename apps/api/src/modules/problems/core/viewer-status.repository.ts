@@ -5,7 +5,8 @@ import { Submission, toUuid, uuidStr } from '@libs/database';
 import { ANY_SOLVED } from '@libs/judging';
 
 /** Legacy `user_completed_ids` / `user_attempted_ids`: solved = some AC whose cases earned everything, attempted = any other submission (compile errors and queued ones included). */
-export type ViewerMark = 'solved' | 'attempted';
+export const VIEWER_MARKS = ['solved', 'attempted'] as const;
+export type ViewerMark = (typeof VIEWER_MARKS)[number];
 export type ViewerStatus = ViewerMark | null;
 
 @Injectable()

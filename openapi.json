@@ -228,12 +228,12 @@
           "accent": {
             "enum": [
               "clay",
-              "orchid",
-              "ocean",
-              "mint",
-              "sunset",
               "gold",
-              "mono"
+              "mint",
+              "mono",
+              "ocean",
+              "orchid",
+              "sunset"
             ],
             "type": "string"
           },
@@ -601,10 +601,10 @@
       },
       "CommentPageType": {
         "enum": [
-          "problem",
-          "editorial",
-          "contest",
           "blog",
+          "contest",
+          "editorial",
+          "problem",
           "tagProblem"
         ],
         "type": "string"
@@ -758,9 +758,9 @@
       },
       "ContestActionState": {
         "enum": [
+          "idle",
           "queued",
-          "running",
-          "idle"
+          "running"
         ],
         "type": "string"
       },
@@ -852,8 +852,8 @@
           "state": {
             "enum": [
               "none",
-              "ready",
-              "preparing"
+              "preparing",
+              "ready"
             ],
             "type": "string"
           }
@@ -1071,19 +1071,19 @@
       "ContestFormatName": {
         "enum": [
           "default",
+          "final_submission",
+          "icpc",
           "ioi",
           "ioi16",
-          "icpc",
-          "vnoj",
           "ultimate",
-          "final_submission"
+          "vnoj"
         ],
         "type": "string"
       },
       "ContestLabelStyle": {
         "enum": [
-          "numeric",
-          "alpha"
+          "alpha",
+          "numeric"
         ],
         "type": "string"
       },
@@ -1236,9 +1236,9 @@
           "liveStatus": {
             "description": "Their live participation (`liveStatusOf`); null when they have none.",
             "enum": [
-              "registered",
+              "finished",
               "participating",
-              "finished"
+              "registered"
             ],
             "nullable": true,
             "type": "string"
@@ -1252,9 +1252,9 @@
       },
       "ContestPhase": {
         "enum": [
-          "upcoming",
+          "ended",
           "running",
-          "ended"
+          "upcoming"
         ],
         "type": "string"
       },
@@ -1648,9 +1648,9 @@
           "liveStatus": {
             "description": "Their live participation (`liveStatusOf`); null when they have none.",
             "enum": [
-              "registered",
+              "finished",
               "participating",
-              "finished"
+              "registered"
             ],
             "nullable": true,
             "type": "string"
@@ -2283,10 +2283,10 @@
           },
           "submissionSourceVisibility": {
             "enum": [
-              "F",
               "A",
-              "S",
-              "O"
+              "F",
+              "O",
+              "S"
             ],
             "type": "string"
           },
@@ -2304,9 +2304,9 @@
           },
           "testcaseVisibility": {
             "enum": [
-              "O",
+              "A",
               "C",
-              "A"
+              "O"
             ],
             "type": "string"
           },
@@ -2699,8 +2699,8 @@
         "properties": {
           "action": {
             "enum": [
-              "delete",
               "create",
+              "delete",
               "edit"
             ],
             "type": "string"
@@ -2728,9 +2728,9 @@
           }
         },
         "required": [
+          "action",
           "id",
           "at",
-          "action",
           "editor",
           "changes"
         ],
@@ -3800,8 +3800,8 @@
       },
       "OrganizationRequestState": {
         "enum": [
-          "P",
           "A",
+          "P",
           "R"
         ],
         "type": "string"
@@ -4121,8 +4121,8 @@
       },
       "PostFeed": {
         "enum": [
-          "global",
-          "all"
+          "all",
+          "global"
         ],
         "type": "string"
       },
@@ -4324,13 +4324,13 @@
           },
           "checker": {
             "enum": [
-              "standard",
               "bridged",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
-              "linecount"
+              "linecount",
+              "standard"
             ],
             "type": "string"
           },
@@ -4361,10 +4361,10 @@
           },
           "grader": {
             "enum": [
-              "standard",
               "interactive",
+              "output_only",
               "signature",
-              "output_only"
+              "standard"
             ],
             "type": "string"
           },
@@ -4582,8 +4582,8 @@
           "viewerStatus": {
             "description": "For the signed-in viewer; null when anonymous or never submitted.",
             "enum": [
-              "solved",
-              "attempted"
+              "attempted",
+              "solved"
             ],
             "nullable": true,
             "type": "string"
@@ -4592,6 +4592,7 @@
         "required": [
           "language",
           "availableTranslations",
+          "viewerStatus",
           "id",
           "code",
           "name",
@@ -4625,7 +4626,6 @@
           "userCount",
           "acRate",
           "canEdit",
-          "viewerStatus",
           "contest",
           "editor"
         ],
@@ -4808,14 +4808,15 @@
           "viewerStatus": {
             "description": "For the signed-in viewer; null when anonymous or never submitted.",
             "enum": [
-              "solved",
-              "attempted"
+              "attempted",
+              "solved"
             ],
             "nullable": true,
             "type": "string"
           }
         },
         "required": [
+          "viewerStatus",
           "id",
           "code",
           "name",
@@ -4829,8 +4830,7 @@
           "isPublic",
           "isOrganizationPrivate",
           "hasPublicEditorial",
-          "hasPdfStatement",
-          "viewerStatus"
+          "hasPdfStatement"
         ],
         "type": "object"
       },
@@ -4886,18 +4886,18 @@
       },
       "ProblemSort": {
         "enum": [
-          "date",
-          "-date",
-          "code",
-          "-code",
-          "name",
-          "-name",
-          "points",
-          "-points",
-          "acRate",
           "-acRate",
-          "userCount",
-          "-userCount"
+          "-code",
+          "-date",
+          "-name",
+          "-points",
+          "-userCount",
+          "acRate",
+          "code",
+          "date",
+          "name",
+          "points",
+          "userCount"
         ],
         "type": "string"
       },
@@ -5118,13 +5118,13 @@
           },
           "checker": {
             "enum": [
-              "standard",
               "bridged",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
-              "linecount"
+              "linecount",
+              "standard"
             ],
             "type": "string"
           },
@@ -5136,10 +5136,10 @@
           },
           "grader": {
             "enum": [
-              "standard",
               "interactive",
+              "output_only",
               "signature",
-              "output_only"
+              "standard"
             ],
             "type": "string"
           },
@@ -5241,10 +5241,10 @@
           },
           "expiryMode": {
             "enum": [
+              "A",
               "D",
-              "U",
               "M",
-              "A"
+              "U"
             ],
             "type": "string"
           },
@@ -5256,8 +5256,8 @@
           },
           "status": {
             "enum": [
-              "public",
-              "private"
+              "private",
+              "public"
             ],
             "type": "string"
           },
@@ -5612,10 +5612,10 @@
           },
           "style": {
             "enum": [
+              "blog",
               "problem",
               "problem-full",
               "solution",
-              "blog",
               "user"
             ],
             "type": "string"
@@ -5685,10 +5685,10 @@
       },
       "ScoreboardVisibility": {
         "enum": [
-          "V",
-          "H",
           "C",
-          "P"
+          "H",
+          "P",
+          "V"
         ],
         "type": "string"
       },
@@ -6135,10 +6135,10 @@
           },
           "error": {
             "enum": [
+              "abandoned",
               "deadline",
               "engine_failed",
-              "internal_error",
-              "abandoned"
+              "internal_error"
             ],
             "nullable": true,
             "type": "string"
@@ -6166,8 +6166,8 @@
           },
           "scope": {
             "enum": [
-              "problem",
-              "contest"
+              "contest",
+              "problem"
             ],
             "type": "string"
           },
@@ -6178,10 +6178,10 @@
           },
           "status": {
             "enum": [
-              "queued",
-              "running",
               "done",
-              "failed"
+              "failed",
+              "queued",
+              "running"
             ],
             "type": "string"
           },
@@ -6305,9 +6305,9 @@
           "providers": {
             "items": {
               "enum": [
-                "google",
                 "facebook",
-                "github"
+                "github",
+                "google"
               ],
               "type": "string"
             },
@@ -6432,8 +6432,8 @@
       },
       "StaffUserSort": {
         "enum": [
-          "lastAccess",
-          "-lastAccess"
+          "-lastAccess",
+          "lastAccess"
         ],
         "type": "string"
       },
@@ -6466,13 +6466,13 @@
           "status": {
             "enum": [
               "AC",
-              "WA",
-              "TLE",
+              "IR",
               "MLE",
               "OLE",
-              "IR",
               "RTE",
-              "SC"
+              "SC",
+              "TLE",
+              "WA"
             ],
             "type": "string"
           },
@@ -6515,13 +6515,13 @@
           "status": {
             "enum": [
               "AC",
-              "WA",
-              "TLE",
+              "IR",
               "MLE",
               "OLE",
-              "IR",
               "RTE",
-              "SC"
+              "SC",
+              "TLE",
+              "WA"
             ],
             "type": "string"
           },
@@ -6714,10 +6714,10 @@
           },
           "type": {
             "enum": [
-              "queued",
-              "processing",
+              "done",
               "grading-begin",
-              "done"
+              "processing",
+              "queued"
             ],
             "type": "string"
           },
@@ -6741,10 +6741,10 @@
           },
           "event": {
             "enum": [
-              "queued",
-              "processing",
+              "done",
               "grading-begin",
-              "done"
+              "processing",
+              "queued"
             ],
             "type": "string"
           }
@@ -6899,11 +6899,11 @@
           "type": {
             "description": "The SSE event name repeats it.",
             "enum": [
-              "queued",
-              "processing",
+              "done",
               "grading-begin",
-              "test-case",
-              "done"
+              "processing",
+              "queued",
+              "test-case"
             ],
             "type": "string"
           },
@@ -6928,11 +6928,11 @@
           },
           "event": {
             "enum": [
-              "queued",
-              "processing",
+              "done",
               "grading-begin",
-              "test-case",
-              "done"
+              "processing",
+              "queued",
+              "test-case"
             ],
             "type": "string"
           }
@@ -6945,18 +6945,18 @@
       },
       "SubmissionResult": {
         "enum": [
+          "AB",
           "AC",
-          "WA",
-          "TLE",
-          "MLE",
-          "OLE",
-          "IR",
-          "RTE",
           "CE",
           "IE",
+          "IR",
+          "MLE",
+          "OLE",
+          "RJ",
+          "RTE",
           "SC",
-          "AB",
-          "RJ"
+          "TLE",
+          "WA"
         ],
         "type": "string"
       },
@@ -7069,14 +7069,14 @@
       },
       "SubmissionStatus": {
         "enum": [
-          "QU",
-          "P",
-          "G",
-          "D",
-          "IE",
-          "CE",
           "AB",
-          "PD"
+          "CE",
+          "D",
+          "G",
+          "IE",
+          "P",
+          "PD",
+          "QU"
         ],
         "type": "string"
       },
@@ -7301,12 +7301,12 @@
             "description": "Never `bridged`: a custom checker is problem-wide only.",
             "enum": [
               "",
-              "standard",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
-              "linecount"
+              "linecount",
+              "standard"
             ],
             "type": "string"
           },
@@ -7351,8 +7351,8 @@
           "type": {
             "enum": [
               "C",
-              "S",
-              "E"
+              "E",
+              "S"
             ],
             "type": "string"
           }
@@ -7376,12 +7376,12 @@
           "checker": {
             "enum": [
               "",
-              "standard",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
-              "linecount"
+              "linecount",
+              "standard"
             ],
             "type": "string"
           },
@@ -7417,8 +7417,8 @@
           "type": {
             "enum": [
               "C",
-              "S",
-              "E"
+              "E",
+              "S"
             ],
             "type": "string"
           }
@@ -7564,8 +7564,8 @@
           },
           "type": {
             "enum": [
-              "problem",
-              "general"
+              "general",
+              "problem"
             ],
             "type": "string"
           },
@@ -7724,8 +7724,8 @@
           }
         },
         "required": [
-          "username",
-          "methods"
+          "methods",
+          "username"
         ],
         "type": "object"
       },
@@ -8280,10 +8280,10 @@
           },
           "submissionSourceVisibility": {
             "enum": [
-              "F",
               "A",
-              "S",
-              "O"
+              "F",
+              "O",
+              "S"
             ],
             "type": "string"
           },
@@ -8301,9 +8301,9 @@
           },
           "testcaseVisibility": {
             "enum": [
-              "O",
+              "A",
               "C",
-              "A"
+              "O"
             ],
             "type": "string"
           },
@@ -8338,8 +8338,8 @@
           },
           "aceTheme": {
             "enum": [
-              "auto",
               "ambiance",
+              "auto",
               "chaos",
               "chrome",
               "clouds",
@@ -8399,11 +8399,11 @@
           },
           "mathEngine": {
             "enum": [
-              "tex",
-              "svg",
-              "mml",
+              "auto",
               "jax",
-              "auto"
+              "mml",
+              "svg",
+              "tex"
             ],
             "type": "string"
           },
@@ -8443,17 +8443,17 @@
           },
           "expiryMode": {
             "enum": [
-              "U",
-              "M",
+              "A",
               "D",
-              "A"
+              "M",
+              "U"
             ],
             "type": "string"
           },
           "status": {
             "enum": [
-              "public",
-              "private"
+              "private",
+              "public"
             ],
             "type": "string"
           }
@@ -8544,8 +8544,8 @@
           "state": {
             "enum": [
               "none",
-              "ready",
-              "preparing"
+              "preparing",
+              "ready"
             ],
             "type": "string"
           }
@@ -15401,8 +15401,8 @@
             "required": true,
             "schema": {
               "enum": [
-                "rss",
-                "atom"
+                "atom",
+                "rss"
               ],
               "type": "string"
             }
@@ -17183,9 +17183,9 @@
             "schema": {
               "default": "public",
               "enum": [
-                "public",
+                "all",
                 "private",
-                "all"
+                "public"
               ],
               "type": "string"
             }
@@ -18145,10 +18145,10 @@
             "schema": {
               "enum": [
                 "archive",
-                "generator",
                 "customChecker",
                 "customGrader",
-                "customHeader"
+                "customHeader",
+                "generator"
               ],
               "type": "string"
             }
@@ -18214,10 +18214,10 @@
             "required": true,
             "schema": {
               "enum": [
-                "generator",
                 "customChecker",
                 "customGrader",
-                "customHeader"
+                "customHeader",
+                "generator"
               ],
               "type": "string"
             }
@@ -20970,10 +20970,10 @@
             "schema": {
               "default": "rating",
               "enum": [
-                "rating",
                 "performancePoints",
                 "points",
-                "problemCount"
+                "problemCount",
+                "rating"
               ],
               "type": "string"
             }
@@ -21461,11 +21461,11 @@
             "schema": {
               "default": "rating",
               "enum": [
+                "contributionPoints",
                 "performancePoints",
                 "points",
                 "problemCount",
-                "rating",
-                "contributionPoints"
+                "rating"
               ],
               "type": "string"
             }

@@ -1,4 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { DATA_EXPORT_STATES, type DataExportState } from '@libs/common';
 import {
   ArrayMaxSize,
   IsArray,
@@ -27,7 +28,8 @@ export class PrepareDataDto {
 }
 
 export class ContestDataStatusResponse {
-  state!: 'none' | 'preparing' | 'ready';
+  @ApiProperty({ enum: DATA_EXPORT_STATES })
+  state!: DataExportState;
   /** When the last prepare was requested. */
   preparedAt!: string | null;
   /** When the zip on disk was written. */

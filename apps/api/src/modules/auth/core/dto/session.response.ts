@@ -1,12 +1,15 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { uuidStr } from '@libs/database';
 import { AppearanceResponse } from '../../../users/profile/dto/profile.response';
 import { Principal, SessionData, UserDocument } from '@libs/auth';
 
-export type SecondFactorMethod = 'totp' | 'webauthn';
+export const SECOND_FACTOR_METHODS = ['totp', 'webauthn'] as const;
+export type SecondFactorMethod = (typeof SECOND_FACTOR_METHODS)[number];
 
 /** All a password-only session may learn: enough to draw the second-factor page. */
 export class TwoFactorPendingResponse {
   username!: string;
+  @ApiProperty({ enum: SECOND_FACTOR_METHODS, isArray: true })
   methods!: SecondFactorMethod[];
 }
 

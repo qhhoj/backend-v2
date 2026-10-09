@@ -6,7 +6,8 @@ import { isEditorialPublished } from '../problem-search';
 import type { ProblemDocument } from '../problems.repository';
 import { statementFor } from '@libs/problems';
 import { CatalogItemResponse } from './problem-meta.response';
-import type { ViewerStatus } from '../viewer-status.repository';
+import { ApiProperty } from '@nestjs/swagger';
+import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 
 export class ProblemListItemResponse {
   id!: string;
@@ -24,6 +25,7 @@ export class ProblemListItemResponse {
   hasPublicEditorial!: boolean;
   hasPdfStatement!: boolean;
   /** For the signed-in viewer; null when anonymous or never submitted. */
+  @ApiProperty({ enum: VIEWER_MARKS, nullable: true })
   viewerStatus!: ViewerStatus;
 
   static from(

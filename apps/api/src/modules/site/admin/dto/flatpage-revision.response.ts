@@ -1,12 +1,15 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { uuidStr } from '@libs/database';
 import type { Revision } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 
-export type FlatpageRevisionAction = 'create' | 'edit' | 'delete';
+export const FLATPAGE_REVISION_ACTIONS = ['create', 'edit', 'delete'] as const;
+export type FlatpageRevisionAction = (typeof FLATPAGE_REVISION_ACTIONS)[number];
 
 export class FlatpageRevisionResponse {
   id!: string;
   at!: Date;
+  @ApiProperty({ enum: FLATPAGE_REVISION_ACTIONS })
   action!: FlatpageRevisionAction;
   /** Null when the editor's account is gone. */
   editor!: UserSummaryResponse | null;

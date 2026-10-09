@@ -1,7 +1,9 @@
-import type { TicketLinkType } from '@libs/database';
+import { ApiProperty } from '@nestjs/swagger';
+import { TICKET_LINK_TYPES, type TicketLinkType } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 
 export class TicketLinkResponse {
+  @ApiProperty({ enum: TICKET_LINK_TYPES })
   type!: TicketLinkType;
   id!: string;
   /** The problem code; null for a general issue and for a deleted problem. */

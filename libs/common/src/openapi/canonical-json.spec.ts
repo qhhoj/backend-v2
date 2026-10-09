@@ -18,4 +18,23 @@ describe('canonicalJson', () => {
       '{\n  "alpha": 2,\n  "list": [\n    "b",\n    "a"\n  ],\n  "zeta": 1\n}\n',
     );
   });
+
+  it('sorts enum lists (numbers numerically, strings by code point) but no other array', () => {
+    const text = canonicalJson({
+      properties: { enum: { type: 'string' } },
+      a: { enum: ['edit', 'delete', 'create'] },
+      b: { enum: [1, -1, 0, 10, 2] },
+      c: { list: ['b', 'a'] },
+    });
+    const parsed = JSON.parse(text) as {
+      a: { enum: string[] };
+      b: { enum: number[] };
+      c: { list: string[] };
+      properties: { enum: object };
+    };
+    expect(parsed.a.enum).toEqual(['create', 'delete', 'edit']);
+    expect(parsed.b.enum).toEqual([-1, 0, 1, 2, 10]);
+    expect(parsed.c.list).toEqual(['b', 'a']);
+    expect(parsed.properties.enum).toEqual({ type: 'string' });
+  });
 });

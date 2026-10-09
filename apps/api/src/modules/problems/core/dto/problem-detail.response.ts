@@ -14,7 +14,7 @@ import {
   LicenseResponse,
 } from './problem-meta.response';
 import { UserSummaryResponse } from './user-summary.response';
-import type { ViewerStatus } from '../viewer-status.repository';
+import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 
 export interface ProblemDetailContext {
   lang: StatementLanguage;
@@ -149,6 +149,7 @@ export class ProblemDetailResponse {
   acRate!: number;
   canEdit!: boolean;
   /** For the signed-in viewer; null when anonymous or never submitted. */
+  @ApiProperty({ enum: VIEWER_MARKS, nullable: true })
   viewerStatus!: ViewerStatus;
   /** The viewer's current contest when it lists this problem. */
   contest!: ProblemContestResponse | null;

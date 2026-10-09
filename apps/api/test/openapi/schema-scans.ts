@@ -1,3 +1,4 @@
+import { compareEnumValues } from '@libs/common';
 import type {
   OpenAPIObject,
   ParameterObject,
@@ -132,4 +133,21 @@ export function duplicateEnums(document: OpenAPIObject): string[][] {
     ]);
   }
   return [...byValues.values()].filter((names) => names.length > 1);
+}
+
+/** JSON pointers of every `enum` list in `document` that is not in canonical order (numbers numerically, strings by code point). */
+export function unsortedEnumSites(document: unknown): string[] {
+  const sites: string[] = [];
+  const visit = (node: unknown, path: string): void => {
+    if (node === null || typeof node !== 'object') return;
+    for (const [key, child] of Object.entries(node)) {
+      const here = `${path}/${key}`;
+      if (key === 'enum' && Array.isArray(child)) {
+        const sorted = [...(child as unknown[])].sort(compareEnumValues);
+        if (JSON.stringify(sorted) !== JSON.stringify(child)) sites.push(here);
+      } else visit(child, here);
+    }
+  };
+  visit(document, '');
+  return sites;
 }

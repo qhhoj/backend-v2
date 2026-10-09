@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getMetadataStorage } from 'class-validator';
 import type { OpenAPIObject, OperationObject } from '@nestjs/swagger';
 import {
@@ -10,6 +12,7 @@ import {
 import { loadDocument } from './document';
 import {
   duplicateEnums,
+  unsortedEnumSites,
   inlineEnumSites,
   looseSites,
   namedEnumsWith,
@@ -110,6 +113,13 @@ describe('OpenAPI schema quality', () => {
     expect(namedEnumsWith(document, LABEL_STYLES)).toEqual([
       'ContestLabelStyle',
     ]);
+  });
+
+  it('lists every enum of the committed openapi.json in canonical order, so emit order never depends on load order', () => {
+    const committed: unknown = JSON.parse(
+      readFileSync(join(process.cwd(), 'openapi.json'), 'utf8'),
+    );
+    expect(unsortedEnumSites(committed)).toEqual([]);
   });
 
   it('describes no file route by a ReadStream schema (file routes are binary bodies)', () => {
