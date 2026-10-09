@@ -26,7 +26,7 @@ export function mayPublish(principal: Principal, problem: Problem): boolean {
   );
 }
 
-/** What publishing this problem would do for this actor: the one decision behind the manual action, its dry run and the automatic job. `published` means "is, or in a dry run would be, made public". */
+/** A trashed problem is `deleted` (restore it first); `null` is a problem that does not exist. What publishing this problem would do for this actor: the one decision behind the manual action, its dry run and the automatic job. `published` means "is, or in a dry run would be, made public". */
 export function publishVerdict(
   principal: Principal,
   problem: Problem | null,
@@ -34,10 +34,11 @@ export function publishVerdict(
   if (!problem) return { outcome: 'skipped', reason: 'not_found' };
   if (problem.deletedAt) return { outcome: 'skipped', reason: 'deleted' };
   if (problem.isPublic) return { outcome: 'unchanged', reason: null };
-  if (problem.isOrganizationPrivate)
-    return { outcome: 'skipped', reason: 'organization_private' };
+  // Rights first: an actor who may not edit the problem learns nothing about its flags.
   if (!mayPublish(principal, problem))
     return { outcome: 'skipped', reason: 'no_permission' };
+  if (problem.isOrganizationPrivate)
+    return { outcome: 'skipped', reason: 'organization_private' };
   return { outcome: 'published', reason: null };
 }
 

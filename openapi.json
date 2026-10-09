@@ -269,35 +269,6 @@
         ],
         "type": "object"
       },
-      "ArchivedInOrganizationResponse": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "slug",
-          "name"
-        ],
-        "type": "object"
-      },
-      "ArchivedInResponse": {
-        "properties": {
-          "organizations": {
-            "items": {
-              "$ref": "#/components/schemas/ArchivedInOrganizationResponse"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "organizations"
-        ],
-        "type": "object"
-      },
       "AssignTagsDto": {
         "properties": {
           "tagCodes": {
@@ -430,56 +401,6 @@
         ],
         "type": "object"
       },
-      "BulkProblemsDto": {
-        "properties": {
-          "action": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/OrganizationProblemBulkAction"
-              }
-            ]
-          },
-          "codes": {
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
-          },
-          "tagId": {
-            "format": "uuid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "action",
-          "codes"
-        ],
-        "type": "object"
-      },
-      "BulkProblemsResponse": {
-        "properties": {
-          "done": {
-            "type": "number"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/BulkResultResponse"
-            },
-            "type": "array"
-          },
-          "skipped": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "results",
-          "done",
-          "skipped"
-        ],
-        "type": "object"
-      },
       "BulkRejudgeDto": {
         "properties": {
           "dryRun": {
@@ -540,29 +461,6 @@
           "count",
           "dryRun",
           "allowed"
-        ],
-        "type": "object"
-      },
-      "BulkResultResponse": {
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "outcome": {
-            "enum": [
-              "done",
-              "skipped"
-            ],
-            "type": "string"
-          },
-          "reason": {
-            "description": "Set when skipped: the code is not a live problem of this organization.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "outcome"
         ],
         "type": "object"
       },
@@ -1015,13 +913,6 @@
             "nullable": true,
             "type": "object"
           },
-          "export": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContestActionState"
-              }
-            ]
-          },
           "judgeFinal": {
             "allOf": [
               {
@@ -1043,13 +934,6 @@
               }
             ]
           },
-          "replay": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContestActionState"
-              }
-            ]
-          },
           "rescore": {
             "allOf": [
               {
@@ -1063,8 +947,6 @@
           "judgeFinal",
           "rate",
           "publish",
-          "replay",
-          "export",
           "autoPublish"
         ],
         "type": "object"
@@ -2015,7 +1897,7 @@
         "type": "object"
       },
       "ContestTagColor": {
-        "description": "A colour token key (`tag-1`..`tag-8`), never a hex.",
+        "description": "A theme token key (`tag-1`..`tag-8`), never a hex.",
         "enum": [
           "tag-1",
           "tag-2",
@@ -2512,7 +2394,7 @@
             "type": "string"
           },
           "name": {
-            "description": "Hostname-style: the judge sends it as `x-judge-name` metadata when it opens the judge link.",
+            "description": "Hostname-style: the judge-server sends it as its handshake `id`.",
             "type": "string"
           }
         },
@@ -2911,31 +2793,6 @@
         ],
         "type": "object"
       },
-      "CreateProblemTagDto": {
-        "properties": {
-          "color": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContestTagColor"
-              }
-            ],
-            "description": "The palette token keys; the component is the contest tags' `ContestTagColor` (identical palette; one enumeration, one component)."
-          },
-          "name": {
-            "maxLength": 40,
-            "minLength": 1,
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "slug",
-          "name"
-        ],
-        "type": "object"
-      },
       "CreateShortLinkDto": {
         "properties": {
           "code": {
@@ -3062,56 +2919,6 @@
         "required": [
           "judge",
           "authKey"
-        ],
-        "type": "object"
-      },
-      "CreditActorResponse": {
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "username": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "username"
-        ],
-        "type": "object"
-      },
-      "CreditEntryResponse": {
-        "properties": {
-          "actor": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/CreditActorResponse"
-              }
-            ],
-            "description": "The user who spent the credits; null for a system entry or a user that no longer exists.",
-            "nullable": true,
-            "type": "object"
-          },
-          "amount": {
-            "type": "number"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "ref": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "actor",
-          "reason",
-          "amount",
-          "ref",
-          "createdAt"
         ],
         "type": "object"
       },
@@ -5091,63 +4898,6 @@
         ],
         "type": "object"
       },
-      "OrganizationProblemArchiveFilter": {
-        "enum": [
-          "all",
-          "false",
-          "true"
-        ],
-        "type": "string"
-      },
-      "OrganizationProblemBulkAction": {
-        "enum": [
-          "add-tag",
-          "archive",
-          "remove-tag",
-          "unarchive"
-        ],
-        "type": "string"
-      },
-      "OrganizationProblemResponse": {
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "isArchived": {
-            "type": "boolean"
-          },
-          "isPublic": {
-            "type": "boolean"
-          },
-          "name": {
-            "type": "string"
-          },
-          "points": {
-            "type": "number"
-          },
-          "tags": {
-            "items": {
-              "$ref": "#/components/schemas/ProblemTagResponse"
-            },
-            "type": "array"
-          },
-          "updatedAt": {
-            "description": "When the problem document was last written (the \"Cập nhật\" column), not the link's tag or archive edits.",
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "name",
-          "points",
-          "isPublic",
-          "isArchived",
-          "updatedAt",
-          "tags"
-        ],
-        "type": "object"
-      },
       "OrganizationRequestResponse": {
         "properties": {
           "createdAt": {
@@ -5233,52 +4983,6 @@
           "isOpen"
         ],
         "type": "object"
-      },
-      "OrganizationUsageResponse": {
-        "properties": {
-          "credits": {
-            "$ref": "#/components/schemas/QuotaMeterResponse"
-          },
-          "enforcing": {
-            "type": "boolean"
-          },
-          "month": {
-            "description": "`YYYY-MM` in the site time zone.",
-            "type": "string"
-          },
-          "organization": {
-            "$ref": "#/components/schemas/UsageOrganizationResponse"
-          },
-          "quota": {
-            "$ref": "#/components/schemas/UsageQuotaResponse"
-          },
-          "recent": {
-            "items": {
-              "$ref": "#/components/schemas/CreditEntryResponse"
-            },
-            "type": "array"
-          },
-          "storage": {
-            "$ref": "#/components/schemas/QuotaMeterResponse"
-          }
-        },
-        "required": [
-          "organization",
-          "month",
-          "enforcing",
-          "credits",
-          "storage",
-          "quota",
-          "recent"
-        ],
-        "type": "object"
-      },
-      "OrganizationUsageSort": {
-        "enum": [
-          "credits",
-          "name"
-        ],
-        "type": "string"
       },
       "OrganizationViewerResponse": {
         "properties": {
@@ -6420,34 +6124,6 @@
         ],
         "type": "string"
       },
-      "ProblemTagResponse": {
-        "properties": {
-          "color": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContestTagColor"
-              }
-            ],
-            "description": "A colour token key (`tag-1`..`tag-8`), never a hex."
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "color",
-          "id",
-          "slug",
-          "name"
-        ],
-        "type": "object"
-      },
       "ProblemTranslationResponse": {
         "properties": {
           "description": {
@@ -6852,29 +6528,6 @@
         },
         "required": [
           "queued"
-        ],
-        "type": "object"
-      },
-      "QuotaMeterResponse": {
-        "properties": {
-          "isNearLimit": {
-            "type": "boolean"
-          },
-          "isOver": {
-            "type": "boolean"
-          },
-          "limit": {
-            "type": "number"
-          },
-          "used": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "used",
-          "limit",
-          "isNearLimit",
-          "isOver"
         ],
         "type": "object"
       },
@@ -7631,23 +7284,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "SetProblemTagsDto": {
-        "properties": {
-          "tagIds": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "maxItems": 20,
-            "type": "array",
-            "uniqueItems": true
-          }
-        },
-        "required": [
-          "tagIds"
-        ],
         "type": "object"
       },
       "SettingKey": {
@@ -10713,24 +10349,6 @@
         },
         "type": "object"
       },
-      "UpdateProblemTagDto": {
-        "properties": {
-          "color": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ContestTagColor"
-              }
-            ],
-            "description": "The palette token keys; the component is the contest tags' `ContestTagColor` (identical palette; one enumeration, one component)."
-          },
-          "name": {
-            "maxLength": 40,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "UpdateProfileDto": {
         "properties": {
           "about": {
@@ -10831,23 +10449,6 @@
         },
         "type": "object"
       },
-      "UpdateQuotaDto": {
-        "properties": {
-          "quotaMonthlyCredits": {
-            "maximum": 1000000,
-            "minimum": 0,
-            "nullable": true,
-            "type": "number"
-          },
-          "quotaStorageBytes": {
-            "maximum": 1099511627776,
-            "minimum": 0,
-            "nullable": true,
-            "type": "number"
-          }
-        },
-        "type": "object"
-      },
       "UpdateRankingLinkDto": {
         "properties": {
           "expiresAt": {
@@ -10926,73 +10527,6 @@
         },
         "required": [
           "url"
-        ],
-        "type": "object"
-      },
-      "UsageOrganizationResponse": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "slug",
-          "name"
-        ],
-        "type": "object"
-      },
-      "UsageOverviewRowResponse": {
-        "properties": {
-          "creditsLimit": {
-            "type": "number"
-          },
-          "creditsUsed": {
-            "type": "number"
-          },
-          "month": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "storageLimit": {
-            "type": "number"
-          },
-          "storageUsed": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "slug",
-          "name",
-          "month",
-          "creditsUsed",
-          "creditsLimit",
-          "storageUsed",
-          "storageLimit"
-        ],
-        "type": "object"
-      },
-      "UsageQuotaResponse": {
-        "properties": {
-          "monthlyCredits": {
-            "nullable": true,
-            "type": "number"
-          },
-          "storageBytes": {
-            "nullable": true,
-            "type": "number"
-          }
-        },
-        "required": [
-          "monthlyCredits",
-          "storageBytes"
         ],
         "type": "object"
       },
@@ -20215,94 +19749,6 @@
         ]
       }
     },
-    "/api/internal/organizations/usage": {
-      "get": {
-        "operationId": "OrganizationUsageController_overview",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "sort",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/OrganizationUsageSort"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1,
-              "type": "number"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/UsageOverviewRowResponse"
-                      },
-                      "type": "array"
-                    },
-                    "meta": {
-                      "$ref": "#/components/schemas/PageMetaResponse"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "meta"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Static `usage` wins over `:slug` (the slug `usage` is reserved).",
-        "tags": [
-          "OrganizationUsage"
-        ],
-        "x-enveloped": true
-      }
-    },
     "/api/internal/organizations/{slug}": {
       "get": {
         "operationId": "OrganizationsController_detail",
@@ -20739,703 +20185,6 @@
         "x-enveloped": true
       }
     },
-    "/api/internal/organizations/{slug}/problem-tags": {
-      "get": {
-        "operationId": "ProblemTagsController_list",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1,
-              "type": "number"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/ProblemTagResponse"
-                      },
-                      "type": "array"
-                    },
-                    "meta": {
-                      "$ref": "#/components/schemas/PageMetaResponse"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "meta"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "ProblemTags"
-        ],
-        "x-enveloped": true
-      },
-      "post": {
-        "operationId": "ProblemTagsController_create",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProblemTagDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/ProblemTagResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "ProblemTags"
-        ]
-      }
-    },
-    "/api/internal/organizations/{slug}/problem-tags/{tagSlug}": {
-      "delete": {
-        "operationId": "ProblemTagsController_remove",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tagSlug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "ProblemTags"
-        ]
-      },
-      "patch": {
-        "operationId": "ProblemTagsController_update",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tagSlug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProblemTagDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/ProblemTagResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "ProblemTags"
-        ]
-      }
-    },
-    "/api/internal/organizations/{slug}/problems": {
-      "get": {
-        "operationId": "OrganizationProblemsController_list",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Default: archived problems are hidden.",
-            "in": "query",
-            "name": "archived",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/OrganizationProblemArchiveFilter"
-            }
-          },
-          {
-            "description": "The `q` query parameter (a longer property name keeps the `id-length` lint rule); `name: 'q'` documents the wire name.",
-            "in": "query",
-            "name": "q",
-            "required": false,
-            "schema": {
-              "maxLength": 50,
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1,
-              "type": "number"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "number"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tag",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/OrganizationProblemResponse"
-                      },
-                      "type": "array"
-                    },
-                    "meta": {
-                      "$ref": "#/components/schemas/PageMetaResponse"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "meta"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "OrganizationProblems"
-        ],
-        "x-enveloped": true
-      }
-    },
-    "/api/internal/organizations/{slug}/problems/bulk": {
-      "post": {
-        "operationId": "OrganizationProblemBulkController_run",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BulkProblemsDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/BulkProblemsResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "OrganizationProblemBulk"
-        ]
-      }
-    },
-    "/api/internal/organizations/{slug}/problems/{code}/archive": {
-      "delete": {
-        "operationId": "OrganizationProblemsController_unarchive",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "OrganizationProblems"
-        ]
-      },
-      "post": {
-        "operationId": "OrganizationProblemsController_archive",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "OrganizationProblems"
-        ]
-      }
-    },
-    "/api/internal/organizations/{slug}/problems/{code}/tags": {
-      "put": {
-        "operationId": "OrganizationProblemsController_setTags",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetProblemTagsDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/OrganizationProblemResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "OrganizationProblems"
-        ]
-      }
-    },
-    "/api/internal/organizations/{slug}/quota": {
-      "patch": {
-        "operationId": "OrganizationUsageController_updateQuota",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateQuotaDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/OrganizationUsageResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "OrganizationUsage"
-        ]
-      }
-    },
     "/api/internal/organizations/{slug}/requests": {
       "get": {
         "operationId": "OrganizationRequestsController_list",
@@ -21724,63 +20473,6 @@
         },
         "tags": [
           "OrganizationRequests"
-        ]
-      }
-    },
-    "/api/internal/organizations/{slug}/usage": {
-      "get": {
-        "operationId": "OrganizationUsageController_one",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/OrganizationUsageResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "OrganizationUsage"
         ]
       }
     },
@@ -23190,63 +21882,6 @@
         },
         "tags": [
           "ProblemEditing"
-        ]
-      }
-    },
-    "/api/internal/problems/{code}/archived-in": {
-      "get": {
-        "operationId": "ArchiveNoticeController_archivedIn",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/ArchivedInResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "ArchiveNotice"
         ]
       }
     },

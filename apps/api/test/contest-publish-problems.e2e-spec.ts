@@ -264,6 +264,28 @@ describe('publish contest problems after the contest', () => {
     });
   });
 
+  it('reports a trashed problem as deleted with its code for an editor, and a flagged private one as no_permission to an actor without rights', async () => {
+    const { contest, problems } = await endedContest(
+      [{ deletedAt: new Date() }, { isOrganizationPrivate: true }],
+      [ids.owner, ids.limited],
+    );
+    const owner = resultOf(await run('owner', contest.key).expect(200)).items;
+    expect(owner[0]).toMatchObject({
+      problemId: problems[0]._id,
+      code: problems[0].code,
+      outcome: 'skipped',
+      reason: 'deleted',
+    });
+    const limited = resultOf(
+      await run('limited', contest.key).expect(200),
+    ).items;
+    expect(limited[1]).toMatchObject({
+      code: null,
+      outcome: 'skipped',
+      reason: 'no_permission',
+    });
+  });
+
   it('allows five real runs an hour and keeps dry runs free', async () => {
     const { contest } = await endedContest([{ isPublic: true }], [ids.owner]);
     for (let count = 0; count < 5; count += 1)

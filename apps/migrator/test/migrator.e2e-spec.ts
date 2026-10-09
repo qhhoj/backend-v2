@@ -2,6 +2,7 @@ import { newId, toUuid, uuidStr } from '@libs/database';
 import { RowDataPacket } from 'mysql2/promise';
 import { IdMapRepository } from '../src/id-map.repository';
 import { MappedDocument } from '../src/mapper';
+import { GrantPermissionsService } from '../src/grant-permissions.service';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest } from './setup';
 
@@ -49,6 +50,19 @@ describe('migrator framework', () => {
       .updateOne({ name: 'Staff' }, { $set: { permissions: [] } });
     expect(await migration.verify()).toBe(1);
     await migration.backfill();
+  });
+
+  it('verifies clean after grant-permissions added v2-only codenames, and again after a rerun', async () => {
+    const grant = harness.testingModule.get(GrantPermissionsService);
+    expect(await grant.grant()).toMatchObject({ 'judge.delete_problem': 1 });
+    expect(
+      await harness.db.collection('groups').findOne({ name: 'Staff' }),
+    ).toMatchObject({
+      permissions: ['judge.edit_all_problem', 'judge.delete_problem'],
+    });
+    expect(await migration.verify()).toBe(0);
+    await grant.grant();
+    expect(await migration.verify()).toBe(0);
   });
 
   it('keeps ids stable and counts unchanged when re-run', async () => {

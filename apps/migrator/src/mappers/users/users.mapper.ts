@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LegacySourceService } from '../../legacy-source.service';
 import { MapCtx, MappedDocument, Mapper, withoutFields } from '../../mapper';
+import { withoutGrantedPermissions } from '../../permission-grants';
 import { legacySecretsSkipped } from '../../rehearsal';
 import { LegacySecrets } from './legacy-secrets';
 import {
@@ -104,7 +105,7 @@ export class UsersMapper implements Mapper<UserRow> {
 
   normalize(doc: MappedDocument) {
     return {
-      ...withoutFields(doc, RECOMPUTED),
+      ...withoutGrantedPermissions(withoutFields(doc, RECOMPUTED)),
       totpKey: this.secrets
         ? this.secrets.open(doc.totpKey)
         : sealedPresence(doc.totpKey),

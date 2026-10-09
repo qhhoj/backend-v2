@@ -53,7 +53,7 @@ export class ContestAutoPublishOutcome {
   @Prop({ type: Date, required: true }) at!: Date;
   @Prop({ type: String, required: true, enum: AUTO_PUBLISH_STATUSES })
   status!: (typeof AUTO_PUBLISH_STATUSES)[number];
-  /** Empty on success; `no_permission` or `actor_unavailable` on a failure. */
+  /** Empty on success; `no_permission`, `actor_unavailable` or `cannot_edit_contest` on a failure. */
   @Prop({ default: '' }) reason!: string;
   @Prop({ default: 0 }) published!: number;
   @Prop({ default: 0 }) skipped!: number;
@@ -184,6 +184,14 @@ ContestSchema.index({ key: 1 }, { unique: true });
 ContestSchema.index({ isVisible: 1, isPrivate: 1, isOrganizationPrivate: 1 });
 ContestSchema.index({ startTime: -1 });
 ContestSchema.index({ endTime: -1 });
+/** The worker's minute sweep: contests with the publish switch on, whatever the archive size. */
+ContestSchema.index(
+  { endTime: 1 },
+  {
+    name: 'publish_after_end_due',
+    partialFilterExpression: { publishAfterEnd: true },
+  },
+);
 ContestSchema.index({ authors: 1 });
 ContestSchema.index({ curators: 1 });
 ContestSchema.index({ testers: 1 });

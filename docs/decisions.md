@@ -259,6 +259,23 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - The ghost CSV download starts with a UTF-8 BOM — Excel shows Vietnamese labels as mojibake without it; the import already strips it.
 - A hidden board is 403 `forbidden` with issue `board_hidden` on both the replay and the sync standings — one wire shape, so clients match the issue code.
 - Replay Redis failures are coded: the lazy read answers 404 `replay_not_ready`, the editor's rebuild 503 `replay_unavailable` (budget refunded), never a bare 500.
+- Contest tag cap is count-then-insert, so a race can exceed 100; the cost is a few extra tags, a lock would add a dependency for no real harm.
+- The contest tag catalogue is cached per API instance (`ContestTagsQuerier`), so a new tag can be unknown on another instance until its resync.
+- Contest rules acceptance is enforced where a participation is created: register, first live join and every virtual join; a repeat live join keeps the stored acceptance.
+- `rulesRevision` is compare-and-set, so a concurrent save of the rules gets 409 instead of a lost update.
+- New issue codes `rules_not_accepted` (field `acceptRules`) and `unknown_tag` (field `tags`, one issue per slug).
+- Manual publish (`publish-problems`) costs 5 per hour per user; dry runs are free and only completed runs count (a failed run is refunded).
+- The editorial release is compare-and-set on the stored solution, so racing runs write one revision.
+- The publish worker re-checks the recorded editor at job time (account active, rights now, group rights included), because rights may be revoked between switch and end; it skips deleted problems.
+- Cloning a contest resets `publishAfterEnd`, `publishAfterEndBy` and `autoPublishOutcome`: the clone is a new contest and must not publish on a copied switch.
+- Contest tags are a managed catalogue (querier-backed, colour = theme token key) and can be deleted, an exception to the never-deleted catalogue rule: contests keep the slug and show a neutral chip, because a tag is a label, not an identity others reference.
+- One `publishVerdict` decides manual publish, its dry run and the automatic job; `ProblemAccess` moved to `libs/problems` so the worker applies the same edit rules — the paths cannot disagree. Rights are judged before flags (an actor without rights sees `no_permission`, never `organization_private`) and a trashed problem is `deleted`, not `not_found`.
+- The automatic publish bypasses `ProblemEvents`: the worker enqueues the rescore and contribution-points jobs itself, so the feed's publicity cache (`submission-streams.service.ts`) is dropped only by its TTL; accepted.
+- The automatic publish flips `isPublic` and writes its revision in one transaction; a problem found public with that contest's revision means a crashed run, so its follow-up jobs are queued again (both idempotent) and it is counted as published.
+- The worker also re-checks that the recorded editor still edits the contest (`judge.edit_all_contest`, or `judge.edit_own_contest` as author or curator), failing with `cannot_edit_contest`, as the manual route requires.
+- The minute publish sweep reads a partial index (`publish_after_end_due`, only contests with the switch on), so it does not scan the archive of past contests.
+- Contest problem limits follow `ProblemAccess.canSee` (with the contest scope for a viewer inside the contest), so the overview never shows a limit the problem page would 404.
+- New permission codenames are granted by the idempotent `grant-permissions` migrator command, keyed on an anchor permission (held by groups or users directly), not on group names; `verify` ignores the granted codenames, so it may run before or after the command.
 
 ## Organizations and users
 
@@ -459,15 +476,6 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `GET /admin/site/pages/deleted` (B-8f2-9): deleted flatpages `{ id, url, deletedAt }` from their `delete` revisions, newest first; `pages/:id/revisions` already reads them by id, and "recreate" is a normal POST with the old values.
 - Not done: B-8f6 (data version, image listing, structured feedback), B-8f2-1b/2/3b/6b/7b — each needs a product or model decision (organization delete, report model, global audit scope) or a response redesign.
 - Rehearsal (2026-10-09, real dump, no 2FA): verify 0 mismatches ×3; read-only window ≈3.5 min; legacy contests 185 and 187 were flagged rated but never rated, so the v2 re-rating rates them (22 extra ratings) — accepted under the re-rate-everything decision.
-- Contest tag cap is count-then-insert, so a race can exceed 100; the cost is a few extra tags, a lock would add a dependency for no real harm.
-- The contest tag catalogue is cached per API instance (`ContestTagsQuerier`), so a new tag can be unknown on another instance until its resync.
-- Contest rules acceptance is enforced where a participation is created: register, first live join and every virtual join; a repeat live join keeps the stored acceptance.
-- `rulesRevision` is compare-and-set, so a concurrent save of the rules gets 409 instead of a lost update.
-- New issue codes `rules_not_accepted` (field `acceptRules`) and `unknown_tag` (field `tags`, one issue per slug).
-- Manual publish (`publish-problems`) costs 5 per hour per user; dry runs are free and only completed runs count (a failed run is refunded).
-- The editorial release is compare-and-set on the stored solution, so racing runs write one revision.
-- The publish worker re-checks the recorded editor at job time (account active, rights now, group rights included), because rights may be revoked between switch and end; it skips deleted problems.
-- Cloning a contest resets `publishAfterEnd`, `publishAfterEndBy` and `autoPublishOutcome`: the clone is a new contest and must not publish on a copied switch.
 - **Release bot**: `changesets/action` (`.github/workflows/release.yml`) opens the Version Packages PR on every push to `main`; merging it runs `scripts/release/tag-release.mjs` (idempotent `v<version>` tag, no npm publish) because the app is private and the tag is the release.
 - `awaitingStaff` means "newest message not written by a `change_ticket` holder": a non-staff assignee's reply (a problem author) still counts as waiting, because only staff close the loop and staff status is what the stored flag records.
 - A sync `PUT` update is conditional on the state its frozen check read (`isVisible: false`, start still in the future): a publish between read and write gives 409 `conflict`. A parallel create of one key already gave 409 `conflict` (issue `key_taken`) through `ContestsRepository.create`; a sync test now pins it.

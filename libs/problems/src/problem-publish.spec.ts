@@ -75,6 +75,22 @@ describe('publishVerdict', () => {
     });
   });
 
+  it('does not reveal an organization-private flag to an actor without rights', () => {
+    expect(
+      publishVerdict(principal([]), problem({ isOrganizationPrivate: true })),
+    ).toEqual({ outcome: 'skipped', reason: 'no_permission' });
+  });
+
+  it('reports a trashed problem as deleted, public or not', () => {
+    const actor = principal(rights, { isSuperuser: true });
+    const deletedAt = new Date();
+    for (const isPublic of [false, true])
+      expect(publishVerdict(actor, problem({ deletedAt, isPublic }))).toEqual({
+        outcome: 'skipped',
+        reason: 'deleted',
+      });
+  });
+
   it('reports a missing problem as not found', () => {
     expect(publishVerdict(principal(rights), null)).toEqual({
       outcome: 'skipped',

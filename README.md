@@ -149,7 +149,9 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 
 `npx nest build migrator`, then `node dist/apps/migrator/main <command>`:
 
-`audit | backfill [jobs...] [--fresh] | verify [jobs...] | recompute | check-files | check-integrity | finish`
+`audit | backfill [jobs...] [--fresh] | verify [jobs...] | grant-permissions | recompute | check-files | check-integrity | finish`
+
+`grant-permissions` gives the permission codenames that exist only in v2 to the migrated groups and users holding their anchor permission (idempotent, safe to repeat; list in `apps/migrator/src/permission-grants.ts`). Run it after the final `backfill --fresh`; staff see the change once the groups resync (at most 10 minutes).
 
 | Variable                              | Needed by                                |
 | ------------------------------------- | ---------------------------------------- |

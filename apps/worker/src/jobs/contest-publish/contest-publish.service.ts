@@ -25,11 +25,26 @@ import { ContestPublishRepository } from './contest-publish.repository';
 import type { PublishableContest } from './contest-publish.repository';
 
 export type AutoPublishResult = 'published' | 'failed' | 'skipped';
-type FailureReason = 'actor_unavailable' | 'no_permission';
+type FailureReason =
+  'actor_unavailable' | 'no_permission' | 'cannot_edit_contest';
 interface PublishContext {
   actor: Principal;
   now: Date;
 }
+
+/** The recorded editor must still edit the contest, as the manual route requires (`ContestAccess.canEdit`: `judge.edit_all_contest`, or `judge.edit_own_contest` as author or curator). */
+const mayEditContest = (
+  actor: Principal,
+  contest: PublishableContest,
+): boolean => {
+  const listed = [...(contest.authors ?? []), ...(contest.curators ?? [])]
+    .map(uuidStr)
+    .includes(actor.userId);
+  return (
+    hasPermission(actor, 'judge.edit_all_contest') ||
+    (hasPermission(actor, 'judge.edit_own_contest') && listed)
+  );
+};
 
 /** Publishes a contest's problems and editorials at its end for the editor who switched the switch on, after re-checking that editor's account and rights now. The api's `ProblemEvents` are unreachable from the worker, so the two jobs its listeners enqueue (rescore, contribution points) are enqueued here. */
 @Injectable()
@@ -76,6 +91,8 @@ export class ContestPublishService {
     if (!actor) return this.fail(contest, 'actor_unavailable', now);
     if (!hasPermission(actor, 'judge.change_public_visibility'))
       return this.fail(contest, 'no_permission', now);
+    if (!mayEditContest(actor, contest))
+      return this.fail(contest, 'cannot_edit_contest', now);
     const tally = { published: 0, skipped: 0 };
     for (const entry of contest.problems) {
       const outcome = await this.publishOne(contest, uuidStr(entry.problem), {
@@ -111,25 +128,41 @@ export class ContestPublishService {
     const problem = await this.repository.findProblem(problemId);
     const verdict = publishVerdict(context.actor, problem);
     if (!problem) return verdict.outcome;
-    if (verdict.outcome === 'published')
-      await this.publishProblem(contest, problem, context.actor);
+    const outcome = await this.publishOutcome(
+      contest,
+      problem,
+      verdict,
+      context,
+    );
     if (verdict.outcome !== 'skipped')
       await this.releaseEditorial(problem, context);
+    return outcome;
+  }
+
+  /** `published` also for a problem an earlier, crashed run of this contest made public: its follow-up jobs are queued again (both are idempotent) and it is counted. */
+  private async publishOutcome(
+    contest: PublishableContest,
+    problem: Problem,
+    verdict: { outcome: PublishOutcome },
+    { actor }: PublishContext,
+  ): Promise<PublishOutcome> {
+    const problemId = uuidStr(problem._id);
+    if (verdict.outcome === 'published') {
+      const note = { contestKey: contest.key, actorId: actor.userId };
+      if (await this.repository.publishProblem(problemId, note))
+        await this.queueFollowUps(problem);
+    } else if (
+      verdict.outcome === 'unchanged' &&
+      (await this.repository.wasPublishedBy(problemId, contest.key))
+    ) {
+      await this.queueFollowUps(problem);
+      return 'published';
+    }
     return verdict.outcome;
   }
 
-  private async publishProblem(
-    contest: PublishableContest,
-    problem: Problem,
-    actor: Principal,
-  ): Promise<void> {
-    const problemId = uuidStr(problem._id);
-    const isPublished = await this.repository.publishProblem(problemId, {
-      contestKey: contest.key,
-      actorId: actor.userId,
-    });
-    if (!isPublished) return;
-    await notifyRescore(this.rescores, problemId, this.logger);
+  private async queueFollowUps(problem: Problem): Promise<void> {
+    await notifyRescore(this.rescores, uuidStr(problem._id), this.logger);
     if (problem.suggester)
       await notifyContributionPoints(
         this.contributions,

@@ -99,11 +99,25 @@ export class ContestPublishService {
     return {
       problemId,
       // A problem the actor has no rights on stays anonymous: its code is not theirs to learn.
-      code: verdict.reason === 'no_permission' ? null : (problem?.code ?? null),
+      code: this.codeFor(auth.principal, problem, verdict),
       outcome: verdict.outcome,
       reason: verdict.reason,
       editorial,
     };
+  }
+
+  /** The code is shown unless it is not the actor's to learn: no rights, or a trashed problem they could not edit. */
+  private codeFor(
+    principal: Principal,
+    problem: ProblemDocument | null,
+    verdict: PublishVerdict,
+  ): string | null {
+    if (!problem || verdict.reason === 'no_permission') return null;
+    const mayEdit = ProblemAccess.canEdit(
+      principal,
+      ProblemAccess.accessView(problem),
+    );
+    return verdict.reason === 'deleted' && !mayEdit ? null : problem.code;
   }
 
   /** The verdict, after the write it asks for (none in a dry run). A 403/404 from the editing policy means the rights changed since the verdict. */

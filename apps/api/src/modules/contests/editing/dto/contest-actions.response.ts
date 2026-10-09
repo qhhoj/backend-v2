@@ -17,7 +17,7 @@ export class ContestAutoPublishResponse {
     enumName: 'ContestAutoPublishStatus',
   })
   status!: ContestAutoPublishOutcome['status'];
-  /** Empty on success; `no_permission` or `actor_unavailable` on a failure. */
+  /** Empty on success; `no_permission`, `actor_unavailable` or `cannot_edit_contest` on a failure. */
   reason!: string;
   published!: number;
   skipped!: number;

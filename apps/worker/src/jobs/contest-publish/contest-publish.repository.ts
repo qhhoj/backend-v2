@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { buildPrincipal } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
@@ -11,7 +11,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import type { ContestAutoPublishOutcome } from '@libs/database';
-import type { Model } from 'mongoose';
+import type { Connection, Model } from 'mongoose';
 
 export type PublishableContest = Pick<
   Contest,
@@ -20,10 +20,15 @@ export type PublishableContest = Pick<
   | 'startTime'
   | 'endTime'
   | 'problems'
+  | 'authors'
+  | 'curators'
   | 'publishAfterEnd'
   | 'publishAfterEndBy'
   | 'autoPublishOutcome'
 >;
+
+const publishComment = (contestKey: string): string =>
+  `Published after contest ${contestKey}`;
 
 @Injectable()
 export class ContestPublishRepository {
@@ -33,6 +38,7 @@ export class ContestPublishRepository {
     @InjectModel(Revision.name) private readonly revisions: Model<Revision>,
     @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(Group.name) private readonly groups: Model<Group>,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   findContest(contestId: string): Promise<PublishableContest | null> {
@@ -42,6 +48,8 @@ export class ContestPublishRepository {
         startTime: 1,
         endTime: 1,
         problems: 1,
+        authors: 1,
+        curators: 1,
         publishAfterEnd: 1,
         publishAfterEndBy: 1,
         autoPublishOutcome: 1,
@@ -50,17 +58,20 @@ export class ContestPublishRepository {
       .exec();
   }
 
-  /** Ended contests with the switch on and no outcome yet: what the minute sweep looks at (`endTime` index). */
+  /** Ended contests with the switch on and no outcome yet: what the minute sweep looks at. The filter states `publishAfterEnd: true`, so the partial `publish_after_end_due` index (contests with the switch on only) serves it once built; no hint, so the sweep still works before the index exists. */
   async dueContestIds(now: Date): Promise<string[]> {
-    return (
-      await this.contests
-        .distinct('_id', {
+    const due = await this.contests
+      .find(
+        {
           publishAfterEnd: true,
           autoPublishOutcome: null,
           endTime: { $lte: now },
-        })
-        .exec()
-    ).map(uuidStr);
+        },
+        { _id: 1 },
+      )
+      .lean<Array<{ _id: string }>>()
+      .exec();
+    return due.map(({ _id }) => uuidStr(_id));
   }
 
   /** The recorded editor, built by the same `buildPrincipal` as the api's `PrincipalService`; null when the account is gone or inactive. */
@@ -71,35 +82,57 @@ export class ContestPublishRepository {
     return buildPrincipal(user, groups);
   }
 
-  /** A deleted problem reads as missing, so the verdict skips it as `not_found`. */
+  /** A trashed problem is returned too: the verdict skips it as `deleted`, and the writes below still refuse it. */
   findProblem(problemId: string): Promise<Problem | null> {
-    return this.problems
-      .findOne({ _id: problemId, deletedAt: null })
-      .lean<Problem>()
-      .exec();
+    return this.problems.findById(problemId).lean<Problem>().exec();
   }
 
-  /** Only a private problem moves, so racing runs publish (and write the revision) once. */
+  /** Only a live private problem moves, and the flip and its revision commit together (a crash cannot leave a published problem with no revision), so racing runs publish once. */
   async publishProblem(
     problemId: string,
     note: { contestKey: string; actorId: string },
   ): Promise<boolean> {
-    const { matchedCount } = await this.problems
-      .updateOne(
-        { _id: problemId, isPublic: false, deletedAt: null },
-        { $set: { isPublic: true } },
-      )
-      .exec();
-    if (matchedCount === 0) return false;
-    await this.revisions.create({
-      entity: 'problem',
-      entityId: problemId,
-      action: 'edit',
-      userId: note.actorId,
-      changes: { isPublic: { before: false, after: true } },
-      comment: `Published after contest ${note.contestKey}`,
+    let flipped = false;
+    await this.connection.transaction(async (session) => {
+      const { matchedCount } = await this.problems
+        .updateOne(
+          { _id: problemId, isPublic: false, deletedAt: null },
+          { $set: { isPublic: true } },
+          { session },
+        )
+        .exec();
+      flipped = matchedCount === 1;
+      if (!flipped) return;
+      await this.revisions.create(
+        [
+          {
+            entity: 'problem',
+            entityId: problemId,
+            action: 'edit',
+            userId: note.actorId,
+            changes: { isPublic: { before: false, after: true } },
+            comment: publishComment(note.contestKey),
+          },
+        ],
+        { session },
+      );
     });
-    return true;
+    return flipped;
+  }
+
+  /** Whether an earlier run of this contest's publish already made the problem public (its revision is the proof): the recovery path of a crash before the follow-up jobs were queued. */
+  async wasPublishedBy(
+    problemId: string,
+    contestKey: string,
+  ): Promise<boolean> {
+    return (
+      (await this.revisions.exists({
+        entity: 'problem',
+        entityId: problemId,
+        action: 'edit',
+        comment: publishComment(contestKey),
+      })) !== null
+    );
   }
 
   /** Compare-and-set: only the writer that finds the editorial unreleased records the revision; false when it is missing or already released. */

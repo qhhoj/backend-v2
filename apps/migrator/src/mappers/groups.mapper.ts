@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LegacySourceService } from '../legacy-source.service';
-import { groupBy, MapCtx, Mapper } from '../mapper';
+import { groupBy, MapCtx, MappedDocument, Mapper } from '../mapper';
+import { withoutGrantedPermissions } from '../permission-grants';
 
 type Row = { id: number; name: string };
 
@@ -28,5 +29,9 @@ export class GroupsMapper implements Mapper<Row> {
       createdAt: null,
       updatedAt: null,
     };
+  }
+
+  normalize(doc: MappedDocument) {
+    return withoutGrantedPermissions(doc);
   }
 }

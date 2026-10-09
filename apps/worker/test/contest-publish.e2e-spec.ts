@@ -10,7 +10,11 @@ import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
 const hours = (count: number) => new Date(Date.now() + count * 3_600_000);
-const RIGHTS = ['judge.edit_own_problem', 'judge.change_public_visibility'];
+const RIGHTS = [
+  'judge.edit_own_contest',
+  'judge.edit_own_problem',
+  'judge.change_public_visibility',
+];
 const solution = () => ({
   isPublic: false,
   publishOn: new Date(),
@@ -39,6 +43,7 @@ describe('automatic publish after the contest', () => {
       endTime: hours(-1),
       publishAfterEnd: true,
       publishAfterEndBy: editorId,
+      authors: editorId ? [editorId] : [],
       problems: problems.map((problem, order) => ({
         problem: problem._id,
         points: 100,
@@ -187,6 +192,52 @@ describe('automatic publish after the contest', () => {
         now: new Date(),
       }),
     ).toBe(false);
+  });
+
+  it('records a failure when the recorded editor no longer edits the contest', async () => {
+    const editor = await seedUser(worker, { permissions: RIGHTS });
+    const problem = await seedProblem(worker, {
+      isPublic: false,
+      authors: [editor._id],
+    });
+    const contest = await contestOf(editor._id, [problem], { authors: [] });
+    expect(await service.run(contest._id)).toBe('failed');
+    expect(await isPublic(problem)).toBe(false);
+    expect((await outcomeOf(contest._id))!.reason).toBe('cannot_edit_contest');
+  });
+
+  it('queues the rescore and counts a problem a crashed run had already published', async () => {
+    const editor = await seedUser(worker, { permissions: RIGHTS });
+    const problem = await seedProblem(worker, {
+      isPublic: true,
+      authors: [editor._id],
+    });
+    const contest = await contestOf(editor._id, [problem]);
+    await worker.db.collection('revisions').insertOne({
+      entity: 'problem',
+      entityId: toUuid(problem._id),
+      action: 'edit',
+      comment: `Published after contest ${contest.key}`,
+    });
+    expect(await service.run(contest._id)).toBe('published');
+    expect(await outcomeOf(contest._id)).toMatchObject({ published: 1 });
+    expect(
+      rescoreAdd.mock.calls.map(
+        (call: unknown[]) => (call[1] as { problemId?: string })?.problemId,
+      ),
+    ).toContain(problem._id);
+  });
+
+  it('leaves a problem that was public before the contest alone', async () => {
+    const editor = await seedUser(worker, { permissions: RIGHTS });
+    const problem = await seedProblem(worker, {
+      isPublic: true,
+      authors: [editor._id],
+    });
+    const contest = await contestOf(editor._id, [problem]);
+    await service.run(contest._id);
+    expect(rescoreAdd).not.toHaveBeenCalled();
+    expect(await outcomeOf(contest._id)).toMatchObject({ published: 0 });
   });
 
   it('does nothing the second time', async () => {
