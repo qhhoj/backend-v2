@@ -116,9 +116,12 @@ Before the window (days ahead): judge hosts provisioned and verified ("Judge hos
 
 ## Rollback
 
-- Before DNS switch: `systemctl stop qhhoj.target`, reopen the old site (remove the read-only rule), repoint the judges with their old build and config (keep both). Nothing was lost.
-- After DNS switch: new-site writes exist only in Mongo. Decide quickly: either accept the loss and switch DNS back to the old site (and its judges), or fix forward. There is no reverse migration; submissions made on the new site are not replayed to the old one.
-- Keep the old database and uploads unmodified until the rollback period (suggest 2 weeks) ends.
+The rollback target is the old site with its DMOJ judges; there is no mixed state (new site with DMOJ judges, or old site with judge-v2).
+
+- Before the DNS switch: `systemctl stop qhhoj.target`; on every judge host `systemctl disable --now qhhoj-judge`, then `systemctl enable --now <old DMOJ judge unit>` with its kept config (stop the new judge first: both use the isolate boxes and the old judge would race it); reopen the old site (remove the read-only rule). Nothing was lost.
+- After the DNS switch: new-site writes exist only in Mongo. Decide quickly: either accept the loss, switch DNS back to the old site and switch the judges back as above, or fix forward. There is no reverse migration; submissions made on the new site are not replayed to the old one.
+- A bad judge-v2 release alone is not a site rollback: point `/opt/qhhoj-judge/current` at the previous release and restart (Judge connection).
+- Keep the old database, uploads, and the DMOJ judge install and config on every judge host unmodified until the rollback period (suggest 2 weeks, and at least one clean week of judge-v2) ends; then remove the old judge.
 
 ## Judge hosts
 
