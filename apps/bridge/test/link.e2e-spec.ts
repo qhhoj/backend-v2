@@ -5,6 +5,7 @@ import { connect } from 'node:net';
 import type { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { sha256 } from '@libs/auth';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
@@ -19,6 +20,8 @@ import {
   seedProblem,
   seedSubmission,
 } from './fixtures';
+import { JudgeLinkServer } from '../src/link/judge-link.server';
+import type { JudgeSession } from '../src/link/judge-session';
 import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
@@ -38,6 +41,18 @@ const closedWithin = (socket: Socket, ms: number) =>
     socket.once('close', () => resolve(true));
     setTimeout(() => resolve(false), ms);
   });
+/** Sessions the bridge's link server holds for `name` (private state: what the bridge has seen, not the clock). */
+const sessionsOf = (bridge: BridgeTest, name: string): JudgeSession[] =>
+  [
+    ...bridge.module.get<JudgeLinkServer, { sessions: Set<JudgeSession> }>(
+      JudgeLinkServer,
+    ).sessions,
+  ].filter((session) => session.name === name);
+/** The bridge authenticated a session of `name` that has not said Hello. */
+const handshakeSeen = (bridge: BridgeTest, name: string) =>
+  waitUntil(() =>
+    sessionsOf(bridge, name).some((session) => !session.hasHelloed),
+  );
 const judge = (name: string, extra = {}) => ({
   name,
   key: `${name}-key`,
@@ -253,7 +268,7 @@ describe('Judge link (gRPC)', () => {
         bridge.judgePort(),
         judge('admin-rot'),
       );
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await handshakeSeen(bridge, 'admin-rot');
       const { authKey } = await admin().rotateKey('admin-rot');
       expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
       expect((await handshaking.closed).code).toBe(status.PERMISSION_DENIED);
@@ -278,7 +293,7 @@ describe('Judge link (gRPC)', () => {
         bridge.judgePort(),
         judge('admin-block'),
       );
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await handshakeSeen(bridge, 'admin-block');
       await admin().update('admin-block', { isBlocked: true });
       expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
       expect((await handshaking.closed).code).toBe(status.PERMISSION_DENIED);
@@ -314,36 +329,39 @@ describe('Judge link (gRPC)', () => {
   });
 });
 
+/** A self-signed localhost certificate and its key, written to a fresh directory. */
+const selfSigned = () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qhhoj-bridge-tls-'));
+  const [cert, key] = [join(directory, 'cert.pem'), join(directory, 'key.pem')];
+  execFileSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-days',
+      '1',
+      '-keyout',
+      key,
+      '-out',
+      cert,
+      '-subj',
+      '/CN=localhost',
+      '-addext',
+      'subjectAltName=DNS:localhost,IP:127.0.0.1',
+    ],
+    { stdio: 'ignore' },
+  );
+  return { cert, key };
+};
+
 describe('Judge link over TLS', () => {
   let bridge: BridgeTest;
   let ca: Buffer;
   beforeAll(async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'qhhoj-bridge-tls-'));
-    const [cert, key] = [
-      join(directory, 'cert.pem'),
-      join(directory, 'key.pem'),
-    ];
-    execFileSync(
-      'openssl',
-      [
-        'req',
-        '-x509',
-        '-newkey',
-        'rsa:2048',
-        '-nodes',
-        '-days',
-        '1',
-        '-keyout',
-        key,
-        '-out',
-        cert,
-        '-subj',
-        '/CN=localhost',
-        '-addext',
-        'subjectAltName=DNS:localhost,IP:127.0.0.1',
-      ],
-      { stdio: 'ignore' },
-    );
+    const { cert, key } = selfSigned();
     ca = readFileSync(cert);
     bridge = await setupBridgeTest({
       env: { JUDGE_BRIDGE_TLS_CERT: cert, JUDGE_BRIDGE_TLS_KEY: key },
@@ -351,6 +369,30 @@ describe('Judge link over TLS', () => {
     await seedJudge(bridge, 'j1', 'j1-key');
   });
   afterAll(() => bridge.teardown());
+
+  // first in this block: one line per address and minute, so a later failure here would not be logged
+  it('logs, by address, a judge whose TLS handshake fails because it does not trust the certificate', async () => {
+    const warnings: string[] = [];
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation((message) => void warnings.push(String(message)));
+    try {
+      const distrustful = FakeJudge.open(bridge.judgePort(), {
+        ...judge('j1'),
+        ca: readFileSync(selfSigned().cert),
+      });
+      expect((await distrustful.closed).code).toBe(status.UNAVAILABLE);
+      await waitUntil(() =>
+        warnings.some((line) =>
+          /^Connection from 127\.0\.0\.1 closed after \d+ ms with no authenticated session/.test(
+            line,
+          ),
+        ),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
 
   it('serves a judge that pins the certificate, and no plaintext client', async () => {
     const secure = await FakeJudge.online(bridge.judgePort(), {
@@ -430,7 +472,7 @@ describe('Judge sockets (long handshake deadline)', () => {
     const idle = await FakeJudge.online(bridge.judgePort(), own('j1'));
     await idle.endSession();
     // the bridge sees the cancel: the idle socket is the judge's newest
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await waitUntil(() => sessionsOf(bridge, 'j1').length === 0);
     const replaced = await FakeJudge.online(bridge.judgePort(), own('j1'));
     expect(await idle.connectionLost(2500)).toBe(true);
     const newest = await FakeJudge.online(bridge.judgePort(), own('j1'));
@@ -443,7 +485,7 @@ describe('Judge sockets (long handshake deadline)', () => {
   it('a block or key rotation ends every session of the judge, one still before Hello at once, and closes their sockets', async () => {
     const online = await FakeJudge.online(bridge.judgePort(), own('j1'));
     const handshaking = FakeJudge.open(bridge.judgePort(), own('j1'));
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await handshakeSeen(bridge, 'j1');
     const revokedAt = Date.now();
     await commands.publish({
       type: 'disconnect-judge',

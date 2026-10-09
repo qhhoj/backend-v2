@@ -18,6 +18,7 @@ import {
 } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
 import { BridgeModule } from '../src/bridge.module';
+import { BridgeService } from '../src/bridge.service';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
@@ -25,7 +26,23 @@ import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 const KEY = 'restart key';
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Ticks every 300 ms; a judge here always accepts, so a loaded machine must not turn a slow Accepted into an accept timeout. */
+const TIMINGS = { resyncMs: 300, resumeGraceMs: 30_000, acceptMs: 10_000 };
+
+/** BridgeService's private resync tick, seen from the test. */
+interface Resyncing {
+  resyncing: boolean;
+  resync: (this: Resyncing) => Promise<void>;
+}
+/** Completed resync ticks, across restarts (a tick skipped because the previous one still ran is not counted). */
+let ticks = 0;
+const prototype = BridgeService.prototype as unknown as Resyncing;
+const resync = prototype.resync;
+/** Resolves once `count` more resync ticks completed: the tests wait on ticks, never on the clock. */
+const resyncTicks = async (count: number) => {
+  const target = ticks + count;
+  await waitUntil(() => ticks >= target, 10_000);
+};
 
 describe('Bridge restart', () => {
   let bridge: BridgeTest;
@@ -47,8 +64,15 @@ describe('Bridge restart', () => {
   };
 
   beforeAll(async () => {
+    jest.spyOn(prototype, 'resync').mockImplementation(async function (
+      this: Resyncing,
+    ) {
+      const skipped = this.resyncing;
+      await resync.call(this);
+      if (!skipped) ticks += 1;
+    });
     bridge = await setupBridgeTest({
-      timings: { resyncMs: 300, resumeGraceMs: 30_000 },
+      timings: TIMINGS,
     });
     catalog = await seedCatalog(bridge);
   });
@@ -62,6 +86,7 @@ describe('Bridge restart', () => {
   afterAll(async () => {
     await redis.quit();
     await bridge.teardown();
+    jest.restoreAllMocks();
   });
 
   it('a restart while grading leaves the run to its judge, which resumes it: no requeue, no IE', async () => {
@@ -196,7 +221,7 @@ describe('Bridge restart', () => {
     });
     again.hello();
     await again.next('welcome');
-    await sleep(1200); // four ticks: a resumed run is held, never stranded
+    await resyncTicks(4); // a resumed run is held, never stranded
     expect(again.seen('abort')).toEqual([]);
     expect(await submissionRow(id)).toMatchObject({
       status: 'G',
@@ -249,13 +274,13 @@ describe('Bridge restart', () => {
       judgeGeneration: 1,
       judgeSeq: 3,
     });
-    await bridge.restart({ resyncMs: 1000, resumeGraceMs: 30_000 });
+    await bridge.restart({ ...TIMINGS, resyncMs: 1000 });
     try {
-      await sleep(1500); // one tick has passed (at 1000 ms), the second is due at 2000 ms
+      await resyncTicks(1); // the second is due a full second later
       expect((await submissionRow(id)).status).toBe('G');
       await waitUntil(async () => (await submissionRow(id)).status === 'QU');
     } finally {
-      await bridge.restart({ resyncMs: 300, resumeGraceMs: 30_000 });
+      await bridge.restart(TIMINGS);
     }
   });
 
@@ -310,7 +335,7 @@ describe('Bridge restart', () => {
     const firstRef = (await judge.nextAssign(3000)).ref!;
     expect(firstRef.submissionId).toBe(first);
     judge.accept(firstRef);
-    await sleep(1000);
+    await resyncTicks(3);
     expect(judge.seen('assign')).toEqual([]);
     expect(
       bridge.module
@@ -322,7 +347,7 @@ describe('Bridge restart', () => {
     const secondRef = (await judge.nextAssign()).ref!;
     expect(secondRef.submissionId).toBe(second);
     judge.accept(secondRef);
-    await sleep(1000);
+    await resyncTicks(3);
     expect(await submissionRow(second)).toMatchObject({
       status: 'P',
       requeueCount: 0,
@@ -390,28 +415,33 @@ describe('Bridge restart', () => {
     await seedJudge(bridge, 'restart-8', KEY);
     const repository = bridge.module.get(SubmissionsRepository);
     const claimRun = repository.claimRun.bind(repository);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
     const slowClaim = jest
       .spyOn(repository, 'claimRun')
       .mockImplementation(async (...args) => {
         const outcome = await claimRun(...args);
-        await sleep(1000);
+        await held;
         return outcome;
       });
     try {
-      const judge = await connect('restart-8');
       const id = await seedOne();
+      // queued in memory with no judge, so the claim runs in the judge's registration, not in a tick
+      await waitUntil(() => bridge.module.get(DispatcherService).hasQueued(id));
+      const judge = await connect('restart-8');
       await waitUntil(async () => (await submissionRow(id)).status === 'P');
       // claimed in Mongo, Assign not sent yet: several ticks pass
-      await sleep(900);
+      await resyncTicks(3);
       expect(await submissionRow(id)).toMatchObject({
         status: 'P',
         judgedOn: 'restart-8',
       });
+      release();
       const ref = (await judge.nextAssign()).ref!;
       slowClaim.mockRestore();
       judge.accept(ref);
       judge.started(ref, 1);
-      await sleep(1000);
+      await resyncTicks(3);
       expect(await submissionRow(id)).toMatchObject({
         status: 'G',
         judgedOn: 'restart-8',
@@ -420,6 +450,7 @@ describe('Bridge restart', () => {
       expect(judge.isClosed).toBe(false);
       await judge.close();
     } finally {
+      release();
       slowClaim.mockRestore();
     }
   });
@@ -496,7 +527,7 @@ describe('Bridge restart', () => {
     await seedJudge(bridge, 'restart-17', KEY);
     const busy = await connect('restart-16');
     const free = await connect('restart-17');
-    const first = await seedOne({ status: 'PD' });
+    const first = await seedOne({ status: 'PD', pinnedJudge: 'restart-16' });
     await bridge.submissions.updateOne(
       { _id: first },
       { $set: { status: 'QU' } },
@@ -505,13 +536,17 @@ describe('Bridge restart', () => {
     const firstRef = (await busy.nextAssign()).ref!;
     expect(firstRef.submissionId).toBe(first);
     busy.accept(firstRef);
-    const targeted = await seedOne({ status: 'PD' });
+    // the api stores the pin with the row, so a tick that reads it before the command keeps it too
+    const targeted = await seedOne({
+      status: 'PD',
+      pinnedJudge: 'restart-16',
+    });
     await bridge.submissions.updateOne(
       { _id: targeted },
       { $set: { status: 'QU' } },
     );
     await commands.judge([targeted], 'restart-16');
-    await sleep(1000);
+    await resyncTicks(3);
     expect(free.seen('assign')).toEqual([]);
     busy.final(firstRef, Outcome.OUTCOME_COMPILE_ERROR, { log: 'x' });
     expect((await busy.nextAssign()).ref?.submissionId).toBe(targeted);
@@ -529,7 +564,7 @@ describe('Bridge restart', () => {
       );
       expect((await judge.closed).code).toBe(status.PERMISSION_DENIED);
       const id = await seedOne();
-      await sleep(1000);
+      await resyncTicks(3);
       expect(judge.seen('assign')).toEqual([]);
       expect(await submissionRow(id)).toMatchObject({ status: 'QU' });
     });
@@ -558,9 +593,10 @@ describe('Bridge restart', () => {
         { name: 'restart-14' },
         { isDisabled: true },
       );
-      await sleep(1000);
+      // a tick under way may have read the row before the update
+      await resyncTicks(2);
       const id = await seedOne();
-      await sleep(1000);
+      await resyncTicks(2);
       expect(judge.seen('assign')).toEqual([]);
       await bridge.judges.updateOne(
         { name: 'restart-14' },
