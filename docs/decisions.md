@@ -54,6 +54,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Planned (migrator deferred): migrated submissions need `casePoints`/`caseTotal`, and a full recompute follows the backfill — schema defaults make 0/0 rows look solved.
 - Planned (migrator deferred): contest `formatConfig` keys are camelCased on migration, `cumtime` dropped on `final_submission`, `Ultimate` lowercased, Lua label scripts become `labelStyle` — the v2 schema rejects the legacy spellings.
 - The migrator never loads `Env` — it needs only `MONGO_URL` and `LEGACY_*`.
+- `migrator audit` runs read-only pre-import checks (zero dates, invalid JSON, case-only duplicates, unsupported hashes, WebAuthn rows); the id map is looked up per batch, never cached whole, and failed commands exit 1 — the legacy dump has 13M-row log tables and cutover scripts must see failures.
 
 ## Problems
 
