@@ -19,6 +19,7 @@ import { ContestRescoreModule } from './jobs/contest-rescore/contest-rescore.mod
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
 import { MigrationRecomputeModule } from './jobs/migration-recompute/migration-recompute.module';
 import { OrganizationPointsModule } from './jobs/organization-points/organization-points.module';
+import { ProblemPackageModule } from './jobs/problem-package/problem-package.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
@@ -41,6 +42,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     SettingsModule,
     ProblemFilesModule,
     PdfRenderModule,
+    ProblemPackageModule,
     PolygonImportModule,
     SubmissionEffectsModule,
     EffectsSweepModule,

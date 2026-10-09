@@ -55,6 +55,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the code-collision check must see deleted and tombstoned codes',
   ],
+  'apps/worker/src/jobs/problem-package/problem-package.repository.ts': [
+    'F',
+    'a deleted problem is not packaged',
+  ],
   'apps/worker/src/jobs/submission-effects/contest-results.repository.ts': [
     'F',
     'contest scoring reads the problems of the contest, which are live',
