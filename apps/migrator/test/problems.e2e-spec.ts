@@ -122,6 +122,48 @@ describe('problems job', () => {
     ).toBe(false);
   });
 
+  it('embeds data with bare file names, rstripped as standard, and ordered cases', async () => {
+    const sum = (await problem(4001))!;
+    expect(sum.data).toMatchObject({
+      archive: 'tests.zip',
+      customChecker: 'check.cpp',
+      generator: null,
+      checker: 'floats',
+      checkerArgs: { precision: 6 },
+      unicode: true,
+      feedback: '',
+    });
+    expect(
+      sum.data!.cases.map((testCase) => [
+        testCase.input,
+        testCase.checker,
+        testCase.isPretest,
+        testCase.points,
+      ]),
+    ).toEqual([
+      ['1.in', 'identical', true, 40],
+      ['2.in', '', false, 60],
+      ['3.in', 'standard', false, 0],
+    ]);
+    expect(
+      reports.problems.some((line) =>
+        line.startsWith('judge_problemtestcase:4003'),
+      ),
+    ).toBe(false);
+    expect((await problem(4002))!.data).toBeNull();
+  });
+
+  it('fails the data of a problem with an unsupported checker instead of falling back', async () => {
+    const sorted = (await problem(4004))!;
+    expect(sorted).toMatchObject({ code: 'sorted4', data: null });
+    expect(reports.problems).toEqual(
+      expect.arrayContaining([
+        'judge_problemdata:4002 checker "sorted" unsupported',
+        'judge_problemdata:4002 file outside sorted4/',
+      ]),
+    );
+  });
+
   it('verifies clean', async () => {
     expect(await migration.verify(['problems'])).toBe(0);
   });

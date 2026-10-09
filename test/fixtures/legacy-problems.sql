@@ -21,8 +21,8 @@ INSERT INTO judge_problemdata (id, zipfile, generator, output_prefix, output_lim
  (4001,'sum4/tests.zip','',NULL,NULL,'','floats','{"precision": 6}',4001,'sum4/check.cpp','','','standard','',0,1),
  (4002,'old4/tests.zip','',NULL,NULL,'','sorted','',4004,'','','','standard','',0,0);
 INSERT INTO judge_problemtestcase (id, `order`, type, input_file, output_file, generator_args, points, is_pretest, output_prefix, output_limit, checker, checker_args, dataset_id) VALUES
- (4002,2,'C','2.in','2.out','',60,0,NULL,NULL,'','',4001),
- (4001,1,'C','1.in','1.out','',40,1,NULL,NULL,'identical','',4001),
+ (4001,2,'C','2.in','2.out','',60,0,NULL,NULL,'','',4001),
+ (4002,1,'C','1.in','1.out','',40,1,NULL,NULL,'identical','',4001),
  (4003,3,'C','3.in','3.out','',0,0,NULL,NULL,'rstripped','',4001);
 SET FOREIGN_KEY_CHECKS=1;
 SET FOREIGN_KEY_CHECKS=0;

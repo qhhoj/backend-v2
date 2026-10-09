@@ -5,6 +5,7 @@ import { LegacySourceService } from '../../legacy-source.service';
 import { MapCtx, MappedDocument, Mapper, withoutFields } from '../../mapper';
 import { importedProblem } from '../imported-rows';
 import { mediaUrlOf } from './media-url';
+import { ProblemDataSource } from './problem-data';
 import { ProblemRelations, RELATION_TABLES } from './problem-relations';
 import { PROBLEMS_SQL, ProblemRow } from './problem-row';
 import { ProblemStatements } from './problem-statements';
@@ -25,6 +26,7 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
   sql = PROBLEMS_SQL;
   private readonly relations = new ProblemRelations();
   private readonly statements = new ProblemStatements();
+  private readonly data = new ProblemDataSource();
   /** Legacy ids the job imports: a mirror may only point at one of these. */
   private imported = new Set<number>();
 
@@ -38,6 +40,7 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
     );
     await this.relations.load(source);
     await this.statements.load(source);
+    await this.data.load(source);
   }
 
   map(row: ProblemRow, ctx: MapCtx): MappedDocument | null {
@@ -65,6 +68,7 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
       ),
       translations: this.statements.translationsOf(row.id, style, ctx),
       solution: this.statements.solutionOf(row.id, ctx),
+      data: this.data.dataOf({ id: row.id, code: row.code }, ctx),
     };
   }
 
@@ -114,7 +118,6 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
       allowViewFeedback: ctx.bool(row.allow_view_feedback),
       userCount: Number(row.user_count ?? 0),
       acRate: Number(row.ac_rate ?? 0),
-      data: null,
       dataVersion: 0,
       createdAt: ctx.date(row.date),
       updatedAt: ctx.date(row.date),
