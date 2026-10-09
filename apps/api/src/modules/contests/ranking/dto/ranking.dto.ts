@@ -1,10 +1,15 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { toBoolean } from '../../../problems/core/dto/transforms';
 
 export class RankingQueryDto {
   /** Include virtual participations. */
-  @IsOptional() @Transform(toBoolean) @IsBoolean() virtual = false;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  virtual: boolean = false;
   /** The contest's ranking access code: shows the full board whatever the scoreboard rules. */
   @IsOptional() @IsString() @MaxLength(255) code?: string;
 }

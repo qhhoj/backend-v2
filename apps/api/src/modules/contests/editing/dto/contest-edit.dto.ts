@@ -1,4 +1,4 @@
-import { OmitType, PartialType } from '@nestjs/swagger';
+import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import {
   CONTEST_FORMAT_NAMES,
   CONTEST_KEY_PATTERN,
@@ -90,6 +90,10 @@ export class CreateContestDto {
   @IsOptional()
   @Matches(JUDGE_NAME_PATTERN, { each: true })
   bannedJudges?: string[];
+  @ApiPropertyOptional({
+    enum: SCOREBOARD_VISIBILITIES,
+    enumName: 'ScoreboardVisibility',
+  })
   @IsOptional()
   @IsIn(SCOREBOARD_VISIBILITIES)
   scoreboardVisibility?: ScoreboardVisibility;
@@ -107,13 +111,22 @@ export class CreateContestDto {
   @IsOptional() @IsBoolean() hideProblemAuthors?: boolean;
   @IsOptional() @IsBoolean() showShortDisplay?: boolean;
   @IsOptional() @IsBoolean() pushAnnouncements?: boolean;
-  @IsOptional() @IsIn(LABEL_STYLES) labelStyle?: LabelStyle;
+  @ApiPropertyOptional({ enum: LABEL_STYLES, enumName: 'ContestLabelStyle' })
+  @IsOptional()
+  @IsIn(LABEL_STYLES)
+  labelStyle?: LabelStyle;
   @IsOptional() @IsBoolean() isRated?: boolean;
   @IsOptional() @IsBoolean() rateAll?: boolean;
   @IsOptional() @IsUUID('7', { each: true }) rateExclude?: string[];
   @IsOptional() @IsInt() ratingFloor?: number | null;
   @IsOptional() @IsInt() ratingCeiling?: number | null;
-  @IsOptional() @IsIn(CONTEST_FORMAT_NAMES) formatName?: ContestFormatName;
+  @ApiPropertyOptional({
+    enum: CONTEST_FORMAT_NAMES,
+    enumName: 'ContestFormatName',
+  })
+  @IsOptional()
+  @IsIn(CONTEST_FORMAT_NAMES)
+  formatName?: ContestFormatName;
   /** Checked by the format (`parseFormatConfig`); omitted on a format change: that format's defaults. */
   @IsOptional() @IsObject() formatConfig?: Record<string, unknown>;
   @IsOptional()

@@ -1,5 +1,7 @@
+import { CONTEST_PHASES } from '@libs/contests';
 import type { ContestPhase } from '@libs/contests';
 import { CONTEST_TAG_PATTERN } from '@libs/database';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -15,16 +17,25 @@ import {
 } from 'class-validator';
 import { toBoolean } from '../../../problems/core/dto/transforms';
 
-export const CONTEST_PHASES: readonly ContestPhase[] = [
-  'upcoming',
-  'running',
-  'ended',
-];
-
 export class ContestListQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 50;
-  @IsOptional() @IsIn(CONTEST_PHASES) phase?: ContestPhase;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize: number = 50;
+  @ApiPropertyOptional({ enum: CONTEST_PHASES, enumName: 'ContestPhase' })
+  @IsOptional()
+  @IsIn(CONTEST_PHASES)
+  phase?: ContestPhase;
   @IsOptional() @Matches(CONTEST_TAG_PATTERN) tag?: string;
   @IsOptional() @IsUUID('7') organization?: string;
   @IsOptional() @Transform(toBoolean) @IsBoolean() rated?: boolean;

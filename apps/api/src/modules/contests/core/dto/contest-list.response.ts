@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { contestPhase, LIVE_STATUSES } from '@libs/contests';
+import { CONTEST_PHASES, contestPhase, LIVE_STATUSES } from '@libs/contests';
 import type { ContestPhase, LiveStatus } from '@libs/contests';
+import { CONTEST_FORMAT_NAMES } from '@libs/database';
 import type { Contest, ContestFormatName } from '@libs/database';
 
 /** What every contest view shows of the contest itself. */
@@ -12,7 +13,9 @@ export class ContestSummaryResponse {
   endTime!: Date;
   /** Seconds. */
   timeLimit!: number | null;
+  @ApiProperty({ enum: CONTEST_PHASES, enumName: 'ContestPhase' })
   phase!: ContestPhase;
+  @ApiProperty({ enum: CONTEST_FORMAT_NAMES, enumName: 'ContestFormatName' })
   formatName!: ContestFormatName;
   isRated!: boolean;
   tags!: string[];

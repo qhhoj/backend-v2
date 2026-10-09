@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
@@ -13,6 +14,11 @@ export class PrepareDataDto {
   /** Legacy `submission_problem_glob`; default `*`. */
   @IsOptional() @Matches(PROBLEM_GLOB_PATTERN) problemGlob?: string;
   /** Legacy `submission_results`; empty or absent: every result. */
+  @ApiPropertyOptional({
+    enum: SUBMISSION_RESULTS,
+    enumName: 'SubmissionResult',
+    isArray: true,
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(SUBMISSION_RESULTS.length)

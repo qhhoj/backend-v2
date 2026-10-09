@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ANNOUNCEMENT_TITLE_MAX } from '@libs/database';
 import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
 import { Type } from 'class-transformer';
@@ -18,8 +19,20 @@ export class CreateAnnouncementDto {
 }
 
 export class AnnouncementListQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) pageSize = 20;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  pageSize: number = 20;
 }
 
 /** The key stays unvalidated like `ContestKeyParamDto`; a malformed id is a 400. */

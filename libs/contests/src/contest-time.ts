@@ -22,7 +22,8 @@ export interface ParticipationTimes {
   virtual: number;
   isRegistered: boolean;
 }
-export type ContestPhase = 'upcoming' | 'running' | 'ended';
+export const CONTEST_PHASES = ['upcoming', 'running', 'ended'] as const;
+export type ContestPhase = (typeof CONTEST_PHASES)[number];
 
 const SECOND_MS = 1000;
 const MINUTE_MS = 60 * SECOND_MS;

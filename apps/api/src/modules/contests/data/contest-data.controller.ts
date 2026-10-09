@@ -11,7 +11,7 @@ import {
 import type { FastifyReply } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { RawResponse } from '@libs/common';
+import { ApiFileResponse, RawResponse } from '@libs/common';
 import { ContestDataService } from './contest-data.service';
 import {
   ContestDataStatusResponse,
@@ -43,6 +43,7 @@ export class ContestDataController {
   }
 
   /** Always an attachment with `nosniff`; the file name is the contest key (`[a-z0-9_]`), nothing to escape. */
+  @ApiFileResponse('application/zip')
   @RawResponse()
   @Get(':key/data/download')
   async download(

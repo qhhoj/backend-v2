@@ -747,37 +747,75 @@
         ],
         "type": "object"
       },
+      "ContestActionState": {
+        "enum": [
+          "queued",
+          "running",
+          "idle"
+        ],
+        "type": "string"
+      },
       "ContestActionsResponse": {
         "properties": {
           "judgeFinal": {
-            "enum": [
-              "queued",
-              "running",
-              "idle"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestActionState"
+              }
+            ]
           },
           "rate": {
-            "enum": [
-              "queued",
-              "running",
-              "idle"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestActionState"
+              }
+            ]
           },
           "rescore": {
-            "enum": [
-              "queued",
-              "running",
-              "idle"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestActionState"
+              }
+            ]
           }
         },
         "required": [
           "rescore",
           "judgeFinal",
           "rate"
+        ],
+        "type": "object"
+      },
+      "ContestAnnouncementEventResponse": {
+        "properties": {
+          "announcementId": {
+            "type": "string"
+          },
+          "contestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "contestId",
+          "announcementId"
+        ],
+        "type": "object"
+      },
+      "ContestAnnouncementFrame": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContestAnnouncementEventResponse"
+          },
+          "event": {
+            "enum": [
+              "announcement"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
         ],
         "type": "object"
       },
@@ -855,16 +893,11 @@
             "type": "object"
           },
           "formatName": {
-            "enum": [
-              "default",
-              "ioi",
-              "ioi16",
-              "icpc",
-              "vnoj",
-              "ultimate",
-              "final_submission"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestFormatName"
+              }
+            ]
           },
           "frozenLastMinutes": {
             "type": "number"
@@ -888,22 +921,21 @@
             "type": "string"
           },
           "labelStyle": {
-            "enum": [
-              "numeric",
-              "alpha"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestLabelStyle"
+              }
+            ]
           },
           "name": {
             "type": "string"
           },
           "phase": {
-            "enum": [
-              "running",
-              "upcoming",
-              "ended"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestPhase"
+              }
+            ]
           },
           "pointsPrecision": {
             "type": "number"
@@ -939,13 +971,11 @@
             "type": "boolean"
           },
           "scoreboardVisibility": {
-            "enum": [
-              "P",
-              "V",
-              "H",
-              "C"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScoreboardVisibility"
+              }
+            ]
           },
           "settings": {
             "allOf": [
@@ -991,19 +1021,21 @@
           }
         },
         "required": [
+          "phase",
+          "formatName",
+          "scoreboardVisibility",
+          "labelStyle",
           "formatConfig",
           "description",
           "descriptionHtml",
           "authors",
           "frozenLastMinutes",
-          "scoreboardVisibility",
           "showSubmissionList",
           "pointsPrecision",
           "runPretestsOnly",
           "hideProblemTags",
           "hideProblemAuthors",
           "showShortDisplay",
-          "labelStyle",
           "problems",
           "viewer",
           "settings",
@@ -1013,8 +1045,6 @@
           "startTime",
           "endTime",
           "timeLimit",
-          "phase",
-          "formatName",
           "isRated",
           "tags",
           "userCount",
@@ -1028,6 +1058,25 @@
           "registrationEnd"
         ],
         "type": "object"
+      },
+      "ContestFormatName": {
+        "enum": [
+          "default",
+          "ioi",
+          "ioi16",
+          "icpc",
+          "vnoj",
+          "ultimate",
+          "final_submission"
+        ],
+        "type": "string"
+      },
+      "ContestLabelStyle": {
+        "enum": [
+          "numeric",
+          "alpha"
+        ],
+        "type": "string"
       },
       "ContestLanguageStatsResponse": {
         "properties": {
@@ -1063,16 +1112,11 @@
             "type": "string"
           },
           "formatName": {
-            "enum": [
-              "default",
-              "ioi",
-              "ioi16",
-              "icpc",
-              "vnoj",
-              "ultimate",
-              "final_submission"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestFormatName"
+              }
+            ]
           },
           "isOrganizationPrivate": {
             "type": "boolean"
@@ -1090,12 +1134,11 @@
             "type": "string"
           },
           "phase": {
-            "enum": [
-              "running",
-              "upcoming",
-              "ended"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestPhase"
+              }
+            ]
           },
           "registrationEnd": {
             "format": "date-time",
@@ -1152,6 +1195,8 @@
           }
         },
         "required": [
+          "phase",
+          "formatName",
           "viewer",
           "key",
           "name",
@@ -1159,8 +1204,6 @@
           "startTime",
           "endTime",
           "timeLimit",
-          "phase",
-          "formatName",
           "isRated",
           "tags",
           "userCount",
@@ -1197,6 +1240,14 @@
           "isCurrent"
         ],
         "type": "object"
+      },
+      "ContestPhase": {
+        "enum": [
+          "upcoming",
+          "running",
+          "ended"
+        ],
+        "type": "string"
       },
       "ContestProblemDto": {
         "properties": {
@@ -1675,16 +1726,11 @@
             "type": "object"
           },
           "formatName": {
-            "enum": [
-              "default",
-              "ioi",
-              "ioi16",
-              "icpc",
-              "vnoj",
-              "ultimate",
-              "final_submission"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestFormatName"
+              }
+            ]
           },
           "frozenLastMinutes": {
             "minimum": 0,
@@ -1712,11 +1758,11 @@
             "type": "string"
           },
           "labelStyle": {
-            "enum": [
-              "numeric",
-              "alpha"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestLabelStyle"
+              }
+            ]
           },
           "lockedAfter": {
             "nullable": true,
@@ -1796,13 +1842,11 @@
             "type": "number"
           },
           "scoreboardVisibility": {
-            "enum": [
-              "V",
-              "H",
-              "C",
-              "P"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScoreboardVisibility"
+              }
+            ]
           },
           "showShortDisplay": {
             "type": "boolean"
@@ -4162,21 +4206,7 @@
           "results": {
             "description": "Legacy `submission_results`; empty or absent: every result.",
             "items": {
-              "enum": [
-                "AC",
-                "WA",
-                "TLE",
-                "MLE",
-                "OLE",
-                "IR",
-                "RTE",
-                "CE",
-                "IE",
-                "SC",
-                "AB",
-                "RJ"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/SubmissionResult"
             },
             "type": "array"
           }
@@ -5540,6 +5570,26 @@
         ],
         "type": "object"
       },
+      "ResyncFrame": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "description": "Always `{}`.",
+            "type": "object"
+          },
+          "event": {
+            "enum": [
+              "resync"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
       "ScopeQueryDto": {
         "properties": {
           "contest": {
@@ -5552,6 +5602,15 @@
           }
         },
         "type": "object"
+      },
+      "ScoreboardVisibility": {
+        "enum": [
+          "V",
+          "H",
+          "C",
+          "P"
+        ],
+        "type": "string"
       },
       "ScratchCodesRemainingResponse": {
         "properties": {
@@ -6698,6 +6757,24 @@
         ],
         "type": "object"
       },
+      "SubmissionResult": {
+        "description": "Legacy `submission_results`; empty or absent: every result.",
+        "enum": [
+          "AC",
+          "WA",
+          "TLE",
+          "MLE",
+          "OLE",
+          "IR",
+          "RTE",
+          "CE",
+          "IE",
+          "SC",
+          "AB",
+          "RJ"
+        ],
+        "type": "string"
+      },
       "SubmissionSourceResponse": {
         "properties": {
           "id": {
@@ -7396,16 +7473,11 @@
             "type": "object"
           },
           "formatName": {
-            "enum": [
-              "default",
-              "ioi",
-              "ioi16",
-              "icpc",
-              "vnoj",
-              "ultimate",
-              "final_submission"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestFormatName"
+              }
+            ]
           },
           "frozenLastMinutes": {
             "minimum": 0,
@@ -7430,11 +7502,11 @@
             "type": "boolean"
           },
           "labelStyle": {
-            "enum": [
-              "numeric",
-              "alpha"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestLabelStyle"
+              }
+            ]
           },
           "lockedAfter": {
             "nullable": true,
@@ -7514,13 +7586,11 @@
             "type": "number"
           },
           "scoreboardVisibility": {
-            "enum": [
-              "V",
-              "H",
-              "C",
-              "P"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScoreboardVisibility"
+              }
+            ]
           },
           "showShortDisplay": {
             "type": "boolean"
@@ -12544,31 +12614,23 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 50,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
@@ -12576,12 +12638,7 @@
             "name": "phase",
             "required": false,
             "schema": {
-              "enum": [
-                "upcoming",
-                "running",
-                "ended"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/ContestPhase"
             }
           },
           {
@@ -12976,31 +13033,23 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 20,
               "maximum": 50,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           }
         ],
@@ -13428,13 +13477,14 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "application/zip": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReadStream"
+                  "format": "binary",
+                  "type": "string"
                 }
               }
             },
-            "description": ""
+            "description": "The file, as an attachment."
           },
           "default": {
             "content": {
@@ -13806,31 +13856,23 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 50,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
@@ -13987,14 +14029,10 @@
             "description": "Include virtual participations.",
             "in": "query",
             "name": "virtual",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": false
+              "default": false,
+              "type": "boolean"
             }
           },
           {
@@ -14801,7 +14839,21 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ContestAnnouncementFrame"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResyncFrame"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A stream of frames; `event` names each one."
           },
           "default": {
             "content": {

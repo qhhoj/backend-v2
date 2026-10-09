@@ -11,9 +11,16 @@ import type {
 import { sseFrame } from '../../events/sse';
 import { STREAM_LIMITS } from '../../events/stream-limits';
 import type { StreamLimits } from '../../events/stream-limits';
+import { ContestAnnouncementEventResponse } from './dto/contest-stream-frames.response';
 import { ContestAccess } from '../core/contest-access';
 import { ContestViewerService } from '../core/contest-viewer.service';
 import { ContestsRepository } from '../core/contests.repository';
+
+/** The `data` of an `announcement` event; the event name is the SSE `event:` line, not a member. */
+export const announcementFrameData = (
+  contestId: string,
+  announcementId: string,
+): ContestAnnouncementEventResponse => ({ contestId, announcementId });
 
 interface ContestStream extends OpenStream {
   contestId: string;
@@ -77,10 +84,10 @@ export class ContestStreamsService implements EventChannel {
   deliver(raw: string): void {
     const event = parseContestEvent(raw);
     if (!event) return;
-    const frame = sseFrame(event.type, {
-      contestId: event.contestId,
-      announcementId: event.announcementId,
-    });
+    const frame = sseFrame(
+      event.type,
+      announcementFrameData(event.contestId, event.announcementId),
+    );
     for (const entry of this.byContest.get(event.contestId) ?? [])
       entry.stream.send(frame);
   }

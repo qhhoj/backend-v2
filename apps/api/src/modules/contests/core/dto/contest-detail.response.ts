@@ -3,7 +3,7 @@ import type { UserDocument } from '@libs/auth';
 import { participationEnd, problemLabel } from '@libs/contests';
 import type { ProblemCell } from '@libs/contests';
 import { unique } from '@libs/common';
-import { uuidStr } from '@libs/database';
+import { LABEL_STYLES, SCOREBOARD_VISIBILITIES, uuidStr } from '@libs/database';
 import type {
   Contest,
   ContestParticipation,
@@ -203,6 +203,10 @@ export class ContestDetailResponse extends ContestSummaryResponse {
   descriptionHtml!: string;
   authors!: UserSummaryResponse[];
   frozenLastMinutes!: number;
+  @ApiProperty({
+    enum: SCOREBOARD_VISIBILITIES,
+    enumName: 'ScoreboardVisibility',
+  })
   scoreboardVisibility!: ScoreboardVisibility;
   showSubmissionList!: boolean;
   pointsPrecision!: number;
@@ -210,6 +214,7 @@ export class ContestDetailResponse extends ContestSummaryResponse {
   hideProblemTags!: boolean;
   hideProblemAuthors!: boolean;
   showShortDisplay!: boolean;
+  @ApiProperty({ enum: LABEL_STYLES, enumName: 'ContestLabelStyle' })
   labelStyle!: LabelStyle;
   @ApiProperty({
     type: 'object',

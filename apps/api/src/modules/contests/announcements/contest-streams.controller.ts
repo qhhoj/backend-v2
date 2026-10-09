@@ -1,8 +1,11 @@
 import { Controller, Get, Param, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CurrentAuth, Public } from '@libs/auth';
+import { ApiEventStream } from '@libs/common';
 import type { AuthContext } from '@libs/auth';
+import { ResyncFrame } from '../../events/dto/resync-frame.response';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
+import { ContestAnnouncementFrame } from './dto/contest-stream-frames.response';
 import { ContestStreamsService } from './contest-streams.service';
 
 /** Server-sent events; see `SubmissionStreamsController`. */
@@ -11,6 +14,7 @@ export class ContestStreamsController {
   constructor(private readonly streams: ContestStreamsService) {}
 
   /** Contest announcements as ids (`announcement`), for anyone who sees the contest; `resync` after a lost subscription. */
+  @ApiEventStream(ContestAnnouncementFrame, ResyncFrame)
   @Public()
   @Get(':key')
   async contest(
