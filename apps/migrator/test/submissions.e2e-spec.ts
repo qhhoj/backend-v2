@@ -54,6 +54,17 @@ describe('submissions job', () => {
     expect((await submission(7001))!.points).toBe(400);
   });
 
+  it('rescores a stale legacy score above its unclamped problem points, and reports it', async () => {
+    // 7014: 1250 on the 1000-point p7, all cases passed.
+    expect((await submission(7014))!.points).toBe(1000);
+    expect(reports.submissions).toContain(
+      "judge_submission:7014 scored above its problem's points, rescored",
+    );
+    expect(reports.submissions).not.toContain(
+      "judge_submission:7001 scored above its problem's points, rescored",
+    );
+  });
+
   it('requeues in-flight submissions and nulls an empty result', async () => {
     expect(await submission(7002)).toMatchObject({
       status: 'QU',

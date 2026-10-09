@@ -52,8 +52,11 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
     s.user_id, s.contest_object_id, s.judged_date, s.locked_after, s.rejudged_date
     FROM judge_submission s ${importedSubmission('s')} ORDER BY s.id`;
   children: ChildQuery<CaseRow> = { sql: TESTCASES_SQL, key: 'submission_id' };
-  /** Problems whose points the problems job clamps: legacy id -> clamped points and partial flag. */
-  private clamped = new Map<number, { points: number; partial: boolean }>();
+  /** Every imported problem: legacy id -> v2 points (clamped by the problems job), partial flag, whether clamped. */
+  private problems = new Map<
+    number,
+    { points: number; partial: boolean; clamped: boolean }
+  >();
 
   async prepare(source: LegacySourceService) {
     const { min, max } = PROBLEM_LIMITS.points;
@@ -62,18 +65,17 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
       points: number;
       partial: number;
     }>(
-      `SELECT p.id, p.points, p.partial FROM judge_problem p ${importedProblem('p')}
-       WHERE p.points < ? OR p.points > ?`,
-      [min, max],
+      `SELECT p.id, p.points, p.partial FROM judge_problem p ${importedProblem('p')}`,
     );
-    this.clamped = new Map(
-      rows.map((row) => [
-        Number(row.id),
-        {
-          points: Math.min(max, Math.max(min, Number(row.points))),
-          partial: Boolean(row.partial),
-        },
-      ]),
+    this.problems = new Map(
+      rows.map((row) => {
+        const points = Math.min(max, Math.max(min, Number(row.points)));
+        const clamped = points !== Number(row.points);
+        return [
+          Number(row.id),
+          { points, partial: Boolean(row.partial), clamped },
+        ];
+      }),
     );
   }
 
@@ -103,7 +105,7 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
     return {
       time: row.time,
       memory: row.memory,
-      points: this.pointsOf(row),
+      points: this.pointsOf(row, ctx),
       casePoints: Number(row.case_points ?? 0),
       caseTotal: Number(row.case_total ?? 0),
       error: row.error,
@@ -116,10 +118,19 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
     };
   }
 
-  /** A graded submission on a clamped problem is scored against the clamped points, as `problem-rescore` would; the legacy value was scaled to the old points. */
-  private pointsOf(row: Row): number | null {
-    const problem = this.clamped.get(Number(row.problem_id));
+  /**
+   * A graded submission on a clamped problem is scored against the clamped points, as `problem-rescore` would; the legacy value was scaled to the old points.
+   * So is a stale legacy score above its problem's points (the points were lowered without a rescore), reported.
+   */
+  private pointsOf(row: Row, ctx: MapCtx): number | null {
+    const problem = this.problems.get(Number(row.problem_id));
     if (!problem || row.points === null) return row.points;
+    if (!problem.clamped) {
+      if (Number(row.points) <= problem.points) return row.points;
+      ctx.report(
+        `judge_submission:${row.id} scored above its problem's points, rescored`,
+      );
+    }
     return submissionPoints(
       Number(row.case_points ?? 0),
       Number(row.case_total ?? 0),
