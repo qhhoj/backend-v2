@@ -522,6 +522,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
 ## Env and deploy
 
+- Production install, nginx, systemd units, env template, cutover and rollback: `deploy/RUNBOOK.md`
 - `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env); the migrator reads only `MONGO_URL` and `LEGACY_*`
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart

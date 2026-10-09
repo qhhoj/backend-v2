@@ -1,0 +1,20 @@
+[Unit]
+Description=QHHOJ worker (PDF, Polygon import, similarity, exports)
+After=network-online.target mongod.service redis.service
+Wants=network-online.target
+PartOf=qhhoj.target
+
+[Service]
+User=qhhoj
+WorkingDirectory=/opt/qhhoj/backend
+EnvironmentFile=/etc/qhhoj/env
+ExecStart=/usr/bin/node dist/apps/worker/main
+MemoryMax=6G
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=qhhoj.target
