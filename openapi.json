@@ -4942,6 +4942,40 @@
         ],
         "type": "object"
       },
+      "PackageBuildingResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "building"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "PackageStatusResponse": {
+        "properties": {
+          "key": {
+            "description": "`<dataVersion>.<contentHash>` of what the build is (or was) for.",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "building",
+              "ready"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "key"
+        ],
+        "type": "object"
+      },
       "PageMetaResponse": {
         "properties": {
           "page": {
@@ -22125,6 +22159,151 @@
         "tags": [
           "ProblemUploads"
         ]
+      }
+    },
+    "/api/internal/problems/{code}/package": {
+      "get": {
+        "operationId": "ProblemPackageController_download",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file, as an attachment."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PackageBuildingResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Still building (see Retry-After)."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "200 the zip (attachment), 202 while building, 404 `package_not_built`, 409 `package_too_large`, 503 `package_unavailable`.",
+        "tags": [
+          "ProblemPackage"
+        ],
+        "x-enveloped": true
+      },
+      "post": {
+        "operationId": "ProblemPackageController_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PackageStatusResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The current package is cached."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PackageStatusResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A build is queued or running; poll `GET` on the same path."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "200 `{data: {status: 'ready', key}}` when the current package is cached, 202 `{data: {status: 'building', key}}` when a build is queued or running. Plain `@Res()` because the status depends on the answer.",
+        "tags": [
+          "ProblemPackage"
+        ],
+        "x-enveloped": true
       }
     },
     "/api/internal/problems/{code}/pdf": {

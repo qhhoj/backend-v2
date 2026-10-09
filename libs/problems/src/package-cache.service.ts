@@ -8,6 +8,7 @@ import {
   rename,
   rm,
   stat,
+  utimes,
 } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
@@ -17,6 +18,14 @@ import { PROBLEM_CODE_PATTERN } from '@libs/database';
 import { PACKAGE_CACHE_MAX_BYTES } from './lifecycle-queues';
 
 const KEY_PATTERN = /^\d+\.[0-9a-f]{12}$/;
+/** An error the caller treats as "already gone": ENOENT becomes `fallback`, anything else is rethrown. */
+const ignoreMissing =
+  <T>(fallback: T) =>
+  (error: NodeJS.ErrnoException): T => {
+    if (error.code === 'ENOENT') return fallback;
+    throw error;
+  };
+
 /** A temporary file this old is the debris of a crashed build. */
 const STRAY_TEMPORARY_MS = 60 * 60 * 1000;
 
@@ -38,20 +47,21 @@ export class PackageCacheService {
   async has(code: string, key: string): Promise<boolean> {
     const path = this.pathOf(code, key);
     await assertRealPathInside(this.root, path);
-    return access(path).then(
+    const present = await access(path).then(
       () => true,
       () => false,
     );
+    if (present) await this.touch(path);
+    return present;
   }
 
   /** The cached file opened for reading (caller closes it), or null; holding the handle means a later deletion cannot break a response that already started. */
   async open(code: string, key: string): Promise<FileHandle | null> {
     const path = this.pathOf(code, key);
     await assertRealPathInside(this.root, path);
-    return open(path, 'r').catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    });
+    const handle = await open(path, 'r').catch(ignoreMissing(null));
+    if (handle) await this.touch(path);
+    return handle;
   }
 
   /** `produce` writes the zip to a temporary path; it is renamed into place only when it resolves, then the problem's other keys are removed. */
@@ -78,9 +88,13 @@ export class PackageCacheService {
   /** Total cache cap (preflight M10): the oldest zips go first until the cache holds at most `maxBytes`; returns how many went. */
   async evictToLimit(maxBytes: number): Promise<number> {
     const zips: Array<{ name: string; size: number; mtimeMs: number }> = [];
-    for (const name of await this.names())
-      if (name.endsWith('.zip'))
-        zips.push({ name, ...(await stat(this.resolveInside(name))) });
+    for (const name of await this.names()) {
+      if (!name.endsWith('.zip')) continue;
+      const found = await stat(this.resolveInside(name)).catch(
+        ignoreMissing(null),
+      );
+      if (found) zips.push({ name, size: found.size, mtimeMs: found.mtimeMs });
+    }
     zips.sort((first, second) => first.mtimeMs - second.mtimeMs);
     let total = zips.reduce((sum, zip) => sum + zip.size, 0);
     let removed = 0;
@@ -109,7 +123,9 @@ export class PackageCacheService {
       const isZip = name.endsWith('.zip');
       if (!isZip && !name.endsWith('.tmp')) continue;
       const path = this.resolveInside(name);
-      const { mtimeMs } = await stat(path);
+      const found = await stat(path).catch(ignoreMissing(null));
+      if (!found) continue;
+      const { mtimeMs } = found;
       const limit = isZip ? maxAgeMs : STRAY_TEMPORARY_MS;
       if (now - mtimeMs <= limit) continue;
       await rm(path, { force: true });
@@ -118,11 +134,14 @@ export class PackageCacheService {
     return removed;
   }
 
+  /** A hit counts as use: the newest mtime is the last one evicted. A file deleted meanwhile is not an error. */
+  private async touch(path: string): Promise<void> {
+    const now = new Date();
+    await utimes(path, now, now).catch(ignoreMissing(undefined));
+  }
+
   private async names(): Promise<string[]> {
-    return readdir(this.root).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return [];
-      throw error;
-    });
+    return readdir(this.root).catch(ignoreMissing([]));
   }
 
   private assertCode(code: string): void {

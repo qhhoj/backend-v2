@@ -375,6 +375,8 @@ describe('OpenAPI document', () => {
       'GET /api/internal/auth/social/{provider}/callback 200',
       // The PDF itself (application/pdf); its 202 and 503 are documented on the route.
       'GET /api/internal/problems/{code}/pdf 200',
+      // The package zip (application/zip); its 202 is documented on the route.
+      'GET /api/internal/problems/{code}/package 200',
     ]);
 
     it('documents the session response inside the data envelope with its members', async () => {

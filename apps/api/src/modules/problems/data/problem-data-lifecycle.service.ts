@@ -4,6 +4,7 @@ import type { OnModuleInit } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { STATEMENT_LANGUAGES } from '@libs/database';
 import {
+  PackageCacheService,
   PDF_QUEUE,
   PdfCacheService,
   pdfJobId,
@@ -21,6 +22,7 @@ export class ProblemDataLifecycleService implements OnModuleInit {
     private readonly repository: ProblemsRepository,
     private readonly dataFiles: ProblemDataFilesService,
     private readonly pdfCache: PdfCacheService,
+    private readonly packages: PackageCacheService,
     private readonly events: ProblemEvents,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
   ) {}
@@ -42,6 +44,8 @@ export class ProblemDataLifecycleService implements OnModuleInit {
     try {
       await this.dropPdfsOf(oldCode);
       await this.dropPdfsOf(newCode);
+      await this.packages.deleteAll(oldCode);
+      await this.packages.deleteAll(newCode);
       await this.dataFiles.rename(oldCode, newCode);
     } catch (error) {
       this.logger.error(

@@ -1,7 +1,9 @@
 import {
   mkdirSync,
   readdirSync,
+  rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -138,14 +140,41 @@ describe('problem package build', () => {
     expect(manifest.data.cases.map((row) => row.input)).toEqual(['1.in']);
   });
 
+  it('refuses a data file that is a symlink out of the data root, and builds no zip', async () => {
+    const problem = await seedPackageProblem('pkg_link');
+    const outside = join(worker.pdfCacheRoot, 'outside-secret.txt');
+    writeFileSync(outside, 'SECRET');
+    const checker = join(dataDirectory(problem.code), 'checker.cpp');
+    rmSync(checker);
+    symlinkSync(outside, checker);
+    await expect(
+      service.build({ code: problem.code, key: 'ignored' }),
+    ).rejects.toThrow('symlink');
+    expect(
+      readdirSync(packagesDirectory()).filter((name) =>
+        name.startsWith('pkg_link.'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('refuses a data row that names a path outside the problem directory', async () => {
+    const problem = await seedPackageProblem('pkg_dots');
+    await worker.problems.updateOne(
+      { _id: problem._id },
+      { 'data.archive': '../pkg_sum/tests.zip' },
+    );
+    await expect(
+      service.build({ code: problem.code, key: 'ignored' }),
+    ).rejects.toThrow();
+  });
+
   it('builds the same content once and does not rewrite the file', async () => {
     const problem = await seedPackageProblem('pkg_once');
     const key = await service.build({ code: problem.code, key: 'x' });
     const path = cache.pathOf(problem.code, key);
-    const past = new Date(Date.now() - 60_000);
-    utimesSync(path, past, past);
+    const { ino } = statSync(path);
     expect(await service.build({ code: problem.code, key: 'x' })).toBe(key);
-    expect(Math.round(statSync(path).mtimeMs)).toBe(past.getTime());
+    expect(statSync(path).ino).toBe(ino);
   });
 
   it('gives an edited problem a new key and drops the old zip', async () => {

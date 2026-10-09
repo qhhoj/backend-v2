@@ -33,6 +33,8 @@ import { ProblemImportsController } from './imports/problem-imports.controller';
 import { ProblemImportsService } from './imports/problem-imports.service';
 import { ProblemLifecycleController } from './lifecycle/problem-lifecycle.controller';
 import { ProblemLifecycleService } from './lifecycle/problem-lifecycle.service';
+import { ProblemPackageController } from './package/problem-package.controller';
+import { ProblemPackageService } from './package/problem-package.service';
 import { ProblemPdfController } from './pdf/problem-pdf.controller';
 import { ProblemPdfService } from './pdf/problem-pdf.service';
 import { ProblemUploadsController } from './uploads/problem-uploads.controller';
@@ -81,6 +83,7 @@ const repositories = [
     ProblemDataController,
     ProblemPdfController,
     ProblemLifecycleController,
+    ProblemPackageController,
   ],
   providers: [
     ...queriers,
@@ -99,6 +102,7 @@ const repositories = [
     ProblemImportsService,
     ProblemPdfService,
     ProblemLifecycleService,
+    ProblemPackageService,
     ProblemRescoreEnqueuerService,
     ProblemEvents,
     RateLimitService,

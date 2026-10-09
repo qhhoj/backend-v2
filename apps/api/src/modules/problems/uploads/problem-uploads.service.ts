@@ -10,6 +10,7 @@ import {
   safeFileName,
   isPdf,
   isSvgWithinLimits,
+  PackageCacheService,
   sniffImage,
   SVG_MAX_BYTES,
 } from '@libs/problems';
@@ -52,6 +53,7 @@ export class ProblemUploadsService {
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly events: ProblemEvents,
+    private readonly packages: PackageCacheService,
   ) {}
 
   async uploadImage(
@@ -163,6 +165,8 @@ export class ProblemUploadsService {
       await this.storage.delete(relativePath);
       throw error;
     }
+    // The content key cannot see a same-named material; drop the problem's cached packages (a build already running can still write one stale zip under the old key, accepted).
+    await this.packages.deleteAll(problem.code);
     const previousUrl = problem[field];
     const previous = this.storage.relativePathOf(
       previousUrl,
