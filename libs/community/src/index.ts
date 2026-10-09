@@ -18,3 +18,4 @@ export * from './ticket-timeline';
 export * from './ticket-canned-replies';
 export * from './official-mode';
 export * from './ticket-notifications';
+export * from './organization-usage-queues';
