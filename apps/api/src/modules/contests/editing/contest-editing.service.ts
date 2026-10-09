@@ -36,6 +36,8 @@ import type {
   UpdateContestDto,
 } from './dto/contest-edit.dto';
 import { ContestEditFieldsService } from './contest-edit-fields.service';
+import { chargedOrganization } from '../../organizations/quota/quota-charge';
+import { QuotaService } from '../../organizations/quota/quota.service';
 
 /** `GET /contests/current` shadows a contest with this key. */
 export const RESERVED_CONTEST_KEYS: readonly string[] = ['current'];
@@ -85,6 +87,7 @@ export class ContestEditingService {
     @InjectQueue(CONTEST_PUBLISH_QUEUE)
     private readonly publishes: Queue<ContestPublishJob>,
     @Inject(REDIS) private readonly redis: Redis,
+    private readonly quota: QuotaService,
   ) {}
 
   /** Legacy `CreateContest`: the creator becomes an author. */
@@ -148,15 +151,20 @@ export class ContestEditingService {
     return this.contestsService.detail(principal, contest.key);
   }
 
-  /** The caller becomes an author; FSO judging is scheduled for the new end. Shared with the sync API, which validates through `ContestEditFieldsService` itself. */
+  /** The caller becomes an author; FSO judging is scheduled for the new end. Shared with the sync API, which validates through `ContestEditFieldsService` itself. An organization-private contest is charged to its first listed organization, refunded when the create fails. */
   async insert(
     principal: Principal,
     fields: Partial<Contest>,
   ): Promise<ContestDocument> {
-    const contest = await this.contests.create({
-      ...fields,
-      authors: unique([...(fields.authors ?? []), principal.userId]),
-    });
+    const contest = await this.quota.charged(
+      chargedOrganization(principal, fields),
+      { kind: 'contest', userId: principal.userId, ref: fields.key ?? '' },
+      () =>
+        this.contests.create({
+          ...fields,
+          authors: unique([...(fields.authors ?? []), principal.userId]),
+        }),
+    );
     await this.rescheduleEndJobs({ previous: null, next: contest });
     return contest;
   }
@@ -197,7 +205,7 @@ export class ContestEditingService {
     return this.contestsService.detail(principal, key);
   }
 
-  /** Writes already-validated fields and runs every follow-up of an edit. Shared with the sync API, which validates through `ContestEditFieldsService` itself. */
+  /** Writes already-validated fields and runs every follow-up of an edit. Shared with the sync API, which validates through `ContestEditFieldsService` itself. An organization-private contest is charged to its first listed organization, refunded when the create fails. */
   async applyFields(
     contest: ContestDocument,
     fields: Partial<Contest>,

@@ -13,6 +13,7 @@ import {
   CONTEST_RESCORE_QUEUE,
 } from '@libs/contests';
 import { EventsModule } from '../events/events.module';
+import { OrganizationQuotaModule } from '../organizations/quota/organization-quota.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './core/contest-access.module';
@@ -70,6 +71,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     GhostsModule,
     ReplayModule,
     EventsModule,
+    OrganizationQuotaModule,
     ProblemsApiModule,
     SubmissionsApiModule,
     BullModule.registerQueue(
