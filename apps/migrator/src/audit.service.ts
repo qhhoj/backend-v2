@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ENUM_CHECKS, ORPHAN_CHECKS, RANGE_CHECKS } from './audit-checks';
 import { LegacySourceService } from './legacy-source.service';
 
 const JSON_COLUMNS = [
@@ -10,6 +11,14 @@ const CASE_INSENSITIVE_COLUMNS: [string, string, boolean][] = [
   ['auth_user', 'username', true],
   ['auth_user', 'email', false],
   ['auth_group', 'name', true],
+  ['judge_organization', 'slug', true],
+  ['judge_problemgroup', 'name', true],
+  ['judge_problemtype', 'name', true],
+  ['judge_taggroup', 'code', true],
+  ['judge_tag', 'code', true],
+  ['judge_tagproblem', 'code', true],
+  ['judge_language', 'key', true],
+  ['judge_license', 'key', true],
 ];
 const SUPPORTED_HASHES = ['pbkdf2_sha256', 'pbkdf2_sha1'];
 
@@ -30,6 +39,10 @@ export class AuditService {
     await this.checkCaseDuplicates(report);
     await this.checkPasswordHashes(report);
     await this.checkWebauthn(report);
+    await this.checkRanges(report);
+    await this.checkEnums(report);
+    await this.checkOrphans(report);
+    await this.checkFormatKeys(report);
     return report;
   }
 
@@ -69,13 +82,19 @@ export class AuditService {
 
   private async checkCaseDuplicates({ errors, warnings }: AuditReport) {
     for (const [tableName, columnName, unique] of CASE_INSENSITIVE_COLUMNS) {
-      const duplicates = await this.source.query<{ value: string }>(
-        `SELECT LOWER(\`${columnName}\`) value FROM \`${tableName}\` WHERE \`${columnName}\` <> '' GROUP BY LOWER(\`${columnName}\`) HAVING COUNT(DISTINCT BINARY \`${columnName}\`) > 1`,
+      const groups = await this.source.query<{ ids: string }>(
+        `SELECT GROUP_CONCAT(id ORDER BY id SEPARATOR ' ') ids FROM \`${tableName}\` WHERE \`${columnName}\` <> '' GROUP BY LOWER(\`${columnName}\`) HAVING COUNT(DISTINCT BINARY \`${columnName}\`) > 1 ORDER BY MIN(id)`,
       );
-      for (const { value } of duplicates)
-        (unique ? errors : warnings).push(
-          `${tableName}.${columnName}: case-only duplicate "${value}"`,
-        );
+      if (!groups.length) continue;
+      const named = groups.map(({ ids }) =>
+        ids
+          .split(' ')
+          .map((id) => `${tableName}:${id}`)
+          .join(' '),
+      );
+      (unique ? errors : warnings).push(
+        `${tableName}.${columnName}: ${groups.length} case-only duplicate group(s): ${named.join('; ')}`,
+      );
     }
   }
 
@@ -101,5 +120,52 @@ export class AuditService {
       warnings.push(
         `${credentials} legacy WebAuthn credential(s): verify publicKey format`,
       );
+  }
+
+  /** A `bound` line is an error: the kept rows can never pass `verify` (Step 6 stop rule). */
+  private async checkRanges({ errors, warnings }: AuditReport) {
+    for (const [what, sql, bound] of RANGE_CHECKS) {
+      const total = await this.count(sql);
+      if (total) (bound ? errors : warnings).push(`${what}: ${total} row(s)`);
+    }
+  }
+
+  /** VNOJ keeps `LSO` upper-case (Task 11 renames it); every format/key pair is listed so an unknown key is seen before L5 runs. Keys only, never values. */
+  private async checkFormatKeys({ warnings }: AuditReport) {
+    const pairs = await this.source.query<{
+      format: string;
+      keys: string | null;
+    }>(
+      "SELECT DISTINCT format_name AS format, JSON_KEYS(format_config) AS `keys` FROM judge_contest WHERE format_config <> '' AND JSON_VALID(format_config)",
+    );
+    for (const { format, keys } of pairs)
+      warnings.push(
+        `judge_contest.format_config keys of ${format}: ${keys ?? '[]'}`,
+      );
+  }
+
+  private async checkEnums({ warnings }: AuditReport) {
+    for (const [table, column, accepted] of ENUM_CHECKS) {
+      const values = await this.source.query<{ value: string }>(
+        `SELECT DISTINCT \`${column}\` AS value FROM \`${table}\` WHERE \`${column}\` IS NOT NULL`,
+      );
+      for (const { value } of values)
+        if (!accepted.includes(value))
+          warnings.push(
+            `${table}.${column}: value "${value}" not in the v2 enum`,
+          );
+    }
+  }
+
+  private async checkOrphans({ warnings }: AuditReport) {
+    for (const [child, column, parent] of ORPHAN_CHECKS) {
+      const total = await this.count(
+        `SELECT COUNT(*) total FROM \`${child}\` c LEFT JOIN \`${parent}\` p ON p.id = c.\`${column}\` WHERE c.\`${column}\` IS NOT NULL AND p.id IS NULL`,
+      );
+      if (total)
+        warnings.push(
+          `${child}.${column} → ${parent}: ${total} dangling row(s)`,
+        );
+    }
   }
 }
