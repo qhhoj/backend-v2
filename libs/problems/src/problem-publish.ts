@@ -10,6 +10,7 @@ export const PUBLISH_SKIP_REASONS = [
   'no_permission',
   'organization_private',
   'not_found',
+  'deleted',
 ] as const;
 export type PublishSkipReason = (typeof PUBLISH_SKIP_REASONS)[number];
 export interface PublishVerdict {
@@ -31,6 +32,7 @@ export function publishVerdict(
   problem: Problem | null,
 ): PublishVerdict {
   if (!problem) return { outcome: 'skipped', reason: 'not_found' };
+  if (problem.deletedAt) return { outcome: 'skipped', reason: 'deleted' };
   if (problem.isPublic) return { outcome: 'unchanged', reason: null };
   if (problem.isOrganizationPrivate)
     return { outcome: 'skipped', reason: 'organization_private' };

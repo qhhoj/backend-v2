@@ -14,6 +14,7 @@ import type { SubmissionEventType } from '@libs/judging';
 import { SubmissionsService } from '../src/modules/submissions/core/submissions.service';
 import { STREAM_LIMITS } from '../src/modules/events/stream-limits';
 import type { StreamLimits } from '../src/modules/events/stream-limits';
+import { softDelete } from './deleted-problem-fixtures';
 import {
   createProblem,
   createUserWith,
@@ -102,6 +103,8 @@ describe('submission event streams', () => {
       ['stream_hidden', { isPublic: false }],
       ['stream_org', { isOrganizationPrivate: true }],
       ['stream_flip', {}],
+      ['stream_gone', {}],
+      ['stream_dead', {}],
     ] as const)
       problems[code] = (
         await createProblem(api, catalog, { code, ...extra })
@@ -191,6 +194,43 @@ describe('submission event streams', () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(feed.messages).toEqual([]);
+  });
+
+  it('public feed: a submission of a deleted problem never appears', async () => {
+    const feed = await open(null, EVENTS);
+    await waitUntil(() => streams.openCounts().feed === 1);
+    await softDelete(api, problems.stream_gone);
+    const gone = await seed('stream_gone');
+    const live = await seed('stream_a');
+    await publish(gone, 'done', 'D');
+    await publish(live, 'done', 'D');
+    expect((await feed.next('done')).data).toMatchObject({
+      submissionId: live._id,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(feed.messages).toEqual([]);
+  });
+
+  it('a deleted problem: owner and staff watch the status but never the cases, others get 404', async () => {
+    await softDelete(api, problems.stream_dead);
+    const submission = await seed('stream_dead');
+    const path = `${EVENTS}/${submission._id}`;
+    const owner = await open('owner', path);
+    const root = await open('root', path);
+    const stranger = await open('other', path);
+    expect(stranger.status).toBe(404);
+    expect((await owner.next('state')).data).toMatchObject({
+      currentTestcase: null,
+    });
+    await root.next('state');
+    await publish(submission, 'test-case', 'G', 2);
+    await publish(submission, 'done', 'D');
+    await owner.next('done');
+    await root.next('done');
+    for (const client of [owner, root])
+      expect(client.messages.map(({ event }) => event)).not.toContain(
+        'test-case',
+      );
   });
 
   it('caps open streams per user and per IP, and frees a slot on disconnect', async () => {

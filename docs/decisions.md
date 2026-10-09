@@ -97,6 +97,20 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Statement PDFs: Playwright job in the worker, cache `PDF_CACHE_ROOT/<code>.<lang>.pdf`, 202 while rendering, 503 with `Retry-After` on failure — render cost stays off the API.
 - Tagging needs `allowTagging` plus `judge.add_tagproblem` or rating >= 1900; no external OJ calls — legacy rule, no outbound dependency.
 - Languages admin has no delete and no key rename — judges report languages by key and submissions, problems and judges reference them; a rename or delete would orphan them.
+- Soft delete is `deletedAt` (absent while live) filtered by `ProblemsRepository` in every finder; the deleted set is read by range so the sparse index serves it — one choke point, and a structural spec classifies every other direct reader of the collection so a new unfiltered read fails a test.
+- Purge keeps submissions: it removes the data directory, rendered PDFs, packages, uploads (unless shared), comments and revisions and leaves a tombstone with code and name; `purgeStartedAt` is claimed first so a restore cannot interleave and a killed purge is simply rerun — students keep their history and re-rates stay stable.
+- The purge deletes the problem's revisions; the structured `problem-purged` log line (problem id, code, counts) is the audit record — a tombstone has no statement left to diff against.
+- A purge claims with `purgeStartedAt` (blocks restore) and sets `purgedAt` last; the sweep retries any claim an hour old, whatever the problem's age, so a crashed purge-now is finished the next night instead of waiting out the grace period.
+- A symlinked problem data directory is refused by the purge (even one pointing inside the root): the judge marker would be written into the link's target and left there.
+- A queued or running submission of a deleted problem is still judged (the bridge reads it deliberately unfiltered, with the problem's limits); effects ignore it, so points, solver counts and contest scores do not move.
+- Submissions of a deleted or purged problem are visible only to their owner and to `judge.view_all_submission` holders, with no cases and no feedback; everyone else gets 404.
+- Rejudge and reject of a submission of a deleted problem answer 409 `problem_deleted`: they would overwrite the history the purge ruling promises to keep (abort by the owner stays).
+- Delete and restore recompute the solvers (points, solved counts) through their own `problem-solvers-recompute` job, because `problem-rescore` exits for a problem it cannot find; restore therefore brings the counters back.
+- `deletedIds()` is read on every submissions list call, uncached: one `distinct` over a sparse index is cheap, and a cache would show a just-deleted problem's submissions to others until it expired.
+- The package cache is an LRU keyed by the data version plus a hash of everything the package states (no statement revision exists), capped at 8 GiB with the oldest zips evicted first; packages live under `PDF_CACHE_ROOT/packages`, and the zip writer streams files (the text-only lazy zip cannot carry binary tests).
+- Package requests spend the per-user budget (10 an hour) first and the per-problem one (3 an hour) second, and a refusal by either gives the other hit back — a refused request must not eat budget it did not use.
+- Problem codes `deleted`, `meta` and `imports` are reserved (static routes and the imports prefix) by one `@IsProblemCode()` decorator on every DTO that names a new code; a deleted or tombstoned code stays taken forever by its row, and the Polygon create precheck says so before queueing.
+- Publishing after a contest skips a deleted problem with the reason `deleted` (the manual action loads it with `findIncludingDeleted` to say so; the worker's reader filters it and counts it as skipped).
 
 ## Judging and bridge
 

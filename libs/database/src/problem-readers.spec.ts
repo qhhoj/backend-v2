@@ -147,4 +147,15 @@ describe('direct readers of the problems collection', () => {
       expect(reason.length).toBeGreaterThanOrEqual(20);
     }
   });
+
+  it('names the deleted filter in every reader that claims to apply it', () => {
+    for (const [file, [treatment]] of Object.entries(PROBLEM_READERS)) {
+      if (treatment === 'S') continue;
+      const source = readFileSync(join(ROOT, file), 'utf8');
+      expect({
+        file,
+        mentionsFilter: /deletedAt|\bLIVE\b/.test(source),
+      }).toEqual({ file, mentionsFilter: true });
+    }
+  });
 });

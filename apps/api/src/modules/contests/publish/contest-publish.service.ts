@@ -89,7 +89,8 @@ export class ContestPublishService {
     problemId: string,
     run: PublishRun,
   ): Promise<PublishedProblemResponse> {
-    const problem = await this.problems.findById(problemId);
+    // S: a deleted problem is reported as `skipped: deleted`, not `not_found`.
+    const problem = await this.problems.findIncludingDeleted(problemId);
     const verdict = await this.applied(auth, problem, run);
     const editorial =
       run.editorials && problem

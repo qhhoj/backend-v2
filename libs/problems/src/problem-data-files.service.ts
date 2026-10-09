@@ -173,9 +173,11 @@ export class ProblemDataFilesService {
     });
   }
 
-  /** Drops a problem's whole directory (the purge) under the data lock and the judges' writing marker, so no upload or judge read interleaves; a missing directory is nothing to do. */
+  /** Drops a problem's whole directory (the purge) under the data lock and the judges' writing marker, so no upload or judge read interleaves; a missing directory is nothing to do. A symlinked directory is refused even when it points inside the root: the marker would be written into, and left on, the link's target. */
   async removeDirectory(code: string): Promise<void> {
     const directory = this.directoryOf(code);
+    if ((await lstat(directory).catch(() => null))?.isSymbolicLink())
+      throw new Error(`Data directory is a symlink: ${code}`);
     await this.withDataWrite(code, async () => {
       await assertRealPathInside(this.root, directory);
       await rm(directory, { recursive: true, force: true });

@@ -40,15 +40,15 @@ export class ProblemPurgeRepository {
     private readonly commentLocks: Model<CommentLock>,
   ) {}
 
-  /** Deleted before `cutoff`, not purged yet, and not claimed by a purge in the last hour (sparse `{deletedAt}` index). A claim older than `staleBefore` belongs to a purge that died. */
+  /** Not purged yet and either deleted before `cutoff` with no claim, or claimed before `staleBefore` whatever its age: a claim that old belongs to a purge that died, and a superuser's purge-now must not wait out the grace period to be finished (sparse `{deletedAt}` index). */
   async expiredIds(cutoff: Date, staleBefore: Date): Promise<string[]> {
     return (
       await this.problems
         .distinct('_id', {
-          deletedAt: { $gt: DELETED_SINCE, $lte: cutoff },
+          deletedAt: { $gt: DELETED_SINCE },
           purgedAt: null,
           $or: [
-            { purgeStartedAt: null },
+            { deletedAt: { $lte: cutoff }, purgeStartedAt: null },
             { purgeStartedAt: { $lte: staleBefore } },
           ],
         })

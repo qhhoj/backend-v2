@@ -47,20 +47,30 @@ export class ProblemPackageService {
     code: string,
   ): Promise<PackageStatusResponse> {
     const target = await this.targetOf(auth.principal, code);
-    await this.rateLimit.reserve(
-      [`package:user:${auth.principal.userId}:${target.code}`],
-      PACKAGE_LIMIT,
-      PACKAGE_WINDOW_SECONDS,
-    );
-    await this.rateLimit.reserve(
-      [`package:user:${auth.principal.userId}`],
-      PACKAGE_USER_LIMIT,
-      PACKAGE_WINDOW_SECONDS,
-    );
+    await this.reserveBudget(auth.principal.userId, target.code);
     if (await this.packages.has(target.code, target.key))
       return { status: 'ready', key: target.key };
     await this.enqueue(target.code, target.key);
     return { status: 'building', key: target.key };
+  }
+
+  /** The per-user budget first, then the per-problem one; a refusal by either leaves the other budget as it was, so a refused request costs the editor nothing but the counter that refused it. */
+  private async reserveBudget(userId: string, code: string): Promise<void> {
+    const releaseUser = await this.rateLimit.reserve(
+      [`package:user:${userId}`],
+      PACKAGE_USER_LIMIT,
+      PACKAGE_WINDOW_SECONDS,
+    );
+    try {
+      await this.rateLimit.reserve(
+        [`package:user:${userId}:${code}`],
+        PACKAGE_LIMIT,
+        PACKAGE_WINDOW_SECONDS,
+      );
+    } catch (error) {
+      await releaseUser();
+      throw error;
+    }
   }
 
   /** The cached file for the problem as it is now, or why there is none yet. */

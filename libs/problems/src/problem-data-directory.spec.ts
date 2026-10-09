@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -48,11 +49,13 @@ describe('ProblemDataFilesService.removeDirectory', () => {
     mkdirSync(join(root, 'busy'), { recursive: true });
     writeFileSync(join(root, 'busy', 'tests.zip'), 'x');
     let release!: () => void;
-    const held = files.withDataWrite(
-      'busy',
-      () => new Promise<void>((resolve) => (release = resolve)),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    let entered!: () => void;
+    const holding = new Promise<void>((resolve) => (entered = resolve));
+    const held = files.withDataWrite('busy', () => {
+      entered();
+      return new Promise<void>((resolve) => (release = resolve));
+    });
+    await holding;
     await expect(files.removeDirectory('busy')).rejects.toThrow();
     expect(existsSync(join(root, 'busy', 'tests.zip'))).toBe(true);
     release();
@@ -68,5 +71,15 @@ describe('ProblemDataFilesService.removeDirectory', () => {
     await expect(files.removeDirectory('linked')).rejects.toThrow();
     expect(existsSync(join(outside, 'keep.txt'))).toBe(true);
     rmSync(outside, { recursive: true, force: true });
+  });
+
+  it('refuses a symlink that points inside the root, so no marker is left on its target', async () => {
+    mkdirSync(join(root, 'real_target'), { recursive: true });
+    writeFileSync(join(root, 'real_target', 'tests.zip'), 'x');
+    symlinkSync(join(root, 'real_target'), join(root, 'inner_link'));
+    await expect(files.removeDirectory('inner_link')).rejects.toThrow(
+      'symlink',
+    );
+    expect(readdirSync(join(root, 'real_target'))).toEqual(['tests.zip']);
   });
 });

@@ -2,6 +2,7 @@ import { readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue, Worker } from 'bullmq';
+import { RateLimitService } from '@libs/common';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { EMPTY_TEST_CASE, emptyProblemData } from '@libs/database';
 import type { Problem } from '@libs/database';
@@ -13,6 +14,10 @@ import {
   packageKey,
 } from '@libs/problems';
 import type { ProblemPackageJob } from '@libs/problems';
+import {
+  PACKAGE_LIMIT,
+  PACKAGE_USER_LIMIT,
+} from '../src/modules/problems/package/package-rate-limits';
 import { clearRateLimits } from './contest-fixtures';
 import { softDelete } from './deleted-problem-fixtures';
 import {
@@ -88,6 +93,8 @@ describe('problem package download', () => {
     for (const [name, permissions] of [
       ['editor', ['judge.edit_own_problem']],
       ['reader', []],
+      ['bystander', ['judge.edit_own_problem']],
+      ['burst', ['judge.edit_own_problem']],
     ] as Array<[string, string[]]>) {
       const user = await createUserWith(api, name, { permissions });
       ids[name] = user._id;
@@ -107,6 +114,16 @@ describe('problem package download', () => {
     await requestPackage('reader', open.code).expect(403);
     await fetchPackage('reader', open.code).expect(403);
     await requestPackage('reader', hidden.code).expect(404);
+  });
+
+  it('is closed to a holder of edit_own_problem who is not an author, on both routes', async () => {
+    const open = await editable({ isPublic: true });
+    const hidden = await editable({ isPublic: false });
+    await requestPackage('bystander', open.code).expect(403);
+    await fetchPackage('bystander', open.code).expect(403);
+    await requestPackage('bystander', hidden.code).expect(404);
+    await fetchPackage('bystander', hidden.code).expect(404);
+    expect(await queue.getJobs(['waiting', 'active'])).toEqual([]);
   });
 
   it('queues one build per problem and key, however many editors ask', async () => {
@@ -226,6 +243,8 @@ describe('problem package download', () => {
     const key = await keyOf(problem._id);
     await cached(problem.code, key, 'OLD');
     const newCode = `${problem.code}_new`;
+    // A reused code must not serve another problem's package.
+    await cached(newCode, key, 'STALE');
     await authed(
       api.http().patch(`${PROBLEMS}/${problem.code}`),
       sessions.editor,
@@ -235,9 +254,35 @@ describe('problem package download', () => {
     const packages = join(api.pdfCacheRoot, 'packages');
     await waitUntil(
       () =>
-        !readdirSync(packages).some((name) =>
-          name.startsWith(`${problem.code}.`),
+        !readdirSync(packages).some(
+          (name) =>
+            name.startsWith(`${problem.code}.`) ||
+            name.startsWith(`${newCode}.`),
         ),
     );
+  });
+
+  describe('budgets', () => {
+    const hits = (key: string) => api.app.get(RateLimitService).count(key);
+    const problemOf = (name: string) => `package:user:${ids[name]}`;
+    const owned = (name: string) => editable({ authors: [ids[name]] });
+
+    it('a refusal by the per-user budget spends nothing of the per-problem one', async () => {
+      for (let count = 0; count < PACKAGE_USER_LIMIT; count += 1)
+        await requestPackage('burst', (await owned('burst')).code).expect(202);
+      const refused = await owned('burst');
+      await requestPackage('burst', refused.code)
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      expect(await hits(`${problemOf('burst')}:${refused.code}`)).toBe(0);
+    });
+
+    it('a refusal by the per-problem budget gives the per-user hit back', async () => {
+      const problem = await owned('bystander');
+      for (let count = 0; count < PACKAGE_LIMIT; count += 1)
+        await requestPackage('bystander', problem.code).expect(202);
+      await requestPackage('bystander', problem.code).expect(429);
+      expect(await hits(problemOf('bystander'))).toBe(PACKAGE_LIMIT);
+    });
   });
 });

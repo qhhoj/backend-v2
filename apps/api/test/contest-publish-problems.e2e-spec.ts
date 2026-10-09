@@ -277,7 +277,7 @@ describe('publish contest problems after the contest', () => {
   it('gives the hit back when a run fails midway', async () => {
     const { contest } = await endedContest([{ isPublic: true }], [ids.owner]);
     const failing = jest
-      .spyOn(api.app.get(ProblemsRepository), 'findById')
+      .spyOn(api.app.get(ProblemsRepository), 'findIncludingDeleted')
       .mockRejectedValueOnce(new Error('database down'));
     await run('owner', contest.key).expect(500);
     failing.mockRestore();

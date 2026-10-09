@@ -212,11 +212,13 @@ describe('problem purge', () => {
     const { problem } = await seedDeleted();
     const files = worker.module.get(ProblemDataFilesService);
     let release!: () => void;
-    const held = files.withDataWrite(
-      problem.code,
-      () => new Promise<void>((resolve) => (release = resolve)),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    let entered!: () => void;
+    const holding = new Promise<void>((resolve) => (entered = resolve));
+    const held = files.withDataWrite(problem.code, () => {
+      entered();
+      return new Promise<void>((resolve) => (release = resolve));
+    });
+    await holding;
     await expect(service.purge(problem._id)).rejects.toThrow();
     expect(
       existsSync(join(worker.problemDataRoot, problem.code, 'tests.zip')),
@@ -282,6 +284,17 @@ describe('problem purge', () => {
       expect.arrayContaining([problemPurgeJobId(stale.problem._id)]),
     );
     expect(queuedJobIds()).not.toContain(problemPurgeJobId(fresh.problem._id));
+  });
+
+  it('sweeps a crashed purge-now at once, although the grace period has not passed', async () => {
+    const recent = await seedDeleted(2 * DAY);
+    await worker.problems.updateOne(
+      { _id: recent.problem._id },
+      { purgeStartedAt: new Date(Date.now() - 2 * 3_600_000) },
+    );
+    purgeAdd.mockClear();
+    await service.sweep();
+    expect(queuedJobIds()).toContain(problemPurgeJobId(recent.problem._id));
   });
 
   it('cannot be restored once claimed, and a stale claim is completed by a plain purge', async () => {

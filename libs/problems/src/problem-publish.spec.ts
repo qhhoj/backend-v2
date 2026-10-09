@@ -36,6 +36,13 @@ const problem = (extra: Partial<Problem> = {}): Problem =>
 describe('publishVerdict', () => {
   const rights = ['judge.edit_own_problem', 'judge.change_public_visibility'];
 
+  it('skips a deleted problem, before anything else about it', () => {
+    const actor = principal(rights, { isSuperuser: true });
+    expect(
+      publishVerdict(actor, problem({ isPublic: true, deletedAt: new Date() })),
+    ).toEqual({ outcome: 'skipped', reason: 'deleted' });
+  });
+
   it('publishes a private problem the actor edits when they may change visibility', () => {
     const actor = principal(rights);
     expect(publishVerdict(actor, problem({ authors: [actor.userId] }))).toEqual(

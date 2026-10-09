@@ -291,7 +291,7 @@ export class ProblemsRepository {
     return { items, total };
   }
 
-  /** Every deleted problem's id: a small set, used to scope submission lists. */
+  /** Every deleted problem's id (tombstones included), used to scope submission lists. One `distinct` over the sparse `deletedAt` index per list call, not cached: a cache would keep a just-deleted problem's submissions in other users' lists until it expired. The set grows by one id per purged problem; revisit with a short cache plus event invalidation if lists get slow. */
   async deletedIds(): Promise<string[]> {
     return (await this.problems.distinct('_id', DELETED).exec()).map(uuidStr);
   }

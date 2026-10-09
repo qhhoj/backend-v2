@@ -6339,6 +6339,7 @@
       },
       "PublishSkipReason": {
         "enum": [
+          "deleted",
           "no_permission",
           "not_found",
           "organization_private"
