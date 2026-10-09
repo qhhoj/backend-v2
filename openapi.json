@@ -560,8 +560,8 @@
           "type": {
             "enum": [
               "problem",
-              "blog",
               "contest",
+              "blog",
               "editorial",
               "tagProblem"
             ],
