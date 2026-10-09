@@ -19,7 +19,7 @@ export class ErrorBodyResponse {
     additionalProperties: { type: 'array', items: { type: 'string' } },
   })
   fields?: Record<string, string[]>;
-  /** Present on validation errors: the same failures with machine codes. */
+  /** Present on every 4xx: validation failures with machine codes, or one request-level issue (`field` empty) named after the refusal (`unauthenticated`, `forbidden`, `rate_limited`, ...). */
   @ApiPropertyOptional({ type: [FieldIssueResponse] })
   issues?: FieldIssueResponse[];
 }

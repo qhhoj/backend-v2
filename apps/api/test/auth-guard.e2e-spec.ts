@@ -27,6 +27,7 @@ import {
   ApiTest,
   createUser,
   errorCode,
+  issueCodes,
   sessionCookie,
   setupApiTest,
   TEST_ENV,
@@ -139,7 +140,8 @@ describe('AuthGuard', () => {
       .http()
       .get('/guarded/private')
       .expect(401)
-      .expect(errorCode('unauthorized'));
+      .expect(errorCode('unauthorized'))
+      .expect(issueCodes(['unauthenticated']));
   });
   it('authenticates a session cookie', async () => {
     const { id } = await login();
@@ -558,7 +560,8 @@ describe('AuthGuard', () => {
       .set('Authorization', await useApiToken())
       .expect(403)
       .expect(errorCode('forbidden'))
-      .expect(errorMessage('Permission denied'));
+      .expect(errorMessage('Permission denied'))
+      .expect(issueCodes(['forbidden']));
   });
   it('reports the first failing check: session-only, pwned password, impersonation, then permission', async () => {
     const impersonatorId = await createSuperuser('ivan');
@@ -704,7 +707,8 @@ describe('AuthGuard', () => {
         await serviceRoute(`Bearer ${generateServiceKey().key}`).expect(401);
       await serviceRoute(`Bearer ${generateServiceKey().key}`)
         .expect(429)
-        .expect(errorCode('rate_limited'));
+        .expect(errorCode('rate_limited'))
+        .expect(issueCodes(['rate_limited']));
       const { bearer } = await makeClient();
       await serviceRoute(bearer).expect(429);
     });

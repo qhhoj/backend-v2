@@ -218,6 +218,13 @@ describe('auth session endpoints', () => {
       .send({ username: 'carol', password: 'correct horse battery' })
       .expect(403, {
         error: {
+          issues: [
+            {
+              field: '',
+              code: 'banned',
+              message: 'This account has been banned. Reason: spam',
+            },
+          ],
           code: 'banned',
           message: 'This account has been banned. Reason: spam',
           banReason: 'spam',

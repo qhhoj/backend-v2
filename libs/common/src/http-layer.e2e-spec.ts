@@ -74,11 +74,24 @@ describe('http layer', () => {
   it('maps AppError', () =>
     http()
       .get('/t/app-error')
-      .expect(403, { error: { code: 'banned', message: 'Banned: spam' } }));
+      .expect(403, {
+        error: {
+          issues: [{ field: '', code: 'banned', message: 'Banned: spam' }],
+          code: 'banned',
+          message: 'Banned: spam',
+        },
+      }));
   it('merges extras next to code and message without overriding them', () =>
     http()
       .get('/t/app-error-extra')
-      .expect(409, { error: { hint: 'y', code: 'conflict', message: 'x' } }));
+      .expect(409, {
+        error: {
+          issues: [{ field: '', code: 'conflict', message: 'x' }],
+          hint: 'y',
+          code: 'conflict',
+          message: 'x',
+        },
+      }));
   it('answers field issues next to the field messages', () =>
     http()
       .get('/t/issues')

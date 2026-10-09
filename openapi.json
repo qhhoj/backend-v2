@@ -3127,7 +3127,7 @@
             "type": "object"
           },
           "issues": {
-            "description": "Present on validation errors: the same failures with machine codes.",
+            "description": "Present on every 4xx: validation failures with machine codes, or one request-level issue (`field` empty) named after the refusal (`unauthenticated`, `forbidden`, `rate_limited`, ...).",
             "items": {
               "$ref": "#/components/schemas/FieldIssueResponse"
             },

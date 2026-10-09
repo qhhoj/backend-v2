@@ -10,7 +10,7 @@ import type {
 import { MAX_MARKDOWN_LENGTH } from '../src/modules/problems/core/dto/limits';
 import { authed } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
-import { errorCode, setupApiTest } from './setup';
+import { errorCode, issueCodes, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import { signedIn } from './ticket-fixtures';
 
@@ -659,7 +659,8 @@ describe('site content administration', () => {
         await preview('x', session).expect(200);
       const refused = await preview('x', session)
         .expect(429)
-        .expect(errorCode('rate_limited'));
+        .expect(errorCode('rate_limited'))
+        .expect(issueCodes(['rate_limited']));
       expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
     });
   });

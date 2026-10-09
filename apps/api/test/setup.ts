@@ -294,6 +294,12 @@ export const createUser = async (
 
 export const sessionCookie = (id: string) => `qhhoj_session=${id}`;
 
+/** Asserts the codes of the response's top-level `error.issues[]`, in order. */
+export const issueCodes =
+  (codes: string[]) =>
+  ({ body }: { body: { error: { issues?: { code: string }[] } } }) =>
+    expect((body.error.issues ?? []).map((issue) => issue.code)).toEqual(codes);
+
 export const errorCode =
   (code: string) =>
   ({ body }: { body: { error: { code: string } } }) =>
