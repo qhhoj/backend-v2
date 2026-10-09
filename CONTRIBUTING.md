@@ -124,10 +124,6 @@ user-activity/
   user-activity.module.ts
   capture/         onResponse hook, buffer, writer, live visitors store
   staff/           logs, summary, CSV export, live, deletes (`judge.can_see_user_activity`)
-api-v2/            legacy shapes, grouped like the features
-  api-v2.module.ts
-  core/            envelope, exception filter, query and filter helpers
-  contests/  problems/  submissions/  organizations/  users/
 ```
 
 - File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|store|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|handler|oauth-provider|spec`
@@ -229,7 +225,7 @@ api-v2/            legacy shapes, grouped like the features
 
 - `GET /api/internal/openapi.json` (raw JSON, no auth) is the contract the frontend generates its types from; `docs/decisions.md` has why
 - Response shapes are classes in `dto/*.response.ts`; the swagger CLI plugin (`nest-cli.json`) documents every `*.dto.ts` and `*.response.ts` from its types and comments, so a new route needs only its class, no decorators
-- A paginated route returns `Paginated<Item>` and carries `@ApiPaginatedResponse(Item)` (`{ data: Item[], meta }`); `@RawResponse()` marks routes that bypass the `{ data }` envelope (legacy `/api/v2`, files); `envelopeResponses` wraps every other 2xx JSON schema in `{ data }`
+- A paginated route returns `Paginated<Item>` and carries `@ApiPaginatedResponse(Item)` (`{ data: Item[], meta }`); `@RawResponse()` marks routes that bypass the `{ data }` envelope (files, feeds); `envelopeResponses` wraps every other 2xx JSON schema in `{ data }`
 - Give `Record`, `unknown`, nullable-union and integer-bounded fields an explicit `@ApiProperty(...)` (the plugin cannot infer them); multipart bodies use `@ApiConsumes` + `@ApiBody`
 - `npm run test:openapi` runs `openapi.e2e-spec.ts` under `jest.openapi.config.js`, which applies the plugin; plain jest cannot (the plugin reads types, so `isolatedModules` must be off) and the main suite ignores that spec. It fails for a JSON route without a response schema, so run it after adding or changing a route
 
@@ -240,7 +236,7 @@ api-v2/            legacy shapes, grouped like the features
 
 ## Problems
 
-- Layout: `apps/api/src/modules/problems/` (`/api/internal/problems`), `modules/api-v2/` (`/api/v2`), rendering in `libs/render`
+- Layout: `apps/api/src/modules/problems/` (`/api/internal/problems`), rendering in `libs/render`
 - File names: reads are `problems.*`, write flows are `problem-<flow>.*` (`problem-editing`, `problem-uploads`)
 - Rules live in `ProblemAccess` (`problem-access.ts`): `canSee`, `canEdit`, `visibleFilter`
 - List filter `solved=true|false` (the viewer's solved problems, an AC with every case point; anonymous viewers have solved nothing); detail `contest` is `{ contestKey, attemptsLeft }` (null `attemptsLeft` = no `maxSubmissions`) when the viewer's current contest lists the problem, else null
@@ -261,7 +257,6 @@ api-v2/            legacy shapes, grouped like the features
 - Golden fixtures: `libs/render/src/fixtures/*.md|html`; regenerate with `UPDATE_GOLDENS=1 npx jest libs/render/src/goldens.spec.ts`, review the diff; listed in `.prettierignore`
 - Uploads: type is sniffed from the bytes; SVG max 512 KiB, 20000 tags, nesting depth 1000; materials use an extension allow-list
 - Text index: `await model.init()` in fixtures before `$text` queries
-- `/api/v2`: legacy Django envelope (`api_version`, `method`, `fetched`, `data`/`error`); unknown query params are ignored; an invalid Bearer token is 403 `login required`
 
 ## Problem data
 
@@ -312,21 +307,20 @@ api-v2/            legacy shapes, grouped like the features
 - SSE: `GET /api/internal/events/submissions/:id` (detail rules; `state` first, read after the stream is registered; `test-case` only when every case result is visible; `resync` after a lost subscription) and `GET /api/internal/events/submissions` (public feed: public, non-org-private problems, no progress); one subscriber connection per api process
 - SSE layout: `modules/events/` holds the generic `EventStreamHub` (one Redis subscriber, caps, drain/buffer limits, heartbeat, recheck, resubscribe, shutdown) and `sse.ts`; a channel implements `EventChannel` and registers itself with the hub: `submissions/streams/submission-streams.service.ts` (submissions and feed) and `contests/announcements/contest-streams.service.ts` (contest announcements). A new channel = a service like those, a controller and a Redis channel name
 - Stream limits (`events/stream-limits.ts`, per api process): 8 per user, 16 per IP, 5000 total, 1000 feed, 2000 contest; a client is dropped when a write stays undrained or the backlog stays above 16 KiB for 2 s in total, or at once above 256 KiB; 15 s heartbeat; access (session, user, detail rules) re-checked every 60 s
-- `/api/v2/submissions` (oldest first; totals only with `user` or `problem`) and `/api/v2/submission/:id` (login, `can_see_detail`; cases follow the problem's case visibility, stricter than legacy)
 
 ## Contests
 
 - Layout: `apps/api/src/modules/contests/` (`/api/internal/contests`), formats and ranking helpers in `libs/contests`, worker jobs `contest-rescore`, `contest-final-judge`, `contest-rating` and `contest-data`
 - Collections: `contests` (problems embedded, `accessCodeHash` sha256, `bannedJudges` judge names), `contestParticipations` (`virtual`: 0 live, -1 spectate, n virtual; `isRegistered` until the first join; live and frozen results), `contestSubmissions` (`_id` = submission id, points scaled to the contest problem); `users.currentParticipation`
 - Rules live in `ContestAccess` (`core/contest-access.ts`): `canSee`, `canEdit`, `visibleFilter`, scoreboard and `canSeeFullSubmissionList` checks; viewer facts come from `ContestViewerService`; invisible or unknown contest -> 404 (also a malformed key), state conflicts -> 409
-- Current participation is checked on read (`CurrentContestService.current`): ended or invisible contest -> pointer cleared (compare-and-set). Its scope feeds `ProblemAccess.canSee/visibleFilter`: before the start every problem is hidden, after it the contest's problems are visible. `/api/v2` applies no contest scope (legacy parity)
+- Current participation is checked on read (`CurrentContestService.current`): ended or invisible contest -> pointer cleared (compare-and-set). Its scope feeds `ProblemAccess.canSee/visibleFilter`: before the start every problem is hidden, after it the contest's problems are visible
 - Formats: a `ContestFormat` (`parseConfig`, `score`, `firstSolveTime`) in `libs/contests/src/formats/<kebab-case-name>.ts` (`final-submission.ts` for `final_submission`), registered in `FORMATS` (`registry.ts`); names `default ioi ioi16 icpc vnoj ultimate final_submission`; scored through `scoreParticipation(rows, { name, config }, context)`; configs are camelCase, validated on every write (400 `formatConfig`); `labelStyle` (`numeric|alpha`) replaces legacy Lua label scripts
 - Freeze (`icpc`, `vnoj` only): absolute, contest end - `frozenLastMinutes`, and it stays after the end; an editor unfreezes by setting `frozenLastMinutes` to 0. Non-editors get only frozen fields and cells (`standingOf`, never mixed with live ones) in rankings and participations, own row included; editors always see live data
 - Submit inside a current contest that lists the problem: priority 0, `lockedAfter` for live participations, pretests flag, `maxSubmissions` (IE and PD excluded) checked under the per-user lock; FSO submissions skip the unfinished limit; a running FSO contest stores `PD`: no bridge command, no event. The bridge reads banned judges, pretests and `in-contest` from Mongo at load and claim
 - Effects: `SubmissionEffectsService.applyContest` rescales the contest submission (`contestSubmissionPoints`), `recomputeParticipation` (coalesced per participation) rewrites results and drops the four ranking keys
 - Rescore: `contest-rescore {contestId}` (no `jobId`, one at a time) runs on `POST /:key/rescore`, disqualifications, problem rescores, and contest edits that change `scoringOf` (editing service): format, format config, `startTime`, `endTime`, `frozenLastMinutes`, `pointsPrecision`, or the problems' id, points, partial or order. Every edit purges the ranking keys; other edits do not rescore
 - Ranking (`GET /:key/ranking`): one indexed read of the contest's rows, sorted in memory (`compareStandings`, competition ranks 1, 1, 3; ties in participation id order), cached per `{withVirtual, frozen}` for `scoreboardCacheTimeout` s with single-flight builds per api process; editors, own-row boards (viewer may not see the full board) and a 0 timeout bypass the cache
-- Submission lists: `GET /:key/submissions` filters by contest and shows everyone's rows only when `canSeeFullSubmissionList` (never during a freeze unless editor), else the viewer's own (403 for another `user`). Other users' submissions of contests whose full list the viewer may not see leave `/api/internal/submissions`, `/api/v2/submissions` and the detail (403)
+- Submission lists: `GET /:key/submissions` filters by contest and shows everyone's rows only when `canSeeFullSubmissionList` (never during a freeze unless editor), else the viewer's own (403 for another `user`). Other users' submissions of contests whose full list the viewer may not see leave `/api/internal/submissions` and the detail (403)
 - FSO (`final_submission`): delayed job `final-judge-<contest>-<endTime ms>` rescheduled on create and edit, one-minute sweep over contests holding `PD` rows, `POST /:key/judge-final` (ended FSO contests only, else 409; ignores `autoJudge`); each run is serialised per contest, requeues each `PD` row once at priority 3 and skips rows rejected with `RJ`; a single rejudge of a `PD` row is 409; leaving `final_submission` while rows are `PD` is 409
 - Access codes (`contests/core/rate-limits.ts`): wrong codes 10 per user and 30 per IP per 10 min on join and register (a missing code and a right one cost nothing); editors skip the code; virtual numbering retried up to 10 times
 - Viewer fields: list rows carry `requiresAccessCode`, `disallowVirtual`, the registration window and `viewer {liveStatus, isCurrent}` (null signed out). `ContestViewerService.listViewersOf` reads them with one hinted participation query per page plus the current pointer. `liveStatusOf` (`libs/contests`) is `registered | participating | finished`. `isCurrent` uses `viewerOf`'s rule (an ended participation is not current). The detail viewer has the same two fields
@@ -334,12 +328,12 @@ api-v2/            legacy shapes, grouped like the features
 - Refusals: `participation/participation-refusals.ts` is the one table of register, join and leave codes; add a case there, never a bare `AppError` in the service
 - Disqualify (`POST /:key/participations/:id/disqualify`, `{ disqualified }`): scores -9999 (frozen fields too), bans or unbans the user from the contest, clears the current pointer, queues a rescore. The `contest.banAfterDisqualifications` setting (0 = off) bans the account (`isActive` false, `isUnlisted`) at that many disqualifications outside organisation-private contests; lifting uses compare-and-set on the ban reason
 - Legacy migration (migrator requirement): `formatConfig` keys `last_score_altering` -> `lastScoreAltering`, `auto_judge` -> `autoJudge`, `LSO` -> `lso`; drop `cumtime` on `final_submission`; format name `Ultimate` -> `ultimate`; Lua label scripts become `labelStyle`
-- Deviations from legacy: `ultimate` takes the latest row (no double count on equal dates), writes its tiebreaker and rounds its score; FSO final judging requeues `PD` rows only; no fifth ranking sort key (`-submission_count`); frozen results never reach non-editors through `/api/v2` (legacy leaked them)
+- Deviations from legacy: `ultimate` takes the latest row (no double count on equal dates), writes its tiebreaker and rounds its score; FSO final judging requeues `PD` rows only; no fifth ranking sort key (`-submission_count`); frozen results never reach non-editors
 
 ## Contest extras
 
 - Action status: `GET /contests/:key/actions` (editors only) scans the live queue jobs for rescore, judge-final (manual only) and rating; there is no failed state, since jobs are removed when they end
-- Rating: `POST /contests/:key/rate` (`judge.contest_rating` + edit rights, ended contest, 409 while the board is frozen; the worker also skips a frozen target and leaves frozen contests out of the re-rate chain and `/api/v2` rankings hide ratings on a frozen board; a rescore of a contest with ratings is the follow-up trigger) queues `contest-rating` (global concurrency 1); the job deletes every rating from the earliest of the target's end, its stored ratings' end and any moved contest's end, re-rates every rated contest from there in end order, then refreshes `users.rating`; `libs/contests/src/rating/elo-mmr.ts` is the legacy Python ported line for line
+- Rating: `POST /contests/:key/rate` (`judge.contest_rating` + edit rights, ended contest, 409 while the board is frozen; the worker also skips a frozen target and leaves frozen contests out of the re-rate chain; a rescore of a contest with ratings is the follow-up trigger) queues `contest-rating` (global concurrency 1); the job deletes every rating from the earliest of the target's end, its stored ratings' end and any moved contest's end, re-rates every rated contest from there in end order, then refreshes `users.rating`; `libs/contests/src/rating/elo-mmr.ts` is the legacy Python ported line for line
 - Elo-MMR goldens: `python3 -I tools/legacy/elo_mmr_goldens.py <online-judge>/judge/ratings.py libs/contests/src/rating/elo-mmr.goldens.json`; generated, never hand-edited
 - Public ranking: links (`/contests/:key/ranking-link`, `/public-rankings/:token`, 18-char tokens, misses limited per IP) and the ranking code (`?code=`); both serve `ContestRankingService.board`, frozen while frozen
 - Official ranking: CMS CSV parsed at write (`ranking/official-ranking.ts`: 1 MiB, 10 000 rows, 105 columns) or a URL
@@ -348,7 +342,6 @@ api-v2/            legacy shapes, grouped like the features
 - Similarity: see "Similarity" below
 - Data: `CONTEST_DATA_ROOT` (unset -> 404); one prepare per contest per 24 h unless the zip is missing; zip written to a per-run temp name, streamed with lazily fetched sources, capped in bytes and entries; download streamed by the api
 - Clone: `POST /contests/:key/clone` (`judge.clone_contest` + edit rights on the source), hidden, cloner as only author
-- `/api/v2/contests|contest/:key|participations`: legacy shapes; participations use `ContestAccess.scoreboardFilter` like contest detail, so hidden boards list no scores to non-editors (stricter than legacy) and standings are frozen for non-editors
 
 ## Similarity
 
@@ -381,7 +374,6 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - Staff lists: `GET /api/internal/admin/users` (username prefix with the CI collation, `banned` filter via the partial `banReason` index, never e-mail; `judge.ban_user`), `GET /api/internal/admin/organization-requests` (the queue across organizations, one state at a time; `judge.edit_all_organization`), `GET /api/internal/admin/posts?state=hidden|scheduled` (`judge.edit_all_post`)
 - Ban (`judge.ban_user`, never yourself or a superuser): compare-and-set on `banReason`, unlisted, inactive, every session destroyed; the reserved automatic cheating reason cannot be used; unban restores rank `user`, listed and active whatever the user had before (legacy)
 - User data: `USER_DATA_ROOT` (unset -> 404, muted -> 404); 3 prepares per user per day, one per 24 h while a fresh zip exists (`canPrepare`); zip (profile whitelist, own submissions with sources and `info.json`) kept 7 days, removed by the hourly sweep
-- `/api/v2/organizations|users|user/:username`: legacy shapes, counted pages; unlisted organizations hidden like `canList`; contest ratings of frozen boards are `null` for non-editors
 - Tests: `setupApiTest` exposes `organizations`, `organizationRequests`, `userDataRoot`; `setupWorkerTest` exposes `organizations`, `userDataRoot`
 
 ## Blog and comments
