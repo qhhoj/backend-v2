@@ -107,10 +107,11 @@ export class TicketsRepository {
       await this.tickets.updateOne({ _id: ticketId }, { $set: changes }).exec();
   }
 
-  /** The cap is part of the filter, so parallel posts can never pass it; false = the ticket is full (or gone). */
+  /** The cap is part of the filter, so parallel posts can never pass it; false = the ticket is full (or gone). `byStaff` is stored: staff status changes over time. */
   async pushMessage(
     ticketId: string,
     message: TicketMessage,
+    byStaff: boolean,
   ): Promise<boolean> {
     const { modifiedCount } = await this.tickets
       .updateOne(
@@ -125,11 +126,31 @@ export class TicketsRepository {
         },
         {
           $push: { messages: message },
-          $set: { lastMessageAt: message.createdAt },
+          $set: {
+            lastMessageAt: message.createdAt,
+            lastMessageByStaff: byStaff,
+          },
           $inc: { messageCount: 1 },
         },
       )
       .exec();
     return modifiedCount === 1;
+  }
+
+  /** Open tickets assigned to the user. Through `{assignees, _id}`. */
+  countAssignedOpen(userId: string): Promise<number> {
+    return this.tickets
+      .countDocuments({ assignees: userId, isOpen: true })
+      .exec();
+  }
+
+  /** Open tickets whose newest message was not written by staff. `null` matches a document without the field (tickets from the migrator's raw bulkWrite, and tickets that predate the flag), so they count as waiting. Through `{isOpen, lastMessageByStaff}`. */
+  countAwaitingStaff(): Promise<number> {
+    return this.tickets
+      .countDocuments({
+        isOpen: true,
+        lastMessageByStaff: { $in: [false, null] },
+      })
+      .exec();
   }
 }

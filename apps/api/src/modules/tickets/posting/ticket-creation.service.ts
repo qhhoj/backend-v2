@@ -10,6 +10,7 @@ import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { renderField } from '../../problems/editing/problem-markup';
 import type { TicketDetailResponse } from '../core/dto/ticket.response';
 import { TICKET_LIMIT, TICKET_WINDOW_SECONDS } from '../core/rate-limits';
+import { TicketAccess } from '../core/ticket-access';
 import { TicketContextService } from '../core/ticket-context.service';
 import { TicketGateService } from '../core/ticket-gate.service';
 import { TicketResponsesService } from '../core/ticket-responses.service';
@@ -110,6 +111,7 @@ export class TicketCreationService {
           messages: [message],
           messageCount: 1,
           lastMessageAt: createdAt,
+          lastMessageByStaff: TicketAccess.isStaff(principal),
         },
         link,
       );

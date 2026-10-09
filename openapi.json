@@ -8323,6 +8323,23 @@
         ],
         "type": "object"
       },
+      "TicketSummaryResponse": {
+        "properties": {
+          "assignedOpen": {
+            "description": "Open tickets the viewer is assigned to.",
+            "type": "number"
+          },
+          "awaitingStaff": {
+            "description": "Open tickets whose newest message is not from staff; 0 unless the viewer holds `judge.change_ticket`.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "assignedOpen",
+          "awaitingStaff"
+        ],
+        "type": "object"
+      },
       "TokenDto": {
         "properties": {
           "token": {
@@ -22585,6 +22602,55 @@
         },
         "tags": [
           "TicketCreation"
+        ]
+      }
+    },
+    "/api/internal/tickets/summary": {
+      "get": {
+        "operationId": "TicketSummaryController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TicketSummaryResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The ticket badge; the browser may reuse it for 15 seconds.",
+        "tags": [
+          "TicketSummary"
         ]
       }
     },

@@ -9,6 +9,8 @@ import { ProblemsApiModule } from '../problems/problems-api.module';
 import { CannedRepliesController } from './canned/canned-replies.controller';
 import { CannedRepliesRepository } from './canned/canned-replies.repository';
 import { CannedRepliesService } from './canned/canned-replies.service';
+import { TicketSummaryController } from './alerts/ticket-summary.controller';
+import { TicketSummaryService } from './alerts/ticket-summary.service';
 import { TicketGateService } from './core/ticket-gate.service';
 import { TicketContextService } from './core/ticket-context.service';
 import { TicketResponsesService } from './core/ticket-responses.service';
@@ -41,6 +43,7 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     TicketMessagesController,
     TicketUpdatesController,
     TicketStreamsController,
+    TicketSummaryController,
   ],
   providers: [
     CannedRepliesRepository,
@@ -56,6 +59,7 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     TicketCreationService,
     TicketMessagesService,
     TicketUpdatesService,
+    TicketSummaryService,
   ],
   exports: [
     TicketsRepository,

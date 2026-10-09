@@ -10,6 +10,7 @@ import {
   TICKET_MESSAGE_LIMIT,
   TICKET_WINDOW_SECONDS,
 } from '../core/rate-limits';
+import { TicketAccess } from '../core/ticket-access';
 import { TicketContextService } from '../core/ticket-context.service';
 import { TicketGateService } from '../core/ticket-gate.service';
 import { TicketResponsesService } from '../core/ticket-responses.service';
@@ -50,7 +51,13 @@ export class TicketMessagesService {
       createdAt: new Date(),
     };
     try {
-      if (!(await this.tickets.pushMessage(ticketId, message)))
+      if (
+        !(await this.tickets.pushMessage(
+          ticketId,
+          message,
+          TicketAccess.isStaff(principal),
+        ))
+      )
         throw new AppError(
           'conflict',
           409,
