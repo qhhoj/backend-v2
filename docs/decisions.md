@@ -364,3 +364,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `editor.baseName` on the problem detail (B-8f8): the base name whatever `lang` was requested, so the editor needs no second `lang=en` read.
 - `GET /admin/site/pages/deleted` (B-8f2-9): deleted flatpages `{ id, url, deletedAt }` from their `delete` revisions, newest first; `pages/:id/revisions` already reads them by id, and "recreate" is a normal POST with the old values.
 - Not done: B-8f6 (data version, image listing, structured feedback), B-8f2-1b/2/3b/6b/7b — each needs a product or model decision (organization delete, report model, global audit scope) or a response redesign.
+- Rehearsal (2026-10-09, real dump, no 2FA): verify 0 mismatches ×3; read-only window ≈3.5 min; legacy contests 185 and 187 were flagged rated but never rated, so the v2 re-rating rates them (22 extra ratings) — accepted under the re-rate-everything decision.
