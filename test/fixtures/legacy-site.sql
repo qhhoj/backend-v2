@@ -14,4 +14,11 @@ INSERT INTO judge_ticketmessage (id, body, time, ticket_id, user_id) VALUES
  (9001,'**first**','2023-05-01 00:30:00',9001,1001),
  (9003,'ghost','2023-05-01 02:00:00',9001,9999);
 INSERT INTO judge_ticket_assignees (id, ticket_id, profile_id) VALUES (9001,9001,1002);
+INSERT INTO django_flatpage (id, url, title, content, enable_comments, template_name, registration_required) VALUES
+ (9001,'/about/','About','# Hi',0,'flatpages/about.html',0),(9002,'/about','Dup','x',0,'',0),(9003,'/a/../b/','Bad','x',0,'',1);
+INSERT INTO judge_miscconfig (id, `key`, value) VALUES (9001,'motd','old'),(9002,'motd','new'),(9003,'home_page_top','{% if x %}y{% endif %}');
+INSERT INTO judge_navigationbar (id, `order`, `key`, label, path, regex, lft, rght, tree_id, level, parent_id, hidden) VALUES
+ (9001,1,'probs','Problems','/problems/','^/problem',1,4,9001,0,NULL,0),
+ (9002,2,'subs','Subs','/submissions/','(?x) ^/submission  # list',2,3,9001,1,9001,1),
+ (9003,3,'bad','Bad','/bad/','(?P<x>a',1,2,9003,0,NULL,0);
 SET FOREIGN_KEY_CHECKS=1;
