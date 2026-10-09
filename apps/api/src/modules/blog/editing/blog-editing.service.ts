@@ -158,14 +158,15 @@ export class BlogEditingService {
     id: string,
     dto: UpdatePostDto,
   ): Promise<PostDetailResponse> {
-    this.refuseInOfficialContest(principal);
+    const moderation = this.isModeration(principal, dto);
+    if (!moderation) this.refuseInOfficialContest(principal);
     const { post, view } = await this.visibility.visiblePost(principal, id);
     if (!BlogAccess.canEdit(principal, view))
       throw forbidden('You cannot edit this post');
     if ((await this.users.signedIn(principal)).mute)
       throw forbidden('Muted users cannot edit posts');
     this.assertFlags(principal, dto, post);
-    await this.reserveWrite(principal);
+    if (!moderation) await this.reserveWrite(principal);
     const { authorIds, content, summary, publishOn, ...fields } = dto;
     const changes: Partial<BlogPost> = { ...fields };
     if (publishOn !== undefined) changes.publishOn = new Date(publishOn);
@@ -253,6 +254,18 @@ export class BlogEditingService {
     message: string,
   ): void {
     if (!hasPermission(principal, permission)) throw forbidden(message);
+  }
+
+  /** Hiding or showing a post (only `visible` sent) by `edit_all_post`: exempt from the write limit and the contest lock, so spam can go during a contest. */
+  private isModeration(principal: Principal, dto: UpdatePostDto): boolean {
+    const sent = Object.keys(dto).filter(
+      (key) => dto[key as keyof UpdatePostDto] !== undefined,
+    );
+    return (
+      sent.length === 1 &&
+      sent[0] === 'visible' &&
+      hasPermission(principal, 'judge.edit_all_post')
+    );
   }
 
   private async reserveWrite(principal: Principal): Promise<void> {

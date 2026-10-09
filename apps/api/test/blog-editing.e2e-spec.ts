@@ -339,6 +339,55 @@ describe('blog editing', () => {
     await create(other, { title: 'Other' }).expect(201);
   });
 
+  it('lets edit_all_post hide and show posts past the write limit and during the official contest', async () => {
+    const { user } = await person();
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_post'],
+    });
+    const post = await createPost(api, { authors: [user._id] });
+    for (let index = 0; index < 12; index++)
+      await patch(post._id, staff, { visible: index % 2 === 0 }).expect(200);
+    await api.setSetting('contest.officialMode', true);
+    try {
+      await patch(post._id, staff, { visible: true }).expect(200);
+      await patch(post._id, staff, { visible: false }).expect(200);
+    } finally {
+      await api.setSetting('contest.officialMode', false);
+    }
+    expect((await api.blogPosts.findById(post._id).lean())!.visible).toBe(
+      false,
+    );
+  });
+
+  it('keeps the write limit for moderator edits beyond visible and for authors changing visible', async () => {
+    const { user, session } = await person();
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_post'],
+    });
+    const post = await createPost(api, { authors: [user._id] });
+    for (let index = 0; index < 10; index++)
+      await patch(post._id, staff, {
+        visible: true,
+        title: `T${index}`,
+      }).expect(200);
+    await patch(post._id, staff, { visible: false, title: 'Over' })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    for (let index = 0; index < 10; index++)
+      await patch(post._id, session, { visible: index % 2 === 0 }).expect(200);
+    await patch(post._id, session, { visible: true })
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    await api.setSetting('contest.officialMode', true);
+    try {
+      await patch(post._id, staff, { visible: true, title: 'Locked' }).expect(
+        403,
+      );
+    } finally {
+      await api.setSetting('contest.officialMode', false);
+    }
+  });
+
   it('deletes with delete_blogpost, taking comments, votes and the lock along and recomputing their authors', async () => {
     const { user, session } = await person();
     const { user: deleter, session: deleterSession } = await person({
