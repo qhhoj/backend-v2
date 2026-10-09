@@ -21,7 +21,7 @@ export const PERMISSION_GRANTS: readonly PermissionGrant[] = [
 export const withoutGrantedPermissions = (doc: Document): Document => {
   if (!Array.isArray(doc.permissions)) return doc;
   const held = new Set<string>(doc.permissions);
-  const added = new Set(
+  const added = new Set<string>(
     PERMISSION_GRANTS.filter(({ heldBy }) => held.has(heldBy)).map(
       ({ permission }) => permission,
     ),
