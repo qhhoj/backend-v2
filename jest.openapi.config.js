@@ -4,6 +4,7 @@ const [swagger] = require('./nest-cli.json').compilerOptions.plugins;
 
 module.exports = {
   ...base,
+  globalSetup: require.resolve('./jest.openapi.require-redis'),
   testPathIgnorePatterns: ['/node_modules/'],
   testRegex: '.*/(openapi\\.e2e-spec|[^/]+\\.openapi-spec)\\.ts$',
   transform: {

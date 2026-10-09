@@ -358,12 +358,6 @@ describe('OpenAPI document', () => {
       'GET /api/internal/auth/social/{provider}/callback 200',
       // The PDF itself (application/pdf); its 202 and 503 are documented on the route.
       'GET /api/internal/problems/{code}/pdf 200',
-      // Server-sent event streams (text/event-stream), not JSON.
-      'GET /api/internal/events/submissions 200',
-      'GET /api/internal/events/submissions/{id} 200',
-      'GET /api/internal/events/tickets 200',
-      'GET /api/internal/events/tickets/{id} 200',
-      'GET /api/internal/events/contests/{key} 200',
     ]);
 
     it('documents the session response inside the data envelope with its members', async () => {
@@ -549,6 +543,7 @@ describe('OpenAPI document', () => {
             const response = operation.responses[status];
             return response &&
               !response.content?.['application/json']?.schema &&
+              !response.content?.['text/event-stream']?.schema &&
               !operation['x-raw']
               ? [`${method.toUpperCase()} ${path} ${status}`]
               : [];

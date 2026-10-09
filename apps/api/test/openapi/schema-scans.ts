@@ -99,3 +99,37 @@ export function inlineEnumSites(
   visit(document, '');
   return sites;
 }
+
+const enumKey = (values: readonly (string | number)[]): string =>
+  values.map(String).sort().join('|');
+
+/** Names of the component schemas that are an enumeration of exactly `values`: one name means every site shares one generated type. */
+export function namedEnumsWith(
+  document: OpenAPIObject,
+  values: readonly (string | number)[],
+): string[] {
+  const wanted = enumKey(values);
+  return Object.entries(document.components?.schemas ?? {})
+    .filter(([, schema]) => {
+      const members = (schema as SchemaObject).enum;
+      return members !== undefined && enumKey(members) === wanted;
+    })
+    .map(([name]) => name)
+    .sort();
+}
+
+/** Groups of component enumerations that list the same values under different names (a renamed `enumName` at one site). */
+export function duplicateEnums(document: OpenAPIObject): string[][] {
+  const byValues = new Map<string, string[]>();
+  for (const [name, schema] of Object.entries(
+    document.components?.schemas ?? {},
+  )) {
+    const members = (schema as SchemaObject).enum;
+    if (members === undefined) continue;
+    byValues.set(enumKey(members), [
+      ...(byValues.get(enumKey(members)) ?? []),
+      name,
+    ]);
+  }
+  return [...byValues.values()].filter((names) => names.length > 1);
+}
