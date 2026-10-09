@@ -14,12 +14,23 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { Env } from '@libs/common';
+import Redis from 'ioredis';
+import { TEST_REDIS_URL } from '@libs/common/testing';
 import { ProblemDataFilesService } from './problem-data-files.service';
 
 describe('ProblemDataFilesService', () => {
   const root = mkdtempSync(join(tmpdir(), 'qhhoj-problem-data-'));
-  const files = new ProblemDataFilesService({ problemDataRoot: root } as Env);
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const env = { problemDataRoot: root } as Env;
+  const redis = new Redis(TEST_REDIS_URL);
+  const otherProcessRedis = new Redis(TEST_REDIS_URL);
+  const files = new ProblemDataFilesService(env, redis);
+  const otherProcess = new ProblemDataFilesService(env, otherProcessRedis);
+  beforeAll(() => redis.flushdb());
+  afterAll(async () => {
+    await redis.quit();
+    await otherProcessRedis.quit();
+    rmSync(root, { recursive: true, force: true });
+  });
 
   it('writes init.yml atomically under <root>/<code>/ and reads it back', async () => {
     await files.writeInit('sum', 'archive: tests.zip\n');
@@ -51,10 +62,6 @@ describe('ProblemDataFilesService', () => {
     await files.writeDataVersion('monotonic', 5);
     await files.writeDataVersion('monotonic', 4);
     expect(await files.readDataVersion('monotonic')).toBe(5);
-    await Promise.all(
-      [7, 9, 6, 8].map((version) => files.writeDataVersion('racing', version)),
-    );
-    expect(await files.readDataVersion('racing')).toBe(9);
   });
   it('reads a corrupt stamp as none', async () => {
     mkdirSync(join(root, 'corrupt'), { recursive: true });
@@ -78,12 +85,12 @@ describe('ProblemDataFilesService', () => {
       ).rejects.toThrow('boom');
       expect(existsSync(markerOf('marked'))).toBe(false);
     });
-    it('stays up until the last of two overlapping changes ends', async () => {
+    it('serialises writers of one problem across independent service instances, and frees the lock after', async () => {
       let release!: () => void;
       let running!: () => void;
       const started = new Promise<void>((resolve) => (running = resolve));
-      const slow = files.withDataWrite(
-        'overlap',
+      const holder = files.withDataWrite(
+        'shared',
         () =>
           new Promise<void>((resolve) => {
             release = resolve;
@@ -91,13 +98,23 @@ describe('ProblemDataFilesService', () => {
           }),
       );
       await started;
-      await files.withDataWrite('overlap', () => Promise.resolve());
-      expect(existsSync(markerOf('overlap'))).toBe(true);
+      await expect(
+        otherProcess.withDataWrite('shared', () => Promise.resolve()),
+      ).rejects.toMatchObject({
+        status: 409,
+        code: 'conflict',
+        extra: {
+          issues: [expect.objectContaining({ field: 'lock', code: 'busy' })],
+        },
+      });
+      await otherProcess.withDataWrite('free_other', () => Promise.resolve());
+      expect(existsSync(markerOf('shared'))).toBe(true);
       release();
-      await slow;
-      expect(existsSync(markerOf('overlap'))).toBe(false);
+      await holder;
+      expect(existsSync(markerOf('shared'))).toBe(false);
+      await otherProcess.withDataWrite('shared', () => Promise.resolve());
     });
-    it('is swept when stale and left by no live writer, kept when fresh', async () => {
+    it('is swept when stale and its lock is gone, kept when fresh or while a writer holds the lock', async () => {
       mkdirSync(join(root, 'dead'), { recursive: true });
       writeFileSync(markerOf('dead'), '');
       await files.stageUpload('dead');
@@ -106,6 +123,14 @@ describe('ProblemDataFilesService', () => {
       utimesSync(markerOf('dead'), longAgo, longAgo);
       await files.stageUpload('dead');
       expect(existsSync(markerOf('dead'))).toBe(false);
+    });
+    it('is not swept from under a live writer', async () => {
+      await files.withDataWrite('live', async () => {
+        const longAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(markerOf('live'), longAgo, longAgo);
+        await files.stageUpload('live');
+        expect(existsSync(markerOf('live'))).toBe(true);
+      });
     });
   });
   it('moves the stamp with a renamed directory', async () => {

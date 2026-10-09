@@ -12,10 +12,13 @@ import {
 } from 'node:fs/promises';
 import { basename, dirname, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
+import type Redis from 'ioredis';
 import {
   assertRealPathInside,
   ENV,
+  REDIS,
   SAFE_SEGMENT,
+  withRedisLock,
   writeFileAtomically,
 } from '@libs/common';
 import type { Env } from '@libs/common';
@@ -29,6 +32,8 @@ export const DATA_WRITING_MARKER = '.data-version.writing';
 const IMPORTS_DIRECTORY = '.imports';
 /** Dot-prefixed: `safeName` refuses leading dots, so no client file can ever be named like a staged upload. */
 const UPLOAD_PREFIX = '.upload-';
+/** Covers the largest upload plus its recompile; the lock is not renewed, so a write must finish within it. */
+const DATA_WRITE_LOCK_SECONDS = 15 * 60;
 const STALE_UPLOAD_MS = 60 * 60 * 1000;
 /** The worker removes a package when its job ends; one left past a failed job's retention (a day) belongs to a lost job. */
 const STALE_IMPORT_MS = 2 * 24 * 60 * 60 * 1000;
@@ -37,12 +42,11 @@ const STALE_IMPORT_MS = 2 * 24 * 60 * 60 * 1000;
 @Injectable()
 export class ProblemDataFilesService {
   private readonly root: string;
-  /** Overlapping data writes of one problem share its marker: the last one out removes it. */
-  private readonly writersOf = new Map<string, number>();
-  /** Per-problem tail of the stamp writes, so a read-compare-rename never interleaves with another in this process. */
-  private readonly stampTail = new Map<string, Promise<unknown>>();
 
-  constructor(@Inject(ENV) env: Env) {
+  constructor(
+    @Inject(ENV) env: Env,
+    @Inject(REDIS) private readonly redis: Redis,
+  ) {
     this.root = resolve(env.problemDataRoot);
   }
 
@@ -90,40 +94,30 @@ export class ProblemDataFilesService {
     return this.removeFile(code, INIT_FILE);
   }
 
-  /** Runs one data change under the marker; removed on success and on every error path. */
-  async withDataWrite<T>(code: string, work: () => Promise<T>): Promise<T> {
+  /** Runs one data change under the problem's cross-process lock (api and worker both write data) and the judge's marker; the marker is removed on success and on every error path. A writer that finds the lock taken gets the 409 `busy` conflict at once. */
+  withDataWrite<T>(code: string, work: () => Promise<T>): Promise<T> {
     const marker = this.markerPath(code);
-    const writers = this.writersOf.get(code) ?? 0;
-    this.writersOf.set(code, writers + 1);
-    try {
-      if (writers === 0)
+    return withRedisLock(
+      this.redis,
+      {
+        key: this.lockKey(code),
+        ttlSeconds: DATA_WRITE_LOCK_SECONDS,
+        busyMessage:
+          "Another change to this problem's data is in progress, try again",
+      },
+      async () => {
         await writeFileAtomically(marker, Buffer.alloc(0), this.root);
-      return await work();
-    } finally {
-      const left = (this.writersOf.get(code) ?? 1) - 1;
-      if (left > 0) this.writersOf.set(code, left);
-      else {
-        this.writersOf.delete(code);
-        await rm(marker, { force: true });
-      }
-    }
+        try {
+          return await work();
+        } finally {
+          await rm(marker, { force: true });
+        }
+      },
+    );
   }
 
-  /** Written atomically after every other file of a data change (init.yml, committed uploads, removals), so a judge that reads version N sees N's files; a judge that sees an older stamp waits for the newer one. Never lowers the stamp: two overlapping edits can finish out of order, and the newer version must win. */
-  writeDataVersion(code: string, version: number): Promise<void> {
-    const previous = this.stampTail.get(code) ?? Promise.resolve();
-    const run = previous
-      .catch(() => undefined)
-      .then(() => this.raiseDataVersion(code, version));
-    this.stampTail.set(code, run);
-    const forget = () => {
-      if (this.stampTail.get(code) === run) this.stampTail.delete(code);
-    };
-    run.then(forget, forget);
-    return run;
-  }
-
-  private async raiseDataVersion(code: string, version: number): Promise<void> {
+  /** Written atomically after every other file of a data change (init.yml, committed uploads, removals), so a judge that reads version N sees N's files; a judge that sees an older stamp waits for the newer one. Never lowers the stamp; callers hold the data lock, so the read-compare-rename does not interleave. */
+  async writeDataVersion(code: string, version: number): Promise<void> {
     const current = await this.readDataVersion(code);
     if (current !== null && current >= version) return;
     await writeFileAtomically(
@@ -144,6 +138,10 @@ export class ProblemDataFilesService {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
+  }
+
+  private lockKey(code: string): string {
+    return `problem-data-lock:${code}`;
   }
 
   private markerPath(code: string): string {
@@ -206,13 +204,13 @@ export class ProblemDataFilesService {
     return stagedPath;
   }
 
-  /** Staged files left by a crashed request, and a writing marker no live writer holds (its process was killed): dropped once an hour old, so abandoned uploads never pile up and no problem waits on a dead marker. */
+  /** Staged files left by a crashed request, and a writing marker whose lock is gone (its process was killed): dropped once an hour old, so abandoned uploads never pile up and no problem waits on a dead marker. */
   private async sweepStaleUploads(code: string): Promise<void> {
     const directory = this.directoryOf(code);
     const oldest = Date.now() - STALE_UPLOAD_MS;
+    const locked = (await this.redis.exists(this.lockKey(code))) === 1;
     for (const entry of await readdir(directory)) {
-      const staleMarker =
-        entry === DATA_WRITING_MARKER && !this.writersOf.has(code);
+      const staleMarker = entry === DATA_WRITING_MARKER && !locked;
       if (!entry.startsWith(UPLOAD_PREFIX) && !staleMarker) continue;
       const path = this.resolveInside(`${code}/${entry}`);
       const stats = await lstat(path).catch(() => null);
