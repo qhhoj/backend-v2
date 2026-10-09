@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { sha256, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { invalidField, unique } from '@libs/common';
+import { AppError, invalidField, unique } from '@libs/common';
 import { FormatConfigError, parseFormatConfig } from '@libs/contests';
 import type { Contest, ContestProblem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
+import { ContestTagsQuerier } from '../tags/contest-tags.querier';
 import type { ContestDocument } from '../core/contests.repository';
 import { NULLABLE_CONTEST_FIELDS } from './dto/contest-edit.dto';
 import type {
@@ -167,6 +168,7 @@ export class ContestEditFieldsService {
   constructor(
     private readonly problems: ProblemsRepository,
     private readonly users: UsersRepository,
+    private readonly tags: ContestTagsQuerier,
   ) {}
 
   /** The DTO as stored fields, checked against `current` (null on create). */
@@ -183,6 +185,7 @@ export class ContestEditFieldsService {
       fields.descriptionHtml = renderField('description', dto.description);
     Object.assign(fields, rulesFields(dto, current));
     Object.assign(fields, publishFields(principal, dto, current));
+    this.assertTags(dto, current);
     const isFormatEdited =
       dto.formatConfig !== undefined || dto.formatName !== undefined;
     // Relies on the schema's `formatConfig` default only for the no-format create; any edit of the format resolves it here.
@@ -198,6 +201,27 @@ export class ContestEditFieldsService {
     );
     await this.assertUsers(fields);
     return fields;
+  }
+
+  /** Only slugs added to the stored set need a catalogue entry: an old contest with a legacy slug still saves, and a legacy slug can always be removed. */
+  private assertTags(
+    dto: UpdateContestDto,
+    current: ContestDocument | null,
+  ): void {
+    if (dto.tags === undefined) return;
+    const stored = current?.tags ?? [];
+    const unknown = dto.tags.filter(
+      (slug) => !stored.includes(slug) && !this.tags.hasSlug(slug),
+    );
+    if (unknown.length)
+      throw new AppError(
+        'unknown_tag',
+        400,
+        `Unknown tag: ${unknown.join(', ')}`,
+        {
+          tags: unknown.map((slug) => `Unknown tag ${slug}.`),
+        },
+      );
   }
 
   private async assertUsers(fields: Partial<Contest>): Promise<void> {

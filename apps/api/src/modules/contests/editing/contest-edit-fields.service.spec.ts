@@ -3,11 +3,13 @@ import type { UsersRepository } from '@libs/auth';
 import { ContestEditFieldsService } from './contest-edit-fields.service';
 import type { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { UpdateContestDto } from './dto/contest-edit.dto';
+import type { ContestTagsQuerier } from '../tags/contest-tags.querier';
 
 describe('ContestEditFieldsService.toFields', () => {
   const service = new ContestEditFieldsService(
     {} as ProblemsRepository,
     {} as UsersRepository,
+    {} as ContestTagsQuerier,
   );
   const principal = {} as Principal;
 
