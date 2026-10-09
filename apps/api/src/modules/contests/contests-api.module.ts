@@ -121,5 +121,11 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     RateLimitService,
     SolverCountsService,
   ],
+  // The sync API (`SyncModule`) writes and reads contests through these.
+  exports: [
+    ContestEditingService,
+    ContestEditFieldsService,
+    ContestRankingService,
+  ],
 })
 export class ContestsApiModule {}

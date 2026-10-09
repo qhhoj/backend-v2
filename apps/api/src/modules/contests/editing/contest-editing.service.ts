@@ -132,8 +132,8 @@ export class ContestEditingService {
     return this.contestsService.detail(principal, contest.key);
   }
 
-  /** The caller becomes an author; FSO judging is scheduled for the new end. */
-  private async insert(
+  /** The caller becomes an author; FSO judging is scheduled for the new end. Shared with the sync API, which validates through `ContestEditFieldsService` itself. */
+  async insert(
     principal: Principal,
     fields: Partial<Contest>,
   ): Promise<ContestDocument> {
@@ -157,17 +157,16 @@ export class ContestEditingService {
   ): Promise<ContestDetailResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
     const fields = await this.editFields.toFields(principal, dto, contest);
-    if (
-      contest.formatName === 'final_submission' &&
-      fields.formatName &&
-      fields.formatName !== contest.formatName &&
-      (await this.contests.hasPendingSubmissions(contest._id))
-    )
-      throw new AppError(
-        'conflict',
-        409,
-        'Judge the pending submissions before leaving final_submission',
-      );
+    await this.applyFields(contest, fields);
+    return this.contestsService.detail(principal, key);
+  }
+
+  /** Writes already-validated fields and runs every follow-up of an edit. Shared with the sync API, which validates through `ContestEditFieldsService` itself. */
+  async applyFields(
+    contest: ContestDocument,
+    fields: Partial<Contest>,
+  ): Promise<void> {
+    await this.assertFormatChangeAllowed(contest, fields);
     const updated = await this.save(contest, fields);
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
@@ -184,7 +183,24 @@ export class ContestEditingService {
       !sameJson(fields.lockedAfter, contest.lockedAfter)
     )
       await this.contests.propagateLock(contest._id, fields.lockedAfter);
-    return this.contestsService.detail(principal, key);
+  }
+
+  /** Pending final submissions would never be judged once the contest leaves `final_submission`. */
+  private async assertFormatChangeAllowed(
+    contest: ContestDocument,
+    fields: Partial<Contest>,
+  ): Promise<void> {
+    if (
+      contest.formatName === 'final_submission' &&
+      fields.formatName &&
+      fields.formatName !== contest.formatName &&
+      (await this.contests.hasPendingSubmissions(contest._id))
+    )
+      throw new AppError(
+        'conflict',
+        409,
+        'Judge the pending submissions before leaving final_submission',
+      );
   }
 
   /** Changed rules raise the revision inside the same update; a concurrent change of the rules is a conflict. */

@@ -4,12 +4,32 @@ import { AuthModule, IntegrationClientsRepository } from '@libs/auth';
 import { ENV, RateLimitService, type Env } from '@libs/common';
 import { IntegrationClientsController } from './clients/integration-clients.controller';
 import { IntegrationClientsService } from './clients/integration-clients.service';
+import { ContestAccessModule } from '../contests/core/contest-access.module';
+import { ContestsApiModule } from '../contests/contests-api.module';
+import { ProblemsApiModule } from '../problems/problems-api.module';
+import { SyncActsAsService } from './contests/sync-acts-as.service';
+import { SyncContestOwnership } from './contests/sync-contest-ownership.service';
+import { SyncContestsController } from './contests/sync-contests.controller';
+import { SyncContestsService } from './contests/sync-contests.service';
+import { SyncRateLimit } from './contests/sync-rate-limit.service';
 
 /** The sync API for integration clients and the administration of their keys. */
 @Module({
-  imports: [AuthModule],
-  controllers: [IntegrationClientsController],
-  providers: [IntegrationClientsService, RateLimitService],
+  imports: [
+    AuthModule,
+    ContestAccessModule,
+    ContestsApiModule,
+    ProblemsApiModule,
+  ],
+  controllers: [IntegrationClientsController, SyncContestsController],
+  providers: [
+    IntegrationClientsService,
+    RateLimitService,
+    SyncActsAsService,
+    SyncContestOwnership,
+    SyncContestsService,
+    SyncRateLimit,
+  ],
 })
 export class SyncModule implements OnApplicationBootstrap {
   private readonly logger = new Logger(SyncModule.name);

@@ -8332,6 +8332,174 @@
         ],
         "type": "object"
       },
+      "SyncContestDto": {
+        "properties": {
+          "description": {
+            "maxLength": 200000,
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          },
+          "formatConfig": {
+            "additionalProperties": true,
+            "description": "Free-form JSON: the keys depend on the format.",
+            "type": "object"
+          },
+          "formatName": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestFormatName"
+              }
+            ]
+          },
+          "frozenLastMinutes": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "problems": {
+            "description": "In contest order.",
+            "items": {
+              "$ref": "#/components/schemas/SyncProblemDto"
+            },
+            "type": "array"
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "timeLimit": {
+            "description": "Seconds a participant has once started; omitted, the whole window.",
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "startTime",
+          "endTime",
+          "problems"
+        ],
+        "type": "object"
+      },
+      "SyncContestResponse": {
+        "properties": {
+          "endTime": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isVisible": {
+            "description": "False until a person publishes it; the sync API cannot change it.",
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "participantCount": {
+            "description": "Users on the contestant list.",
+            "type": "number"
+          },
+          "startTime": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "startTime",
+          "endTime",
+          "isVisible",
+          "participantCount"
+        ],
+        "type": "object"
+      },
+      "SyncProblemDto": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "partial": {
+            "description": "Partial scoring; true when omitted.",
+            "type": "boolean"
+          },
+          "points": {
+            "maximum": 3500,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "code",
+          "points"
+        ],
+        "type": "object"
+      },
+      "SyncUpsertAction": {
+        "description": "What the request did, or on a dry run what it would do.",
+        "enum": [
+          "created",
+          "unchanged",
+          "updated"
+        ],
+        "type": "string"
+      },
+      "SyncUpsertResponse": {
+        "properties": {
+          "action": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SyncUpsertAction"
+              }
+            ],
+            "description": "What the request did, or on a dry run what it would do."
+          },
+          "dryRun": {
+            "description": "True when nothing was written (`?dryRun=true`).",
+            "type": "boolean"
+          },
+          "endTime": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isVisible": {
+            "description": "False until a person publishes it; the sync API cannot change it.",
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "participantCount": {
+            "description": "Users on the contestant list.",
+            "type": "number"
+          },
+          "startTime": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "dryRun",
+          "key",
+          "name",
+          "startTime",
+          "endTime",
+          "isVisible",
+          "participantCount"
+        ],
+        "type": "object"
+      },
       "TagAssignmentResponse": {
         "properties": {
           "assigner": {
@@ -25246,6 +25414,141 @@
         },
         "tags": [
           "UserModeration"
+        ]
+      }
+    },
+    "/api/sync/v1/contests/{key}": {
+      "get": {
+        "operationId": "SyncContestsController_read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SyncContestResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "SyncContests"
+        ]
+      },
+      "put": {
+        "operationId": "SyncContestsController_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "`true` validates everything and writes nothing.",
+            "in": "query",
+            "name": "dryRun",
+            "required": false,
+            "schema": {
+              "enum": [
+                "false",
+                "true"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncContestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SyncUpsertResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "SyncContests"
         ]
       }
     },
