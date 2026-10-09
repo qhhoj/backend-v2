@@ -1,4 +1,5 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
+import { ARCHIVE_FILTERS } from '../../src/modules/organizations/problems/dto/organization-problem.dto';
 import { RESERVED_ORGANIZATION_SLUG_PATTERN } from '../../src/modules/organizations/editing/dto/organization-edit.dto';
 import { ORGANIZATION_TAG_COLORS } from '@libs/database';
 import { loadDocument, parameterOf } from './document';
@@ -53,5 +54,37 @@ describe('organization problem tags, archive and quota schemas', () => {
         (site) => !site.startsWith('/components/schemas/'),
       ),
     ).toEqual([]);
+  });
+
+  it('documents the organization problem list query by its wire names', () => {
+    const route = {
+      route: '/api/internal/organizations/{slug}/problems',
+      method: 'get',
+    } as const;
+    expect(parameterOf(document, route, 'q')).toMatchObject({
+      required: false,
+      schema: { type: 'string' },
+    });
+    expect(() => parameterOf(document, route, 'search')).toThrow(
+      /no parameter search/,
+    );
+    expect(parameterOf(document, route, 'page')).toMatchObject({
+      required: false,
+      schema: { type: 'number' },
+    });
+    expect(parameterOf(document, route, 'archived').schema).toMatchObject({
+      $ref: '#/components/schemas/OrganizationProblemArchiveFilter',
+    });
+    expect(schema('OrganizationProblemArchiveFilter').enum).toHaveLength(
+      ARCHIVE_FILTERS.length,
+    );
+  });
+
+  it('documents OrganizationProblemResponse.updatedAt as a required date-time', () => {
+    const response = schema('OrganizationProblemResponse');
+    expect(response.properties).toMatchObject({
+      updatedAt: { type: 'string', format: 'date-time' },
+    });
+    expect(response.required).toContain('updatedAt');
   });
 });

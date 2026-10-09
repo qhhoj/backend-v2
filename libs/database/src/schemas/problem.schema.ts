@@ -123,6 +123,8 @@ export class Problem {
   @Prop({ default: 0 }) dataVersion!: number;
   /** Bytes in the problem's data directory. Recompute-and-set after every data write and by the `problem-databytes` job; the storage meter sums it. */
   @Prop({ default: 0, min: 0 }) dataBytes!: number;
+  /** Written by Mongoose `timestamps`; read by the organization problem list. */
+  updatedAt!: Date;
   /** Soft delete: set while the problem is in its grace period, and afterwards on the tombstone. Absent while the problem is live (restore `$unset`s it), so `{deletedAt: null}` reads "live". */
   @Prop({ type: Date }) deletedAt?: Date;
   @Prop({ type: UUID }) deletedBy?: string;
