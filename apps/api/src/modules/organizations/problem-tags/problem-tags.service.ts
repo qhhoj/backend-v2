@@ -45,6 +45,7 @@ export class ProblemTagsService {
     );
   }
 
+  /** The cap is check-then-insert: parallel creates at 99 tags can pass it together and leave a few more than the limit (accepted, see decisions.md). */
   async create(
     principal: Principal,
     slug: string,

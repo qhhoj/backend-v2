@@ -37,12 +37,11 @@ export class ProblemStorageQuota {
     });
   }
 
-  /** After a data write: warns the organization's admins once it passes 80% of storage. */
+  /** After a data write: warns the organization's admins once it passes 80% of storage. Never throws (see `QuotaService.afterStorageWrite`). */
   async afterWrite(organizationId: string | null): Promise<void> {
     if (organizationId === null) return;
-    await this.quota.afterStorageWrite(
-      organizationId,
-      await this.problems.sumDataBytes(organizationId),
+    await this.quota.afterStorageWrite(organizationId, () =>
+      this.problems.sumDataBytes(organizationId),
     );
   }
 

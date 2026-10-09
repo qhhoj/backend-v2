@@ -127,25 +127,39 @@ export class QuotaService implements OnApplicationBootstrap {
     return result;
   }
 
-  /** The once-a-month 80% credit warning; it sits outside the refund `try`, so a failure here can never refund finished work. */
+  /** The once-a-month 80% credit warning; it sits outside the refund `try`, so a failure here can never refund finished work, and it is caught so it never fails the request whose work is done. */
   private async warnIfCreditsNear(key: UsageKey): Promise<void> {
-    const { credits } = await this.limitsOf(key.organizationId);
-    const used = await this.creditsUsed(key);
-    if (meterOf(used, credits).isNearLimit)
-      await this.warnings.warnOnce(key, 'credits');
+    try {
+      const { credits } = await this.limitsOf(key.organizationId);
+      const used = await this.creditsUsed(key);
+      if (meterOf(used, credits).isNearLimit)
+        await this.warnings.warnOnce(key, 'credits');
+    } catch (error) {
+      this.logger.error(
+        `Credit warning for ${key.organizationId} failed: ${(error as Error).message}`,
+      );
+    }
   }
 
-  /** The storage meter's counterpart: called after a data write with the organization's new total. */
+  /** The storage meter's counterpart: called after a data write with the organization's new total (or a function reading it). Never throws: the write is done, a failed warning is only logged. */
   async afterStorageWrite(
     organizationId: string,
-    usedBytes: number,
+    usedBytes: number | (() => Promise<number>),
     now = new Date(),
   ): Promise<void> {
-    const { storageBytes } = await this.limitsOf(organizationId);
-    if (!meterOf(usedBytes, storageBytes).isNearLimit) return;
-    const key = { organizationId, month: this.monthKeyOf(now) };
-    await this.ensureUsageRow(key);
-    await this.warnings.warnOnce(key, 'storage');
+    try {
+      const used =
+        typeof usedBytes === 'number' ? usedBytes : await usedBytes();
+      const { storageBytes } = await this.limitsOf(organizationId);
+      if (!meterOf(used, storageBytes).isNearLimit) return;
+      const key = { organizationId, month: this.monthKeyOf(now) };
+      await this.ensureUsageRow(key);
+      await this.warnings.warnOnce(key, 'storage');
+    } catch (error) {
+      this.logger.error(
+        `Storage warning for ${organizationId} failed: ${(error as Error).message}`,
+      );
+    }
   }
 
   /** The atomic spend. (1) In enforce mode a price above the limit is refused up front. (2) An upsert with `$setOnInsert` only creates the month's row, so it can never hit a duplicate key on an over-limit month. (3) A guarded `$inc` without upsert applies the limit, including on the month's first spend; a miss is `quota_exceeded`. */

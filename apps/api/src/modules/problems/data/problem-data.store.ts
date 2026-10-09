@@ -92,7 +92,7 @@ export class ProblemDataStore {
     await this.recordDataBytes(problem);
   }
 
-  /** The files and the stamp are already in place, so a failed meter write is logged and not thrown: throwing would refund credits for work that was done. `dataBytes` stays stale until the next write or the nightly backfill. */
+  /** The files and the stamp are already in place, so a failed meter write is logged and not thrown: throwing would refund credits for work that was done. `dataBytes` stays stale until the next write or the one-off `problem-databytes` backfill (the nightly job only logs drift). */
   private async recordDataBytes(problem: ProblemDocument): Promise<void> {
     try {
       await this.repository.setDataBytes(

@@ -97,4 +97,34 @@ describe('quota 80 percent warning', () => {
     await quota.afterStorageWrite(organization._id, 900);
     expect(sent).toHaveLength(0);
   });
+
+  it('never lets a failing warning read fail finished work, and charges once', async () => {
+    const organization = await createOrganization(api, {
+      adminIds: ['0190a000-0000-7000-8000-0000000000ee'],
+      quotaMonthlyCredits: 10,
+      quotaStorageBytes: 1000,
+    });
+    const reading = jest
+      .spyOn(quota, 'creditsUsed')
+      .mockRejectedValueOnce(new Error('mongo blip'));
+    await expect(spend(organization._id)).resolves.toBe(1);
+    expect(
+      await quota.creditsUsed({
+        organizationId: organization._id,
+        month: quota.monthKeyOf(new Date()),
+      }),
+    ).toBe(1);
+    reading.mockRestore();
+    const limits = jest
+      .spyOn(quota, 'limitsOf')
+      .mockRejectedValueOnce(new Error('mongo blip'));
+    await expect(
+      quota.afterStorageWrite(organization._id, 900),
+    ).resolves.toBeUndefined();
+    limits.mockRestore();
+    const sizing = jest.fn().mockRejectedValueOnce(new Error('sum failed'));
+    await expect(
+      quota.afterStorageWrite(organization._id, sizing),
+    ).resolves.toBeUndefined();
+  });
 });

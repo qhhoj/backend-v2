@@ -163,7 +163,7 @@ export class ProblemImportsService {
     );
   }
 
-  /** An update of an organization problem must fit its organization's storage: the package size (an upper bound of the data it brings) against what the problem holds now. A create has no organization yet; no credits are spent because the job's outcome is unknown here. */
+  /** An update of an organization problem must fit its organization's storage: the package size against what the problem holds now. The zip is compressed, so its size is a lower bound of the extracted data and the check can under-count. A create has no organization yet; the update path is free of credits (only this storage check applies) because the job's outcome is unknown here. No storage warning follows an import either: the worker has no quota service, and the next API upload warns. */
   private async assertStorage(
     auth: AuthContext,
     query: PolygonImportQueryDto,

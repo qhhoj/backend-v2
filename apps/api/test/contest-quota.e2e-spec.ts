@@ -1,9 +1,18 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
+import type { Queue } from 'bullmq';
+import { CONTEST_PUBLISH_QUEUE } from '@libs/contests';
+import type { ContestPublishJob } from '@libs/contests';
 import { REDIS } from '@libs/common';
-import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
+import {
+  OrganizationCreditEntry,
+  OrganizationUsage,
+  uuidStr,
+} from '@libs/database';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
+import { QuotaService } from '../src/modules/organizations/quota/quota.service';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { contestUrl, createContest, hoursFromNow } from './contest-fixtures';
 import { createOrganization } from './organization-fixtures';
@@ -136,6 +145,31 @@ describe('contest quota', () => {
     expect(await api.contests.countDocuments({ key: refusedKey })).toBe(0);
   });
 
+  it('creates and schedules the contest once even when the warning read fails', async () => {
+    const organization = await limited(100);
+    const reading = jest
+      .spyOn(api.app.get(QuotaService), 'creditsUsed')
+      .mockRejectedValueOnce(new Error('mongo blip'));
+    const body = {
+      ...orgContest([organization._id]),
+      publishAfterEnd: true,
+    };
+    await post(body).expect(201);
+    reading.mockRestore();
+    expect(await usedBy(organization._id)).toBe(20);
+    expect(
+      await ledger.countDocuments({ organization: organization._id }),
+    ).toBe(1);
+    const queue = api.app.get<Queue<ContestPublishJob>>(
+      getQueueToken(CONTEST_PUBLISH_QUEUE),
+    );
+    const contest = await api.contests.findOne({ key: body.key }).lean();
+    const jobs = await queue.getJobs(['delayed', 'waiting']);
+    expect(jobs.map((job) => job.data.contestId)).toContain(
+      uuidStr(contest!._id),
+    );
+  });
+
   it('lets an over-limit contest through in warn mode', async () => {
     await api.setSetting('quota.enforce', 'warn');
     const organization = await limited(5);
@@ -193,6 +227,31 @@ describe('contest quota', () => {
       await patch(contest.key, { organizations: [second._id] }).expect(200);
       expect(await usedBy(first._id)).toBeNull();
       expect(await usedBy(second._id)).toBeNull();
+    });
+
+    it('charges once when two edits scope the same contest at the same time', async () => {
+      const organization = await limited(100);
+      const contest = await owned();
+      const contests = api.app.get(ContestsRepository);
+      const write = contests.update.bind(contests);
+      const overtaken = jest
+        .spyOn(contests, 'update')
+        .mockImplementationOnce(async (...args) => {
+          // The other editor's edit lands first and scopes the contest (and is charged).
+          await api.contests.updateOne(
+            { key: contest.key },
+            { isOrganizationPrivate: true, organizations: [organization._id] },
+          );
+          return write(...args);
+        });
+      await patch(contest.key, {
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+      })
+        .expect(409)
+        .expect(errorCode('conflict'));
+      overtaken.mockRestore();
+      expect(await usedBy(organization._id)).toBe(0);
     });
 
     it('refunds when the save fails', async () => {

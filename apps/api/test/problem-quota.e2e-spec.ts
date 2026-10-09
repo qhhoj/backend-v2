@@ -3,6 +3,8 @@ import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
+import { QuotaService } from '../src/modules/organizations/quota/quota.service';
+import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { createOrganization } from './organization-fixtures';
 import {
@@ -94,6 +96,23 @@ describe('problem creation quota', () => {
     expect(
       entries.map(({ reason, amount, ref }) => [reason, amount, ref]),
     ).toEqual([['problem', 10, body.code]]);
+  });
+
+  it('records the revision once even when the warning read fails', async () => {
+    const organization = await limited(100);
+    const reading = jest
+      .spyOn(api.app.get(QuotaService), 'creditsUsed')
+      .mockRejectedValueOnce(new Error('mongo blip'));
+    const appended = jest.spyOn(api.app.get(RevisionsRepository), 'append');
+    const body = orgPayload([organization._id]);
+    await post(editor, body).expect(201);
+    reading.mockRestore();
+    expect(appended).toHaveBeenCalledTimes(1);
+    appended.mockRestore();
+    expect(await usedBy(organization._id)).toBe(10);
+    expect(
+      await ledger.countDocuments({ organization: organization._id }),
+    ).toBe(1);
   });
 
   it('refuses creation at the limit, creates nothing and leaves the counter alone', async () => {

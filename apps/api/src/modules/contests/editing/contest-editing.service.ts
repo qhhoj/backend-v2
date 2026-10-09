@@ -218,12 +218,18 @@ export class ContestEditingService {
     guard: FilterQuery<Contest> = {},
   ): Promise<void> {
     await this.assertFormatChangeAllowed(contest, fields);
+    const charged = newlyChargedOrganization(principal, contest, fields);
+    // A charged edit saves only while the contest is still unscoped, so two concurrent edits cannot both charge: the loser gets a 409 and its charge is refunded.
+    const saveGuard =
+      charged === null
+        ? guard
+        : { ...guard, isOrganizationPrivate: contest.isOrganizationPrivate };
     // The re-check runs inside the charged work, so a save it undoes is refunded like any failed save.
     const updated = await this.quota.charged(
-      newlyChargedOrganization(principal, contest, fields),
+      charged,
       { kind: 'contest', userId: principal.userId, ref: contest.key },
       async () => {
-        const saved = await this.save(contest, fields, guard);
+        const saved = await this.save(contest, fields, saveGuard);
         await this.undoIfProblemDeleted(contest, fields);
         return saved;
       },
