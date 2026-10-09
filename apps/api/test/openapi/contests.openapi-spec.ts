@@ -5,12 +5,11 @@ import {
   SCOREBOARD_VISIBILITIES,
 } from '@libs/database';
 import { CONTEST_PHASES } from '@libs/contests';
+import { CONTEST_ACTION_STATES } from '../../src/modules/contests/editing/dto/contest-actions.response';
 import { announcementFrameData } from '../../src/modules/contests/announcements/contest-streams.service';
 import { loadDocument, operationOf, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';
 import { frameDataKeys, streamEventNames } from './stream-frames';
-
-const ACTION_STATES = ['queued', 'running', 'idle'];
 
 describe('contest schemas', () => {
   let document: OpenAPIObject;
@@ -23,15 +22,14 @@ describe('contest schemas', () => {
     return found as SchemaObject;
   };
 
-  it('has no untyped parameter, empty schema or bare object on contest routes', () => {
-    // /contests/{key}/submissions is driven by B4's SubmissionListQueryDto.
-    expect(
-      looseSites(document).filter(
-        (site) =>
-          site.includes('/api/internal/contests') &&
-          !site.includes('/contests/{key}/submissions'),
-      ),
-    ).toEqual([]);
+  /** Sites are labelled `GET <route> parameter <name>` or `schema <Name>.<property> ...`; enum sites are JSON paths. */
+  const OWN_SITE =
+    /\/api\/internal\/contests\b(?!\/\{key\}\/submissions)|(^schema |\/components\/schemas\/)(Contest|Announcement|Participation|Ranking|PrepareData|CreateContest|UpdateContest)/;
+  const owned = (sites: string[]) =>
+    sites.filter((site) => OWN_SITE.test(site));
+
+  it('has no untyped parameter, empty schema or bare object on contest routes and schemas', () => {
+    expect(owned(looseSites(document))).toEqual([]);
   });
 
   it('types paging as optional numbers and the ranking flag as an optional boolean', () => {
@@ -57,14 +55,14 @@ describe('contest schemas', () => {
     const named = [
       ['ContestFormatName', CONTEST_FORMAT_NAMES],
       ['ContestLabelStyle', LABEL_STYLES],
-      ['ContestActionState', ACTION_STATES],
+      ['ContestActionState', CONTEST_ACTION_STATES],
       ['ContestPhase', CONTEST_PHASES],
       ['ScoreboardVisibility', SCOREBOARD_VISIBILITIES],
     ] as const;
     for (const [name, values] of named) {
       // One enumName reused for another set would merge them silently: the member count catches it.
       expect(schema(name).enum).toHaveLength(values.length);
-      expect(inlineEnumSites(document, values)).toEqual([]);
+      expect(owned(inlineEnumSites(document, values))).toEqual([]);
     }
   });
 
