@@ -46,6 +46,17 @@ describe('contest jobs', () => {
     });
   });
 
+  it('stores the v2-only rules and auto-publish fields at their defaults', async () => {
+    expect(await contest(5001)).toMatchObject({
+      rules: '',
+      rulesHtml: '',
+      rulesRevision: 0,
+      publishAfterEnd: false,
+      publishAfterEndBy: null,
+      autoPublishOutcome: null,
+    });
+  });
+
   it('embeds problems in order, renumbered, unlimited submissions as null, skipping unknown problems', async () => {
     const { problems } = (await contest(5001)) as unknown as {
       problems: { problem: UUID }[];

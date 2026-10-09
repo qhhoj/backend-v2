@@ -58,6 +58,8 @@ export class ParticipationsMapper implements Mapper<Row> {
       realStart,
       virtual,
       isRegistered,
+      rulesAcceptedAt: null,
+      rulesAcceptedRevision: null,
       isDisqualified: ctx.bool(row.is_disqualified),
       score: Number(row.score ?? 0),
       cumtime: Number(row.cumtime ?? 0),

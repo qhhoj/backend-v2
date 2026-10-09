@@ -33,6 +33,8 @@ describe('contest result jobs', () => {
       score: 100,
       cumtime: 600,
       isRegistered: false,
+      rulesAcceptedAt: null,
+      rulesAcceptedRevision: null,
       formatData: {},
       frozenFormatData: {},
     });

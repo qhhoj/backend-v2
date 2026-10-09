@@ -9,6 +9,16 @@ import { CONTESTS_SQL, ContestRow } from './contest-row';
 const MICROSECONDS = 1_000_000;
 const hashOrNull = (code: string | null) => (code ? sha256(code) : null);
 
+/** Fields the legacy site lacks, stored explicitly because the migrator writes raw (no schema defaults), so `.lean()` reads and filters see them. */
+const V2_ONLY_DEFAULTS = {
+  rules: '',
+  rulesHtml: '',
+  rulesRevision: 0,
+  publishAfterEnd: false,
+  publishAfterEndBy: null,
+  autoPublishOutcome: null,
+};
+
 @Injectable()
 export class ContestsMapper implements Mapper<ContestRow> {
   name = 'contests';
@@ -27,6 +37,7 @@ export class ContestsMapper implements Mapper<ContestRow> {
       ...this.textAndTime(row, ctx),
       ...this.access(row, ctx),
       ...this.board(row, ctx),
+      ...V2_ONLY_DEFAULTS,
       ...formatOf(row, ctx),
       ...this.relations.fieldsOf(row.id, ctx),
       createdAt: null,
