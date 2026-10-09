@@ -15,6 +15,8 @@ async function main(): Promise<void> {
       adminPassword: process.env.E2E_ADMIN_PASSWORD ?? 'e2e-admin-pass-1',
       userPassword: process.env.E2E_USER_PASSWORD ?? 'e2e-user-pass-1',
       encryptionKey: key,
+      judgeName: process.env.FAKE_JUDGE_NAME ?? 'e2e-judge',
+      judgeKey: process.env.FAKE_JUDGE_KEY ?? 'e2e-judge-key',
     });
     console.log(JSON.stringify(summary, null, 2));
   } finally {

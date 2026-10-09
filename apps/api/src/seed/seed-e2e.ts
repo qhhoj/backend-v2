@@ -21,6 +21,7 @@ import {
 import { compileInitYaml } from '@libs/problems';
 import { SETTINGS, sealSetting } from '@libs/settings';
 import type { Connection, FilterQuery, Model } from 'mongoose';
+import { seedJudge } from './seed-judge';
 
 export interface SeedOptions {
   problemDataRoot: string;
@@ -28,12 +29,15 @@ export interface SeedOptions {
   userPassword: string;
   /** Seals the mail URL row, the same key the api reads settings with. */
   encryptionKey: Buffer;
+  judgeName: string;
+  judgeKey: string;
 }
 export interface SeedSummary {
   admin: string;
   user: string;
   problem: string;
   language: string;
+  judge: string;
 }
 
 /** Mailpit from docker-compose.yml, the URL CONTRIBUTING gives for local mail. */
@@ -213,6 +217,7 @@ export async function seedE2e(
   const { admin, user } = await seedUsers(connection, options);
   const catalog = await seedCatalog(connection);
   await seedMailSetting(connection, options.encryptionKey);
+  await seedJudge(connection, options);
   await seedSampleProblem(connection, {
     catalog,
     authorId: admin._id,
@@ -223,5 +228,6 @@ export async function seedE2e(
     user: user.username,
     problem: SAMPLE_PROBLEM_CODE,
     language: catalog.language.key,
+    judge: options.judgeName,
   };
 }

@@ -1,10 +1,12 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { verifyPassword } from '@libs/auth';
+import { sha256, verifyPassword } from '@libs/auth';
 import { encryptionKey } from '@libs/common';
 import { TEST_ENV } from '@libs/common/testing';
 import {
+  Judge,
+  JudgeSchema,
   Language,
   LanguageSchema,
   Problem,
@@ -32,6 +34,8 @@ describe('seed:e2e', () => {
     adminPassword: 'admin-pass-123',
     userPassword: 'user-pass-123',
     encryptionKey: key,
+    judgeName: 'seed-judge',
+    judgeKey: 'seed-judge-key',
   });
   const mailRow = () =>
     connection
@@ -64,6 +68,7 @@ describe('seed:e2e', () => {
       user: 'e2e_user',
       problem: 'e2e_sum',
       language: 'PY3',
+      judge: 'seed-judge',
     });
     const users = connection.model(User.name, UserSchema);
     const admin = await users.findOne({ username: 'e2e_admin' });
@@ -121,6 +126,18 @@ describe('seed:e2e', () => {
     expect((await users.findOne({ username: 'e2e_user' }))!.password).toBe(
       'changed-by-test',
     );
+  });
+
+  it('registers a judge whose stored key is the hash, and never rewrites it', async () => {
+    const judges = connection.model<Judge>(Judge.name, JudgeSchema);
+    await seedE2e(connection, options());
+    const row = await judges.findOne({ name: 'seed-judge' }).lean();
+    expect(row!.authKeyHash).toBe(sha256('seed-judge-key'));
+    await seedE2e(connection, { ...options(), judgeKey: 'rotated-key' });
+    expect(await judges.countDocuments({ name: 'seed-judge' })).toBe(1);
+    expect(
+      (await judges.findOne({ name: 'seed-judge' }).lean())!.authKeyHash,
+    ).toBe(sha256('seed-judge-key'));
   });
 
   it('keeps a mail URL an admin already set', async () => {
