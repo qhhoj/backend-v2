@@ -1,6 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Injectable, Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated, RateLimitService } from '@libs/common';
+import {
+  NOTIFICATION_FANOUT_QUEUE,
+  notifyAnnouncementFanout,
+} from '@libs/community';
+import type { NotificationFanoutJob } from '@libs/community';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { AnnouncementsRepository } from './announcements.repository';
 import { ContestEventsService } from './contest-events.service';
@@ -18,11 +25,15 @@ import {
 
 @Injectable()
 export class ContestAnnouncementsService {
+  private readonly logger = new Logger(ContestAnnouncementsService.name);
+
   constructor(
     private readonly contestsService: ContestsService,
     private readonly announcements: AnnouncementsRepository,
     private readonly events: ContestEventsService,
     private readonly rateLimit: RateLimitService,
+    @InjectQueue(NOTIFICATION_FANOUT_QUEUE)
+    private readonly fanout: Queue<NotificationFanoutJob>,
   ) {}
 
   async list(
@@ -80,16 +91,18 @@ export class ContestAnnouncementsService {
       throw new AppError('not_found', 404, 'No such announcement');
   }
 
+  /** Shown live on the contest stream, and written to the inboxes by the fan-out job. */
   private async push(
     contest: ContestDocument,
     announcementId: string,
   ): Promise<void> {
-    if (contest.pushAnnouncements)
-      await this.events.publish({
-        type: 'announcement',
-        contestId: contest._id,
-        announcementId,
-      });
+    if (!contest.pushAnnouncements) return;
+    await this.events.publish({
+      type: 'announcement',
+      contestId: contest._id,
+      announcementId,
+    });
+    await notifyAnnouncementFanout(this.fanout, announcementId, this.logger);
   }
 
   /** Every push reaches every open stream of the contest: bounded per contest, never given back. */

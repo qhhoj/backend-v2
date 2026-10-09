@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
+import { NOTIFICATION_FANOUT_QUEUE } from '@libs/community';
 import { RateLimitService } from '@libs/common';
 import {
   CONTEST_DATA_QUEUE,
@@ -59,6 +60,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
       { name: CONTEST_FINAL_JUDGE_QUEUE },
       { name: CONTEST_RATING_QUEUE },
       { name: CONTEST_DATA_QUEUE },
+      { name: NOTIFICATION_FANOUT_QUEUE },
     ),
   ],
   // Fastify matches a static segment (Task 7's `current`) before `:key`, whatever the controller order.

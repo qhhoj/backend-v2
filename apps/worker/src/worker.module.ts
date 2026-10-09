@@ -24,6 +24,7 @@ import { SubmissionEffectsModule } from './jobs/submission-effects/submission-ef
 import { UserDataModule } from './jobs/user-data/user-data.module';
 import { ContributionPointsModule } from './jobs/contribution-points/contribution-points.module';
 import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.module';
+import { NotificationFanoutModule } from './jobs/notification-fanout/notification-fanout.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.mod
     UserDataModule,
     DiscordWebhookModule,
     MigrationRecomputeModule,
+    NotificationFanoutModule,
   ],
 })
 export class WorkerModule {}
