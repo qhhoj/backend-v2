@@ -163,6 +163,25 @@ function publishFields(
     : { publishAfterEndBy: null };
 }
 
+/** One `unknown_tag` 400 with an issue per slug, so each carries its own code. */
+function unknownTags(slugs: string[]): AppError {
+  const messages = slugs.map((slug) => `Unknown tag ${slug}.`);
+  return new AppError(
+    'unknown_tag',
+    400,
+    `Unknown tag: ${slugs.join(', ')}`,
+    { tags: messages },
+    undefined,
+    {
+      issues: slugs.map((slug, index) => ({
+        field: 'tags',
+        code: 'unknown_tag',
+        message: messages[index],
+      })),
+    },
+  );
+}
+
 @Injectable()
 export class ContestEditFieldsService {
   constructor(
@@ -213,15 +232,7 @@ export class ContestEditFieldsService {
     const unknown = dto.tags.filter(
       (slug) => !stored.includes(slug) && !this.tags.hasSlug(slug),
     );
-    if (unknown.length)
-      throw new AppError(
-        'unknown_tag',
-        400,
-        `Unknown tag: ${unknown.join(', ')}`,
-        {
-          tags: unknown.map((slug) => `Unknown tag ${slug}.`),
-        },
-      );
+    if (unknown.length) throw unknownTags(unknown);
   }
 
   private async assertUsers(fields: Partial<Contest>): Promise<void> {

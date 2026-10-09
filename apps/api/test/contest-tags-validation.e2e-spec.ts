@@ -44,10 +44,20 @@ describe('contest tags in the editor', () => {
       endTime: new Date(Date.now() + 7_200_000).toISOString(),
       tags,
     });
-    await authed(api.http().post('/api/internal/contests'), editor)
-      .send(body(['nope']))
+    const refused = await authed(
+      api.http().post('/api/internal/contests'),
+      editor,
+    )
+      .send(body(['nope', 'olp', 'other']))
       .expect(400)
       .expect(errorCode('unknown_tag'));
+    expect(
+      (
+        refused.body as {
+          error: { issues: Array<{ field: string; code: string }> };
+        }
+      ).error.issues.map(({ field, code }) => `${field}:${code}`),
+    ).toEqual(['tags:unknown_tag', 'tags:unknown_tag']);
     await authed(api.http().post('/api/internal/contests'), editor)
       .send(body(['olp']))
       .expect(201);
