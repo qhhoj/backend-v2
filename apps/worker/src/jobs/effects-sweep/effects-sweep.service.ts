@@ -8,6 +8,7 @@ import type { SubmissionGradedJob } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
 
+const MINUTE_MS = 60 * 1000;
 export const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 /** `judgedDate` is grading-begin: a grading that began up to this long before the last sweep and finished after it is still covered. */
 export const SWEEP_OVERLAP_MS = 10 * 60 * 1000;
@@ -19,6 +20,9 @@ export const SWEEP_WATERMARK_KEY = 'effects:sweep:until';
 export const EFFECTS_DUE_GRACE_MS = 2 * 60 * 1000;
 /** Rows repaired per sweep, oldest first; the rest wait for the next one. */
 export const EFFECTS_DUE_BATCH = 1000;
+
+/** A row whose repair keeps failing is logged once per this long, not on every sweep; its retries go on. */
+export const REPAIR_LOG_BACKOFF_MS = 60 * 60 * 1000;
 
 export interface SweepResult {
   users: number;
@@ -35,6 +39,8 @@ export interface SweepResult {
 @Injectable()
 export class EffectsSweepService {
   private readonly logger = new Logger(EffectsSweepService.name);
+  /** Failing rows by id: when each was last logged (epoch ms). A row that repairs leaves the map. */
+  private readonly failureLoggedAt = new Map<string, number>();
 
   constructor(
     private readonly repository: SubmissionEffectsRepository,
@@ -73,11 +79,10 @@ export class EffectsSweepService {
     for (const job of due) {
       try {
         await this.effects.apply(job);
+        this.failureLoggedAt.delete(job.submissionId);
         repaired += 1;
       } catch (error) {
-        this.logger.error(
-          `Repairing the effects of submission ${job.submissionId} failed: ${(error as Error).message}`,
-        );
+        this.logFailure(job.submissionId, error as Error, now);
         await this.repository.postponeEffectsDue(job.submissionId);
       }
     }
@@ -86,6 +91,16 @@ export class EffectsSweepService {
         `Re-applied the effects of ${repaired} submissions whose graded job was lost`,
       );
     return repaired;
+  }
+
+  private logFailure(submissionId: string, error: Error, now: number): void {
+    const loggedAt = this.failureLoggedAt.get(submissionId);
+    if (loggedAt !== undefined && now - loggedAt < REPAIR_LOG_BACKOFF_MS)
+      return;
+    this.failureLoggedAt.set(submissionId, now);
+    this.logger.error(
+      `Repairing the effects of submission ${submissionId} failed (logged again in ${REPAIR_LOG_BACKOFF_MS / MINUTE_MS} min if it keeps failing): ${error.message}`,
+    );
   }
 
   /** Rows due since before this have lost their job: due for longer than the grace, and stamped before every graded job still running or waiting (BullMQ serves them oldest first, so a row stamped later may only be queued behind them, e.g. during a bulk rejudge). A job in retry backoff is not waited for; repairing its row too is harmless. */

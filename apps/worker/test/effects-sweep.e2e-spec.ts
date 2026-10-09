@@ -1,4 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
 import { Worker } from 'bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
@@ -292,6 +293,32 @@ describe('effects sweep', () => {
       ).toBe(1000);
     } finally {
       await graded.resume();
+    }
+  });
+
+  it('logs a row whose repair keeps failing once per backoff, not on every sweep', async () => {
+    const now = Date.now();
+    const problem = await seedProblem(worker);
+    const user = await seedUser(worker);
+    const stuck = await seedGraded(worker, user._id, problem._id, {
+      date: new Date(now - 3 * 60 * MINUTE),
+      judgedDate: null,
+      effectsDueAt: new Date(now - 40 * MINUTE),
+    });
+    const effects = worker.module.get(SubmissionEffectsService);
+    jest.spyOn(effects, 'apply').mockRejectedValue(new Error('scoring threw'));
+    const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const failuresLogged = () =>
+      logged.mock.calls.filter((call) => String(call[0]).includes(stuck._id))
+        .length;
+    try {
+      for (const minutes of [0, 10, 20, 30])
+        await sweeps.sweep(now + minutes * MINUTE);
+      expect(failuresLogged()).toBe(1);
+      await sweeps.sweep(now + 70 * MINUTE);
+      expect(failuresLogged()).toBe(2);
+    } finally {
+      jest.restoreAllMocks();
     }
   });
 
