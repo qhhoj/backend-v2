@@ -82,11 +82,38 @@ describe('post-migration checks', () => {
     );
   });
 
+  it('lists site paths outside MEDIA_URL as unchecked, not as missing or silently skipped', async () => {
+    const media = mkdtempSync(join(tmpdir(), 'media-'));
+    await docs('problems').deleteMany({});
+    await docs('submissionSources').deleteMany({});
+    await docs('problems').insertOne({
+      _id: toUuid(newId()),
+      code: 'pdfs',
+      pdfStatementUrl: '/static/a.pdf',
+      materialUrl: 'https://cdn.example/m.pdf',
+    });
+    const report = await new FileCheckService(conn).run({
+      problemData: media,
+      media,
+    });
+    expect(report).toEqual({
+      checked: 0,
+      missing: [],
+      unchecked: ['pdfs pdfStatementUrl'],
+    });
+  });
+
   it('reports broken cross-collection invariants with counts', async () => {
     const user = toUuid(newId());
     const submission = toUuid(newId());
     await docs('users').insertOne({ _id: user, rating: 1500 });
     await docs('submissions').insertOne({ _id: submission, user });
+    const problem = toUuid(newId());
+    await docs('problems').insertOne({ _id: problem, code: 'p', points: 800 });
+    await docs('submissions').insertMany([
+      { _id: toUuid(newId()), user, problem, points: 1000 },
+      { _id: toUuid(newId()), user, problem, points: 800 },
+    ]);
     await docs('contestSubmissions').insertOne({
       _id: toUuid(newId()),
       participation: toUuid(newId()),
@@ -102,7 +129,8 @@ describe('post-migration checks', () => {
     const lines = await integrity.run();
     expect(lines).toEqual(
       expect.arrayContaining([
-        'submissions without a source: 1',
+        'submissions without a source: 3',
+        "submissions scoring above their problem's points: 1",
         'contestSubmissions whose submission is missing: 1',
         'contestSubmissions whose participation is missing: 1',
         'ratings whose participation is missing: 1',

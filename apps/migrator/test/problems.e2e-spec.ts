@@ -45,6 +45,13 @@ describe('problems job', () => {
     );
   });
 
+  it('puts a bare pdf path under MEDIA_URL and keeps http(s) and site paths', async () => {
+    expect((await problem(4005))!.pdfStatementUrl).toBe(
+      '/media/statements/low.pdf',
+    );
+    expect((await problem(4006))!.pdfStatementUrl).toBe('/static/high.pdf');
+  });
+
   it('resolves relations to v2 ids (profiles to users)', async () => {
     const sum = (await problem(4001))!;
     expect(sum.typeIds.map(uuidStr)).toEqual(

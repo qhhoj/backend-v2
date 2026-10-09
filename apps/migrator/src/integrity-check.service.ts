@@ -131,6 +131,15 @@ const danglingPipeline = (ref: Reference): Document[] => [
   { $count: 'total' },
 ];
 
+/** Graded submissions that score above their problem's points: a copied legacy score that was never rescaled. */
+const OVERSCORED: Document[] = [
+  { $match: { points: { $ne: null } } },
+  lookup('problems', 'problem', 'target'),
+  { $unwind: '$target' },
+  { $match: { $expr: { $gt: ['$points', '$target.points'] } } },
+  { $count: 'total' },
+];
+
 const BREAKDOWN_SHOWN = 10;
 
 /** The total, then the legacy contests that lose the most rows, so the exit 1 can be triaged without reading data. */
@@ -162,6 +171,11 @@ export class IntegrityCheckService {
       const count = await this.count(ref.collection, danglingPipeline(ref));
       if (count) lines.push(`${ref.what}: ${count}`);
     }
+    const overscored = await this.count('submissions', OVERSCORED);
+    if (overscored)
+      lines.push(
+        `submissions scoring above their problem's points: ${overscored}`,
+      );
     const stale = await this.staleRatings();
     if (stale)
       lines.push(

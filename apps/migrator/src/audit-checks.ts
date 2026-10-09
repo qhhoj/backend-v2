@@ -102,7 +102,7 @@ export const RANGE_CHECKS: readonly [string, string, boolean][] = [
     NOTE,
   ],
   [
-    'judge_submissiontestcase.status RJ (mapped to IE)',
+    'judge_submissiontestcase.status RJ (cases dropped, ruling)',
     count("judge_submissiontestcase WHERE status = 'RJ'"),
     NOTE,
   ],
@@ -280,8 +280,15 @@ export const RANGE_CHECKS: readonly [string, string, boolean][] = [
     NOTE,
   ],
   [
-    'judge_problem.pdf_url not http(s)',
-    count("judge_problem WHERE pdf_url <> '' AND pdf_url NOT LIKE 'http%'"),
+    'judge_problem.pdf_url bare relative path (rewritten under MEDIA_URL)',
+    count(
+      "judge_problem WHERE pdf_url <> '' AND pdf_url NOT LIKE 'http%' AND pdf_url NOT LIKE '/%'",
+    ),
+    NOTE,
+  ],
+  [
+    "judge_problem.pdf_url site path starting with '/' (kept; check-files lists those outside MEDIA_URL as unchecked)",
+    count("judge_problem WHERE pdf_url LIKE '/%'"),
     NOTE,
   ],
   [

@@ -30,4 +30,6 @@ INSERT INTO judge_problem (id, code, name, time_limit, memory_limit, points, gro
  (4005,'low4','Low',1,65536,100,4001,'F','O','A','2021-01-05 00:00:00'),
  (4006,'high4','High',1,65536,9000,4001,'F','O','A','2021-01-06 00:00:00');
 INSERT INTO judge_problem_types (id, problem_id, problemtype_id) VALUES (4005,4005,4001),(4006,4006,4001);
+UPDATE judge_problem SET pdf_url='statements/low.pdf' WHERE id=4005;
+UPDATE judge_problem SET pdf_url='/static/high.pdf' WHERE id=4006;
 SET FOREIGN_KEY_CHECKS=1;

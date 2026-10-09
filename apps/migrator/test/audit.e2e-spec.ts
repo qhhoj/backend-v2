@@ -71,7 +71,9 @@ describe('audit', () => {
     expect(report.errors.some((line) => line.startsWith(label))).toBe(false);
   });
   it('counts RJ test cases that map to IE, without an enum warning', () => {
-    expect(added('judge_submissiontestcase.status RJ (mapped to IE)')).toBe(1);
+    expect(
+      added('judge_submissiontestcase.status RJ (cases dropped, ruling)'),
+    ).toBe(1);
     expect(report.warnings.join('\n')).not.toContain('"RJ"');
   });
   it('never prints a password field that has no recognised algorithm prefix', () => {

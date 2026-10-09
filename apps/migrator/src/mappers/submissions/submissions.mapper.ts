@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { PROBLEM_LIMITS } from '@libs/database';
+import { submissionPoints } from '@libs/judging';
+import { LegacySourceService } from '../../legacy-source.service';
 import {
   SUBMISSION_PRIORITY,
   SUBMISSION_RESULTS,
@@ -6,7 +9,7 @@ import {
 } from '@libs/database';
 import type { SubmissionResult, SubmissionStatus } from '@libs/database';
 import { ChildQuery, MapCtx, MappedDocument, Mapper } from '../../mapper';
-import { importedSubmission } from '../imported-rows';
+import { importedProblem, importedSubmission } from '../imported-rows';
 import { CaseRow, casesOf, TESTCASES_SQL } from './submission-cases';
 
 type Row = {
@@ -49,6 +52,30 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
     s.user_id, s.contest_object_id, s.judged_date, s.locked_after, s.rejudged_date
     FROM judge_submission s ${importedSubmission('s')} ORDER BY s.id`;
   children: ChildQuery<CaseRow> = { sql: TESTCASES_SQL, key: 'submission_id' };
+  /** Problems whose points the problems job clamps: legacy id -> clamped points and partial flag. */
+  private clamped = new Map<number, { points: number; partial: boolean }>();
+
+  async prepare(source: LegacySourceService) {
+    const { min, max } = PROBLEM_LIMITS.points;
+    const rows = await source.query<{
+      id: number;
+      points: number;
+      partial: number;
+    }>(
+      `SELECT p.id, p.points, p.partial FROM judge_problem p ${importedProblem('p')}
+       WHERE p.points < ? OR p.points > ?`,
+      [min, max],
+    );
+    this.clamped = new Map(
+      rows.map((row) => [
+        Number(row.id),
+        {
+          points: Math.min(max, Math.max(min, Number(row.points))),
+          partial: Boolean(row.partial),
+        },
+      ]),
+    );
+  }
 
   map(row: Row, ctx: MapCtx, cases: CaseRow[]): MappedDocument {
     const where = `judge_submission:${row.id}`;
@@ -76,7 +103,7 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
     return {
       time: row.time,
       memory: row.memory,
-      points: row.points,
+      points: this.pointsOf(row),
       casePoints: Number(row.case_points ?? 0),
       caseTotal: Number(row.case_total ?? 0),
       error: row.error,
@@ -87,6 +114,18 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
       rejudgedDate: ctx.date(row.rejudged_date),
       lockedAfter: ctx.date(row.locked_after),
     };
+  }
+
+  /** A graded submission on a clamped problem is scored against the clamped points, as `problem-rescore` would; the legacy value was scaled to the old points. */
+  private pointsOf(row: Row): number | null {
+    const problem = this.clamped.get(Number(row.problem_id));
+    if (!problem || row.points === null) return row.points;
+    return submissionPoints(
+      Number(row.case_points ?? 0),
+      Number(row.case_total ?? 0),
+      problem.points,
+      problem.partial,
+    );
   }
 
   /** In flight at cutover goes back to the queue; the bridge rebuilds its queue from Mongo. */

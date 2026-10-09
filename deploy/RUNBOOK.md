@@ -25,25 +25,32 @@ Layout assumed: code in `/opt/qhhoj/backend`, frontend dist in `/var/www/qhhoj`,
 
 Run on the new host with the variables below in `/root/migrate.env` (mode 600; `set -a; . /root/migrate.env; set +a`; delete it after the rollback period). The migrator reads `process.env` directly; a command that lacks a variable fails with `<NAME> is required`.
 
-| Variable                              | Needed by                                                        |
-| ------------------------------------- | ---------------------------------------------------------------- |
-| `MONGO_URL`                           | every command                                                    |
-| `LEGACY_MYSQL_URL`                    | audit, backfill, verify, check-integrity                         |
-| `LEGACY_SECRET_KEY`, `ENCRYPTION_KEY` | backfill (users job: decrypts legacy 2FA secrets, re-seals them) |
-| `MEDIA_URL` (default `/media`)        | backfill (problems, sources)                                     |
-| `REDIS_URL`                           | recompute (same Redis and Mongo as the worker)                   |
-| `PROBLEM_DATA_ROOT`, `MEDIA_ROOT`     | check-files                                                      |
+| Variable                              | Needed by                                                                   |
+| ------------------------------------- | --------------------------------------------------------------------------- |
+| `MONGO_URL`                           | every command                                                               |
+| `LEGACY_MYSQL_URL`                    | audit, backfill, verify, check-integrity                                    |
+| `LEGACY_SECRET_KEY`, `ENCRYPTION_KEY` | backfill and verify (users job: decrypts legacy 2FA secrets, re-seals them) |
+| `MEDIA_URL` (default `/media`)        | backfill and verify (problems, sources), check-files                        |
+| `REDIS_URL`                           | recompute (same Redis and Mongo as the worker)                              |
+| `PROBLEM_DATA_ROOT`, `MEDIA_ROOT`     | check-files                                                                 |
+
+`/etc/qhhoj/env` and `/root/migrate.env` must hold the same `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY` and `MEDIA_URL`. A different `ENCRYPTION_KEY` seals every migrated TOTP secret and scratch code under a key the api does not hold, and `verify` cannot see it (it opens them with the migrate key): every 2FA user would be locked out. Compare the values before the first `backfill`.
+
+For a rehearsal on the full dump run the migrator as `NODE_OPTIONS=--max-old-space-size=3072` inside a 4 GB limit. Time `audit` too: its zero-date scan reads every date column, including the 13M-row activity table.
 
 Data dirs (`MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, and any MariaDB or Mongo datadir used in a rehearsal) must not be under `/tmp`: it is a size-limited tmpfs and a 4.5 GB import fills it ("table is full").
 
 Order (all from `node dist/apps/migrator/main <command>`):
 
 1. `audit` (read-only). Read its warnings; the manual items below come from it.
-2. `backfill [jobs...] [--fresh]`: idempotent upsert by `_id`, repeatable while the old site is live (delta catch-up). It writes the migration marker the worker requires. `--fresh` empties each selected collection first (rehearsal, and the final run so rows deleted on the old site disappear; ids stay stable through `migrationIdMap`).
+2. `backfill [jobs...] [--fresh] [--report <path>]`: idempotent upsert by `_id`, repeatable while the old site is live (delta catch-up). It writes the migration marker the worker requires. `--fresh` empties each selected collection first (rehearsal, and the final run so rows deleted on the old site disappear; ids stay stable through `migrationIdMap`). Without `--fresh` a replaced row under a unique key (misc config key, flatpage url) is refused as a duplicate, so delta runs are a warm-up only; the final run is always `--fresh`. The console shows a few lines per job; every report line (ids, codes and keys only, no row data) is saved to `--report` (default `./migration-report-<time>.txt`, mode 600) and its path is printed. The manual items below are read from that file. Never run `backfill` against the live database after `finish`: it re-arms the marker and with it the rating wipe.
 3. `verify [jobs...]` must exit 0; exit 1 lists mismatches (job and document).
-4. `recompute`: the worker's `migration-recompute` job (points, stats, scores, caches; re-rates every rated contest, see decisions.md). It needs a running worker on the same Redis and Mongo and fails at once with "no worker on migration-recompute" otherwise. It detects the worker with Redis `CLIENT LIST`; a managed Redis that forbids it needs a self-hosted one. Allow hours (6 h timeout).
+4. Start only the worker (`systemctl start qhhoj-worker`; the api and bridge stay stopped), then `recompute`: the worker's `migration-recompute` job (points, stats, scores, caches; re-rates every rated contest, see decisions.md). It needs a running worker on the same Redis and Mongo and fails at once with "no worker on migration-recompute" otherwise. It detects the worker with Redis `CLIENT LIST`; a managed Redis that forbids it needs a self-hosted one. Allow hours (6 h timeout). The worker may stay up afterwards or be stopped; `qhhoj.target` starts it in step 4 of the cutover anyway.
 5. Copy the legacy upload tree into `MEDIA_ROOT` (including `submission_file/`) and the problem data into `PROBLEM_DATA_ROOT`; rsync again in the window. Audit the media tree: `find $MEDIA_ROOT -type f ! -path '*/submission_file/*' | sed 's/.*\.//' | sort | uniq -c`; nginx serves only png/jpg/jpeg/gif/webp/svg/pdf/txt inline and everything else as a download.
-6. `check-files` (exit 1 lists missing files, first 50 shown) and `check-integrity` (references, counts, rating coverage; exit 1 on a problem) must exit 0.
+6. `check-files` (exit 1 lists missing files, first 50 shown) and `check-integrity` (references, counts, rating coverage; exit 1 on a problem) must exit 0, except as ruled below. `check-files` also warns about `pdfStatementUrl`/`materialUrl` site paths outside `MEDIA_URL` (they cannot be checked here): open each by hand on the new host.
+
+   Rating coverage ("legacy-rated participations without a v2 rating", "v2 ratings without a legacy rating", "rated contests: legacy N, v2 M") can differ legitimately because the replay re-rates (users cross the rating floor and ceiling; contests legacy marked rated but never rated get rows). Any other line (references, "submissions scoring above their problem's points", stale user ratings) is still an abort. For a rating shortfall: read the per-contest breakdown; a handful of contests with few missing rows is accepted and recorded in the decisions log; a shortfall spread over many contests, or any contest missing most of its rows, means the replay did not run: abort, re-run `recompute`, and check the worker log.
+
 7. `finish`: clears the migration marker, so the worker refuses `migration-recompute` from then on. Run it before go-live and never after the site takes writes.
 8. `mongodump` the migrated database (`/backup/qhhoj-cutover.gz`) before starting the services.
 
@@ -51,19 +58,22 @@ Rehearse the whole sequence on a copy first and time `backfill --fresh`: that is
 
 Manual items:
 
-- Deactivated superusers. Old-site admin-deactivated accounts migrate banned ("Account deactivated on the old site.", inactive, unlisted). Staff cannot unban a superuser in the UI. The audit warning "auth_user deactivated superusers" gives the count; clear each by hand: `db.users.updateOne({ username: "<name>" }, { $set: { isActive: true, banReason: null, displayRank: "user", isUnlisted: false } })`.
+- Deactivated superusers. Old-site admin-deactivated accounts migrate banned ("Account deactivated on the old site.", inactive, unlisted). Staff cannot unban a superuser in the UI. The audit warning "auth_user deactivated superusers" gives the count. Leave them banned: they could not log in on the old site either. Re-enable one only on an explicit decision that the person regains access (`db.users.updateOne({ username: "<name>" }, { $set: { isActive: true, banReason: null, isUnlisted: false } })` restores full superuser access, a grant the old site did not give). To let staff manage the account instead, demote it: `$set: { isSuperuser: false, isStaff: false }`.
 - Lua label scripts: 6 contests use one; v2 has only numeric and alpha labels, so they become alpha and the report says `judge_contest:<id> Lua label script -> alpha`. Staff open each of the 6 and check the problem labels.
-- Clamped points: 19 problems had points outside 800..3500 and were clamped (`clamped points judge_problem:<id> <old> -> <new>` in the report). Review them with the problem setters.
+- Clamped points: 19 problems had points outside 800..3500 and were clamped (`clamped points judge_problem:<id> <old> -> <new>` in the report). The submissions job rescored those problems' graded submissions against the clamped points, so their user points and stats stay consistent. Review the new points with the problem setters; if one changes, a `problem-rescore` fixes its submissions.
 - RJ test cases: case status `RJ` is not a v2 status; those cases are dropped and counted in the report (submission totals are unaffected).
 - Judges are not migrated (names fail the v2 pattern and judge-v2 registers fresh): create judges and keys in the admin UI after cutover.
 - Canary skip: the users job checks `LEGACY_SECRET_KEY` against the first `totp_key`, else the first `scratch_codes`. With neither it logs "no legacy secret to test LEGACY_SECRET_KEY against (canary skipped)": check the key by hand then. A wrong key aborts the users job.
+- Not migrated, tell the users: API tokens (`judge_profile.api_token`; regenerate them) and IP auth.
+- Template-valued misc config entries are kept raw and only reported: convert them by hand. Re-enter the legacy site settings (the env/settings import is paused) in the admin UI.
+- Permissions that exist only in v2 (for example `judge.change_settings`, `judge.import_polygon_package`, `judge.create_mass_testcases`) are held by no migrated group. Superusers bypass them; grant them to the staff groups that need them.
 - Badges, legacy ratings, activity, sessions and logs are not migrated by decision; users log in again.
 
 ## Cutover sequence
 
 1. Announce. Lower the DNS TTL a day ahead.
 2. Old site read-only: put the old nginx in a mode that rejects POST/PUT/PATCH/DELETE (503 with a notice), stop the old site's background workers (celery, cron) and the old judges' intake, wait for in-flight submissions to finish.
-3. Final `backfill --fresh` (the id map is kept, so ids stay stable; rows deleted since an earlier run would otherwise fail `verify`), `rsync` media and problem data, then `verify`, `recompute`, `check-files`, `check-integrity` (all exit 0 required; otherwise abort, the old site is untouched) and `finish`.
+3. Final `backfill --fresh` (the id map is kept, so ids stay stable; rows deleted since an earlier run would otherwise fail `verify`), `rsync` media and problem data, then `verify`, start the worker alone (`systemctl start qhhoj-worker`) and `recompute`, then `check-files`, `check-integrity` (all exit 0 required; otherwise abort, the old site is untouched) and `finish`.
 4. Start the new stack: `systemctl start qhhoj.target`, then run the smoke checks against the new host by `curl --resolve` or `/etc/hosts`.
 5. Point the judges to the new bridge (see Judge connection) and check they connect.
 6. Switch DNS to the new host. All sessions are invalidated once, users log in again.

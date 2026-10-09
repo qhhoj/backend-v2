@@ -12,14 +12,14 @@ describe('MigrationReport', () => {
     ]);
   });
 
-  it('logs at most 50 distinct lines and says how many it held back', () => {
+  it('logs at most 10 distinct lines and says how many it held back', () => {
     const report = new MigrationReport();
-    for (let index = 0; index < 53; index++) report.add(`line ${index}`);
+    for (let index = 0; index < 13; index++) report.add(`line ${index}`);
     const warn = jest.fn();
     report.flush('job', { warn });
-    expect(warn).toHaveBeenCalledTimes(51);
+    expect(warn).toHaveBeenCalledTimes(11);
     expect(warn).toHaveBeenLastCalledWith(
-      'job: 3 more distinct report line(s)',
+      'job: 3 more distinct report line(s) (all are in the report file)',
     );
   });
 });

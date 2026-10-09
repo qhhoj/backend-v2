@@ -1,4 +1,4 @@
-const SHOWN_LINES = 50;
+const SHOWN_LINES = 10;
 
 /** What a job imported differently from legacy or left out. Lines name a legacy `table:id`, a code or a key, never row content. */
 export class MigrationReport {
@@ -20,7 +20,7 @@ export class MigrationReport {
       logger.warn(`${job}: ${line}`);
     if (lines.length > SHOWN_LINES)
       logger.warn(
-        `${job}: ${lines.length - SHOWN_LINES} more distinct report line(s)`,
+        `${job}: ${lines.length - SHOWN_LINES} more distinct report line(s) (all are in the report file)`,
       );
   }
 }

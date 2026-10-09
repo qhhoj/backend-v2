@@ -7,6 +7,7 @@ import { escapeRegExp } from '@libs/common';
 import { DATA_FILE_KINDS, uuidStr } from '@libs/database';
 import { mediaUrl, requiredEnv } from './legacy-env';
 
+type Report = { checked: number; missing: string[]; unchecked: string[] };
 /** `path` null: the reference escapes `root`, so it counts as missing. */
 type Wanted = { label: string; path: string | null; root: string };
 type Roots = { problemData: string; media: string };
@@ -42,18 +43,22 @@ export class FileCheckService {
       problemData: requiredEnv('PROBLEM_DATA_ROOT'),
       media: requiredEnv('MEDIA_ROOT'),
     },
-  ): Promise<{ checked: number; missing: string[] }> {
+  ): Promise<Report> {
+    const unchecked: string[] = [];
     const wanted = [
-      ...(await this.problemFiles(roots)),
+      ...(await this.problemFiles(roots, unchecked)),
       ...(await this.sourceFiles(roots.media)),
     ];
     const missing: string[] = [];
     for (const file of wanted)
       if (!(await present(file))) missing.push(file.label);
-    return { checked: wanted.length, missing };
+    return { checked: wanted.length, missing, unchecked };
   }
 
-  private async problemFiles(roots: Roots): Promise<Wanted[]> {
+  private async problemFiles(
+    roots: Roots,
+    unchecked: string[],
+  ): Promise<Wanted[]> {
     const wanted: Wanted[] = [];
     const cursor = this.conn.collection('problems').find(
       {},
@@ -76,7 +81,12 @@ export class FileCheckService {
       }
       for (const field of MEDIA_FIELDS) {
         const url: unknown = problem[field];
-        const path = typeof url === 'string' ? this.mediaPath(url, roots) : '';
+        if (typeof url !== 'string' || !url) continue;
+        if (url.startsWith('/') && !url.startsWith(`${mediaUrl()}/`)) {
+          unchecked.push(`${problem.code} ${field}`);
+          continue;
+        }
+        const path = this.mediaPath(url, roots);
         if (path !== '')
           wanted.push({
             label: `${problem.code} ${field}`,
@@ -88,7 +98,7 @@ export class FileCheckService {
     return wanted;
   }
 
-  /** The file under MEDIA_ROOT for a MEDIA_URL link; '' for an external link (nothing to check). */
+  /** The file under MEDIA_ROOT for a MEDIA_URL link; '' for an http(s) link (nothing to check). */
   private mediaPath(url: string, roots: Roots): string | null {
     const prefix = `${mediaUrl()}/`;
     return url.startsWith(prefix)

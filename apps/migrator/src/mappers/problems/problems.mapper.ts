@@ -109,7 +109,7 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
       isOrganizationPrivate: ctx.bool(row.is_organization_private),
       isManuallyManaged: ctx.bool(row.is_manually_managed),
       isFullMarkup: ctx.bool(row.is_full_markup),
-      pdfStatementUrl: row.pdf_url || null,
+      pdfStatementUrl: mediaUrlOf(row.pdf_url),
       materialUrl: mediaUrlOf(row.problem_material),
       ogImage: row.og_image ?? '',
       submissionSourceVisibility: row.submission_source_visibility_mode,

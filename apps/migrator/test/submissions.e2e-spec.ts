@@ -45,6 +45,15 @@ describe('submissions job', () => {
     );
   });
 
+  it('rescores graded submissions of clamped problems against the clamped points', async () => {
+    // 4005: 100 -> 800, non-partial; 4006: 9000 -> 3500.
+    expect((await submission(7010))!.points).toBe(800);
+    expect((await submission(7011))!.points).toBe(0);
+    expect((await submission(7012))!.points).toBe(3500);
+    expect((await submission(7013))!.points).toBeNull();
+    expect((await submission(7001))!.points).toBe(400);
+  });
+
   it('requeues in-flight submissions and nulls an empty result', async () => {
     expect(await submission(7002)).toMatchObject({
       status: 'QU',

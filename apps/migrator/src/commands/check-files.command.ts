@@ -16,10 +16,19 @@ export class CheckFilesCommand extends CommandRunner {
   }
 
   async run() {
-    const { checked, missing } = await this.files.run();
+    const { checked, missing, unchecked } = await this.files.run();
     missing
       .slice(0, SHOWN)
       .forEach((label) => this.logger.error(`missing ${label}`));
+    unchecked
+      .slice(0, SHOWN)
+      .forEach((label) =>
+        this.logger.warn(`unchecked (site path outside MEDIA_URL) ${label}`),
+      );
+    if (unchecked.length)
+      this.logger.warn(
+        `${unchecked.length} site path(s) outside MEDIA_URL were not checked: verify them by hand`,
+      );
     this.logger.log(`${checked} file(s) checked, ${missing.length} missing`);
     process.exitCode = missing.length ? 1 : 0;
   }
