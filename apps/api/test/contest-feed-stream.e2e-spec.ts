@@ -11,6 +11,7 @@ import { EventStreamHubService } from '../src/modules/events/event-stream-hub.se
 import {
   DEFAULT_FEED_LIMITS,
   FEED_LIMITS,
+  FeedService,
 } from '../src/modules/contests/feed/feed.service';
 import {
   FEED_STREAM_OPTIONS,
@@ -301,6 +302,64 @@ describe('contest event feed stream', () => {
       () => api.app.get(EventStreamHubService).openCounts().total === 0,
     );
     expect((await connect(contest, key)).status).toBe(200);
+  });
+
+  it('gives every slot back when the client leaves during the first snapshot', async () => {
+    const { contest } = await seed();
+    const key = await mint(contest);
+    const feeds = api.app.get(FeedService);
+    const original = feeds.eventsFor.bind(feeds);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const spy = jest
+      .spyOn(feeds, 'eventsFor')
+      .mockImplementationOnce(async (...args) => {
+        await gate;
+        return original(...args);
+      });
+    try {
+      const request = http.get({
+        host: '127.0.0.1',
+        port: port(),
+        path: `/api/internal/events/contests/${contest.key}/feed`,
+        headers: { Authorization: basic(key) },
+      });
+      request.on('error', () => undefined);
+      await until(() => spy.mock.calls.length === 1);
+      expect(api.app.get(EventStreamHubService).openCounts().total).toBe(1);
+      request.destroy();
+      await until(
+        () => api.app.get(EventStreamHubService).openCounts().total === 0,
+      );
+      release();
+    } finally {
+      release();
+      spy.mockRestore();
+    }
+    const [one, two] = [
+      await connect(contest, key),
+      await connect(contest, key),
+    ];
+    expect([one.status, two.status]).toEqual([200, 200]);
+  });
+
+  it('builds the feed once per tick however many streams a contest has', async () => {
+    const { contest } = await seed();
+    const key = await mint(contest);
+    const spy = jest.spyOn(api.app.get(FeedService), 'eventsFor');
+    try {
+      const [one, two] = [
+        await connect(contest, key),
+        await connect(contest, key),
+      ];
+      await until(() => one.events.length > 0 && two.events.length > 0);
+      spy.mockClear();
+      await new Promise((resolve) => setTimeout(resolve, TICK_MS * 10));
+      expect(spy.mock.calls.length).toBeGreaterThan(5);
+      expect(spy.mock.calls.length).toBeLessThanOrEqual(12);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('refuses a wrong key before streaming anything', async () => {

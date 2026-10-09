@@ -31,6 +31,6 @@ Modes: `frozen-until-release` (default) and `live`. While the contest is frozen 
 | `CE`                                | `CE`           | no              |
 | `IE`, `AB`, `RJ`, or not yet judged | no judgement   |                 |
 
-A stream re-checks its key every 10 s and ends when it stops qualifying; at most two streams per key, counted in the shared SSE caps (`feedTotal`, `perIp`, `total`).
+Streams of one contest share one feed build per tick (each stream only diffs against what it was sent); each stream re-checks its key every 10 s and ends when it stops qualifying; a contest that grows past 20 000 submissions ends its streams; at most two streams per key, counted in the shared SSE caps (`feedTotal`, `perIp`, `total`).
 
 A contest with more than 100 000 submissions answers `409 feed_too_large`; one with more than 20 000 cannot be streamed (`409 feed_too_large_for_stream`, poll the snapshot). A submission whose problem left the contest, whose language is not listed or whose team is not a feed team is not published.

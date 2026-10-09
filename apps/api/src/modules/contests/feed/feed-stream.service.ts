@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnModuleDestroy } from '@nestjs/common';
@@ -9,9 +8,9 @@ import { EventStreamHubService } from '../../events/event-stream-hub.service';
 import { STREAM_LIMITS } from '../../events/stream-limits';
 import type { StreamLimits } from '../../events/stream-limits';
 import { FeedAuthService } from './feed-auth.service';
-import type { FeedContext } from './feed-auth.service';
-import { FeedService, newFeedSession } from './feed.service';
-import type { FeedSession } from './feed.service';
+import { FeedService } from './feed.service';
+import { FeedRoom, unsentOf } from './feed-room';
+import type { FeedSubscriber } from './feed-room';
 
 export const FEED_STREAM_OPTIONS = Symbol('FEED_STREAM_OPTIONS');
 export interface FeedStreamOptions {
@@ -34,19 +33,14 @@ const STREAM_HEADERS = {
   'X-Accel-Buffering': 'no',
 } as const;
 
-/** What one open stream remembers. */
-interface StreamState {
-  context: FeedContext;
-  session: FeedSession;
-  sent: Set<string>;
-  nextToken: number;
-}
-
-/** What was sent, by content: a changed event (a re-judged submission, the state) is sent again, an unchanged one never. */
-const digestOf = (event: FeedEvent): string =>
-  createHash('sha1')
-    .update(JSON.stringify([event.type, event.id, event.data]))
-    .digest('base64');
+const once = (action: () => void): (() => void) => {
+  let isDone = false;
+  return () => {
+    if (isDone) return;
+    isDone = true;
+    action();
+  };
+};
 
 @Injectable()
 export class FeedStreamService implements OnModuleDestroy {
@@ -56,6 +50,8 @@ export class FeedStreamService implements OnModuleDestroy {
   private openCount = 0;
   /** Hijacked responses keep the HTTP server from closing: shutdown ends every one. */
   private readonly responses = new Set<ServerResponse>();
+  /** One room per contest with a stream open or opening. */
+  private readonly rooms = new Map<string, FeedRoom>();
 
   constructor(
     private readonly hub: EventStreamHubService,
@@ -65,7 +61,7 @@ export class FeedStreamService implements OnModuleDestroy {
     private readonly feeds: FeedService,
   ) {}
 
-  /** Everything that can fail runs before the reply is taken over: the key, the hub caps (per IP and in total), the per-key cap, the first snapshot. */
+  /** Everything that can fail runs before the reply is taken over: the key, the hub caps (per IP and in total), the per-key cap, the first snapshot. A client that leaves meanwhile gives every slot back. */
   async open(
     request: FastifyRequest,
     reply: FastifyReply,
@@ -76,27 +72,34 @@ export class FeedStreamService implements OnModuleDestroy {
       contestKey,
     );
     const release = this.reserve(request.ip, context.feedKey.id);
-    try {
-      const session = newFeedSession();
-      const first = await this.feeds.eventsFor(context, new Date(), session);
-      this.begin(
-        reply,
-        {
-          context,
-          session,
-          sent: new Set(first.map(digestOf)),
-          nextToken: first.length + 1,
-        },
-        first,
-        release,
-      );
-    } catch (error) {
+    const room = this.joinRoom(context.contest._id);
+    const subscriber: FeedSubscriber = {
+      response: reply.raw,
+      context,
+      sent: new Map(),
+      nextToken: 1,
+    };
+    const leave = once(() => {
+      clearInterval(subscriber.keepAlive);
+      room.subscribers.delete(subscriber);
+      this.responses.delete(reply.raw);
+      this.leaveRoom(context.contest._id, room);
       release();
+    });
+    reply.raw.once('close', leave);
+    try {
+      if (reply.raw.destroyed) return leave();
+      const first = unsentOf(subscriber, await room.build(context));
+      if (reply.raw.destroyed) return leave();
+      this.begin(reply, subscriber, room, first);
+    } catch (error) {
+      leave();
       throw error;
     }
   }
 
   onModuleDestroy(): void {
+    for (const room of this.rooms.values()) clearInterval(room.timer);
     for (const response of [...this.responses]) response.destroy();
   }
 
@@ -127,42 +130,71 @@ export class FeedStreamService implements OnModuleDestroy {
 
   private begin(
     reply: FastifyReply,
-    state: StreamState,
+    subscriber: FeedSubscriber,
+    room: FeedRoom,
     first: FeedEvent[],
-    release: () => void,
   ): void {
     reply.hijack();
     const response = reply.raw;
     response.writeHead(200, STREAM_HEADERS);
     this.responses.add(response);
     response.write(this.feeds.ndjson(first));
-    let isBusy = false;
-    const timer = setInterval(() => {
-      if (isBusy) return;
-      isBusy = true;
-      void this.push(response, state).finally(() => {
-        isBusy = false;
-      });
-    }, this.options.intervalMs);
-    const keepAlive = setInterval(
+    subscriber.keepAlive = setInterval(
       () => response.write('\n'),
       this.options.keepAliveMs,
     );
-    response.once('close', () => {
-      clearInterval(timer);
-      clearInterval(keepAlive);
-      this.responses.delete(response);
-      release();
-    });
+    room.subscribers.add(subscriber);
   }
 
-  /** One tick: the new events, or the end of the stream when the key stopped qualifying. */
-  private async push(
-    response: ServerResponse,
-    state: StreamState,
-  ): Promise<void> {
+  private joinRoom(contestId: string): FeedRoom {
+    let room = this.rooms.get(contestId);
+    if (!room) {
+      room = new FeedRoom(this.feeds, this.options.intervalMs / 2);
+      room.timer = setInterval(
+        () => void this.tickRoom(room!),
+        this.options.intervalMs,
+      );
+      this.rooms.set(contestId, room);
+    }
+    room.holders += 1;
+    return room;
+  }
+
+  /** A room with no stream open or opening is dropped with its cached submissions and timer. */
+  private leaveRoom(contestId: string, room: FeedRoom): void {
+    room.holders -= 1;
+    if (room.holders > 0) return;
+    clearInterval(room.timer);
+    this.rooms.delete(contestId);
+  }
+
+  /** One tick of a contest: every stream re-checks its key; the feed is built once for all of them. */
+  private async tickRoom(room: FeedRoom): Promise<void> {
+    if (room.isTicking) return;
+    room.isTicking = true;
     try {
-      const events = await this.tick(state);
+      const now = new Date();
+      await Promise.all(
+        [...room.subscribers].map((subscriber) =>
+          this.push(room, subscriber, now),
+        ),
+      );
+    } finally {
+      room.isTicking = false;
+    }
+  }
+
+  /** The stream's new events, or the end of the stream when its key stopped qualifying. */
+  private async push(
+    room: FeedRoom,
+    subscriber: FeedSubscriber,
+    now: Date,
+  ): Promise<void> {
+    const { response } = subscriber;
+    try {
+      const { contest, feedKey } = subscriber.context;
+      const fresh = await this.auth.reauthorize(contest._id, feedKey.id, now);
+      const events = unsentOf(subscriber, await room.build(fresh, now));
       if (events.length) response.write(this.feeds.ndjson(events));
       if (response.writableLength > this.limits.maxBufferedBytes)
         response.destroy();
@@ -173,22 +205,5 @@ export class FeedStreamService implements OnModuleDestroy {
         );
       response.end();
     }
-  }
-
-  /** The key and its owner are checked again; then the events not sent yet, numbered on from the last token. Only submissions changed since the last tick are read. */
-  private async tick(state: StreamState): Promise<FeedEvent[]> {
-    const fresh = await this.auth.reauthorize(
-      state.context.contest._id,
-      state.context.feedKey.id,
-    );
-    const latest = await this.feeds.eventsFor(fresh, new Date(), state.session);
-    const added = latest.filter((event) => !state.sent.has(digestOf(event)));
-    for (const event of added) state.sent.add(digestOf(event));
-    const numbered = added.map((event, index) => ({
-      ...event,
-      token: String(state.nextToken + index),
-    }));
-    state.nextToken += added.length;
-    return numbered;
   }
 }

@@ -40,11 +40,15 @@ export interface FeedSession {
   rows: Map<string, FeedSubmissionRow>;
   /** The previous tick's start minus the overlap; null before the first tick. */
   since: Date | null;
+  /** When `rows` was last read in full; a full re-read now and then drops rows that left the contest. */
+  loadedAt: number;
 }
 export const newFeedSession = (): FeedSession => ({
   rows: new Map(),
   since: null,
+  loadedAt: 0,
 });
+const FULL_RELOAD_MS = 10 * 60_000;
 /** Re-reads a minute of overlap: merging by id makes a repeated row harmless, and a clock gap cannot lose one. */
 const TICK_OVERLAP_MS = 60_000;
 
@@ -177,13 +181,30 @@ export class FeedService {
     session?: FeedSession,
   ): Promise<FeedSubmissionRow[]> {
     if (!session) return this.data.allSubmissions(contestId);
-    const fresh =
-      session.since === null
-        ? await this.data.allSubmissions(contestId)
-        : await this.data.changedSubmissions(contestId, session.since);
+    const isFull =
+      session.since === null ||
+      now.getTime() - session.loadedAt > FULL_RELOAD_MS;
+    const fresh = isFull
+      ? await this.data.allSubmissions(contestId)
+      : await this.data.changedSubmissions(contestId, session.since as Date);
+    if (isFull) {
+      session.rows.clear();
+      session.loadedAt = now.getTime();
+    }
     for (const row of fresh) session.rows.set(row.id, row);
     session.since = new Date(now.getTime() - TICK_OVERLAP_MS);
+    this.assertStreamable(session.rows.size);
     return [...session.rows.values()];
+  }
+
+  /** A contest that grew past the stream cap after the stream opened stops the stream. */
+  private assertStreamable(count: number): void {
+    if (count > this.limits.maxStreamSubmissions)
+      throw new AppError(
+        'feed_too_large_for_stream',
+        409,
+        'This contest has too many submissions to stream; poll the snapshot',
+      );
   }
 
   private inputOf(
