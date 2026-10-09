@@ -34,6 +34,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'a submission graded after the delete is still scored with the problem points it was judged against',
   ],
+  'apps/api/src/modules/contests/feed/feed-data.repository.ts': [
+    'S',
+    'the event feed names every contest problem, including ones deleted since the contest',
+  ],
   'apps/migrator/src/file-check.service.ts': [
     'S',
     'the post-migration file check verifies the files of every problem row, deleted or not',
