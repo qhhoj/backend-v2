@@ -100,16 +100,20 @@ describe('Grading (bridge Mongo layer)', () => {
         problemCode: 'root',
         languageKey: 'PY3',
         priority: 1,
+        generation: 0,
         judgeName: null,
         bannedJudges: [],
+        retryBannedJudges: [],
       },
       {
         id: rejudge._id,
         problemCode: 'root',
         languageKey: 'CPP17',
         priority: 2,
+        generation: 0,
         judgeName: null,
         bannedJudges: [],
+        retryBannedJudges: [],
       },
     ]);
   });

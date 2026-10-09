@@ -1,3 +1,4 @@
+import { lstat } from 'node:fs/promises';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -18,12 +19,17 @@ import {
 import type { SubmissionCase } from '@libs/database';
 import { gradeCases, gradedJobOf, submissionPoints } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
-import type { QueuedSubmission } from '../dispatch/dispatch';
+import type { AssignmentRef } from '@libs/judge-proto';
+import type { QueuedSubmission } from '../dispatch/slots';
 import { MAX_SUBMISSION_CASES } from '../protocol/judge-packets';
 import type { SubmissionRequest } from '../protocol/judge-packets';
+import type { AssignRequest } from './assign-request';
+import { submissionFilePath } from './submission-file-path';
 
 /** Judge disconnects forgiven while a submission is in flight; the next one is an internal error. */
 export const MAX_REQUEUES = 1;
+/** The IE message of a claimed row whose problem, source or uploaded file is gone. */
+const MISSING_DATA_MESSAGE = 'Submission data is missing';
 /** `failed`: the submission's data vanished, so it was finished as IE and still needs its graded job. */
 export type ClaimOutcome =
   | { request: SubmissionRequest; subject: SubmissionGradedJob }
@@ -33,6 +39,14 @@ export interface InFlightClaim {
   id: string;
   judgedOn: string | null;
 }
+/** A P/G row, the judge it names and the generation it runs. */
+export interface InFlightRun extends InFlightClaim {
+  generation: number;
+}
+/** `failed`: the submission's data vanished, so it was finished as IE and still needs its graded job. */
+export type RunClaimOutcome =
+  | { request: AssignRequest; subject: SubmissionGradedJob }
+  | { failed: SubmissionGradedJob };
 export type CasesOutcome = 'appended' | 'stale' | 'full';
 
 /** Back to the queue with partial results dropped; the `$set` of every requeue and reset-in-flight write. */
@@ -44,19 +58,28 @@ export const REQUEUE_RESET = {
   currentTestcase: 0,
   batch: false,
   error: null,
+  judgeSeq: 0,
 } as const;
+
+/** What a claim needs of a queued entry. */
+type ClaimTarget = Pick<QueuedSubmission, 'id' | 'problemCode' | 'languageKey'>;
 
 /** The claimed row's fields, as `claimIfQueued` projects them. */
 type ClaimedSubmission = Pick<
   Submission,
-  'user' | 'problem' | 'language' | 'date' | 'contest'
+  'user' | 'problem' | 'language' | 'date' | 'contest' | 'judgeGeneration'
 > & { _id: string };
 
 /** What `loadJudgingInputs` reads besides the claimed row. */
 interface JudgingInputs {
   problem: Pick<
     Problem,
-    'timeLimit' | 'memoryLimit' | 'partial' | 'languageLimits'
+    | 'timeLimit'
+    | 'memoryLimit'
+    | 'partial'
+    | 'languageLimits'
+    | 'dataVersion'
+    | 'mirrorRoot'
   >;
   source: string;
   language: Pick<Language, 'fileOnly' | 'fileSizeLimit'> | null;
@@ -66,7 +89,7 @@ interface JudgingInputs {
 
 /** The judge's request for a claimed submission: limits (a per-language override wins), the source, short-circuiting for non-partial problems, contest meta and the attempt number. Pure. */
 function submissionRequest(
-  queued: QueuedSubmission,
+  queued: ClaimTarget,
   submission: ClaimedSubmission,
   { problem, source, language, earlierAttempts, contestMeta }: JudgingInputs,
 ): SubmissionRequest {
@@ -90,6 +113,55 @@ function submissionRequest(
     fileSizeLimit: language?.fileSizeLimit ?? 0,
   };
 }
+
+/** What a claimed run adds to `JudgingInputs`. */
+interface RunInputs extends JudgingInputs {
+  dataVersion: number;
+  fileOnly: boolean;
+  sourceSize: number;
+}
+
+/** `PROBLEM_LIMITS.memoryLimit.min` is 0; isolate needs a positive `--cg-mem` (preflight M4). */
+const MIN_MEMORY_LIMIT_KIB = 1024;
+
+/** The Assign for a claimed run: limits (a per-language override wins; memory at least 1 MiB), the data version, the source or its file, short-circuiting for non-partial problems, contest meta and the attempt number. Pure. */
+function assignRequest(
+  queued: QueuedSubmission,
+  submission: ClaimedSubmission,
+  inputs: RunInputs,
+): AssignRequest {
+  const { problem, contestMeta } = inputs;
+  const languageId = uuidStr(submission.language);
+  const limit = problem.languageLimits.find(
+    (entry) => uuidStr(entry.languageId) === languageId,
+  );
+  return {
+    ref: { submissionId: queued.id, generation: submission.judgeGeneration },
+    problemCode: queued.problemCode,
+    dataVersion: inputs.dataVersion,
+    languageKey: queued.languageKey,
+    source: inputs.source,
+    fileOnly: inputs.fileOnly,
+    sourceSize: inputs.sourceSize,
+    timeLimit: limit?.timeLimit ?? problem.timeLimit,
+    memoryLimit: Math.max(
+      MIN_MEMORY_LIMIT_KIB,
+      limit?.memoryLimit ?? problem.memoryLimit,
+    ),
+    shortCircuit: !problem.partial,
+    pretestsOnly: contestMeta?.pretestsOnly ?? false,
+    inContest: contestMeta?.virtual ?? null,
+    attemptNo: inputs.earlierAttempts + 1,
+    userId: uuidStr(submission.user),
+  };
+}
+
+/** Filter of one run: the row, the judge it names and the generation it runs. */
+const runOf = (ref: AssignmentRef, judgeName: string) => ({
+  _id: ref.submissionId,
+  judgedOn: judgeName,
+  judgeGeneration: ref.generation,
+});
 
 const IN_FLIGHT = { $in: [...IN_FLIGHT_STATUSES] };
 const ABSOLUTE_URL = /^https?:\/\//i;
@@ -129,7 +201,13 @@ export class SubmissionsRepository {
     const rows = await this.submissions
       .find(
         { status: 'QU', ...(ids && { _id: { $in: ids } }) },
-        { problem: 1, language: 1, priority: 1, contest: 1 },
+        {
+          problem: 1,
+          language: 1,
+          priority: 1,
+          contest: 1,
+          judgeGeneration: 1,
+        },
       )
       .sort({ priority: 1, _id: 1 })
       .lean();
@@ -179,8 +257,10 @@ export class SubmissionsRepository {
               problemCode,
               languageKey,
               priority: row.priority,
+              generation: row.judgeGeneration ?? 0,
               judgeName: null,
               bannedJudges: metaOf.get(uuidStr(row._id))?.bannedJudges ?? [],
+              retryBannedJudges: [],
             },
           ]
         : [];
@@ -290,17 +370,86 @@ export class SubmissionsRepository {
 
   /** Compare-and-set QU → P for `judgeName`, then what the judge needs. Null when it is no longer queued (aborted, rejudged, claimed by another judge). */
   async claim(
-    queued: QueuedSubmission,
+    queued: ClaimTarget,
     judgeName: string,
   ): Promise<ClaimOutcome | null> {
     const submission = await this.claimIfQueued(queued.id, judgeName);
     if (!submission) return null;
     const inputs = await this.loadJudgingInputs(queued.id, submission);
     if (!inputs) return this.finishMissingDataAsIE(queued.id, judgeName);
+    const source = inputs.language?.fileOnly
+      ? this.absoluteFileUrl(inputs.source)
+      : inputs.source;
     return {
-      request: submissionRequest(queued, submission, inputs),
+      request: submissionRequest(queued, submission, { ...inputs, source }),
       subject: gradedJobOf(submission),
     };
+  }
+
+  /** Compare-and-set QU → P for `judgeName` with the next generation, then the Assign. Null when it is no longer queued (aborted, rejudged, claimed by another judge). */
+  async claimRun(
+    queued: QueuedSubmission,
+    judgeName: string,
+  ): Promise<RunClaimOutcome | null> {
+    const submission = await this.claimIfQueued(queued.id, judgeName);
+    if (!submission) return null;
+    const inputs = await this.runInputsOf(queued.id, submission);
+    if (inputs)
+      return {
+        request: assignRequest(queued, submission, inputs),
+        subject: gradedJobOf(submission),
+      };
+    this.logger.error(`Submission ${queued.id} lost its problem or source`);
+    const ref = {
+      submissionId: queued.id,
+      generation: submission.judgeGeneration,
+    };
+    const failed = await this.finishRun(
+      ref,
+      judgeName,
+      'IE',
+      MISSING_DATA_MESSAGE,
+    );
+    return failed && { failed };
+  }
+
+  /** Judging inputs plus what only the new protocol sends: the judged problem's data version and the source size (a file-only upload must be on disk). */
+  private async runInputsOf(
+    submissionId: string,
+    submission: ClaimedSubmission,
+  ): Promise<RunInputs | null> {
+    const inputs = await this.loadJudgingInputs(submissionId, submission);
+    if (!inputs) return null;
+    const fileOnly = inputs.language?.fileOnly ?? false;
+    const [dataVersion, sourceSize] = await Promise.all([
+      this.judgedDataVersion(inputs.problem),
+      this.sourceSizeOf(inputs.source, fileOnly),
+    ]);
+    return sourceSize === null
+      ? null
+      : { ...inputs, dataVersion, fileOnly, sourceSize };
+  }
+
+  /** A mirror is judged with its root's data, so it carries the root's version. */
+  private async judgedDataVersion(
+    problem: Pick<Problem, 'dataVersion' | 'mirrorRoot'>,
+  ): Promise<number> {
+    if (!problem.mirrorRoot) return problem.dataVersion ?? 0;
+    const root = await this.problems
+      .findById(problem.mirrorRoot, { dataVersion: 1 })
+      .lean();
+    return root?.dataVersion ?? 0;
+  }
+
+  /** Bytes of an inline source, or of the uploaded file (a regular file under MEDIA_ROOT/submission_file); null when the file is not there. */
+  private async sourceSizeOf(
+    source: string,
+    fileOnly: boolean,
+  ): Promise<number | null> {
+    if (!fileOnly) return Buffer.byteLength(source);
+    const path = submissionFilePath(this.env, source);
+    const stats = path ? await lstat(path).catch(() => null) : null;
+    return stats?.isFile() ? stats.size : null;
   }
 
   /** Writes P and `judgedOn` on the row, but only while it is still QU. */
@@ -311,10 +460,20 @@ export class SubmissionsRepository {
     return this.submissions
       .findOneAndUpdate(
         { _id: submissionId, status: 'QU' },
-        { $set: { status: 'P', judgedOn: judgeName } },
+        {
+          $set: { status: 'P', judgedOn: judgeName, judgeSeq: 0 },
+          $inc: { judgeGeneration: 1 },
+        },
         {
           new: true,
-          projection: { user: 1, problem: 1, language: 1, date: 1, contest: 1 },
+          projection: {
+            user: 1,
+            problem: 1,
+            language: 1,
+            date: 1,
+            contest: 1,
+            judgeGeneration: 1,
+          },
         },
       )
       .lean();
@@ -333,6 +492,8 @@ export class SubmissionsRepository {
             memoryLimit: 1,
             partial: 1,
             languageLimits: 1,
+            dataVersion: 1,
+            mirrorRoot: 1,
           })
           .lean(),
         this.sources.findById(submissionId).lean(),
@@ -347,9 +508,7 @@ export class SubmissionsRepository {
     if (!problem || !source) return null;
     return {
       problem,
-      source: language?.fileOnly
-        ? this.absoluteFileUrl(source.source)
-        : source.source,
+      source: source.source,
       language,
       earlierAttempts,
       contestMeta: metaOf.get(submissionId),
@@ -366,7 +525,7 @@ export class SubmissionsRepository {
       submissionId,
       judgeName,
       'IE',
-      'Submission data is missing',
+      MISSING_DATA_MESSAGE,
     );
     return failed && { failed };
   }
@@ -554,5 +713,114 @@ export class SubmissionsRepository {
       ),
     );
     return rows.flatMap((row) => (row ? [gradedJobOf(row)] : []));
+  }
+
+  /** A run its judge never accepted (accept timeout) or never received: back to QU without spending the requeue. */
+  async releaseRun(ref: AssignmentRef, judgeName: string): Promise<boolean> {
+    const { modifiedCount } = await this.submissions.updateOne(
+      { ...runOf(ref, judgeName), status: 'P', judgeSeq: 0 },
+      { $set: { status: 'QU', judgedOn: null } },
+    );
+    return modifiedCount === 1;
+  }
+
+  /** The grace of a lost judge expired: back to QU with partial results dropped and the requeue spent; null once it is spent or the row moved on. */
+  async requeueRun(
+    ref: AssignmentRef,
+    judgeName: string,
+  ): Promise<SubmissionGradedJob | null> {
+    const row = await this.submissions
+      .findOneAndUpdate(
+        {
+          ...runOf(ref, judgeName),
+          status: IN_FLIGHT,
+          requeueCount: { $not: { $gte: MAX_REQUEUES } },
+        },
+        { $set: REQUEUE_RESET, $inc: { requeueCount: 1 } },
+        { projection: { user: 1, problem: 1 } },
+      )
+      .lean();
+    return row && gradedJobOf(row);
+  }
+
+  /** Ends a run without a judge message: IE on the second judge loss or missing data, AB for an abort recorded during the grace. */
+  async finishRun(
+    ref: AssignmentRef,
+    judgeName: string,
+    status: 'IE' | 'AB',
+    error: string | null,
+  ): Promise<SubmissionGradedJob | null> {
+    const row = await this.submissions
+      .findOneAndUpdate(
+        { ...runOf(ref, judgeName), status: IN_FLIGHT },
+        {
+          $set:
+            status === 'AB'
+              ? { status, result: status, points: 0 }
+              : { status, result: status, error },
+        },
+        { projection: { user: 1, problem: 1 } },
+      )
+      .lean();
+    return row && gradedJobOf(row);
+  }
+
+  /** The seq stored for a run a reconnecting judge still holds; null when the row moved on (another judge or generation, or no longer P/G). */
+  async resumableSeq(
+    ref: AssignmentRef,
+    judgeName: string,
+  ): Promise<number | null> {
+    const row = await this.submissions
+      .findOne({ ...runOf(ref, judgeName), status: IN_FLIGHT }, { judgeSeq: 1 })
+      .lean();
+    return row ? row.judgeSeq : null;
+  }
+
+  async inFlightRuns(): Promise<InFlightRun[]> {
+    const rows = await this.submissions
+      .find({ status: IN_FLIGHT }, { judgedOn: 1, judgeGeneration: 1 })
+      .lean();
+    return rows.map((row) => ({
+      id: uuidStr(row._id),
+      judgedOn: row.judgedOn,
+      generation: row.judgeGeneration ?? 0,
+    }));
+  }
+
+  /** Resync: P/G runs no session or grace holds go back to QU without spending `requeueCount`; each write still requires the run read, so a row that moved on is left alone. */
+  async resetStrandedRuns(runs: InFlightRun[]): Promise<SubmissionGradedJob[]> {
+    const rows = await Promise.all(
+      runs.map(({ id, judgedOn, generation }) =>
+        this.submissions
+          .findOneAndUpdate(
+            {
+              _id: id,
+              status: IN_FLIGHT,
+              judgedOn,
+              judgeGeneration: generation,
+            },
+            { $set: REQUEUE_RESET },
+            { projection: { user: 1, problem: 1 } },
+          )
+          .lean(),
+      ),
+    );
+    return rows.flatMap((row) => (row ? [gradedJobOf(row)] : []));
+  }
+
+  /** Whom a submission's graded job and events name. */
+  async gradedSubjectOf(
+    submissionId: string,
+  ): Promise<SubmissionGradedJob | null> {
+    const row = await this.submissions
+      .findById(submissionId, { user: 1, problem: 1 })
+      .lean();
+    return row && gradedJobOf(row);
+  }
+
+  /** The stored source (a media URL for a file-only language). */
+  async sourceOf(submissionId: string): Promise<string | null> {
+    const row = await this.sources.findById(submissionId, { source: 1 }).lean();
+    return row?.source ?? null;
   }
 }
