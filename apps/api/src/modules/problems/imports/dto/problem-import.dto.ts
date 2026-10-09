@@ -26,7 +26,10 @@ export class PolygonImportQueryDto {
     message: 'Only lowercase letters, digits and underscores (1-32).',
   })
   code!: string;
-  @IsOptional() @IsIn(IMPORT_MODES) mode: ImportMode = 'create';
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(IMPORT_MODES)
+  mode: ImportMode = 'create';
   @IsOptional()
   @Transform(toArray)
   @IsUUID('7', { each: true })

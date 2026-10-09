@@ -11,6 +11,7 @@ import {
 } from '@libs/database';
 import { loadDocument } from './document';
 import {
+  defaultedRequiredSites,
   duplicateEnums,
   unsortedEnumSites,
   inlineEnumSites,
@@ -31,6 +32,10 @@ describe('OpenAPI schema quality', () => {
 
   it('has no untyped parameter, empty schema or bare object (free-form ones say additionalProperties)', () => {
     expect(looseSites(document)).toEqual([]);
+  });
+
+  it('marks no defaulted parameter or property as required (the client would force a value the server fills in)', () => {
+    expect(defaultedRequiredSites(document)).toEqual([]);
   });
 
   it('documents every validated DTO property (the plugin drops what it cannot type)', () => {

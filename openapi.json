@@ -5090,7 +5090,6 @@
         "required": [
           "isPublic",
           "publishOn",
-          "authors",
           "content"
         ],
         "type": "object"
@@ -5170,13 +5169,7 @@
         },
         "required": [
           "checker",
-          "checkerArgs",
           "grader",
-          "graderArgs",
-          "outputPrefix",
-          "outputLimit",
-          "unicode",
-          "nobigmath",
           "cases"
         ],
         "type": "object"
@@ -7358,16 +7351,7 @@
           }
         },
         "required": [
-          "type",
-          "input",
-          "output",
-          "points",
-          "isPretest",
-          "generatorArgs",
-          "checker",
-          "checkerArgs",
-          "outputPrefix",
-          "outputLimit"
+          "type"
         ],
         "type": "object"
       },
@@ -16194,6 +16178,21 @@
           },
           {
             "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "performancePoints",
+              "enum": [
+                "performancePoints",
+                "points",
+                "problemCount",
+                "rating"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "page",
             "required": false,
             "schema": {
@@ -16212,21 +16211,6 @@
               "maximum": 100,
               "minimum": 1,
               "type": "number"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "required": true,
-            "schema": {
-              "default": "performancePoints",
-              "enum": [
-                "performancePoints",
-                "points",
-                "problemCount",
-                "rating"
-              ],
-              "type": "string"
             }
           }
         ],
@@ -17087,6 +17071,20 @@
           },
           {
             "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "default": "public",
+              "enum": [
+                "all",
+                "private",
+                "public"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
@@ -17174,20 +17172,6 @@
             "required": false,
             "schema": {
               "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "visibility",
-            "required": true,
-            "schema": {
-              "default": "public",
-              "enum": [
-                "all",
-                "private",
-                "public"
-              ],
-              "type": "string"
             }
           }
         ],
@@ -17305,6 +17289,19 @@
         "parameters": [
           {
             "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "create",
+              "enum": [
+                "create",
+                "update"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "ignoreZeroPointBatches",
             "required": false,
             "schema": {
@@ -17335,19 +17332,6 @@
             "name": "code",
             "required": true,
             "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "mode",
-            "required": true,
-            "schema": {
-              "default": "create",
-              "enum": [
-                "create",
-                "update"
-              ],
               "type": "string"
             }
           },
@@ -20966,7 +20950,7 @@
           {
             "in": "query",
             "name": "sort",
-            "required": true,
+            "required": false,
             "schema": {
               "default": "rating",
               "enum": [
@@ -21457,7 +21441,7 @@
           {
             "in": "query",
             "name": "sort",
-            "required": true,
+            "required": false,
             "schema": {
               "default": "rating",
               "enum": [

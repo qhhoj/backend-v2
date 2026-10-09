@@ -32,9 +32,15 @@ export class ContributorListQueryDto {
 }
 
 export class UserListQueryDto extends ContributorListQueryDto {
-  @IsOptional() @IsIn(USER_SORTS) sort: UserSort = 'rating';
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(USER_SORTS)
+  sort: UserSort = 'rating';
 }
 
 export class RankQueryDto {
-  @IsOptional() @IsIn(LEADERBOARD_FIELDS) sort: LeaderboardField = 'rating';
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(LEADERBOARD_FIELDS)
+  sort: LeaderboardField = 'rating';
 }

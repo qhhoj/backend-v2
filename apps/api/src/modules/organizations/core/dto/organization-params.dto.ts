@@ -42,7 +42,10 @@ export class OrganizationListQueryDto {
 }
 
 export class MemberListQueryDto {
-  @IsOptional() @IsIn(MEMBER_SORTS) sort: MemberSort = 'performancePoints';
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(MEMBER_SORTS)
+  sort: MemberSort = 'performancePoints';
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

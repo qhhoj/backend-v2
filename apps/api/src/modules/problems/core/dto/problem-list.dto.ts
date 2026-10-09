@@ -57,8 +57,10 @@ export class ProblemListQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() hasEditorial?: boolean;
   /** `false`: only problems the viewer has not solved; `true`: only solved ones (an AC with every case point). Anonymous viewers have solved nothing. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() solved?: boolean;
-  @IsOptional() @IsIn(PROBLEM_VISIBILITIES) visibility: ProblemVisibility =
-    'public';
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(PROBLEM_VISIBILITIES)
+  visibility: ProblemVisibility = 'public';
   @ApiPropertyOptional({ enum: PROBLEM_SORT_OPTIONS, enumName: 'ProblemSort' })
   @IsOptional()
   @IsIn(PROBLEM_SORT_OPTIONS)

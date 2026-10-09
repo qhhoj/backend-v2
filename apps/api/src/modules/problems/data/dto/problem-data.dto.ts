@@ -14,6 +14,7 @@ import type {
   Grader,
   JsonObject,
 } from '@libs/database';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -54,28 +55,59 @@ const FileName = () =>
 
 export class TestCaseDto {
   @IsIn(CASE_TYPES) type!: CaseType;
-  @FileName() input: string = '';
-  @FileName() output: string = '';
-  @NullableCount() points: number | null = null;
-  @IsBoolean() isPretest: boolean = false;
-  @IsString() @MaxLength(1000) generatorArgs: string = '';
+  @ApiPropertyOptional()
+  @FileName()
+  input: string = '';
+  @ApiPropertyOptional()
+  @FileName()
+  output: string = '';
+  @ApiPropertyOptional()
+  @NullableCount()
+  points: number | null = null;
+  @ApiPropertyOptional()
+  @IsBoolean()
+  isPretest: boolean = false;
+  @ApiPropertyOptional()
+  @IsString()
+  @MaxLength(1000)
+  generatorArgs: string = '';
   /** Never `bridged`: a custom checker is problem-wide only. */
-  @IsIn(CASE_CHECKERS) checker: CaseChecker = '';
-  @JsonArgs() checkerArgs: JsonObject | null = null;
-  @NullableCount() outputPrefix: number | null = null;
-  @NullableCount() outputLimit: number | null = null;
+  @ApiPropertyOptional()
+  @IsIn(CASE_CHECKERS)
+  checker: CaseChecker = '';
+  @ApiPropertyOptional()
+  @JsonArgs()
+  checkerArgs: JsonObject | null = null;
+  @ApiPropertyOptional()
+  @NullableCount()
+  outputPrefix: number | null = null;
+  @ApiPropertyOptional()
+  @NullableCount()
+  outputLimit: number | null = null;
 }
 
 /** The whole configuration at once (legacy form + formset); file names are set by the upload routes and kept as they are. */
 export class PutProblemDataDto {
   @IsIn(CHECKERS) checker!: Checker;
-  @JsonArgs() checkerArgs: JsonObject | null = null;
+  @ApiPropertyOptional()
+  @JsonArgs()
+  checkerArgs: JsonObject | null = null;
   @IsIn(GRADERS) grader!: Grader;
-  @JsonArgs() graderArgs: JsonObject | null = null;
-  @NullableCount() outputPrefix: number | null = null;
-  @NullableCount() outputLimit: number | null = null;
-  @IsBoolean() unicode: boolean = false;
-  @IsBoolean() nobigmath: boolean = false;
+  @ApiPropertyOptional()
+  @JsonArgs()
+  graderArgs: JsonObject | null = null;
+  @ApiPropertyOptional()
+  @NullableCount()
+  outputPrefix: number | null = null;
+  @ApiPropertyOptional()
+  @NullableCount()
+  outputLimit: number | null = null;
+  @ApiPropertyOptional()
+  @IsBoolean()
+  unicode: boolean = false;
+  @ApiPropertyOptional()
+  @IsBoolean()
+  nobigmath: boolean = false;
   @IsArray()
   @ArrayMaxSize(MAX_TESTCASES_MASS)
   @ValidateNested({ each: true })

@@ -151,3 +151,32 @@ export function unsortedEnumSites(document: unknown): string[] {
   visit(document, '');
   return sites;
 }
+
+/**
+ * Parameters and properties that have a `default` yet are `required`: the generated client then forces callers to send
+ * a value the server would fill in anyway. A defaulted member is optional by definition.
+ */
+export function defaultedRequiredSites(document: OpenAPIObject): string[] {
+  const parameters = operationsOf(document).flatMap(({ label, operation }) =>
+    ((operation.parameters ?? []) as ParameterObject[])
+      .filter(
+        (parameter) =>
+          parameter.required &&
+          (parameter.schema as SchemaObject | undefined)?.default !== undefined,
+      )
+      .map((parameter) => `${label} parameter ${parameter.name}`),
+  );
+  const properties = Object.entries(document.components?.schemas ?? {}).flatMap(
+    ([name, schema]) => {
+      const { properties = {}, required = [] } = schema as SchemaObject;
+      return required
+        .filter(
+          (property) =>
+            (properties[property] as SchemaObject | undefined)?.default !==
+            undefined,
+        )
+        .map((property) => `schema ${name}.${property}`);
+    },
+  );
+  return [...parameters, ...properties].sort();
+}
