@@ -100,6 +100,7 @@ organizations/
   organizations-api.module.ts
   core/            access rules, repositories (organizations, members, requests), points refresh, rate-limits, dto
   editing/  membership/  requests/
+  problem-tags/  problems/  usage/  quota/   each folder's `wiring.ts` holds an array of its classes: add a class there, never to `organizations-api.module.ts`
 users/
   users-api.module.ts
   core/            listed-users, rate-limits, shared dto (username param, time zone)
@@ -418,6 +419,8 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - Staff lists: `GET /api/internal/admin/users` (username prefix with the CI collation, `banned` filter via the partial `banReason` index, never e-mail; `judge.ban_user`), `GET /api/internal/admin/organization-requests` (the queue across organizations, one state at a time; `judge.edit_all_organization`), `GET /api/internal/admin/posts?state=hidden|scheduled` (`judge.edit_all_post`)
 - Ban (`judge.ban_user`, never yourself or a superuser): compare-and-set on `banReason`, unlisted, inactive, every session destroyed; the reserved automatic cheating reason cannot be used; unban restores rank `user`, listed and active whatever the user had before (legacy)
 - User data: `USER_DATA_ROOT` (unset -> 404, muted -> 404); 3 prepares per user per day, one per 24 h while a fresh zip exists (`canPrepare`); zip (profile whitelist, own submissions with sources and `info.json`) kept 7 days, removed by the hourly sweep
+- Quota: charge a creation with `QuotaService.charged(chargedOrganization(principal, subject), request, work)` after validation (spend first, refund when `work` throws); the Redis key `quota:databytes-backfilled` gates `quota.enforce`; worker jobs `problem-databytes` (one-off backfill) and `organization-usage-audit` (nightly drift log); settings `quota.*`
+- Quota and tag refusals: 403 `quota_exceeded` (issue `field` is the meter, `credits` or `storage`; `details {meter, limit, used, needed}`), 409 `conflict` with issue `tag_limit_reached` (100 problem tags per organization), 400 `validation_failed` with issue `unknown_tag` (no such tag in the organization; contest tags too) or `unexpected_tag` (bulk `tagId` on an action that takes none)
 - Tests: `setupApiTest` exposes `organizations`, `organizationRequests`, `userDataRoot`; `setupWorkerTest` exposes `organizations`, `userDataRoot`
 
 ## Blog and comments
