@@ -31,7 +31,9 @@ export class UserAdminQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() banned?: boolean;
   /** `lastAccess` oldest first, `-lastAccess` most recent first; users who never visited sort as the oldest. Unset: a search by username, otherwise newest account first. */
   @ApiPropertyOptional({ enum: STAFF_USER_SORTS, enumName: 'StaffUserSort' })
-  @IsOptional() @IsIn(STAFF_USER_SORTS) sort?: StaffUserSort;
+  @IsOptional()
+  @IsIn(STAFF_USER_SORTS)
+  sort?: StaffUserSort;
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
