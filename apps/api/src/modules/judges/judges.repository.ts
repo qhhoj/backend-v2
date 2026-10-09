@@ -29,7 +29,8 @@ export class JudgesRepository {
     return this.judges
       .aggregate<JudgeListRow>([
         ...(name === undefined ? [] : [{ $match: { name } }]),
-        { $project: { authKeyHash: 0 } },
+        // `problems`: judge documents from before the field was dropped may still hold up to 100000 codes
+        { $project: { authKeyHash: 0, problems: 0 } },
         { $sort: { name: 1 } },
       ])
       .exec();

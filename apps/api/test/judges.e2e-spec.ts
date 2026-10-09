@@ -1,3 +1,4 @@
+import Redis from 'ioredis';
 import { sha256 } from '@libs/auth';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
@@ -42,11 +43,23 @@ describe('/api/internal/judges', () => {
   beforeEach(() => clearBridgeCommands(api));
   afterAll(() => api.teardown());
 
-  it('is for judge.change_judge holders only', async () => {
+  it('every judge route is for judge.change_judge holders only', async () => {
+    await create('judge-guarded');
+    const routes = [
+      api.http().get(JUDGES),
+      api.http().post(JUDGES).send({ name: 'judge-denied' }),
+      api.http().patch(`${JUDGES}/judge-guarded`).send({ isBlocked: true }),
+      api.http().post(`${JUDGES}/judge-guarded/key`),
+      api.http().post(`${JUDGES}/judge-guarded/disconnect`).send({}),
+    ];
     await api.http().get(JUDGES).expect(401);
-    await authed(api.http().get(JUDGES), member)
-      .expect(403)
-      .expect(errorCode('forbidden'));
+    for (const route of routes)
+      await authed(route, member).expect(403).expect(errorCode('forbidden'));
+    expect(await storedHash('judge-denied')).toBeUndefined();
+    expect(await api.judges.findOne({ name: 'judge-guarded' })).toMatchObject({
+      isBlocked: false,
+    });
+    expect(await bridgeCommands(api)).toEqual([]);
   });
 
   it('creates a judge whose key is shown once and stored only as its hash', async () => {
@@ -131,11 +144,12 @@ describe('/api/internal/judges', () => {
       'judge-0',
       'judge-a',
       'judge-dup',
+      'judge-guarded',
       'judge-live',
     ]);
   });
 
-  it('rotates the key, killing the old one and the open connection', async () => {
+  it('rotates the key, replacing the stored hash, and asks the bridge to drop the judge', async () => {
     const { authKey: oldKey } = await create('judge-rot');
     const { authKey } = dataOf<{ authKey: string }>(
       await authed(api.http().post(`${JUDGES}/judge-rot/key`), admin).expect(
@@ -147,6 +161,31 @@ describe('/api/internal/judges', () => {
     expect(await bridgeCommands(api)).toEqual([
       { type: 'disconnect-judge', judgeName: 'judge-rot', force: true },
     ]);
+  });
+
+  it('still returns the new key and keeps the block when the bridge command cannot be published', async () => {
+    await create('judge-redis-down');
+    const down = jest
+      .spyOn(Redis.prototype, 'xadd')
+      .mockRejectedValue(new Error('redis gone'));
+    try {
+      const { authKey } = dataOf<{ authKey: string }>(
+        await authed(
+          api.http().post(`${JUDGES}/judge-redis-down/key`),
+          admin,
+        ).expect(200),
+      );
+      expect(await storedHash('judge-redis-down')).toBe(sha256(authKey));
+      await authed(api.http().patch(`${JUDGES}/judge-redis-down`), admin)
+        .send({ isBlocked: true })
+        .expect(200);
+      expect(
+        await api.judges.findOne({ name: 'judge-redis-down' }),
+      ).toMatchObject({ isBlocked: true });
+      expect(down).toHaveBeenCalled();
+    } finally {
+      down.mockRestore();
+    }
   });
 
   it('blocks (dropping the connection), disables and enables through the bridge', async () => {
