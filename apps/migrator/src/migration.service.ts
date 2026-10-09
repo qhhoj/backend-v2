@@ -9,6 +9,7 @@ import { LegacySourceService } from './legacy-source.service';
 import { createMapCtx } from './map-ctx';
 import { batched, MappedDocument, Mapper, MAPPERS } from './mapper';
 import { MigrationReport } from './migration-report';
+import { schemaErrors } from './schema-check';
 import { skippedLines } from './skipped-tables';
 
 const DUPLICATE_KEY = 11000;
@@ -146,6 +147,8 @@ export class MigrationService {
         const found = actual.get(uuidStr(doc._id));
         if (!found || canonical(found) !== canonical(doc))
           fail(`${mapper.name}: mismatch ${uuidStr(doc._id)}`);
+        for (const error of schemaErrors(this.conn, mapper.collection, doc))
+          fail(`${mapper.name}: ${uuidStr(doc._id)} ${error}`);
       }
     }
     const count = await collection.countDocuments();
