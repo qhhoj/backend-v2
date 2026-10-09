@@ -30,6 +30,21 @@ describe('conformance matcher', () => {
     );
   });
 
+  it('needs a present value for a star and a present message for any expectation', () => {
+    expect(mismatch({ welcome: { sessionId: '*' } }, { welcome: {} })).toMatch(
+      /^\$\.welcome\.sessionId: expected a value/,
+    );
+    expect(
+      mismatch(
+        { final: { reason: 'RETRY_REASON_UNSPECIFIED' } },
+        { accepted: {} },
+      ),
+    ).toMatch(/^\$\.final: expected this message/);
+    expect(mismatch({ ack: {} }, null)).toMatch(
+      /^\$\.ack: expected this message/,
+    );
+  });
+
   it('treats an absent and a null field alike', () => {
     expect(mismatch({ ack: { seq: 0 } }, { ack: {} })).toBeNull();
     expect(mismatch({ ack: { seq: 0 } }, { ack: { seq: null } })).toBeNull();

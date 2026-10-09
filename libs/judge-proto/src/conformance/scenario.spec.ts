@@ -13,7 +13,7 @@ const writeScenario = (name: string, body: string): string => {
 describe('conformance scenarios', () => {
   it('loads every vendored scenario and every message in it round-trips', () => {
     const scenarios = loadScenarios();
-    expect(scenarios.length).toBeGreaterThanOrEqual(30);
+    expect(scenarios).toHaveLength(40);
     expect(new Set(scenarios.map((scenario) => scenario.name)).size).toBe(
       scenarios.length,
     );
@@ -55,6 +55,22 @@ describe('conformance scenarios', () => {
     expect(() => loadScenario(renamed)).toThrow(
       /name first must equal the file name/,
     );
+  });
+
+  it('accepts a second connection `as` another judge and refuses a dangling one', () => {
+    const body = (judges: string) =>
+      `applies_to: [bridge]\nsetup: {judges: ${judges}}\nsteps:\n  - drop: {judge: j1b}\n`;
+    expect(
+      loadScenario(
+        writeScenario('second', body('[{name: j1}, {name: j1b, as: j1}]')),
+      ).setup.judges[1].as,
+    ).toBe('j1');
+    expect(() =>
+      loadScenario(writeScenario('dangling', body('[{name: j1b, as: j1}]'))),
+    ).toThrow(/judge j1b: as j1 must name another judge/);
+    expect(() =>
+      loadScenario(writeScenario('self', body('[{name: j1b, as: j1b}]'))),
+    ).toThrow(/as j1b must name another judge/);
   });
 
   it('refuses a bridge restart in a scenario the judge runs', () => {

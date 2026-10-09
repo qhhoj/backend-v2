@@ -1,10 +1,10 @@
 {
   "source": "judge-v2",
-  "tag": "proto-v1.0",
-  "commit": "3a72eff01e47b6ecde5555b0037accfb8b8f55b4",
+  "tag": "proto-v1.1",
+  "commit": "a71558469eabc245a916faf37e10d82082f2ee1e",
   "files": {
-    "compat/v1.shape.json": "c91df8a019c115322dafd85bd24cb56aa4e1ec07c082d7e806a4080e811f1b61",
-    "conformance/matcher-cases.json": "0c7ee0fc6fb250e8511e1df68a7e00f4780a83ef019e885b17224a441a000552",
+    "compat/v1.shape.json": "bef3e4481bc464a23127ab40a543c701e5fb2ea4a467f0328b9ab7218acaf55e",
+    "conformance/matcher-cases.json": "328c8a084d23185ba634c5223becb48edc3a5a3dab277489612548d6d5d19eea",
     "conformance/scenarios/01-hello-first.yaml": "99e5a7c0de109da57ded61bdb2bca5ec061914f4deba727769a97964bf241c62",
     "conformance/scenarios/02-bad-key.yaml": "1e765d4887e7adf872a01f0ac79a33fd10a30c357f1dee0f0771d1d4cf5af76f",
     "conformance/scenarios/03-blocked-judge.yaml": "e4c08977863ceb603fefbdffff98c90de3a0631abcbe5fe9a901bbba20f53666",
@@ -41,6 +41,10 @@
     "conformance/scenarios/31-bridge-restart-resume.yaml": "ffd7d77ab06d4053122e0de00014c0e7e99b5b9057751e9f28ab6daeaee30ce5",
     "conformance/scenarios/32-fetch-source.yaml": "45a02d47381a2d1e77d89442d9bd8149ca0a12054e220f70e29fb9567bb21e47",
     "conformance/scenarios/33-draining.yaml": "d895d39207cd74a9af53fba2bd264da48f2b53f15329ada8efc17a0d95cb7ef2",
+    "conformance/scenarios/34-session-replaced.yaml": "e38dc535e224141364a006462f82aa4786ead9bc1a5d8f6ddbfd43301fd85241",
+    "conformance/scenarios/35-restart-without-resume.yaml": "3893acee4df196658b183dd1b1519c4322b6ee6495ba93c043eaad81ce6b4735",
+    "conformance/scenarios/36-idle-timeout.yaml": "2bd33397e5ca9dee34ed3cded5e8197e38baba8cc322cf95e76b6faa1c274eb3",
+    "conformance/scenarios/37-replayed-final.yaml": "20cf44e3832ef5b6440747eb9d297731cddd9309212ec2bb18493afeb25df51f",
     "golden/bridge-abort.bin": "ad1f66f9cafc7b70bce88c783abd4df3592a55d3bc48569a59ae781917789a3e",
     "golden/bridge-abort.json": "1435db0f56d8c2562242b8c0604fabd998a83b643f7858c2f4b3e28c57393a4d",
     "golden/bridge-ack.bin": "6631c6181834ff92592d0248bab2357df487395f01ab8c3dce3a18cd580c6eda",
@@ -87,7 +91,7 @@
     "golden/judge-pong.json": "d72c678ad9a9b5467e89f133b3a8e865ed34789965e2225bbfd4120c12b96019",
     "golden/judge-started.bin": "9a39f07f5a772697ebefba032cef9cd3e26b2c594a9f52fd1776805b9cda92c7",
     "golden/judge-started.json": "09b2cb8a3a8954c95c66f678d3c896b407aa408a16da86c56faa1b5d1e4267e0",
-    "qhhoj/judge/v1/judge.proto": "a6bee9ee0b8c3634716b134c0285afe746b17fa72d2a5c741e909b9e976b3a9e",
-    "version.json": "8de3794c06d94523dd01b215a9afe5037aaeb54c08c3cb1670dae4e224e8e324"
+    "qhhoj/judge/v1/judge.proto": "7394f7dae5744b1fefb29cc69c065363c828e2148d0cfe547a5942d296792471",
+    "version.json": "cc200f9acc052ea6136e4f347aa40089c0367f67c319e57ad3256e27dbfdde39"
   }
 }

@@ -34,7 +34,14 @@ export type Step =
   | { restart_bridge: Record<string, never> };
 
 export interface ScenarioSetup {
-  judges: Array<{ name: string; blocked?: boolean }>;
+  judges: Array<{
+    name: string;
+    blocked?: boolean;
+    /** A second connection authenticating as this judge, addressed by `name`. */
+    as?: string;
+    /** False: the judge ignores pings (a hung process). */
+    answers_pings?: boolean;
+  }>;
   problems?: Array<{ code: string; dataVersion?: number; partial?: boolean }>;
   submissions?: Array<{
     id: string;
@@ -48,7 +55,7 @@ export interface Scenario {
   name: string;
   summary: string;
   applies_to: Role[];
-  /** Bridge timing overrides in ms (`handshakeMs`, `acceptMs`, `resumeGraceMs`, `resyncMs`, ...). */
+  /** Bridge timing overrides in ms (`handshakeMs`, `acceptMs`, `resumeGraceMs`, `resyncMs`, `idleMs`, ...). */
   timings?: Record<string, number>;
   setup: ScenarioSetup;
   steps: Step[];
@@ -136,6 +143,19 @@ function checkStep(
   }
 }
 
+function checkJudges(judges: ScenarioSetup['judges']): void {
+  const names = new Set(judges.map((judge) => judge.name));
+  for (const judge of judges) {
+    if (
+      judge.as !== undefined &&
+      (judge.as === judge.name || !names.has(judge.as))
+    )
+      throw new Error(
+        `judge ${judge.name}: as ${judge.as} must name another judge`,
+      );
+  }
+}
+
 export function validateScenario(scenario: Scenario, fileStem: string): void {
   if (scenario.name !== fileStem)
     throw new Error(`name ${scenario.name} must equal the file name`);
@@ -146,6 +166,7 @@ export function validateScenario(scenario: Scenario, fileStem: string): void {
   if (restarts && scenario.applies_to.join() !== 'bridge')
     throw new Error('restart_bridge needs applies_to: [bridge]');
   const judges = new Set(scenario.setup.judges.map((judge) => judge.name));
+  checkJudges(scenario.setup.judges);
   const known = (judge: string) => {
     if (!judges.has(judge)) throw new Error(`unknown judge ${judge}`);
   };

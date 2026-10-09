@@ -87,7 +87,10 @@ function mismatchAt(
   expected: Json,
   actual: unknown,
 ): string | null {
-  if (expected === '*') return null;
+  if (expected === '*')
+    return actual === undefined || actual === null
+      ? `${path}: expected a value, got none`
+      : null;
   if (isObject(expected)) return objectMismatch(path, expected, actual);
   if (Array.isArray(expected)) return arrayMismatch(path, expected, actual);
   if ((actual === undefined || actual === null) && isDefault(expected))
@@ -96,6 +99,19 @@ function mismatchAt(
   return `${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual ?? null)}`;
 }
 
-/** Null when every field `expected` names matches `actual` (a missing field holds its proto3 default, `{}` needs the field present, `"*"` matches anything); otherwise what differs, with its path. */
-export const mismatch = (expected: Json, actual: unknown): string | null =>
-  mismatchAt('$', expected, actual);
+/** Null when every field `expected` names matches `actual` (a missing field holds its proto3 default, `{}` needs the field present, `"*"` matches any present value, and every top-level key must be present); otherwise what differs, with its path. */
+export function mismatch(expected: Json, actual: unknown): string | null {
+  return missingMember(expected, actual) ?? mismatchAt('$', expected, actual);
+}
+
+/** The top-level keys name the oneof member of a message: it must be the one sent, however empty its expectation is. */
+function missingMember(expected: Json, actual: unknown): string | null {
+  if (!isObject(expected)) return null;
+  const observed = isObject(actual) ? actual : {};
+  const missing = Object.keys(expected).find(
+    (key) => observed[key] === undefined || observed[key] === null,
+  );
+  return missing === undefined
+    ? null
+    : `$.${missing}: expected this message, got ${JSON.stringify(actual ?? null)}`;
+}

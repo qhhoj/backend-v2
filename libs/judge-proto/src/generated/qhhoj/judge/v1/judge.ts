@@ -24,6 +24,8 @@ export const protobufPackage = "qhhoj.judge.v1";
  * inside v1 only add fields, oneof members and enum values, never renumber,
  * retype or rename; a removed field's number and name go to `reserved`.
  * Fields are declared in field-number order. Readers ignore unknown fields.
+ * Every uint64 on the wire stays at or below 2^53 - 1 (9007199254740991): the
+ * TypeScript side decodes them as numbers and refuses larger values.
  * A breaking change is a new package `qhhoj.judge.v2` served beside v1.
  */
 
@@ -34,6 +36,10 @@ export enum ErrorCode {
   ERROR_CODE_FLOOD = 3,
   ERROR_CODE_TOO_LARGE = 4,
   ERROR_CODE_SEQ_GAP = 5,
+  /**
+   * ERROR_CODE_UNKNOWN_REF - Not sent by the v1 bridge (a message for an unheld ref is answered with an
+   * Abort); reserved for a later minor.
+   */
   ERROR_CODE_UNKNOWN_REF = 6,
   ERROR_CODE_INTERNAL = 7,
   UNRECOGNIZED = -1,
@@ -337,7 +343,9 @@ export interface Resume {
   action: Resume_Action;
   /**
    * CONTINUE: replay the outbox from this seq. DROP: the judge stops the run and
-   * still ends it with Final{OUTCOME_ABORTED}, which frees the bridge's slot.
+   * still ends it with Final{OUTCOME_ABORTED}, which frees the bridge's slot. The
+   * bridge stores nothing for that Final and does not ack it, so the judge drops
+   * the run's outbox itself once the run has ended.
    */
   fromSeq: number;
 }
@@ -440,7 +448,8 @@ export interface Assign {
 
 /**
  * The judge ends every run it kills with Final{OUTCOME_ABORTED}, before or after
- * Accepted; until then the bridge counts the run against the judge's slots.
+ * Accepted; until then the bridge counts the run against the judge's slots. The
+ * bridge neither stores nor acks that Final: the judge drops the run's outbox itself.
  */
 export interface Abort {
   ref: AssignmentRef | undefined;
