@@ -33,7 +33,8 @@
     "stack:down": "bash scripts/fullstack/down.sh",
     "changeset": "changeset",
     "version": "changeset version",
-    "release:tag": "changeset tag"
+    "release:version": "changeset version && npm install --package-lock-only",
+    "release:tag": "node scripts/release/tag-release.mjs"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0",
@@ -130,7 +131,8 @@
     "testEnvironment": "node",
     "roots": [
       "<rootDir>/apps/",
-      "<rootDir>/libs/"
+      "<rootDir>/libs/",
+      "<rootDir>/scripts/release/"
     ],
     "moduleNameMapper": {
       "^@libs/(common|database|auth|render|problems|judging|judge-proto|contests|community|settings)(|/.*)$": "<rootDir>/libs/$1/src$2"

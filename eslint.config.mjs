@@ -17,6 +17,7 @@ export default tseslint.config(
       'eslint.config.mjs',
       'libs/judge-proto/src/generated/**',
       'scripts/judge-proto/lock.js',
+      'scripts/release/tag-release.mjs',
     ],
   },
   eslint.configs.recommended,

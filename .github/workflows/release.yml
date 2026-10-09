@@ -1,0 +1,31 @@
+# Opens or updates the "Version Packages" PR from the pending .changeset/*.md files on every push to main.
+# Merging that PR leaves no changesets, so the next run takes the publish branch: release:tag tags v<version>
+# (no npm publish; the app is private). Third-party actions are pinned by commit SHA; bump them deliberately.
+name: release
+on: { push: { branches: [main] } }
+concurrency:
+  group: release
+  cancel-in-progress: false
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
+        with:
+          version: npm run release:version
+          publish: npm run release:tag
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

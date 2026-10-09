@@ -419,3 +419,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - The editorial release is compare-and-set on the stored solution, so racing runs write one revision.
 - The publish worker re-checks the recorded editor at job time (account active, rights now, group rights included), because rights may be revoked between switch and end; it skips deleted problems.
 - Cloning a contest resets `publishAfterEnd`, `publishAfterEndBy` and `autoPublishOutcome`: the clone is a new contest and must not publish on a copied switch.
+- **Release bot**: `changesets/action` (`.github/workflows/release.yml`) opens the Version Packages PR on every push to `main`; merging it runs `scripts/release/tag-release.mjs` (idempotent `v<version>` tag, no npm publish) because the app is private and the tag is the release.
