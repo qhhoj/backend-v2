@@ -1,7 +1,9 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Inject, Logger, Module } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { AuthModule, IntegrationClientsRepository } from '@libs/auth';
 import { ENV, RateLimitService, type Env } from '@libs/common';
+import { CONTEST_FINAL_JUDGE_QUEUE } from '@libs/contests';
 import { IntegrationClientsController } from './clients/integration-clients.controller';
 import { IntegrationClientsService } from './clients/integration-clients.service';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
@@ -11,7 +13,11 @@ import { SyncActsAsService } from './contests/sync-acts-as.service';
 import { SyncContestOwnership } from './contests/sync-contest-ownership.service';
 import { SyncContestsController } from './contests/sync-contests.controller';
 import { SyncContestsService } from './contests/sync-contests.service';
+import { SyncContestRemovalService } from './contests/sync-contest-removal.service';
+import { SyncParticipantsRepository } from './contests/sync-participants.repository';
+import { SyncParticipantsService } from './contests/sync-participants.service';
 import { SyncRateLimit } from './contests/sync-rate-limit.service';
+import { SyncStandingsService } from './contests/sync-standings.service';
 
 /** The sync API for integration clients and the administration of their keys. */
 @Module({
@@ -20,6 +26,7 @@ import { SyncRateLimit } from './contests/sync-rate-limit.service';
     ContestAccessModule,
     ContestsApiModule,
     ProblemsApiModule,
+    BullModule.registerQueue({ name: CONTEST_FINAL_JUDGE_QUEUE }),
   ],
   controllers: [IntegrationClientsController, SyncContestsController],
   providers: [
@@ -27,8 +34,12 @@ import { SyncRateLimit } from './contests/sync-rate-limit.service';
     RateLimitService,
     SyncActsAsService,
     SyncContestOwnership,
+    SyncContestRemovalService,
     SyncContestsService,
+    SyncParticipantsRepository,
+    SyncParticipantsService,
     SyncRateLimit,
+    SyncStandingsService,
   ],
 })
 export class SyncModule implements OnApplicationBootstrap {

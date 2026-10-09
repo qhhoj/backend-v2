@@ -50,4 +50,20 @@ describe('sync API schemas', () => {
       [...((schema('SyncUpsertAction').enum ?? []) as string[])].sort(),
     ).toEqual(['created', 'unchanged', 'updated']);
   });
+
+  it('documents participants, removal and standings', () => {
+    const base = '/api/sync/v1/contests/{key}';
+    const statuses = (route: string, method: 'get' | 'put' | 'delete') =>
+      Object.keys(operationOf(document, route, method).responses);
+    expect(statuses(`${base}/participants`, 'put')).toContain('200');
+    expect(statuses(base, 'delete')).toContain('204');
+    expect(statuses(`${base}/standings`, 'get')).toContain('200');
+    expect(schema('SyncParticipantsResponse').properties).toMatchObject({
+      applied: { type: 'number' },
+      unknown: { type: 'array', items: { type: 'string' } },
+    });
+    expect(
+      schema('SyncParticipantsDto').properties?.['usernames'],
+    ).toMatchObject({ type: 'array', maxItems: 2000 });
+  });
 });

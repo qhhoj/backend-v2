@@ -8421,6 +8421,45 @@
         ],
         "type": "object"
       },
+      "SyncParticipantsDto": {
+        "properties": {
+          "usernames": {
+            "description": "Usernames of existing, active users; sync never creates a user.",
+            "items": {
+              "maxLength": 150,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "usernames"
+        ],
+        "type": "object"
+      },
+      "SyncParticipantsResponse": {
+        "properties": {
+          "applied": {
+            "description": "Users now on the contestant list.",
+            "type": "number"
+          },
+          "unknown": {
+            "description": "Usernames that matched no active user, as the client sent them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied",
+          "unknown"
+        ],
+        "type": "object"
+      },
       "SyncProblemDto": {
         "properties": {
           "code": {
@@ -25418,6 +25457,46 @@
       }
     },
     "/api/sync/v1/contests/{key}": {
+      "delete": {
+        "operationId": "SyncContestsController_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "SyncContests"
+        ]
+      },
       "get": {
         "operationId": "SyncContestsController_read",
         "parameters": [
@@ -25516,6 +25595,130 @@
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/SyncUpsertResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "SyncContests"
+        ]
+      }
+    },
+    "/api/sync/v1/contests/{key}/participants": {
+      "put": {
+        "operationId": "SyncContestsController_setParticipants",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncParticipantsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SyncParticipantsResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "SyncContests"
+        ]
+      }
+    },
+    "/api/sync/v1/contests/{key}/standings": {
+      "get": {
+        "operationId": "SyncContestsController_getStandings",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RankingResponse"
                     }
                   },
                   "required": [
