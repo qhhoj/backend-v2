@@ -12,5 +12,6 @@ import { OrganizationPointsService } from './organization-points.service';
     OrganizationPointsService,
     OrganizationPointsRepository,
   ],
+  exports: [OrganizationPointsService],
 })
 export class OrganizationPointsModule {}

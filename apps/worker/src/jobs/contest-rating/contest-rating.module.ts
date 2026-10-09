@@ -12,5 +12,6 @@ import { ContestRatingService } from './contest-rating.service';
     ContestRatingService,
     ContestRatingRepository,
   ],
+  exports: [ContestRatingService],
 })
 export class ContestRatingModule {}

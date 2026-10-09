@@ -15,6 +15,7 @@ import { ContestRatingModule } from './jobs/contest-rating/contest-rating.module
 import { SimilarityModule } from './jobs/similarity/similarity.module';
 import { ContestRescoreModule } from './jobs/contest-rescore/contest-rescore.module';
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
+import { MigrationRecomputeModule } from './jobs/migration-recompute/migration-recompute.module';
 import { OrganizationPointsModule } from './jobs/organization-points/organization-points.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
@@ -48,6 +49,7 @@ import { DiscordWebhookModule } from './jobs/discord-webhook/discord-webhook.mod
     ContributionPointsModule,
     UserDataModule,
     DiscordWebhookModule,
+    MigrationRecomputeModule,
   ],
 })
 export class WorkerModule {}

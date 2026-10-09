@@ -12,5 +12,6 @@ import { ContributionPointsService } from './contribution-points.service';
     ContributionPointsService,
     ContributionPointsRepository,
   ],
+  exports: [ContributionPointsService],
 })
 export class ContributionPointsModule {}
