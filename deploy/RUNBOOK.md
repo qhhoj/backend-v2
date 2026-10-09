@@ -104,7 +104,9 @@ Manual items:
 
 ## Judge connection
 
-- Judges (qhhoj/judge-server fork, which handles UUID submission ids) connect to `BRIDGE_HOST:JUDGE_BRIDGE_PORT` (default 9999) with their judge name and key.
-- Create or rotate the judge and its key in the admin UI (the key is shown once; a rotate or block disconnects the judge at once). Judges are not migrated; register them fresh and issue new keys.
+- Judges (judge-v2, `qhhoj-judge`) open a gRPC `qhhoj.judge.v1` link to `JUDGE_BRIDGE_HOST:JUDGE_BRIDGE_PORT` (default 9999), sending the judge name and key as `x-judge-name`/`x-judge-key` metadata. Runs survive a reconnect within 30 s (resume).
+- TLS: set `JUDGE_BRIDGE_TLS_CERT` and `JUDGE_BRIDGE_TLS_KEY` (both or neither); a non-loopback host without them refuses to start. Judges pin the certificate (or its private CA). The pair is read once at start: after renewing it, restart the bridge (`systemctl restart qhhoj-bridge`); judges reconnect and resume.
+- Create or rotate the judge and its key in the admin UI (the key is shown once; a rotate or block ends every session of the judge and closes its connections at once). Judges are not migrated; register them fresh and issue new keys.
+- Limits: one connection per judge (a newer session replaces the older one); a connection with no session is closed after 15 s; 8 such connections per address; an address with 20 failed key checks in a minute is refused for the rest of that minute (logged as `Judge key check failed from <address>`).
 - Only one bridge instance may run. Bind `JUDGE_BRIDGE_HOST` to the private interface where possible and firewall the port to judge hosts; nginx never proxies it.
-- Remote judges connect only over a private network or WireGuard (keys travel in clear). `/api/internal/openapi.json` is public and lists admin routes (all permission-guarded); deny it in nginx if unwanted. Judges must reach `SITE_URL` + `MEDIA_URL` over HTTP(S) (file-only submissions), share the `PROBLEM_DATA_ROOT` volume, and run with a restart policy (they exit on a broken connection).
+- Remote judges still connect only over a private network or WireGuard. `/api/internal/openapi.json` is public and lists admin routes (all permission-guarded); deny it in nginx if unwanted. Judges must share the `PROBLEM_DATA_ROOT` volume and run with a restart policy.
