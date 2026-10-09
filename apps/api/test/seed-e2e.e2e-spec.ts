@@ -99,6 +99,9 @@ describe('seed:e2e', () => {
     ]);
     for (const file of ['1.in', '1.out', 'init.yml'])
       expect(existsSync(join(root, 'e2e_sum', file))).toBe(true);
+    expect(readFileSync(join(root, 'e2e_sum', '.data-version'), 'utf8')).toBe(
+      `${problem!.dataVersion}\n`,
+    );
     expect(readFileSync(join(root, 'e2e_sum', 'init.yml'), 'utf8')).toContain(
       '1.in',
     );

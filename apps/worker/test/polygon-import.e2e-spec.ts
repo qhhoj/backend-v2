@@ -237,10 +237,12 @@ describe('PolygonImportProcessor', () => {
     ]);
     const directory = dataDirectory('sum');
     expect(readdirSync(directory).sort()).toEqual([
+      '.data-version',
       'checker.cpp',
       'init.yml',
       'tests.zip',
     ]);
+    expect(readFileSync(join(directory, '.data-version'), 'utf8')).toBe('1\n');
     expect(await listZipEntries(join(directory, 'tests.zip'))).toEqual([
       '01.inp',
       '01.out',
@@ -341,10 +343,14 @@ describe('PolygonImportProcessor', () => {
     });
     expect(imageCount()).toBe(imagesBefore + 1);
     expect(readdirSync(dataDirectory('sum')).sort()).toEqual([
+      '.data-version',
       'checker.cpp',
       'init.yml',
       'tests.zip',
     ]);
+    expect(
+      readFileSync(join(dataDirectory('sum'), '.data-version'), 'utf8'),
+    ).toBe('2\n');
   });
 
   it('applies what an update is given and records only real changes', async () => {
@@ -436,6 +442,7 @@ describe('PolygonImportProcessor', () => {
       ),
     );
     expect(readdirSync(dataDirectory('sum')).sort()).toEqual([
+      '.data-version',
       'init.yml',
       'tests.zip',
     ]);

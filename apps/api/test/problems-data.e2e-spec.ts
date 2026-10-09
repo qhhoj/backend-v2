@@ -154,6 +154,12 @@ describe('problem data editor', () => {
     const data = dataOf(await put('sum', editor, body).expect(200));
     expect(data.feedback).toBe('');
     expect(data.hasInit).toBe(true);
+    const { dataVersion } = (await api.problems
+      .findOne({ code: 'sum' })
+      .lean())!;
+    expect(
+      readFileSync(join(api.problemDataRoot, 'sum', '.data-version'), 'utf8'),
+    ).toBe(`${dataVersion}\n`);
     expect(data.cases).toHaveLength(4);
     expect(data.cases[1]).toMatchObject({ points: null, isPretest: true });
     expect(
@@ -202,6 +208,27 @@ describe('problem data editor', () => {
         after: { count: 0, changed: [0, 1, 2, 3] },
       },
     });
+  });
+
+  it('stores feedback for a file io name that would leave the judge box', async () => {
+    const data = dataOf(
+      await put(
+        'sum',
+        editor,
+        config([plainCase(1)], {
+          graderArgs: {
+            io_method: 'file',
+            io_input_file: '../../x',
+            io_output_file: '/etc/passwd',
+          },
+        }),
+      ).expect(200),
+    );
+    expect(data.feedback).toBe('Input/Output file must be a plain file name.');
+    expect(data.hasInit).toBe(false);
+    expect(existsSync(join(api.problemDataRoot, 'sum', 'init.yml'))).toBe(
+      false,
+    );
   });
 
   it('stores feedback and removes init.yml when the cases do not compile', async () => {

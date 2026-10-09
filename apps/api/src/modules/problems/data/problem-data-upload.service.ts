@@ -77,6 +77,7 @@ export class ProblemDataUploadService {
       );
       await this.dataFiles.commitUpload(problem.code, staged, name);
       await this.removeReplaced(problem.code, previous.archive, name);
+      await this.store.stampVersion(problem, version);
       await this.store.recordChange(auth, problem, {
         before: previous,
         after: stored,
@@ -119,6 +120,7 @@ export class ProblemDataUploadService {
       );
       await this.dataFiles.commitUpload(problem.code, staged, name);
       await this.removeReplaced(problem.code, previous[kind], name);
+      await this.store.stampVersion(problem, version);
       await this.store.recordChange(auth, problem, {
         before: previous,
         after: stored,

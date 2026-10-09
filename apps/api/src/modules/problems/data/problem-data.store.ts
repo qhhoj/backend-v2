@@ -73,6 +73,11 @@ export class ProblemDataStore {
     return problem;
   }
 
+  /** Last step of every data change, after init.yml and every file move or removal: stamps `<code>/.data-version` with the version `compileAndStore` wrote (`expected + 1`), the judges' cache key. */
+  stampVersion(problem: ProblemDocument, expected: number): Promise<void> {
+    return this.dataFiles.writeDataVersion(problem.code, expected + 1);
+  }
+
   /** The stored data as a plain object, with the version to compare-and-set against. `data` is `select: false`, so it is loaded explicitly; the problem from the access check never carries it. */
   async loadData(
     problem: ProblemDocument,

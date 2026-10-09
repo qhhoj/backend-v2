@@ -32,6 +32,31 @@ describe('ProblemDataFilesService', () => {
     expect(await files.readInit('sum')).toBeNull();
     await files.removeInit('sum');
   });
+  it('stamps the data version atomically, replaces it, and reads none from an unstamped directory', async () => {
+    expect(await files.readDataVersion('stamped')).toBeNull();
+    await files.writeInit('stamped', 'archive: tests.zip\n');
+    expect(await files.readDataVersion('stamped')).toBeNull();
+    await files.writeDataVersion('stamped', 4);
+    await files.writeDataVersion('stamped', 5);
+    expect(readFileSync(join(root, 'stamped', '.data-version'), 'utf8')).toBe(
+      '5\n',
+    );
+    expect(await files.readDataVersion('stamped')).toBe(5);
+    expect(readdirSync(join(root, 'stamped')).sort()).toEqual([
+      '.data-version',
+      'init.yml',
+    ]);
+  });
+  it('moves the stamp with a renamed directory', async () => {
+    await files.writeDataVersion('before_rename', 7);
+    await files.rename('before_rename', 'after_rename');
+    expect(await files.readDataVersion('after_rename')).toBe(7);
+  });
+  it('refuses to stamp a directory that is not a problem code', async () => {
+    await expect(files.writeDataVersion('../x', 1)).rejects.toThrow(
+      /Invalid problem code/,
+    );
+  });
   it('writes buffers and streams, reports existence', async () => {
     await files.writeFile('sum', 'checker.cpp', Buffer.from('int main(){}'));
     await files.writeFile(

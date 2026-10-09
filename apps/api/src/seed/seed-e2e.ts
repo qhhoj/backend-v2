@@ -224,26 +224,26 @@ async function seedProblem(
       data: { ...sample, cases: compiled.cases },
     },
   );
-  await writeProblemFiles(
-    join(problemDataRoot, spec.code),
-    spec,
-    compiled.yaml,
-  );
+  await writeProblemFiles(join(problemDataRoot, spec.code), spec, {
+    yaml: compiled.yaml,
+    dataVersion: problem.dataVersion ?? 0,
+  });
   return problem._id;
 }
 
+/** The stamp goes last, like the api's data writes: a judge that reads it sees the files. */
 async function writeProblemFiles(
   directory: string,
   { files, archive }: ProblemSpec,
-  yaml: string | null,
+  { yaml, dataVersion }: { yaml: string | null; dataVersion: number },
 ): Promise<void> {
   await writeIfChanged(join(directory, 'init.yml'), yaml ?? '');
-  if (archive) {
+  if (archive)
     await writeIfChanged(join(directory, archive), await zipBytes(files));
-    return;
-  }
-  for (const [name, content] of Object.entries(files))
-    await writeIfChanged(join(directory, name), content);
+  else
+    for (const [name, content] of Object.entries(files))
+      await writeIfChanged(join(directory, name), content);
+  await writeIfChanged(join(directory, '.data-version'), `${dataVersion}\n`);
 }
 
 export async function seedE2e(

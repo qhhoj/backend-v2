@@ -42,6 +42,8 @@ export interface AppliedImport {
   problemId: string;
   /** Data files the previous configuration named; the caller removes those the new one no longer uses. */
   previousFiles: string[];
+  /** The problem's `dataVersion` after the import; the caller stamps the data directory with it. */
+  dataVersion: number;
 }
 
 const FULL_MARKUP_PERMISSION: Permission = 'judge.problem_full_markup';
@@ -73,6 +75,7 @@ const summaryOf = (problem: Partial<Problem>) => ({
 interface WrittenProblem {
   problemId: string;
   after: Partial<Problem>;
+  dataVersion: number;
 }
 
 /** The imported statement, limits and data; a re-import with a tutorial keeps the editorial's publication state (it is never un-published), one without a tutorial removes the editorial. */
@@ -197,6 +200,7 @@ export class PolygonImportRepository {
     );
     return {
       problemId: written.problemId,
+      dataVersion: written.dataVersion,
       previousFiles: DATA_FILE_KINDS.flatMap(
         (kind) => before?.data?.[kind] ?? [],
       ),
@@ -242,7 +246,11 @@ export class PolygonImportRepository {
       throw new PolygonImportError(
         'the problem changed while the package was importing, try again',
       );
-    return { problemId, after: { ...before, ...changes } };
+    return {
+      problemId,
+      after: { ...before, ...changes },
+      dataVersion: (target?.dataVersion ?? 0) + 1,
+    };
   }
 
   private async insertWithCatalogDefaults(
@@ -262,7 +270,7 @@ export class PolygonImportRepository {
     const [{ _id: problemId }] = await this.problems.create([created], {
       session,
     });
-    return { problemId, after: created };
+    return { problemId, after: created, dataVersion: created.dataVersion };
   }
 
   private async appendImportRevision(

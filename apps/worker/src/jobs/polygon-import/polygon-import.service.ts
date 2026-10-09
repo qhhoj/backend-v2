@@ -192,6 +192,10 @@ export class PolygonImportService {
             ? this.dataFiles.removeInit(code)
             : this.dataFiles.writeInit(code, yaml),
       ],
+      [
+        'stamping the data version',
+        () => this.dataFiles.writeDataVersion(code, applied.dataVersion),
+      ],
       ['dropping the cached PDFs', () => this.dropPdfs(code)],
     ];
     for (const [step, work] of steps)

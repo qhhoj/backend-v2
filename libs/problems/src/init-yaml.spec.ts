@@ -319,6 +319,32 @@ describe('compileInitYaml', () => {
       output_only: true,
     });
   });
+  it.each([
+    ['../x', 'a.out'],
+    ['a.inp', '/etc/passwd'],
+    ['sub/a.inp', 'a.out'],
+    ['a.inp', 'sub\\a.out'],
+    ['.hidden', 'a.out'],
+    ['input', 'a.out'],
+    ['a.inp', 'output'],
+    ['main', 'a.out'],
+    ['a.inp', '.stderr'],
+  ])(
+    'refuses file io names that leave the box or shadow its files: %s, %s',
+    (input, output) =>
+      failsWith(
+        {
+          graderArgs: {
+            io_method: 'file',
+            io_input_file: input,
+            io_output_file: output,
+          },
+          cases: [plain(1)],
+        },
+        'Input/Output file must be a plain file name.',
+      ),
+  );
+
   it('emits global limits and hints', () =>
     expect(
       init({

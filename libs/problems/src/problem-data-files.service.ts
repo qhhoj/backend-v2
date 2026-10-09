@@ -22,6 +22,8 @@ import type { Env } from '@libs/common';
 import { PROBLEM_CODE_PATTERN } from '@libs/database';
 
 export const INIT_FILE = 'init.yml';
+/** The judge's cache key for `<code>/`: the problem's `dataVersion`, written last. Dot-prefixed, so no client file (`safeName`) can take the name. */
+export const DATA_VERSION_FILE = '.data-version';
 const IMPORTS_DIRECTORY = '.imports';
 /** Dot-prefixed: `safeName` refuses leading dots, so no client file can ever be named like a staged upload. */
 const UPLOAD_PREFIX = '.upload-';
@@ -80,6 +82,31 @@ export class ProblemDataFilesService {
 
   removeInit(code: string): Promise<void> {
     return this.removeFile(code, INIT_FILE);
+  }
+
+  /** Written atomically after every other file of a data change (init.yml, committed uploads, removals), so a judge that reads version N sees N's files; a judge that sees an older stamp waits for the newer one. */
+  async writeDataVersion(code: string, version: number): Promise<void> {
+    await writeFileAtomically(
+      this.dataVersionPath(code),
+      Buffer.from(`${version}\n`, 'utf8'),
+      this.root,
+    );
+  }
+
+  /** The stamped version, or null when the directory has none (legacy rsync data). */
+  async readDataVersion(code: string): Promise<number | null> {
+    const path = this.dataVersionPath(code);
+    await assertRealPathInside(this.root, path);
+    try {
+      return Number((await readFile(path, 'utf8')).trim());
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+  }
+
+  private dataVersionPath(code: string): string {
+    return this.resolveInside(`${this.codeOf(code)}/${DATA_VERSION_FILE}`);
   }
 
   async readInit(code: string): Promise<string | null> {

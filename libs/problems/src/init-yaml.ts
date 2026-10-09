@@ -106,6 +106,26 @@ function requireSource(
   return name;
 }
 
+/** Names the judge keeps for itself inside the box (judge-v2 `case_file` rule). */
+const RESERVED_BOX_NAMES: ReadonlySet<string> = new Set([
+  'input',
+  'output',
+  'main',
+  '.stderr',
+]);
+
+/** A file io name is joined to the box directory by the judge: only a plain name that cannot leave it or shadow the judge's own files is allowed. */
+function plainBoxFileName(name: string): string {
+  if (
+    name === '' ||
+    name.startsWith('.') ||
+    /[/\\]/.test(name) ||
+    RESERVED_BOX_NAMES.has(name)
+  )
+    throw new ProblemDataError('Input/Output file must be a plain file name.');
+  return name;
+}
+
 /** Legacy `make_grader`. */
 function applyGrader(init: InitCase, data: ProblemData): void {
   assertBoundedArgs(data.graderArgs);
@@ -124,7 +144,10 @@ function applyGrader(init: InitCase, data: ProblemData): void {
       );
     if (typeof input !== 'string' || typeof output !== 'string')
       throw new ProblemDataError('Input/Output file must be a string.');
-    init.file_io = { input, output };
+    init.file_io = {
+      input: plainBoxFileName(input),
+      output: plainBoxFileName(output),
+    };
     return;
   }
   if (data.grader === 'interactive') {

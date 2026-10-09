@@ -87,6 +87,7 @@ describe('problem data files', () => {
     });
     expect(data.archiveFiles).toEqual(['1.in', '1.out', '2.in', '2.out']);
     expect(readdirSync(directory).sort()).toEqual([
+      '.data-version',
       'My_Tests_v2.zip',
       'init.yml',
     ]);
@@ -101,7 +102,11 @@ describe('problem data files', () => {
       buildZip(tests(1)),
       'tests.zip',
     ).expect(201);
-    expect(readdirSync(directory).sort()).toEqual(['init.yml', 'tests.zip']);
+    expect(readdirSync(directory).sort()).toEqual([
+      '.data-version',
+      'init.yml',
+      'tests.zip',
+    ]);
   });
   it('refuses a bad archive and leaves the directory clean', async () => {
     const archive = `${PROBLEMS}/sum/data/archive`;
@@ -148,7 +153,11 @@ describe('problem data files', () => {
       .attach('file', buildZip(tests(1)), 'tests.zip')
       .expect(400);
     await upload(archive, plain, buildZip(tests(1)), 'tests.zip').expect(403);
-    expect(readdirSync(directory).sort()).toEqual(['init.yml', 'tests.zip']);
+    expect(readdirSync(directory).sort()).toEqual([
+      '.data-version',
+      'init.yml',
+      'tests.zip',
+    ]);
     expect(readdirSync(api.problemDataRoot).sort()).toEqual(['sum']);
   });
   it('accepts an archive larger than the 20 MiB plugin default (per-call limit wins)', async () => {
@@ -278,7 +287,7 @@ describe('problem data files', () => {
       expect((await storedData()).archiveFiles).toEqual(before);
       expect(initArchive()).toBe('race.zip');
       expect(
-        readdirSync(directory).filter((name) => name.startsWith('.')),
+        readdirSync(directory).filter((name) => name.startsWith('.upload-')),
       ).toEqual([]);
     });
     it('lets exactly one of two concurrent same-name archive uploads win, intact on disk', async () => {
@@ -328,7 +337,7 @@ describe('problem data files', () => {
         readdirSync(directory).filter((name) => name.endsWith('.zip')),
       ).toEqual(['tests.zip']);
       expect(
-        readdirSync(directory).filter((name) => name.startsWith('.')),
+        readdirSync(directory).filter((name) => name.startsWith('.upload-')),
       ).toEqual([]);
     });
     it('keeps the old source when a same-name re-upload loses the CAS', async () => {
@@ -367,7 +376,7 @@ describe('problem data files', () => {
       );
       expect(existsSync(join(directory, 'first.cpp'))).toBe(false);
       expect(
-        readdirSync(directory).filter((name) => name.startsWith('.')),
+        readdirSync(directory).filter((name) => name.startsWith('.upload-')),
       ).toEqual([]);
     });
   });
@@ -384,6 +393,12 @@ describe('problem data files', () => {
     );
     expect(existsSync(join(directory, 'chk.cpp'))).toBe(false);
     expect(existsSync(join(directory, 'init.yml'))).toBe(false);
+    const { dataVersion } = (await api.problems
+      .findOne({ code: 'sum' })
+      .lean())!;
+    expect(readFileSync(join(directory, '.data-version'), 'utf8')).toBe(
+      `${dataVersion}\n`,
+    );
     await authed(
       api.http().delete(`${PROBLEMS}/sum/data/files/customChecker`),
       editor,
