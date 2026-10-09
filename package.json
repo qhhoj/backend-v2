@@ -24,6 +24,8 @@
     "test:openapi": "jest --config jest.openapi.config.js --runInBand",
     "openapi:emit": "OPENAPI_OUT=${OPENAPI_OUT:-openapi.json} jest --config jest.openapi-emit.config.js --runInBand --forceExit --silent",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "judge:up": "scripts/judge/judge-up.sh",
+    "judge:down": "scripts/judge/judge-down.sh",
     "seed:e2e": "TS_NODE_TRANSPILE_ONLY=true ts-node -r tsconfig-paths/register apps/api/src/seed/main.ts",
     "stack:up": "bash scripts/fullstack/up.sh",
     "stack:down": "bash scripts/fullstack/down.sh"

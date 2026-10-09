@@ -1,0 +1,15 @@
+# Local DMOJ judge. The official judge-tier images are not pullable anonymously
+# (docker.io/dmoj/judge-tier1 denied, ghcr.io/dmoj/judge-tier1 403), so build the
+# judge from PyPI on a plain Python base with the PY3 and C++ runtimes.
+FROM docker.io/library/python:3.11-slim-bookworm
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends g++ gcc libseccomp-dev tini \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir dmoj
+# Our submission ids are UUID strings; stock dmoj only formats them with %d in log lines.
+RUN d="$(python -c 'import dmoj,os;print(os.path.dirname(dmoj.__file__))')" \
+ && sed -i 's/%d/%s/g' "$d/packet.py" "$d/judge.py"
+RUN useradd -m -s /bin/bash judge && mkdir -p /problems && chown judge:judge /problems
+WORKDIR /judge
+USER judge
+ENTRYPOINT ["/usr/bin/tini", "--"]

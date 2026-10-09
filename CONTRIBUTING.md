@@ -294,6 +294,16 @@ user-activity/
 - Actions: invisible problem -> 404; abort (owner unless rejudged, or `judge.abort_any_submission`), rejudge/reject (`judge.rejudge_submission`/`judge.reject_submission` + edit rights; 409 while unfinished; rejudge: while in flight or locked), bulk rejudge per problem (more than 10 needs `judge.rejudge_submission_lot`, locked only with `force`; counts first, then streams chunks of at most 1000 ids)
 - Judges admin (`judge.change_judge`): `/api/internal/judges`; keys are shown once; rotate and block force-disconnect
 
+## Local judge
+
+A real DMOJ judge in podman, so submissions are compiled and judged for real (PY3 and C++ runtimes).
+
+- Needs a running api and bridge, the seeded `e2e_admin` (`npm run seed:e2e`), and `PROBLEM_DATA_ROOT` pointing at the directory the api writes problem data to (one folder per problem with `init.yml`; the seed writes it for `e2e_sum`).
+- `PROBLEM_DATA_ROOT=... API_ORIGIN=http://127.0.0.1:3000 SITE_ORIGIN=<SITE_URL> BRIDGE_PORT=9999 npm run judge:up` logs in as the admin (`ADMIN_USERNAME`/`ADMIN_PASSWORD`, default the seed's), creates the judge `JUDGE_NAME` (default `local-judge`) or rotates its key, and starts the container with `--network host`. `BRIDGE_HOST`/`BRIDGE_PORT` default to 127.0.0.1:9990. The container id is in `$JUDGE_RUN_DIR/judge.cid` (default `/tmp/qhhoj-judge-<uid>`); `npm run judge:down` removes exactly that container.
+- The image `localhost/qhhoj-judge:local` is built from `scripts/judge/Containerfile` on first run: the official `dmoj/judge-tier1` images cannot be pulled anonymously (docker.io denied, ghcr.io 403), so it installs `dmoj` from PyPI. It patches the judge's log formats because our submission ids are UUID strings, not integers.
+- Runtimes are detected with `dmoj-autoconf` at container start; the problem data is mounted read-only at `/problems`.
+- Submit through the api as usual; a judged submission ends `D` with `AC`/`WA`.
+
 ## Effects and realtime
 
 - Every recompute of a user's points or a problem's stats goes through `SubmissionEffectsService` (worker); recomputes read Mongo and `$set`, never increment. `runCoalesced` (`libs/common`) serialises one key across processes, extends its lock while the work runs, and reruns once more for every mark left meanwhile, so bursts collapse

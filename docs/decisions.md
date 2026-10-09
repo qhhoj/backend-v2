@@ -333,3 +333,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `libs/<lib>/src/testing.ts` stays one test-support entry per lib, refused in production code by lint — splitting the small files would add paths without adding clarity.
 - The personal data export (request and download) is `@NoImpersonation()` — an admin impersonating a user must not request or download that user's private export; `PATCH /profile` stays allowed.
 - Blog moderation (visible-only patch by edit_all_post) skips the personal write limit and the official-contest lock — moderators must hide spam during contests.
+- Local real judge (`npm run judge:up/down`, podman): the official judge-tier images are not anonymously pullable, so `scripts/judge/Containerfile` installs `dmoj` from PyPI and patches its `%d` log formats for UUID submission ids; registration goes through the judges admin API.
