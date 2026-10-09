@@ -3,6 +3,7 @@ import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
+import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { contestUrl, createContest, hoursFromNow } from './contest-fixtures';
 import { createOrganization } from './organization-fixtures';
@@ -133,5 +134,80 @@ describe('contest quota', () => {
     const organization = await limited(5);
     await post(orgContest([organization._id])).expect(201);
     expect(await usedBy(organization._id)).toBe(20);
+  });
+
+  describe('an edit that scopes a contest to an organization', () => {
+    const patch = (key: string, body: object) =>
+      authed(api.http().patch(contestUrl(key)), editor).send(body);
+    const owned = (extra: Record<string, unknown> = {}) =>
+      createContest(api, {
+        key: `quotaedit${(counter += 1)}`,
+        authors: [editorId],
+        ...extra,
+      });
+
+    it('charges the first listed organization when a public contest is made private', async () => {
+      const first = await limited(100);
+      const second = await limited(100);
+      const contest = await owned();
+      await patch(contest.key, {
+        isOrganizationPrivate: true,
+        organizations: [first._id, second._id],
+      }).expect(200);
+      expect(await usedBy(first._id)).toBe(20);
+      expect(await usedBy(second._id)).toBeNull();
+      const entries = await ledger.find({ organization: first._id }).lean();
+      expect(entries.map(({ reason, ref }) => [reason, ref])).toEqual([
+        ['contest', contest.key],
+      ]);
+    });
+
+    it('refuses at the limit and leaves the contest public', async () => {
+      const organization = await limited(10);
+      const contest = await owned();
+      await patch(contest.key, {
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+      })
+        .expect(403)
+        .expect(errorCode('quota_exceeded'));
+      const stored = await api.contests.findOne({ key: contest.key }).lean();
+      expect(stored?.isOrganizationPrivate).toBe(false);
+    });
+
+    it('does not charge a contest that was already organization-private', async () => {
+      const first = await limited(100);
+      const second = await limited(100);
+      const contest = await owned({
+        isOrganizationPrivate: true,
+        organizations: [first._id],
+      });
+      await patch(contest.key, { name: 'Renamed' }).expect(200);
+      await patch(contest.key, { organizations: [second._id] }).expect(200);
+      expect(await usedBy(first._id)).toBeNull();
+      expect(await usedBy(second._id)).toBeNull();
+    });
+
+    it('refunds when the save fails', async () => {
+      const organization = await limited(100);
+      const contest = await owned();
+      const failing = jest
+        .spyOn(api.app.get(ContestsRepository), 'update')
+        .mockRejectedValueOnce(new Error('mongo blip'));
+      await patch(contest.key, {
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+      }).expect(500);
+      failing.mockRestore();
+      expect(await usedBy(organization._id)).toBe(0);
+      const entries = await ledger
+        .find({ organization: organization._id })
+        .sort({ _id: 1 })
+        .lean();
+      expect(entries.map(({ reason, amount }) => [reason, amount])).toEqual([
+        ['contest', 20],
+        ['refund', -20],
+      ]);
+    });
   });
 });

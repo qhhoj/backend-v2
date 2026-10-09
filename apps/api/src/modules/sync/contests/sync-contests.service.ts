@@ -106,7 +106,7 @@ export class SyncContestsService {
         managedBy: client.clientId,
       });
     else
-      await this.editing.applyFields(job.existing!, job.fields, {
+      await this.editing.applyFields(acting, job.existing!, job.fields, {
         isVisible: false,
         startTime: { $gt: new Date() },
       });

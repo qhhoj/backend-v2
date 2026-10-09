@@ -36,7 +36,10 @@ import type {
   UpdateContestDto,
 } from './dto/contest-edit.dto';
 import { ContestEditFieldsService } from './contest-edit-fields.service';
-import { chargedOrganization } from '../../organizations/quota/quota-charge';
+import {
+  chargedOrganization,
+  newlyChargedOrganization,
+} from '../../organizations/quota/quota-charge';
 import { QuotaService } from '../../organizations/quota/quota.service';
 
 /** `GET /contests/current` shadows a contest with this key. */
@@ -201,18 +204,23 @@ export class ContestEditingService {
   ): Promise<ContestDetailResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
     const fields = await this.editFields.toFields(principal, dto, contest);
-    await this.applyFields(contest, fields);
+    await this.applyFields(principal, contest, fields);
     return this.contestsService.detail(principal, key);
   }
 
-  /** Writes already-validated fields and runs every follow-up of an edit. Shared with the sync API, which validates through `ContestEditFieldsService` itself. An organization-private contest is charged to its first listed organization, refunded when the create fails. */
+  /** Writes already-validated fields and runs every follow-up of an edit. Shared with the sync API, which validates through `ContestEditFieldsService` itself. An edit that makes a contest organization-scoped (see `newlyChargedOrganization`) is charged to its first listed organization like a create, refunded when the save fails. */
   async applyFields(
+    principal: Principal,
     contest: ContestDocument,
     fields: Partial<Contest>,
     guard: FilterQuery<Contest> = {},
   ): Promise<void> {
     await this.assertFormatChangeAllowed(contest, fields);
-    const updated = await this.save(contest, fields, guard);
+    const updated = await this.quota.charged(
+      newlyChargedOrganization(principal, contest, fields),
+      { kind: 'contest', userId: principal.userId, ref: contest.key },
+      () => this.save(contest, fields, guard),
+    );
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
     await this.rescheduleEndJobs({ previous: contest, next: updated });
