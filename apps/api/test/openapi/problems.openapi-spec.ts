@@ -3,6 +3,57 @@ import { STATEMENT_LANGUAGES } from '@libs/database';
 import { loadDocument, operationOf, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';
 
+/** Schemas whose classes live in the problems and tags modules (UserSummaryResponse is shared and owned by M0). */
+const OWN_SCHEMAS = [
+  'AssignTagsDto',
+  'CatalogItemResponse',
+  'CloneProblemDto',
+  'CreateLanguageDto',
+  'CreateProblemDto',
+  'CreateTagProblemDto',
+  'EditorialResponse',
+  'ImportJobResponse',
+  'ImportJobStartedResponse',
+  'ImportResultResponse',
+  'LanguageAdminResponse',
+  'LanguageLimitDto',
+  'LanguageLimitResponse',
+  'LanguageResponse',
+  'LicenseResponse',
+  'PdfRenderingResponse',
+  'ProblemContestResponse',
+  'ProblemDataLimitsResponse',
+  'ProblemDataResponse',
+  'ProblemDetailResponse',
+  'ProblemEditorResponse',
+  'ProblemEditorialDraftResponse',
+  'ProblemListItemResponse',
+  'ProblemMetaResponse',
+  'ProblemRefResponse',
+  'ProblemTranslationResponse',
+  'PutEditorialDto',
+  'PutProblemDataDto',
+  'PutTranslationDto',
+  'RenderPreviewDto',
+  'TagAssignmentResponse',
+  'TagCatalogResponse',
+  'TagGroupResponse',
+  'TagProblemListItemResponse',
+  'TagProblemResponse',
+  'TagResponse',
+  'TestCaseDto',
+  'TestCaseResponse',
+  'UpdateLanguageDto',
+  'UpdateProblemDto',
+  'UploadedFileResponse',
+];
+const OWN_ROUTE = /\/api\/internal\/(problems|tags)\b/;
+const OWN_SCHEMA_NAMES = OWN_SCHEMAS.join('|');
+/** Loose sites are labelled `schema <Name>...`; inline enums sit under `/components/schemas/<Name>/`. */
+const OWN_SCHEMA = new RegExp(
+  `^schema (${OWN_SCHEMA_NAMES})\\b|\\/components\\/schemas\\/(${OWN_SCHEMA_NAMES})\\/`,
+);
+
 describe('problem and tag schemas', () => {
   let document: OpenAPIObject;
   beforeAll(async () => {
@@ -13,22 +64,23 @@ describe('problem and tag schemas', () => {
     if (!found) throw new Error(`The document has no schema ${name}`);
     return found as SchemaObject;
   };
-  const OWN_SITE =
-    /\/api\/internal\/(problems|tags)\b|\/schemas\/(Problem|Editorial|Translation|Tag|TestCase)/;
+  /** Sites on the problem and tag routes (not B7's ticket routes) and on the schemas this lane owns. */
   const ownSites = (sites: string[]) =>
-    sites.filter((site) => OWN_SITE.test(site));
-
-  it('has no untyped parameter, empty schema or bare object on problem and tag routes', () => {
-    const ownLoose = looseSites(document).filter(
+    sites.filter(
       (site) =>
-        /\/api\/internal\/(problems|tags)\b/.test(site) &&
-        !site.includes('/tickets') &&
-        !site.includes('/pdf'),
+        (OWN_ROUTE.test(site) && !site.includes('/tickets')) ||
+        OWN_SCHEMA.test(site),
     );
-    const schemas = looseSites(document).filter((site) =>
-      /^schema (TestCaseDto|PutProblemDataDto)\b/.test(site),
+
+  it('documents every schema this lane owns', () => {
+    const missing = OWN_SCHEMAS.filter(
+      (name) => !document.components?.schemas?.[name],
     );
-    expect([...ownLoose, ...schemas]).toEqual([]);
+    expect(missing).toEqual([]);
+  });
+
+  it('has no untyped parameter, empty schema or bare object on problem and tag routes and schemas', () => {
+    expect(ownSites(looseSites(document))).toEqual([]);
   });
 
   it('types the list paging as optional numbers within their bounds', () => {
