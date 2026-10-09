@@ -87,7 +87,7 @@ async function seedUsers(
 }
 
 /** The language, type and group the sample problem needs. */
-async function seedCatalog(connection: Connection) {
+export async function seedCatalog(connection: Connection) {
   const language = await ensure(
     connection.model<Language>(Language.name, LanguageSchema),
     { key: 'PY3' },
