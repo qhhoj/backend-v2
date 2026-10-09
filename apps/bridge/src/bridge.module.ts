@@ -15,6 +15,7 @@ import { JudgeServerService } from './judges/judge-server.service';
 import { JudgesRepository } from './judges/judges.repository';
 import { BridgeService } from './bridge.service';
 import { GradingService } from './submissions/grading.service';
+import { RunWritesRepository } from './submissions/run-writes.repository';
 import { SubmissionsRepository } from './submissions/submissions.repository';
 
 @Module({
@@ -30,6 +31,7 @@ import { SubmissionsRepository } from './submissions/submissions.repository';
   providers: [
     { provide: BRIDGE_TIMINGS, useValue: DEFAULT_BRIDGE_TIMINGS },
     SubmissionsRepository,
+    RunWritesRepository,
     SubmissionEventsService,
     GradingService,
     DispatchService,

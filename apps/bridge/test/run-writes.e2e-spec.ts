@@ -1,0 +1,251 @@
+import type { Problem, SubmissionCase } from '@libs/database';
+import type { AssignmentRef } from '@libs/judge-proto';
+import {
+  RETRY_LIMIT_MESSAGE,
+  RunWritesRepository,
+} from '../src/submissions/run-writes.repository';
+import { SubmissionsRepository } from '../src/submissions/submissions.repository';
+import type { RunKey } from '../src/submissions/write-outcome';
+import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
+import type { BridgeCatalog } from './fixtures';
+import { setupBridgeTest } from './setup';
+import type { BridgeTest } from './setup';
+
+const JUDGE = 'judge-01';
+const reported = (
+  position: number,
+  extra: Partial<SubmissionCase> = {},
+): SubmissionCase => ({
+  position,
+  status: 'AC',
+  time: 0.1,
+  memory: 1000,
+  points: 1,
+  total: 1,
+  batch: null,
+  feedback: '',
+  extendedFeedback: '',
+  output: '',
+  ...extra,
+});
+
+describe('Run writes (seq compare-and-set)', () => {
+  let bridge: BridgeTest;
+  let catalog: BridgeCatalog;
+  let writes: RunWritesRepository;
+  let repository: SubmissionsRepository;
+  let codes = 0;
+  const stored = async (id: string) =>
+    (await bridge.submissions.findById(id).select('+cases').lean())!;
+  /** A submission claimed by `JUDGE`; `key(seq)` names its run. */
+  const claimed = async (problemFields: Partial<Problem> = {}) => {
+    const problem = await seedProblem(bridge, catalog, {
+      code: `w${(codes += 1)}`,
+      ...problemFields,
+    });
+    const submission = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+    });
+    const [queued] = await repository.loadQueued([submission._id]);
+    const claim = await repository.claimRun(queued, JUDGE);
+    if (!claim || !('request' in claim)) throw new Error('not claimed');
+    const ref: AssignmentRef = claim.request.ref;
+    const key = (seq: number, judgeName = JUDGE): RunKey => ({
+      ref,
+      judgeName,
+      seq,
+    });
+    return { id: submission._id, ref, key };
+  };
+
+  beforeAll(async () => {
+    bridge = await setupBridgeTest();
+    catalog = await seedCatalog(bridge);
+    writes = bridge.module.get(RunWritesRepository);
+    repository = bridge.module.get(SubmissionsRepository);
+  });
+  afterAll(() => bridge.teardown());
+
+  it('applies a run in order, advancing judgeSeq, and grades it from the stored cases', async () => {
+    const { id, key } = await claimed({ partial: true });
+    expect(await writes.accept(key(1))).toBe('applied');
+    expect(await writes.compiled(key(2), 'warning: x')).toBe('applied');
+    expect(await writes.started(key(3), true)).toBe('applied');
+    expect(await stored(id)).toMatchObject({
+      status: 'G',
+      isPretested: true,
+      judgeSeq: 3,
+    });
+    expect(
+      await writes.cases(key(4), [
+        reported(1, { batch: 1 }),
+        reported(2, { batch: 1, status: 'WA', points: 0 }),
+      ]),
+    ).toBe('applied');
+    expect(await stored(id)).toMatchObject({
+      batch: true,
+      currentTestcase: 3,
+      judgeSeq: 4,
+    });
+    const finished = await writes.finishGraded(key(5), 7);
+    expect(finished.outcome).toBe('applied');
+    expect(finished.job?.submissionId).toBe(id);
+    expect(await stored(id)).toMatchObject({
+      status: 'D',
+      result: 'WA',
+      error: 'warning: x',
+      judgeSeq: 5,
+      judgedDataVersion: 7,
+      casePoints: 0,
+      caseTotal: 1,
+    });
+  });
+
+  it('answers a replayed seq as a duplicate and stores nothing twice', async () => {
+    const { id, key } = await claimed();
+    await writes.accept(key(1));
+    await writes.started(key(2), false);
+    expect(await writes.cases(key(3), [reported(1)])).toBe('applied');
+    expect(await writes.accept(key(1))).toBe('duplicate');
+    expect(await writes.cases(key(3), [reported(1)])).toBe('duplicate');
+    expect((await stored(id)).cases).toHaveLength(1);
+    await writes.finishGraded(key(4), 0);
+    expect(await writes.finishGraded(key(4), 0)).toEqual({
+      outcome: 'duplicate',
+      job: null,
+    });
+  });
+
+  it('calls a skipped seq a gap and a message that does not fit the status out of order', async () => {
+    const { key } = await claimed();
+    await writes.accept(key(1));
+    expect(await writes.started(key(3), false)).toBe('gap');
+    expect(await writes.cases(key(2), [reported(1)])).toBe('order');
+    expect(await writes.finishGraded(key(2), 0)).toEqual({
+      outcome: 'order',
+      job: null,
+    });
+  });
+
+  it('ignores another judge, another generation and a run requeued under it as stale', async () => {
+    const { ref, key } = await claimed();
+    await writes.accept(key(1));
+    expect(await writes.started(key(2, 'judge-02'), false)).toBe('stale');
+    expect(
+      await writes.started(
+        {
+          ref: { ...ref, generation: ref.generation + 1 },
+          judgeName: JUDGE,
+          seq: 2,
+        },
+        false,
+      ),
+    ).toBe('stale');
+    await repository.requeueRun(ref, JUDGE);
+    expect(await writes.started(key(2), false)).toBe('stale');
+  });
+
+  it('refuses cases beyond 10000 per submission without writing, and advances the seq on an empty batch', async () => {
+    const { id, key } = await claimed();
+    await writes.accept(key(1));
+    await writes.started(key(2), false);
+    await bridge.submissions.updateOne(
+      { _id: id },
+      {
+        $set: {
+          cases: Array.from({ length: 9999 }, (_unused, index) =>
+            reported(index + 1),
+          ),
+        },
+      },
+    );
+    expect(await writes.cases(key(3), [reported(10000), reported(10001)])).toBe(
+      'full',
+    );
+    expect(await writes.cases(key(3), [])).toBe('applied');
+    expect(await writes.cases(key(4), [reported(10000)])).toBe('applied');
+    expect((await stored(id)).cases).toHaveLength(10000);
+  });
+
+  it('ends a run as CE with its log, IE with its message, or AB without points', async () => {
+    const ce = await claimed();
+    await writes.accept(ce.key(1));
+    expect(
+      (
+        await writes.finishWith(ce.key(2), 'CE', {
+          log: 'error: x',
+          dataVersionUsed: 3,
+        })
+      ).outcome,
+    ).toBe('applied');
+    expect(await stored(ce.id)).toMatchObject({
+      status: 'CE',
+      result: 'CE',
+      error: 'error: x',
+      judgedDataVersion: 3,
+    });
+    const ab = await claimed();
+    await writes.accept(ab.key(1));
+    await writes.started(ab.key(2), false);
+    expect(
+      (
+        await writes.finishWith(ab.key(3), 'AB', {
+          log: '',
+          dataVersionUsed: 0,
+        })
+      ).outcome,
+    ).toBe('applied');
+    expect(await stored(ab.id)).toMatchObject({
+      status: 'AB',
+      result: 'AB',
+      points: 0,
+    });
+    expect(
+      (
+        await writes.finishWith(ab.key(4), 'IE', {
+          log: 'late',
+          dataVersionUsed: 0,
+        })
+      ).outcome,
+    ).toBe('stale');
+  });
+
+  it('requeues on RETRY without spending the requeue, and fails the third RETRY as IE', async () => {
+    const run = await claimed();
+    const retryOnce = async (expectRequeued: boolean) => {
+      const [queued] = await repository.loadQueued([run.id]);
+      const claim = queued && (await repository.claimRun(queued, JUDGE));
+      const ref = claim && 'request' in claim ? claim.request.ref : run.ref;
+      const key = { ref, judgeName: JUDGE, seq: 1 };
+      await writes.accept(key);
+      const outcome = await writes.retry(
+        { ...key, seq: 2 },
+        'data version 4 not visible',
+      );
+      expect(outcome).toMatchObject({
+        outcome: 'applied',
+        requeued: expectRequeued,
+      });
+    };
+    await writes.accept(run.key(1));
+    expect(await writes.retry(run.key(2), 'sandbox failed')).toMatchObject({
+      outcome: 'applied',
+      requeued: true,
+    });
+    expect(await stored(run.id)).toMatchObject({
+      status: 'QU',
+      retryCount: 1,
+      requeueCount: 0,
+      judgedOn: null,
+    });
+    await retryOnce(true);
+    await retryOnce(false);
+    expect(await stored(run.id)).toMatchObject({
+      status: 'IE',
+      retryCount: 3,
+      requeueCount: 0,
+      judgeGeneration: 3,
+      error: `${RETRY_LIMIT_MESSAGE}: data version 4 not visible`,
+    });
+  });
+});
