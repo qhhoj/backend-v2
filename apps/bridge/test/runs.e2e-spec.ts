@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newId } from '@libs/database';
@@ -46,7 +46,10 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     catalog = await seedCatalog(bridge);
     repository = bridge.module.get(SubmissionsRepository);
   });
-  afterAll(() => bridge.teardown());
+  afterAll(async () => {
+    rmSync(join(tmpdir(), 'submission_file'), { recursive: true, force: true });
+    await bridge.teardown();
+  });
 
   it('claims QU → P with the next generation and builds the Assign from the problem and the source', async () => {
     const { problem, id, queued } = await queuedRow(

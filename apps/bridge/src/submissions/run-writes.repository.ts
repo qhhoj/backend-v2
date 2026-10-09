@@ -31,6 +31,8 @@ export interface RetryOutcome extends FinishOutcome {
 }
 
 const IN_FLIGHT = [...IN_FLIGHT_STATUSES];
+/** A GRADED Final may follow Accepted directly (conformance 37): a run with no cases is graded as it stands. */
+const GRADABLE: readonly SubmissionStatus[] = ['P', 'G'];
 const GRADED_JOB_FIELDS = { user: 1, problem: 1 } as const;
 
 /** The run's row, its judge and generation, and the previous seq: exactly-once effect for at-least-once delivery. */
@@ -94,16 +96,17 @@ export class RunWritesRepository {
     return matchedCount === 1 ? 'applied' : this.miss(key, ['G'], cases.length);
   }
 
-  /** Legacy `on_grading_end`: totals from the stored cases, points from the problem's current points. */
+  /** Legacy `on_grading_end`, also from P: totals from the stored cases, points from the problem's current points. */
   async finishGraded(
     key: RunKey,
     dataVersionUsed: number,
   ): Promise<FinishOutcome> {
-    const filter = runFilter(key, ['G']);
+    const filter = runFilter(key, GRADABLE);
     const submission = await this.submissions
       .findOne(filter, { user: 1, problem: 1, cases: 1 })
       .lean();
-    if (!submission) return { outcome: await this.miss(key, ['G']), job: null };
+    if (!submission)
+      return { outcome: await this.miss(key, GRADABLE), job: null };
     const problem = await this.problems
       .findById(submission.problem, { points: 1, partial: 1 })
       .lean();
@@ -131,7 +134,7 @@ export class RunWritesRepository {
     });
     return modifiedCount === 1
       ? { outcome: 'applied', job: gradedJobOf(submission) }
-      : { outcome: await this.miss(key, ['G']), job: null };
+      : { outcome: await this.miss(key, GRADABLE), job: null };
   }
 
   /** Final COMPILE_ERROR (CE + log), INTERNAL_ERROR (IE + message) or ABORTED (AB, no points). */
@@ -157,7 +160,10 @@ export class RunWritesRepository {
   async retry(key: RunKey, log: string): Promise<RetryOutcome> {
     const row = await this.submissions
       .findOneAndUpdate(
-        { ...runFilter(key, IN_FLIGHT), retryCount: { $lt: MAX_RETRIES - 1 } },
+        {
+          ...runFilter(key, IN_FLIGHT),
+          retryCount: { $not: { $gte: MAX_RETRIES - 1 } },
+        },
         { $set: REQUEUE_RESET, $inc: { retryCount: 1 } },
         { projection: GRADED_JOB_FIELDS },
       )

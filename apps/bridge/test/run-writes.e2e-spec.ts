@@ -116,15 +116,11 @@ describe('Run writes (seq compare-and-set)', () => {
     });
   });
 
-  it('calls a skipped seq a gap and a message that does not fit the status out of order', async () => {
+  it('calls a skipped seq a gap and cases before Started out of order', async () => {
     const { key } = await claimed();
     await writes.accept(key(1));
     expect(await writes.started(key(3), false)).toBe('gap');
     expect(await writes.cases(key(2), [reported(1)])).toBe('order');
-    expect(await writes.finishGraded(key(2), 0)).toEqual({
-      outcome: 'order',
-      job: null,
-    });
   });
 
   it('ignores another judge, another generation and a run requeued under it as stale', async () => {
@@ -247,5 +243,37 @@ describe('Run writes (seq compare-and-set)', () => {
       judgeGeneration: 3,
       error: `${RETRY_LIMIT_MESSAGE}: data version 4 not visible`,
     });
+  });
+
+  it('grades a run straight from P when Final GRADED follows Accepted, and acks its replay as a duplicate', async () => {
+    const { id, key } = await claimed();
+    await writes.accept(key(1));
+    const finished = await writes.finishGraded(key(2), 4);
+    expect(finished.outcome).toBe('applied');
+    expect(finished.job?.submissionId).toBe(id);
+    expect(await stored(id)).toMatchObject({
+      status: 'D',
+      judgeSeq: 2,
+      judgedDataVersion: 4,
+    });
+    expect(await writes.finishGraded(key(2), 4)).toEqual({
+      outcome: 'duplicate',
+      job: null,
+    });
+  });
+
+  it('counts a row without retryCount (a migrated one) as zero RETRYs', async () => {
+    const { id, key } = await claimed();
+    await writes.accept(key(1));
+    await bridge.submissions.updateOne(
+      { _id: id },
+      { $unset: { retryCount: '' } },
+    );
+    expect(await stored(id)).not.toHaveProperty('retryCount');
+    expect(await writes.retry(key(2), 'sandbox failed')).toMatchObject({
+      outcome: 'applied',
+      requeued: true,
+    });
+    expect(await stored(id)).toMatchObject({ status: 'QU', retryCount: 1 });
   });
 });
