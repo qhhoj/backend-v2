@@ -5,6 +5,7 @@ import { AppError, invalidField, unique } from '@libs/common';
 import { timelineEventsOf } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
+import { TicketNotificationsService } from '../alerts/ticket-notifications.service';
 import type { TicketDetailResponse } from '../core/dto/ticket.response';
 import { TicketAccess } from '../core/ticket-access';
 import type { TicketAccessView } from '../core/ticket-access';
@@ -40,6 +41,7 @@ export class TicketUpdatesService {
     private readonly users: UsersRepository,
     private readonly events: TicketEventsService,
     private readonly contributions: ContributionPointsService,
+    private readonly alerts: TicketNotificationsService,
   ) {}
 
   async update(
@@ -113,8 +115,9 @@ export class TicketUpdatesService {
     return changes;
   }
 
-  /** Everything told about the change once it is stored: the SSE feed and the creator's contribution points. */
+  /** Everything told about the change once it is stored: the SSE feed, the creator's contribution points and the inboxes. */
   private async afterUpdate({
+    principal,
     ticket,
     view,
     changes,
@@ -129,6 +132,14 @@ export class TicketUpdatesService {
       });
     if (changes.isContributive !== undefined)
       await this.contributions.refresh([view.creator]);
+    await this.alerts.updated({
+      actor: principal.userId,
+      ticketId,
+      ticketTitle: ticket.title,
+      owner: view.creator,
+      assigneesBefore: view.assignees,
+      changes,
+    });
   }
 
   /** Every name must be an active user; the issue names the field, never which name failed. */

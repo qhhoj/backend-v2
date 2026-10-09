@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
+import { NotificationsModule } from '@libs/community';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { DiscordModule } from '../discord/discord.module';
@@ -9,6 +10,8 @@ import { ProblemsApiModule } from '../problems/problems-api.module';
 import { CannedRepliesController } from './canned/canned-replies.controller';
 import { CannedRepliesRepository } from './canned/canned-replies.repository';
 import { CannedRepliesService } from './canned/canned-replies.service';
+import { TicketNotificationsService } from './alerts/ticket-notifications.service';
+import { TicketStaffRepository } from './alerts/ticket-staff.repository';
 import { TicketSummaryController } from './alerts/ticket-summary.controller';
 import { TicketSummaryService } from './alerts/ticket-summary.service';
 import { TicketGateService } from './core/ticket-gate.service';
@@ -34,6 +37,7 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     ContributionsModule,
     DiscordModule,
     EventsModule,
+    NotificationsModule,
     ProblemsApiModule,
   ],
   controllers: [
@@ -60,6 +64,8 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     TicketMessagesService,
     TicketUpdatesService,
     TicketSummaryService,
+    TicketStaffRepository,
+    TicketNotificationsService,
   ],
   exports: [
     TicketsRepository,

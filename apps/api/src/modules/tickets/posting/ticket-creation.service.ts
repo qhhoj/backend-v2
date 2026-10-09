@@ -8,6 +8,7 @@ import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { renderField } from '../../problems/editing/problem-markup';
+import { TicketNotificationsService } from '../alerts/ticket-notifications.service';
 import type { TicketDetailResponse } from '../core/dto/ticket.response';
 import { TICKET_LIMIT, TICKET_WINDOW_SECONDS } from '../core/rate-limits';
 import { TicketAccess } from '../core/ticket-access';
@@ -15,6 +16,7 @@ import { TicketContextService } from '../core/ticket-context.service';
 import { TicketGateService } from '../core/ticket-gate.service';
 import { TicketResponsesService } from '../core/ticket-responses.service';
 import { TicketsRepository } from '../core/tickets.repository';
+import type { TicketDocument } from '../core/tickets.repository';
 import { TicketEventsService } from '../streams/ticket-events.service';
 import type { NewGeneralTicketDto, NewTicketDto } from './dto/new-ticket.dto';
 
@@ -34,6 +36,7 @@ export class TicketCreationService {
     private readonly responses: TicketResponsesService,
     private readonly events: TicketEventsService,
     private readonly discord: DiscordWebhooksService,
+    private readonly alerts: TicketNotificationsService,
   ) {}
 
   /** The problem must be visible to the filer (with their contest scope); assignees are the contest authors when the filer is in a contest that has the problem, else the problem's authors. */
@@ -86,8 +89,27 @@ export class TicketCreationService {
     dto: NewTicketDto,
     target: { link: TicketLink; assignees: string[]; subjectLink: string },
   ): Promise<TicketDetailResponse> {
-    const { link, assignees, subjectLink } = target;
-    const bodyHtml = renderField(dto.body, 'user', 'body');
+    const { message, ticket } = await this.insert(principal, dto, target);
+    await this.announce(principal, ticket, dto, {
+      messageId: message._id,
+      subjectLink: target.subjectLink,
+    });
+    return this.responses.detail(
+      principal,
+      ticket,
+      await this.context.accessView(ticket),
+    );
+  }
+
+  /** Rate limit, then create the ticket with its first message; a refused create gives its hit back. */
+  private async insert(
+    principal: Principal,
+    dto: NewTicketDto,
+    target: { link: TicketLink; assignees: string[] },
+  ): Promise<{
+    message: { _id: string };
+    ticket: Awaited<ReturnType<TicketsRepository['create']>>;
+  }> {
     const releaseHit = await this.rateLimits.reserve(
       [`ticket:${principal.userId}`],
       TICKET_LIMIT,
@@ -98,36 +120,45 @@ export class TicketCreationService {
       _id: newId(),
       user: principal.userId,
       body: dto.body,
-      bodyHtml,
+      bodyHtml: renderField(dto.body, 'user', 'body'),
       createdAt,
     };
-    let ticket;
     try {
-      ticket = await this.tickets.create(
+      const ticket = await this.tickets.create(
         {
           title: dto.title,
           user: principal.userId,
-          assignees,
+          assignees: target.assignees,
           messages: [message],
           messageCount: 1,
           lastMessageAt: createdAt,
           lastMessageByStaff: TicketAccess.isStaff(principal),
         },
-        link,
+        target.link,
       );
+      return { message, ticket };
     } catch (error) {
       await releaseHit();
       throw error;
     }
+  }
+
+  /** Everything told about a new ticket once it is saved: the SSE feed, Discord and the inboxes. */
+  private async announce(
+    principal: Principal,
+    ticket: TicketDocument,
+    dto: NewTicketDto,
+    sent: { messageId: string; subjectLink: string },
+  ): Promise<void> {
     const ticketId = uuidStr(ticket._id);
     await this.events.publish({
       type: 'new-ticket',
       ticketId,
-      messageId: message._id,
+      messageId: sent.messageId,
       open: null,
     });
     await this.discord.notify('on_new_ticket', {
-      title: `New ticket on ${subjectLink}`,
+      title: `New ticket on ${sent.subjectLink}`,
       description: newTicketDescription({
         title: dto.title,
         ticketUrl: this.discord.link(ticketPath(ticketId)),
@@ -135,10 +166,12 @@ export class TicketCreationService {
       }),
       author: this.discord.author(principal.username),
     });
-    return this.responses.detail(
-      principal,
-      ticket,
-      await this.context.accessView(ticket),
-    );
+    await this.alerts.filed({
+      ticketId,
+      title: dto.title,
+      body: dto.body,
+      creator: principal.userId,
+      assignees: ticket.assignees.map(uuidStr),
+    });
   }
 }
