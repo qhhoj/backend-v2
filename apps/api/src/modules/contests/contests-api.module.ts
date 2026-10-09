@@ -6,6 +6,7 @@ import { RateLimitService } from '@libs/common';
 import {
   CONTEST_DATA_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
+  CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_QUEUE,
 } from '@libs/contests';
@@ -60,6 +61,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     BullModule.registerQueue(
       { name: CONTEST_RESCORE_QUEUE },
       { name: CONTEST_FINAL_JUDGE_QUEUE },
+      { name: CONTEST_PUBLISH_QUEUE },
       { name: CONTEST_RATING_QUEUE },
       { name: CONTEST_DATA_QUEUE },
       { name: NOTIFICATION_FANOUT_QUEUE },
