@@ -11,7 +11,7 @@ import { importedParticipation } from './mappers/imported-rows';
 const LEGACY_RATED_SQL = `SELECT r.participation_id AS id, r.contest_id FROM judge_rating r
   JOIN judge_contestparticipation p ON p.id = r.participation_id ${importedParticipation('p')}`;
 
-/** Rows of `collection` whose `field` names no `_id` of `foreign` (nor of `orForeign`). */
+/** Rows of `collection` whose `field` names no `_id` of `foreign` . */
 interface Reference {
   what: string;
   collection: string;
@@ -19,7 +19,8 @@ interface Reference {
   foreign: string;
   /** The array that holds `field` (one row per element). */
   array?: string;
-  orForeign?: string;
+  /** Only rows matching this are checked. */
+  where?: Document;
 }
 
 const REFERENCES: readonly Reference[] = [
@@ -79,11 +80,18 @@ const REFERENCES: readonly Reference[] = [
     foreign: 'comments',
   },
   {
-    what: 'tickets whose linked item is missing',
+    what: 'tickets whose linked problem is missing',
     collection: 'tickets',
     field: 'linkedItem.id',
     foreign: 'problems',
-    orForeign: 'generalIssues',
+    where: { 'linkedItem.type': 'problem' },
+  },
+  {
+    what: 'tickets whose linked general issue is missing',
+    collection: 'tickets',
+    field: 'linkedItem.id',
+    foreign: 'generalIssues',
+    where: { 'linkedItem.type': 'general' },
   },
   {
     what: 'ratings whose participation is missing',
@@ -117,17 +125,27 @@ const lookup = (from: string, field: string, as: string): Document => ({
 
 const danglingPipeline = (ref: Reference): Document[] => [
   ...(ref.array ? [{ $unwind: `$${ref.array}` }] : []),
-  { $match: { [ref.field]: { $ne: null } } },
+  { $match: { ...ref.where, [ref.field]: { $ne: null } } },
   lookup(ref.foreign, ref.field, 'target'),
-  ...(ref.orForeign
-    ? [
-        lookup(ref.orForeign, ref.field, 'other'),
-        { $match: { other: { $size: 0 } } },
-      ]
-    : []),
   { $match: { target: { $size: 0 } } },
   { $count: 'total' },
 ];
+
+const BREAKDOWN_SHOWN = 10;
+
+/** The total, then the legacy contests that lose the most rows, so the exit 1 can be triaged without reading data. */
+const missingLines = (byContest: Map<number, number>): string[] => {
+  const total = [...byContest.values()].reduce((sum, rows) => sum + rows, 0);
+  if (!total) return [];
+  const worst = [...byContest]
+    .sort(([, left], [, right]) => right - left)
+    .slice(0, BREAKDOWN_SHOWN)
+    .map(([contest, rows]) => `  judge_contest:${contest}: ${rows}`);
+  return [
+    `legacy-rated participations without a v2 rating: ${total}`,
+    ...worst,
+  ];
+};
 
 /** Cross-collection invariants `verify` (row by row) cannot see; run after `recompute`. */
 @Injectable()
@@ -162,22 +180,26 @@ export class IntegrityCheckService {
     const rated = new Set(
       (await ratings.distinct('participation')).map(uuidStr),
     );
-    const missing = legacy.filter((row) => {
+    const legacyIds = new Set<string>();
+    const missingByContest = new Map<number, number>();
+    for (const row of legacy) {
       const id = this.ids.find('judge_contestparticipation', Number(row.id));
-      return !id || !rated.has(id);
-    }).length;
+      if (id) legacyIds.add(id);
+      if (id && rated.has(id)) continue;
+      const contest = Number(row.contest_id);
+      missingByContest.set(contest, (missingByContest.get(contest) ?? 0) + 1);
+    }
     const legacyContests = new Set(legacy.map((row) => Number(row.contest_id)))
       .size;
     const v2Contests = (await ratings.distinct('contest')).length;
-    const lines = missing
-      ? [`legacy-rated participations without a v2 rating: ${missing}`]
-      : [];
-    return legacyContests === v2Contests
-      ? lines
-      : [
-          ...lines,
-          `rated contests: legacy ${legacyContests}, v2 ${v2Contests}`,
-        ];
+    const extra = [...rated].filter((id) => !legacyIds.has(id)).length;
+    return [
+      ...missingLines(missingByContest),
+      ...(legacyContests === v2Contests
+        ? []
+        : [`rated contests: legacy ${legacyContests}, v2 ${v2Contests}`]),
+      ...(extra ? [`v2 ratings without a legacy rating: ${extra}`] : []),
+    ];
   }
 
   private async count(

@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
-import { MIGRATION_RECOMPUTE_QUEUE } from '@libs/judging';
+import { MIGRATION_RECOMPUTE_QUEUE, MIGRATION_REFUSAL } from '@libs/judging';
 import { RecomputeService } from './recompute.service';
 
 describe('RecomputeService', () => {
@@ -53,6 +53,13 @@ describe('RecomputeService', () => {
     await listen(() => Promise.reject(new Error('boom')));
     await expect(new RecomputeService().run(TEST_REDIS_URL)).rejects.toThrow(
       'boom',
+    );
+  });
+
+  it("reports the worker's refusal to run outside a migration clearly", async () => {
+    await listen(() => Promise.reject(new Error(MIGRATION_REFUSAL)));
+    await expect(new RecomputeService().run(TEST_REDIS_URL)).rejects.toThrow(
+      'migration-recompute refused: the database has no migration marker',
     );
   });
 });

@@ -1,4 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { getConnectionToken } from '@nestjs/mongoose';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
@@ -10,6 +11,12 @@ import {
   recalculateRatings,
 } from '@libs/contests';
 import { newId, uuidStr } from '@libs/database';
+import {
+  MIGRATION_REFUSAL,
+  MIGRATION_STATE_COLLECTION,
+  MIGRATION_STATE_ID,
+} from '@libs/judging';
+import type { Connection } from 'mongoose';
 import { MigrationRecomputeService } from '../src/jobs/migration-recompute/migration-recompute.service';
 import {
   seedContest,
@@ -32,10 +39,49 @@ describe('migration recompute', () => {
       .get<Queue>(getQueueToken(CONTEST_RATING_QUEUE))
       .getJobCounts('waiting', 'delayed', 'active');
 
+  const marker = () =>
+    worker.module
+      .get<Connection>(getConnectionToken())
+      .collection<{ _id: string }>(MIGRATION_STATE_COLLECTION);
+  const mark = () =>
+    marker().updateOne(
+      { _id: MIGRATION_STATE_ID },
+      { $set: { since: new Date() } },
+      { upsert: true },
+    );
+
   beforeAll(async () => {
     worker = await setupWorkerTest();
+    await mark();
   });
   afterAll(() => worker.teardown());
+
+  it('refuses to run, and keeps every rating, without the migration marker', async () => {
+    const user = await seedUser(worker);
+    await worker.ratings.create({
+      user: user._id,
+      contest: newId(),
+      participation: newId(),
+      contestEndTime: new Date(),
+      rank: 1,
+      rating: 1700,
+      mean: 1700,
+      performance: 1700,
+      lastRated: new Date(),
+    });
+    await marker().deleteOne({ _id: MIGRATION_STATE_ID });
+    const ratingsBefore = await worker.ratings.countDocuments();
+
+    await expect(
+      worker.module.get(MigrationRecomputeService).run(),
+    ).rejects.toThrow(MIGRATION_REFUSAL);
+
+    expect(await worker.ratings.countDocuments()).toBe(ratingsBefore);
+    await mark();
+    await expect(
+      worker.module.get(MigrationRecomputeService).run(),
+    ).resolves.toMatchObject({ users: await worker.users.countDocuments() });
+  });
 
   it('recomputes every derived value from migrated rows', async () => {
     const organization = await seedOrganization(worker);
@@ -187,5 +233,138 @@ describe('migration recompute', () => {
     expect(
       Object.values(await ratingJobCounts()).every((count) => count === 0),
     ).toBe(true);
+  });
+
+  it('replays several contests in end order, skipping frozen, virtual and unsubmitted rows, and clears the other ratings', async () => {
+    await worker.ratings.deleteMany({});
+    await worker.participations.deleteMany({});
+    await worker.contestSubmissions.deleteMany({});
+    await worker.contests.deleteMany({});
+    await worker.users.deleteMany({});
+    const problem = await seedProblem(worker);
+    const problems = [{ problem: problem._id, points: 100, order: 0 } as never];
+    const contest = (endDaysAgo: number, extra = {}) => {
+      const endTime = new Date(Date.now() - endDaysAgo * DAY_MS);
+      const startTime = new Date(endTime.getTime() - 3_600_000);
+      return seedContest(worker, {
+        isRated: true,
+        startTime,
+        endTime,
+        problems,
+        ...extra,
+      });
+    };
+    // Inserted out of end order: the later-ending contest has the smaller id.
+    const late = await contest(2);
+    const early = await contest(3);
+    const frozen = await contest(4, {
+      formatName: 'icpc',
+      frozenLastMinutes: 30,
+    });
+    expect(uuidStr(late._id) < uuidStr(early._id)).toBe(true);
+    const [userA, userB, userC, stale, virtualOnly, unsubmitted] = [
+      await seedUser(worker),
+      await seedUser(worker),
+      await seedUser(worker),
+      await seedUser(worker, { rating: 2900 }),
+      await seedUser(worker, { rating: 2800 }),
+      await seedUser(worker, { rating: 1111 }),
+    ];
+    const join = async (
+      where: { _id: string; startTime: Date },
+      user: { _id: string },
+      points: number | null,
+      extra = {},
+    ) => {
+      const participation = await seedParticipation(
+        worker,
+        uuidStr(where._id),
+        uuidStr(user._id),
+        { realStart: where.startTime, ...extra },
+      );
+      if (points !== null)
+        await seedContestSubmission(
+          worker,
+          participation,
+          uuidStr(problem._id),
+          { points },
+        );
+      return participation;
+    };
+    const earlyA = await join(early, userA, 100);
+    const earlyB = await join(early, userB, 50);
+    await join(early, virtualOnly, 100, { virtual: 1 });
+    const lateA = await join(late, userA, 50);
+    const lateB = await join(late, userB, 100);
+    const lateC = await join(late, userC, 70);
+    await join(late, unsubmitted, null);
+    await join(frozen, userA, 100);
+    await join(frozen, userB, 50);
+    // The v2 library, fed by hand: the first contest from scratch, the second from the first's outputs.
+    const [firstA, firstB] = recalculateRatings([
+      { rank: 1, mean: MEAN_INIT, history: [] },
+      { rank: 2, mean: MEAN_INIT, history: [] },
+    ]);
+    const [secondB, secondC, secondA] = recalculateRatings([
+      { rank: 1, mean: firstB.mean, history: [firstB.performance] },
+      { rank: 2, mean: MEAN_INIT, history: [] },
+      { rank: 3, mean: firstA.mean, history: [firstA.performance] },
+    ]);
+    const row = (id: string, rank: number, out: typeof firstA) => [
+      id,
+      rank,
+      out.rating,
+      out.mean,
+      out.performance,
+    ];
+    const expectedRows = [
+      row(uuidStr(earlyA._id), 1, firstA),
+      row(uuidStr(earlyB._id), 2, firstB),
+      row(uuidStr(lateB._id), 1, secondB),
+      row(uuidStr(lateC._id), 2, secondC),
+      row(uuidStr(lateA._id), 3, secondA),
+    ];
+    const snapshot = async () => ({
+      rows: (
+        await worker.ratings
+          .find({})
+          .sort({ contestEndTime: 1, rank: 1 })
+          .lean()
+      ).map((entry) => [
+        uuidStr(entry.participation),
+        entry.rank,
+        entry.rating,
+        entry.mean,
+        entry.performance,
+      ]),
+      users: (await worker.users.find({}).lean())
+        .map((user) => [uuidStr(user._id), user.rating])
+        .sort(),
+    });
+    const service = worker.module.get(MigrationRecomputeService);
+
+    const first = await service.run();
+
+    expect(first).toMatchObject({
+      ratedContests: 2,
+      ratings: 5,
+      frozenRatedContests: 1,
+    });
+    const once = await snapshot();
+    expect(once.rows).toEqual(expectedRows);
+    const ratingOf = (user: { _id: string }) =>
+      once.users.find(([id]) => id === uuidStr(user._id))![1];
+    expect([userA, userB, userC].map(ratingOf)).toEqual([
+      secondA.rating,
+      secondB.rating,
+      secondC.rating,
+    ]);
+    expect([stale, virtualOnly, unsubmitted].map(ratingOf)).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    await service.run();
+    expect(await snapshot()).toEqual(once);
   });
 });

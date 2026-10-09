@@ -8,7 +8,10 @@ import {
 import type { MigrationRecomputeResult } from '@libs/judging';
 import { requiredEnv } from './legacy-env';
 
-/** Queues the worker's migration recompute and waits for its result. Without a worker it fails at once instead of waiting forever. */
+/** A dead worker must not hang the command forever. */
+const JOB_TIMEOUT_MS = 6 * 60 * 60 * 1000;
+
+/** Queues the worker's migration recompute and waits for its result. Without a worker it fails at once instead of waiting forever. `getWorkers` uses Redis CLIENT LIST, which some managed Redis setups forbid (the runbook notes it). */
 @Injectable()
 export class RecomputeService {
   async run(
@@ -34,7 +37,10 @@ export class RecomputeService {
         {},
         { jobId: MIGRATION_RECOMPUTE_JOB_ID },
       );
-      return (await job.waitUntilFinished(events)) as MigrationRecomputeResult;
+      return (await job.waitUntilFinished(
+        events,
+        JOB_TIMEOUT_MS,
+      )) as MigrationRecomputeResult;
     } finally {
       await events.close();
       await queue.close();

@@ -5,6 +5,11 @@ import type { Connection } from 'mongoose';
 import { REDIS } from '@libs/common';
 import { purgeRankingCache } from '@libs/contests';
 import { uuidStr } from '@libs/database';
+import {
+  MIGRATION_REFUSAL,
+  MIGRATION_STATE_COLLECTION,
+  MIGRATION_STATE_ID,
+} from '@libs/judging';
 import type { MigrationRecomputeResult } from '@libs/judging';
 import { ContributionPointsService } from '../contribution-points/contribution-points.service';
 import { OrganizationPointsService } from '../organization-points/organization-points.service';
@@ -28,6 +33,7 @@ export class MigrationRecomputeService {
 
   /** Ratings come right after the participations (standings); organizations after users (their PP sums members' PP); the ranking caches go last. */
   async run(): Promise<MigrationRecomputeResult> {
+    await this.requireMigrationMarker();
     const participations = await this.each('contestParticipations', (id) =>
       this.effects.recomputeParticipation(id),
     );
@@ -51,6 +57,14 @@ export class MigrationRecomputeService {
     };
     this.logger.log(`Migration recompute done: ${JSON.stringify(result)}`);
     return result;
+  }
+
+  /** The replay wipes every rating: only a database a backfill marked may run it. */
+  private async requireMigrationMarker(): Promise<void> {
+    const marked = await this.conn
+      .collection(MIGRATION_STATE_COLLECTION)
+      .countDocuments({ _id: MIGRATION_STATE_ID } as never);
+    if (!marked) throw new Error(MIGRATION_REFUSAL);
   }
 
   private async each(

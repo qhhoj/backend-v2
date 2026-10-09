@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getConnectionToken } from '@nestjs/mongoose';
@@ -8,6 +8,7 @@ import { Connection } from 'mongoose';
 import { FileCheckService } from '../src/file-check.service';
 import { IdMapRepository } from '../src/id-map.repository';
 import { IntegrityCheckService } from '../src/integrity-check.service';
+import { MigrationStateService } from '../src/migration-state.service';
 import { LegacySourceService } from '../src/legacy-source.service';
 import { setupMigratorTest } from './setup';
 
@@ -45,12 +46,19 @@ describe('post-migration checks', () => {
     writeFileSync(join(problemData, 'sum', 'tests.zip'), 'zip');
     // Exists, but outside `sum/`: only the root guard keeps it missing.
     writeFileSync(join(problemData, 'escape.txt'), 'x');
+    const outside = join(mkdtempSync(join(tmpdir(), 'out-')), 'secret.txt');
+    writeFileSync(outside, 'x');
+    // A symlink inside `sum/` to a file outside it, and a directory named like a file.
+    symlinkSync(outside, join(problemData, 'sum', 'link.txt'));
+    mkdirSync(join(problemData, 'sum', 'folder'));
     await docs('problems').insertOne({
       _id: toUuid(newId()),
       code: 'sum',
       data: {
         archive: 'tests.zip',
         customChecker: 'check.cpp',
+        customHeader: 'link.txt',
+        customGrader: 'folder',
         generator: '../escape.txt',
       },
       materialUrl: '/media/m/sum.pdf',
@@ -61,10 +69,12 @@ describe('post-migration checks', () => {
       source: '/media/submission_file/sum/1/a.sb3',
     });
     const report = await new FileCheckService(conn).run({ problemData, media });
-    expect(report.checked).toBe(5);
+    expect(report.checked).toBe(7);
     expect(report.missing.sort()).toEqual(
       [
         'sum data.customChecker',
+        'sum data.customGrader',
+        'sum data.customHeader',
         'sum data.generator',
         'sum materialUrl',
         expect.stringMatching(/^submission source /) as string,
@@ -114,10 +124,15 @@ describe('post-migration checks', () => {
         _id: toUuid(newId()),
         linkedItem: { type: 'problem', id: toUuid(newId()) },
       },
+      // A problem ticket must point at a problem, not at a general issue.
+      { _id: toUuid(newId()), linkedItem: { type: 'problem', id: issue } },
     ]);
     const lines = await integrity.run();
     expect(lines).toContain('contest problems that are missing: 1');
-    expect(lines).toContain('tickets whose linked item is missing: 1');
+    expect(lines).toContain('tickets whose linked problem is missing: 2');
+    expect(lines.some((line) => line.includes('linked general issue'))).toBe(
+      false,
+    );
   });
 
   it('asserts that every legacy-rated participation has a v2 rating, and compares rated-contest counts', async () => {
@@ -148,5 +163,15 @@ describe('post-migration checks', () => {
       ),
     ).toBe(false);
     expect(lines).toContain('rated contests: legacy 1, v2 2');
+  });
+
+  it('writes the migration marker on begin (repeatably) and clears it on finish', async () => {
+    const state = new MigrationStateService(conn);
+    expect(await state.isActive()).toBe(false);
+    await state.begin();
+    await state.begin();
+    expect(await state.isActive()).toBe(true);
+    await state.finish();
+    expect(await state.isActive()).toBe(false);
   });
 });

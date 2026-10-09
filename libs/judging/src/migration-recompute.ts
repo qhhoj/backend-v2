@@ -21,3 +21,9 @@ export interface MigrationRecomputeResult extends RatingReplayResult {
   organizations: number;
   contests: number;
 }
+
+/** The marker `migrator backfill` writes and `migrator finish` clears; the destructive recompute refuses without it, so it cannot run against a live site. */
+export const MIGRATION_STATE_COLLECTION = 'migrationState';
+export const MIGRATION_STATE_ID = 'migration';
+export const MIGRATION_REFUSAL =
+  'migration-recompute refused: the database has no migration marker (migrator backfill writes it, migrator finish clears it); this job re-rates every contest and must not run on a live site';

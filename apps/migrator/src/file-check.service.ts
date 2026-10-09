@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { access } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { Connection } from 'mongoose';
 import { escapeRegExp } from '@libs/common';
 import { DATA_FILE_KINDS, uuidStr } from '@libs/database';
 import { mediaUrl, requiredEnv } from './legacy-env';
 
-/** `path` null: the reference escapes its root, so it counts as missing. */
-type Wanted = { label: string; path: string | null };
+/** `path` null: the reference escapes `root`, so it counts as missing. */
+type Wanted = { label: string; path: string | null; root: string };
 type Roots = { problemData: string; media: string };
 const MEDIA_FIELDS = ['materialUrl', 'pdfStatementUrl'] as const;
 
@@ -19,12 +19,18 @@ const inside = (root: string | null, relative: string): string | null => {
   return path.startsWith(resolve(root) + sep) ? path : null;
 };
 
-const present = async ({ path }: Wanted): Promise<boolean> =>
-  path !== null &&
-  access(path).then(
-    () => true,
-    () => false,
-  );
+/** A regular file whose real path (symlinks followed) is still inside `root`. */
+const present = async ({ path, root }: Wanted): Promise<boolean> => {
+  if (path === null) return false;
+  try {
+    return (
+      inside(await realpath(root), await realpath(path)) !== null &&
+      (await stat(path)).isFile()
+    );
+  } catch {
+    return false;
+  }
+};
 
 /** D5: every file a migrated document names must be on the copied volumes. */
 @Injectable()
@@ -65,13 +71,18 @@ export class FileCheckService {
           wanted.push({
             label: `${problem.code} data.${kind}`,
             path: inside(folder, name),
+            root: roots.problemData,
           });
       }
       for (const field of MEDIA_FIELDS) {
         const url: unknown = problem[field];
         const path = typeof url === 'string' ? this.mediaPath(url, roots) : '';
         if (path !== '')
-          wanted.push({ label: `${problem.code} ${field}`, path });
+          wanted.push({
+            label: `${problem.code} ${field}`,
+            path,
+            root: roots.media,
+          });
       }
     }
     return wanted;
@@ -98,6 +109,7 @@ export class FileCheckService {
       wanted.push({
         label: `submission source ${uuidStr(row._id)}`,
         path: inside(media, (row.source as string).slice(prefix.length)),
+        root: media,
       });
     return wanted;
   }
