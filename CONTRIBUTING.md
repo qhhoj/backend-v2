@@ -296,10 +296,10 @@ user-activity/
 
 ## Local judge
 
-A real DMOJ judge in podman, so submissions are compiled and judged for real (PY3 and C++ runtimes).
+**Temporary, local-only dev/test judge, to be replaced by our judge-server rewrite; never use it in production.** A real DMOJ judge in podman, so submissions are compiled and judged for real (PY3 and C++ runtimes).
 
 - Needs a running api and bridge, the seeded `e2e_admin` (`npm run seed:e2e`), and `PROBLEM_DATA_ROOT` pointing at the directory the api writes problem data to (one folder per problem with `init.yml`; the seed writes it for `e2e_sum`).
-- `PROBLEM_DATA_ROOT=... API_ORIGIN=http://127.0.0.1:3000 SITE_ORIGIN=<SITE_URL> BRIDGE_PORT=9999 npm run judge:up` logs in as the admin (`ADMIN_USERNAME`/`ADMIN_PASSWORD`, default the seed's), creates the judge `JUDGE_NAME` (default `local-judge`) or rotates its key, and starts the container with `--network host`. `BRIDGE_HOST`/`BRIDGE_PORT` default to 127.0.0.1:9990. The container id is in `$JUDGE_RUN_DIR/judge.cid` (default `/tmp/qhhoj-judge-<uid>`); `npm run judge:down` removes exactly that container.
+- `PROBLEM_DATA_ROOT=... API_ORIGIN=http://127.0.0.1:3000 SITE_ORIGIN=<SITE_URL> BRIDGE_PORT=9999 npm run judge:up` logs in as the admin (`ADMIN_USERNAME`/`ADMIN_PASSWORD`, default the seed's), creates the judge `JUDGE_NAME` (default `local-judge`) or rotates its key, and starts the container with `--network host`, `--cap-add SYS_PTRACE` and `seccomp=unconfined` (local-only flags), then waits until the judge is online (`JUDGE_WAIT_SECONDS`, default 60) and prints the container logs if it is not. On a `npm run stack:up` stack (use `STACK_JUDGE=none`) the paths, ports, `SITE_URL` and admin password are read from `$RUN/env` automatically. `BRIDGE_HOST`/`BRIDGE_PORT` default to 127.0.0.1:9990. The container id is in `$JUDGE_RUN_DIR/judge.cid` (default `/tmp/qhhoj-judge-<uid>`); `npm run judge:down` removes exactly that container.
 - The image `localhost/qhhoj-judge:local` is built from `scripts/judge/Containerfile` on first run: the official `dmoj/judge-tier1` images cannot be pulled anonymously (docker.io denied, ghcr.io 403), so it installs `dmoj` from PyPI. It patches the judge's log formats because our submission ids are UUID strings, not integers.
 - Runtimes are detected with `dmoj-autoconf` at container start; the problem data is mounted read-only at `/problems`.
 - Submit through the api as usual; a judged submission ends `D` with `AC`/`WA`.

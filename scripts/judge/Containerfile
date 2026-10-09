@@ -1,4 +1,5 @@
-# Local DMOJ judge. The official judge-tier images are not pullable anonymously
+# TEMPORARY, LOCAL-ONLY dev/test judge, to be replaced by our judge-server rewrite.
+# Never deploy this image. Local DMOJ judge. The official judge-tier images are not pullable anonymously
 # (docker.io/dmoj/judge-tier1 denied, ghcr.io/dmoj/judge-tier1 403), so build the
 # judge from PyPI on a plain Python base with the PY3 and C++ runtimes.
 FROM docker.io/library/python:3.11-slim-bookworm

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stops the judge container recorded by judge-up.sh (by container id, never by name).
+# Temporary local-only dev/test judge (see judge-up.sh). Stops the judge container recorded by judge-up.sh (by container id, never by name).
 set -euo pipefail
 JUDGE_RUN_DIR="${JUDGE_RUN_DIR:-/tmp/qhhoj-judge-$(id -u)}"
 cidfile="$JUDGE_RUN_DIR/judge.cid"
