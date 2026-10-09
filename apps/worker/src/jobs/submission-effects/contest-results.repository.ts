@@ -101,7 +101,7 @@ export class ContestResultsRepository {
 
   async problemPartials(problemIds: string[]): Promise<Map<string, boolean>> {
     const rows = await this.problems
-      .find({ _id: { $in: problemIds } }, { partial: 1 })
+      .find({ _id: { $in: problemIds }, deletedAt: null }, { partial: 1 })
       .lean();
     return new Map(rows.map((row) => [uuidStr(row._id), row.partial]));
   }
@@ -179,7 +179,7 @@ export class ContestResultsRepository {
   /** ioi16's divisor per problem, from the problem data's cases (`select: false`). */
   async dataPointsOf(problemIds: string[]): Promise<Map<string, number>> {
     const rows = await this.problems
-      .find({ _id: { $in: problemIds } })
+      .find({ _id: { $in: problemIds }, deletedAt: null })
       .select('+data')
       .lean();
     return new Map(

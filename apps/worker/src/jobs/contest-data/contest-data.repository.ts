@@ -60,6 +60,7 @@ export class ContestDataRepository {
               _id: {
                 $in: contest.problems.map((entry) => uuidStr(entry.problem)),
               },
+              deletedAt: null,
             },
             { code: 1 },
           )
@@ -181,7 +182,7 @@ export class ContestDataRepository {
     return new Map(
       (
         await this.problems
-          .find({ _id: { $in: ids } }, { code: 1 })
+          .find({ _id: { $in: ids }, deletedAt: null }, { code: 1 })
           .lean()
           .exec()
       ).map((problem) => [uuidStr(problem._id), problem.code]),

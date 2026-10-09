@@ -48,7 +48,11 @@ export class ContributionPointsRepository {
           ])
           .exec(),
         this.problems
-          .countDocuments({ suggester: userId, isPublic: true })
+          .countDocuments({
+            suggester: userId,
+            isPublic: true,
+            deletedAt: null,
+          })
           .exec(),
         this.tickets
           .countDocuments({ user: userId, isContributive: true })

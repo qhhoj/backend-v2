@@ -7,7 +7,12 @@ import type { ProblemBest, UserPoints } from '@libs/judging';
 
 export type EffectsProblem = Pick<
   Problem,
-  '_id' | 'points' | 'partial' | 'isPublic' | 'isOrganizationPrivate'
+  | '_id'
+  | 'points'
+  | 'partial'
+  | 'isPublic'
+  | 'isOrganizationPrivate'
+  | 'deletedAt'
 >;
 
 export type ProblemStats = Pick<Problem, 'userCount' | 'acRate'>;
@@ -39,6 +44,7 @@ export class SubmissionEffectsRepository {
     };
   }
 
+  /** Deliberately S: it also answers for a deleted problem and returns `deletedAt`, so a grading that finishes after a delete is recognised and ignored (and `problem-rescore` still runs for it). */
   findProblem(problemId: string): Promise<EffectsProblem | null> {
     return this.problems
       .findById(problemId, {
@@ -46,6 +52,7 @@ export class SubmissionEffectsRepository {
         partial: 1,
         isPublic: 1,
         isOrganizationPrivate: 1,
+        deletedAt: 1,
       })
       .lean<EffectsProblem>()
       .exec();
@@ -71,7 +78,13 @@ export class SubmissionEffectsRepository {
           localField: '_id',
           foreignField: '_id',
           pipeline: [
-            { $match: { isPublic: true, isOrganizationPrivate: false } },
+            {
+              $match: {
+                isPublic: true,
+                isOrganizationPrivate: false,
+                deletedAt: null,
+              },
+            },
             { $project: { _id: 1 } },
           ],
           as: 'publicProblem',

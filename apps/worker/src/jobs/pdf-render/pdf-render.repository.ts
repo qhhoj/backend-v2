@@ -11,7 +11,10 @@ export class PdfRenderRepository {
   ) {}
 
   findByCode(code: string): Promise<Problem | null> {
-    return this.problems.findOne({ code }).lean<Problem>().exec();
+    return this.problems
+      .findOne({ code, deletedAt: null })
+      .lean<Problem>()
+      .exec();
   }
 
   async languageNames(ids: string[]): Promise<Map<string, string>> {

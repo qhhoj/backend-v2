@@ -34,10 +34,10 @@ export class SubmissionEffectsService {
     private readonly organizationPoints: Queue<OrganizationPointsJob>,
   ) {}
 
-  /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update. */
+  /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update; its pending gradings finish without effects. */
   async apply(job: SubmissionGradedJob): Promise<void> {
     const problem = await this.repository.findProblem(job.problemId);
-    if (!problem) return;
+    if (!problem || problem.deletedAt) return;
     if (problem.isPublic && !problem.isOrganizationPrivate)
       await this.recomputeUser(job.userId);
     await this.recomputeProblem(job.problemId);

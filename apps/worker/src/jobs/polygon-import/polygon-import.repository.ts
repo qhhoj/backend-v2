@@ -118,7 +118,7 @@ export class PolygonImportRepository {
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
-  /** Cheap pre-check so a wrong mode fails before any file is written; `apply` checks again inside the transaction. */
+  /** Cheap pre-check so a wrong mode fails before any file is written; `apply` checks again inside the transaction. Deliberately S: `findOne({ code })` sees deleted and tombstoned problems, so their codes stay taken. */
   async resolveTarget(job: PolygonImportJob): Promise<ImportTarget> {
     const existing = await this.problems.findOne({ code: job.code }).exec();
     this.checkTarget(job, existing);
@@ -339,8 +339,11 @@ export class PolygonImportRepository {
       isFullMarkup: boolean;
       isManuallyManaged: boolean;
       mirrorOf: string | null;
+      deletedAt?: Date | null;
     } | null,
   ): void {
+    if (existing?.deletedAt)
+      throw new PolygonImportError(`problem with code ${job.code} is deleted`);
     if (job.mode === 'create' && existing)
       throw new PolygonImportError(
         `problem with code ${job.code} already exists`,
