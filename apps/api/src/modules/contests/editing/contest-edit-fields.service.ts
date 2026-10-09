@@ -121,6 +121,31 @@ function resolveFormatConfig(
   }
 }
 
+/** Markdown to sanitised HTML; text past the render limits is the field's validation error. */
+function renderField(field: 'description' | 'rules', text: string): string {
+  try {
+    return renderMarkdown(text, 'problem');
+  } catch (error) {
+    if (!(error instanceof RenderLimitError)) throw error;
+    throw invalidField(field, error.message);
+  }
+}
+
+/** The trimmed text, its HTML and the next revision; the text alone when it is unchanged, so an unrelated edit never bumps the revision. */
+function rulesFields(
+  dto: UpdateContestDto,
+  current: ContestDocument | null,
+): Partial<Contest> {
+  if (dto.rules === undefined) return {};
+  const text = dto.rules.trim();
+  if (text === (current?.rules ?? '')) return { rules: text };
+  return {
+    rules: text,
+    rulesHtml: text ? renderField('rules', text) : '',
+    rulesRevision: (current?.rulesRevision ?? 0) + 1,
+  };
+}
+
 @Injectable()
 export class ContestEditFieldsService {
   constructor(
@@ -139,7 +164,8 @@ export class ContestEditFieldsService {
     if (dto.problems !== undefined)
       fields.problems = await this.contestProblems(principal, dto.problems);
     if (dto.description !== undefined)
-      fields.descriptionHtml = this.render(dto.description);
+      fields.descriptionHtml = renderField('description', dto.description);
+    Object.assign(fields, rulesFields(dto, current));
     const isFormatEdited =
       dto.formatConfig !== undefined || dto.formatName !== undefined;
     // Relies on the schema's `formatConfig` default only for the no-format create; any edit of the format resolves it here.
@@ -203,14 +229,5 @@ export class ContestEditFieldsService {
       outputPrefixOverride: entry.outputPrefixOverride ?? null,
       maxSubmissions: entry.maxSubmissions ?? null,
     }));
-  }
-
-  private render(text: string): string {
-    try {
-      return renderMarkdown(text, 'problem');
-    } catch (error) {
-      if (!(error instanceof RenderLimitError)) throw error;
-      throw invalidField('description', error.message);
-    }
   }
 }

@@ -210,6 +210,9 @@ function labelledProblems(
 export class ContestDetailResponse extends ContestSummaryResponse {
   description!: string;
   descriptionHtml!: string;
+  rules!: string;
+  rulesHtml!: string;
+  rulesRevision!: number;
   authors!: UserSummaryResponse[];
   frozenLastMinutes!: number;
   @ApiProperty({
@@ -249,6 +252,9 @@ export class ContestDetailResponse extends ContestSummaryResponse {
       ...ContestSummaryResponse.from(contest, extras.now),
       description: contest.description,
       descriptionHtml: contest.descriptionHtml,
+      rules: contest.rules,
+      rulesHtml: contest.rulesHtml,
+      rulesRevision: contest.rulesRevision,
       authors: extras.authors.map((author) => UserSummaryResponse.from(author)),
       frozenLastMinutes: contest.frozenLastMinutes,
       scoreboardVisibility: contest.scoreboardVisibility,

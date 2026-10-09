@@ -2,6 +2,7 @@ import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import {
   CONTEST_FORMAT_NAMES,
   CONTEST_KEY_PATTERN,
+  CONTEST_RULES_MAX,
   CONTEST_TAG_PATTERN,
   JUDGE_NAME_PATTERN,
   LABEL_STYLES,
@@ -61,6 +62,8 @@ export class CreateContestDto {
   @MaxLength(MAX_MARKDOWN_LENGTH)
   description?: string;
   @IsOptional() @IsString() @MaxLength(1000) summary?: string;
+  /** Markdown, trimmed at save; empty or whitespace: no rules. */
+  @IsOptional() @IsString() @MaxLength(CONTEST_RULES_MAX) rules?: string;
   @IsOptional()
   @ArrayMaxSize(20)
   @Matches(CONTEST_TAG_PATTERN, { each: true })
@@ -111,6 +114,7 @@ export class CreateContestDto {
   @IsOptional() @IsBoolean() hideProblemAuthors?: boolean;
   @IsOptional() @IsBoolean() showShortDisplay?: boolean;
   @IsOptional() @IsBoolean() pushAnnouncements?: boolean;
+  @IsOptional() @IsBoolean() publishAfterEnd?: boolean;
   @ApiPropertyOptional({ enum: LABEL_STYLES, enumName: 'ContestLabelStyle' })
   @IsOptional()
   @IsIn(LABEL_STYLES)
