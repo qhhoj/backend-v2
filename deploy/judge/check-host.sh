@@ -75,9 +75,12 @@ output_of() { # <fixture name> <command...>
 }
 # isolate's check fails on ASLR=2 by design; that line is the one accepted waiver (RUNBOOK "Judge hosts" step 1).
 # Its output is coloured (`ESC[31mFAIL`): the escapes are stripped first, or no word boundary precedes the verdict.
+# A missing tool ("command not found") or an empty report has no `Checking for` line and fails too.
 isolate_env_clean() {
-  ! output_of isolate-check-environment isolate-check-environment | sed 's/\x1b\[[0-9;]*m//g' \
-    | grep -iE '\b(FAIL|CAUTION|WARN(ING)?|ERROR)\b' | grep -viqE 'randomi[sz]|ASLR'
+  local report
+  report="$(output_of isolate-check-environment isolate-check-environment | sed 's/\x1b\[[0-9;]*m//g')"
+  echo "$report" | grep -q '^Checking for ' || return 1
+  ! echo "$report" | grep -iE '\b(FAIL|CAUTION|WARN(ING)?|ERROR)\b' | grep -viqE 'randomi[sz]|ASLR'
 }
 egress_dropped() { output_of nft-output nft list chain inet filter output | grep -q 'policy drop'; }
 isolate_v2() { isolate --version | grep -q 'isolator 2\.'; }

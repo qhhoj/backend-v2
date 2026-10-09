@@ -84,6 +84,14 @@ good_host
 run_commands >/dev/null || { echo "a good host must pass with its real commands" >&2; run_commands; exit 1; }
 good_host; echo "WARNING: transparent hugepages are enabled" >> "$fixtures/isolate-check-environment"
 if run_commands >/dev/null 2>&1; then echo "not caught: THP warning from a failing isolate-check-environment" >&2; exit 1; fi
+good_host; : > "$fixtures/isolate-check-environment"
+if run >/dev/null 2>&1; then echo "not caught: empty isolate-check-environment report" >&2; exit 1; fi
+# isolate-check-environment not installed (or not on PATH): FAIL, never clean.
+missing="$(mktemp -d)"; trap 'rm -rf "$root" "$fixtures" "$stubs" "$missing"' EXIT
+cp "$stubs/nft" "$stubs/isolate" "$stubs/systemctl" "$missing/"
+good_host
+if PATH="$missing:/usr/bin:/bin" CHECK_ROOT="$root" CHECK_KEY_OWNER="$(id -u)" bash "$here/check-host.sh" 2>&1 \
+  | grep -q '^ok    isolate-check-environment'; then echo "not caught: isolate-check-environment missing" >&2; exit 1; fi
 
 # Exactly enough boxes passes: 7 default slots (8 CPUs - 1) need 14 boxes from 0.
 expect_pass "num_boxes = box_base + 2*slots" 'sed -i "s/num_boxes = 1000/num_boxes = 14/" "$root/usr/local/etc/isolate"'
