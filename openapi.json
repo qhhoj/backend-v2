@@ -16191,6 +16191,58 @@
         "x-raw": true
       }
     },
+    "/api/internal/contests/{key}/feed": {
+      "get": {
+        "operationId": "FeedController_snapshot",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file, as an attachment."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "HTTP Basic with the contest's feed key, no session: resolver tools only speak Basic. NDJSON, one event per line.",
+        "tags": [
+          "Feed"
+        ],
+        "x-raw": true
+      }
+    },
     "/api/internal/contests/{key}/feed-key": {
       "delete": {
         "operationId": "FeedKeysController_revoke",
