@@ -58,6 +58,27 @@ describe('requestReplayBuild', () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 
+  it('queues only one build behind a running one, however often it is asked', async () => {
+    const jobs: FakeJob[] = [{ contestId: 'c1', state: 'active' }];
+    const { queue, add } = fakeQueue(jobs);
+    add.mockImplementation(() => {
+      jobs.push({ contestId: 'c1', state: 'waiting' });
+      return Promise.resolve();
+    });
+    for (let call = 0; call < 5; call += 1)
+      await requestReplayBuild(queue, 'c1');
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds nothing when a build runs and another waits', async () => {
+    const { queue, add } = fakeQueue([
+      { contestId: 'c1', state: 'active' },
+      { contestId: 'c1', state: 'waiting' },
+    ]);
+    await requestReplayBuild(queue, 'c1');
+    expect(add).not.toHaveBeenCalled();
+  });
+
   it('queues nothing for ten reader polls while a build runs, in skip mode', async () => {
     const { queue, add } = fakeQueue([{ contestId: 'c1', state: 'active' }]);
     for (let poll = 0; poll < 10; poll += 1)

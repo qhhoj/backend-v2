@@ -1,7 +1,11 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
-import { CONTEST_ENQUEUE_TIMEOUT_MS, contestActionState } from './queues';
+import {
+  CONTEST_ENQUEUE_TIMEOUT_MS,
+  contestActionState,
+  WAITING_JOB_TYPES,
+} from './queues';
 
 export const CONTEST_REPLAY_QUEUE = 'contest-replay';
 export const CONTEST_REPLAY_JOB = 'build';
@@ -30,14 +34,26 @@ export const replayDelayMs = (endTime: Date, now: Date): number =>
 export const isReplayFinal = (builtAt: Date, endTime: Date): boolean =>
   builtAt.getTime() >= replayReadyAt(endTime).getTime();
 
-/** Coalesces per contest: a build that has not started yet (waiting or delayed) will read current data, so a second request adds nothing; a running one adds another unless `ifRunning` is 'skip'. */
+/** `contestActionState` reports 'running' first, so it hides a build that waits behind the running one. */
+const hasWaitingBuild = async (
+  queue: Queue<ContestReplayJob>,
+  contestId: string,
+): Promise<boolean> =>
+  (await queue.getJobs(WAITING_JOB_TYPES)).some(
+    (job) => job.data.contestId === contestId,
+  );
+
+/** Coalesces per contest: a build that has not started yet (waiting or delayed) will read current data, so a second request adds nothing; a running one adds at most one waiting build, and none when `ifRunning` is 'skip'. */
 export async function requestReplayBuild(
   queue: Queue<ContestReplayJob>,
   contestId: string,
   { ifRunning = 'queue', delayMs = 0 }: ReplayRequestOptions = {},
 ): Promise<void> {
-  const state = await contestActionState(queue, contestId);
-  if (state === 'queued' || (state === 'running' && ifRunning === 'skip'))
+  if (await hasWaitingBuild(queue, contestId)) return;
+  if (
+    ifRunning === 'skip' &&
+    (await contestActionState(queue, contestId)) === 'running'
+  )
     return;
   await queue.add(
     CONTEST_REPLAY_JOB,

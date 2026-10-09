@@ -168,7 +168,11 @@ export const contestDataJobId = (contestId: string) =>
   oneJobPerContest('data', contestId).jobId;
 
 export type ContestActionState = 'idle' | 'queued' | 'running';
-const WAITING_JOB_TYPES: JobType[] = ['waiting', 'prioritized', 'delayed'];
+export const WAITING_JOB_TYPES: JobType[] = [
+  'waiting',
+  'prioritized',
+  'delayed',
+];
 
 /** Whether an editor's request for this contest waits in the queue, or runs now. Rescore and rating jobs carry no per-contest id, so the live jobs are scanned; failed and completed jobs are removed (`JOB_RETENTION`), so there is no "failed" state. */
 export async function contestActionState<Data extends { contestId: string }>(
