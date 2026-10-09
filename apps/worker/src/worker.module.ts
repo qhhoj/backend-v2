@@ -22,6 +22,7 @@ import { OrganizationPointsModule } from './jobs/organization-points/organizatio
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
+import { ProblemSolversModule } from './jobs/problem-solvers/problem-solvers.module';
 import { SubmissionEffectsModule } from './jobs/submission-effects/submission-effects.module';
 import { UserDataModule } from './jobs/user-data/user-data.module';
 import { ContributionPointsModule } from './jobs/contribution-points/contribution-points.module';
@@ -44,6 +45,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     SubmissionEffectsModule,
     EffectsSweepModule,
     ProblemRescoreModule,
+    ProblemSolversModule,
     ContestRescoreModule,
     ContestReplayModule,
     ContestFinalJudgeModule,
