@@ -1175,6 +1175,43 @@
         ],
         "type": "object"
       },
+      "ContestExportStatusResponse": {
+        "properties": {
+          "nextPrepareAt": {
+            "description": "When another request is allowed; null: now.",
+            "nullable": true,
+            "type": "string"
+          },
+          "preparedAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "readyAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "size": {
+            "nullable": true,
+            "type": "number"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "preparing",
+              "ready"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "preparedAt",
+          "readyAt",
+          "size",
+          "nextPrepareAt"
+        ],
+        "type": "object"
+      },
       "ContestFormatName": {
         "enum": [
           "default",
@@ -15236,6 +15273,170 @@
         "summary": "Always an attachment with `nosniff`; the file name is the contest key (`[a-z0-9_]`), nothing to escape.",
         "tags": [
           "ContestData"
+        ],
+        "x-raw": true
+      }
+    },
+    "/api/internal/contests/{key}/export": {
+      "get": {
+        "operationId": "ContestExportController_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ContestExportStatusResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ContestExport"
+        ]
+      },
+      "post": {
+        "operationId": "ContestExportController_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/QueuedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ContestExport"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/export/download": {
+      "get": {
+        "operationId": "ContestExportController_download",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file, as an attachment."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Always an attachment with `nosniff`; the file name is the contest key (`[a-z0-9_]`), nothing to escape.",
+        "tags": [
+          "ContestExport"
         ],
         "x-raw": true
       }

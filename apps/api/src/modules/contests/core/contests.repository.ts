@@ -65,6 +65,15 @@ export class ContestsRepository {
       .exec();
   }
 
+  async setExportPreparedAt(
+    contestId: string,
+    preparedAt: Date,
+  ): Promise<void> {
+    await this.contests
+      .updateOne({ _id: contestId }, { $set: { exportPreparedAt: preparedAt } })
+      .exec();
+  }
+
   async setBanned(
     contestId: string,
     userId: string,
