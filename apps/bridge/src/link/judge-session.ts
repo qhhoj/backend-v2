@@ -50,9 +50,9 @@ function messageContext(body: JudgeMessage['body']): string {
     seq?: number;
   };
   const ref = inner?.ref;
-  return ref
-    ? `${body.$case} of submission ${ref.submissionId} gen ${ref.generation} seq ${inner.seq}`
-    : body.$case;
+  if (!ref) return body.$case;
+  const seq = typeof inner.seq === 'number' ? ` seq ${inner.seq}` : '';
+  return `${body.$case} of submission ${ref.submissionId} gen ${ref.generation}${seq}`;
 }
 
 /** Adds `key`, forgetting the oldest beyond `RUNS_REMEMBERED` (a Set keeps insertion order). */
@@ -324,7 +324,7 @@ export class JudgeSession implements DispatchTarget {
       ({ action }) => action === Resume_Action.ACTION_CONTINUE,
     ).length;
     this.logger.log(
-      `Judge ${this.name} connected from ${this.identity.address ?? 'unknown'}: build ${loggableText(build)}, protocol 1.${protocolMinor}, ${slots} slots, ${runtimes.length} runtimes, resumed ${resumed}, dropped ${plan.resume.length - resumed}`,
+      `Judge ${this.name} connected from ${this.identity.address ?? 'unknown'}: build ${loggableText(build)}, protocol 1.${Math.min(protocolMinor, PROTOCOL_MINOR)}, ${slots} slots, ${runtimes.length} runtimes, resumed ${resumed}, dropped ${plan.resume.length - resumed}`,
     );
     await judges.markSessionOnline(this.name, this.connectedAt, {
       slots,

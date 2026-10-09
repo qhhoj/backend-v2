@@ -66,6 +66,16 @@ export class SubmissionEffectsRepository {
       .exec();
   }
 
+  /** A row whose repair failed goes to the back of the line (due from now), so failing rows cannot hold back the rest. */
+  async postponeEffectsDue(submissionId: string): Promise<void> {
+    await this.submissions
+      .updateOne(
+        { _id: submissionId, effectsDueAt: { $type: 'date' } },
+        { $set: { effectsDueAt: new Date() } },
+      )
+      .exec();
+  }
+
   /** The oldest rows whose effects have been due since before `before` (read through the partial `effectsDueAt` index), as graded jobs. */
   async effectsDueBefore(
     before: Date,

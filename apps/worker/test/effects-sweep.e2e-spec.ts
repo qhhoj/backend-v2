@@ -6,7 +6,13 @@ import { REDIS } from '@libs/common';
 import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
-import { EFFECTS_SWEEP_JOB, EFFECTS_SWEEP_QUEUE } from '@libs/judging';
+import {
+  EFFECTS_SWEEP_JOB,
+  EFFECTS_SWEEP_QUEUE,
+  gradedJobOf,
+  SUBMISSION_GRADED_JOB,
+  SUBMISSION_GRADED_QUEUE,
+} from '@libs/judging';
 import { EffectsSweepProcessor } from '../src/jobs/effects-sweep/effects-sweep.processor';
 import {
   EffectsSweepService,
@@ -228,6 +234,65 @@ describe('effects sweep', () => {
       contestPoints: 0,
       effectsDueAt: expect.any(Date) as Date,
     });
+  });
+
+  it('waits for graded jobs still queued (a backlog), and puts a row that keeps failing behind the others', async () => {
+    const now = Date.now();
+    await redis.set(SWEEP_WATERMARK_KEY, String(now - MINUTE));
+    const problem = await seedProblem(worker);
+    const dueRow = async (minutesAgo: number) => {
+      const user = await seedUser(worker);
+      const submission = await seedGraded(worker, user._id, problem._id, {
+        date: new Date(now - 3 * 60 * MINUTE),
+        judgedDate: null,
+        effectsDueAt: new Date(now - minutesAgo * MINUTE),
+      });
+      return { user, submission };
+    };
+    const dueOf = async (id: string) =>
+      (await worker.submissions.findById(id, { effectsDueAt: 1 }).lean())!
+        .effectsDueAt;
+    const graded = worker.module.get<Queue>(
+      getQueueToken(SUBMISSION_GRADED_QUEUE),
+    );
+    const failing = await dueRow(40);
+    const queuedBehind = await dueRow(20);
+    await graded.pause();
+    try {
+      // a job queued 30 minutes ago still waits: rows stamped after it may be behind it
+      await graded.add(SUBMISSION_GRADED_JOB, gradedJobOf(failing.submission), {
+        timestamp: now - 30 * MINUTE,
+      });
+      const effects = worker.module.get(SubmissionEffectsService);
+      const apply = effects.apply.bind(effects);
+      const broken = jest
+        .spyOn(effects, 'apply')
+        .mockImplementation((job) =>
+          job.submissionId === failing.submission._id
+            ? Promise.reject(new Error('scoring threw'))
+            : apply(job),
+        );
+      try {
+        await sweeps.sweep(now);
+      } finally {
+        broken.mockRestore();
+      }
+      expect(await dueOf(queuedBehind.submission._id)).toEqual(
+        new Date(now - 20 * MINUTE),
+      );
+      // postponed: due from the failed attempt on
+      expect((await dueOf(failing.submission._id))!.getTime()).toBeGreaterThan(
+        now - MINUTE,
+      );
+      await graded.obliterate({ force: true });
+      await sweeps.sweep(now);
+      expect(await dueOf(queuedBehind.submission._id)).toBeNull();
+      expect(
+        (await worker.users.findById(queuedBehind.user._id).lean())!.points,
+      ).toBe(1000);
+    } finally {
+      await graded.resume();
+    }
   });
 
   it('reads its window through indexes', async () => {

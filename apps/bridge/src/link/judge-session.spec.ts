@@ -608,7 +608,7 @@ describe('JudgeSession', () => {
       dispatch.resume = record('resume', { resume: [], abort: [] });
     }
     expect(lines).toEqual([
-      'Judge j1 connected from 10.0.0.5: build qhhoj-judge 0.1.0, protocol 1.3, 2 slots, 1 runtimes, resumed 1, dropped 1',
+      `Judge j1 connected from 10.0.0.5: build qhhoj-judge 0.1.0, protocol 1.${PROTOCOL_MINOR}, 2 slots, 1 runtimes, resumed 1, dropped 1`,
       'Judge j1 disconnected: the judge ended its stream; 0 runs held',
     ]);
   });

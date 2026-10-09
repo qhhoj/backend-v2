@@ -154,7 +154,7 @@ export class SubmissionsRepository {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Queued submissions (all, or those of `ids`) in dispatch order, with the codes judges know (a mirror is judged under its root's code) and the judge pinned at submit, which every requeue keeps. A row whose problem or language is gone is skipped. */
+  /** Queued submissions (all, or those of `ids`) in dispatch order, with the codes judges know (a mirror is judged under its root's code) and the judge pinned at submit, kept by an accept timeout and a resync (a judge loss or RETRY drops it). A row whose problem or language is gone is skipped. */
   async loadQueued(ids?: string[]): Promise<QueuedSubmission[]> {
     const rows = await this.submissions
       .find(
@@ -477,7 +477,11 @@ export class SubmissionsRepository {
           status: IN_FLIGHT,
           requeueCount: { $not: { $gte: MAX_REQUEUES } },
         },
-        { $set: REQUEUE_RESET, $inc: { requeueCount: 1 } },
+        // the pinned judge failed it: any judge may take it now
+        {
+          $set: { ...REQUEUE_RESET, pinnedJudge: null },
+          $inc: { requeueCount: 1 },
+        },
         { projection: { user: 1, problem: 1 } },
       )
       .lean();

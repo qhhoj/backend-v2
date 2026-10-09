@@ -100,32 +100,51 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     });
   });
 
-  it('keeps the judge pinned at submit through a requeue and a resync reset; a rejudge clears it', async () => {
+  it('keeps the judge pinned at submit across an accept timeout and a resync reset; a judge loss and a rejudge drop it', async () => {
     const problem = await seedProblem(bridge, catalog, { code: nextCode() });
-    const { _id: id } = await seedSubmission(bridge, catalog, {
-      problem: problem._id,
-      pinnedJudge: JUDGE,
-    });
-    const pinOf = async () => (await repository.loadQueued([id]))[0]?.judgeName;
-    const claimed = async () => {
+    const pinned = async () =>
+      (
+        await seedSubmission(bridge, catalog, {
+          problem: problem._id,
+          pinnedJudge: JUDGE,
+        })
+      )._id;
+    const pinOf = async (id: string) =>
+      (await repository.loadQueued([id]))[0]?.judgeName;
+    const claimed = async (id: string) => {
       const [queued] = await repository.loadQueued([id]);
       const claim = await repository.claimRun(queued, JUDGE);
       if (!claim || !('request' in claim)) throw new Error('not claimed');
       return claim.request.ref;
     };
-    expect(await pinOf()).toBe(JUDGE);
-    expect(await repository.requeueRun(await claimed(), JUDGE)).not.toBeNull();
-    expect(await pinOf()).toBe(JUDGE);
-    const ref = await claimed();
+    const id = await pinned();
+    expect(await pinOf(id)).toBe(JUDGE);
+    expect(await repository.releaseRun(await claimed(id), JUDGE)).toBe(true);
+    expect(await pinOf(id)).toBe(JUDGE);
+    const ref = await claimed(id);
     await repository.resetStrandedRuns([
       { id, judgedOn: JUDGE, generation: ref.generation },
     ]);
-    expect(await pinOf()).toBe(JUDGE);
+    expect(await pinOf(id)).toBe(JUDGE);
+    expect(
+      await repository.requeueRun(await claimed(id), JUDGE),
+    ).not.toBeNull();
+    expect(await pinOf(id)).toBeNull();
+
+    const rejudged = await pinned();
+    const finalOnly = await pinned();
     await bridge.submissions.updateOne(
-      { _id: id },
+      { _id: rejudged },
       requeueUpdate(SUBMISSION_PRIORITY.rejudge),
     );
-    expect(await pinOf()).toBeNull();
+    await bridge.submissions.updateOne(
+      { _id: finalOnly },
+      requeueUpdate(SUBMISSION_PRIORITY.batchRejudge, { keepsPin: true }),
+    );
+    expect([await pinOf(rejudged), await pinOf(finalOnly)]).toEqual([
+      null,
+      JUDGE,
+    ]);
   });
 
   it("sends a mirror its root's data version", async () => {

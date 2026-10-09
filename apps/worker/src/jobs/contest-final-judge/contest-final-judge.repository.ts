@@ -60,12 +60,12 @@ export class ContestFinalJudgeRepository {
     return rows.map(gradedJobOf);
   }
 
-  /** The api's rejudge reset (`requeueUpdate`) at batch priority; only rows still PD move, so a row leaves PD once. */
+  /** The api's rejudge reset (`requeueUpdate`) at batch priority, keeping a judge pinned at submit (this is the row's first run); only rows still PD move, so a row leaves PD once. */
   async requeue(ids: string[]): Promise<void> {
     await this.submissions
       .updateMany(
         { _id: { $in: ids }, ...JUDGEABLE_PENDING },
-        requeueUpdate(SUBMISSION_PRIORITY.batchRejudge),
+        requeueUpdate(SUBMISSION_PRIORITY.batchRejudge, { keepsPin: true }),
       )
       .exec();
   }

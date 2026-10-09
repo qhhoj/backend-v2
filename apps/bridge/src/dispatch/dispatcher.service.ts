@@ -423,28 +423,33 @@ export class DispatcherService {
     ]);
   }
 
-  /** A failed write (Mongo) holds the run in grace again, so the retry still spends the requeue; the resync's stranded-run reset would not. */
+  /** A failed write (Mongo) holds the run in grace again, so the retry still spends the requeue; the resync's stranded-run reset would not. A failed enqueue after a requeue is left to the resync (the row is QU). */
   private async graceExpired(entry: GraceEntry): Promise<void> {
-    const { ref, judgeName, abortRequested } = entry;
+    const { ref, judgeName } = entry;
+    let outcome: GraceOutcome;
     try {
-      const outcome = await this.runs.graceExpired(
+      outcome = await this.runs.graceExpired(
         ref,
         judgeName,
-        abortRequested,
+        entry.abortRequested,
       );
-      this.logger.warn(
-        `Grace of submission ${runOf(ref)} on judge ${judgeName} expired: ${GRACE_OUTCOME_TEXT[outcome]}`,
-      );
-      if (outcome === 'requeued')
-        await this.enqueue(
-          await this.submissions.loadQueued([ref.submissionId]),
-        );
     } catch (error) {
       this.logger.error(
         `Grace expiry of submission ${runOf(ref)} on judge ${judgeName} failed, held again: ${(error as Error).message}`,
       );
-      this.holdAgain(entry);
+      return this.holdAgain(entry);
     }
+    this.logger.warn(
+      `Grace of submission ${runOf(ref)} on judge ${judgeName} expired: ${GRACE_OUTCOME_TEXT[outcome]}`,
+    );
+    if (outcome === 'requeued')
+      await this.enqueue(
+        await this.submissions.loadQueued([ref.submissionId]),
+      ).catch((error: Error) =>
+        this.logger.error(
+          `Dispatching requeued submission ${ref.submissionId} failed, the resync recovers it: ${error.message}`,
+        ),
+      );
   }
 
   private holdAgain({ ref, judgeName, abortRequested }: GraceEntry): void {

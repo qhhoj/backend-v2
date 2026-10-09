@@ -138,6 +138,7 @@ describe('RunsService (events and graded jobs of a run)', () => {
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation((message) => void warnings.push(String(message)));
     const { id, key } = await newRun();
+    await bridge.submissions.updateOne({ _id: id }, { pinnedJudge: JUDGE });
     await runs.accepted(key(1));
     expect(
       await runs.final(key(2), final({ kind: 'retry', log: 'no data' })),
@@ -146,7 +147,12 @@ describe('RunsService (events and graded jobs of a run)', () => {
     expect(
       await runs.final(key(2), final({ kind: 'retry', log: 'no data' })),
     ).toBe('duplicate');
-    expect(await stored(id)).toMatchObject({ status: 'QU', retryCount: 1 });
+    // the pinned judge cannot run it: any judge may take it now
+    expect(await stored(id)).toMatchObject({
+      status: 'QU',
+      retryCount: 1,
+      pinnedJudge: null,
+    });
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const again = await claim(id);
       await runs.accepted(again.key(1));

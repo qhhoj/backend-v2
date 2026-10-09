@@ -173,7 +173,8 @@ export class RunWritesRepository {
         },
         // the run's seq stays, so a replay of this Final is classified a duplicate (the next claim resets it)
         {
-          $set: { ...REQUEUE_RESET, judgeSeq: key.seq },
+          // the judge cannot run it: a pin to that judge would bring it back there
+          $set: { ...REQUEUE_RESET, judgeSeq: key.seq, pinnedJudge: null },
           $inc: { retryCount: 1 },
         },
         { projection: GRADED_JOB_FIELDS },

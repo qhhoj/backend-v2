@@ -1,6 +1,10 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
+import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import type { SubmissionGradedJob } from '@libs/judging';
 import { SubmissionEffectsRepository } from '../submission-effects/submission-effects.repository';
 import { SubmissionEffectsService } from '../submission-effects/submission-effects.service';
 
@@ -36,6 +40,8 @@ export class EffectsSweepService {
     private readonly repository: SubmissionEffectsRepository,
     private readonly effects: SubmissionEffectsService,
     @Inject(REDIS) private readonly redis: Redis,
+    @InjectQueue(SUBMISSION_GRADED_QUEUE)
+    private readonly graded: Queue<SubmissionGradedJob>,
   ) {}
 
   async sweep(now = Date.now()): Promise<SweepResult> {
@@ -57,10 +63,10 @@ export class EffectsSweepService {
     return { users: userIds.length, problems: problemIds.length, repaired };
   }
 
-  /** One failing row is logged and stays due for the next sweep; the others go on. */
+  /** A failing row is logged and goes to the back of the line; the others go on. */
   private async repairDue(now: number): Promise<number> {
     const due = await this.repository.effectsDueBefore(
-      new Date(now - EFFECTS_DUE_GRACE_MS),
+      await this.dueCutoff(now),
       EFFECTS_DUE_BATCH,
     );
     let repaired = 0;
@@ -72,6 +78,7 @@ export class EffectsSweepService {
         this.logger.error(
           `Repairing the effects of submission ${job.submissionId} failed: ${(error as Error).message}`,
         );
+        await this.repository.postponeEffectsDue(job.submissionId);
       }
     }
     if (repaired)
@@ -79,5 +86,17 @@ export class EffectsSweepService {
         `Re-applied the effects of ${repaired} submissions whose graded job was lost`,
       );
     return repaired;
+  }
+
+  /** Rows due since before this have lost their job: due for longer than the grace, and stamped before every graded job still running or waiting (BullMQ serves them oldest first, so a row stamped later may only be queued behind them, e.g. during a bulk rejudge). A job in retry backoff is not waited for; repairing its row too is harmless. */
+  private async dueCutoff(now: number): Promise<Date> {
+    const [active, oldestWaiting] = await Promise.all([
+      this.graded.getJobs(['active']),
+      this.graded.getJobs(['waiting'], 0, 0, true),
+    ]);
+    const pendingSince = [...active, ...oldestWaiting].map(
+      (job) => job.timestamp,
+    );
+    return new Date(Math.min(now - EFFECTS_DUE_GRACE_MS, ...pendingSince));
   }
 }

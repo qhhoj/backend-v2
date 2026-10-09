@@ -140,7 +140,7 @@ export class Submission {
   @Prop({ default: 0 }) retryCount!: number;
   /** Set by every write that finishes the submission (D, CE, IE, AB, a reject) and cleared once its graded job applied the effects; the effects sweep re-applies rows still due, so a lost or failed graded job is repaired. */
   @Prop({ type: Date, default: null }) effectsDueAt!: Date | null;
-  /** The judge chosen at submit (`judgeId`): only it takes the row, through every requeue, until a rejudge clears it. */
+  /** The judge chosen at submit (`judgeId`): only it takes the row, across accept timeouts, resyncs and restarts; cleared when that judge fails the run (grace expiry, RETRY) and by a rejudge. */
   @Prop({ type: String, default: null }) pinnedJudge!: string | null;
   /** Up to 10000 rows; loaded only by the detail view and the bridge's grading end. */
   @Prop({ type: [SubmissionCaseSchema], default: [], select: false })
