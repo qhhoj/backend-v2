@@ -153,6 +153,23 @@ export class ContestsRepository {
       .exec())!;
   }
 
+  /** Writes `changes` and raises `rulesRevision` by one in the same update, only while the stored rules are still `previousRules`; null when another save changed them first. */
+  async updateRules(
+    id: string,
+    previousRules: string,
+    changes: Partial<Contest>,
+  ): Promise<ContestDocument | null> {
+    // A row written before rules existed has no `rules` member.
+    const stored = previousRules === '' ? { $in: ['', null] } : previousRules;
+    return this.contests
+      .findOneAndUpdate(
+        { _id: id, rules: stored },
+        { $set: changes, $inc: { rulesRevision: 1 } },
+        { new: true, runValidators: true },
+      )
+      .exec();
+  }
+
   /** Submissions final judging would still requeue (`PD` and not rejected, held by `final_submission`) in the contest. */
   async hasPendingSubmissions(contestId: string): Promise<boolean> {
     return (

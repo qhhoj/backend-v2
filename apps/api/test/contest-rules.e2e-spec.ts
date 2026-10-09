@@ -74,7 +74,32 @@ describe('contest rules in the editor and the detail', () => {
 
   it('refuses rules past 8192 characters', async () => {
     const contest = await createContest(api, { authors: [editorId] });
-    await patch(contest.key, { rules: 'x'.repeat(8193) }).expect(400);
+    const { body } = await patch(contest.key, {
+      rules: 'x'.repeat(8193),
+    }).expect(400);
+    const { error } = body as {
+      error: { issues: { field: string; code: string }[] };
+    };
+    expect(error.issues).toEqual([
+      expect.objectContaining({ field: 'rules', code: 'max_length' }),
+    ]);
+  });
+
+  it('keeps the revision equal to the number of text changes under concurrent saves', async () => {
+    const contest = await createContest(api, { authors: [editorId] });
+    const statuses = (
+      await Promise.all(
+        ['first text', 'second text', 'third text'].map((rules) =>
+          patch(contest.key, { rules }),
+        ),
+      )
+    ).map((response) => response.status);
+    const saved = statuses.filter((status) => status === 200).length;
+    expect(statuses.every((status) => status === 200 || status === 409)).toBe(
+      true,
+    );
+    const stored = await api.contests.findById(contest._id).lean();
+    expect(stored!.rulesRevision).toBe(saved);
   });
 
   it('shows the rules to a signed-out visitor of a public contest', async () => {

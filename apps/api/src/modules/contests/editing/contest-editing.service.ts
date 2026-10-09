@@ -166,7 +166,7 @@ export class ContestEditingService {
         409,
         'Judge the pending submissions before leaving final_submission',
       );
-    const updated = await this.contests.update(contest._id, fields);
+    const updated = await this.save(contest, fields);
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
     await rescheduleFinalJudge(
@@ -183,6 +183,27 @@ export class ContestEditingService {
     )
       await this.contests.propagateLock(contest._id, fields.lockedAfter);
     return this.contestsService.detail(principal, key);
+  }
+
+  /** Changed rules raise the revision inside the same update; a concurrent change of the rules is a conflict. */
+  private async save(
+    contest: ContestDocument,
+    fields: Partial<Contest>,
+  ): Promise<ContestDocument> {
+    if (fields.rules === undefined || fields.rules === contest.rules)
+      return this.contests.update(contest._id, fields);
+    const updated = await this.contests.updateRules(
+      contest._id,
+      contest.rules,
+      fields,
+    );
+    if (!updated)
+      throw new AppError(
+        'conflict',
+        409,
+        'The contest rules changed meanwhile; reload and save again',
+      );
+    return updated;
   }
 
   /** An editor's manual rescore (legacy admin action). */

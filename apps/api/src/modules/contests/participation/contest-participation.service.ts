@@ -29,7 +29,7 @@ import { ContestsService } from '../core/contests.service';
 import { CurrentContestService } from '../core/current-contest.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import type { ParticipationListQueryDto } from './dto/participation.dto';
-import { refusal } from './participation-refusals';
+import { refusal, rulesNotAccepted } from './participation-refusals';
 import {
   CurrentParticipationResponse,
   ParticipationResponse,
@@ -230,7 +230,7 @@ export class ContestParticipationService {
     now: Date,
   ): RulesAcceptance | null {
     if (contest.rules === '') return null;
-    if (!acceptRules) throw refusal('rules_not_accepted');
+    if (!acceptRules) throw rulesNotAccepted();
     return {
       rulesAcceptedAt: now,
       rulesAcceptedRevision: contest.rulesRevision,

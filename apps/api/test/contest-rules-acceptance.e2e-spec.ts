@@ -49,9 +49,13 @@ describe('contest rules acceptance', () => {
       registrationStart: hoursFromNow(-2),
       registrationEnd: hoursFromNow(1),
     });
-    await post('alice', contest.key, 'register')
-      .expect(400)
-      .expect(errorCode('rules_not_accepted'));
+    const refused = await post('alice', contest.key, 'register').expect(400);
+    expect(refused.body).toMatchObject({
+      error: {
+        code: 'rules_not_accepted',
+        issues: [{ field: 'acceptRules', code: 'rules_not_accepted' }],
+      },
+    });
     await post('alice', contest.key, 'register', { acceptRules: false })
       .expect(400)
       .expect(errorCode('rules_not_accepted'));

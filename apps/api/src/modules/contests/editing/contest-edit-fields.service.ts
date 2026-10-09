@@ -131,7 +131,7 @@ function renderField(field: 'description' | 'rules', text: string): string {
   }
 }
 
-/** The trimmed text, its HTML and the next revision; the text alone when it is unchanged, so an unrelated edit never bumps the revision. */
+/** The trimmed text and its HTML (revision 1 on create); on an edit the revision is raised by the update itself (`ContestsRepository.updateRules`), so concurrent saves cannot write the same one. Nothing but the text when it is unchanged. */
 function rulesFields(
   dto: UpdateContestDto,
   current: ContestDocument | null,
@@ -142,7 +142,7 @@ function rulesFields(
   return {
     rules: text,
     rulesHtml: text ? renderField('rules', text) : '',
-    rulesRevision: (current?.rulesRevision ?? 0) + 1,
+    ...(current ? {} : { rulesRevision: 1 }),
   };
 }
 
