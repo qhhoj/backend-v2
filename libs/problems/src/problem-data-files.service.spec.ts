@@ -330,4 +330,16 @@ describe('ProblemDataFilesService', () => {
       chmodSync(directory, 0o700);
     }
   });
+
+  it('sums the data directory files and ignores staged uploads and other directories', async () => {
+    expect(await files.bytesOf('nodata')).toBe(0);
+    await files.writeFile('sized', 'tests.zip', Buffer.alloc(1000));
+    await files.writeInit('sized', 'archive: tests.zip\n');
+    writeFileSync(join(root, 'sized', '.upload-abc'), Buffer.alloc(5000));
+    mkdirSync(join(root, 'sized', 'nested'));
+    writeFileSync(join(root, 'sized', 'nested', 'big'), Buffer.alloc(7000));
+    expect(await files.bytesOf('sized')).toBe(
+      1000 + 'archive: tests.zip\n'.length,
+    );
+  });
 });

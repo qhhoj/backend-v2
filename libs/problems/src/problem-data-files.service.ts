@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { Dirent } from 'node:fs';
 import {
   access,
   lstat,
@@ -179,6 +180,29 @@ export class ProblemDataFilesService {
       await assertRealPathInside(this.root, directory);
       await rm(directory, { recursive: true, force: true });
     });
+  }
+
+  /** Bytes of the regular files directly in the problem's data directory (staged `.upload-*` files and subdirectories do not count); 0 when the directory is missing. */
+  async bytesOf(code: string): Promise<number> {
+    const directory = this.directoryOf(code);
+    await assertRealPathInside(this.root, directory);
+    let entries: Dirent[];
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+      throw error;
+    }
+    const sizes = await Promise.all(
+      entries
+        .filter(
+          (entry) => entry.isFile() && !entry.name.startsWith(UPLOAD_PREFIX),
+        )
+        .map(
+          async (entry) => (await lstat(resolve(directory, entry.name))).size,
+        ),
+    );
+    return sizes.reduce((total, size) => total + size, 0);
   }
 
   /** Moves a problem's whole directory; the target is reserved first so an existing one is never merged into, and a missing source is nothing to move. */
