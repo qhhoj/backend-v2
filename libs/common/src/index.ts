@@ -38,3 +38,7 @@ export * from './openapi/canonical-json';
 export * from './openapi/page-meta.response';
 export * from './openapi/error.response';
 export * from './openapi/render-preview.response';
+export * from './openapi/error-responses';
+export * from './openapi/api-event-stream';
+export * from './openapi/api-file-response';
+export * from './openapi/opaque-json-object';
