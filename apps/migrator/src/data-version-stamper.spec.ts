@@ -37,6 +37,7 @@ describe('stampDataVersions', () => {
       kept: 0,
       missingDirectory: 0,
       invalidCode: 0,
+      symlinked: [],
     });
   });
 
@@ -69,6 +70,7 @@ describe('stampDataVersions', () => {
       kept: 1,
       missingDirectory: 0,
       invalidCode: 0,
+      symlinked: [],
     });
   });
 
@@ -86,6 +88,7 @@ describe('stampDataVersions', () => {
       kept: 0,
       missingDirectory: 1,
       invalidCode: 2,
+      symlinked: [],
     });
     await expect(
       readFile(join(root, 'gone', DATA_VERSION_FILE)),
@@ -109,6 +112,32 @@ describe('stampDataVersions', () => {
       stampDataVersions([{ code: 'evil', dataVersion: 1 }], options),
     ).rejects.toThrow(/escapes/);
     await rm(outside, { recursive: true, force: true });
+  });
+
+  it('lists problems whose directory is or holds a symlink, and still stamps them', async () => {
+    await problemDir('clean');
+    await problemDir('linked_file');
+    await writeFile(join(root, 'clean', '1.in'), '1\n');
+    await symlink(
+      join(root, 'clean', '1.in'),
+      join(root, 'linked_file', '1.in'),
+    );
+    await mkdir(join(root, 'nested', 'tests'), { recursive: true });
+    await symlink(
+      join(root, 'clean', '1.in'),
+      join(root, 'nested', 'tests', '1.in'),
+    );
+    await symlink(join(root, 'clean'), join(root, 'alias'));
+    const summary = await stampDataVersions(
+      ['clean', 'linked_file', 'nested', 'alias'].map((code) => ({
+        code,
+        dataVersion: 1,
+      })),
+      options,
+    );
+    expect(summary.symlinked).toEqual(['linked_file', 'nested', 'alias']);
+    expect(summary.written + summary.kept).toBe(4);
+    expect(await stamp('linked_file')).toBe('1\n');
   });
 
   it('a garbage stamp is replaced', async () => {
