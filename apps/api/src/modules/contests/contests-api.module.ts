@@ -8,6 +8,7 @@ import {
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
+  CONTEST_REPLAY_QUEUE,
   CONTEST_RESCORE_QUEUE,
 } from '@libs/contests';
 import { EventsModule } from '../events/events.module';
@@ -76,6 +77,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
       { name: CONTEST_PUBLISH_QUEUE },
       { name: CONTEST_RATING_QUEUE },
       { name: CONTEST_DATA_QUEUE },
+      { name: CONTEST_REPLAY_QUEUE },
       { name: NOTIFICATION_FANOUT_QUEUE },
     ),
   ],

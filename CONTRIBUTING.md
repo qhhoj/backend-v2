@@ -25,6 +25,8 @@ apps/
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
   worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, organization-points, user-data, contribution-points, discord-webhook)
   bridge/     judge gRPC server (qhhoj.judge.v1): link/ (server, sessions, messages, FetchSource), dispatch/ (slots, grace, dispatcher, commands), judges/, submissions/ (claims, run writes, runs), bridge-core.module.ts, bridge.service.ts
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, contest-replay, organization-points, user-data, contribution-points, discord-webhook)
+  bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
 libs/
   common/     http layer (AppError and its subclasses, filter, interceptor, pipes), bootstrap, env, BaseMongoStreamQuerier, `runCoalesced`, AES-GCM helper (`crypto/`), time zones (`text/time-zone.ts`), OpenAPI helpers (`openapi/`), mail contract (`Mailer`, `MAILER`, `InMemoryMailer`)
   database/   uuid helpers, schema helpers, SCHEMAS, DatabaseModule
@@ -33,7 +35,7 @@ libs/
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   judge-proto/ the vendored qhhoj.judge.v1 contract and its generated TypeScript (see Judge protocol)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep, similarity), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
-  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
+  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data, contest-replay), replay queue, events and ghost scoring (`replay-queue`, `replay-events`, `ghost-replay`), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
   community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, tickets (limits, Discord texts), ticket-events contract, flatpage urls, user activity rules (session keys, user agent classifier, CSV cells), queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook), notifications (drafts, event contract, queues, repository, service, module)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
@@ -70,6 +72,8 @@ contests/
   announcements/   announcements, contest-events (SSE pushes)
   stats/  data/  submissions/
   editing/         create/update, clone
+  ghosts/          ghosts.* (staff CSV import, list, csv download, delete), ghost-csv
+  replay/          replay.* (GET replay chunks, POST rebuild), replay-access, replays.repository
 problems/
   problems-api.module.ts
   core/            list/detail, repository, access, search, events, rescore, revisions, rate-limits, multipart, shared dto
@@ -188,6 +192,8 @@ user-activity/
 - `issues: [{ field, code, message }]` is the machine-readable twin of `fields`, built from one list by `ValidationFailedError` (or derived by `AppError` when `fields` is given, code `invalid`); codes are snake_case: the failing constraint name (`max_length`, `is_in`), or `context: { code: '...' }` on the class-validator decorator (`username_invalid_characters`, `email_invalid`), or the code a service gives (`invalidField(field, message, code)`, `ValidationFailedError`): `username_taken`, `email_taken`, `password_pwned`, `organization_unavailable`, `language_unknown`, `language_takes_file`, `language_takes_text`, `file_upload_disabled`, `language_extension_invalid`, `file_wrong_extension`, `scratch_project_invalid`, `must_not_be_null` (a PATCH field that may not be null), `password_incorrect`, `password_unchanged`, `assignee_unknown`, `invalid_url`, `invalid_path`, `invalid_regex`, `parent_unknown`, `parent_cycle`; nested DTO fields use dotted names (`appearance.glass`)
 - `extra` (6th `AppError` argument) is merged into the error object next to `code` and `message`, never overriding them; `BannedError` (login) uses it for `banReason`
 - Contest participation refusals (`participation-refusals.ts`): 409 `editor_cannot_register`, `registration_not_required`, `registration_closed`, `contest_ended`, `already_registered`, `contest_not_started`, `virtual_disallowed`, `not_registered`; 403 `banned_from_contest`, `access_code_required`, `wrong_access_code`; 404 `not_in_contest`; 400 `rules_not_accepted` (field `acceptRules`, a contest with rules and a new participation without the box ticked)
+- Contest participation refusals (`participation-refusals.ts`): 409 `editor_cannot_register`, `registration_not_required`, `registration_closed`, `contest_ended`, `already_registered`, `contest_not_started`, `virtual_disallowed`, `not_registered`; 403 `banned_from_contest`, `access_code_required`, `wrong_access_code`; 404 `not_in_contest`
+- Contest replay refusals (`replay/replay-refusal.ts`, every one carries `issues[].code`): 403 `forbidden` with issue `board_frozen` or `board_hidden`; 409 `contest_not_ended`, `replay_unsupported`, `replay_changed`; 400 `replay_build_required`; 404 `replay_chunk_not_found`, `replay_not_ready`, `not_found`; 429 `rate_limited`
 - Query DTOs: `@Type(() => Number)` for numbers; `dto/transforms.ts` (`toArray`, `toBoolean`, `trim`) for arrays, booleans and search strings
 - Admin list paging: `/api/internal/admin/users` takes `pageSize` (<= 100) and caps `page` at 500 (skipping is linear); the other new admin lists and the public organization list use fixed sizes with `page` <= 10000
 - Repeated filters are sent as `typeIds=a&typeIds=b`, never `typeIds[]`

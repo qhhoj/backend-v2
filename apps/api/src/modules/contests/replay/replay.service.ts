@@ -94,7 +94,7 @@ export class ReplayService {
     });
   }
 
-  /** Ended contests only (the worker builds nothing earlier); waits for the settle time when the end is recent. */
+  /** Ended contests only (the worker builds nothing earlier); waits for the settle time when the end is recent. A failed enqueue gives the editor's budget back. */
   rebuild(
     principal: Principal,
     key: string,
@@ -103,14 +103,19 @@ export class ReplayService {
     return withCodedRefusals(async () => {
       const contest = await this.viewers.editableContest(principal, key);
       assertEnded(contest, now);
-      await this.rateLimit.reserve(
+      const refund = await this.rateLimit.reserve(
         [`replay-rebuild:${contest._id}:${principal.userId}`],
         REPLAY_REBUILD_LIMIT,
         REPLAY_REBUILD_WINDOW_SECONDS,
       );
-      await requestReplayBuild(this.queue, contest._id, {
-        delayMs: replayDelayMs(contest.endTime, now),
-      });
+      try {
+        await requestReplayBuild(this.queue, contest._id, {
+          delayMs: replayDelayMs(contest.endTime, now),
+        });
+      } catch (error) {
+        await refund();
+        throw error;
+      }
       return { queued: true };
     });
   }

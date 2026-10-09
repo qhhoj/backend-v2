@@ -36,6 +36,12 @@ describe('replay schemas', () => {
     });
   });
 
+  it('types the replay status of the actions answer by the shared ContestActionState enum', () => {
+    expect(
+      JSON.stringify(schema('ContestActionsResponse').properties!.replay),
+    ).toContain('#/components/schemas/ContestActionState');
+  });
+
   it('lists exactly the members of the replay answer', () => {
     expect(Object.keys(schema('ReplayResponse').properties!).sort()).toEqual([
       'buildId',

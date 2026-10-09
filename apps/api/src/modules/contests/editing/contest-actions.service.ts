@@ -6,6 +6,7 @@ import {
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
+  CONTEST_REPLAY_QUEUE,
   CONTEST_RESCORE_QUEUE,
   contestActionState,
 } from '@libs/contests';
@@ -13,6 +14,7 @@ import type {
   ContestFinalJudgeJob,
   ContestPublishJob,
   ContestRatingJob,
+  ContestReplayJob,
   ContestRescoreJob,
 } from '@libs/contests';
 import { ContestsService } from '../core/contests.service';
@@ -30,6 +32,8 @@ export class ContestActionsService {
     private readonly ratings: Queue<ContestRatingJob>,
     @InjectQueue(CONTEST_PUBLISH_QUEUE)
     private readonly publishes: Queue<ContestPublishJob>,
+    @InjectQueue(CONTEST_REPLAY_QUEUE)
+    private readonly replays: Queue<ContestReplayJob>,
   ) {}
 
   /** Editors only, like `rescore`. The automatic final judging at the end is not an editor's request, so it is filtered out. */
@@ -38,11 +42,12 @@ export class ContestActionsService {
     key: string,
   ): Promise<ContestActionsResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
-    const [rescore, judgeFinal, rate, publish] = await Promise.all([
+    const [rescore, judgeFinal, rate, publish, replay] = await Promise.all([
       contestActionState(this.rescores, contest._id),
       contestActionState(this.finalJudges, contest._id, (data) => data.manual),
       contestActionState(this.ratings, contest._id),
       contestActionState(this.publishes, contest._id),
+      contestActionState(this.replays, contest._id),
     ]);
     const outcome = contest.autoPublishOutcome;
     return {
@@ -50,6 +55,7 @@ export class ContestActionsService {
       judgeFinal,
       rate,
       publish,
+      replay,
       autoPublish: outcome && {
         at: outcome.at,
         status: outcome.status,

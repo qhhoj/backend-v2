@@ -1,5 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
-import type { Queue } from 'bullmq';
+import { Queue } from 'bullmq';
 import { CONTEST_REPLAY_QUEUE, REPLAY_FORMAT_VERSION } from '@libs/contests';
 import type { ContestReplayJob } from '@libs/contests';
 import { newId, uuidStr } from '@libs/database';
@@ -372,6 +372,22 @@ describe('contest replay', () => {
       api.http().post(url(contest.key, '/rebuild')),
       sessions.editor,
     ).expect(429);
+  });
+
+  it("gives the editor's rebuild budget back when the queue refuses the request", async () => {
+    const contest = await endedContest();
+    await queue.obliterate({ force: true });
+    const rebuild = () =>
+      authed(api.http().post(url(contest.key, '/rebuild')), sessions.editor);
+    const failing = jest
+      .spyOn(Queue.prototype, 'add')
+      .mockRejectedValue(new Error('redis down'));
+    for (let attempt = 0; attempt < 4; attempt += 1)
+      await rebuild().expect(500);
+    failing.mockRestore();
+    for (let attempt = 0; attempt < 3; attempt += 1)
+      await rebuild().expect(202);
+    await rebuild().expect(429);
   });
 
   it("refuses a rebuild while the contest runs, without queueing or spending the editor's budget", async () => {

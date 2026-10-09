@@ -5,16 +5,19 @@ import {
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
+  CONTEST_REPLAY_QUEUE,
   CONTEST_RESCORE_QUEUE,
   enqueueContestRating,
   enqueueContestRescore,
   requestFinalJudge,
+  requestReplayBuild,
   reschedulePublish,
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
   ContestPublishJob,
   ContestRatingJob,
+  ContestReplayJob,
   ContestRescoreJob,
 } from '@libs/contests';
 import type { ContestActionsResponse } from '../src/modules/contests/editing/dto/contest-actions.response';
@@ -32,6 +35,7 @@ describe('contest action status', () => {
   let finalJudges: Queue<ContestFinalJudgeJob>;
   let ratings: Queue<ContestRatingJob>;
   let publishes: Queue<ContestPublishJob>;
+  let replays: Queue<ContestReplayJob>;
   let editor: TestSession;
   let plain: TestSession;
   let editorId: string;
@@ -50,6 +54,7 @@ describe('contest action status', () => {
     judgeFinal: 'idle',
     rate: 'idle',
     publish: 'idle',
+    replay: 'idle',
     autoPublish: null,
   };
 
@@ -59,6 +64,7 @@ describe('contest action status', () => {
     finalJudges = api.app.get(getQueueToken(CONTEST_FINAL_JUDGE_QUEUE));
     ratings = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
     publishes = api.app.get(getQueueToken(CONTEST_PUBLISH_QUEUE));
+    replays = api.app.get(getQueueToken(CONTEST_REPLAY_QUEUE));
     editorId = (
       await createUserWith(api, 'actions_editor', {
         permissions: ['judge.add_contest', 'judge.edit_own_contest'],
@@ -76,6 +82,7 @@ describe('contest action status', () => {
     await finalJudges.obliterate({ force: true });
     await ratings.obliterate({ force: true });
     await publishes.obliterate({ force: true });
+    await replays.obliterate({ force: true });
   });
 
   it('reports every action idle without a job', async () => {
@@ -138,6 +145,16 @@ describe('contest action status', () => {
       new Logger('spec'),
     );
     expect(await statusOf(contest.key)).toEqual({ ...idle, publish: 'queued' });
+  });
+
+  it('reports a replay build queued while its request waits, and idle for another contest', async () => {
+    const [mine, other] = [
+      await createContest(api, { authors: [editorId] }),
+      await createContest(api, { authors: [editorId] }),
+    ];
+    await requestReplayBuild(replays, mine._id);
+    expect(await statusOf(mine.key)).toEqual({ ...idle, replay: 'queued' });
+    expect(await statusOf(other.key)).toEqual(idle);
   });
 
   it('echoes the recorded outcome of the automatic publish', async () => {

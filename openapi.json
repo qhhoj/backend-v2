@@ -934,6 +934,13 @@
               }
             ]
           },
+          "replay": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestActionState"
+              }
+            ]
+          },
           "rescore": {
             "allOf": [
               {
@@ -947,6 +954,7 @@
           "judgeFinal",
           "rate",
           "publish",
+          "replay",
           "autoPublish"
         ],
         "type": "object"

@@ -210,6 +210,22 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - The final-submission guard (leaving `final_submission` with unjudged pending rows is refused) lives in `applyFields`, shared by the editor and the sync `PUT` — one place instead of a check per caller.
 - `SyncRateLimit`: one budget of 60 requests per minute per client across every sync route (429 beyond), charged before any work.
 - Official contest mode is read only through `isOfficialModeActive` (flag plus lazy `contest.officialModeEndsAt`) — a site that forgot to switch it off unlocks itself; `GET /site` carries `officialMode` and may show a stale banner for up to its 60 s cache. New locks (display badge, organization order, join, leave, join requests) answer 403 `locked_in_official_contest`; the older five keep `forbidden`; tickets, administrator kicks and request decisions stay open; `usernameDisplayOverride` has no user-writable route so nothing locks it.
+- Replay is a worker-built chunked stream of `[seconds, participantIndex, problemIndex, cell, score, cumtime, tiebreaker]` tuples from the real `scoreParticipation` on each submission prefix (5000 per chunk, 2 000 000 safety valve `replay_too_large`, old head stays) — a cap would break mid-contest order, and one format keeps the final state equal to the board.
+- Replay times are seconds from each participation's own start — a windowed contest is meaningless on the contest clock.
+- A build writes chunks under a new `buildId`, swaps the head, then deletes old chunks; chunk > 0 must send the `buildId` or gets 409 `replay_changed`, so a reader never mixes builds.
+- No replay head is written or served before `endTime + 10 min` (`REPLAY_SETTLE_MS`) — the judge still works after the end; an earlier head is refused and rebuilt.
+- Replay is gated by `boardReadable` plus ended, never `canSeeFullScoreboard` (403 `board_frozen` or `board_hidden`, then 409 `contest_not_ended`, then 409 `replay_unsupported`) — a freeze outlives the end and must not leak through replay.
+- Replay builds start lazily on a read (202 `building`, at most one per contest per 30 s), after a ghost change, after a rescore, and from the editor button (ended contests, 3/hour).
+- A failed enqueue of the editor's rebuild refunds its rate-limit budget — a Redis failure must not cost an attempt that queued nothing.
+- A rescore queues a replay build delayed to end + settle — rescored scores change the stream, and an earlier build would be refused as unsettled.
+- Ghosts are raw cells (minute, rejected tries up to 99, points) scored once in the worker through `scoreParticipation` into their own event stream; a ghost the format cannot rank is `unranked` and listed last — inventing data would mis-rank people.
+- Ghost points are clamped to the problem's points at replay — a CSV written for other points must not outscore the problem.
+- Ghost CSV import is all-or-nothing in one transaction; labels can be real names, so formula-looking labels and captions are refused and anonymised labels offered.
+- Ghost CSV refusals carry one of 12 codes with a row: `label_missing`, `label_formula`, `label_repeats`, `label_invalid`, `caption_invalid`, `caption_formula`, `control_character`, `cell_invalid`, `columns_mismatch`, `header_invalid`, `csv_invalid`, `too_many_ghosts`; `*_invalid` on a label or caption means too long.
+- The ghost body is capped at 1 MiB (`GHOST_CSV_MAX_BYTES`, Fastify answers 413) — a ghost set is a few thousand rows, and the body is parsed in memory.
+- `final_submission` contests refuse only the ghost PUT (409 `ghost_unsupported_format`): scores exist only after the final judge, and listing, download and delete must still clean up what exists.
+- Replay chunks of a build that died after `insertChunks` are orphans until the next good build (accepted); a contest delete path must remove the head, chunks and ghosts.
+- Replay and ghost JSON is compressed by the nginx gzip location; the api registers no compression plugin.
 
 ## Organizations and users
 
