@@ -2,20 +2,33 @@ import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, invalidField, unique } from '@libs/common';
+import { timelineEventsOf } from '@libs/community';
+import { uuidStr } from '@libs/database';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import type { TicketDetailResponse } from '../core/dto/ticket.response';
 import { TicketAccess } from '../core/ticket-access';
+import type { TicketAccessView } from '../core/ticket-access';
 import { TicketContextService } from '../core/ticket-context.service';
 import { TicketResponsesService } from '../core/ticket-responses.service';
 import { TicketsRepository } from '../core/tickets.repository';
+import type { TicketChanges, TicketDocument } from '../core/tickets.repository';
 import { TicketEventsService } from '../streams/ticket-events.service';
 import type { UpdateTicketDto } from './dto/update-ticket.dto';
 
 const forbidden = (message: string) => new AppError('forbidden', 403, message);
 
+/** What `afterUpdate` needs once the change is stored. */
+interface UpdateAftermath {
+  principal: Principal;
+  ticket: TicketDocument;
+  view: TicketAccessView;
+  changes: TicketChanges;
+}
+
 /**
  * Legacy `TicketStatusChangeView` and `TicketNotesEditView` as one PATCH.
- * Every permission and every username is checked before the single `$set`, so a refused request writes nothing.
+ * Every permission and every username is checked before the single `updateOne`, so a refused request writes nothing.
+ * The state change and its timeline entries go out in that one write.
  * No mute check: muting blocks filing and writing messages (`TicketGateService`), not closing or editing notes.
  */
 @Injectable()
@@ -35,6 +48,41 @@ export class TicketUpdatesService {
     dto: UpdateTicketDto,
   ): Promise<TicketDetailResponse> {
     const { ticket, view } = await this.context.accessible(principal, ticketId);
+    this.assertAllowed(principal, view, dto);
+    const changes = await this.changesOf(ticket, dto);
+    const before = {
+      isOpen: ticket.isOpen,
+      isContributive: ticket.isContributive,
+      assignees: view.assignees,
+    };
+    const timeline = timelineEventsOf({
+      actor: principal.userId,
+      at: new Date(),
+      before,
+      changes,
+    });
+    if (!(await this.tickets.update(ticketId, changes, before, timeline)))
+      throw new AppError(
+        'conflict',
+        409,
+        'The ticket changed while you were editing it; reload and try again',
+      );
+    await this.afterUpdate({ principal, ticket, view, changes });
+    const fresh = (await this.tickets.findById(ticketId, {
+      withMessages: true,
+    }))!;
+    return this.responses.detail(
+      principal,
+      fresh,
+      await this.context.accessView(fresh),
+    );
+  }
+
+  private assertAllowed(
+    principal: Principal,
+    view: TicketAccessView,
+    dto: UpdateTicketDto,
+  ): void {
     if (
       dto.isContributive !== undefined &&
       !TicketAccess.canMarkGood(principal, view)
@@ -44,7 +92,14 @@ export class TicketUpdatesService {
       throw forbidden('Only assignees and staff can edit notes');
     if (dto.assignees !== undefined && !TicketAccess.canAssign(principal))
       throw forbidden('Only staff can change assignees');
-    const changes: Parameters<TicketsRepository['update']>[1] = {};
+  }
+
+  /** Only what really differs from the stored ticket. */
+  private async changesOf(
+    ticket: TicketDocument,
+    dto: UpdateTicketDto,
+  ): Promise<TicketChanges> {
+    const changes: TicketChanges = {};
     if (dto.isOpen !== undefined && dto.isOpen !== ticket.isOpen)
       changes.isOpen = dto.isOpen;
     if (
@@ -55,7 +110,16 @@ export class TicketUpdatesService {
     if (dto.notes !== undefined) changes.notes = dto.notes;
     if (dto.assignees !== undefined)
       changes.assignees = await this.assigneeIds(dto.assignees);
-    await this.tickets.update(ticketId, changes);
+    return changes;
+  }
+
+  /** Everything told about the change once it is stored: the SSE feed and the creator's contribution points. */
+  private async afterUpdate({
+    ticket,
+    view,
+    changes,
+  }: UpdateAftermath): Promise<void> {
+    const ticketId = uuidStr(ticket._id);
     if (changes.isOpen !== undefined)
       await this.events.publish({
         type: 'ticket-status',
@@ -65,14 +129,6 @@ export class TicketUpdatesService {
       });
     if (changes.isContributive !== undefined)
       await this.contributions.refresh([view.creator]);
-    const fresh = (await this.tickets.findById(ticketId, {
-      withMessages: true,
-    }))!;
-    return this.responses.detail(
-      principal,
-      fresh,
-      await this.context.accessView(fresh),
-    );
   }
 
   /** Every name must be an active user; the issue names the field, never which name failed. */

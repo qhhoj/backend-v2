@@ -1,21 +1,54 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { TICKET_MESSAGE_CAP, TICKETS_PAGE_SIZE } from '@libs/community';
-import { GeneralIssue, isUuid, Ticket, uuidStr } from '@libs/database';
+import {
+  TICKET_MESSAGE_CAP,
+  TICKET_TIMELINE_CAP,
+  TICKETS_PAGE_SIZE,
+} from '@libs/community';
+import type { TicketTimelineDraft } from '@libs/community';
+import { GeneralIssue, isUuid, newId, Ticket, uuidStr } from '@libs/database';
 import type { TicketMessage } from '@libs/database';
 import type {
   Connection,
   FilterQuery,
   HydratedDocument,
   Model,
+  UpdateQuery,
 } from 'mongoose';
 
 export type TicketDocument = HydratedDocument<Ticket>;
 
-/** Message arrays hold up to 500 rows: only the detail loads them. */
-const WITHOUT_MESSAGES = { messages: 0 } as const;
-/** List rows carry neither messages nor staff notes. */
-const LIST_PROJECTION = { messages: 0, notes: 0 } as const;
+/** Message and timeline arrays hold up to 500 and 200 rows: only the detail loads them. */
+const WITHOUT_MESSAGES = { messages: 0, events: 0 } as const;
+/** List rows carry neither messages, timeline nor staff notes. */
+const LIST_PROJECTION = { messages: 0, events: 0, notes: 0 } as const;
+
+export type TicketChanges = Partial<
+  Pick<Ticket, 'isOpen' | 'isContributive' | 'notes' | 'assignees'>
+>;
+
+/** The stored state an update was decided on (the timeline is derived from it). */
+export interface TicketReadState {
+  isOpen: boolean;
+  isContributive: boolean;
+  assignees: readonly string[];
+}
+
+/** The guard of a compare-and-set: each field the update changes must still hold the value that was read. */
+function unchangedSince(
+  changes: TicketChanges,
+  read: TicketReadState,
+): FilterQuery<Ticket> {
+  const guard: FilterQuery<Ticket> = {};
+  if (changes.isOpen !== undefined) guard.isOpen = read.isOpen;
+  if (changes.isContributive !== undefined)
+    guard.isContributive = read.isContributive;
+  if (changes.assignees !== undefined)
+    guard.assignees = read.assignees.length
+      ? { $all: [...read.assignees], $size: read.assignees.length }
+      : { $size: 0 };
+  return guard;
+}
 
 @Injectable()
 export class TicketsRepository {
@@ -96,15 +129,26 @@ export class TicketsRepository {
     return created;
   }
 
-  /** One `$set`; the caller already decided what may change. */
+  /** One `updateOne`, a compare-and-set on the changed fields: the changes and their timeline entries commit together, or nothing does. `$slice` keeps the newest `TICKET_TIMELINE_CAP` entries, so a full timeline never refuses the state change. False = the ticket is gone or changed since `read`. */
   async update(
     ticketId: string,
-    changes: Partial<
-      Pick<Ticket, 'isOpen' | 'isContributive' | 'notes' | 'assignees'>
-    >,
-  ): Promise<void> {
-    if (Object.keys(changes).length)
-      await this.tickets.updateOne({ _id: ticketId }, { $set: changes }).exec();
+    changes: TicketChanges,
+    read: TicketReadState,
+    events: readonly TicketTimelineDraft[] = [],
+  ): Promise<boolean> {
+    if (!Object.keys(changes).length) return true;
+    const update: UpdateQuery<Ticket> = { $set: changes };
+    if (events.length)
+      update.$push = {
+        events: {
+          $each: events.map((event) => ({ _id: newId(), ...event })),
+          $slice: -TICKET_TIMELINE_CAP,
+        },
+      };
+    const { matchedCount } = await this.tickets
+      .updateOne({ _id: ticketId, ...unchangedSince(changes, read) }, update)
+      .exec();
+    return matchedCount === 1;
   }
 
   /** The cap is part of the filter, so parallel posts can never pass it; false = the ticket is full (or gone). `byStaff` is stored: staff status changes over time. */

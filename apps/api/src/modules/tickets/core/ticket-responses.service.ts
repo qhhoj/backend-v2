@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
+import { mergeTimeline } from '@libs/community';
 import { unique } from '@libs/common';
 import { uuidStr } from '@libs/database';
-import type { TicketMessage } from '@libs/database';
+import type { TicketMessage, TicketTimelineEvent } from '@libs/database';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import type {
   TicketDetailResponse,
+  TicketTimelineEventResponse,
   TicketLinkResponse,
   TicketListItemResponse,
   TicketMessageResponse,
+  TicketTimelineEntryResponse,
 } from './dto/ticket.response';
 import { TicketAccess } from './ticket-access';
 import type { TicketAccessView } from './ticket-access';
@@ -48,13 +51,15 @@ export class TicketResponsesService {
       markGood: TicketAccess.canMarkGood(principal, view),
       assign: TicketAccess.canAssign(principal),
     };
+    const messages = (ticket.messages ?? []).map((message) =>
+      this.message(message, people),
+    );
     return {
       ...this.item(ticket, people, links),
       notes: ticket.notes,
       can,
-      messages: (ticket.messages ?? []).map((message) =>
-        this.message(message, people),
-      ),
+      messages,
+      timeline: this.timeline(messages, ticket.events ?? [], people),
     };
   }
 
@@ -91,6 +96,36 @@ export class TicketResponsesService {
     };
   }
 
+  /** Messages and events by time; a ticket that predates the timeline has no events. */
+  private timeline(
+    messages: TicketMessageResponse[],
+    events: TicketTimelineEvent[],
+    people: People,
+  ): TicketTimelineEntryResponse[] {
+    const merged = mergeTimeline(
+      messages,
+      events.map((event) => this.event(event, people)),
+    );
+    return merged.map((entry): TicketTimelineEntryResponse =>
+      entry.kind === 'message'
+        ? { kind: 'message', at: entry.at, message: entry.message, event: null }
+        : { kind: 'event', at: entry.at, message: null, event: entry.event },
+    );
+  }
+
+  private event(
+    event: TicketTimelineEvent,
+    people: People,
+  ): TicketTimelineEventResponse {
+    return {
+      id: uuidStr(event._id),
+      type: event.type,
+      actor: this.person(people, uuidStr(event.user)),
+      target: event.target ? this.person(people, uuidStr(event.target)) : null,
+      at: event.at,
+    };
+  }
+
   private message(
     message: TicketMessage,
     people: People,
@@ -114,6 +149,10 @@ export class TicketResponsesService {
         uuidStr(ticket.user),
         ...ticket.assignees.map(uuidStr),
         ...(ticket.messages ?? []).map((message) => uuidStr(message.user)),
+        ...(ticket.events ?? []).flatMap((event) => [
+          uuidStr(event.user),
+          ...(event.target ? [uuidStr(event.target)] : []),
+        ]),
       ]),
     );
     return new Map(

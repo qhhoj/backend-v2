@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TICKET_LINK_TYPES, type TicketLinkType } from '@libs/database';
+import {
+  TICKET_LINK_TYPES,
+  TICKET_TIMELINE_TYPES,
+  type TicketLinkType,
+  type TicketTimelineType,
+} from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 
 export class TicketLinkResponse {
@@ -42,9 +47,30 @@ export class TicketPermissionsResponse {
   assign!: boolean;
 }
 
+/** A state change of the ticket, shown between the messages. */
+export class TicketTimelineEventResponse {
+  id!: string;
+  @ApiProperty({ enum: TICKET_TIMELINE_TYPES, enumName: 'TicketTimelineType' })
+  type!: TicketTimelineType;
+  actor!: UserSummaryResponse;
+  /** The assignee of `assigned` / `unassigned`, else null. */
+  target!: UserSummaryResponse | null;
+  at!: Date;
+}
+
+/** One row of the thread: exactly one of `message` and `event` is set, matching `kind`. */
+export class TicketTimelineEntryResponse {
+  kind!: 'message' | 'event';
+  at!: Date;
+  message!: TicketMessageResponse | null;
+  event!: TicketTimelineEventResponse | null;
+}
+
 export class TicketDetailResponse extends TicketListItemResponse {
   /** Every reader sees it; `can.editNotes` says who may change it. */
   notes!: string;
   messages!: TicketMessageResponse[];
+  /** Messages and state changes by time (equal instants: message first). */
+  timeline!: TicketTimelineEntryResponse[];
   can!: TicketPermissionsResponse;
 }
