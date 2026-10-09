@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, invalidField, isDocumentTooLarge } from '@libs/common';
 import { emptyProblemData } from '@libs/database';
@@ -22,6 +22,8 @@ import { RevisionsRepository } from '../core/revisions.repository';
 /** Access checks, compile-and-persist and the response shape shared by the data and upload services. */
 @Injectable()
 export class ProblemDataStore {
+  private readonly logger = new Logger(ProblemDataStore.name);
+
   constructor(
     private readonly policy: ProblemEditPolicyService,
     private readonly repository: ProblemsRepository,
@@ -87,10 +89,22 @@ export class ProblemDataStore {
     expected: number,
   ): Promise<void> {
     await this.dataFiles.writeDataVersion(problem.code, expected + 1);
-    await this.repository.setDataBytes(
-      problem._id,
-      await this.dataFiles.bytesOf(problem.code),
-    );
+    await this.recordDataBytes(problem);
+  }
+
+  /** The files and the stamp are already in place, so a failed meter write is logged and not thrown: throwing would refund credits for work that was done. `dataBytes` stays stale until the next write or the nightly backfill. */
+  private async recordDataBytes(problem: ProblemDocument): Promise<void> {
+    try {
+      await this.repository.setDataBytes(
+        problem._id,
+        await this.dataFiles.bytesOf(problem.code),
+      );
+    } catch (error) {
+      this.logger.error(
+        `dataBytes of ${problem.code} not recorded after the data was stored`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   /** The stored data as a plain object, with the version to compare-and-set against. `data` is `select: false`, so it is loaded explicitly; the problem from the access check never carries it. */

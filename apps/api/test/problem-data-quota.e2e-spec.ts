@@ -10,6 +10,7 @@ import { buildZip } from '@libs/problems/testing';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
+import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { ProblemDataStore } from '../src/modules/problems/data/problem-data.store';
 import { createOrganization } from './organization-fixtures';
 import {
@@ -203,6 +204,20 @@ describe('problem data quota', () => {
       ['upload', 1],
       ['refund', -1],
     ]);
+  });
+
+  it('keeps the credits spent and the stored data when only recording dataBytes fails', async () => {
+    const { organization, problem } = await orgProblem();
+    const failing = jest
+      .spyOn(api.app.get(ProblemsRepository), 'setDataBytes')
+      .mockRejectedValueOnce(new Error('mongo blip'));
+    await uploadArchive(problem.code, buildZip(tests(1))).expect(201);
+    failing.mockRestore();
+    expect(await creditsOf(organization._id)).toBe(1);
+    expect(await ledgerOf(organization._id)).toEqual([['upload', 1]]);
+    expect(
+      existsSync(join(api.problemDataRoot, problem.code, 'tests.zip')),
+    ).toBe(true);
   });
 
   it('gives the credits back when another data write holds the problem lock', async () => {

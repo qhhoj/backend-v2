@@ -92,6 +92,7 @@ export class ProblemDataUploadService {
     this.assertNameFree(previous, 'archive', name);
     const bytes = (await stat(staged)).size;
     const organizationId = this.storage.organizationOf(auth.principal, problem);
+    // Deliberately outside the lock: the storage cap is a soft meter. Two parallel uploads to different problems of one organization can both pass and overshoot once; `dataBytes` is re-measured from disk on every write, so the next check sees the true total.
     await this.assertStorageFits(organizationId, problem, {
       bytes,
       replaced: previous.archive,
