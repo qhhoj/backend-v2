@@ -1,4 +1,5 @@
 import type { Test } from 'supertest';
+import { newId } from '@libs/database';
 import type { User } from '@libs/database';
 import { clearRateLimits } from './contest-fixtures';
 import {
@@ -7,8 +8,14 @@ import {
   createPost,
   writer,
 } from './community-fixtures';
-import { authed, loginAs } from './problem-fixtures';
-import type { TestSession } from './problem-fixtures';
+import { createOrganization, organizationUrl } from './organization-fixtures';
+import {
+  authed,
+  createProblem,
+  loginAs,
+  seedCatalog,
+} from './problem-fixtures';
+import type { Catalog, TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
@@ -33,6 +40,7 @@ const aMinuteAgo = () => new Date(Date.now() - 60_000).toISOString();
 describe('official contest mode', () => {
   let api: ApiTest;
   let counter = 0;
+  let catalog: Catalog;
   const setMode = async (on: boolean, endsAt = '') => {
     await api.setSetting('contest.officialMode', on);
     await api.setSetting('contest.officialModeEndsAt', endsAt);
@@ -80,6 +88,70 @@ describe('official contest mode', () => {
           content: 'C',
         }),
     },
+    {
+      name: 'profile display badge',
+      lockedCode: 'locked_in_official_contest',
+      okStatus: 200,
+      prepare: async (person) => {
+        const badge = newId();
+        await api.users.updateOne(
+          { _id: person.id },
+          { $set: { badges: [badge] } },
+        );
+        return patchProfile({ displayBadgeId: badge });
+      },
+    },
+    {
+      name: 'profile organization order',
+      lockedCode: 'locked_in_official_contest',
+      okStatus: 200,
+      prepare: async (person) => {
+        const first = await createOrganization(api, {}, [person.id]);
+        const second = await createOrganization(api, {}, [person.id]);
+        return patchProfile({ organizations: [second._id, first._id] });
+      },
+    },
+    {
+      name: 'organization join',
+      lockedCode: 'locked_in_official_contest',
+      okStatus: 204,
+      prepare: async () => {
+        const organization = await createOrganization(api, { isOpen: true });
+        return (session) =>
+          authed(
+            api.http().post(organizationUrl(organization.slug, '/join')),
+            session,
+          );
+      },
+    },
+    {
+      name: 'organization leave',
+      lockedCode: 'locked_in_official_contest',
+      okStatus: 204,
+      prepare: async (person) => {
+        const organization = await createOrganization(api, { isOpen: true }, [
+          person.id,
+        ]);
+        return (session) =>
+          authed(
+            api.http().post(organizationUrl(organization.slug, '/leave')),
+            session,
+          );
+      },
+    },
+    {
+      name: 'organization join request',
+      lockedCode: 'locked_in_official_contest',
+      okStatus: 201,
+      prepare: async () => {
+        const organization = await createOrganization(api, { isOpen: false });
+        return (session) =>
+          authed(
+            api.http().post(organizationUrl(organization.slug, '/requests')),
+            session,
+          ).send({ reason: 'I would like to join' });
+      },
+    },
   ];
 
   /** One attempt in one mode state by one kind of person, each on a fresh person and fresh data. */
@@ -101,6 +173,7 @@ describe('official contest mode', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
+    catalog = await seedCatalog(api);
   });
   afterEach(() => setMode(false));
   afterAll(() => api.teardown());
@@ -186,5 +259,53 @@ describe('official contest mode', () => {
     await expect(
       api.setSetting('contest.officialModeEndsAt', '2026-10-10T08:00:00+07:00'),
     ).resolves.toBeUndefined();
+  });
+
+  it('does not lock a profile form that resends the stored badge and order', async () => {
+    const person = await newPerson();
+    const badge = newId();
+    const first = await createOrganization(api, {}, [person.id]);
+    const second = await createOrganization(api, {}, [person.id]);
+    await api.users.updateOne(
+      { _id: person.id },
+      { $set: { badges: [badge], displayBadgeId: badge } },
+    );
+    await setMode(true);
+    await patchProfile({
+      displayBadgeId: badge,
+      organizations: [first._id, second._id],
+      timezone: 'UTC',
+    })(person.session).expect(200);
+  });
+
+  it('keeps tickets open while the mode is on', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: `lockticket${(counter += 1)}`,
+    });
+    const person = await newPerson();
+    await setMode(true);
+    await authed(
+      api.http().post(`/api/internal/problems/${problem.code}/tickets`),
+      person.session,
+    )
+      .send({ title: 'Wrong answer', body: 'Sample 2 looks wrong' })
+      .expect(201);
+  });
+
+  it('lets an organization administrator keep removing members while the mode is on', async () => {
+    const admin = await newPerson();
+    const member = await newPerson();
+    const organization = await createOrganization(
+      api,
+      { adminIds: [admin.id], isOpen: true },
+      [member.id],
+    );
+    await setMode(true);
+    await authed(
+      api.http().post(organizationUrl(organization.slug, '/kick')),
+      admin.session,
+    )
+      .send({ userId: member.id })
+      .expect(204);
   });
 });

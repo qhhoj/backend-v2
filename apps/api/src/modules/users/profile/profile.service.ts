@@ -4,6 +4,7 @@ import { UsersRepository } from '@libs/auth';
 import { AppError, invalidField } from '@libs/common';
 import {
   canInteract,
+  assertNotLockedByOfficialMode,
   INTERACT_MIN_PROBLEM_COUNT,
   officialModeLocks,
 } from '@libs/community';
@@ -68,6 +69,7 @@ export class ProfileService {
       ...this.aboutChange(principal, user, about),
     };
     this.assertReferences(user, dto);
+    this.assertAppearanceUnlocked(principal, user, dto);
     if (organizations !== undefined)
       await this.reorder(
         principal,
@@ -109,6 +111,25 @@ export class ProfileService {
         `Solve at least ${INTERACT_MIN_PROBLEM_COUNT} problems before editing your profile`,
       );
     return { about, aboutHtml: renderField(about, 'user', 'about') };
+  }
+
+  /** The display badge and the order of organizations are part of how a user appears on the boards, so they freeze with `about` and the name. Resending the stored value is not a change. */
+  private assertAppearanceUnlocked(
+    principal: Principal,
+    user: UserDocument,
+    dto: UpdateProfileDto,
+  ): void {
+    const storedBadge = user.displayBadgeId
+      ? uuidStr(user.displayBadgeId)
+      : null;
+    const isBadgeChanged =
+      dto.displayBadgeId !== undefined &&
+      (dto.displayBadgeId ?? null) !== storedBadge;
+    const isOrderChanged =
+      dto.organizations !== undefined &&
+      dto.organizations.join() !== user.organizations.map(uuidStr).join();
+    if (isBadgeChanged || isOrderChanged)
+      assertNotLockedByOfficialMode(this.settings, principal);
   }
 
   /** Throws a 400 for an unknown language or a display badge the user does not hold. */

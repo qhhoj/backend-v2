@@ -56,7 +56,7 @@ export const SETTINGS = {
     type: booleanType,
     default: false,
     description:
-      'Official contest mode: non-superusers cannot edit their about or first name, read or write comments, vote on comments or write blog posts. Locks on display badge, organization order and joining, leaving or requesting organizations are coming; tickets stay open.',
+      'Official contest mode: non-superusers cannot edit their about, first name, display badge or organization order, read or write comments, vote on comments, write blog posts, or join, leave or request to join organizations; tickets stay open. Switches itself off at contest.officialModeEndsAt.',
     secret: false,
   }),
   'contest.officialModeEndsAt': define({

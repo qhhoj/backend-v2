@@ -2,8 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
-import { MAX_OPEN_ORGANIZATIONS } from '@libs/community';
+import {
+  assertNotLockedByOfficialMode,
+  MAX_OPEN_ORGANIZATIONS,
+} from '@libs/community';
 import { uuidStr } from '@libs/database';
+import { SettingsService } from '@libs/settings';
 import { OrganizationAccess } from '../core/organization-access';
 import { OrganizationMembersRepository } from '../core/organization-members.repository';
 import { OrganizationPointsService } from '../core/organization-points.service';
@@ -20,10 +24,12 @@ export class MembershipService {
     private readonly members: OrganizationMembersRepository,
     private readonly users: UsersRepository,
     private readonly points: OrganizationPointsService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Legacy `JoinOrganization`: open organizations only, at most three open ones per user (private ones do not count). */
   async join(principal: Principal, slug: string): Promise<void> {
+    assertNotLockedByOfficialMode(this.settings, principal);
     const organization = await this.organizationsService.bySlug(slug);
     if (!organization.isOpen)
       throw conflict('This organization is private; send a join request');
@@ -52,6 +58,7 @@ export class MembershipService {
 
   /** Legacy `LeaveOrganization`: admins cannot leave. */
   async leave(principal: Principal, slug: string): Promise<void> {
+    assertNotLockedByOfficialMode(this.settings, principal);
     const organization = await this.organizationsService.bySlug(slug);
     if (
       OrganizationAccess.isAdmin(
