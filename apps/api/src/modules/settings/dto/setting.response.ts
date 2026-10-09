@@ -1,11 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ANY_JSON_VALUE } from './any-json-value';
 import { sameJson } from '@libs/common';
-import { redactSetting } from '@libs/settings';
+import { redactSetting, SETTING_KEYS } from '@libs/settings';
+import type { SettingKey } from '@libs/settings';
 import type { SettingDefinition } from '@libs/settings';
 
 export class SettingResponse {
-  key!: string;
+  @ApiProperty({ enum: SETTING_KEYS, enumName: 'SettingKey' })
+  key!: SettingKey;
   description!: string;
   /** True when the value holds a secret; its secret parts read `{set: boolean}`. */
   hasSecret!: boolean;
@@ -20,7 +22,7 @@ export class SettingResponse {
   updatedBy!: string | null;
 
   static of(
-    key: string,
+    key: SettingKey,
     definition: SettingDefinition<unknown>,
     shown: { value: unknown; redacted: unknown },
     row: { updatedAt: Date; updatedBy: string | null } | undefined,

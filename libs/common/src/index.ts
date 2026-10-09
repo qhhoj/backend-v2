@@ -44,3 +44,4 @@ export * from './openapi/error-responses';
 export * from './openapi/api-event-stream';
 export * from './openapi/api-file-response';
 export * from './openapi/opaque-json-object';
+export * from './openapi/api-file-upload';

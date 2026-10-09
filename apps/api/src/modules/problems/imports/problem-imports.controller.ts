@@ -8,6 +8,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+import { ApiFileUpload } from '@libs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ImportJobResponse } from './dto/import-job.response';
@@ -23,6 +24,7 @@ import { ProblemImportsService } from './problem-imports.service';
 export class ProblemImportsController {
   constructor(private readonly imports: ProblemImportsService) {}
 
+  @ApiFileUpload()
   @Post()
   @HttpCode(202)
   start(

@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
+import { ANY_JSON_VALUE } from '../../../settings/dto/any-json-value';
 import { uuidStr } from '@libs/database';
 import type { Revision } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
@@ -6,6 +7,14 @@ import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.res
 export const FLATPAGE_REVISION_ACTIONS = ['create', 'edit', 'delete'] as const;
 export type FlatpageRevisionAction = (typeof FLATPAGE_REVISION_ACTIONS)[number];
 
+export class FieldChangeResponse {
+  @ApiProperty(ANY_JSON_VALUE)
+  before!: unknown;
+  @ApiProperty(ANY_JSON_VALUE)
+  after!: unknown;
+}
+
+@ApiExtraModels(FieldChangeResponse)
 export class FlatpageRevisionResponse {
   id!: string;
   at!: Date;
@@ -13,7 +22,12 @@ export class FlatpageRevisionResponse {
   action!: FlatpageRevisionAction;
   /** Null when the editor's account is gone. */
   editor!: UserSummaryResponse | null;
-  changes!: Record<string, { before: unknown; after: unknown }>;
+  /** Per changed field, its value before and after. */
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { $ref: getSchemaPath(FieldChangeResponse) },
+  })
+  changes!: Record<string, FieldChangeResponse>;
 
   static from(
     row: Revision,

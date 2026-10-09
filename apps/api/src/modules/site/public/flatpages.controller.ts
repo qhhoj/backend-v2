@@ -1,4 +1,5 @@
 import { Controller, Get, Header, Req } from '@nestjs/common';
+import { ApiParam } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -11,6 +12,11 @@ export class FlatpagesController {
   constructor(private readonly pages: FlatpagesService) {}
 
   /** The wildcard (`*`) is everything after `/pages/`, nested urls included. `private, no-cache`: the body depends on the session (`registrationRequired` pages), so a shared cache must never serve it and a private one must revalidate (an edit shows at once). */
+  @ApiParam({
+    name: 'path',
+    type: String,
+    description: 'Everything after /pages/',
+  })
   @Header('Cache-Control', 'private, no-cache')
   @Get('*')
   page(

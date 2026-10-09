@@ -8,6 +8,11 @@ import {
 } from '@libs/database';
 import { Type } from 'class-transformer';
 import {
+  ApiSubmissionSourceVisibility,
+  ApiTestcaseResultVisibility,
+  ApiTestcaseVisibility,
+} from '../../core/dto/problem-visibility';
+import {
   ArrayMinSize,
   IsBoolean,
   IsIn,
@@ -71,10 +76,15 @@ export class CreateProblemDto {
   @ArrayMinSize(1) @IsUUID('7', { each: true }) typeIds!: string[];
   @IsUUID('7') groupId!: string;
   @IsOptional() @IsUUID('7') licenseId?: string | null;
+  @ApiSubmissionSourceVisibility(false)
   @IsOptional()
   @IsIn(SUBMISSION_SOURCE_VISIBILITIES)
   submissionSourceVisibility?: string;
-  @IsOptional() @IsIn(TESTCASE_VISIBILITIES) testcaseVisibility?: string;
+  @ApiTestcaseVisibility(false)
+  @IsOptional()
+  @IsIn(TESTCASE_VISIBILITIES)
+  testcaseVisibility?: string;
+  @ApiTestcaseResultVisibility(false)
   @IsOptional()
   @IsIn(TESTCASE_RESULT_VISIBILITIES)
   testcaseResultVisibility?: string;

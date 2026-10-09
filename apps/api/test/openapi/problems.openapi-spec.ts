@@ -1,5 +1,10 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
-import { STATEMENT_LANGUAGES } from '@libs/database';
+import {
+  STATEMENT_LANGUAGES,
+  SUBMISSION_SOURCE_VISIBILITIES,
+  TESTCASE_RESULT_VISIBILITIES,
+  TESTCASE_VISIBILITIES,
+} from '@libs/database';
 import { loadDocument, operationOf, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';
 
@@ -105,6 +110,61 @@ describe('problem and tag schemas', () => {
     expect(ownSites(inlineEnumSites(document, STATEMENT_LANGUAGES))).toEqual(
       [],
     );
+  });
+
+  it('documents the six upload routes as multipart with a binary file field', () => {
+    const uploads = [
+      '/api/internal/problems/uploads/image',
+      '/api/internal/problems/{code}/statement',
+      '/api/internal/problems/{code}/material',
+      '/api/internal/problems/{code}/data/archive',
+      '/api/internal/problems/{code}/data/files/{kind}',
+      '/api/internal/problems/imports',
+    ];
+    for (const route of uploads) {
+      const body = operationOf(document, route, 'post').requestBody as {
+        content: Record<string, { schema: SchemaObject }>;
+      };
+      expect(Object.keys(body.content)).toEqual(['multipart/form-data']);
+      const { schema: form } = body.content['multipart/form-data'];
+      expect(form.required).toContain('file');
+      expect(form.properties?.file).toEqual({
+        type: 'string',
+        format: 'binary',
+      });
+    }
+  });
+
+  it('shares one named enum per visibility code across detail, create and update', () => {
+    const named = {
+      submissionSourceVisibility: [
+        'SubmissionSourceVisibility',
+        SUBMISSION_SOURCE_VISIBILITIES,
+      ],
+      testcaseVisibility: ['TestcaseVisibility', TESTCASE_VISIBILITIES],
+      testcaseResultVisibility: [
+        'TestcaseResultVisibility',
+        TESTCASE_RESULT_VISIBILITIES,
+      ],
+    } as const;
+    for (const [member, [name, codes]] of Object.entries(named)) {
+      expect((schema(name).enum ?? []).map(String).sort()).toEqual(
+        [...codes].sort(),
+      );
+      for (const owner of [
+        'ProblemDetailResponse',
+        'CreateProblemDto',
+        'UpdateProblemDto',
+      ]) {
+        const site = schema(owner).properties?.[member] as {
+          $ref?: string;
+          allOf?: Array<{ $ref?: string }>;
+        };
+        expect(site.$ref ?? site.allOf?.[0]?.$ref).toBe(
+          `#/components/schemas/${name}`,
+        );
+      }
+    }
   });
 
   it('types the import flags as optional booleans', () => {

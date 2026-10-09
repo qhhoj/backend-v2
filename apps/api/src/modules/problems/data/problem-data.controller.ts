@@ -16,7 +16,7 @@ import { createReadStream } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ApiFileResponse, RawResponse } from '@libs/common';
+import { ApiFileResponse, ApiFileUpload, RawResponse } from '@libs/common';
 import { DATA_BODY_LIMIT_BYTES } from '../core/dto/limits';
 import {
   DataFileKindParamDto,
@@ -68,6 +68,7 @@ export class ProblemDataController {
     return yaml;
   }
 
+  @ApiFileUpload()
   @Post(':code/data/archive')
   uploadArchive(
     @CurrentAuth() auth: AuthContext,
@@ -77,6 +78,7 @@ export class ProblemDataController {
     return this.uploads.uploadArchive(auth, code, request);
   }
 
+  @ApiFileUpload()
   @Post(':code/data/files/:kind')
   uploadSource(
     @CurrentAuth() auth: AuthContext,

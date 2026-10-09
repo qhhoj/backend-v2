@@ -13,6 +13,11 @@ import {
   LanguageResponse,
   LicenseResponse,
 } from './problem-meta.response';
+import {
+  ApiSubmissionSourceVisibility,
+  ApiTestcaseResultVisibility,
+  ApiTestcaseVisibility,
+} from './problem-visibility';
 import { UserSummaryResponse } from './user-summary.response';
 import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 
@@ -141,8 +146,11 @@ export class ProblemDetailResponse {
   })
   availableTranslations!: StatementLanguage[];
   hasEditorial!: boolean;
+  @ApiSubmissionSourceVisibility()
   submissionSourceVisibility!: string;
+  @ApiTestcaseVisibility()
   testcaseVisibility!: string;
+  @ApiTestcaseResultVisibility()
   testcaseResultVisibility!: string;
   allowViewFeedback!: boolean;
   userCount!: number;

@@ -2282,33 +2282,29 @@
             "type": "string"
           },
           "submissionSourceVisibility": {
-            "enum": [
-              "A",
-              "F",
-              "O",
-              "S"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionSourceVisibility"
+              }
+            ]
           },
           "summary": {
             "maxLength": 1000,
             "type": "string"
           },
           "testcaseResultVisibility": {
-            "enum": [
-              "A",
-              "B",
-              "S"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TestcaseResultVisibility"
+              }
+            ]
           },
           "testcaseVisibility": {
-            "enum": [
-              "A",
-              "C",
-              "O"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TestcaseVisibility"
+              }
+            ]
           },
           "testers": {
             "items": {
@@ -2545,6 +2541,23 @@
         ],
         "type": "object"
       },
+      "FieldChangeResponse": {
+        "properties": {
+          "after": {
+            "description": "Any JSON value; its shape is the setting definition.",
+            "nullable": true
+          },
+          "before": {
+            "description": "Any JSON value; its shape is the setting definition.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "type": "object"
+      },
       "FieldIssueResponse": {
         "properties": {
           "code": {
@@ -2710,7 +2723,10 @@
             "type": "string"
           },
           "changes": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldChangeResponse"
+            },
+            "description": "Per changed field, its value before and after.",
             "type": "object"
           },
           "editor": {
@@ -2729,10 +2745,10 @@
         },
         "required": [
           "action",
+          "changes",
           "id",
           "at",
-          "editor",
-          "changes"
+          "editor"
         ],
         "type": "object"
       },
@@ -4553,16 +4569,28 @@
             "type": "string"
           },
           "submissionSourceVisibility": {
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionSourceVisibility"
+              }
+            ]
           },
           "summary": {
             "type": "string"
           },
           "testcaseResultVisibility": {
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TestcaseResultVisibility"
+              }
+            ]
           },
           "testcaseVisibility": {
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TestcaseVisibility"
+              }
+            ]
           },
           "timeLimit": {
             "type": "number"
@@ -4592,6 +4620,9 @@
         "required": [
           "language",
           "availableTranslations",
+          "submissionSourceVisibility",
+          "testcaseVisibility",
+          "testcaseResultVisibility",
           "viewerStatus",
           "id",
           "code",
@@ -4619,9 +4650,6 @@
           "pdfStatementUrl",
           "materialUrl",
           "hasEditorial",
-          "submissionSourceVisibility",
-          "testcaseVisibility",
-          "testcaseResultVisibility",
           "allowViewFeedback",
           "userCount",
           "acRate",
@@ -5769,6 +5797,26 @@
         },
         "type": "object"
       },
+      "SettingKey": {
+        "enum": [
+          "auth.facebook",
+          "auth.github",
+          "auth.google",
+          "auth.pwnedApiUrl",
+          "contest.banAfterDisqualifications",
+          "contest.officialMode",
+          "discord.webhooks",
+          "mail.from",
+          "mail.smtpUrl",
+          "pdf.maxBytes",
+          "pdf.renderTimeoutMs",
+          "similarity.maxPairs",
+          "similarity.maxSubmissions",
+          "similarity.minPercent",
+          "site.timeZone"
+        ],
+        "type": "string"
+      },
       "SettingResponse": {
         "properties": {
           "default": {
@@ -5787,7 +5835,11 @@
             "type": "boolean"
           },
           "key": {
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SettingKey"
+              }
+            ]
           },
           "updatedAt": {
             "format": "date-time",
@@ -5804,9 +5856,9 @@
           }
         },
         "required": [
+          "key",
           "value",
           "default",
-          "key",
           "description",
           "hasSecret",
           "isDefault",
@@ -6968,6 +7020,15 @@
         ],
         "type": "object"
       },
+      "SubmissionSourceVisibility": {
+        "enum": [
+          "A",
+          "F",
+          "O",
+          "S"
+        ],
+        "type": "string"
+      },
       "SubmissionStateEventResponse": {
         "properties": {
           "casePoints": {
@@ -7420,6 +7481,22 @@
           "outputLimit"
         ],
         "type": "object"
+      },
+      "TestcaseResultVisibility": {
+        "enum": [
+          "A",
+          "B",
+          "S"
+        ],
+        "type": "string"
+      },
+      "TestcaseVisibility": {
+        "enum": [
+          "A",
+          "C",
+          "O"
+        ],
+        "type": "string"
       },
       "TicketDetailResponse": {
         "properties": {
@@ -8263,33 +8340,29 @@
             "type": "string"
           },
           "submissionSourceVisibility": {
-            "enum": [
-              "A",
-              "F",
-              "O",
-              "S"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionSourceVisibility"
+              }
+            ]
           },
           "summary": {
             "maxLength": 1000,
             "type": "string"
           },
           "testcaseResultVisibility": {
-            "enum": [
-              "A",
-              "B",
-              "S"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TestcaseResultVisibility"
+              }
+            ]
           },
           "testcaseVisibility": {
-            "enum": [
-              "A",
-              "C",
-              "O"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TestcaseVisibility"
+              }
+            ]
           },
           "testers": {
             "items": {
@@ -8763,9 +8836,17 @@
         "properties": {
           "score": {
             "type": "number"
+          },
+          "viewerVote": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteScore"
+              }
+            ]
           }
         },
         "required": [
+          "viewerVote",
           "score"
         ],
         "type": "object"
@@ -16636,7 +16717,17 @@
     "/api/internal/pages/{path}": {
       "get": {
         "operationId": "FlatpagesController_page",
-        "parameters": [],
+        "parameters": [
+          {
+            "description": "Everything after /pages/",
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -17420,6 +17511,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "202": {
             "content": {
@@ -17690,6 +17800,25 @@
       "post": {
         "operationId": "ProblemUploadsController_uploadImage",
         "parameters": [],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -18066,6 +18195,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -18207,6 +18355,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -18490,6 +18657,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -18635,6 +18821,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {

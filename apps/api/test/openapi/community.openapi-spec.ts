@@ -1,9 +1,10 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
 import { COMMENT_PAGE_TYPES } from '@libs/database';
+import { SETTING_KEYS } from '@libs/settings';
 import { ACTIVITY_DAYS_MAX, VOTE_SCORES } from '@libs/community';
 import type { TicketEvent } from '@libs/community';
 import { ticketEventData } from '../../src/modules/tickets/streams/ticket-streams.service';
-import { loadDocument, parameterOf } from './document';
+import { loadDocument, operationOf, parameterOf } from './document';
 import { inlineEnumSites, looseSites } from './schema-scans';
 import { frameDataKeys, streamEventNames } from './stream-frames';
 
@@ -104,6 +105,56 @@ describe('community, ticket, site, settings and activity schemas', () => {
     expect(ownedSites(inlineEnumSites(document, COMMENT_PAGE_TYPES))).toEqual(
       [],
     );
+  });
+
+  const refOf = (site: unknown) => {
+    const { $ref, allOf } = site as {
+      $ref?: string;
+      allOf?: Array<{ $ref?: string }>;
+    };
+    return $ref ?? allOf?.[0]?.$ref;
+  };
+
+  it('documents viewerVote on the vote response as the VoteScore enum', () => {
+    const response = schema('VoteResponse');
+    expect(refOf(response.properties?.viewerVote)).toBe(
+      '#/components/schemas/VoteScore',
+    );
+    expect(response.required).toContain('viewerVote');
+  });
+
+  it('documents the flatpage wildcard as a path parameter', () => {
+    expect(
+      parameterOf(
+        document,
+        { route: '/api/internal/pages/{path}', method: 'get' },
+        'path',
+      ),
+    ).toMatchObject({ in: 'path', required: true, schema: { type: 'string' } });
+    expect(
+      operationOf(document, '/api/internal/pages/{path}', 'get'),
+    ).toBeDefined();
+  });
+
+  it('types the setting key as the named enum of the registry keys', () => {
+    expect((schema('SettingKey').enum ?? []).map(String).sort()).toEqual(
+      [...SETTING_KEYS].sort(),
+    );
+    expect(refOf(schema('SettingResponse').properties?.key)).toBe(
+      '#/components/schemas/SettingKey',
+    );
+  });
+
+  it('types each flatpage revision change as { before, after }', () => {
+    const changes = schema('FlatpageRevisionResponse').properties
+      ?.changes as SchemaObject;
+    expect(refOf(changes.additionalProperties)).toBe(
+      '#/components/schemas/FieldChangeResponse',
+    );
+    expect(schema('FieldChangeResponse').required?.sort()).toEqual([
+      'after',
+      'before',
+    ]);
   });
 
   it('keeps the setting value any JSON value, not an object', () => {
