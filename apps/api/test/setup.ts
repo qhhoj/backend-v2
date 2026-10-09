@@ -18,6 +18,7 @@ import {
   NavigationItem,
   Notification,
   Ticket,
+  TicketCannedReply,
   UserActivity,
   UserSession,
   ContestOfficialRanking,
@@ -197,6 +198,9 @@ export async function setupApiTest({
       getModelToken(CommentLock.name),
     ),
     tickets: readyApp.get<Model<Ticket>>(getModelToken(Ticket.name)),
+    ticketCannedReplies: readyApp.get<Model<TicketCannedReply>>(
+      getModelToken(TicketCannedReply.name),
+    ),
     generalIssues: readyApp.get<Model<GeneralIssue>>(
       getModelToken(GeneralIssue.name),
     ),

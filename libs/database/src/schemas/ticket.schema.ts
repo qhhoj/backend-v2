@@ -28,6 +28,31 @@ export class TicketMessage {
 }
 export const TicketMessageSchema = SchemaFactory.createForClass(TicketMessage);
 
+export const TICKET_TIMELINE_TYPES = [
+  'closed',
+  'reopened',
+  'assigned',
+  'unassigned',
+  'marked-good',
+  'unmarked-good',
+] as const;
+export type TicketTimelineType = (typeof TICKET_TIMELINE_TYPES)[number];
+
+/** One state change of a ticket, embedded; the thread shows it between the messages. */
+@Schema({ id: false })
+export class TicketTimelineEvent {
+  @IdProp() _id!: string;
+  @Prop({ type: String, required: true, enum: [...TICKET_TIMELINE_TYPES] })
+  type!: TicketTimelineType;
+  /** Who did it. */
+  @Prop({ type: UUID, required: true }) user!: string;
+  @Prop({ type: Date, required: true }) at!: Date;
+  /** The assignee of `assigned` / `unassigned`, else null. */
+  @Prop({ type: UUID, default: null }) target!: string | null;
+}
+export const TicketTimelineEventSchema =
+  SchemaFactory.createForClass(TicketTimelineEvent);
+
 @Schema({ ...baseSchemaOptions, collection: 'tickets' })
 export class Ticket {
   @IdProp() _id!: string;
@@ -47,6 +72,11 @@ export class Ticket {
   /** Denormalized so lists never load `messages`. */
   @Prop({ default: 0 }) messageCount!: number;
   @Prop({ type: Date, default: () => new Date() }) lastMessageAt!: Date;
+  /** The newest 200 state changes, oldest first (every `$push` slices to 200, so a full timeline never refuses a change). */
+  @Prop({ type: [TicketTimelineEventSchema], default: [] })
+  events!: TicketTimelineEvent[];
+  /** Whether the newest message came from a `change_ticket` holder; stored because staff status changes over time. */
+  @Prop({ default: false }) lastMessageByStaff!: boolean;
   createdAt!: Date;
   updatedAt!: Date;
 }
@@ -59,3 +89,5 @@ TicketSchema.index({ 'linkedItem.id': 1, _id: -1 });
 TicketSchema.index({ isOpen: 1, _id: -1 });
 // Good tickets of a user (contribution points).
 TicketSchema.index({ user: 1, isContributive: 1 });
+// Open tickets waiting for staff (the summary count).
+TicketSchema.index({ isOpen: 1, lastMessageByStaff: 1 });

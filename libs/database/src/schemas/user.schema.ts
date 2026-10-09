@@ -128,3 +128,6 @@ UserSchema.index(
 );
 // Organization points (top 100 by PP), member counts and member lists.
 UserSchema.index({ organizations: 1, performancePoints: -1 });
+// Who holds a permission, directly or through a group (ticket alerts to staff).
+UserSchema.index({ permissions: 1 });
+UserSchema.index({ groups: 1 });

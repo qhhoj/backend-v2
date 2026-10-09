@@ -61,6 +61,10 @@ import { Submission, SubmissionSchema } from './submission.schema';
 import { TagGroup, TagGroupSchema } from './tag-group.schema';
 import { TagProblem, TagProblemSchema } from './tag-problem.schema';
 import { Tag, TagSchema } from './tag.schema';
+import {
+  TicketCannedReply,
+  TicketCannedReplySchema,
+} from './ticket-canned-reply.schema';
 import { Ticket, TicketSchema } from './ticket.schema';
 import { UserActivity, UserActivitySchema } from './user-activity.schema';
 import { UserSession, UserSessionSchema } from './user-session.schema';
@@ -105,6 +109,7 @@ export * from './submission.schema';
 export * from './tag-group.schema';
 export * from './tag-problem.schema';
 export * from './tag.schema';
+export * from './ticket-canned-reply.schema';
 export * from './ticket.schema';
 export * from './user-activity.schema';
 export * from './user-session.schema';
@@ -117,6 +122,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: NavigationItem.name, schema: NavigationItemSchema },
   { name: Notification.name, schema: NotificationSchema },
   { name: Ticket.name, schema: TicketSchema },
+  { name: TicketCannedReply.name, schema: TicketCannedReplySchema },
   { name: UserActivity.name, schema: UserActivitySchema },
   { name: UserSession.name, schema: UserSessionSchema },
   { name: ContestAnnouncement.name, schema: ContestAnnouncementSchema },
