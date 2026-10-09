@@ -8154,6 +8154,13 @@
             "description": "Every reader sees it; `can.editNotes` says who may change it.",
             "type": "string"
           },
+          "timeline": {
+            "description": "Messages and state changes by time (equal instants: message first).",
+            "items": {
+              "$ref": "#/components/schemas/TicketTimelineEntryResponse"
+            },
+            "type": "array"
+          },
           "title": {
             "type": "string"
           }
@@ -8171,6 +8178,7 @@
           "lastMessageAt",
           "notes",
           "messages",
+          "timeline",
           "can"
         ],
         "type": "object"
@@ -8365,6 +8373,96 @@
           "awaitingStaff"
         ],
         "type": "object"
+      },
+      "TicketTimelineEntryResponse": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "event": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TicketTimelineEventResponse"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "event",
+              "message"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TicketMessageResponse"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "message",
+          "event"
+        ],
+        "type": "object"
+      },
+      "TicketTimelineEventResponse": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/UserSummaryResponse"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The assignee of `assigned` / `unassigned`, else null.",
+            "nullable": true,
+            "type": "object"
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TicketTimelineType"
+              }
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "actor",
+          "target",
+          "at"
+        ],
+        "type": "object"
+      },
+      "TicketTimelineType": {
+        "enum": [
+          "assigned",
+          "closed",
+          "marked-good",
+          "reopened",
+          "unassigned",
+          "unmarked-good"
+        ],
+        "type": "string"
       },
       "TokenDto": {
         "properties": {
