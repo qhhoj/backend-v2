@@ -75,7 +75,7 @@ export const judgesAtEnd = (contest: FinalJudgeTarget): boolean =>
   contest.formatName === 'final_submission' &&
   finalSubmissionFormat.parseConfig(contest.formatConfig).autoJudge;
 
-/** After a create or an edit: the previous end's job goes, the new end's comes (delay 0 once past). Never throws: the sweep judges any ended contest whose job was lost. */
+/** After a create or an edit: the previous end's job goes, the new end's comes (delay 0 once past). Never throws: a failed removal is logged and the new job is still added (the old job finds a moved end and does nothing), and the sweep judges any ended contest whose job was lost. */
 export async function rescheduleFinalJudge(
   queue: Queue<ContestFinalJudgeJob>,
   change: { previous: FinalJudgeTarget | null; next: FinalJudgeTarget },
@@ -89,29 +89,40 @@ export async function rescheduleFinalJudge(
     judgesAtEnd(next) &&
     previous.endTime.getTime() === next.endTime.getTime();
   if (unchanged) return;
+  if (previous && judgesAtEnd(previous))
+    await attempt(
+      logger,
+      `Final judging removal for contest ${previous.id}`,
+      () => queue.remove(finalJudgeJobId(previous.id, previous.endTime)),
+    );
+  if (judgesAtEnd(next))
+    await attempt(
+      logger,
+      `Final judging scheduling for contest ${next.id}`,
+      () =>
+        queue.add(
+          CONTEST_FINAL_JUDGE_JOB,
+          { contestId: next.id, manual: false },
+          {
+            jobId: finalJudgeJobId(next.id, next.endTime),
+            delay: Math.max(0, next.endTime.getTime() - now),
+            ...JOB_RETRY,
+            ...JOB_RETENTION,
+          },
+        ),
+    );
+}
+
+/** One queue call with its own timeout; a failure is logged, not thrown, so a failed removal never keeps the next job from being added. */
+export async function attempt(
+  logger: Logger,
+  what: string,
+  call: () => Promise<unknown>,
+): Promise<void> {
   try {
-    await withinTimeout(
-      (async () => {
-        if (previous && judgesAtEnd(previous))
-          await queue.remove(finalJudgeJobId(previous.id, previous.endTime));
-        if (judgesAtEnd(next))
-          await queue.add(
-            CONTEST_FINAL_JUDGE_JOB,
-            { contestId: next.id, manual: false },
-            {
-              jobId: finalJudgeJobId(next.id, next.endTime),
-              delay: Math.max(0, next.endTime.getTime() - now),
-              ...JOB_RETRY,
-              ...JOB_RETENTION,
-            },
-          );
-      })(),
-      CONTEST_ENQUEUE_TIMEOUT_MS,
-    );
+    await withinTimeout(call(), CONTEST_ENQUEUE_TIMEOUT_MS);
   } catch (error) {
-    logger.error(
-      `Final judging of contest ${next.id} not scheduled: ${(error as Error).message}`,
-    );
+    logger.error(`${what} failed: ${(error as Error).message}`);
   }
 }
 

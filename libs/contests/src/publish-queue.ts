@@ -1,7 +1,7 @@
 import type { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
-import { CONTEST_ENQUEUE_TIMEOUT_MS } from './queues';
+import { JOB_RETENTION, JOB_RETRY } from '@libs/judging';
+import { attempt } from './queues';
 
 export const CONTEST_PUBLISH_QUEUE = 'contest-publish';
 export const CONTEST_PUBLISH_JOB = 'publish';
@@ -39,33 +39,25 @@ export async function reschedulePublish(
     previous.endTime.getTime() === next.endTime.getTime();
   if (unchanged) return;
   if (wasScheduled)
-    await attempt(logger, `removal for contest ${previous.id}`, () =>
-      queue.remove(publishJobId(previous.id, previous.endTime)),
+    await attempt(
+      logger,
+      `Auto-publish removal for contest ${previous.id}`,
+      () => queue.remove(publishJobId(previous.id, previous.endTime)),
     );
   if (next.publishAfterEnd)
-    await attempt(logger, `scheduling for contest ${next.id}`, () =>
-      queue.add(
-        CONTEST_PUBLISH_JOB,
-        { contestId: next.id },
-        {
-          jobId: publishJobId(next.id, next.endTime),
-          delay: Math.max(0, next.endTime.getTime() - now),
-          ...JOB_RETRY,
-          ...JOB_RETENTION,
-        },
-      ),
+    await attempt(
+      logger,
+      `Auto-publish scheduling for contest ${next.id}`,
+      () =>
+        queue.add(
+          CONTEST_PUBLISH_JOB,
+          { contestId: next.id },
+          {
+            jobId: publishJobId(next.id, next.endTime),
+            delay: Math.max(0, next.endTime.getTime() - now),
+            ...JOB_RETRY,
+            ...JOB_RETENTION,
+          },
+        ),
     );
-}
-
-/** One queue call with its own timeout; a failure is logged, not thrown. */
-async function attempt(
-  logger: Logger,
-  what: string,
-  call: () => Promise<unknown>,
-): Promise<void> {
-  try {
-    await withinTimeout(call(), CONTEST_ENQUEUE_TIMEOUT_MS);
-  } catch (error) {
-    logger.error(`Auto-publish ${what} failed: ${(error as Error).message}`);
-  }
 }

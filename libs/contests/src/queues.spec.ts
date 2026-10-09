@@ -140,6 +140,20 @@ describe('rescheduleFinalJudge', () => {
     );
     expect(await ids()).toEqual([]);
   });
+
+  it('still adds the new job when removing the previous one throws', async () => {
+    const later = new Date(end.getTime() + 60_000);
+    const failingRemove = {
+      remove: () => Promise.reject(new Error('redis down')),
+      add: queue.add.bind(queue),
+    };
+    await rescheduleFinalJudge(
+      failingRemove as unknown as Queue<ContestFinalJudgeJob>,
+      { previous: target(), next: target({ endTime: later }) },
+      logger,
+    );
+    expect(await ids()).toEqual([finalJudgeJobId('c9', later)]);
+  });
 });
 
 describe('contest extras queues', () => {
