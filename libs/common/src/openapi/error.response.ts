@@ -5,6 +5,8 @@ export class FieldIssueResponse {
   /** Machine code, snake_case. */
   code!: string;
   message!: string;
+  /** 1-based row of a CSV import (the header is row 1); absent for issues that belong to no row. */
+  @ApiPropertyOptional() row?: number;
 }
 
 export class ErrorBodyResponse {

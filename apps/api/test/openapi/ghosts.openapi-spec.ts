@@ -59,4 +59,10 @@ describe('ghost schemas', () => {
       'dryRun',
     ]);
   });
+
+  it('documents the optional row on a field issue', () => {
+    const issue = schema('FieldIssueResponse');
+    expect(issue.properties).toMatchObject({ row: { type: 'number' } });
+    expect(issue.required ?? []).not.toContain('row');
+  });
 });

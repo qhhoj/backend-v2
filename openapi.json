@@ -2876,6 +2876,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "row": {
+            "description": "1-based row of a CSV import (the header is row 1); absent for issues that belong to no row.",
+            "type": "number"
           }
         },
         "required": [

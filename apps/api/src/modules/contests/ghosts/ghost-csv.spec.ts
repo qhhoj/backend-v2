@@ -105,7 +105,15 @@ describe('parseGhostCsv', () => {
       ],
     ],
     [`${HEADER}\nAn\u0007n,,12,`, [['control_character', 2]]],
-    [`${HEADER}\nAnn,=HYPERLINK(1),12,`, [['caption_invalid', 2]]],
+    [`${HEADER}\nAnn,=HYPERLINK(1),12,`, [['caption_formula', 2]]],
+    [`${HEADER}\n   ,,12,`, [['label_missing', 2]]],
+    [
+      `${HEADER}\nAnn,${'y'.repeat(65)},12,\nBob,@x,12,`,
+      [
+        ['caption_invalid', 2],
+        ['caption_formula', 3],
+      ],
+    ],
     ['', [['csv_invalid', undefined]]],
   ])('reports %j as the issue codes %j', (csv, expected) => {
     const { issues } = parseGhostCsv(csv, IDS);

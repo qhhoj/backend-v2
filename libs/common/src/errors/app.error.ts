@@ -3,6 +3,8 @@ export interface FieldIssue {
   field: string;
   code: string;
   message: string;
+  /** 1-based row of a CSV import (the header is row 1); absent when the issue belongs to no row. */
+  row?: number;
 }
 
 const issuesOf = (fields: Record<string, string[]>): FieldIssue[] =>

@@ -145,6 +145,59 @@ describe('contest ghosts', () => {
     ]);
   });
 
+  it('lists each problem as an issue of field csv with its code and row, and stores nothing', async () => {
+    const contest = await icpcContest();
+    const bad = [
+      'label,caption,ghost_a',
+      '=cmd,,5+0',
+      'Dee,,zzz',
+      'Dee,,6+0',
+      ',,7+0',
+      '   ,,7+0',
+      'Eve,=x,8+0',
+      'Fay,,8+0,9',
+    ].join('\n');
+    const response = await put('editor', contest.key, { csv: bad })
+      .expect(400)
+      .expect(errorCode('ghost_import_invalid'));
+    const { issues } = (
+      response.body as {
+        error: {
+          issues: Array<{
+            field: string;
+            code: string;
+            row?: number;
+            message: string;
+          }>;
+        };
+      }
+    ).error;
+    expect(issues.map(({ field, code, row }) => [field, code, row])).toEqual([
+      ['csv', 'label_formula', 2],
+      ['csv', 'cell_invalid', 3],
+      ['csv', 'label_repeats', 4],
+      ['csv', 'label_missing', 5],
+      ['csv', 'label_missing', 6],
+      ['csv', 'caption_formula', 7],
+      ['csv', 'columns_mismatch', 8],
+    ]);
+    expect(issues.every(({ message }) => message.length > 0)).toBe(true);
+    expect(await list(contest.key)).toEqual([]);
+  });
+
+  it('gives a refusal without a row (empty file) an issue with no row member', async () => {
+    const contest = await icpcContest();
+    const response = await put('editor', contest.key, { csv: '' })
+      .expect(400)
+      .expect(errorCode('ghost_import_invalid'));
+    const { issues } = (
+      response.body as { error: { issues: Array<Record<string, unknown>> } }
+    ).error;
+    expect(issues).toHaveLength(1);
+    expect(Object.keys(issues[0]).sort()).toEqual(['code', 'field', 'message']);
+    expect(issues[0]).toMatchObject({ field: 'csv', code: 'csv_invalid' });
+  });
+
   it('refuses a body over 1 MiB with 413 and stores nothing', async () => {
     const contest = await icpcContest();
     const huge = `label,caption,ghost_a\r\n${'x'.repeat(GHOST_CSV_MAX_BYTES)},,5`;

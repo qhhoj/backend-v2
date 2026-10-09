@@ -8,13 +8,14 @@ import {
   readCsvRecords,
 } from '@libs/contests';
 
-/** Machine codes of a refused ghost CSV; the SPA words each one itself. */
+/** Machine codes of a refused ghost CSV; the SPA words each one itself. `label_invalid` and `caption_invalid` mean "too long"; a leading = + - @ has its own `label_formula` and `caption_formula`. */
 export const GHOST_CSV_ISSUE_CODES = [
   'label_missing',
   'label_formula',
   'label_repeats',
   'label_invalid',
   'caption_invalid',
+  'caption_formula',
   'control_character',
   'cell_invalid',
   'columns_mismatch',
@@ -83,7 +84,7 @@ export function parseGhostCell(
 }
 
 function labelIssues(label: string, row: number): GhostCsvIssue[] {
-  if (label === '')
+  if (label.trim() === '')
     return [rowIssue('label_missing', row, 'the label is empty')];
   const issues: GhostCsvIssue[] = [];
   if (label.length > GHOST_LABEL_MAX)
@@ -117,7 +118,7 @@ function textIssues(
     );
   if (FORMULA_START.test(caption))
     issues.push(
-      rowIssue('caption_invalid', row, 'the caption starts with = + - or @'),
+      rowIssue('caption_formula', row, 'the caption starts with = + - or @'),
     );
   if (CONTROL_CHARACTER.test(label) || CONTROL_CHARACTER.test(caption))
     issues.push(

@@ -22,12 +22,24 @@ import type {
   ImportGhostsDto,
 } from './dto/ghosts.dto';
 import { anonymizeLabels, ghostsToCsv, parseGhostCsv } from './ghost-csv';
+import type { GhostCsvResult } from './ghost-csv';
 import { GhostsRepository } from './ghosts.repository';
 
 interface ProblemColumn {
   problemId: string;
   code: string;
 }
+
+/** `fields.csv` keeps the English lines; `issues` carry the code and row the SPA words its own text from. */
+const importRefusal = ({ errors, issues }: GhostCsvResult): AppError =>
+  new AppError(
+    'ghost_import_invalid',
+    400,
+    'The ghost CSV has errors',
+    { csv: errors },
+    undefined,
+    { issues: issues.map((found) => ({ field: 'csv', ...found })) },
+  );
 
 @Injectable()
 export class GhostsService {
@@ -52,15 +64,7 @@ export class GhostsService {
       dto.csv,
       new Map(columns.map((column) => [column.code, column.problemId])),
     );
-    if (parsed.errors.length)
-      throw new AppError(
-        'ghost_import_invalid',
-        400,
-        'The ghost CSV has errors',
-        {
-          csv: parsed.errors,
-        },
-      );
+    if (parsed.issues.length) throw importRefusal(parsed);
     const ghosts = dto.anonymize
       ? anonymizeLabels(parsed.ghosts)
       : parsed.ghosts;
