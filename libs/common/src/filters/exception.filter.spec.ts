@@ -2,6 +2,7 @@ import {
   ArgumentsHost,
   ForbiddenException,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { AppError } from '../errors/app.error';
 import { AppExceptionFilter } from './exception.filter';
@@ -98,6 +99,24 @@ describe('AppExceptionFilter issues', () => {
     expect(run(new NotFoundException('Gone')).body.error).toMatchObject({
       code: 'not_found',
       issues: [{ field: '', code: 'not_found', message: 'Gone' }],
+    });
+  });
+
+  it("names Fastify's body-limit refusal payload_too_large, with an issue of the same code", () => {
+    const { status, body } = run(
+      new PayloadTooLargeException('Request body is too large'),
+    );
+    expect(status).toBe(413);
+    expect(body.error).toEqual({
+      code: 'payload_too_large',
+      message: 'Request body is too large',
+      issues: [
+        {
+          field: '',
+          code: 'payload_too_large',
+          message: 'Request body is too large',
+        },
+      ],
     });
   });
 

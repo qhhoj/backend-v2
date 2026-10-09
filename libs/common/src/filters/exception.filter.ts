@@ -12,6 +12,7 @@ const CODES: Record<number, string> = {
   401: 'unauthorized',
   403: 'forbidden',
   404: 'not_found',
+  413: 'payload_too_large',
   429: 'rate_limited',
 };
 

@@ -215,7 +215,9 @@ describe('contest ghosts', () => {
   it('refuses a body over 1 MiB with 413 and stores nothing', async () => {
     const contest = await icpcContest();
     const huge = `label,caption,ghost_a\r\n${'x'.repeat(GHOST_CSV_MAX_BYTES)},,5`;
-    await put('editor', contest.key, { csv: huge }).expect(413);
+    await put('editor', contest.key, { csv: huge })
+      .expect(413)
+      .expect(errorCode('payload_too_large'));
     expect(await list(contest.key)).toEqual([]);
   });
 
