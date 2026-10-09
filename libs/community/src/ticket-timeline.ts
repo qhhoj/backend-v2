@@ -13,6 +13,7 @@ export interface TicketTimelineDraft {
   target: string | null;
 }
 
+/** The stored state an update was decided on: the timeline is derived from it and the repository's compare-and-set guards on it. */
 export interface TicketStateSnapshot {
   isOpen: boolean;
   isContributive: boolean;

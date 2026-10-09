@@ -5,7 +5,7 @@ import {
   TICKET_TIMELINE_CAP,
   TICKETS_PAGE_SIZE,
 } from '@libs/community';
-import type { TicketTimelineDraft } from '@libs/community';
+import type { TicketStateSnapshot, TicketTimelineDraft } from '@libs/community';
 import { GeneralIssue, isUuid, newId, Ticket, uuidStr } from '@libs/database';
 import type { TicketMessage } from '@libs/database';
 import type {
@@ -27,17 +27,10 @@ export type TicketChanges = Partial<
   Pick<Ticket, 'isOpen' | 'isContributive' | 'notes' | 'assignees'>
 >;
 
-/** The stored state an update was decided on (the timeline is derived from it). */
-export interface TicketReadState {
-  isOpen: boolean;
-  isContributive: boolean;
-  assignees: readonly string[];
-}
-
 /** The guard of a compare-and-set: each field the update changes must still hold the value that was read. */
 function unchangedSince(
   changes: TicketChanges,
-  read: TicketReadState,
+  read: TicketStateSnapshot,
 ): FilterQuery<Ticket> {
   const guard: FilterQuery<Ticket> = {};
   if (changes.isOpen !== undefined) guard.isOpen = read.isOpen;
@@ -133,7 +126,7 @@ export class TicketsRepository {
   async update(
     ticketId: string,
     changes: TicketChanges,
-    read: TicketReadState,
+    read: TicketStateSnapshot,
     events: readonly TicketTimelineDraft[] = [],
   ): Promise<boolean> {
     if (!Object.keys(changes).length) return true;

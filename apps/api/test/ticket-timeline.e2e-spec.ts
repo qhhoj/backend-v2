@@ -1,4 +1,4 @@
-import { newId } from '@libs/database';
+import { newId, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import type {
   TicketDetailResponse,
@@ -129,6 +129,73 @@ describe('ticket timeline', () => {
       await repository.update(ticket._id, { isOpen: false }, read, [closed]),
     ).toBe(false);
     expect((await stored(ticket._id))?.events).toHaveLength(1);
+  });
+
+  it('refuses an assignees change when the assignees changed since they were read', async () => {
+    const ticket = await createTicket(api, {
+      creator: people.creator.id,
+      assignees: [people.other.id],
+    });
+    const repository = api.app.get(TicketsRepository);
+    const read = { isOpen: true, isContributive: false, assignees: [] };
+    expect(
+      await repository.update(
+        ticket._id,
+        { assignees: [people.assignee.id] },
+        read,
+      ),
+    ).toBe(false);
+    expect((await stored(ticket._id))?.assignees.map(uuidStr)).toEqual([
+      people.other.id,
+    ]);
+    expect(
+      await repository.update(
+        ticket._id,
+        { assignees: [people.assignee.id] },
+        { ...read, assignees: [people.other.id] },
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses a good-ticket change when the flag changed since it was read', async () => {
+    const ticket = await createTicket(api, {
+      creator: people.creator.id,
+      isContributive: true,
+    });
+    const repository = api.app.get(TicketsRepository);
+    const read = { isOpen: true, isContributive: false, assignees: [] };
+    expect(
+      await repository.update(ticket._id, { isContributive: true }, read),
+    ).toBe(false);
+    expect(
+      await repository.update(
+        ticket._id,
+        { isContributive: false },
+        { ...read, isContributive: true },
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses with 409 when two staff change the assignees at once', async () => {
+    const ticket = await createTicket(api, { creator: people.creator.id });
+    const repository = api.app.get(TicketsRepository);
+    const original = repository.update.bind(repository);
+    const racing = jest
+      .spyOn(repository, 'update')
+      .mockImplementationOnce(async (id, changes, read, events) => {
+        await api.tickets.updateOne(
+          { _id: id },
+          { $set: { assignees: [people.other.id] } },
+        );
+        return original(id, changes, read, events);
+      });
+    await patch('staff', ticket._id, { assignees: ['assignee'] })
+      .expect(409)
+      .expect(errorCode('conflict'));
+    racing.mockRestore();
+    expect((await stored(ticket._id))?.assignees.map(uuidStr)).toEqual([
+      people.other.id,
+    ]);
   });
 
   it('refuses with 409 and writes nothing when the ticket changed after it was read', async () => {

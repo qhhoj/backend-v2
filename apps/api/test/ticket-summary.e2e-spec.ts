@@ -73,6 +73,17 @@ describe('ticket summary', () => {
   });
 
   describe('awaitingStaff', () => {
+    it('keeps a ticket waiting after a reply from a non-staff assignee', async () => {
+      const ticket = await createTicket(api, {
+        creator: people.creator.id,
+        assignees: [people.assignee.id],
+        lastMessageByStaff: true,
+      });
+      expect((await summary('staff')).awaitingStaff).toBe(0);
+      await post('assignee', ticket._id, 'looking').expect(201);
+      expect((await summary('staff')).awaitingStaff).toBe(1);
+    });
+
     it('counts open tickets whose newest message is not from staff, and follows the conversation', async () => {
       const waiting = await createTicket(api, { creator: people.creator.id });
       await createTicket(api, {

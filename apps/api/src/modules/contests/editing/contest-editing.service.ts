@@ -2,6 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
+import type { FilterQuery } from 'mongoose';
 import type { Principal } from '@libs/auth';
 import { AppError, invalidField, REDIS, sameJson, unique } from '@libs/common';
 import {
@@ -200,9 +201,10 @@ export class ContestEditingService {
   async applyFields(
     contest: ContestDocument,
     fields: Partial<Contest>,
+    guard: FilterQuery<Contest> = {},
   ): Promise<void> {
     await this.assertFormatChangeAllowed(contest, fields);
-    const updated = await this.save(contest, fields);
+    const updated = await this.save(contest, fields, guard);
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
     await this.rescheduleEndJobs({ previous: contest, next: updated });
@@ -234,23 +236,26 @@ export class ContestEditingService {
       );
   }
 
-  /** Changed rules raise the revision inside the same update; a concurrent change of the rules is a conflict. */
+  /** Changed rules raise the revision inside the same update; a concurrent change of the rules, or of the state `guard` names, is a conflict. */
   private async save(
     contest: ContestDocument,
     fields: Partial<Contest>,
+    guard: FilterQuery<Contest>,
   ): Promise<ContestDocument> {
-    if (fields.rules === undefined || fields.rules === contest.rules)
-      return this.contests.update(contest._id, fields);
-    const updated = await this.contests.updateRules(
-      contest._id,
-      contest.rules,
-      fields,
-    );
+    const updated =
+      fields.rules === undefined || fields.rules === contest.rules
+        ? await this.contests.update(contest._id, fields, guard)
+        : await this.contests.updateRules(
+            contest._id,
+            contest.rules,
+            fields,
+            guard,
+          );
     if (!updated)
       throw new AppError(
         'conflict',
         409,
-        'The contest rules changed meanwhile; reload and save again',
+        'The contest changed meanwhile; reload and save again',
       );
     return updated;
   }

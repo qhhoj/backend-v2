@@ -149,17 +149,19 @@ export class ContestsRepository {
     }
   }
 
+  /** Writes `changes` while the contest still matches `guard`; null when it does not. */
   async update(
     id: string,
     changes: Partial<Contest>,
-  ): Promise<ContestDocument> {
-    return (await this.contests
-      .findByIdAndUpdate(
-        id,
+    guard: FilterQuery<Contest> = {},
+  ): Promise<ContestDocument | null> {
+    return this.contests
+      .findOneAndUpdate(
+        { ...guard, _id: id },
         { $set: changes },
         { new: true, runValidators: true },
       )
-      .exec())!;
+      .exec();
   }
 
   /** Writes `changes` and raises `rulesRevision` by one in the same update, only while the stored rules are still `previousRules`; null when another save changed them first. */
@@ -167,12 +169,13 @@ export class ContestsRepository {
     id: string,
     previousRules: string,
     changes: Partial<Contest>,
+    guard: FilterQuery<Contest> = {},
   ): Promise<ContestDocument | null> {
     // A row written before rules existed has no `rules` member.
     const stored = previousRules === '' ? { $in: ['', null] } : previousRules;
     return this.contests
       .findOneAndUpdate(
-        { _id: id, rules: stored },
+        { ...guard, _id: id, rules: stored },
         { $set: changes, $inc: { rulesRevision: 1 } },
         { new: true, runValidators: true },
       )

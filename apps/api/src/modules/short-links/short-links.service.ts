@@ -28,6 +28,12 @@ import { ShortLinksRepository } from './short-links.repository';
 
 const MANAGE = 'judge.manage_short_link';
 const notFound = () => new AppError('not_found', 404, 'No such short link');
+/** A visit's 404 must not be cached: the code may be created next. */
+const visitNotFound = () =>
+  new AppError('not_found', 404, 'No such short link', undefined, {
+    'Cache-Control': 'no-store',
+  });
+const noRelease = (): Promise<void> => Promise.resolve();
 
 @Injectable()
 export class ShortLinksService {
@@ -39,7 +45,7 @@ export class ShortLinksService {
     @Inject(SHORT_CODE_SOURCE) private readonly codes: ShortCodeSource,
   ) {}
 
-  /** Anyone signed in gets the one automatic link of an allowed path (idempotent); staff may pick the code and an expiry. */
+  /** Anyone signed in gets the one automatic link of an allowed path (idempotent); staff may pick the code and an expiry and have no daily quota. */
   async create(
     principal: Principal,
     dto: CreateShortLinkDto,
@@ -59,11 +65,7 @@ export class ShortLinksService {
       );
     if (dto.code !== undefined && isReservedShortCode(dto.code))
       throw invalidField('code', 'This code is reserved.');
-    const release = await this.rateLimit.reserve(
-      [`short-link:user:${principal.userId}`],
-      CREATE_LIMIT,
-      CREATE_WINDOW_SECONDS,
-    );
+    const release = await this.reserveCreate(principal);
     try {
       const { link, isNew } = isChosen
         ? { link: await this.insertChosen(principal, path, dto), isNew: true }
@@ -75,6 +77,16 @@ export class ShortLinksService {
       await release();
       throw error;
     }
+  }
+
+  /** Staff are not held to the daily quota; everyone else gets `CREATE_LIMIT` new links a day. */
+  private reserveCreate(principal: Principal): Promise<() => Promise<void>> {
+    if (hasPermission(principal, MANAGE)) return Promise.resolve(noRelease);
+    return this.rateLimit.reserve(
+      [`short-link:user:${principal.userId}`],
+      CREATE_LIMIT,
+      CREATE_WINDOW_SECONDS,
+    );
   }
 
   private async automaticLink(
@@ -163,7 +175,7 @@ export class ShortLinksService {
   }
 
   async remove(principal: Principal, code: string): Promise<void> {
-    const removed = await this.links.remove(code);
+    const removed = await this.links.remove(code.toLowerCase());
     if (!removed) throw notFound();
     this.logger.log(
       JSON.stringify({
@@ -189,13 +201,13 @@ export class ShortLinksService {
     const now = visit.now ?? new Date();
     const link = await this.links.findByCode(code.toLowerCase());
     if (!link || (link.expiresAt !== null && link.expiresAt <= now))
-      throw notFound();
+      throw visitNotFound();
     const path = shortTargetOf(link.path);
     if (path === null) {
       this.logger.error(
         `Short link ${link.code} holds a path outside the allow-list; not redirecting`,
       );
-      throw notFound();
+      throw visitNotFound();
     }
     if (visit.isProbe) return path;
     await this.links.recordHit(link._id, now).catch((error: Error) => {

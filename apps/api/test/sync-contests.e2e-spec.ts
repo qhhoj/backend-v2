@@ -3,6 +3,8 @@ import { getModelToken } from '@nestjs/mongoose';
 import { generateApiToken, generateServiceKey } from '@libs/auth';
 import { IntegrationClient, uuidStr } from '@libs/database';
 import type { Model } from 'mongoose';
+import { SyncContestOwnership } from '../src/modules/sync/contests/sync-contest-ownership.service';
+import { SyncActsAsService } from '../src/modules/sync/contests/sync-acts-as.service';
 import {
   clearRateLimits,
   createContest,
@@ -137,6 +139,43 @@ describe('sync API: writing contests', () => {
     ).toBe('updated');
     expect(await api.contests.countDocuments({ key })).toBe(1);
     expect((await api.contests.findOne({ key }).lean())?.name).toBe('Renamed');
+  });
+
+  it('answers 409 conflict with an issue when a parallel create of the same key wins', async () => {
+    const { bearer } = await makeClient();
+    const key = newKey();
+    await put(bearer, key, payload()).expect(200);
+    const ownership = api.app.get(SyncContestOwnership);
+    const stale = jest.spyOn(ownership, 'find').mockResolvedValueOnce(null);
+    const response = await put(bearer, key, payload({ name: 'Twin' })).expect(
+      409,
+    );
+    stale.mockRestore();
+    const { error } = response.body as { error: Record<string, unknown> };
+    expect(error).toMatchObject({
+      code: 'conflict',
+      issues: [{ field: 'key', code: 'key_taken' }],
+    });
+    expect(await api.contests.countDocuments({ key })).toBe(1);
+  });
+
+  it('answers 409 and writes nothing when the contest is published between the check and the write', async () => {
+    const { bearer } = await makeClient();
+    const key = newKey();
+    await put(bearer, key, payload()).expect(200);
+    const actsAs = api.app.get(SyncActsAsService);
+    const original = actsAs.principalOf.bind(actsAs);
+    const racing = jest
+      .spyOn(actsAs, 'principalOf')
+      .mockImplementationOnce(async (client) => {
+        await api.contests.updateOne({ key }, { $set: { isVisible: true } });
+        return original(client);
+      });
+    await put(bearer, key, payload({ name: 'Late' }))
+      .expect(409)
+      .expect(errorCode('conflict'));
+    racing.mockRestore();
+    expect((await api.contests.findOne({ key }).lean())?.name).toBe('Round');
   });
 
   it('validates without writing on a dry run, and still rejects a bad body', async () => {

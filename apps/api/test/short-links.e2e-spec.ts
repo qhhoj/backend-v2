@@ -202,6 +202,11 @@ describe('short links', () => {
     });
   });
 
+  it('holds staff to no daily quota', async () => {
+    for (let index = 0; index < 22; index += 1)
+      await create(staff, { path: fresh() }).expect(201);
+  });
+
   describe('visiting', () => {
     it('answers a HEAD probe like a visit but does not count it', async () => {
       const path = fresh();
@@ -243,7 +248,8 @@ describe('short links', () => {
     });
 
     it('answers 404 for an unknown code and for an expired link, without counting', async () => {
-      await visit('nosuch').expect(404);
+      const unknown = await visit('nosuch').expect(404);
+      expect(unknown.headers['cache-control']).toContain('no-store');
       const path = fresh();
       const { code } = dataOf<Link>(
         await create(staff, {
@@ -367,6 +373,18 @@ describe('short links', () => {
         api.http().delete(`/api/internal/short-links/${code}`),
         staff,
       ).expect(404);
+    });
+
+    it('deletes by the code in any letter case, like the redirect resolves it', async () => {
+      const { code } = dataOf<Link>(
+        await create(student, { path: fresh() }).expect(201),
+      );
+      await visit(code.toUpperCase()).expect(302);
+      await authed(
+        api.http().delete(`/api/internal/short-links/${code.toUpperCase()}`),
+        staff,
+      ).expect(204);
+      await visit(code).expect(404);
     });
 
     it('needs a signed-in user to create, list or delete', async () => {
