@@ -1,4 +1,5 @@
 import type { Metadata } from '@grpc/grpc-js';
+import { JUDGE_NAME_PATTERN } from '@libs/database';
 import type { JudgesRepository } from '../judges/judges.repository';
 import type { JudgeIdentity } from './judge-session';
 
@@ -7,6 +8,12 @@ const MAX_KEY_LENGTH = 256;
 const textOf = (metadata: Metadata, key: string): string | null => {
   const [value] = metadata.get(key);
   return typeof value === 'string' ? value : null;
+};
+
+/** The claimed judge name, fit for a log line: one that fails `JUDGE_NAME_PATTERN` is not echoed. */
+export const loggableNameOf = (metadata: Metadata): string => {
+  const name = textOf(metadata, 'x-judge-name');
+  return name && JUDGE_NAME_PATTERN.test(name) ? name : '(invalid name)';
 };
 
 /** The address part of `address:port`. */

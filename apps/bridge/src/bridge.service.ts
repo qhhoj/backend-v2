@@ -74,8 +74,10 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
   /** A block, disable or key rotation whose command was lost still takes effect: connected judges are compared with their rows. */
   private async reconcileJudges(): Promise<void> {
     const names = this.dispatch.connectedNames();
-    if (names.length)
-      await this.dispatch.reconcile(await this.judges.accessOf(names));
+    if (!names.length) return;
+    const access = await this.judges.accessOf(names);
+    for (const name of await this.dispatch.reconcile(access))
+      this.server.revoke(name);
   }
 
   /** A P/G run no session and no grace holds (its judge never came back after a bridge restart, a write was lost) would never be sent again. A session frees a slot before the next row is claimed, so a run counts as stranded only when it was unheld on two consecutive ticks; `requeueCount` is not spent, the judge did not fail. */

@@ -1,4 +1,9 @@
-import { credentials, Metadata, status } from '@grpc/grpc-js';
+import {
+  connectivityState,
+  credentials,
+  Metadata,
+  status,
+} from '@grpc/grpc-js';
 import type {
   ChannelCredentials,
   ClientDuplexStream,
@@ -35,6 +40,8 @@ export interface FakeJudgeOptions {
   inFlight?: InFlight[];
   /** PEM CA the bridge's certificate is signed by; plaintext without it. */
   ca?: Buffer;
+  /** A connection of its own; otherwise grpc-js shares one between clients with the same target. */
+  ownConnection?: boolean;
 }
 
 const keyOf = (ref: AssignmentRef) => `${ref.submissionId}.${ref.generation}`;
@@ -73,7 +80,10 @@ export class FakeJudge {
     const client = new JudgeLinkClient(
       `127.0.0.1:${port}`,
       FakeJudge.credentialsOf(options),
-      { 'grpc.ssl_target_name_override': 'localhost' },
+      {
+        'grpc.ssl_target_name_override': 'localhost',
+        ...(options.ownConnection && { 'grpc.use_local_subchannel_pool': 1 }),
+      },
     );
     const metadata = new Metadata();
     metadata.set('x-judge-name', options.name);
@@ -293,6 +303,28 @@ export class FakeJudge {
   }
 
   /** Cancels the session (the connection is lost from the bridge's view) and closes the channel. */
+  /** Ends the stream but keeps the channel, like a judge between two sessions. */
+  async endSession(): Promise<StatusObject> {
+    this.call.cancel();
+    return this.closed;
+  }
+
+  /** True once the channel's connection is gone (the bridge closed the socket), false if it is still up after `timeoutMs`. */
+  connectionLost(timeoutMs: number): Promise<boolean> {
+    const channel = this.client.getChannel();
+    const deadline = Date.now() + timeoutMs;
+    return new Promise((resolve) => {
+      const watch = () => {
+        const state = channel.getConnectivityState(false);
+        if (state !== connectivityState.READY) return resolve(true);
+        channel.watchConnectivityState(state, deadline, (error) =>
+          error ? resolve(false) : watch(),
+        );
+      };
+      watch();
+    });
+  }
+
   async close(): Promise<StatusObject> {
     this.call.cancel();
     const ended = await this.closed;

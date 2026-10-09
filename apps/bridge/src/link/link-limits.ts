@@ -21,3 +21,8 @@ export const MAX_JUDGE_CONNECTIONS = 256;
 export const MAX_UNAUTHENTICATED_PER_ADDRESS = 8;
 /** FetchSource chunk size. */
 export const SOURCE_CHUNK_BYTES = 1024 * 1024;
+/** Failed key checks per address in `FAILED_AUTH_WINDOW_MS`; the address is then refused until the window ends. */
+export const MAX_FAILED_AUTH_PER_ADDRESS = 20;
+export const FAILED_AUTH_WINDOW_MS = 60_000;
+/** A socket closed by the bridge (judge revoked, replaced by a newer socket) gets this long to deliver its sessions' final statuses. */
+export const SOCKET_FLUSH_MS = 1000;

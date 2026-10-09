@@ -1,5 +1,9 @@
 import { Server, status } from '@grpc/grpc-js';
-import type { ConnectionInjector, ServerOptions } from '@grpc/grpc-js';
+import type {
+  ConnectionInjector,
+  ServerOptions,
+  StatusObject,
+} from '@grpc/grpc-js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createServer } from 'node:net';
 import type { AddressInfo, Server as NetServer, Socket } from 'node:net';
@@ -11,8 +15,9 @@ import type { BridgeTimings } from '../bridge-timings';
 import { DispatcherService } from '../dispatch/dispatcher.service';
 import { JudgesRepository } from '../judges/judges.repository';
 import { RunsService } from '../submissions/runs.service';
+import { AuthFailures } from './auth-failures';
 import { ConnectionGuard, peerOfCall } from './connection-guard';
-import { addressOf, authenticateCall } from './judge-auth';
+import { addressOf, authenticateCall, loggableNameOf } from './judge-auth';
 import { JudgeSession } from './judge-session';
 import type {
   JudgeIdentity,
@@ -20,10 +25,13 @@ import type {
   SessionServices,
 } from './judge-session';
 import {
+  FAILED_AUTH_WINDOW_MS,
+  MAX_FAILED_AUTH_PER_ADDRESS,
   MAX_JUDGE_CONNECTIONS,
   MAX_MESSAGE_BYTES,
   MAX_SLOTS,
   MAX_UNAUTHENTICATED_PER_ADDRESS,
+  SOCKET_FLUSH_MS,
 } from './link-limits';
 import { decodeJudgeMessage } from './messages';
 import { serverCredentials } from './server-credentials';
@@ -53,10 +61,12 @@ const LINK_SERVICE = {
 
 /** How long a stopping bridge lets judges read their final status. */
 const CLOSE_GRACE_MS = 1000;
+const REVOKED = 'blocked, key rotated or disconnected by an admin';
+const STOPPING = 'the bridge is stopping';
 
 type AuthenticatedCall = Pick<SessionCall, 'metadata' | 'getPeer' | 'emit'>;
 
-/** The judge port: a TCP server with the connection caps of decision 87 whose sockets are handed to grpc-js (TLS unless loopback); `Session` streams become `JudgeSession`s, `FetchSource` serves held runs' files. */
+/** The judge port: a TCP server with the connection caps of decision 87 whose sockets are handed to grpc-js (TLS unless loopback); `Session` streams become `JudgeSession`s (one handshake per judge), `FetchSource` serves held runs' files, an address with too many failed key checks is locked out, and a revoked judge loses its sessions and sockets. */
 @Injectable()
 export class JudgeLinkServer {
   private readonly logger = new Logger(JudgeLinkServer.name);
@@ -69,6 +79,14 @@ export class JudgeLinkServer {
   private injector: ConnectionInjector | null = null;
   private tcp: NetServer | null = null;
   private accepting = false;
+  private closing = false;
+  private readonly failures = new AuthFailures({
+    maxPerWindow: MAX_FAILED_AUTH_PER_ADDRESS,
+    windowMs: FAILED_AUTH_WINDOW_MS,
+  });
+  /** Bumped by each `revoke`; per judge, the value its last revoke set. A key check that started before it is refused. */
+  private revision = 0;
+  private readonly revokedAt = new Map<string, number>();
 
   constructor(
     @Inject(ENV) private readonly env: Env,
@@ -82,6 +100,7 @@ export class JudgeLinkServer {
     this.guard = new ConnectionGuard({
       maxUnauthenticatedPerAddress: MAX_UNAUTHENTICATED_PER_ADDRESS,
       deadlineMs: timings.handshakeMs,
+      flushMs: SOCKET_FLUSH_MS,
     });
   }
 
@@ -119,20 +138,29 @@ export class JudgeLinkServer {
 
   /** Stops accepting, ends every session with UNAVAILABLE and waits until their ends were handled. */
   async close(): Promise<void> {
+    this.closing = true;
     const tcp = this.tcp;
     this.tcp = null;
     if (!tcp) return;
     const stopped = new Promise<void>((resolve) => tcp.close(() => resolve()));
     for (const socket of this.held) socket.destroy();
     const sessions = [...this.sessions];
-    for (const session of sessions)
-      session.end(status.UNAVAILABLE, 'the bridge is stopping');
+    for (const session of sessions) session.end(status.UNAVAILABLE, STOPPING);
     await Promise.all(sessions.map((session) => session.finished));
     // GOAWAY, then the sockets close once the statuses above are flushed
     this.injector?.drain(CLOSE_GRACE_MS);
     await stopped;
     this.injector?.destroy();
     this.grpc.forceShutdown();
+  }
+
+  /** Blocked, key rotated or force-disconnected (after the dispatcher told its registered session): every session of the judge ends, those still in their handshake too, a key check already under way is refused, and its sockets close once the statuses are out. */
+  revoke(name: string): void {
+    this.revision += 1;
+    this.revokedAt.set(name, this.revision);
+    for (const session of this.sessions)
+      if (session.name === name) session.end(status.PERMISSION_DENIED, REVOKED);
+    this.guard.closeJudge(name);
   }
 
   private onSocket(socket: Socket): void {
@@ -143,7 +171,8 @@ export class JudgeLinkServer {
   }
 
   private serve(socket: Socket): void {
-    if (!this.guard.admit(socket)) return void socket.destroy();
+    const locked = this.failures.isLocked(socket.remoteAddress ?? '');
+    if (locked || !this.guard.admit(socket)) return void socket.destroy();
     socket.resume();
     this.injector!.injectConnection(socket);
   }
@@ -152,10 +181,24 @@ export class JudgeLinkServer {
     const peer = peerOfCall(call.getPeer());
     const identity = await this.identify(call, peer);
     if (!identity) return;
-    this.guard.markAuthenticated(peer);
     const session = new JudgeSession(call, identity, this.services);
+    this.guard.sessionOpened(peer, session.name);
+    this.endOlderHandshakes(session);
     this.sessions.add(session);
-    void session.finished.then(() => this.sessions.delete(session));
+    void session.finished.then(() => {
+      this.sessions.delete(session);
+      this.guard.sessionClosed(peer, session.name);
+    });
+  }
+
+  /** One handshake per judge: an older session of the judge that has not said Hello ends now. A helloed one is replaced by the dispatcher at the newer session's Hello (Disconnect, ABORTED, its runs move over), as the protocol's session rules require. */
+  private endOlderHandshakes(newer: JudgeSession): void {
+    for (const session of this.sessions)
+      if (session.name === newer.name && !session.hasHelloed)
+        session.end(
+          status.ABORTED,
+          'replaced by a newer session of this judge',
+        );
   }
 
   private async fetchSource(call: SourceCall): Promise<void> {
@@ -164,29 +207,69 @@ export class JudgeLinkServer {
       await this.sources.serve(call, this.dispatch.sessionOf(identity.name));
   }
 
-  /** Null after refusing the call: UNAUTHENTICATED for bad credentials, UNAVAILABLE when the check itself failed (Mongo). */
+  /** Null after refusing the call: UNAVAILABLE while the bridge stops, UNAUTHENTICATED for bad credentials, PERMISSION_DENIED when the judge was revoked during the check. */
   private async identify(
     call: AuthenticatedCall,
     peer: string,
   ): Promise<JudgeIdentity | null> {
+    if (this.closing) return refuse(call, status.UNAVAILABLE, STOPPING);
+    const startedAt = this.revision;
+    const identity = await this.checkKey(call, peer);
+    if (!identity) return null;
+    if (this.closing) return refuse(call, status.UNAVAILABLE, STOPPING);
+    if ((this.revokedAt.get(identity.name) ?? 0) > startedAt)
+      return refuse(call, status.PERMISSION_DENIED, REVOKED);
+    return identity;
+  }
+
+  /** UNAVAILABLE when the check itself failed (Mongo). */
+  private async checkKey(
+    call: AuthenticatedCall,
+    peer: string,
+  ): Promise<JudgeIdentity | null> {
+    let identity: JudgeIdentity | null;
     try {
-      const identity = await authenticateCall(
+      identity = await authenticateCall(
         call.metadata,
         this.judges,
         addressOf(peer),
       );
-      if (!identity)
-        call.emit('error', {
-          code: status.UNAUTHENTICATED,
-          details: 'unknown judge, wrong key or blocked',
-        });
-      return identity;
     } catch (error) {
       this.logger.error(
         `Authenticating ${peer} failed: ${(error as Error).message}`,
       );
-      call.emit('error', { code: status.UNAVAILABLE, details: 'try again' });
-      return null;
+      return refuse(call, status.UNAVAILABLE, 'try again');
     }
+    if (identity) return identity;
+    this.keyCheckFailed(call, peer);
+    return refuse(
+      call,
+      status.UNAUTHENTICATED,
+      'unknown judge, wrong key or blocked',
+    );
+  }
+
+  /** Logs the first failure of an address's window and the lock-out (never the key); a locked-out address loses the socket. */
+  private keyCheckFailed(call: AuthenticatedCall, peer: string): void {
+    const address = addressOf(peer);
+    const count = this.failures.record(address);
+    const name = loggableNameOf(call.metadata);
+    if (count === 1)
+      this.logger.warn(`Judge key check failed from ${address} (${name})`);
+    if (count < MAX_FAILED_AUTH_PER_ADDRESS) return;
+    if (count === MAX_FAILED_AUTH_PER_ADDRESS)
+      this.logger.warn(
+        `${address} failed ${count} key checks (last: ${name}); refused until ${FAILED_AUTH_WINDOW_MS / 1000} s after its first failure`,
+      );
+    this.guard.destroy(peer);
   }
 }
+
+const refuse = (
+  call: AuthenticatedCall,
+  code: status,
+  details: string,
+): null => {
+  call.emit('error', { code, details } satisfies Partial<StatusObject>);
+  return null;
+};

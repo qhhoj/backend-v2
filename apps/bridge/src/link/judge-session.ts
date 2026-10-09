@@ -169,6 +169,11 @@ export class JudgeSession implements DispatchTarget {
     this.end(status.ABORTED, reason);
   }
 
+  /** Hello was read: from here on the dispatcher decides about replacing this session. */
+  get hasHelloed(): boolean {
+    return this.helloed;
+  }
+
   holds(ref: AssignmentRef): boolean {
     return this.inFlight.get(ref.submissionId) === ref.generation;
   }

@@ -30,6 +30,12 @@ const closedSoon = (socket: Socket) =>
     socket.once('close', () => resolve(true));
     setTimeout(() => resolve(false), 300);
   });
+/** Resolves true when the socket closes within `ms`. */
+const closedWithin = (socket: Socket, ms: number) =>
+  new Promise<boolean>((resolve) => {
+    socket.once('close', () => resolve(true));
+    setTimeout(() => resolve(false), ms);
+  });
 const judge = (name: string, extra = {}) => ({
   name,
   key: `${name}-key`,
@@ -160,6 +166,29 @@ describe('Judge link (gRPC)', () => {
     await online.close();
   });
 
+  it('closes the socket of a judge a handshake deadline after its last session ends', async () => {
+    const fake = await FakeJudge.online(
+      bridge.judgePort(),
+      judge('j1', { ownConnection: true }),
+    );
+    await fake.endSession();
+    expect(await fake.connectionLost(2000)).toBe(true);
+    await fake.close();
+  });
+
+  it('keeps one handshake per judge: a newer session ends the older ones that have not said Hello', async () => {
+    const sessions = [1, 2, 3].map(() =>
+      FakeJudge.open(bridge.judgePort(), judge('j2', { ownConnection: true })),
+    );
+    for (const older of sessions.slice(0, 2))
+      expect(await older.closed).toMatchObject({
+        code: status.ABORTED,
+        details: 'replaced by a newer session of this judge',
+      });
+    expect(sessions[2].isClosed).toBe(false);
+    for (const fake of sessions) await fake.close();
+  });
+
   it('replaces a session with a newer one of the same judge: the old one is told and ends ABORTED', async () => {
     const first = await FakeJudge.online(bridge.judgePort(), judge('j2'));
     const second = await FakeJudge.online(bridge.judgePort(), judge('j2'));
@@ -261,17 +290,33 @@ describe('Judge link over TLS', () => {
       ca,
     });
     expect(secure.sessionId).not.toBe('');
+    // a session marks its socket only if grpc-js reports the TLS peer as the socket does
+    expect(await secure.connectionLost(1000)).toBe(false);
+    expect(secure.isClosed).toBe(false);
     await secure.close();
     const plain = FakeJudge.open(bridge.judgePort(), judge('j1'));
     plain.hello();
     expect((await plain.closed).code).toBe(status.UNAVAILABLE);
+  });
+
+  it('ends a TLS session that sends no Hello in time with DEADLINE_EXCEEDED', async () => {
+    const fake = FakeJudge.open(bridge.judgePort(), { ...judge('j1'), ca });
+    expect((await fake.closed).code).toBe(status.DEADLINE_EXCEEDED);
+  });
+
+  it('closes a socket that never starts its TLS handshake at the deadline', async () => {
+    const socket = await rawSocket(bridge.judgePort());
+    expect(await closedWithin(socket, 2000)).toBe(true);
   });
 });
 
 describe('Judge key changes whose command was lost', () => {
   let bridge: BridgeTest;
   beforeAll(async () => {
-    bridge = await setupBridgeTest({ timings: { resyncMs: 200 } });
+    // a long deadline: a closed socket was closed by the revoke
+    bridge = await setupBridgeTest({
+      timings: { resyncMs: 200, handshakeMs: 5000 },
+    });
   });
   afterAll(() => bridge.teardown());
 
@@ -283,12 +328,90 @@ describe('Judge key changes whose command was lost', () => {
     async (_why, change) => {
       const name = `live-${Object.keys(change)[0]}`;
       await seedJudge(bridge, name, `${name}-key`);
-      const fake = await FakeJudge.online(bridge.judgePort(), judge(name));
+      const fake = await FakeJudge.online(
+        bridge.judgePort(),
+        judge(name, { ownConnection: true }),
+      );
       await bridge.judges.updateOne({ name }, { $set: change });
       expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
       expect(
         fake.seen('disconnect').map(({ disconnect }) => disconnect.forced),
       ).toEqual([true]);
+      expect(await fake.connectionLost(2500)).toBe(true);
+      await fake.close();
     },
   );
+});
+
+describe('Judge sockets (long handshake deadline)', () => {
+  let bridge: BridgeTest;
+  const redis = new Redis(TEST_REDIS_URL);
+  const commands = new BridgeCommandsService(redis);
+  const own = (name: string) => judge(name, { ownConnection: true });
+  beforeAll(async () => {
+    // sockets closed within 2.5 s were closed by the rule under test, not the 5 s deadline
+    bridge = await setupBridgeTest({ timings: { handshakeMs: 5000 } });
+    await seedJudge(bridge, 'j1', 'j1-key');
+  });
+  afterAll(async () => {
+    await redis.quit();
+    await bridge.teardown();
+  });
+
+  it('keeps one socket per judge: a newer session closes its idle socket, and the socket of the session it replaces', async () => {
+    const idle = await FakeJudge.online(bridge.judgePort(), own('j1'));
+    await idle.endSession();
+    // the bridge sees the cancel: the idle socket is the judge's newest
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const replaced = await FakeJudge.online(bridge.judgePort(), own('j1'));
+    expect(await idle.connectionLost(2500)).toBe(true);
+    const newest = await FakeJudge.online(bridge.judgePort(), own('j1'));
+    expect((await replaced.closed).code).toBe(status.ABORTED);
+    expect(await replaced.connectionLost(2500)).toBe(true);
+    expect(newest.isClosed).toBe(false);
+    for (const fake of [idle, replaced, newest]) await fake.close();
+  });
+
+  it('a block or key rotation ends every session of the judge, one still before Hello at once, and closes their sockets', async () => {
+    const online = await FakeJudge.online(bridge.judgePort(), own('j1'));
+    const handshaking = FakeJudge.open(bridge.judgePort(), own('j1'));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const revokedAt = Date.now();
+    await commands.publish({
+      type: 'disconnect-judge',
+      judgeName: 'j1',
+      force: true,
+    });
+    expect((await online.closed).code).toBe(status.PERMISSION_DENIED);
+    expect((await handshaking.closed).code).toBe(status.PERMISSION_DENIED);
+    expect(Date.now() - revokedAt).toBeLessThan(2500);
+    for (const fake of [online, handshaking])
+      expect(await fake.connectionLost(2500)).toBe(true);
+    for (const fake of [online, handshaking]) await fake.close();
+  });
+});
+
+describe('Failed key checks', () => {
+  let bridge: BridgeTest;
+  beforeAll(async () => {
+    bridge = await setupBridgeTest();
+    await seedJudge(bridge, 'j1', 'j1-key');
+  });
+  afterAll(() => bridge.teardown());
+
+  it('locks an address out after 20 failed key checks: even the right key is then refused', async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const fake = FakeJudge.open(
+        bridge.judgePort(),
+        judge('j1', { key: 'x' }),
+      );
+      fake.hello();
+      // the status, then the next attempt: a cancelled call may never reach the key check
+      await fake.closed;
+      await fake.close();
+    }
+    const valid = FakeJudge.open(bridge.judgePort(), judge('j1'));
+    valid.hello();
+    expect((await valid.closed).code).toBe(status.UNAVAILABLE);
+  });
 });

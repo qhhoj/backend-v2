@@ -22,6 +22,9 @@ const fakeSocket = (address: string) => {
 const asSocket = (socket: ReturnType<typeof fakeSocket>) =>
   socket as unknown as Socket;
 
+const peerOf = (socket: ReturnType<typeof fakeSocket>) =>
+  `${socket.remoteAddress}:${socket.remotePort}`;
+
 describe('ConnectionGuard', () => {
   let guard: ConnectionGuard;
   beforeEach(() => {
@@ -29,9 +32,18 @@ describe('ConnectionGuard', () => {
     guard = new ConnectionGuard({
       maxUnauthenticatedPerAddress: 2,
       deadlineMs: 15_000,
+      flushMs: 1000,
     });
   });
   afterEach(() => jest.useRealTimers());
+
+  /** An admitted socket with one open session of `judge`. */
+  const withSession = (address: string, judge: string) => {
+    const socket = fakeSocket(address);
+    guard.admit(asSocket(socket));
+    guard.sessionOpened(peerOf(socket), judge);
+    return socket;
+  };
 
   it('refuses a third unauthenticated socket from one address, not from another, and frees the slot on close', () => {
     const [first, second] = [fakeSocket('10.0.0.5'), fakeSocket('10.0.0.5')];
@@ -53,28 +65,24 @@ describe('ConnectionGuard', () => {
     expect(guard.unauthenticatedFrom('10.0.0.9')).toBe(1);
   });
 
-  it('lets an address open a new socket while its authenticated judge stays connected', () => {
-    const judge = fakeSocket('10.0.0.4');
-    guard.admit(asSocket(judge));
-    guard.markAuthenticated(`10.0.0.4:${judge.remotePort}`);
+  it('lets an address open a new socket while its judge has a session open', () => {
+    withSession('10.0.0.4', 'j1');
     expect(guard.admit(asSocket(fakeSocket('10.0.0.4')))).toBe(true);
     expect(guard.admit(asSocket(fakeSocket('10.0.0.4')))).toBe(true);
     expect(guard.admit(asSocket(fakeSocket('10.0.0.4')))).toBe(false);
   });
 
-  it('does not count a socket whose session authenticated, and never destroys it', () => {
-    const judge = fakeSocket('10.0.0.7');
-    guard.admit(asSocket(judge));
-    guard.markAuthenticated(`10.0.0.7:${judge.remotePort}`);
+  it('does not count a socket while a session is open on it, and does not destroy it', () => {
+    const judge = withSession('10.0.0.7', 'j1');
     expect(guard.unauthenticatedFrom('10.0.0.7')).toBe(0);
     jest.advanceTimersByTime(60_000);
     expect(judge.destroyed).toBe(false);
   });
 
-  it('ignores an authentication mark for a peer it does not hold', () => {
+  it('ignores a session for a peer it does not hold', () => {
     const silent = fakeSocket('10.0.0.3');
     guard.admit(asSocket(silent));
-    guard.markAuthenticated('10.0.0.3:1');
+    guard.sessionOpened('10.0.0.3:1', 'j1');
     jest.advanceTimersByTime(15_000);
     expect(silent.destroyed).toBe(true);
   });
@@ -87,6 +95,67 @@ describe('ConnectionGuard', () => {
     jest.advanceTimersByTime(1);
     expect(silent.destroyed).toBe(true);
     expect(guard.unauthenticatedFrom('10.0.0.8')).toBe(0);
+  });
+
+  it('counts a socket whose last session ended as unauthenticated again and destroys it a deadline later', () => {
+    const judge = withSession('10.0.0.7', 'j1');
+    guard.sessionOpened(peerOf(judge), 'j1');
+    jest.advanceTimersByTime(60_000);
+    guard.sessionClosed(peerOf(judge), 'j1');
+    jest.advanceTimersByTime(60_000);
+    expect(judge.destroyed).toBe(false);
+    guard.sessionClosed(peerOf(judge), 'j1');
+    expect(guard.unauthenticatedFrom('10.0.0.7')).toBe(1);
+    jest.advanceTimersByTime(14_999);
+    expect(judge.destroyed).toBe(false);
+    jest.advanceTimersByTime(1);
+    expect(judge.destroyed).toBe(true);
+  });
+
+  it('keeps one socket per judge: a session elsewhere retires its idle socket, and a replaced one goes when its session ends', () => {
+    const idle = withSession('10.0.0.2', 'j1');
+    guard.sessionClosed(peerOf(idle), 'j1');
+    const busy = withSession('10.0.0.2', 'j1');
+    jest.advanceTimersByTime(1000);
+    expect(idle.destroyed).toBe(true);
+    const newest = withSession('10.0.0.2', 'j1');
+    jest.advanceTimersByTime(60_000);
+    expect(busy.destroyed).toBe(false);
+    guard.sessionClosed(peerOf(busy), 'j1');
+    jest.advanceTimersByTime(1000);
+    expect(busy.destroyed).toBe(true);
+    expect(newest.destroyed).toBe(false);
+  });
+
+  it('retires every socket of a revoked judge after the flush delay, sparing other judges and a socket another judge has a session on', () => {
+    const shared = withSession('10.0.0.1', 'j1');
+    guard.sessionOpened(peerOf(shared), 'j2');
+    const other = withSession('10.0.0.1', 'j2');
+    const busy = withSession('10.0.0.1', 'j1');
+    const idle = withSession('10.0.0.1', 'j1');
+    guard.sessionClosed(peerOf(idle), 'j1');
+    guard.closeJudge('j1');
+    jest.advanceTimersByTime(999);
+    expect([busy.destroyed, idle.destroyed]).toEqual([false, false]);
+    jest.advanceTimersByTime(1);
+    expect([busy.destroyed, idle.destroyed]).toEqual([true, true]);
+    expect([shared.destroyed, other.destroyed]).toEqual([false, false]);
+  });
+
+  it('keeps a retired socket on which a session authenticates again (the new key)', () => {
+    const judge = withSession('10.0.0.1', 'j1');
+    guard.closeJudge('j1');
+    guard.sessionClosed(peerOf(judge), 'j1');
+    guard.sessionOpened(peerOf(judge), 'j1');
+    jest.advanceTimersByTime(60_000);
+    expect(judge.destroyed).toBe(false);
+  });
+
+  it('destroys a socket on request at once', () => {
+    const socket = fakeSocket('10.0.0.1');
+    guard.admit(asSocket(socket));
+    guard.destroy(peerOf(socket));
+    expect(socket.destroyed).toBe(true);
   });
 
   it('reads a grpc-js peer in the socket format, IPv6 included', () => {

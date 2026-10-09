@@ -4,6 +4,7 @@ import { ENV, unique } from '@libs/common';
 import type { Env } from '@libs/common';
 import { BRIDGE_COMMANDS_STREAM, parseBridgeCommand } from '@libs/judging';
 import type { BridgeCommand } from '@libs/judging';
+import { JudgeLinkServer } from '../link/judge-link.server';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { DispatcherService } from './dispatcher.service';
 
@@ -32,6 +33,7 @@ export class CommandsService {
     @Inject(ENV) private readonly env: Env,
     private readonly dispatch: DispatcherService,
     private readonly submissions: SubmissionsRepository,
+    private readonly link: JudgeLinkServer,
   ) {}
 
   /** The newest entry id (`0-0` when empty). Taken before the queue is rebuilt from Mongo, so a command published meanwhile is still read. */
@@ -156,9 +158,12 @@ export class CommandsService {
       case 'abort':
         return this.dispatch.abort(command.submissionId);
       case 'disconnect-judge':
-        return this.dispatch.disconnect(command.judgeName, {
+        this.dispatch.disconnect(command.judgeName, {
           isForced: command.force,
         });
+        // block, key rotation and forced disconnect: no session or socket of the judge stays
+        if (command.force) this.link.revoke(command.judgeName);
+        return;
       case 'disable-judge':
         return this.dispatch.setDisabled(command.judgeName, command.isDisabled);
     }

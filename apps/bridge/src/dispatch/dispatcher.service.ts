@@ -184,23 +184,26 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
-  /** Mongo is the truth for access: a connected judge that is now blocked, deleted or holds a rotated key is dropped, and a changed `isDisabled` is applied. Covers a lost command. */
-  async reconcile(access: JudgeAccess[]): Promise<void> {
+  /** Mongo is the truth for access: a connected judge that is now blocked, deleted or holds a rotated key is dropped, and a changed `isDisabled` is applied. Covers a lost command. Returns the names dropped, for the link to revoke. */
+  async reconcile(access: JudgeAccess[]): Promise<string[]> {
     const byName = new Map(access.map((judge) => [judge.name, judge]));
+    const dropped: string[] = [];
     for (const [name, judge] of this.judges) {
       const stored = byName.get(name);
       if (
         !stored ||
         stored.isBlocked ||
         stored.authKeyHash !== judge.authKeyHash
-      )
+      ) {
         judge.disconnect({
           isForced: true,
           reason: 'blocked, deleted or key rotated',
         });
-      else if (stored.isDisabled !== judge.isDisabled)
+        dropped.push(name);
+      } else if (stored.isDisabled !== judge.isDisabled)
         await this.setDisabled(name, stored.isDisabled);
     }
+    return dropped;
   }
 
   disconnect(name: string, { isForced }: { isForced: boolean }): void {
