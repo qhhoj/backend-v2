@@ -128,19 +128,27 @@ export class DispatcherService {
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
-    if (!this.windDown(judge, ref)) return;
+    // still tracked: the release publishes `queued`
+    if (!this.keepSlotWinding(judge, ref)) return;
     judge.abort(ref);
     if (await this.runs.release(ref, judge.name))
       await this.enqueue(await this.submissions.loadQueued([ref.submissionId]));
+    else this.runs.forget(ref);
     await this.offerWork(judge);
   }
 
   /** The bridge let go of a held run (accept timeout, rejudge void, stale write): judge-v2 frees a slot only when the run's process returns, so the run keeps its slot as `winding` until the judge's `Final` for it. False when the judge does not hold that generation. */
   windDown(judge: DispatchTarget, ref: AssignmentRef): boolean {
+    if (!this.keepSlotWinding(judge, ref)) return false;
+    this.runs.forget(ref);
+    return true;
+  }
+
+  /** Moves a held run to `winding`; its events stay tracked. */
+  private keepSlotWinding(judge: DispatchTarget, ref: AssignmentRef): boolean {
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return false;
     judge.inFlight.delete(ref.submissionId);
     judge.winding.add(windingKey(ref));
-    this.runs.forget(ref);
     return true;
   }
 

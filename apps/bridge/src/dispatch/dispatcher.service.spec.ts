@@ -64,6 +64,9 @@ describe('DispatcherService', () => {
   let resumeGates: Map<string, Promise<void>>;
   /** When set, every claim waits on it: a dispatch held open between its read and its claim. */
   let claimGate: Promise<void> | null;
+  let tracked: Set<string>;
+  /** Submissions a release announced as `queued`. */
+  let published: string[];
   let expired: Array<{ ref: AssignmentRef; abortRequested: boolean }>;
   let dispatcher: DispatcherService;
   const runs = {
@@ -80,9 +83,14 @@ describe('DispatcherService', () => {
         subject: { submissionId: queued.id, userId: 'u', problemId: 'p' },
       };
     },
-    sent: () => undefined,
-    forget: () => undefined,
-    release: () => Promise.resolve(true),
+    /** RunsService's tracking: a release publishes `queued` only for a run still tracked. */
+    sent: ({ request }: { request: AssignRequest }) =>
+      void tracked.add(request.ref.submissionId),
+    forget: (ref: AssignmentRef) => void tracked.delete(ref.submissionId),
+    release: (ref: AssignmentRef) => {
+      if (tracked.delete(ref.submissionId)) published.push(ref.submissionId);
+      return Promise.resolve(true);
+    },
     resumableSeq: async (ref: AssignmentRef) => {
       await resumeGates.get(ref.submissionId);
       return stored.get(`${ref.submissionId}.${ref.generation}`) ?? null;
@@ -122,6 +130,8 @@ describe('DispatcherService', () => {
     stored = new Map();
     resumeGates = new Map();
     claimGate = null;
+    tracked = new Set();
+    published = [];
     expired = [];
     dispatcher = new DispatcherService(submissions, runs, TIMINGS);
   });
@@ -580,6 +590,8 @@ describe('DispatcherService', () => {
       generation: 1,
     });
     expect(judge.aborted).toEqual([{ submissionId: slow.id, generation: 1 }]);
+    // the row is QU again: the UI hears `queued`, not a stale `processing`
+    expect(published).toEqual([slow.id]);
     // judge-v2 frees the slot only when the aborted run's process returns: no Assign until its Final{ABORTED}
     expect(judge.assigned).toHaveLength(2);
     expect(dispatcher.queuedIds()).toEqual([slow.id]);
