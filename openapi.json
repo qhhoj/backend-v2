@@ -1324,6 +1324,11 @@
             "nullable": true,
             "type": "number"
           },
+          "memoryLimit": {
+            "description": "KiB; null when the viewer cannot see the problem.",
+            "nullable": true,
+            "type": "number"
+          },
           "name": {
             "type": "string"
           },
@@ -1338,6 +1343,11 @@
           },
           "solverCount": {
             "description": "Live participants whose cell is worth the problem's full points (the ranking's `acceptedCount`), frozen for non-editors during a freeze; null unless the viewer may see the full ranking. Up to 30 s old.",
+            "nullable": true,
+            "type": "number"
+          },
+          "timeLimit": {
+            "description": "Seconds; null when the viewer cannot see the problem.",
             "nullable": true,
             "type": "number"
           },
@@ -1361,6 +1371,8 @@
           "partial",
           "isPretested",
           "maxSubmissions",
+          "timeLimit",
+          "memoryLimit",
           "solverCount",
           "viewerResult"
         ],

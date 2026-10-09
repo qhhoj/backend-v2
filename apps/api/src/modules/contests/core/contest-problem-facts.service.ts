@@ -4,6 +4,8 @@ import { isFrozenFor, LIVE, standingOf } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestAccess } from './contest-access';
+import { contestScopeOf } from './contest-scope';
+import { visibleLimits } from './contest-problem-limits';
 import type { ContestViewer } from './contest-viewer.service';
 import type { ContestDocument } from './contests.repository';
 import type { ContestProblemFacts } from './dto/contest-detail.response';
@@ -57,15 +59,24 @@ export class ContestProblemFactsService {
       now,
       viewer,
     );
-    const [summaries, viewerResults, solverCounts] = await Promise.all([
-      this.problems.findSummaries(
+    const [problemRows, viewerResults, solverCounts] = await Promise.all([
+      this.problems.findByIds(
         contest.problems.map((entry) => uuidStr(entry.problem)),
       ),
       this.viewerResultsOf(contest, ownParticipation, isFrozenView),
       canSeeFullBoard ? this.solvers.countsOf(contest, isFrozenView) : null,
     ]);
     return {
-      summaries: summaries.map(({ _id, code, name }) => ({ _id, code, name })),
+      summaries: problemRows.map(({ _id, code, name }) => ({
+        _id,
+        code,
+        name,
+      })),
+      limits: visibleLimits(
+        principal,
+        problemRows,
+        viewer.inContest ? contestScopeOf(contest, now) : null,
+      ),
       viewerResults,
       solverCounts,
     };

@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { contestPhase, hasParticipationEnded } from '@libs/contests';
+import { hasParticipationEnded } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { ContestScope } from '../../problems/core/problem-access';
 import { ContestAccess } from './contest-access';
+import { contestScopeOf } from './contest-scope';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
 import { ParticipationsRepository } from './participations.repository';
@@ -51,14 +52,7 @@ export class CurrentContestService {
     current: CurrentParticipation | null,
     now = new Date(),
   ): ContestScope | null {
-    return (
-      current && {
-        started: contestPhase(current.contest, now) !== 'upcoming',
-        problemIds: current.contest.problems.map((entry) =>
-          uuidStr(entry.problem),
-        ),
-      }
-    );
+    return current && contestScopeOf(current.contest, now);
   }
 
   async scopeOf(

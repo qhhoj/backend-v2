@@ -11,6 +11,7 @@ import type {
   ScoreboardVisibility,
 } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import type { ProblemLimits } from '../contest-problem-limits';
 import { ApiProblemCell } from './api-problem-cells';
 import {
   ContestListViewerResponse,
@@ -39,6 +40,10 @@ export class ContestProblemResponse {
   partial!: boolean;
   isPretested!: boolean;
   maxSubmissions!: number | null;
+  /** Seconds; null when the viewer cannot see the problem. */
+  timeLimit!: number | null;
+  /** KiB; null when the viewer cannot see the problem. */
+  memoryLimit!: number | null;
   /** Live participants whose cell is worth the problem's full points (the ranking's `acceptedCount`), frozen for non-editors during a freeze; null unless the viewer may see the full ranking. Up to 30 s old. */
   solverCount!: number | null;
   /** Null when signed out, without a scoring participation (live or virtual) in the contest, or when the board is hidden from the viewer. */
@@ -160,6 +165,8 @@ export class ContestSettingsResponse {
 /** What the detail service gathered about the contest's problems. */
 export interface ContestProblemFacts {
   summaries: Array<{ _id: string; code: string; name: string }>;
+  /** Per problem id; only the problems the viewer may see. */
+  limits: Map<string, ProblemLimits>;
   /** Per problem id; null when the viewer has no scoring participation or may not see the board. */
   viewerResults: Map<string, ContestProblemViewerResultResponse> | null;
   /** Per problem id; null when the viewer may not see the full ranking. */
@@ -190,6 +197,8 @@ function labelledProblems(
           partial: entry.partial,
           isPretested: entry.isPretested,
           maxSubmissions: entry.maxSubmissions,
+          timeLimit: facts.limits.get(problemId)?.timeLimit ?? null,
+          memoryLimit: facts.limits.get(problemId)?.memoryLimit ?? null,
           solverCount:
             facts.solverCounts && (facts.solverCounts.get(problemId) ?? 0),
           viewerResult: facts.viewerResults?.get(problemId) ?? null,
