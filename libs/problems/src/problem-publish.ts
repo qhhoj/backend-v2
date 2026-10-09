@@ -39,9 +39,9 @@ export function publishVerdict(
   return { outcome: 'published', reason: null };
 }
 
-/** Public and past its publish time: the rule readers apply to an editorial. */
+/** Public and past its publish time: the rule readers apply to an editorial. A lean document may carry `undefined` instead of `null`. */
 export const isEditorialReleased = (
   solution: Problem['solution'],
   now: Date,
 ): boolean =>
-  solution !== null && solution.isPublic && solution.publishOn <= now;
+  solution != null && solution.isPublic && solution.publishOn <= now;

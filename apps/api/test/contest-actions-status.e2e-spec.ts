@@ -1,15 +1,19 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
+  CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_QUEUE,
   enqueueContestRating,
   enqueueContestRescore,
   requestFinalJudge,
+  reschedulePublish,
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
+  ContestPublishJob,
   ContestRatingJob,
   ContestRescoreJob,
 } from '@libs/contests';
@@ -27,6 +31,7 @@ describe('contest action status', () => {
   let rescores: Queue<ContestRescoreJob>;
   let finalJudges: Queue<ContestFinalJudgeJob>;
   let ratings: Queue<ContestRatingJob>;
+  let publishes: Queue<ContestPublishJob>;
   let editor: TestSession;
   let plain: TestSession;
   let editorId: string;
@@ -44,6 +49,8 @@ describe('contest action status', () => {
     rescore: 'idle',
     judgeFinal: 'idle',
     rate: 'idle',
+    publish: 'idle',
+    autoPublish: null,
   };
 
   beforeAll(async () => {
@@ -51,6 +58,7 @@ describe('contest action status', () => {
     rescores = api.app.get(getQueueToken(CONTEST_RESCORE_QUEUE));
     finalJudges = api.app.get(getQueueToken(CONTEST_FINAL_JUDGE_QUEUE));
     ratings = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
+    publishes = api.app.get(getQueueToken(CONTEST_PUBLISH_QUEUE));
     editorId = (
       await createUserWith(api, 'actions_editor', {
         permissions: ['judge.add_contest', 'judge.edit_own_contest'],
@@ -67,6 +75,7 @@ describe('contest action status', () => {
     await rescores.obliterate({ force: true });
     await finalJudges.obliterate({ force: true });
     await ratings.obliterate({ force: true });
+    await publishes.obliterate({ force: true });
   });
 
   it('reports every action idle without a job', async () => {
@@ -109,6 +118,47 @@ describe('contest action status', () => {
     );
     expect((await finalJudges.getJobs(['delayed'])).length).toBe(1);
     expect(await statusOf(created.key)).toEqual(idle);
+  });
+
+  it('reports the automatic publish queued once it is scheduled for the end', async () => {
+    const contest = await createContest(api, {
+      authors: [editorId],
+      publishAfterEnd: true,
+    });
+    await reschedulePublish(
+      publishes,
+      {
+        previous: null,
+        next: {
+          id: contest._id,
+          endTime: contest.endTime,
+          publishAfterEnd: true,
+        },
+      },
+      new Logger('spec'),
+    );
+    expect(await statusOf(contest.key)).toEqual({ ...idle, publish: 'queued' });
+  });
+
+  it('echoes the recorded outcome of the automatic publish', async () => {
+    const at = new Date();
+    const contest = await createContest(api, {
+      authors: [editorId],
+      autoPublishOutcome: {
+        at,
+        status: 'failed',
+        reason: 'no_permission',
+        published: 0,
+        skipped: 3,
+      },
+    });
+    expect((await statusOf(contest.key)).autoPublish).toEqual({
+      at: at.toISOString(),
+      status: 'failed',
+      reason: 'no_permission',
+      published: 0,
+      skipped: 3,
+    });
   });
 
   it('ignores requests queued for another contest', async () => {

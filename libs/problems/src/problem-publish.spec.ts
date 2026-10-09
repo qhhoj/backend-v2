@@ -102,4 +102,10 @@ describe('isEditorialReleased', () => {
     ).toBe(false);
     expect(isEditorialReleased(null, now)).toBe(false);
   });
+
+  it('treats a missing solution field on a lean document as not released', () => {
+    expect(
+      isEditorialReleased(undefined as unknown as Problem['solution'], now),
+    ).toBe(false);
+  });
 });

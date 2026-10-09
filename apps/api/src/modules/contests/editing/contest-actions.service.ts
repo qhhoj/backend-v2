@@ -4,12 +4,14 @@ import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
+  CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
   CONTEST_RESCORE_QUEUE,
   contestActionState,
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
+  ContestPublishJob,
   ContestRatingJob,
   ContestRescoreJob,
 } from '@libs/contests';
@@ -26,6 +28,8 @@ export class ContestActionsService {
     private readonly finalJudges: Queue<ContestFinalJudgeJob>,
     @InjectQueue(CONTEST_RATING_QUEUE)
     private readonly ratings: Queue<ContestRatingJob>,
+    @InjectQueue(CONTEST_PUBLISH_QUEUE)
+    private readonly publishes: Queue<ContestPublishJob>,
   ) {}
 
   /** Editors only, like `rescore`. The automatic final judging at the end is not an editor's request, so it is filtered out. */
@@ -34,11 +38,25 @@ export class ContestActionsService {
     key: string,
   ): Promise<ContestActionsResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
-    const [rescore, judgeFinal, rate] = await Promise.all([
+    const [rescore, judgeFinal, rate, publish] = await Promise.all([
       contestActionState(this.rescores, contest._id),
       contestActionState(this.finalJudges, contest._id, (data) => data.manual),
       contestActionState(this.ratings, contest._id),
+      contestActionState(this.publishes, contest._id),
     ]);
-    return { rescore, judgeFinal, rate };
+    const outcome = contest.autoPublishOutcome;
+    return {
+      rescore,
+      judgeFinal,
+      rate,
+      publish,
+      autoPublish: outcome && {
+        at: outcome.at,
+        status: outcome.status,
+        reason: outcome.reason,
+        published: outcome.published,
+        skipped: outcome.skipped,
+      },
+    };
   }
 }
