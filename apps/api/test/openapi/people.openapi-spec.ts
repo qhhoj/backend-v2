@@ -18,9 +18,13 @@ const PAGE_ONLY = [
 /** The routes and schemas this lane owns. `PostPageQueryDto` (org posts, user blog) belongs to the blog lane. */
 const OWN_ROUTE =
   /\/api\/internal\/(auth|users|contributors|organizations|profile|admin\/users|admin\/organization-requests)\b/;
-const OWN_SITE =
-  /\/api\/internal\/(auth|users|contributors|organizations|profile|admin\/users|admin\/organization-requests)\b|\/components\/schemas\/(OrganizationRequest|CreateOrganizationRequest|DecideOrganizationRequest)/;
+/** Schema sites are labelled `schema <Name>...` (loose) or are JSON pointers `/components/schemas/<Name>/...` (enums). */
+const OWN_SCHEMA =
+  /(^schema |\/components\/schemas\/)(ActivityQueryDto|ActivityResponse|AppearanceDto|AppearanceResponse|BanDto|ChangePasswordDto|CodeDto|ContributorListQueryDto|CreateOrganizationDto|CreateOrganizationRequestDto|CurrentPasswordDto|DecideOrganizationRequestDto|KickDto|LeaderboardEntryResponse|LoginDto|MemberListQueryDto|MemberResponse|OrganizationDetailResponse|OrganizationListItemResponse|OrganizationListQueryDto|OrganizationRequestListQueryDto|OrganizationRequestParamsDto|OrganizationRequestResponse|OrganizationSlugParamDto|OrganizationSummaryResponse|OrganizationViewerResponse|PasswordResetConfirmDto|PasswordResetRequestDto|PpBreakdownQueryDto|PpEntryResponse|PpSubmissionResponse|ProfileOrganizationResponse|ProfileResponse|RankQueryDto|RankResponse|RatingHistoryEntryResponse|RatingSummaryResponse|RegenerateTokenResponse|RegisterDto|ResendActivationDto|ScratchCodesRemainingResponse|ScratchCodesResponse|SessionResponse|SocialCompleteDto|SocialProvidersResponse|SolvedGroupResponse|SolvedProblemResponse|SolvedResponse|StaffUserResponse|TokenDto|TotpEnrollmentResponse|TwoFactorPendingResponse|UpdateOrganizationDto|UpdateProfileDto|UserAdminQueryDto|UserCommentsQueryDto|UserDataStatusResponse|UserListQueryDto|UserPageResponse|UserPageStaffResponse|UserResponse|UsernameAvailableDto|UsernameAvailableResponse|WebauthnCredentialResponse|WebauthnLoginDto|WebauthnRegisterDto)\b/;
+const OWN_SITE = new RegExp(`${OWN_ROUTE.source}|${OWN_SCHEMA.source}`);
 const BLOG_SITE = /\/(blog|posts)\b/;
+/** Route labels start with the method; a schema label never does. */
+const ROUTE_LABEL = /^(GET|POST|PUT|PATCH|DELETE) /;
 
 describe('auth, user and organization schemas', () => {
   let document: OpenAPIObject;
@@ -35,7 +39,9 @@ describe('auth, user and organization schemas', () => {
 
   it('has no untyped parameter or bare object on these routes', () => {
     const owned = looseSites(document).filter(
-      (site) => OWN_ROUTE.test(site) && !BLOG_SITE.test(site),
+      (site) =>
+        OWN_SITE.test(site) &&
+        !(ROUTE_LABEL.test(site) && BLOG_SITE.test(site)),
     );
     expect(owned).toEqual([]);
   });
