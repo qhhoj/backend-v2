@@ -11,6 +11,9 @@ type Row = {
   user_id: number;
 };
 
+/** One rule for blank: the same test decides which pending request is kept and which is skipped. */
+const isBlank = (reason: string | null): boolean => !reason?.trim();
+
 @Injectable()
 export class OrganizationRequestsMapper implements Mapper<Row> {
   name = 'organization-requests';
@@ -23,17 +26,20 @@ export class OrganizationRequestsMapper implements Mapper<Row> {
   ];
   sql =
     'SELECT id, time, state, reason, organization_id, user_id FROM judge_organizationrequest ORDER BY id';
-  /** The first pending request per (organization, user): v2's partial unique index allows one. */
+  /** The first pending request per (organization, user), with a non-blank reason: v2's partial unique index allows one. */
   private firstPending = new Set<number>();
 
   async prepare(source: LegacySourceService) {
-    this.firstPending = new Set(
-      (
-        await source.query<{ id: number }>(
-          "SELECT MIN(id) AS id FROM judge_organizationrequest WHERE state = 'P' AND TRIM(reason) <> '' GROUP BY organization_id, user_id",
-        )
-      ).map((row) => Number(row.id)),
+    const pending = await source.query<Row>(
+      "SELECT id, reason, organization_id, user_id FROM judge_organizationrequest WHERE state = 'P' ORDER BY id",
     );
+    const firstByPair = new Map<string, number>();
+    for (const row of pending) {
+      const pair = `${row.organization_id}:${row.user_id}`;
+      if (!isBlank(row.reason) && !firstByPair.has(pair))
+        firstByPair.set(pair, Number(row.id));
+    }
+    this.firstPending = new Set(firstByPair.values());
   }
 
   map(row: Row, ctx: MapCtx): MappedDocument | null {
@@ -55,7 +61,7 @@ export class OrganizationRequestsMapper implements Mapper<Row> {
     };
   }
 
-  /** Legacy kept no decider, so every request is undecided here; a request is refused when its parents are gone, its reason is empty, or a later pending request for the same pair is kept. */
+  /** Legacy kept no decider, so every request is undecided here; a request is refused when its parents are gone, its reason is blank, or a later pending request for the same pair is kept. */
   private skipReason(row: Row, ctx: MapCtx): string | null {
     const organization = ctx.refOrNull(
       'judge_organization',
@@ -63,7 +69,7 @@ export class OrganizationRequestsMapper implements Mapper<Row> {
     );
     const user = ctx.refOrNull('judge_profile', row.user_id);
     if (!organization || !user) return 'organization or user missing';
-    if (!row.reason?.trim()) return 'empty reason';
+    if (isBlank(row.reason)) return 'empty reason';
     return row.state === 'P' && !this.firstPending.has(row.id)
       ? 'duplicate pending'
       : null;

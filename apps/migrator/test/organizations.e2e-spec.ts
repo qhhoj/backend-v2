@@ -102,6 +102,29 @@ describe('organizations jobs', () => {
     );
   });
 
+  it('treats a whitespace-only reason as blank when it picks the kept pending request', async () => {
+    expect(
+      await harness.docOf(
+        'organizationRequests',
+        'judge_organizationrequest',
+        2006,
+      ),
+    ).toBeNull();
+    expect(
+      await harness.docOf(
+        'organizationRequests',
+        'judge_organizationrequest',
+        2007,
+      ),
+    ).toMatchObject({
+      state: 'P',
+      reason: 'join after blank',
+    });
+    expect(reports['organization-requests']).toContain(
+      'skipped judge_organizationrequest:2006 (empty reason)',
+    );
+  });
+
   it('verifies clean', async () => {
     expect(
       await migration.verify(['organizations', 'organization-requests']),
