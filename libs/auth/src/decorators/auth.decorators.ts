@@ -4,6 +4,8 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { FastifyRequest } from 'fastify';
+import type { IntegrationScope } from '@libs/database';
+import type { ServiceClientPrincipal } from '../guards/service-client';
 import { Permission } from '../principal/permissions';
 
 export const PUBLIC_ROUTE = 'auth:public';
@@ -12,6 +14,8 @@ export const PWNED_PASSWORD_ROUTE = 'auth:pwned';
 export const SESSION_ONLY_ROUTE = 'auth:session-only';
 export const NO_IMPERSONATION_ROUTE = 'auth:no-impersonation';
 export const REQUIRED_PERMISSION = 'auth:permission';
+export const SERVICE_ONLY_ROUTE = 'auth:service-only';
+export const REQUIRED_SCOPE = 'auth:scope';
 
 /** No login required. */
 export const Public = () => SetMetadata(PUBLIC_ROUTE, true);
@@ -29,4 +33,14 @@ export const RequirePermission = (permission: Permission) =>
 export const CurrentAuth = createParamDecorator(
   (_data: unknown, context: ExecutionContext) =>
     context.switchToHttp().getRequest<FastifyRequest>().auth,
+);
+/** The route serves integration clients (`Authorization: Bearer qhi_...`) and nothing else: no cookie, no user API token, no CSRF. The guard attaches `request.serviceClient`; `request.auth` stays unset. */
+export const ServiceOnly = () => SetMetadata(SERVICE_ONLY_ROUTE, true);
+/** The scope an integration client must hold on a `@ServiceOnly()` route. */
+export const RequireScope = (scope: IntegrationScope) =>
+  SetMetadata(REQUIRED_SCOPE, scope);
+export const CurrentServiceClient = createParamDecorator(
+  (_data: unknown, context: ExecutionContext) =>
+    context.switchToHttp().getRequest<FastifyRequest>()
+      .serviceClient as ServiceClientPrincipal,
 );

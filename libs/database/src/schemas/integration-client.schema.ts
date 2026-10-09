@@ -26,6 +26,8 @@ export class IntegrationClient {
   @Prop({ type: UUID, required: true }) createdBy!: string;
   @Prop({ type: Date, default: null }) lastUsedAt!: Date | null;
   @Prop({ type: Date, default: null }) revokedAt!: Date | null;
+  /** The key stops working at this instant; null never expires. */
+  @Prop({ type: Date, default: null }) expiresAt!: Date | null;
   createdAt!: Date;
 }
 

@@ -6,28 +6,41 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { AppError, ENV, type Env } from '@libs/common';
+import { AppError, ENV, RateLimitService, type Env } from '@libs/common';
+import { uuidStr, type IntegrationScope } from '@libs/database';
 import {
   BEFORE_TWO_FACTOR_ROUTE,
   NO_IMPERSONATION_ROUTE,
   PUBLIC_ROUTE,
   PWNED_PASSWORD_ROUTE,
   REQUIRED_PERMISSION,
+  REQUIRED_SCOPE,
+  SERVICE_ONLY_ROUTE,
   SESSION_ONLY_ROUTE,
 } from '../decorators/auth.decorators';
-import { constantTimeEqual } from '../crypto';
+import { constantTimeEqual, sha256 } from '../crypto';
+import {
+  type IntegrationClientDocument,
+  IntegrationClientsRepository,
+  isUsableClient,
+} from '../integration/integration-clients.repository';
 import { Permission } from '../principal/permissions';
 import { hasPermission } from '../principal/principal';
 import { PrincipalService } from '../principal/principal.service';
 import { SESSION_COOKIE, setSessionCookie } from '../session/session-cookie';
 import { COOKIE_REFRESH_MS, SessionService } from '../session/session.service';
 import { apiTokenMatches, parseApiToken } from '../token/api-token';
+import { matchesAnyCidr } from '../token/cidr';
+import { isServiceKey, SERVICE_KEY_PREFIX } from '../token/service-key';
 import { isActiveSuperuser } from '../users/active-superuser';
 import { UsersRepository } from '../users/users.repository';
 import { AuthContext } from './auth-context';
 
 const isBearerHeader = (header: string) => /^bearer/i.test(header);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** Failed integration-key lookups per address and window (preflight M15). */
+const SERVICE_KEY_FAILURE_LIMIT = 20;
+const SERVICE_KEY_FAILURE_WINDOW_SECONDS = 600;
 /** Reads a decorator's value, the handler's overriding the controller's. */
 type RouteMetadataReader = <Value>(key: string) => Value | undefined;
 
@@ -40,6 +53,8 @@ export class AuthGuard implements CanActivate {
     private readonly sessions: SessionService,
     private readonly users: UsersRepository,
     private readonly principals: PrincipalService,
+    private readonly clients: IntegrationClientsRepository,
+    private readonly rateLimit: RateLimitService,
     @Inject(ENV) private readonly env: Env,
   ) {
     this.siteOrigin = new URL(env.siteUrl).origin;
@@ -48,16 +63,18 @@ export class AuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const http = context.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
-    this.assertSameOrigin(request);
-    await this.authenticateAndRefreshCookie(
-      request,
-      http.getResponse<FastifyReply>(),
-    );
     const readRouteMetadata: RouteMetadataReader = <Value>(key: string) =>
       this.reflector.getAllAndOverride<Value | undefined>(key, [
         context.getHandler(),
         context.getClass(),
       ]);
+    if (readRouteMetadata<boolean>(SERVICE_ONLY_ROUTE))
+      return this.authenticateServiceClient(request, readRouteMetadata);
+    this.assertSameOrigin(request);
+    await this.authenticateAndRefreshCookie(
+      request,
+      http.getResponse<FastifyReply>(),
+    );
     if (readRouteMetadata<boolean>(PUBLIC_ROUTE)) return true;
     const { auth } = request;
     if (!auth) throw new AppError('unauthorized', 401, 'Login required');
@@ -73,6 +90,91 @@ export class AuthGuard implements CanActivate {
     if (permission && !hasPermission(auth.principal, permission))
       throw new AppError('forbidden', 403, 'Permission denied');
     return true;
+  }
+
+  /**
+   * A `@ServiceOnly()` route takes an integration client and no user credential. A session cookie or a non-`qhi_` bearer is a user (403, even a valid one: a user is never turned into a client); no credential, or a key that is malformed, unknown, revoked or expired, is 401. CSRF and the origin check do not apply: the scheme carries no cookie. The key is looked up on every request, so a revocation is immediate.
+   */
+  private async authenticateServiceClient(
+    request: FastifyRequest,
+    readRouteMetadata: RouteMetadataReader,
+  ): Promise<boolean> {
+    const header = request.headers.authorization ?? '';
+    const token = /^bearer\s+(\S+)\s*$/i.exec(header)?.[1] ?? null;
+    const isUserCredential =
+      request.cookies[SESSION_COOKIE] !== undefined ||
+      (header !== '' && !token?.startsWith(SERVICE_KEY_PREFIX));
+    if (isUserCredential)
+      throw new AppError(
+        'forbidden',
+        403,
+        'This endpoint is for integration clients',
+      );
+    if (token === null)
+      throw new AppError('unauthorized', 401, 'Integration key required');
+    const client = await this.findServiceClient(token, request.ip);
+    this.assertServiceClientMayCall(
+      client,
+      request.ip,
+      readRouteMetadata<IntegrationScope>(REQUIRED_SCOPE),
+    );
+    request.serviceClient = {
+      clientId: uuidStr(client._id),
+      name: client.name,
+      scopes: client.scopes,
+      actsAs: uuidStr(client.actsAs),
+    };
+    await this.clients.touch(client._id, new Date()).catch(() => undefined);
+    return true;
+  }
+
+  /** Failed lookups are counted per address (preflight M15): the key is 256 bits, so this is about load, not guessing. Over the limit the answer is 429 before the database is asked. */
+  private async findServiceClient(
+    token: string,
+    address: string,
+  ): Promise<IntegrationClientDocument> {
+    const failures = `service-key-failures:ip:${address}`;
+    if ((await this.rateLimit.count(failures)) >= SERVICE_KEY_FAILURE_LIMIT)
+      throw new AppError(
+        'rate_limited',
+        429,
+        'Too many invalid integration keys; try again later',
+      );
+    const client = await this.clientOfKey(token);
+    if (!client || !isUsableClient(client, new Date())) {
+      await this.rateLimit.hit(failures, SERVICE_KEY_FAILURE_WINDOW_SECONDS);
+      throw new AppError('unauthorized', 401, 'Invalid integration key');
+    }
+    return client;
+  }
+
+  /** Only the sha256 of a key is stored; the stored hash is compared again in constant time after the indexed lookup. */
+  private async clientOfKey(
+    token: string,
+  ): Promise<IntegrationClientDocument | null> {
+    if (!isServiceKey(token)) return null;
+    const hash = sha256(token);
+    const client = await this.clients.findByKeyHash(hash);
+    return client && constantTimeEqual(client.keyHash, hash) ? client : null;
+  }
+
+  private assertServiceClientMayCall(
+    client: { allowedCidrs: string[]; scopes: readonly IntegrationScope[] },
+    address: string,
+    scope: IntegrationScope | undefined,
+  ): void {
+    if (!matchesAnyCidr(address, client.allowedCidrs))
+      throw new AppError(
+        'forbidden',
+        403,
+        'This address is not allowed for the key',
+      );
+    if (scope && !client.scopes.includes(scope))
+      throw new AppError(
+        'forbidden',
+        403,
+        'The key lacks the scope for this endpoint',
+      );
   }
 
   /** Cookie requests from another origin are refused before anything else, public routes included; bearer clients send no cookies, so CSRF cannot reach them. */

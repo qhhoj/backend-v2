@@ -1,5 +1,7 @@
 import { Controller, Get, Post } from '@nestjs/common';
+import { getModelToken } from '@nestjs/mongoose';
 import Redis from 'ioredis';
+import type { Model } from 'mongoose';
 import { REDIS } from '@libs/common';
 import {
   AllowBeforeTwoFactor,
@@ -7,14 +9,20 @@ import {
   type AuthContext,
   COOKIE_REFRESH_MS,
   CurrentAuth,
+  CurrentServiceClient,
   generateApiToken,
+  generateServiceKey,
   GroupsQuerier,
   NoImpersonation,
   Public,
   RequirePermission,
+  RequireScope,
+  type ServiceClientPrincipal,
+  ServiceOnly,
   SessionOnly,
   sha256,
 } from '@libs/auth';
+import { IntegrationClient } from '@libs/database';
 import {
   ApiTest,
   createUser,
@@ -59,6 +67,18 @@ class GuardedController {
   @Get('account-security')
   accountSecurity() {
     return 'secured';
+  }
+  @ServiceOnly()
+  @RequireScope('contests:read')
+  @Get('service')
+  service(@CurrentServiceClient() client: ServiceClientPrincipal) {
+    return client.name;
+  }
+  @ServiceOnly()
+  @RequireScope('contests:write')
+  @Post('service-write')
+  serviceWrite() {
+    return 'written';
   }
 }
 
@@ -564,5 +584,144 @@ describe('AuthGuard', () => {
     await route()
       .set('Cookie', sessionCookie((await login({}, impersonatorId)).id))
       .expect(200, { data: 'secured' });
+  });
+  describe('integration clients', () => {
+    let clients: Model<IntegrationClient>;
+    const LOCAL = ['127.0.0.0/8', '::1/128'];
+    const HOUR_MS = 60 * 60 * 1000;
+    const makeClient = async (extra: Partial<IntegrationClient> = {}) => {
+      const { key, hash } = generateServiceKey();
+      const client = await clients.create({
+        name: 'bridge',
+        keyHash: hash,
+        keyPrefix: key.slice(0, 8),
+        scopes: ['contests:read', 'contests:write'],
+        allowedCidrs: LOCAL,
+        actsAs: userId,
+        createdBy: userId,
+        ...extra,
+      });
+      return { client, key, bearer: `Bearer ${key}` };
+    };
+    const serviceRoute = (bearer: string) =>
+      api.http().get('/guarded/service').set('Authorization', bearer);
+    beforeAll(() => {
+      clients = api.app.get(getModelToken(IntegrationClient.name));
+    });
+    beforeEach(async () => {
+      const redis = api.app.get<Redis>(REDIS);
+      const keys = await redis.keys('rate:service-key-failures:*');
+      if (keys.length) await redis.del(...keys);
+    });
+
+    it('authenticates a key on a service route without cookies, CSRF or an origin check, and stamps its last use', async () => {
+      const { client, bearer } = await makeClient({ name: 'judge-bridge' });
+      await serviceRoute(bearer).expect(200, { data: 'judge-bridge' });
+      await api
+        .http()
+        .post('/guarded/service-write')
+        .set('Authorization', bearer)
+        .set('Origin', 'https://evil.example')
+        .expect(201, { data: 'written' });
+      expect(
+        (await clients.findById(client._id).lean())?.lastUsedAt,
+      ).toBeInstanceOf(Date);
+    });
+
+    it('never lets a key act as a user: user routes and public routes answer 401', async () => {
+      const { bearer } = await makeClient();
+      await api
+        .http()
+        .get('/guarded/private')
+        .set('Authorization', bearer)
+        .expect(401)
+        .expect(errorCode('unauthorized'));
+      await api
+        .http()
+        .get('/guarded/public')
+        .set('Authorization', bearer)
+        .expect(401);
+      await api
+        .http()
+        .post('/guarded/private')
+        .set('Authorization', bearer)
+        .expect(401);
+    });
+
+    it('refuses every user credential on a service route with 403, and anonymous callers with 401', async () => {
+      const { bearer } = await makeClient();
+      const route = () => api.http().get('/guarded/service');
+      await route()
+        .set('Authorization', await useApiToken())
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await route()
+        .set('Cookie', sessionCookie((await login()).id))
+        .expect(403);
+      await route()
+        .set('Cookie', sessionCookie((await login()).id))
+        .set('Authorization', bearer)
+        .expect(403);
+      await route().set('Authorization', 'Bearer not-a-key').expect(403);
+      await route().expect(401).expect(errorCode('unauthorized'));
+    });
+
+    it('answers 401 for a malformed, unknown or revoked key, at once', async () => {
+      await serviceRoute('Bearer qhi_short').expect(401);
+      await serviceRoute(`Bearer ${generateServiceKey().key}`).expect(401);
+      const { client, bearer } = await makeClient();
+      await serviceRoute(bearer).expect(200);
+      await clients.updateOne(
+        { _id: client._id },
+        { $set: { revokedAt: new Date() } },
+      );
+      await serviceRoute(bearer).expect(401).expect(errorCode('unauthorized'));
+    });
+
+    it('answers 401 for an expired key, and accepts one that expires later', async () => {
+      const { bearer: later } = await makeClient({
+        expiresAt: new Date(Date.now() + HOUR_MS),
+      });
+      await serviceRoute(later).expect(200);
+      const { client, bearer } = await makeClient({
+        expiresAt: new Date(Date.now() + HOUR_MS),
+      });
+      await serviceRoute(bearer).expect(200);
+      await clients.updateOne(
+        { _id: client._id },
+        { $set: { expiresAt: new Date(Date.now() - 1000) } },
+      );
+      await serviceRoute(bearer).expect(401).expect(errorCode('unauthorized'));
+    });
+
+    it('throttles invalid keys per address and answers 429 before looking anything up', async () => {
+      for (let attempt = 0; attempt < 20; attempt += 1)
+        await serviceRoute(`Bearer ${generateServiceKey().key}`).expect(401);
+      await serviceRoute(`Bearer ${generateServiceKey().key}`)
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      const { bearer } = await makeClient();
+      await serviceRoute(bearer).expect(429);
+    });
+
+    it('refuses an address outside the client CIDRs and a client with none', async () => {
+      const { bearer: elsewhere } = await makeClient({
+        allowedCidrs: ['10.0.0.0/8'],
+      });
+      await serviceRoute(elsewhere).expect(403).expect(errorCode('forbidden'));
+      const { bearer: none } = await makeClient({ allowedCidrs: [] });
+      await serviceRoute(none).expect(403);
+    });
+
+    it('refuses a route whose scope the client does not hold', async () => {
+      const { bearer } = await makeClient({ scopes: ['contests:read'] });
+      await serviceRoute(bearer).expect(200);
+      await api
+        .http()
+        .post('/guarded/service-write')
+        .set('Authorization', bearer)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+    });
   });
 });
