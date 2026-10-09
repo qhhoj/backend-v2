@@ -10,6 +10,10 @@ import {
   REDIS,
   withRedisLock,
 } from '@libs/common';
+import {
+  NotificationsService,
+  organizationRequestDraft,
+} from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { OrganizationRequest } from '@libs/database';
 import type Redis from 'ioredis';
@@ -59,6 +63,7 @@ export class OrganizationRequestsService {
     private readonly users: UsersRepository,
     private readonly points: OrganizationPointsService,
     private readonly rateLimits: RateLimitService,
+    private readonly notifications: NotificationsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -182,6 +187,7 @@ export class OrganizationRequestsService {
         () => this.approve(principal, slug, request, now),
       );
     }
+    await this.notifyDecision(organization, request, state);
     return this.respond((await this.requests.findById(id))!, organization.slug);
   }
 
@@ -223,6 +229,23 @@ export class OrganizationRequestsService {
   ): Promise<void> {
     if (!(await this.requests.decide(id, state, decidedBy, decidedAt)))
       throw alreadyDecided();
+  }
+
+  /** The requester finds out in the bell. `notify` logs its own failures: a decision already committed never fails here. */
+  private notifyDecision(
+    organization: { slug: string; name: string },
+    request: OrganizationRequest,
+    state: 'A' | 'R',
+  ): Promise<void> {
+    return this.notifications.notify(
+      [uuidStr(request.user)],
+      organizationRequestDraft({
+        requestId: uuidStr(request._id),
+        slug: organization.slug,
+        organizationName: organization.name,
+        approved: state === 'A',
+      }),
+    );
   }
 
   private async requestOf(slug: string, id: string) {

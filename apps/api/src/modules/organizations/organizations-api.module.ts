@@ -2,7 +2,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
-import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import {
+  NotificationsModule,
+  ORGANIZATION_POINTS_QUEUE,
+} from '@libs/community';
 import { OrganizationEditingController } from './editing/organization-editing.controller';
 import { OrganizationEditingService } from './editing/organization-editing.service';
 import { OrganizationRequestQueueController } from './requests/organization-request-queue.controller';
@@ -21,6 +24,7 @@ import { OrganizationsService } from './core/organizations.service';
 @Module({
   imports: [
     AuthModule,
+    NotificationsModule,
     BullModule.registerQueue({ name: ORGANIZATION_POINTS_QUEUE }),
   ],
   controllers: [
