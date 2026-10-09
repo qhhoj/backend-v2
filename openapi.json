@@ -6037,6 +6037,7 @@
           "auth.pwnedApiUrl",
           "contest.banAfterDisqualifications",
           "contest.officialMode",
+          "contest.officialModeEndsAt",
           "discord.webhooks",
           "mail.from",
           "mail.smtpUrl",
