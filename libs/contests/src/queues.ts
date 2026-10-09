@@ -158,7 +158,10 @@ export interface ContestDataJob {
 }
 
 /** At most one job per contest (an `add` with a live id is ignored), dropped as soon as it ends either way: "running" is "the job exists", and a failure never blocks the next request. */
-export const oneJobPerContest = (prefix: 'data', contestId: string) => ({
+export const oneJobPerContest = (
+  prefix: 'data' | 'export',
+  contestId: string,
+) => ({
   jobId: `${prefix}-${contestId}`,
   attempts: 1,
   removeOnComplete: true,

@@ -187,6 +187,19 @@ describe('contest extras queues', () => {
     });
   });
 
+  it('gives an export its own job id, so it and a data prepare of one contest can both be queued', () => {
+    const contestId = newId();
+    expect(oneJobPerContest('export', contestId)).toEqual({
+      jobId: `export-${contestId}`,
+      attempts: 1,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    expect(oneJobPerContest('export', contestId).jobId).not.toBe(
+      oneJobPerContest('data', contestId).jobId,
+    );
+  });
+
   it('queues a rating per request, retried', async () => {
     const contestId = newId();
     await enqueueContestRating(ratingQueue, contestId);

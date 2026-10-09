@@ -1,5 +1,6 @@
 export * from './contest-events';
 export * from './contest-data';
+export * from './contest-export';
 export * from './contest-points';
 export * from './contest-time';
 export * from './scoring-context';

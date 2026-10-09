@@ -14,6 +14,9 @@ import { EventsModule } from '../events/events.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './core/contest-access.module';
+import { BalloonsModule } from './balloons/balloons.module';
+import { ExportModule } from './export/export.module';
+import { FeedModule } from './feed/feed.module';
 import { ContestTagsModule } from './tags/contest-tags.module';
 import { GhostsModule } from './ghosts/ghosts.module';
 import { ReplayModule } from './replay/replay.module';
@@ -58,6 +61,9 @@ import { RankingLinksService } from './ranking/ranking-links.service';
   imports: [
     AuthModule,
     ContestAccessModule,
+    BalloonsModule,
+    ExportModule,
+    FeedModule,
     ContestTagsModule,
     GhostsModule,
     ReplayModule,
