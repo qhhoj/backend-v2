@@ -1,0 +1,10 @@
+SET FOREIGN_KEY_CHECKS=0;
+SET SESSION sql_mode = '';
+INSERT INTO judge_problemtype (id, name, full_name) VALUES (3001,'dp','Dynamic programming');
+INSERT INTO judge_problemgroup (id, name, full_name) VALUES (3001,'basic','Basic problems');
+INSERT INTO judge_license (id, `key`, link, name, display, icon, text) VALUES (3001,'cc-by','https://cc.example/by','CC BY','CC','i.png','text');
+INSERT INTO judge_taggroup (id, code, name) VALUES (3001,'algo','Algorithms');
+INSERT INTO judge_tag (id, code, name, group_id) VALUES (3001,'greedy','Greedy',3001),(3002,'lost','Lost',3999);
+INSERT INTO judge_tagproblem (id, code, name, link, judge) VALUES (3001,'CF1A','Theatre Square','https://codeforces.com/problemset/problem/1/A','codeforces'),(3002,'X_1','X','https://x.example/1','');
+INSERT INTO judge_tagdata (id, assigner_id, problem_id, tag_id) VALUES (3001,1,3001,3001),(3002,1,3001,3002),(3003,3999,3002,3001);
+SET FOREIGN_KEY_CHECKS=1;
