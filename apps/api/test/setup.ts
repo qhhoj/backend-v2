@@ -22,6 +22,9 @@ import {
   UserActivity,
   UserSession,
   ContestOfficialRanking,
+  ContestGhost,
+  ContestReplayChunk,
+  ContestReplayHead,
   ContestParticipation,
   ContestPublicRankingLink,
   ContestSubmission,
@@ -183,6 +186,13 @@ export async function setupApiTest({
     officialRankings: readyApp.get<Model<ContestOfficialRanking>>(
       getModelToken(ContestOfficialRanking.name),
     ),
+    replayHeads: readyApp.get<Model<ContestReplayHead>>(
+      getModelToken(ContestReplayHead.name),
+    ),
+    replayChunks: readyApp.get<Model<ContestReplayChunk>>(
+      getModelToken(ContestReplayChunk.name),
+    ),
+    ghosts: readyApp.get<Model<ContestGhost>>(getModelToken(ContestGhost.name)),
     organizations: readyApp.get<Model<Organization>>(
       getModelToken(Organization.name),
     ),

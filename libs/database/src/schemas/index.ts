@@ -23,6 +23,15 @@ import {
   ContestOfficialRanking,
   ContestOfficialRankingSchema,
 } from './contest-official-ranking.schema';
+import { ContestGhost, ContestGhostSchema } from './contest-ghost.schema';
+import {
+  ContestReplayChunk,
+  ContestReplayChunkSchema,
+} from './contest-replay-chunk.schema';
+import {
+  ContestReplayHead,
+  ContestReplayHeadSchema,
+} from './contest-replay-head.schema';
 import {
   ContestPublicRankingLink,
   ContestPublicRankingLinkSchema,
@@ -77,9 +86,12 @@ export * from './comment-lock.schema';
 export * from './comment-vote.schema';
 export * from './comment.schema';
 export * from './contest-announcement.schema';
+export * from './contest-ghost.schema';
 export * from './contest-official-ranking.schema';
 export * from './contest-participation.schema';
 export * from './contest-public-ranking-link.schema';
+export * from './contest-replay-chunk.schema';
+export * from './contest-replay-head.schema';
 export * from './contest-submission.schema';
 export * from './contest-tag.schema';
 export * from './contest.schema';
@@ -127,6 +139,9 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: UserSession.name, schema: UserSessionSchema },
   { name: ContestAnnouncement.name, schema: ContestAnnouncementSchema },
   { name: ContestOfficialRanking.name, schema: ContestOfficialRankingSchema },
+  { name: ContestGhost.name, schema: ContestGhostSchema },
+  { name: ContestReplayChunk.name, schema: ContestReplayChunkSchema },
+  { name: ContestReplayHead.name, schema: ContestReplayHeadSchema },
   {
     name: ContestPublicRankingLink.name,
     schema: ContestPublicRankingLinkSchema,

@@ -12,6 +12,9 @@ import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
   Contest,
   ContestAnnouncement,
+  ContestGhost,
+  ContestReplayChunk,
+  ContestReplayHead,
   Notification,
   SimilarityPair,
   SimilarityRun,
@@ -141,6 +144,13 @@ export async function setupWorkerTest({
     contestSubmissions: ready.get<Model<ContestSubmission>>(
       getModelToken(ContestSubmission.name),
     ),
+    replayHeads: ready.get<Model<ContestReplayHead>>(
+      getModelToken(ContestReplayHead.name),
+    ),
+    replayChunks: ready.get<Model<ContestReplayChunk>>(
+      getModelToken(ContestReplayChunk.name),
+    ),
+    ghosts: ready.get<Model<ContestGhost>>(getModelToken(ContestGhost.name)),
     ratings: ready.get<Model<Rating>>(getModelToken(Rating.name)),
     similarityRuns: ready.get<Model<SimilarityRun>>(
       getModelToken(SimilarityRun.name),
