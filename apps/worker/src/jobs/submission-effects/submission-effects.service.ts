@@ -11,10 +11,9 @@ import type { OrganizationPointsJob } from '@libs/community';
 import {
   contestSubmissionPoints,
   disqualify,
-  frozenTime,
-  participationStart,
   purgeRankingCache,
   scoreParticipation,
+  scoringContextOf,
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { acceptanceRate, userPoints } from '@libs/judging';
@@ -99,17 +98,7 @@ export class SubmissionEffectsService {
         const score = scoreParticipation(
           rows.filter((row) => problemIds.includes(row.problemId)),
           { name: contest.formatName, config: contest.formatConfig },
-          {
-            start: participationStart(contest, participation),
-            contestStart: contest.startTime,
-            frozenTime: frozenTime(contest),
-            pointsPrecision: contest.pointsPrecision,
-            problems: contest.problems.map((entry) => ({
-              problemId: uuidStr(entry.problem),
-              points: entry.points,
-              dataPoints: dataPointsOf.get(uuidStr(entry.problem)) ?? null,
-            })),
-          },
+          scoringContextOf(contest, participation, dataPointsOf),
         );
         await this.contestResults.setResults(
           participationId,
