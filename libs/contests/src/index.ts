@@ -3,6 +3,7 @@ export * from './contest-data';
 export * from './contest-points';
 export * from './contest-time';
 export * from './scoring-context';
+export * from './replay-events';
 export * from './labels';
 export * from './standings';
 export * from './queues';

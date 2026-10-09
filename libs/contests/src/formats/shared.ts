@@ -14,7 +14,7 @@ export const secondsSince = (start: Date, date: Date): number =>
 export const roundScore = (score: number, precision: number): number =>
   pythonRound(score, precision);
 
-const byDateThenId = (left: ScoringRow, right: ScoringRow): number =>
+export const byDateThenId = (left: ScoringRow, right: ScoringRow): number =>
   left.date.getTime() - right.date.getTime() ||
   (left.submissionId < right.submissionId
     ? -1
