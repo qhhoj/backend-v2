@@ -41,6 +41,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     DatabaseModule,
     StorageModule,
     QueueModule,
+    // Keep RedisModule before the job modules: Nest runs shutdown hooks in module order, and running jobs still use REDIS (test/shutdown-order.e2e-spec.ts pins it).
     RedisModule,
     ScheduleModule.forRoot(),
     SettingsModule,
