@@ -27,22 +27,23 @@ const SECRETS_SKIPPED =
   'REHEARSAL: legacy secrets skipped, canary skipped, 2FA off for every user';
 const TWO_FACTOR_OFF = '2FA off (legacy secrets skipped, rehearsal)';
 
-/** What a user without migrated secrets gets: no TOTP, no WebAuthn. */
+/** What a user without migrated secrets gets: no TOTP, no WebAuthn (credentials without a handle would be a shape the real run never writes). */
 const NO_SECOND_FACTOR = {
   isTotpEnabled: false,
   totpKey: null,
   scratchCodes: null,
   isWebauthnEnabled: false,
   webauthnUserHandle: null,
+  webauthnCredentials: [],
 };
 
+/** 2FA the user had switched on in legacy; leftover key bytes alone do not count. */
 const hasLegacySecondFactor = (row: UserRow): boolean =>
-  Boolean(
-    Number(row.is_totp_enabled) ||
-    Number(row.is_webauthn_enabled) ||
-    row.totp_key?.length ||
-    row.scratch_codes?.length,
-  );
+  Boolean(Number(row.is_totp_enabled) || Number(row.is_webauthn_enabled));
+
+/** Without secrets verify compares presence only, so a sealed secret in Mongo still shows as a mismatch. */
+const sealedPresence = (sealed: unknown): string | null =>
+  typeof sealed === 'string' ? 'sealed' : null;
 
 @Injectable()
 export class UsersMapper implements Mapper<UserRow> {
@@ -96,16 +97,20 @@ export class UsersMapper implements Mapper<UserRow> {
       ...profileTextFields(row, ctx),
       ...profileStateFields(row, ctx),
       ...deactivatedBanFields(row),
-      ...this.secondFactor(row, ctx),
       ...relations,
+      ...this.secondFactor(row, ctx),
     };
   }
 
   normalize(doc: MappedDocument) {
     return {
       ...withoutFields(doc, RECOMPUTED),
-      totpKey: this.secrets?.open(doc.totpKey) ?? null,
-      scratchCodes: this.secrets?.open(doc.scratchCodes) ?? null,
+      totpKey: this.secrets
+        ? this.secrets.open(doc.totpKey)
+        : sealedPresence(doc.totpKey),
+      scratchCodes: this.secrets
+        ? this.secrets.open(doc.scratchCodes)
+        : sealedPresence(doc.scratchCodes),
     };
   }
 

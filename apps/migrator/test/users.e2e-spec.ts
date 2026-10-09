@@ -202,6 +202,7 @@ describe('users job', () => {
         scratchCodes: null,
         isWebauthnEnabled: false,
         webauthnUserHandle: null,
+        webauthnCredentials: [],
       });
       expect(skipped.users).toContain(
         'REHEARSAL: legacy secrets skipped, canary skipped, 2FA off for every user',
@@ -215,6 +216,17 @@ describe('users job', () => {
 
     it('verifies clean under the same flag', async () => {
       expect(await migration.verify(['users'])).toBe(0);
+    });
+
+    it('still sees sealed secrets of a real run as mismatches', async () => {
+      setSkipLegacySecrets(false);
+      Object.assign(process.env, {
+        LEGACY_SECRET_KEY: saved.LEGACY_SECRET_KEY,
+        ENCRYPTION_KEY: saved.ENCRYPTION_KEY,
+      });
+      await migration.backfill(['users']);
+      setSkipLegacySecrets(true);
+      expect(await migration.verify(['users'])).toBeGreaterThan(0);
     });
 
     it('is refused without MIGRATION_REHEARSAL=1', () => {
