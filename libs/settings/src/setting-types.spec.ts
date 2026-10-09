@@ -3,6 +3,7 @@ import {
   integerType,
   mailFromType,
   oauthClientType,
+  optionalDatetimeType,
   optionalUrlType,
   SettingError,
   smtpUrlType,
@@ -190,5 +191,31 @@ describe('outbound URL safety', () => {
           expect(() => optionalUrlType.parse(url)).toThrow(SettingError);
       });
     });
+  });
+});
+
+describe('optionalDatetimeType', () => {
+  it('accepts empty (off) and normalises an instant with an offset to UTC', () => {
+    expect(optionalDatetimeType.parse('')).toBe('');
+    expect(optionalDatetimeType.parse('2026-10-10T08:00:00+07:00')).toBe(
+      '2026-10-10T01:00:00.000Z',
+    );
+    expect(optionalDatetimeType.parse('2026-10-10T01:00:00Z')).toBe(
+      '2026-10-10T01:00:00.000Z',
+    );
+  });
+  it('refuses a local time without an offset, a date alone, nonsense and non-strings', () => {
+    for (const bad of [
+      '2026-10-10T08:00:00',
+      '2026-10-10',
+      'tomorrow',
+      '2026-13-40T00:00:00Z',
+      1,
+      null,
+      true,
+    ])
+      expect(messageOf(() => optionalDatetimeType.parse(bad))).toContain(
+        'ISO 8601',
+      );
   });
 });

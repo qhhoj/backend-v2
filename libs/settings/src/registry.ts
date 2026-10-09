@@ -3,6 +3,7 @@ import {
   integerType,
   mailFromType,
   oauthClientType,
+  optionalDatetimeType,
   optionalUrlType,
   smtpUrlType,
   timeZoneType,
@@ -55,7 +56,14 @@ export const SETTINGS = {
     type: booleanType,
     default: false,
     description:
-      'Official contest mode: non-superusers cannot edit their about or first name, read or write comments, vote on comments or write blog posts.',
+      'Official contest mode: non-superusers cannot edit their about, first name, display badge or organization order, join, leave or request organizations, read or write comments, vote on comments or write blog posts. Tickets stay open.',
+    secret: false,
+  }),
+  'contest.officialModeEndsAt': define({
+    type: optionalDatetimeType,
+    default: '',
+    description:
+      'Official contest mode switches itself off from this instant (ISO 8601 with an offset); empty: only the flag decides. Forgetting to switch the mode off then cannot lock the site.',
     secret: false,
   }),
   'contest.banAfterDisqualifications': define({

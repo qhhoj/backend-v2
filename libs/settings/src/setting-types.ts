@@ -85,6 +85,25 @@ export const timeZoneType: SettingType<string> = {
       : fail('Must be an IANA time zone name.'),
 };
 
+const INSTANT_WITH_OFFSET =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** `''` switches the feature off; otherwise an ISO 8601 instant that names its offset (a bare local time would mean different instants on different servers). Stored as UTC. */
+export const optionalDatetimeType: SettingType<string> = {
+  parse: (raw) => {
+    if (raw === '') return '';
+    const instant =
+      typeof raw === 'string' && INSTANT_WITH_OFFSET.test(raw)
+        ? new Date(raw)
+        : null;
+    return instant && !Number.isNaN(instant.getTime())
+      ? instant.toISOString()
+      : fail(
+          'Must be empty or an ISO 8601 instant with an offset, e.g. 2026-10-10T08:00:00+07:00.',
+        );
+  },
+};
+
 /** `''` switches the feature off. */
 export const optionalUrlType: SettingType<string> = {
   parse: (raw) =>
