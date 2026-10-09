@@ -86,7 +86,7 @@ Before the window (days ahead): judge hosts provisioned and verified ("Judge hos
    node dist/apps/migrator/main prune-languages --keep "$DAY_ONE_LANGUAGES,OUTPUT" --dry-run
    ```
    The dry run must exit 0 and its `prunedLanguages` and `problemsChanged` must equal the rehearsal's; otherwise stop. The command refuses (exit 1, nothing written) a list with no runtime language (an unset variable) and any key that names no language. Then the same command without `--dry-run`; keep the logged `prunedLanguages`, `problemsChanged`, `languagesDisabled` and `emptiedProblems` in the cutover notes. GAS32 and the other pruned languages keep their rows (disabled), so old submissions still show their language. Re-running it is safe. A language added to the fleet later is re-allowed per problem by its editors.
-6. Start the new stack: `systemctl start qhhoj.target`, then run the smoke checks against the new host by `curl --resolve` or `/etc/hosts`.
+6. Start the new stack: `systemctl start qhhoj.target`, then run the smoke checks against the new host by `curl --resolve` or `/etc/hosts`, all but the judging one (no judge is connected yet: step 7.6 covers it).
 7. Switch the judges, one host at a time:
    1. Save the running firewall for the rollback: `install -d -m 0700 /root/qhhoj-rollback && nft list ruleset > /root/qhhoj-rollback/ruleset.nft && systemctl is-enabled nftables > /root/qhhoj-rollback/nftables-enabled 2>&1 || true` (also note any other firewall unit, e.g. `systemctl is-active ufw`).
    2. `systemctl disable --now <old DMOJ judge unit>`.
@@ -101,7 +101,7 @@ Before the window (days ahead): judge hosts provisioned and verified ("Judge hos
 
 - `curl -fsS https://HOST/api/internal/site` returns JSON; `curl -I https://HOST/some/spa/route` returns 200 with the HTML shell.
 - `curl -N https://HOST/api/internal/events/...` as a logged-in user prints a heartbeat within 15 s without delay (proves unbuffered).
-- Log in, open a problem, submit a solution; a judge grades it; the verdict appears live.
+- Log in, open a problem, submit a solution; a judge grades it; the verdict appears live (in the cutover window only once the judges are switched, Cutover sequence step 7.6).
 - A statement PDF renders (worker + Chromium + pandoc); an uploaded image shows from `/media/`.
 - `ss -ltn | grep 9999` is open locally but unreachable from outside the judge network; `systemctl status qhhoj-*` all active.
 - `curl -sI https://HOST/s/nonexistent` is 404 (not the SPA shell: proves the `/s/` location); an integration key from outside its `allowedCidrs` is refused on `/api/sync/v1/...`.
