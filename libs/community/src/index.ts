@@ -16,3 +16,4 @@ export * from './site-content';
 export * from './notifications';
 export * from './ticket-timeline';
 export * from './ticket-canned-replies';
+export * from './official-mode';

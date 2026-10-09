@@ -5,7 +5,7 @@ import { AppError, unique } from '@libs/common';
 import {
   canInteract,
   COMMENT_THREADS_PAGE_SIZE,
-  officialContestLocks,
+  officialModeLocks,
   pageOf,
   pageRef,
 } from '@libs/community';
@@ -146,9 +146,7 @@ export class CommentsService {
 
   /** Legacy hid the comment area in official contest mode; superusers keep it. */
   assertOpen(principal: Principal | null): void {
-    if (
-      officialContestLocks(this.settings.get('contest.officialMode'), principal)
-    )
+    if (officialModeLocks(this.settings, principal))
       throw new AppError(
         'forbidden',
         403,

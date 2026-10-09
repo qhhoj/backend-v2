@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import type { Principal } from '@libs/auth';
-import { officialContestLocks, RECENT_COMMENTS_COUNT } from '@libs/community';
+import { officialModeLocks, RECENT_COMMENTS_COUNT } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { LeaderboardField } from '@libs/database';
 import { SettingsService } from '@libs/settings';
@@ -67,11 +67,7 @@ export class HomeService {
           limit: RECENT_COMMENTS_COUNT,
         })
       ).items;
-    if (
-      principal ||
-      officialContestLocks(this.settings.get('contest.officialMode'), null)
-    )
-      return newest();
+    if (principal || officialModeLocks(this.settings, null)) return newest();
     const cached = await this.redis.get(ANONYMOUS_RECENT_COMMENTS_KEY);
     if (cached !== null) return JSON.parse(cached) as RecentCommentResponse[];
     const items = await newest();

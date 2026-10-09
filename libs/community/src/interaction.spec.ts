@@ -1,8 +1,4 @@
-import {
-  canInteract,
-  hasEnoughSolves,
-  officialContestLocks,
-} from './interaction';
+import { canInteract, hasEnoughSolves } from './interaction';
 
 const user = (
   fields: Partial<{
@@ -32,14 +28,5 @@ describe('interaction gate', () => {
     expect(canInteract(user({ isStaff: true, mute: true }))).toBe(false);
     expect(canInteract(user({ problemCount: 5 }))).toBe(true);
     expect(canInteract(user({ isSuperuser: true }))).toBe(true);
-  });
-});
-
-describe('officialContestLocks', () => {
-  it('locks everyone but superusers while the mode is on', () => {
-    expect(officialContestLocks(true, null)).toBe(true);
-    expect(officialContestLocks(true, { isSuperuser: false })).toBe(true);
-    expect(officialContestLocks(true, { isSuperuser: true })).toBe(false);
-    expect(officialContestLocks(false, { isSuperuser: false })).toBe(false);
   });
 });

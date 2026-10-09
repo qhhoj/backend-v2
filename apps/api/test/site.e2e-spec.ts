@@ -189,7 +189,12 @@ describe('site content', () => {
         dataOf<SiteResponse>(
           await api.http().get('/api/internal/site').expect(200),
         ),
-      ).toEqual({ navigation: [], config: {} });
+      ).toEqual({
+        navigation: [],
+        config: {},
+        officialMode: false,
+        officialModeEndsAt: null,
+      });
     });
   });
 });

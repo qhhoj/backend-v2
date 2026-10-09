@@ -5,7 +5,7 @@ import { AppError, invalidField } from '@libs/common';
 import {
   canInteract,
   INTERACT_MIN_PROBLEM_COUNT,
-  officialContestLocks,
+  officialModeLocks,
 } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
@@ -128,9 +128,7 @@ export class ProfileService {
 
   /** Legacy removed `about` and `first_name` from the form in official contest mode; superusers still edit. */
   private refuseInOfficialContest(principal: Principal): void {
-    if (
-      officialContestLocks(this.settings.get('contest.officialMode'), principal)
-    )
+    if (officialModeLocks(this.settings, principal))
       throw new AppError(
         'forbidden',
         403,

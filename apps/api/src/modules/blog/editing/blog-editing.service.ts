@@ -5,7 +5,7 @@ import { AppError, RateLimitService, unique } from '@libs/common';
 import {
   canWritePersonalPost,
   excerpt,
-  officialContestLocks,
+  officialModeLocks,
   pagePath,
   postSlug,
 } from '@libs/community';
@@ -277,9 +277,7 @@ export class BlogEditingService {
   }
 
   private refuseInOfficialContest(principal: Principal): void {
-    if (
-      officialContestLocks(this.settings.get('contest.officialMode'), principal)
-    )
+    if (officialModeLocks(this.settings, principal))
       throw forbidden('Blog posts are locked during the official contest');
   }
 

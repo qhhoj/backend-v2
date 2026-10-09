@@ -3,7 +3,7 @@ import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
 import type { CursorPageMetaResponse } from '@libs/common';
-import { officialContestLocks, pageOf, pageRef } from '@libs/community';
+import { officialModeLocks, pageOf, pageRef } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
 import { SettingsService } from '@libs/settings';
@@ -40,9 +40,7 @@ export class RecentCommentsService {
       limit,
     }: { authorId?: string; before?: string | null; limit: number },
   ): Promise<{ items: RecentCommentResponse[]; nextBefore: string | null }> {
-    if (
-      officialContestLocks(this.settings.get('contest.officialMode'), principal)
-    )
+    if (officialModeLocks(this.settings, principal))
       return { items: [], nextBefore: null };
     const now = new Date();
     const scope = principal

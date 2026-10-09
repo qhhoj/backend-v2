@@ -19,9 +19,3 @@ export const hasEnoughSolves = (user: Interactor): boolean =>
 /** Editing `about`, commenting and voting: enough solves and not muted. */
 export const canInteract = (user: Interactor): boolean =>
   !user.mute && hasEnoughSolves(user);
-
-/** Official contest mode (`contest.officialMode` setting): public text (about, blog editing, comments) is locked for everyone but superusers. */
-export const officialContestLocks = (
-  enabled: boolean,
-  viewer: { isSuperuser: boolean } | null,
-): boolean => enabled && !viewer?.isSuperuser;
