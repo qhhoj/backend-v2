@@ -31,7 +31,7 @@ const canAdminister = (
   principal: Principal | null,
   organization: OrganizationAccessView,
 ) => isAdmin(principal, organization) || editsAll(principal);
-/** Who may see the organization enumerated (lists, user pages, leaderboards, `/api/v2`): unlisted ones only their members and `edit_all_organization` (legacy leaked them through select2, `/api/v2` and the sitemap). Its own page stays reachable by slug for anyone: unlisted is not private. */
+/** Who may see the organization enumerated (lists, user pages, leaderboards): unlisted ones only their members and `edit_all_organization` (legacy leaked them through select2 and the sitemap). Its own page stays reachable by slug for anyone: unlisted is not private. */
 const canList = (
   principal: Principal | null,
   organization: OrganizationAccessView,

@@ -40,10 +40,6 @@ describe('contest submissions and the freeze', () => {
     who ? authed(api.http().get(path), sessions[who]) : api.http().get(path);
   const idsOf = (response: { body: unknown }) =>
     dataOf<SubmissionListItemResponse[]>(response).map((item) => item.id);
-  const v2IdsOf = (response: { body: unknown }) =>
-    (
-      response.body as { data: { objects: Array<{ id: string }> } }
-    ).data.objects.map((item) => item.id);
 
   beforeAll(async () => {
     api = await setupApiTest();
@@ -139,16 +135,12 @@ describe('contest submissions and the freeze', () => {
         await get('/api/internal/submissions?problem=frozen_p').expect(200),
       ),
     ).toEqual([bobOutside]);
-    expect(
-      v2IdsOf(await get('/api/v2/submissions?problem=frozen_p').expect(200)),
-    ).toEqual([bobOutside]);
     await get(`/api/internal/submissions/${bobId}`, 'alice')
       .expect(403)
       .expect(errorCode('contest_running'));
     await get(`/api/internal/submissions/${bobId}/source`, 'alice')
       .expect(403)
       .expect(errorCode('contest_running'));
-    await get(`/api/v2/submission/${bobId}`, 'alice').expect(403);
     await get(`/api/internal/submissions/${aliceId}`, 'alice').expect(200);
     for (const who of ['author', 'staff']) {
       expect(
@@ -232,11 +224,6 @@ describe('contest submissions and the freeze', () => {
         ).expect(200),
       ),
     ).not.toContain(bobId);
-    expect(
-      v2IdsOf(
-        await get('/api/v2/submissions?problem=ended_frozen_p').expect(200),
-      ),
-    ).not.toContain(bobId);
     await get(contestUrl(contest.key, '/submissions?user=bob'), 'alice').expect(
       403,
     );
@@ -268,7 +255,6 @@ describe('contest submissions and the freeze', () => {
       ),
     ).toContain(bobId);
     await get(`/api/internal/submissions/${bobId}`, 'alice').expect(200);
-    await get(`/api/v2/submission/${bobId}`, 'alice').expect(200);
   });
 
   it('keeps a running unfrozen contest list to the viewer unless the contest shows it', async () => {
@@ -365,9 +351,6 @@ describe('contest submissions and the freeze', () => {
           ).expect(200),
         ).sort(),
       ).toEqual([aliceId, bobOutside].sort());
-      expect(
-        v2IdsOf(await get(`/api/v2/submissions?problem=${code}`).expect(200)),
-      ).toEqual([bobOutside]);
       await get(`/api/internal/submissions/${bobId}`, 'alice').expect(403);
     },
   );

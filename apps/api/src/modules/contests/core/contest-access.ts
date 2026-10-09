@@ -137,28 +137,7 @@ function visibleFilter(principal: Principal | null): FilterQuery<Contest> {
   };
 }
 
-/** Mongo filter with `canSeeFullScoreboard`'s semantics for a list, minus the viewer's own participations (`P` boards stay hidden until the end). */
-function scoreboardFilter(
-  principal: Principal | null,
-  now: Date,
-): FilterQuery<Contest> {
-  if (seesEveryContest(principal)) return {};
-  return {
-    $or: [
-      { scoreboardVisibility: 'V', startTime: { $lte: now } },
-      { scoreboardVisibility: { $in: ['C', 'P'] }, endTime: { $lt: now } },
-      ...(principal
-        ? [
-            { authors: principal.userId },
-            { curators: principal.userId },
-            { viewContestScoreboard: principal.userId },
-          ]
-        : []),
-    ],
-  };
-}
-
-/** `scoreboardFilter`'s semantics for one contest. */
+/** Whether the viewer may see the board of one contest, by its scoreboard visibility and the viewer's roles. */
 function boardVisible(
   principal: Principal | null,
   contest: ContestAccessView,
@@ -247,7 +226,6 @@ export const ContestAccess = {
   canEdit,
   canSee,
   visibleFilter,
-  scoreboardFilter,
   boardVisible,
   boardReadable,
   showScoreboard,

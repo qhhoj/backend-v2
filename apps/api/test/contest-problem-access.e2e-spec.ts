@@ -1,4 +1,3 @@
-import { generateApiToken } from '@libs/auth';
 import type { SubmissionCase } from '@libs/database';
 import type { ProblemListItemResponse } from '../src/modules/problems/core/dto/problem-list.response';
 import {
@@ -17,7 +16,7 @@ import {
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { dataOf, seedSubmission } from './submission-fixtures';
-import { setupApiTest, TEST_ENV } from './setup';
+import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 describe('contest-only problem access', () => {
@@ -25,7 +24,6 @@ describe('contest-only problem access', () => {
   let catalog: Catalog;
   let session: TestSession;
   let userId: string;
-  let apiToken: string;
   const problem = (code: string) =>
     authed(api.http().get(`/api/internal/problems/${code}`), session);
   const listedCodes = async () =>
@@ -60,17 +58,12 @@ describe('contest-only problem access', () => {
         session,
       ).expect(200),
     ).length;
-  const v2 = (path: string) =>
-    api.http().get(`/api/v2${path}`).set('Authorization', `Bearer ${apiToken}`);
 
   beforeAll(async () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
     userId = (await createUserWith(api, 'contestant'))._id;
     session = await loginAs(api, userId);
-    const issued = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
-    apiToken = issued.token;
-    await api.users.updateOne({ _id: userId }, { apiTokenHash: issued.hash });
   });
   afterAll(() => api.teardown());
 
@@ -232,20 +225,6 @@ describe('contest-only problem access', () => {
     await problem('watched_private').expect(200);
   });
 
-  it('never opens /api/v2 problem endpoints to contest-only problems (legacy skips the contest check)', async () => {
-    const quiet = await createProblem(api, catalog, {
-      code: 'quiet_private',
-      isPublic: false,
-    });
-    const contest = await createContest(api, {
-      problems: [contestProblem(quiet._id, 0)],
-    });
-    await enter(contest._id);
-    await v2('/problem/quiet_private').expect(404);
-    const listed = await v2('/problems').expect(200);
-    expect(JSON.stringify(listed.body)).not.toContain('quiet_private');
-  });
-
   it('hides the editorial while in any contest, and shows it again after leaving', async () => {
     await createProblem(api, catalog, {
       code: 'solved_public',
@@ -318,35 +297,5 @@ describe('contest-only problem access', () => {
     expect(await firstCase()).toMatchObject({ output: '42' });
     await enter((await createContest(api))._id);
     expect(await firstCase()).not.toHaveProperty('output');
-  });
-
-  it('applies no contest scope to /api/v2 submission detail, like the other v2 routes', async () => {
-    const secret = await createProblem(api, catalog, {
-      code: 'v2_secret',
-      isPublic: false,
-    });
-    const open = await createProblem(api, catalog, { code: 'v2_open' });
-    const secretSubmission = await seedSubmission(api, {
-      user: userId,
-      problem: secret._id,
-      language: catalog.languages.cpp,
-    });
-    const openSubmission = await seedSubmission(api, {
-      user: userId,
-      problem: open._id,
-      language: catalog.languages.cpp,
-    });
-    const contest = await createContest(api, {
-      problems: [contestProblem(secret._id, 0)],
-    });
-    await enter(contest._id);
-    await v2(`/submission/${secretSubmission._id}`).expect(404);
-    await makeCurrent(api, userId, null);
-    const upcoming = await createContest(api, {
-      startTime: hoursFromNow(1),
-      endTime: hoursFromNow(2),
-    });
-    await enter(upcoming._id);
-    await v2(`/submission/${openSubmission._id}`).expect(200);
   });
 });

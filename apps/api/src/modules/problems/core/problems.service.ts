@@ -203,7 +203,7 @@ export class ProblemsService {
     );
   }
 
-  /** `/api/v2` and editing ignore the viewer's current contest (legacy `skip_contest_problem_check`; legacy edit views check `is_editable_by` only). */
+  /** Ignores the viewer's current contest (legacy `skip_contest_problem_check`; legacy edit views check `is_editable_by` only). */
   visibleProblemOutsideContest(
     principal: Principal | null,
     code: string,

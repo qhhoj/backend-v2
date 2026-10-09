@@ -81,8 +81,6 @@ describe('OpenAPI document', () => {
         '/api/internal/tags/catalog',
         '/api/internal/tags/{code}',
         '/api/internal/tags/{code}/assign',
-        '/api/v2/problems',
-        '/api/v2/problem/{code}',
       ]),
     );
   });
@@ -112,7 +110,7 @@ describe('OpenAPI document', () => {
     );
   });
 
-  it('lists the realtime and legacy submission endpoints', async () => {
+  it('lists the realtime submission endpoints', async () => {
     const response = await api
       .http()
       .get('/api/internal/openapi.json')
@@ -122,8 +120,6 @@ describe('OpenAPI document', () => {
       expect.arrayContaining([
         '/api/internal/events/submissions',
         '/api/internal/events/submissions/{id}',
-        '/api/v2/submissions',
-        '/api/v2/submission/{id}',
       ]),
     );
   });
@@ -174,9 +170,6 @@ describe('OpenAPI document', () => {
         '/api/internal/contests/{key}/data',
         '/api/internal/contests/{key}/data/download',
         '/api/internal/contests/{key}/clone',
-        '/api/v2/contests',
-        '/api/v2/contest/{key}',
-        '/api/v2/participations',
       ]),
     );
   });
@@ -227,9 +220,6 @@ describe('OpenAPI document', () => {
         '/api/internal/profile',
         '/api/internal/profile/data',
         '/api/internal/profile/data/download',
-        '/api/v2/organizations',
-        '/api/v2/users',
-        '/api/v2/user/{username}',
       ]),
     );
   });
@@ -439,9 +429,11 @@ describe('OpenAPI document', () => {
 
     it('leaves a RawResponse route unwrapped', async () => {
       const doc = await document();
-      const operation = doc.paths['/api/v2/problems'].get;
+      const operation = doc.paths['/api/internal/feeds/{kind}/{format}'].get;
       expect(operation['x-raw']).toBe(true);
-      expect(bodyOf(doc, '/api/v2/problems')?.required).not.toEqual(['data']);
+      expect(
+        bodyOf(doc, '/api/internal/feeds/{kind}/{format}')?.required,
+      ).not.toEqual(['data']);
     });
 
     it('documents the multipart body of the file submission', async () => {

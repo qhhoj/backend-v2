@@ -7,7 +7,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Big-bang cutover, old stack runs until the switch — one migration rehearsal path, no dual writes.
 - MongoDB replica set with UUIDv7 `_id`s everywhere — transactions and change streams; UUIDv7 sorts by time, so lists sort by `-_id`.
 - Django permission codenames kept as strings on users and groups — migrated data and checks keep their meaning.
-- `/api/v2` keeps legacy envelope and field names with UUID ids; the SPA uses `/api/internal` — old API consumers keep working.
+- `/api/v2` (legacy read-only API) removed: no external consumer; the SPA uses the main API.
 - Legacy integer-id URLs and API tokens are not carried over — handled later if needed.
 - Dropped from the legacy site: IP auth, Lua label scripts, `atcoder` and `ecoo` contest formats, clarifications, the per-problem `shortCircuit` field — unused or a security/runtime cost.
 
@@ -61,7 +61,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Render limits (markdown size, formulas, KaTeX output, tags, nesting, HTML size) are enforced and fail as 400 — a hostile statement cannot cost unbounded CPU.
 - Markdown via `markdown-it` tuned to legacy `markdown2` output, KaTeX on the server, `sanitize-html` with the legacy allow-list; `problem-full` is unsanitized and needs `judge.problem_full_markup` — legacy parity with a permission around the unsafe path.
 - Math spans are protected before Markdown and an unknown macro stays as raw TeX in `math-error` — a bad formula never fails a save.
-- One rule set, `ProblemAccess`, for list, detail and `/api/v2`; the legacy quirk that admins do not see private problems in lists is dropped for a `visibility` filter — one source of truth.
+- One rule set, `ProblemAccess`, for list and detail; the legacy quirk that admins do not see private problems in lists is dropped for a `visibility` filter — one source of truth.
 - `visibleFilter` is only used in `find`/`count`, never in an aggregate — aggregate pipelines would need a different shape.
 - Invisible or unknown problem is 404, visible but not editable is 403 — existence is not leaked.
 - Catalog data (types, groups, licenses, languages, tags) is querier-backed and never deleted — small, hot, rarely changing.
@@ -132,7 +132,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Contests embed at most `MAX_CONTEST_PROBLEMS` (100) unique problems — bounded document.
 - Contest duration limit 14 days — legacy `VNOJ_CONTEST_DURATION_LIMIT`.
 - Current contest is `users.currentParticipation`, validated lazily on read with compare-and-set — no per-request middleware.
-- A current contest feeds `ProblemAccess`: before the start every problem is hidden, after it the contest's problems are visible whatever their own publicity; the editorial is 404 while in a contest — legacy parity. `/api/v2` applies no contest scope, as legacy.
+- A current contest feeds `ProblemAccess`: before the start every problem is hidden, after it the contest's problems are visible whatever their own publicity; the editorial is 404 while in a contest — legacy parity.
 - Contest submission list is filtered by contest, not by problem visibility or the viewer's scope — the legacy `ForceContestMixin` behaviour; access is still gated by contest rules.
 - Access codes are hashed and compared in constant time; wrong guesses are rate limited per user and per IP, correct or missing codes cost nothing; editors skip the code — blocks guessing without punishing normal flow.
 - A join after the registration window by an unregistered user is 409; `isRegistered` replaces the 1970 sentinel and is live-only.
@@ -143,12 +143,12 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Contest effects ride the existing `submission-effects` job and recompute a participation through `runCoalesced` — one scoring path.
 - Rescore (`contest-rescore`) runs on edits that change `scoringOf` (format, config, times, freeze, precision, problem id/points/partial/order) and on disqualification; other edits only purge the ranking keys — rescoring is expensive (about 34 s at 12k participations).
 - Ranking is computed from participation fields and ordered `isDisqualified, -score, cumtime, tiebreaker`; the cache key is `{withVirtual, frozen}` with single-flight builds, every recompute purges all four keys — legacy left frozen keys stale; editors and own-row boards bypass the cache.
-- Freeze applies to `icpc` and `vnoj` only, stays after the end (editors set `frozenLastMinutes` to 0 to unfreeze), and non-editors only ever see `frozen*` fields, also through `/api/v2` and participations — legacy `/api/v2` leaked live standings.
-- Hidden scoreboards list no scores to non-editors in `/api/v2` participations — stricter than legacy, consistent with the freeze stance.
+- Freeze applies to `icpc` and `vnoj` only, stays after the end (editors set `frozenLastMinutes` to 0 to unfreeze), and non-editors only ever see `frozen*` fields, in participations, which once leaked live standings.
+- Hidden scoreboards list no scores to non-editors in participations — stricter than legacy, consistent with the freeze stance.
 - Disqualify sets score -9999, bans the user from the contest, clears the current pointer, queues a rescore and re-rates when ratings exist; auto-ban after N disqualifications is off by default (setting `contest.banAfterDisqualifications`, 0 = off), lifts by compare-and-set on the ban reason, reconciled from the final `isDisqualified` — concurrent opposite requests converge and a manual ban is never lifted.
 - Rating is Elo-MMR ported line for line (goldens generated from the legacy Python), queued by an editor or by the rescore of a contest that has ratings, one job at a time; it deletes and re-rates from the earliest affected end time in one Mongo transaction — a re-rate after any contest edit keeps later contests consistent.
 - `contest-rescore` of a contest that has ratings enqueues `contest-rating` — the single trigger after disqualifications and scoring or end-time edits (broader than legacy); an end-time edit queues no rating itself, and the rating run's start moves earlier until it covers contests whose end moved.
-- Rating is never computed from a frozen board: `POST /rate` answers 409 while the contest is frozen, the worker skips a target frozen at run time (logged) and leaves every contest still frozen at run time out of the re-rate chain (a contest is rateable once its board is unfrozen, like the `now` bound), and `/api/v2` rankings return `old_rating`/`new_rating` null on a frozen board — ratings follow live standings and would reveal the hidden winner.
+- Rating is never computed from a frozen board: `POST /rate` answers 409 while the contest is frozen, the worker skips a target frozen at run time (logged) and leaves every contest still frozen at run time out of the re-rate chain (a contest is rateable once its board is unfrozen, like the `now` bound), and ratings follow live standings, which would reveal the hidden winner.
 - A rated contest frozen again after rating loses its ratings on the next re-rate run covering its end; it is re-rated only by `POST /rate` after unfreezing — an automatic trigger cannot tell "never rated" from "deleted by a chain run" and would make manual rating automatic.
 - Contest data download: zip written to a per-run temp name, sources fetched lazily, capped in bytes and entries, prepared at most once per 24 h unless the zip is missing; the root is outside `MEDIA_ROOT` — the zip is served by the API, never directly.
 - Public ranking links use 18-char tokens with per-IP miss limits; both links and ranking codes serve the same `board` — frozen while frozen.
@@ -168,7 +168,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 
 - Membership stays `users.organizations` (ordered array, no membership collection) — legacy has no role or join date; the principal already carries it.
 - Planned (migrator deferred): migrated `about` (users and organizations) must be rendered into `aboutHtml` on backfill, and `organizations.memberCount`/`performancePoints` recomputed — reads never render and the job writes the counts.
-- Unlisted organizations are kept out of every enumeration but stay reachable by slug — legacy leaked them through select2, `/api/v2` and the sitemap; a private unlisted organization is joined through its link.
+- Unlisted organizations are kept out of every enumeration but stay reachable by slug — legacy leaked them through select2 and the sitemap; a private unlisted organization is joined through its link.
 - Joins and profile reorders are compare-and-set on the membership array; approvals run under a per-organization Redis lock against a live member count — parallel requests cannot pass the open-organization cap or `slots`.
 - A personal look (accent preset, glass, glow) is one nullable `appearance` object on the user, replaced whole by PATCH /profile and cleared by null — the SPA sends the whole look, null means "use the site's"; the colour mode stays in `siteTheme`.
 - Accent presets are a closed enum (`APPEARANCE_ACCENTS`), not free colours — the SPA checks contrast per preset, a free colour cannot be checked.
@@ -187,10 +187,8 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - A ban cannot use the automatic cheating reason — that reason is reserved for automatic contest-cheating bans.
 - Join requests are limited (5 per hour per user) — legacy had no limit.
 - User data zips live 7 days outside `MEDIA_ROOT` (and apart from `CONTEST_DATA_ROOT`), at most 3 prepares per user per day, served by the api — legacy kept them forever in a cache directory.
-- The api-v2 module is grouped by feature like the internal modules — one place per feature, same size rule.
 - New organization admins join the `Org Admin` group on update as well as create — legacy granted it on create only; it is never revoked, like legacy.
-- `/api/v2/user` hides contest ratings of re-frozen boards from non-editors — a frozen board must not leak through the rating.
-- One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; `/users/:username/ratings` and `/api/v2/user` both use it: `/api/v2/user` drops the boards the viewer cannot see, while the internal route keeps the entry. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
+- One rule, `ContestAccess.boardReadable`, decides whether a viewer may read results derived from a board; the user's ratings page uses it. An unreadable board keeps its history entry with null rank, performance and rating, and the rating summary (min, max, count) counts readable entries only.
 - Organization summaries carry `isOpen`; home users carry the first listed organization through `OrganizationsService.firstListedByUser`, shared with the leaderboard — one rule, so the two lists cannot disagree.
 - Staff user list uses a CI-collated username range (an `i` regex cannot use the index) and a partial `banReason` index; ban duration is deferred because it needs an expiry sweep.
 - A searched staff user list is ordered by username along the same CI index (no in-memory sort), `page` is capped at 500 to bound the skip cost, and `banned=false` means not banned (no `banReason`).
@@ -330,6 +328,6 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Specs and the spec harness under `apps/*/test/` skip the length rule only — they read as tables of cases; complexity and parameters still apply to them.
 - `parseBridgeCommand` and `renderMath` keep their complexity behind an inline disable — one protocol switch and one guarded KaTeX call read best whole.
 - `contestMetaOf` stays in the bridge — the api and worker read different contest fields for different jobs; only `runPretestsOnly && isPretested` recurs, and a one-line expression is not worth a shared helper.
-- One name per concept, listed in CONTRIBUTING's glossary; renames happen only where a term was ambiguous (`AllowBeforeTwoFactor` for the 2FA-pending session, since `partial` means partial scoring), and wire fields never change — the SPA and `/api/v2` clients depend on them.
+- One name per concept, listed in CONTRIBUTING's glossary; renames happen only where a term was ambiguous (`AllowBeforeTwoFactor` for the 2FA-pending session, since `partial` means partial scoring), and wire fields never change — the SPA depends on them.
 - `libs/<lib>/src/testing.ts` stays one test-support entry per lib, refused in production code by lint — splitting the small files would add paths without adding clarity.
 - The personal data export (request and download) is `@NoImpersonation()` — an admin impersonating a user must not request or download that user's private export; `PATCH /profile` stays allowed.

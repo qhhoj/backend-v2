@@ -44,25 +44,6 @@ export class OrganizationsRepository {
     return { items, total };
   }
 
-  /** Legacy `APIOrganizationList`: by id. */
-  async legacyPage(
-    filter: FilterQuery<Organization>,
-    page: number,
-    pageSize: number,
-  ): Promise<{ items: Organization[]; total: number }> {
-    const [items, total] = await Promise.all([
-      this.organizations
-        .find(filter, { slug: 1, shortName: 1, isOpen: 1, memberCount: 1 })
-        .sort({ _id: 1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .lean<Organization[]>()
-        .exec(),
-      this.organizations.countDocuments(filter).exec(),
-    ]);
-    return { items, total };
-  }
-
   /** Through `{adminIds}`. */
   countAdminRoles(userId: string): Promise<number> {
     return this.organizations.countDocuments({ adminIds: userId }).exec();

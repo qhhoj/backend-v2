@@ -94,14 +94,6 @@ export class ParticipationsRepository {
       .exec();
   }
 
-  /** The user's live rows, through `{user}`. */
-  liveRowsOf(userId: string): Promise<ContestParticipation[]> {
-    return this.participations
-      .find({ user: userId, virtual: LIVE })
-      .lean<ContestParticipation[]>()
-      .exec();
-  }
-
   liveOf(
     userId: string,
     contestIds: string[],
@@ -311,25 +303,6 @@ export class ParticipationsRepository {
         .sort({ virtual: 1, _id: 1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
-        .exec(),
-      this.participations.countDocuments(filter).exec(),
-    ]);
-    return { items, total };
-  }
-
-  /** Legacy `APIContestParticipationList` pages: counted, by id. */
-  async legacyPage(
-    filter: FilterQuery<ContestParticipation>,
-    page: number,
-    pageSize: number,
-  ): Promise<{ items: ContestParticipation[]; total: number }> {
-    const [items, total] = await Promise.all([
-      this.participations
-        .find(filter, { formatData: 0, frozenFormatData: 0 })
-        .sort({ _id: 1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .lean<ContestParticipation[]>()
         .exec(),
       this.participations.countDocuments(filter).exec(),
     ]);

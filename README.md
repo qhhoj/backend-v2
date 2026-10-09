@@ -73,7 +73,7 @@ npm run typecheck
 ## Architecture
 
 ```
-apps/api       HTTP: /api/internal (SPA), /api/v2 (legacy shapes), SSE streams
+apps/api       HTTP: /api/internal (SPA), SSE streams
 apps/bridge    judge TCP server, dispatch queue, grading
 apps/worker    BullMQ jobs
 apps/migrator  MariaDB -> MongoDB backfill/verify CLI
@@ -114,7 +114,7 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 
 | To change                                                      | Look in                                                                                                                                                                                                                 |
 | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An HTTP endpoint                                               | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `api-v2/`, `tags/`, `judges/` use their own module file) |
+| An HTTP endpoint                                               | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `tags/`, `judges/` use their own module file) |
 | Who can see/edit a problem or contest                          | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts`                                                                                                                                    |
 | A contest scoring format                                       | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts`                                                                                                                                                      |
 | Contest viewer fields (list `viewer`, detail `viewerResult`, `solverCount`) | `modules/contests/core/contest-viewer.service.ts`, `core/contest-problem-facts.service.ts`, `core/solver-counts.service.ts`, `core/viewer-problem-results.ts` |
@@ -138,7 +138,6 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | Auth, sessions, permissions                                    | `libs/auth/src`, flows in `modules/auth/<flow>/`; new permissions in `libs/auth/src/principal/permissions.ts`                                                                                                           |
 | Markdown rendering                                             | `libs/render/src` (goldens in `src/fixtures`)                                                                                                                                                                           |
 | `init.yml`, zip handling, data files                           | `libs/problems/src`, routes in `modules/problems/data`                                                                                                                                                                  |
-| `/api/v2` legacy shapes                                        | `apps/api/src/modules/api-v2`                                                                                                                                                                                           |
 | A Mongo schema                                                 | `libs/database/src/schemas/` (register in `SCHEMAS`)                                                                                                                                                                    |
 | A background job                                               | `apps/worker/src/jobs/<job>/` and its queue contract in `libs/<lib>/src/queues.ts`                                                                                                                                      |
 | A legacy import                                                | `apps/migrator/src/mappers/`                                                                                                                                                                                            |

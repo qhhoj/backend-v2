@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { strictlyAbove } from '@libs/community';
-import { CI, User } from '@libs/database';
+import { User } from '@libs/database';
 import type { LeaderboardField } from '@libs/database';
-import type { FilterQuery, Model } from 'mongoose';
+import type { Model } from 'mongoose';
 import { LISTED_USERS } from '../core/listed-users';
 
 export type LeaderboardRow = Pick<
@@ -31,9 +31,6 @@ const PROJECTION = {
   organizations: 1,
 };
 
-/** The collection default: `legacyPage` compares case-insensitively only when filtering by username. */
-const BINARY = { locale: 'simple' };
-
 /** Every query walks `{isUnlisted, isActive, <field>: -1, _id: 1}`. */
 @Injectable()
 export class LeaderboardsRepository {
@@ -51,28 +48,6 @@ export class LeaderboardsRepository {
       .limit(pageSize)
       .lean<LeaderboardRow[]>()
       .exec();
-  }
-
-  /** Legacy `APIUserList`: listed, active users by id; usernames compare case-insensitively (legacy MySQL collation). */
-  async legacyPage(
-    filter: FilterQuery<User>,
-    page: number,
-    pageSize: number,
-  ): Promise<{ items: LeaderboardRow[]; total: number }> {
-    const query = { ...LISTED_USERS, ...filter };
-    const collation = filter.username ? CI : BINARY;
-    const [items, total] = await Promise.all([
-      this.users
-        .find(query, PROJECTION)
-        .collation(collation)
-        .sort({ _id: 1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .lean<LeaderboardRow[]>()
-        .exec(),
-      this.users.countDocuments(query).collation(collation).exec(),
-    ]);
-    return { items, total };
   }
 
   count(): Promise<number> {

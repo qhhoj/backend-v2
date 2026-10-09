@@ -32,7 +32,7 @@ import type { DetailAccess, SubmissionActions } from './submission-access';
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
-/** `result` and `status` only feed `$in`, so they stay plain strings: `/api/v2` passes the raw query values. */
+/** `result` and `status` only feed `$in`, so they stay plain strings. */
 export type SubmissionFilters = Pick<
   SubmissionListQueryDto,
   'user' | 'problem' | 'language'
@@ -336,7 +336,7 @@ export class SubmissionsService {
       );
   }
 
-  /** Null when nothing can match (unknown user, invisible problem); other users' submissions of contests whose list the viewer may not see (a freeze, which outlives the contest) are left out; the `/api/internal` list and `/api/v2` share it, `/api/v2` with no contest scope (legacy `get_visible_problems`). */
+  /** Null when nothing can match (unknown user, invisible problem); other users' submissions of contests whose list the viewer may not see (a freeze, which outlives the contest) are left out (legacy `get_visible_problems`). */
   async filterFor(
     principal: Principal | null,
     filters: SubmissionFilters,

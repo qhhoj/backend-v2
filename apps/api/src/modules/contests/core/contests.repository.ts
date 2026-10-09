@@ -98,25 +98,6 @@ export class ContestsRepository {
       .exec();
   }
 
-  /** Lean rows of every match with what the participation list reads: times, format, `canEdit`'s authors and curators, and the scoreboard access fields. */
-  findAll(filter: FilterQuery<Contest>): Promise<Contest[]> {
-    return this.contests
-      .find(filter, {
-        key: 1,
-        startTime: 1,
-        endTime: 1,
-        timeLimit: 1,
-        frozenLastMinutes: 1,
-        formatName: 1,
-        authors: 1,
-        curators: 1,
-        scoreboardVisibility: 1,
-        viewContestScoreboard: 1,
-      })
-      .lean<Contest[]>()
-      .exec();
-  }
-
   /** List rows never carry the description. */
   async list(
     filter: FilterQuery<Contest>,
