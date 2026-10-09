@@ -67,6 +67,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the code-collision check must see deleted and tombstoned codes',
   ],
+  'apps/worker/src/jobs/problem-purge/problem-purge.repository.ts': [
+    'S',
+    'the purge reads the deleted problems it is removing',
+  ],
   'apps/worker/src/jobs/problem-package/problem-package.repository.ts': [
     'F',
     'a deleted problem is not packaged',

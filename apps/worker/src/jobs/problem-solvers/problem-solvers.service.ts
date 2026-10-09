@@ -16,6 +16,8 @@ export class ProblemSolversService {
   ) {}
 
   async recompute(problemId: string): Promise<number> {
+    // A restore brings the problem's `userCount`/`acRate` back; they may have drifted while it was deleted.
+    await this.effects.recomputeProblem(problemId);
     const users = await this.repository.userIds(problemId);
     for (let start = 0; start < users.length; start += CHUNK)
       await this.recomputeChunk(users.slice(start, start + CHUNK));

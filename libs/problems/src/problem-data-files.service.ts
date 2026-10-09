@@ -172,6 +172,15 @@ export class ProblemDataFilesService {
     });
   }
 
+  /** Drops a problem's whole directory (the purge) under the data lock and the judges' writing marker, so no upload or judge read interleaves; a missing directory is nothing to do. */
+  async removeDirectory(code: string): Promise<void> {
+    const directory = this.directoryOf(code);
+    await this.withDataWrite(code, async () => {
+      await assertRealPathInside(this.root, directory);
+      await rm(directory, { recursive: true, force: true });
+    });
+  }
+
   /** Moves a problem's whole directory; the target is reserved first so an existing one is never merged into, and a missing source is nothing to move. */
   async rename(oldCode: string, newCode: string): Promise<void> {
     const oldDirectory = this.directoryOf(oldCode);

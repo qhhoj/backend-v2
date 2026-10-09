@@ -38,6 +38,20 @@ describe('problem-solvers-recompute', () => {
     expect(await countOf(solver._id)).toBe(2);
   });
 
+  it('refreshes the problem user count and acceptance rate, stale after a restore', async () => {
+    const solver = await seedUser(worker);
+    const problem = await seedProblem(worker, { userCount: 99, acRate: 99 });
+    await seedGraded(worker, solver._id, problem._id);
+    await seedGraded(worker, solver._id, problem._id, {
+      result: 'WA',
+      points: 0,
+    });
+    await service.recompute(problem._id);
+    const stats = (await worker.problems.findById(problem._id).lean())!;
+    expect(stats.userCount).toBe(1);
+    expect(stats.acRate).toBeCloseTo(50);
+  });
+
   it('works through more users than one chunk', async () => {
     const problem = await seedProblem(worker);
     const users = await Promise.all(
