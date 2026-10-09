@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { Writable } from 'node:stream';
 import type { FastifyReply } from 'fastify';
 import { openEventStream, sseFrame } from './sse';
@@ -80,10 +81,11 @@ describe('openEventStream', () => {
 
   it('keeps a client that reads, however many frames one tick writes', async () => {
     const raw = new DrainingResponse();
-    const stream = openEventStream(replyOn(raw), 64 * 1024, 20);
+    const stream = openEventStream(replyOn(raw), 64 * 1024, 60_000);
     for (let sent = 0; sent < 200; sent += 1)
       stream.send(sseFrame('done', { sent }));
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await once(raw, 'drain'); // the client read everything; no wall-clock wait
+    expect(raw.writableLength).toBe(0);
     expect(raw.destroyed).toBe(false);
     stream.close();
   });

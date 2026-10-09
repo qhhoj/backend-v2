@@ -3,6 +3,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -23,7 +24,15 @@ describe('ZipArchive', () => {
     entries: Entries,
     message: string | RegExp | Error | (new (...args: never[]) => Error),
   ) => expect(open(entries)).rejects.toThrow(message);
-  const openFileDescriptors = () => readdirSync('/proc/self/fd').length;
+  /** Descriptors of this process that point at or under `path`; unaffected by unrelated fds. */
+  const descriptorsOpenOn = (path: string) =>
+    readdirSync('/proc/self/fd').filter((fd) => {
+      try {
+        return readlinkSync(`/proc/self/fd/${fd}`).startsWith(path);
+      } catch {
+        return false; // closed since the listing (the readdir fd itself)
+      }
+    });
   const collect = async (stream: AsyncIterable<unknown>) => {
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(chunk as Buffer);
@@ -162,7 +171,6 @@ describe('ZipArchive', () => {
     const uncaught: Error[] = [];
     const record = (error: Error) => uncaught.push(error);
     process.on('uncaughtException', record);
-    const before = openFileDescriptors();
     try {
       for (const [label, options] of Object.entries(crafted)) {
         const path = join(directory, `crafted-${label.replace(/\W/g, '')}.zip`);
@@ -177,7 +185,7 @@ describe('ZipArchive', () => {
       process.off('uncaughtException', record);
     }
     expect(uncaught).toEqual([]);
-    expect(openFileDescriptors()).toBe(before);
+    expect(descriptorsOpenOn(directory)).toEqual([]);
   });
 
   it('refuses entries that point outside the archive', async () => {
@@ -339,7 +347,6 @@ describe('ZipArchive', () => {
   });
 
   it('aborts a deflate bomb that declares a small size without leaking a descriptor', async () => {
-    const before = openFileDescriptors();
     const zip = await open([
       {
         name: 'bomb',
@@ -357,7 +364,7 @@ describe('ZipArchive', () => {
     ).rejects.toThrow(ZipError);
     expect(received).toBeLessThanOrEqual(1024);
     zip.close();
-    expect(openFileDescriptors()).toBe(before);
+    expect(descriptorsOpenOn(directory)).toEqual([]);
   });
 
   it('opens from disk and leaks no file descriptor on any failing open', async () => {
@@ -380,7 +387,6 @@ describe('ZipArchive', () => {
       ]),
     );
     const missing = join(directory, 'missing.zip');
-    const before = openFileDescriptors();
     for (let round = 0; round < 200; round++) {
       await expect(ZipArchive.open(bad)).rejects.toThrow(ZipError);
       await expect(ZipArchive.open(garbage)).rejects.toThrow(ZipError);
@@ -392,7 +398,7 @@ describe('ZipArchive', () => {
       await expect(listZipEntries(good)).resolves.toEqual(['a']);
     }
     await new Promise((resolve) => setImmediate(resolve));
-    expect(openFileDescriptors()).toBe(before);
+    expect(descriptorsOpenOn(directory)).toEqual([]);
   });
 
   it('lists 25000 entries from disk in time linear in the entry count', async () => {
