@@ -5,6 +5,7 @@ import { isFrozenFor } from '@libs/contests';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestRankingService } from '../../contests/ranking/contest-ranking.service';
 import type { RankingResponse } from '../../contests/ranking/dto/ranking.response';
+import { SyncActsAsService } from './sync-acts-as.service';
 import { SyncContestOwnership } from './sync-contest-ownership.service';
 import { SyncRateLimit } from './sync-rate-limit.service';
 
@@ -12,6 +13,7 @@ import { SyncRateLimit } from './sync-rate-limit.service';
 export class SyncStandingsService {
   constructor(
     private readonly ownership: SyncContestOwnership,
+    private readonly actsAs: SyncActsAsService,
     private readonly ranking: ContestRankingService,
     private readonly rateLimit: SyncRateLimit,
   ) {}
@@ -24,6 +26,7 @@ export class SyncStandingsService {
   ): Promise<RankingResponse> {
     await this.rateLimit.charge(client);
     const contest = await this.ownership.require(client, key);
+    await this.actsAs.principalOf(client);
     if (
       !ContestAccess.boardVisible(null, ContestAccess.accessView(contest), now)
     )

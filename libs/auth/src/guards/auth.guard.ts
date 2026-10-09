@@ -128,7 +128,9 @@ export class AuthGuard implements CanActivate {
     return true;
   }
 
-  /** Failed lookups are counted per address (preflight M15): the key is 256 bits, so this is about load, not guessing. Over the limit the answer is 429 before the database is asked. */
+  /**
+   * Failed lookups are counted per address (preflight M15): the key is 256 bits, so this is about load, not guessing. Over the limit (20 in 10 minutes) the answer is 429 before the database is asked, for valid keys from that address too: whoever sends 20 junk keys locks out every client sharing its address for the window. Behind a proxy `request.ip` is the proxy unless `TRUST_PROXY` lists it, which would make that every client, so a deploy behind nginx must set `TRUST_PROXY` (the API warns at boot otherwise).
+   */
   private async findServiceClient(
     token: string,
     address: string,
@@ -169,7 +171,8 @@ export class AuthGuard implements CanActivate {
         403,
         'This address is not allowed for the key',
       );
-    if (scope && !client.scopes.includes(scope))
+    // A `@ServiceOnly()` route without `@RequireScope` serves nobody: a forgotten decorator must not open a write route to a read-only key.
+    if (!scope || !client.scopes.includes(scope))
       throw new AppError(
         'forbidden',
         403,

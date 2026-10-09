@@ -80,6 +80,11 @@ class GuardedController {
   serviceWrite() {
     return 'written';
   }
+  @ServiceOnly()
+  @Get('service-unscoped')
+  serviceUnscoped() {
+    return 'unscoped';
+  }
 }
 
 /** One hour past the refresh window, so the guard re-issues the cookie. */
@@ -711,6 +716,16 @@ describe('AuthGuard', () => {
       await serviceRoute(elsewhere).expect(403).expect(errorCode('forbidden'));
       const { bearer: none } = await makeClient({ allowedCidrs: [] });
       await serviceRoute(none).expect(403);
+    });
+
+    it('refuses every key on a service route that declares no scope', async () => {
+      const { bearer } = await makeClient();
+      await api
+        .http()
+        .get('/guarded/service-unscoped')
+        .set('Authorization', bearer)
+        .expect(403)
+        .expect(errorCode('forbidden'));
     });
 
     it('refuses a route whose scope the client does not hold', async () => {

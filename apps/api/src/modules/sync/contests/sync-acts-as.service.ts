@@ -11,7 +11,7 @@ export class SyncActsAsService {
     private readonly principals: PrincipalService,
   ) {}
 
-  /** The client's acting user as a principal. Re-read on every request: a deactivated user, or one who lost a required permission, ends the client's writes at once. */
+  /** The client's acting user as a principal, re-read on every sync request (reads included): a deactivated user, a superuser, or one who lost a required permission ends the client's access at once. */
   async principalOf(client: ServiceClientPrincipal): Promise<Principal> {
     const user = await this.users.findById(client.actsAs);
     if (!user?.isActive)
@@ -21,6 +21,12 @@ export class SyncActsAsService {
         'The acting user of this client is inactive',
       );
     const principal = this.principals.build(user);
+    if (principal.isSuperuser)
+      throw new AppError(
+        'forbidden',
+        403,
+        'The acting user of this client is a superuser',
+      );
     const missing = ACTS_AS_PERMISSIONS.find(
       (permission) => !hasPermission(principal, permission),
     );

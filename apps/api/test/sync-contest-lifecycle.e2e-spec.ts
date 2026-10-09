@@ -12,6 +12,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
+import { SyncParticipantsRepository } from '../src/modules/sync/contests/sync-participants.repository';
 import {
   clearRateLimits,
   contestProblem,
@@ -192,7 +193,7 @@ describe('sync API: participants, removal and standings', () => {
       await call('delete', bearer, key).expect(404);
     });
 
-    it('removes the announcements, the public ranking link and the ghosts with the contest, and refuses when a tester submitted', async () => {
+    it('removes the announcements, the public ranking link and the ghosts with the contest, and refuses when anyone submitted', async () => {
       const { bearer } = await makeClient();
       const key = await create(bearer);
       const contest = await stored(key);
@@ -223,6 +224,17 @@ describe('sync API: participants, removal and standings', () => {
         .expect(409)
         .expect(errorCode('contest_not_deletable'));
       expect(await api.contests.countDocuments({ key: kept })).toBe(1);
+      const stamped = await create(bearer);
+      await api.submissions.create({
+        user: newId(),
+        problem: problemId,
+        language: newId(),
+        contest: (await stored(stamped))._id,
+      });
+      await call('delete', bearer, stamped)
+        .expect(409)
+        .expect(errorCode('contest_not_deletable'));
+      expect(await api.contests.countDocuments({ key: stamped })).toBe(1);
     });
 
     it.each([
@@ -237,6 +249,32 @@ describe('sync API: participants, removal and standings', () => {
         .expect(errorCode('contest_not_deletable'));
       expect(await api.contests.countDocuments({ key })).toBe(1);
     });
+
+    it.each([
+      ['published', { isVisible: true }],
+      ['started', { startTime: hoursFromNow(-1) }],
+      ['handed to a person', { managedBy: null }],
+    ])(
+      'keeps a contest %s between the checks and the delete',
+      async (_name, change) => {
+        const { client, bearer } = await makeClient();
+        const key = await create(bearer);
+        const contest = await stored(key);
+        await api.announcements.create({ contest: contest._id, title: 'Kept' });
+        await api.contests.updateOne({ key }, { $set: change });
+        const deleted = await api.app
+          .get(SyncParticipantsRepository)
+          .deleteUnstarted(uuidStr(contest._id), {
+            clientId: uuidStr(client._id),
+            now: new Date(),
+          });
+        expect(deleted).toBe(false);
+        expect(await api.contests.countDocuments({ key })).toBe(1);
+        expect(
+          await api.announcements.countDocuments({ contest: contest._id }),
+        ).toBe(1);
+      },
+    );
 
     it('never deletes a contest it does not own, nor with the read scope only', async () => {
       const mine = await makeClient();

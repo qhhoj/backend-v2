@@ -61,6 +61,10 @@ describe('integration client administration', () => {
     await createUserWith(api, 'weakauthor', {
       permissions: ['judge.add_contest'],
     });
+    await createUserWith(api, 'rootauthor', {
+      permissions: ['judge.add_contest', 'judge.create_private_contest'],
+      isSuperuser: true,
+    });
     await createUserWith(api, 'sleeper', {
       permissions: ['judge.add_contest', 'judge.create_private_contest'],
       isActive: false,
@@ -104,6 +108,7 @@ describe('integration client administration', () => {
     ['an unknown acting user', { actsAs: 'nobody' }],
     ['an acting user without create_private_contest', { actsAs: 'weakauthor' }],
     ['an inactive acting user', { actsAs: 'sleeper' }],
+    ['a superuser acting user', { actsAs: 'rootauthor' }],
     ['no CIDR', { allowedCidrs: [] }],
     ['a bad CIDR', { allowedCidrs: ['10.0.0.0'] }],
     ['an out-of-range prefix', { allowedCidrs: ['10.0.0.0/33'] }],

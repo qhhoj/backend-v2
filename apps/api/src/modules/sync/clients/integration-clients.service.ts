@@ -111,12 +111,15 @@ export class IntegrationClientsService {
     });
   }
 
-  /** An active user holding every `ACTS_AS_PERMISSIONS` codename; anything else is a 400 on the `actsAs` field. */
+  /** An active, non-superuser user holding every `ACTS_AS_PERMISSIONS` codename; anything else is a 400 on the `actsAs` field. */
   private async actingUser(username: string): Promise<UserDocument> {
     const user = await this.users.findByUsername(username);
     if (!user?.isActive)
       throw invalidField('actsAs', 'Unknown or inactive user.');
     const principal = this.principals.build(user);
+    // A superuser sees and edits everything, so a key acting as one would hold more than the two codenames it needs.
+    if (principal.isSuperuser)
+      throw invalidField('actsAs', 'A superuser cannot be an acting user.');
     const missing = ACTS_AS_PERMISSIONS.find(
       (permission) => !hasPermission(principal, permission),
     );

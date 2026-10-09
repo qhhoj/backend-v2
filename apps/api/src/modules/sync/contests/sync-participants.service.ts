@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ServiceClientPrincipal } from '@libs/auth';
 import type { SyncParticipantsResponse } from './dto/sync-participants.response';
+import { SyncActsAsService } from './sync-acts-as.service';
 import { SyncContestOwnership } from './sync-contest-ownership.service';
 import { SyncParticipantsRepository } from './sync-participants.repository';
 import { SyncRateLimit } from './sync-rate-limit.service';
@@ -11,6 +12,7 @@ export class SyncParticipantsService {
 
   constructor(
     private readonly ownership: SyncContestOwnership,
+    private readonly actsAs: SyncActsAsService,
     private readonly participants: SyncParticipantsRepository,
     private readonly rateLimit: SyncRateLimit,
   ) {}
@@ -23,6 +25,7 @@ export class SyncParticipantsService {
   ): Promise<SyncParticipantsResponse> {
     await this.rateLimit.charge(client);
     const contest = await this.ownership.require(client, key);
+    await this.actsAs.principalOf(client);
     const { ids, unknown } =
       await this.participants.resolveUsernames(usernames);
     await this.participants.setContestants(contest._id, ids);

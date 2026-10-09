@@ -8,6 +8,7 @@ import {
   ContestParticipation,
   ContestPublicRankingLink,
   ContestSubmission,
+  Submission,
   uuidStr,
   User,
 } from '@libs/database';
@@ -29,6 +30,8 @@ export class SyncParticipantsRepository {
     private readonly ghosts: Model<ContestGhost>,
     @InjectModel(ContestSubmission.name)
     private readonly contestSubmissions: Model<ContestSubmission>,
+    @InjectModel(Submission.name)
+    private readonly submissions: Model<Submission>,
   ) {}
 
   /** Active users by username, case-insensitively, with the usernames that matched nobody. */
@@ -60,21 +63,36 @@ export class SyncParticipantsRepository {
       .exec();
   }
 
-  /** Tester submissions are history nobody asked to lose (preflight M16). */
+  /** Tester submissions are history nobody asked to lose (preflight M16). Both collections are asked: a submission is stamped with its contest before its `contestSubmissions` row is written. */
   async hasSubmissions(contestId: string): Promise<boolean> {
-    return (
-      (await this.contestSubmissions.exists({ contest: contestId }).exec()) !==
-      null
-    );
+    const [inContest, submitted] = await Promise.all([
+      this.contestSubmissions.exists({ contest: contestId }).exec(),
+      this.submissions.exists({ contest: contestId }).exec(),
+    ]);
+    return inContest !== null || submitted !== null;
   }
 
-  /** The contest and what belongs to it alone (participations, announcements, public ranking link, ghosts); only for a hidden contest that has not started and has no submissions. The contest goes last, so a failure leaves it in place to retry. */
-  async deleteUnstarted(contestId: string): Promise<void> {
+  /**
+   * Deletes the contest only while it is still owned by `clientId`, hidden and not started, in one conditional write, so a person publishing it meanwhile keeps it; then what belongs to it alone (participations, announcements, public ranking link, ghosts). False when the contest no longer qualified.
+   */
+  async deleteUnstarted(
+    contestId: string,
+    owner: { clientId: string; now: Date },
+  ): Promise<boolean> {
+    const { deletedCount } = await this.contests
+      .deleteOne({
+        _id: contestId,
+        managedBy: { $type: 'binData', $eq: owner.clientId },
+        isVisible: false,
+        startTime: { $gt: owner.now },
+      })
+      .exec();
+    if (deletedCount !== 1) return false;
     const byContest = { contest: contestId };
     await this.participations.deleteMany(byContest).exec();
     await this.announcements.deleteMany(byContest).exec();
     await this.rankingLinks.deleteMany(byContest).exec();
     await this.ghosts.deleteMany(byContest).exec();
-    await this.contests.deleteOne({ _id: contestId }).exec();
+    return true;
   }
 }

@@ -248,19 +248,21 @@ describe('sync API: writing contests', () => {
     );
   });
 
-  it('lets the client attach only problems its acting user can see', async () => {
+  it('lets the client attach only problems its acting user can see, and does not tell hidden from missing', async () => {
     const { bearer, actsAs } = await makeClient();
     const key = newKey();
-    await put(
+    const hidden = await put(
       bearer,
       key,
       payload({ problems: [{ code: 'syncpriv', points: 10 }] }),
     ).expect(400);
-    await put(
+    const missing = await put(
       bearer,
       key,
       payload({ problems: [{ code: 'nosuchproblem', points: 10 }] }),
     ).expect(400);
+    // One answer for both, so a client cannot probe for hidden problem codes.
+    expect(hidden.body).toEqual(missing.body);
     expect(await api.contests.countDocuments({ key })).toBe(0);
     await api.users.updateOne(
       { _id: actsAs._id },
@@ -273,27 +275,40 @@ describe('sync API: writing contests', () => {
     ).expect(200);
   });
 
-  it('stops writing at once when the acting user is deactivated or loses a permission', async () => {
-    const { bearer, actsAs } = await makeClient();
-    await put(bearer, newKey(), payload()).expect(200);
-    await api.users.updateOne(
-      { _id: actsAs._id },
-      { $set: { permissions: ['judge.add_contest'] } },
-    );
-    await put(bearer, newKey(), payload())
-      .expect(403)
-      .expect(errorCode('forbidden'));
-    await api.users.updateOne(
-      { _id: actsAs._id },
-      {
-        $set: {
-          permissions: ['judge.add_contest', 'judge.create_private_contest'],
-          isActive: false,
-        },
-      },
-    );
-    await put(bearer, newKey(), payload()).expect(403);
-  });
+  it.each([
+    ['loses a permission', { permissions: ['judge.add_contest'] }],
+    ['becomes a superuser', { isSuperuser: true }],
+    ['is deactivated', { isActive: false }],
+  ])(
+    'refuses every sync route at once when the acting user %s',
+    async (_name, change) => {
+      const { bearer, actsAs } = await makeClient();
+      const key = newKey();
+      const body = payload();
+      await put(bearer, key, body).expect(200);
+      await api.users.updateOne({ _id: actsAs._id }, { $set: change });
+      const route = (path: string) => `/api/sync/v1/contests/${path}`;
+      const calls = [
+        put(bearer, key, { ...body, name: 'Changed' }),
+        put(bearer, newKey(), payload()),
+        api.http().get(route(key)),
+        api.http().get(route(`${key}/standings`)),
+        api
+          .http()
+          .put(route(`${key}/participants`))
+          .send({ usernames: [] }),
+        api.http().delete(route(key)),
+      ];
+      for (const call of calls)
+        await call
+          .set('Authorization', bearer)
+          .expect(403)
+          .expect(errorCode('forbidden'));
+      expect(await api.contests.findOne({ key }).lean()).toMatchObject({
+        name: 'Round',
+      });
+    },
+  );
 
   it('checks scope, user credentials and keys', async () => {
     const readOnly = await makeClient({ scopes: ['contests:read'] });

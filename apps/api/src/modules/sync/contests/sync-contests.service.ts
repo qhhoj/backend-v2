@@ -26,6 +26,9 @@ import {
 import { SyncContestOwnership } from './sync-contest-ownership.service';
 import { SyncRateLimit } from './sync-rate-limit.service';
 
+/** Word for word the editor's refusal of a problem the acting user cannot see. */
+const UNKNOWN_PROBLEM = 'Unknown problem.';
+
 interface SyncWrite {
   key: string;
   existing: ContestDocument | null;
@@ -80,7 +83,9 @@ export class SyncContestsService {
     key: string,
   ): Promise<SyncContestResponse> {
     await this.rateLimit.charge(client);
-    return SyncContestResponse.from(await this.ownership.require(client, key));
+    const contest = await this.ownership.require(client, key);
+    await this.actsAs.principalOf(client);
+    return SyncContestResponse.from(contest);
   }
 
   /** New contests are hidden and private, owned by the client and authored by the acting user; `insert` and `applyFields` run the same follow-ups as an editor's save (final-judge schedule, ranking cache, rescore). */
@@ -110,7 +115,7 @@ export class SyncContestsService {
     );
   }
 
-  /** Problem codes to ids; an unknown code is a 400 naming it. Whether the acting user may see the problem is `toFields`' check. */
+  /** Problem codes to ids; an unknown code is the same 400 as a problem the acting user cannot see (`toFields`' check), so codes of hidden problems cannot be probed. */
   private async problemIds(codes: string[]): Promise<Map<string, string>> {
     const found = await this.problems.findPage(
       { code: { $in: codes } },
@@ -122,8 +127,7 @@ export class SyncContestsService {
       found.map((problem) => [problem.code, uuidStr(problem._id)]),
     );
     const unknown = codes.filter((code) => !ids.has(code));
-    if (unknown.length)
-      throw invalidField('problems', `Unknown problem: ${unknown.join(', ')}`);
+    if (unknown.length) throw invalidField('problems', UNKNOWN_PROBLEM);
     return ids;
   }
 }
