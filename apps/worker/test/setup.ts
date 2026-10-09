@@ -12,6 +12,7 @@ import {
   CONTEST_PUBLISH_QUEUE,
 } from '@libs/contests';
 import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
+import { PROBLEM_DATABYTES_QUEUE } from '@libs/problems';
 import {
   Contest,
   ContestAnnouncement,
@@ -109,6 +110,7 @@ export async function setupWorkerTest({
         CONTEST_FINAL_JUDGE_QUEUE,
         CONTEST_PUBLISH_QUEUE,
         USER_DATA_QUEUE,
+        PROBLEM_DATABYTES_QUEUE,
       ].map((name) => testingModule!.get<Queue>(getQueueToken(name)));
       await waitUntil(async () => {
         for (const queue of sweepQueues) {

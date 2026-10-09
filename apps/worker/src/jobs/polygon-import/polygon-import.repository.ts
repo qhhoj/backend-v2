@@ -118,6 +118,13 @@ export class PolygonImportRepository {
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
+  /** Recompute-and-set after an import wrote the data files. */
+  async setDataBytes(problemId: string, bytes: number): Promise<void> {
+    await this.problems
+      .updateOne({ _id: problemId }, { $set: { dataBytes: bytes } })
+      .exec();
+  }
+
   /** Cheap pre-check so a wrong mode fails before any file is written; `apply` checks again inside the transaction. Deliberately S: `findOne({ code })` sees deleted and tombstoned problems, so their codes stay taken. */
   async resolveTarget(job: PolygonImportJob): Promise<ImportTarget> {
     const existing = await this.problems.findOne({ code: job.code }).exec();

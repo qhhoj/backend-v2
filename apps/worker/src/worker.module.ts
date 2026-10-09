@@ -23,6 +23,7 @@ import { OrganizationPointsModule } from './jobs/organization-points/organizatio
 import { ProblemPackageModule } from './jobs/problem-package/problem-package.module';
 import { ProblemPurgeModule } from './jobs/problem-purge/problem-purge.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
+import { ProblemDataBytesModule } from './jobs/problem-databytes/problem-databytes.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
 import { ProblemSolversModule } from './jobs/problem-solvers/problem-solvers.module';
@@ -47,6 +48,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     ProblemPackageModule,
     ProblemPurgeModule,
     PolygonImportModule,
+    ProblemDataBytesModule,
     SubmissionEffectsModule,
     EffectsSweepModule,
     ProblemRescoreModule,

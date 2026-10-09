@@ -169,12 +169,30 @@ export class PolygonImportService {
     staged: StagedFile[],
     yaml: string | null,
   ): Promise<void> {
-    await this.dataFiles.withDataWrite(code, () =>
-      this.runSteps(code, this.dataSteps(code, applied, staged, yaml)),
-    );
+    await this.dataFiles.withDataWrite(code, async () => {
+      await this.runSteps(code, this.dataSteps(code, applied, staged, yaml));
+      await this.recordDataBytes(applied.problemId, code);
+    });
     await this.runSteps(code, [
       ['dropping the cached PDFs', () => this.dropPdfs(code)],
     ]);
+  }
+
+  /** Measured under the data lock, after the files are in place. The import stands when measuring fails: the backfill and the next data write fix the number. */
+  private async recordDataBytes(
+    problemId: string,
+    code: string,
+  ): Promise<void> {
+    try {
+      await this.repository.setDataBytes(
+        problemId,
+        await this.dataFiles.bytesOf(code),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Polygon import of ${code}: dataBytes not recorded: ${(error as Error).message}`,
+      );
+    }
   }
 
   private dataSteps(

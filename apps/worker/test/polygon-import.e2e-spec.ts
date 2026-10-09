@@ -207,6 +207,7 @@ describe('PolygonImportProcessor', () => {
       authors: [requesterId],
       dataVersion: 1,
     });
+    expect(problem!.dataBytes).toBeGreaterThan(0);
     expect(problem!.description).toContain('## Input');
     expect(problem!.description).toMatch(
       /!\[image\]\(\/media\/images\/[0-9a-f-]{36}\.png\)/,
