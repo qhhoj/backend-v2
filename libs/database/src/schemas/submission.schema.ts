@@ -138,6 +138,10 @@ export class Submission {
   @Prop({ type: Number, default: null }) judgedDataVersion!: number | null;
   /** `Final{RETRY}` answers since the last rejudge (the judge could not run it: data not visible yet, runtime missing, sandbox failure); the third is IE. */
   @Prop({ default: 0 }) retryCount!: number;
+  /** Set by every write that finishes the submission (D, CE, IE, AB, a reject) and cleared once its graded job applied the effects; the effects sweep re-applies rows still due, so a lost or failed graded job is repaired. */
+  @Prop({ type: Date, default: null }) effectsDueAt!: Date | null;
+  /** The judge chosen at submit (`judgeId`): only it takes the row, through every requeue, until a rejudge clears it. */
+  @Prop({ type: String, default: null }) pinnedJudge!: string | null;
   /** Up to 10000 rows; loaded only by the detail view and the bridge's grading end. */
   @Prop({ type: [SubmissionCaseSchema], default: [], select: false })
   cases!: SubmissionCase[];
@@ -159,6 +163,11 @@ SubmissionSchema.index({ date: -1 });
 SubmissionSchema.index({ user: 1, date: -1 });
 // The effects sweep reads the users and problems graded in its window.
 SubmissionSchema.index({ judgedDate: 1 });
+// The effects sweep reads the rows whose effects are still due; the normal state is cleared, so the index stays small.
+SubmissionSchema.index(
+  { effectsDueAt: 1 },
+  { partialFilterExpression: { effectsDueAt: { $type: 'date' } } },
+);
 // Problem stats count a problem's rows of listed users without reading documents.
 SubmissionSchema.index({ problem: 1, user: 1 });
 // The contest submission list sorts one contest's rows by `-_id`; FSO judging finds contests with pending rows and reads each one's in id order.

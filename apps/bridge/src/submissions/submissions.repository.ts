@@ -16,7 +16,7 @@ import {
   SubmissionSource,
   uuidStr,
 } from '@libs/database';
-import { gradedJobOf } from '@libs/judging';
+import { effectsDue, gradedJobOf } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import type { QueuedSubmission } from '../dispatch/slots';
@@ -154,7 +154,7 @@ export class SubmissionsRepository {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Queued submissions (all, or those of `ids`) in dispatch order, with the codes judges know: a mirror is judged under its root's code. A row whose problem or language is gone is skipped. */
+  /** Queued submissions (all, or those of `ids`) in dispatch order, with the codes judges know (a mirror is judged under its root's code) and the judge pinned at submit, which every requeue keeps. A row whose problem or language is gone is skipped. */
   async loadQueued(ids?: string[]): Promise<QueuedSubmission[]> {
     const rows = await this.submissions
       .find(
@@ -165,6 +165,7 @@ export class SubmissionsRepository {
           priority: 1,
           contest: 1,
           judgeGeneration: 1,
+          pinnedJudge: 1,
         },
       )
       .sort({ priority: 1, _id: 1 })
@@ -216,7 +217,7 @@ export class SubmissionsRepository {
               languageKey,
               priority: row.priority,
               generation: row.judgeGeneration ?? 0,
-              judgeName: null,
+              judgeName: row.pinnedJudge ?? null,
               bannedJudges: metaOf.get(uuidStr(row._id))?.bannedJudges ?? [],
               retryBannedJudges: [],
             },
@@ -494,10 +495,12 @@ export class SubmissionsRepository {
       .findOneAndUpdate(
         { ...runOf(ref, judgeName), status: IN_FLIGHT },
         {
-          $set:
-            status === 'AB'
+          $set: {
+            ...(status === 'AB'
               ? { status, result: status, points: 0 }
-              : { status, result: status, error },
+              : { status, result: status, error }),
+            ...effectsDue(),
+          },
         },
         { projection: { user: 1, problem: 1 } },
       )

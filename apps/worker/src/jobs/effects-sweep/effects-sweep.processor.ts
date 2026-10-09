@@ -20,6 +20,7 @@ import {
   EffectsSweepService,
   SWEEP_INTERVAL_MS,
 } from './effects-sweep.service';
+import type { SweepResult } from './effects-sweep.service';
 
 @Processor(EFFECTS_SWEEP_QUEUE, { concurrency: 1, autorun: false })
 export class EffectsSweepProcessor
@@ -55,7 +56,7 @@ export class EffectsSweepProcessor
     await startAfterIndexes(this.worker, this.submissions);
   }
 
-  process(): Promise<{ users: number; problems: number }> {
+  process(): Promise<SweepResult> {
     return this.sweeps.sweep();
   }
 

@@ -42,8 +42,15 @@ export class SubmissionEffectsService {
     private readonly replayQueue: Queue<ContestReplayJob>,
   ) {}
 
-  /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update; its pending gradings finish without effects. */
+  /** The graded job (and the sweep's repair of one that was lost): the effects, then the row's `effectsDueAt` is cleared, but only the stamp read before them, so a run that finished meanwhile keeps its own. */
   async apply(job: SubmissionGradedJob): Promise<void> {
+    const due = await this.repository.effectsDueAt(job.submissionId);
+    await this.applyEffects(job);
+    if (due) await this.repository.clearEffectsDue(job.submissionId, due);
+  }
+
+  /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update; its pending gradings finish without effects. */
+  private async applyEffects(job: SubmissionGradedJob): Promise<void> {
     const problem = await this.repository.findProblem(job.problemId);
     if (!problem || problem.deletedAt) return;
     if (problem.isPublic && !problem.isOrganizationPrivate)

@@ -124,6 +124,7 @@ describe('submission actions', () => {
         status: 'AB',
         result: 'AB',
         points: 0,
+        effectsDueAt: expect.any(Date) as Date,
       });
       expect(await gradedIds()).toEqual([id]);
       expect(await bridgeCommands(api)).toEqual([
@@ -194,6 +195,8 @@ describe('submission actions', () => {
         currentTestcase: 4,
         batch: true,
         isPretested: true,
+        effectsDueAt: new Date(),
+        pinnedJudge: 'judge-9',
       });
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
       const after = await row(id);
@@ -216,6 +219,8 @@ describe('submission actions', () => {
         currentTestcase: 0,
         batch: false,
         isPretested: false,
+        effectsDueAt: null,
+        pinnedJudge: null,
       });
       expect(after.rejudgedDate).toBeInstanceOf(Date);
       expect(await bridgeCommands(api)).toEqual([
@@ -280,6 +285,7 @@ describe('submission actions', () => {
         points: 0,
         casePoints: 0,
         cases: [],
+        effectsDueAt: expect.any(Date) as Date,
       });
       expect(await gradedIds()).toEqual([id]);
       const queued = await seed({ status: 'QU', result: null });

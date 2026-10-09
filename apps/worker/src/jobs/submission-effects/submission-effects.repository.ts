@@ -2,8 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { Problem, Submission, toUuid, User, uuidStr } from '@libs/database';
-import { ANY_SOLVED } from '@libs/judging';
-import type { ProblemBest, UserPoints } from '@libs/judging';
+import { ANY_SOLVED, gradedJobOf } from '@libs/judging';
+import type {
+  ProblemBest,
+  SubmissionGradedJob,
+  UserPoints,
+} from '@libs/judging';
 
 export type EffectsProblem = Pick<
   Problem,
@@ -42,6 +46,41 @@ export class SubmissionEffectsRepository {
       userIds: users.map(uuidStr),
       problemIds: problems.map(uuidStr),
     };
+  }
+
+  async effectsDueAt(submissionId: string): Promise<Date | null> {
+    const row = await this.submissions
+      .findById(submissionId, { effectsDueAt: 1 })
+      .lean()
+      .exec();
+    return row?.effectsDueAt ?? null;
+  }
+
+  /** Clears the stamp `due` only: a newer finish wrote a newer one, which stays due. */
+  async clearEffectsDue(submissionId: string, due: Date): Promise<void> {
+    await this.submissions
+      .updateOne(
+        { _id: submissionId, effectsDueAt: due },
+        { $set: { effectsDueAt: null } },
+      )
+      .exec();
+  }
+
+  /** The oldest rows whose effects have been due since before `before` (read through the partial `effectsDueAt` index), as graded jobs. */
+  async effectsDueBefore(
+    before: Date,
+    limit: number,
+  ): Promise<SubmissionGradedJob[]> {
+    const rows = await this.submissions
+      .find(
+        { effectsDueAt: { $type: 'date', $lt: before } },
+        { user: 1, problem: 1 },
+      )
+      .sort({ effectsDueAt: 1 })
+      .limit(limit)
+      .lean()
+      .exec();
+    return rows.map(gradedJobOf);
   }
 
   /** Deliberately S: it also answers for a deleted problem and returns `deletedAt`, so a grading that finishes after a delete is recognised and ignored (and `problem-rescore` still runs for it). */

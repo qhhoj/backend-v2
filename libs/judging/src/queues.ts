@@ -36,7 +36,7 @@ export const gradedJobOf = (submission: {
   problemId: uuidStr(submission.problem),
 });
 
-/** Shared by the bridge and the api so every producer uses the same job name, retention and retry policy (effects are idempotent recomputes, so a transient failure is retried). The api passes no `jobId`. The bridge passes `gradedJobId(submissionId, generation)`: a judge that resends its Final after a bridge crash enqueues the same id, which BullMQ drops while the first job still waits, and a rejudge is a new generation, so it is never dropped as a duplicate of the run it replaced. */
+/** Shared by the bridge and the api so every producer uses the same job name, retention and retry policy (effects are idempotent recomputes, so a transient failure is retried). The api passes no `jobId`. The bridge passes `gradedJobId(submissionId, generation)`: a Final resent before its ack enqueues the same id, which BullMQ drops while the first job still waits, and a rejudge is a new generation, so it is never dropped as a duplicate of the run it replaced. A job lost outright (the process died before `add` reached Redis) is repaired by the worker's effects sweep from the row's `effectsDueAt`. */
 export const enqueueGraded = async (
   queue: Queue<SubmissionGradedJob>,
   job: SubmissionGradedJob,

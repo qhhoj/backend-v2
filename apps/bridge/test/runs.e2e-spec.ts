@@ -1,7 +1,8 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { newId } from '@libs/database';
+import { newId, SUBMISSION_PRIORITY } from '@libs/database';
+import { requeueUpdate } from '@libs/judging';
 import type { Problem } from '@libs/database';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
@@ -97,6 +98,34 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
       submissionId: id,
       generation: 2,
     });
+  });
+
+  it('keeps the judge pinned at submit through a requeue and a resync reset; a rejudge clears it', async () => {
+    const problem = await seedProblem(bridge, catalog, { code: nextCode() });
+    const { _id: id } = await seedSubmission(bridge, catalog, {
+      problem: problem._id,
+      pinnedJudge: JUDGE,
+    });
+    const pinOf = async () => (await repository.loadQueued([id]))[0]?.judgeName;
+    const claimed = async () => {
+      const [queued] = await repository.loadQueued([id]);
+      const claim = await repository.claimRun(queued, JUDGE);
+      if (!claim || !('request' in claim)) throw new Error('not claimed');
+      return claim.request.ref;
+    };
+    expect(await pinOf()).toBe(JUDGE);
+    expect(await repository.requeueRun(await claimed(), JUDGE)).not.toBeNull();
+    expect(await pinOf()).toBe(JUDGE);
+    const ref = await claimed();
+    await repository.resetStrandedRuns([
+      { id, judgedOn: JUDGE, generation: ref.generation },
+    ]);
+    expect(await pinOf()).toBe(JUDGE);
+    await bridge.submissions.updateOne(
+      { _id: id },
+      requeueUpdate(SUBMISSION_PRIORITY.rejudge),
+    );
+    expect(await pinOf()).toBeNull();
   });
 
   it("sends a mirror its root's data version", async () => {

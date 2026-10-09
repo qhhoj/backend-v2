@@ -235,6 +235,48 @@ describe('submission effects', () => {
     expect(await pointsOf(user._id)).toEqual(once[0]);
   });
 
+  it('clears the effects stamp it applied, also for a deleted problem, but never a newer one written meanwhile', async () => {
+    const dueOf = async (id: string) =>
+      (await worker.submissions.findById(id, { effectsDueAt: 1 }).lean())!
+        .effectsDueAt;
+    const user = await seedUser(worker);
+    const problem = await seedProblem(worker);
+    const applied = await seedGraded(worker, user._id, problem._id, {
+      effectsDueAt: new Date(),
+    });
+    await effects.apply(gradedJobOf(applied));
+    expect(await dueOf(applied._id)).toBeNull();
+
+    const gone = await seedProblem(worker, { deletedAt: new Date() });
+    const orphan = await seedGraded(worker, user._id, gone._id, {
+      effectsDueAt: new Date(),
+    });
+    await effects.apply(gradedJobOf(orphan));
+    expect(await dueOf(orphan._id)).toBeNull();
+
+    const rejudged = await seedGraded(worker, user._id, problem._id, {
+      effectsDueAt: new Date(Date.now() - 60_000),
+    });
+    const newer = new Date();
+    const recomputeProblem = effects.recomputeProblem.bind(effects);
+    // a rejudge finishes while this job's effects run
+    const racing = jest
+      .spyOn(effects, 'recomputeProblem')
+      .mockImplementationOnce(async (problemId) => {
+        await worker.submissions.updateOne(
+          { _id: rejudged._id },
+          { $set: { effectsDueAt: newer } },
+        );
+        await recomputeProblem(problemId);
+      });
+    try {
+      await effects.apply(gradedJobOf(rejudged));
+    } finally {
+      racing.mockRestore();
+    }
+    expect(await dueOf(rejudged._id)).toEqual(newer);
+  });
+
   it('recomputes a user with 10k submissions through indexes', async () => {
     const user = await seedUser(worker);
     const solved = await worker.problems.insertMany(

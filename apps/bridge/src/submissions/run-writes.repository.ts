@@ -8,7 +8,12 @@ import {
   toUuid,
 } from '@libs/database';
 import type { SubmissionCase, SubmissionStatus } from '@libs/database';
-import { gradeCases, gradedJobOf, submissionPoints } from '@libs/judging';
+import {
+  effectsDue,
+  gradeCases,
+  gradedJobOf,
+  submissionPoints,
+} from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { MAX_SUBMISSION_CASES } from '../link/link-limits';
 import { REQUEUE_RESET } from './submissions.repository';
@@ -130,6 +135,7 @@ export class RunWritesRepository {
         points,
         judgedDataVersion: dataVersionUsed,
         judgeSeq: key.seq,
+        ...effectsDue(),
       },
     });
     return modifiedCount === 1
@@ -152,6 +158,7 @@ export class RunWritesRepository {
         ...fields,
         judgedDataVersion: dataVersionUsed,
         judgeSeq: key.seq,
+        ...effectsDue(),
       },
     });
   }
@@ -180,6 +187,7 @@ export class RunWritesRepository {
         result: 'IE',
         error: `${RETRY_LIMIT_MESSAGE}: ${log}`,
         judgeSeq: key.seq,
+        ...effectsDue(),
       },
       $inc: { retryCount: 1 },
     });

@@ -10,7 +10,7 @@ export interface QueuedSubmission {
   priority: number;
   /** `judgeGeneration` of the row when it was read: a judge still holding this generation or an older one holds a void run. */
   generation: number;
-  /** Only this judge may take it, even while disabled (submit with `judgeId`). */
+  /** Only this judge may take it, even while disabled: the row's `pinnedJudge` (submit with `judgeId`), kept by every requeue and dropped by a rejudge. */
   judgeName: string | null;
   /** Judges that must not see it: a live or spectating contest submission's contest bans (from Mongo) plus any the command adds. */
   bannedJudges: string[];

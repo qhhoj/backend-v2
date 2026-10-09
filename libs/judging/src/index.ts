@@ -11,4 +11,5 @@ export * from './submission-events';
 export * from './submission-events.service';
 export * from './publish-event';
 export * from './requeue';
+export * from './effects-due';
 export * from './migration-recompute';

@@ -15,7 +15,10 @@ import {
 import { SubmissionEffectsService } from '../src/jobs/submission-effects/submission-effects.service';
 import {
   insertGradedRows,
+  seedContest,
+  seedContestSubmission,
   seedGraded,
+  seedParticipation,
   seedProblem,
   seedUser,
 } from './effects-fixtures';
@@ -158,6 +161,75 @@ describe('effects sweep', () => {
     expect(await pointsOf(user._id)).toBe(1000);
   });
 
+  it('re-applies a finished row whose graded job was lost, contest results included, whatever its dates', async () => {
+    const now = Date.now();
+    await redis.set(SWEEP_WATERMARK_KEY, String(now - MINUTE));
+    const problem = await seedProblem(worker);
+    const contest = await seedContest(worker, {
+      formatName: 'ioi',
+      problems: [
+        {
+          problem: problem._id,
+          points: 100,
+          partial: true,
+          isPretested: false,
+          outputPrefixOverride: null,
+          maxSubmissions: null,
+          order: 0,
+        },
+      ],
+    });
+    const seedEntrant = async (effectsDueAt: Date) => {
+      const user = await seedUser(worker);
+      const participation = await seedParticipation(
+        worker,
+        contest._id,
+        user._id,
+      );
+      // a rejudge that ended without grading-begin long after the submit: neither window date is recent
+      const old = new Date(now - 3 * 60 * MINUTE);
+      const submission = await seedContestSubmission(
+        worker,
+        participation,
+        problem._id,
+        { fields: { date: old, judgedDate: null, effectsDueAt } },
+      );
+      return { user, participation, submission };
+    };
+    const lost = await seedEntrant(new Date(now - 5 * MINUTE));
+    const inFlight = await seedEntrant(new Date(now - 10_000));
+    const rowsOf = async ({
+      user,
+      participation,
+      submission,
+    }: typeof lost) => ({
+      userPoints: (await worker.users.findById(user._id).lean())!.points,
+      score: (await worker.participations.findById(participation._id).lean())!
+        .score,
+      contestPoints: (await worker.contestSubmissions
+        .findById(submission._id)
+        .lean())!.points,
+      effectsDueAt: (await worker.submissions
+        .findById(submission._id, { effectsDueAt: 1 })
+        .lean())!.effectsDueAt,
+    });
+
+    const result = await sweeps.sweep(now);
+    expect(result.repaired).toBeGreaterThanOrEqual(1);
+    expect(await rowsOf(lost)).toEqual({
+      userPoints: 1000,
+      score: 100,
+      contestPoints: 100,
+      effectsDueAt: null,
+    });
+    // its graded job may still be on the way: left to it
+    expect(await rowsOf(inFlight)).toMatchObject({
+      score: 0,
+      contestPoints: 0,
+      effectsDueAt: expect.any(Date) as Date,
+    });
+  });
+
   it('reads its window through indexes', async () => {
     const problem = await seedProblem(worker);
     await insertGradedRows(worker, 20_000, () => ({
@@ -182,6 +254,19 @@ describe('effects sweep', () => {
     expect(
       windowReads.reduce((sum, { docsExamined }) => sum + docsExamined, 0),
     ).toBeLessThan(20_000);
+    const dueReads = operations.filter(
+      ({ collection, operation, planSummary }) =>
+        collection === 'submissions' &&
+        operation === 'query' &&
+        planSummary !== 'IDHACK',
+    );
+    expect(dueReads.length).toBeGreaterThan(0);
+    expect(
+      dueReads.every(
+        ({ planSummary, hasSortStage }) =>
+          planSummary.includes('IXSCAN { effectsDueAt: 1 }') && !hasSortStage,
+      ),
+    ).toBe(true);
   }, 60_000);
 
   it('never runs two sweeps at once, even across worker processes', async () => {
@@ -197,7 +282,7 @@ describe('effects sweep', () => {
       await sleep(200);
       running -= 1;
       finished += 1;
-      return { users: 0, problems: 0 };
+      return { users: 0, problems: 0, repaired: 0 };
     };
     const spy = jest.spyOn(sweeps, 'sweep').mockImplementation(slowSweep);
     const secondProcess = new Worker(EFFECTS_SWEEP_QUEUE, slowSweep, {

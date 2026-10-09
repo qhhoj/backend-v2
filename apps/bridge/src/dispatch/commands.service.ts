@@ -147,7 +147,7 @@ export class CommandsService {
         return this.dispatch.enqueue(
           queued.map((submission) => ({
             ...submission,
-            judgeName: command.judgeName,
+            judgeName: command.judgeName ?? submission.judgeName,
             bannedJudges: unique([
               ...submission.bannedJudges,
               ...command.bannedJudges,

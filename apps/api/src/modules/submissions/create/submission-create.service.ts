@@ -191,6 +191,7 @@ export class SubmissionCreateService {
           user: principal.userId,
           problem: draft.problem._id,
           language: draft.language._id,
+          pinnedJudge: draft.judgeId ?? null,
           ...plan?.fields,
         },
         draft.source,

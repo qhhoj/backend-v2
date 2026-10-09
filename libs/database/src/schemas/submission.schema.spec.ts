@@ -58,6 +58,8 @@ describe('Submission schemas', () => {
       judgedOn: null,
       contest: null,
       lockedAfter: null,
+      effectsDueAt: null,
+      pinnedJudge: null,
     });
     expect(submission.date.getTime()).toBeLessThanOrEqual(Date.now());
   });

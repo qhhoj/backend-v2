@@ -230,6 +230,11 @@ describe('POST /api/internal/problems/:code/submit', () => {
         bannedJudges: [],
       },
     ]);
+    // stored too, so a requeue or a bridge restart keeps it
+    for (const id of [chosen, mirrored])
+      expect((await api.submissions.findById(id).lean())!.pinnedJudge).toBe(
+        'judge-on',
+      );
   });
 
   it('never lets parallel submits slip past the unfinished limit', async () => {

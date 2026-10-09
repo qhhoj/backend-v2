@@ -16,7 +16,7 @@ import {
   UNFINISHED_STATUSES,
   uuidStr,
 } from '@libs/database';
-import { JUDGE_COMMAND_BATCH, requeueUpdate } from '@libs/judging';
+import { effectsDue, JUDGE_COMMAND_BATCH, requeueUpdate } from '@libs/judging';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 const STATE_FIELDS = {
@@ -36,7 +36,12 @@ export type NewSubmission = Pick<Submission, 'user' | 'problem' | 'language'> &
   Partial<
     Pick<
       Submission,
-      'status' | 'priority' | 'contest' | 'lockedAfter' | 'isPretested'
+      | 'status'
+      | 'priority'
+      | 'contest'
+      | 'lockedAfter'
+      | 'isPretested'
+      | 'pinnedJudge'
     >
   >;
 export type NewContestSubmission = Pick<
@@ -148,7 +153,7 @@ export class SubmissionsRepository {
     const { modifiedCount } = await this.submissions
       .updateOne(
         { _id: id, status: 'QU' },
-        { $set: { status: 'AB', result: 'AB', points: 0 } },
+        { $set: { status: 'AB', result: 'AB', points: 0, ...effectsDue() } },
       )
       .exec();
     return modifiedCount === 1;
@@ -173,7 +178,15 @@ export class SubmissionsRepository {
     const { matchedCount } = await this.submissions
       .updateOne(
         { _id: id, status: { $nin: [...UNFINISHED_STATUSES] } },
-        { $set: { result: 'RJ', points: 0, casePoints: 0, cases: [] } },
+        {
+          $set: {
+            result: 'RJ',
+            points: 0,
+            casePoints: 0,
+            cases: [],
+            ...effectsDue(),
+          },
+        },
       )
       .exec();
     return matchedCount === 1;

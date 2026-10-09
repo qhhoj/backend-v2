@@ -10,6 +10,7 @@ import {
 } from '@libs/contests';
 import { Status } from '@libs/judge-proto';
 import type { ContestReplayJob } from '@libs/contests';
+import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import {
   contestProblem,
@@ -29,6 +30,10 @@ import { dataOf } from '../../api/test/submission-fixtures';
 import { setupApiTest } from '../../api/test/setup';
 import type { ApiTest } from '../../api/test/setup';
 import type { RankingResponse } from '../../api/src/modules/contests/ranking/dto/ranking.response';
+import {
+  EFFECTS_DUE_GRACE_MS,
+  EffectsSweepService,
+} from '../../worker/src/jobs/effects-sweep/effects-sweep.service';
 import { WorkerModule } from '../../worker/src/worker.module';
 import { BridgeModule } from '../src/bridge.module';
 import { BRIDGE_TIMINGS } from '../src/bridge-timings';
@@ -109,6 +114,7 @@ describe('a contest across the api, the bridge and the worker', () => {
       ['alice', { permissions: ['judge.spam_submission'] }],
       ['bob', { permissions: ['judge.spam_submission'] }],
       ['dana', { permissions: ['judge.spam_submission'] }],
+      ['erin', { permissions: ['judge.spam_submission'] }],
     ];
     for (const [name, extra] of roles) {
       users[name] = await createUserWith(api, name, extra);
@@ -261,5 +267,51 @@ describe('a contest across the api, the bridge and the worker', () => {
     );
     // `next` consumed the one request; a second judge-final must not have queued another.
     expect(requestsFor(pending)).toEqual([]);
+  });
+
+  it('repairs the board and the user points when the bridge dies between the Final write and the graded job', async () => {
+    const problem = (await api.problems.findOne({ code: 'xflow' }))!;
+    const contest = await createContest(api, {
+      formatName: 'ioi',
+      authors: [users.editor._id],
+      problems: [contestProblem(problem._id, 0)],
+    });
+    await post('erin', contestUrl(contest.key, '/join')).expect(201);
+    const graded = bridge.get<Queue>(getQueueToken(SUBMISSION_GRADED_QUEUE));
+    // the process is gone before the enqueue reaches Redis; the judge's resend after the restart is dropped (the row is no longer P/G)
+    const crash = jest
+      .spyOn(graded, 'add')
+      .mockRejectedValueOnce(new Error('bridge crashed'));
+    const id = await submit('erin');
+    expect(await requestedId()).toBe(id);
+    try {
+      await gradeAc(id);
+      expect(crash).toHaveBeenCalledTimes(1);
+    } finally {
+      crash.mockRestore();
+    }
+    const state = async () => ({
+      score: rowOf(await ranking(contest.key, 'editor'), 'erin').score,
+      userPoints: (await api.users.findById(users.erin._id).lean())!.points,
+      effectsDue: !!(await api.submissions.findById(id).lean())!.effectsDueAt,
+    });
+    expect(await api.submissions.findById(id).lean()).toMatchObject({
+      status: 'D',
+      result: 'AC',
+    });
+    expect(await state()).toEqual({
+      score: 0,
+      userPoints: 0,
+      effectsDue: true,
+    });
+
+    await worker
+      .get(EffectsSweepService)
+      .sweep(Date.now() + EFFECTS_DUE_GRACE_MS);
+    expect(await state()).toEqual({
+      score: 100,
+      userPoints: 1000,
+      effectsDue: false,
+    });
   });
 });
