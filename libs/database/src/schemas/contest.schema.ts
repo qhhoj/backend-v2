@@ -182,6 +182,10 @@ ContestSchema.index({ authors: 1 });
 ContestSchema.index({ curators: 1 });
 ContestSchema.index({ testers: 1 });
 ContestSchema.index({ organizations: 1 });
-ContestSchema.index({ managedBy: 1 }, { sparse: true });
+// Only client-managed rows: Mongoose writes `managedBy: null` on every contest, which a sparse index would still include. A query uses it only when it also states `$type: 'binData'` (equality alone does not imply the type to the planner).
+ContestSchema.index(
+  { managedBy: 1 },
+  { partialFilterExpression: { managedBy: { $type: 'binData' } } },
+);
 // A problem rescore finds the contests that list the problem.
 ContestSchema.index({ 'problems.problem': 1 });

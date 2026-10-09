@@ -17,7 +17,7 @@ describe('platform permission grants', () => {
     connection = await mongoose.createConnection(replSet.getUri()).asPromise();
     await connection.collection('groups').insertMany([
       { name: 'site editors', permissions: ['flatpages.change_flatpage'] },
-      { name: 'settings admins', permissions: ['judge.change_settings'] },
+      { name: 'settings admins', permissions: ['judge.change_miscconfig'] },
       { name: 'authors', permissions: ['judge.add_contest'] },
     ]);
     await new GrantPermissionsService(connection, PERMISSION_GRANTS).grant();

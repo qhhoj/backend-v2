@@ -41,6 +41,31 @@ describe('Contest schemas', () => {
     await replSet.stop();
   });
 
+  it('indexes managedBy for client-managed contests only, not for the null every contest carries', async () => {
+    const managedBy = newId();
+    await Contests.create({
+      key: 'managed_1',
+      name: 'Managed',
+      managedBy,
+      ...window(),
+    });
+    await Contests.create({ key: 'human_1', name: 'Human', ...window() });
+    const plan = async (filter: object) =>
+      JSON.stringify(await Contests.find(filter).explain('queryPlanner'));
+    const typed = { $type: 'binData' };
+    expect(await plan({ managedBy: { ...typed, $eq: managedBy } })).toContain(
+      'IXSCAN',
+    );
+    expect(await plan({ managedBy: null })).not.toContain('IXSCAN');
+    const index = (await Contests.collection.indexes()).find(
+      (candidate) => candidate.name === 'managedBy_1',
+    );
+    expect(index).toMatchObject({
+      partialFilterExpression: { managedBy: { $type: 'binData' } },
+    });
+    expect(index?.sparse).toBeUndefined();
+  });
+
   it('defaults a new contest to a hidden, unrated default-format contest with numeric labels', async () => {
     const contest = await Contests.create({
       key: 'round_1',

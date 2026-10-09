@@ -38,6 +38,28 @@ describe('GrantPermissionsService', () => {
         permissions: ['judge.edit_all_contest', 'judge.change_contest_tag'],
       },
     ]);
+    const users = connection.collection('users');
+    await users.deleteMany({});
+    await users.insertMany([
+      { username: 'direct', permissions: ['judge.edit_all_contest'] },
+      { username: 'plain', permissions: ['judge.add_contest'] },
+    ]);
+  });
+  const userPermissions = async (username: string): Promise<string[]> =>
+    (await connection.collection('users').findOne({ username }))!
+      .permissions as string[];
+
+  it('also gives the codename to users who hold the anchor directly', async () => {
+    const changed = await new GrantPermissionsService(
+      connection,
+      grants,
+    ).grant();
+    expect(changed).toEqual({ 'judge.change_contest_tag': 2 });
+    expect(await userPermissions('direct')).toEqual([
+      'judge.edit_all_contest',
+      'judge.change_contest_tag',
+    ]);
+    expect(await userPermissions('plain')).toEqual(['judge.add_contest']);
   });
 
   it('gives the new codename to the groups holding its anchor and to no other', async () => {
@@ -45,7 +67,7 @@ describe('GrantPermissionsService', () => {
       connection,
       grants,
     ).grant();
-    expect(changed).toEqual({ 'judge.change_contest_tag': 1 });
+    expect(changed).toEqual({ 'judge.change_contest_tag': 2 });
     expect(await permissionsOf('admins')).toEqual([
       'judge.edit_all_contest',
       'judge.change_contest_tag',

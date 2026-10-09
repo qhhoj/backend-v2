@@ -88,6 +88,13 @@ export const timeZoneType: SettingType<string> = {
 const INSTANT_WITH_OFFSET =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
+/** `new Date` rolls `2026-02-31` over to March 3; a typo must not move the end silently. */
+const isRealCalendarDay = (instant: string): boolean => {
+  const [year, month, day] = instant.slice(0, 10).split('-').map(Number);
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day;
+};
+
 /** `''` switches the feature off; otherwise an ISO 8601 instant that names its offset (a bare local time would mean different instants on different servers). Stored as UTC. */
 export const optionalDatetimeType: SettingType<string> = {
   parse: (raw) => {
@@ -96,7 +103,9 @@ export const optionalDatetimeType: SettingType<string> = {
       typeof raw === 'string' && INSTANT_WITH_OFFSET.test(raw)
         ? new Date(raw)
         : null;
-    return instant && !Number.isNaN(instant.getTime())
+    return instant &&
+      !Number.isNaN(instant.getTime()) &&
+      isRealCalendarDay(raw as string)
       ? instant.toISOString()
       : fail(
           'Must be empty or an ISO 8601 instant with an offset, e.g. 2026-10-10T08:00:00+07:00.',

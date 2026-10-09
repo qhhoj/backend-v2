@@ -1,6 +1,6 @@
 import type { Permission } from '@libs/auth';
 
-/** A codename that did not exist in the legacy site: every group holding `heldBy` gets `permission`. Anchors, not group names, because migrated group names are the operator's. Later programs append their own rows. */
+/** A codename that did not exist in the legacy site: every group and every user holding `heldBy` directly gets `permission`. Anchors, not group names, because migrated group names are the operator's. Later programs append their own rows. */
 export interface PermissionGrant {
   permission: Permission;
   heldBy: Permission;
@@ -13,5 +13,5 @@ export const PERMISSION_GRANTS: readonly PermissionGrant[] = [
     permission: 'judge.manage_short_link',
     heldBy: 'flatpages.change_flatpage',
   },
-  { permission: 'judge.manage_integration', heldBy: 'judge.change_settings' },
+  { permission: 'judge.manage_integration', heldBy: 'judge.change_miscconfig' },
 ];
