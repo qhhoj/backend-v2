@@ -69,4 +69,17 @@ describe('contest rules, acceptance and auto-publish schemas', () => {
         rulesAcceptedRevision: { type: 'number', nullable: true },
       });
   });
+
+  it('documents the auto-publish switch on the editor body and the settings', () => {
+    expect(properties('CreateContestDto').publishAfterEnd).toMatchObject({
+      type: 'boolean',
+    });
+    expect(properties('UpdateContestDto').publishAfterEnd).toMatchObject({
+      type: 'boolean',
+    });
+    expect(properties('ContestSettingsResponse')).toMatchObject({
+      publishAfterEnd: { type: 'boolean' },
+      publishAfterEndBy: { type: 'string', nullable: true },
+    });
+  });
 });

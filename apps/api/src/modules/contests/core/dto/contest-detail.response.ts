@@ -114,6 +114,9 @@ export class ContestSettingsResponse {
   ratingFloor!: number | null;
   ratingCeiling!: number | null;
   pushAnnouncements!: boolean;
+  publishAfterEnd!: boolean;
+  /** The editor whose rights the automatic publish re-checks at the end. */
+  publishAfterEndBy!: string | null;
   /** Whether a ranking access code is set; the code itself is never returned. */
   hasRankingAccessCode!: boolean;
   problemOutputPrefixes!: ContestProblemOutputPrefixResponse[];
@@ -157,6 +160,11 @@ export class ContestSettingsResponse {
       ratingFloor: contest.ratingFloor,
       ratingCeiling: contest.ratingCeiling,
       pushAnnouncements: contest.pushAnnouncements,
+      publishAfterEnd: contest.publishAfterEnd,
+      publishAfterEndBy:
+        contest.publishAfterEndBy === null
+          ? null
+          : uuidStr(contest.publishAfterEndBy),
       hasRankingAccessCode: contest.rankingAccessCodeHash !== null,
       problemOutputPrefixes: [...contest.problems]
         .sort((left, right) => left.order - right.order)

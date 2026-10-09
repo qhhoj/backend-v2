@@ -146,6 +146,22 @@ function rulesFields(
   };
 }
 
+/** Who switched auto-publishing on is re-checked when the job runs, so the switch itself needs no extra permission; sending the current value changes nothing. */
+function publishFields(
+  principal: Principal,
+  dto: UpdateContestDto,
+  current: ContestDocument | null,
+): Partial<Contest> {
+  if (
+    dto.publishAfterEnd === undefined ||
+    dto.publishAfterEnd === (current?.publishAfterEnd ?? false)
+  )
+    return {};
+  return dto.publishAfterEnd
+    ? { publishAfterEndBy: principal.userId, autoPublishOutcome: null }
+    : { publishAfterEndBy: null };
+}
+
 @Injectable()
 export class ContestEditFieldsService {
   constructor(
@@ -166,6 +182,7 @@ export class ContestEditFieldsService {
     if (dto.description !== undefined)
       fields.descriptionHtml = renderField('description', dto.description);
     Object.assign(fields, rulesFields(dto, current));
+    Object.assign(fields, publishFields(principal, dto, current));
     const isFormatEdited =
       dto.formatConfig !== undefined || dto.formatName !== undefined;
     // Relies on the schema's `formatConfig` default only for the no-format create; any edit of the format resolves it here.
