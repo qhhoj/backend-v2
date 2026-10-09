@@ -73,8 +73,8 @@ if [ "${STACK_SKIP_REDIS:-0}" != 1 ]; then
 fi
 
 cd "$BACKEND"
-npx nest build api && npx nest build worker && npx nest build bridge
-npm run seed:e2e
+capped 3G npx nest build api && capped 3G npx nest build worker && capped 3G npx nest build bridge
+capped 2G npm run seed:e2e
 
 start api "$RUN/api.log" node dist/apps/api/main
 start worker "$RUN/worker.log" node dist/apps/worker/main
@@ -89,7 +89,7 @@ fi
 
 # The bundle goes to $RUN/dist so a checkout's own dist/ is never touched.
 cd "$FRONTEND"
-API_ORIGIN="$E2E_REAL_API" npx vite build --outDir "$RUN/dist" --emptyOutDir
+API_ORIGIN="$E2E_REAL_API" capped 3G npx vite build --outDir "$RUN/dist" --emptyOutDir
 start preview "$RUN/preview.log" env API_ORIGIN="$E2E_REAL_API" node node_modules/vite/bin/vite.js preview --outDir "$RUN/dist" --host 127.0.0.1 --port "$PORT_PREVIEW" --strictPort
 wait_for preview curl -sf "http://127.0.0.1:$PORT_PREVIEW/api/internal/problems/meta"
 

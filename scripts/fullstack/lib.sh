@@ -28,11 +28,31 @@ assert_port_free() {
   fi
 }
 
+# RAM cap wrapper of the batch host; when absent, commands run uncapped.
+CAP=/home/lamter/QHHOJ/.batch/cap
+
+# capped <mem> <command...>: runs the command under the cap wrapper when it exists.
+capped() {
+  local mem="$1"; shift
+  if [ -x "$CAP" ]; then "$CAP" "$mem" -- "$@"; else "$@"; fi
+}
+
+# Memory ceiling of each service (applies only with the cap wrapper).
+mem_of() {
+  case "$1" in
+    worker) echo 3G ;;
+    mongod | api | bridge) echo 2G ;;
+    *) echo 1G ;;
+  esac
+}
+
 # start <name> <logfile> <command...>: runs detached in its own process group
 # (so the recorded pid is the group leader), records "name pid starttime".
+# The cap wrapper execs the service, so the pid stays the service's.
 start() {
   local name="$1" log="$2"; shift 2
-  setsid nohup "$@" >"$log" 2>&1 &
+  setsid nohup bash -c 'if [ -x "$0" ]; then exec "$0" "$1" -- "${@:2}"; else exec "${@:2}"; fi' \
+    "$CAP" "$(mem_of "$name")" "$@" >"$log" 2>&1 &
   local pid=$!
   echo "$name $pid $(start_time_of "$pid")" >>"$PIDS"
 }
