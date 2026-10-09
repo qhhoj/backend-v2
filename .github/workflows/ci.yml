@@ -55,3 +55,16 @@ jobs:
       # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config.
       - run: npm run test:openapi -- --forceExit
       - run: npm run build && npx nest build migrator && npx nest build worker && npx nest build bridge
+  openapi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm ci
+      - run: npm run openapi:emit
+      - name: openapi.json is up to date
+        run: git diff --exit-code -- openapi.json || (echo "openapi.json is stale: run npm run openapi:emit and commit it" && exit 1)

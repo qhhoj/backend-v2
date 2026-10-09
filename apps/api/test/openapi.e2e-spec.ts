@@ -1,3 +1,5 @@
+import { canonicalJson } from '@libs/common';
+import { loadDocument } from './openapi/document';
 import { ApiTest, setupApiTest } from './setup';
 
 describe('OpenAPI document', () => {
@@ -557,5 +559,12 @@ describe('OpenAPI document', () => {
         [],
       );
     });
+  });
+
+  it('is the same document the offline emit builds', async () => {
+    const served: unknown = (
+      await api.http().get('/api/internal/openapi.json').expect(200)
+    ).body;
+    expect(canonicalJson(served)).toBe(canonicalJson(await loadDocument()));
   });
 });

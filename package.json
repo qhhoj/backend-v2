@@ -22,6 +22,7 @@
     "lint": "eslint \"{apps,libs}/**/*.ts\"",
     "test": "jest --runInBand",
     "test:openapi": "jest --config jest.openapi.config.js --runInBand",
+    "openapi:emit": "OPENAPI_OUT=${OPENAPI_OUT:-openapi.json} jest --config jest.openapi-emit.config.js --runInBand --forceExit --silent",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "seed:e2e": "TS_NODE_TRANSPILE_ONLY=true ts-node -r tsconfig-paths/register apps/api/src/seed/main.ts"
   },

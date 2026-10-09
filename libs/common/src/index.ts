@@ -34,6 +34,7 @@ export * from './openapi/api-has-more-response';
 export * from './openapi/api-paginated-response';
 export * from './openapi/has-more-page-meta.response';
 export * from './openapi/envelope-responses';
+export * from './openapi/canonical-json';
 export * from './openapi/page-meta.response';
 export * from './openapi/error.response';
 export * from './openapi/render-preview.response';
