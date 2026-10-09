@@ -5,6 +5,7 @@ import { newId } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
+import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import type { PublishProblemsResponse } from '../src/modules/contests/publish/dto/publish-problems.response';
 import {
   clearRateLimits,
@@ -95,9 +96,14 @@ describe('publish contest problems after the contest', () => {
 
   it('refuses before the end and for a user who does not edit the contest', async () => {
     const running = await createContest(api, { authors: [ids.owner] });
-    await run('owner', running.key)
+    const refused = await run('owner', running.key)
       .expect(409)
       .expect(errorCode('contest_not_ended'));
+    expect(
+      (refused.body as { error: { issues: unknown[] } }).error.issues,
+    ).toEqual([
+      expect.objectContaining({ field: 'endTime', code: 'contest_not_ended' }),
+    ]);
     const { contest } = await endedContest([{}], [ids.owner]);
     await run('plain', contest.key).expect(403);
   });
@@ -225,6 +231,7 @@ describe('publish contest problems after the contest', () => {
     expect(result.items[0]).toMatchObject({
       outcome: 'skipped',
       reason: 'no_permission',
+      code: null,
     });
     expect(
       (await api.problems.findById(problems[0]._id).lean())!.isPublic,
@@ -265,5 +272,45 @@ describe('publish contest problems after the contest', () => {
       .expect(429)
       .expect(errorCode('rate_limited'));
     await run('owner', contest.key, { dryRun: true }).expect(200);
+  });
+
+  it('gives the hit back when a run fails midway', async () => {
+    const { contest } = await endedContest([{ isPublic: true }], [ids.owner]);
+    const failing = jest
+      .spyOn(api.app.get(ProblemsRepository), 'findById')
+      .mockRejectedValueOnce(new Error('database down'));
+    await run('owner', contest.key).expect(500);
+    failing.mockRestore();
+    for (let count = 0; count < 5; count += 1)
+      await run('owner', contest.key).expect(200);
+  });
+
+  it('releases an editorial once even when two writers race', async () => {
+    const [problem] = (
+      await endedContest(
+        [
+          {
+            solution: {
+              isPublic: false,
+              publishOn: new Date(),
+              authors: [],
+              content: 'e',
+              contentHtml: '<p>e</p>',
+            },
+          },
+        ],
+        [ids.owner],
+      )
+    ).problems;
+    const problems = api.app.get(ProblemsRepository);
+    const now = new Date();
+    const wins = await Promise.all([
+      problems.releaseSolution(problem._id, now),
+      problems.releaseSolution(problem._id, now),
+    ]);
+    expect(wins.filter(Boolean)).toHaveLength(1);
+    expect(
+      (await api.problems.findById(problem._id).lean())!.solution,
+    ).toMatchObject({ isPublic: true });
   });
 });

@@ -758,7 +758,23 @@
       },
       "ContestActionsResponse": {
         "properties": {
+          "autoPublish": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestAutoPublishResponse"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
           "judgeFinal": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestActionState"
+              }
+            ]
+          },
+          "publish": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContestActionState"
@@ -783,7 +799,9 @@
         "required": [
           "rescore",
           "judgeFinal",
-          "rate"
+          "rate",
+          "publish",
+          "autoPublish"
         ],
         "type": "object"
       },
@@ -819,6 +837,46 @@
           "data"
         ],
         "type": "object"
+      },
+      "ContestAutoPublishResponse": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "published": {
+            "type": "number"
+          },
+          "reason": {
+            "description": "Empty on success; `no_permission` or `actor_unavailable` on a failure.",
+            "type": "string"
+          },
+          "skipped": {
+            "type": "number"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestAutoPublishStatus"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "at",
+          "reason",
+          "published",
+          "skipped"
+        ],
+        "type": "object"
+      },
+      "ContestAutoPublishStatus": {
+        "enum": [
+          "failed",
+          "published"
+        ],
+        "type": "string"
       },
       "ContestDataStatusResponse": {
         "properties": {
@@ -2593,6 +2651,16 @@
           "disqualified"
         ],
         "type": "object"
+      },
+      "EditorialOutcome": {
+        "description": "Null when editorials were not requested.",
+        "enum": [
+          "none",
+          "published",
+          "skipped",
+          "unchanged"
+        ],
+        "type": "string"
       },
       "EditorialResponse": {
         "properties": {
@@ -5382,6 +5450,99 @@
         "required": [
           "contest",
           "ranking"
+        ],
+        "type": "object"
+      },
+      "PublishOutcome": {
+        "description": "In a dry run, `published` means \"would be published\".",
+        "enum": [
+          "published",
+          "skipped",
+          "unchanged"
+        ],
+        "type": "string"
+      },
+      "PublishProblemsDto": {
+        "properties": {
+          "dryRun": {
+            "description": "Report what would happen and write nothing; default false.",
+            "type": "boolean"
+          },
+          "editorials": {
+            "description": "Also release the editorials; default false.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PublishProblemsResponse": {
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublishedProblemResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "dryRun",
+          "items"
+        ],
+        "type": "object"
+      },
+      "PublishSkipReason": {
+        "enum": [
+          "no_permission",
+          "not_found",
+          "organization_private"
+        ],
+        "type": "string"
+      },
+      "PublishedProblemResponse": {
+        "properties": {
+          "code": {
+            "description": "Null when the problem document is gone.",
+            "nullable": true,
+            "type": "string"
+          },
+          "editorial": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EditorialOutcome"
+              }
+            ],
+            "description": "Null when editorials were not requested.",
+            "nullable": true
+          },
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublishOutcome"
+              }
+            ],
+            "description": "In a dry run, `published` means \"would be published\"."
+          },
+          "problemId": {
+            "type": "string"
+          },
+          "reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublishSkipReason"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "outcome",
+          "reason",
+          "editorial",
+          "problemId",
+          "code"
         ],
         "type": "object"
       },
@@ -14981,6 +15142,73 @@
         },
         "tags": [
           "ContestParticipation"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/publish-problems": {
+      "post": {
+        "operationId": "ContestPublishController_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishProblemsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PublishProblemsResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ContestPublish"
         ]
       }
     },

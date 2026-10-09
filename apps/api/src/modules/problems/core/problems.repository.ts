@@ -148,6 +148,24 @@ export class ProblemsRepository {
     await this.problems.updateOne({ _id: id }, { $set: changes }).exec();
   }
 
+  /** Makes the editorial public from `now` unless it is already released; false when it is missing or another writer released it first. */
+  async releaseSolution(id: string, now: Date): Promise<boolean> {
+    const { modifiedCount } = await this.problems
+      .updateOne(
+        {
+          _id: id,
+          solution: { $ne: null },
+          $or: [
+            { 'solution.isPublic': false },
+            { 'solution.publishOn': { $gt: now } },
+          ],
+        },
+        { $set: { 'solution.isPublic': true, 'solution.publishOn': now } },
+      )
+      .exec();
+    return modifiedCount === 1;
+  }
+
   /** Compare-and-set on `dataVersion`; false when another writer got there first. A missing counter counts as 0. */
   async updateData(
     id: string,

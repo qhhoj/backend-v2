@@ -13,6 +13,7 @@ import { ProblemEditingService } from '../../problems/editing/problem-editing.se
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { ProblemDocument } from '../../problems/core/problems.repository';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
+import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import type {
   EditorialOutcome,
@@ -50,29 +51,37 @@ export class ContestPublishService {
       auth.principal,
       key,
     );
-    if (contestPhase(contest, now) !== 'ended')
-      throw new AppError(
-        'contest_not_ended',
-        409,
-        'Problems can be published after the contest ends',
-      );
-    if (!options.dryRun)
-      await this.rateLimit.reserve(
-        [`contest-publish:user:${auth.principal.userId}`],
-        PUBLISH_LIMIT,
-        PUBLISH_WINDOW_SECONDS,
-      );
+    if (contestPhase(contest, now) !== 'ended') throw contestNotEnded();
+    const release = options.dryRun ? null : await this.spendRun(auth);
+    try {
+      const items = await this.publishAll(auth, contest, { ...options, now });
+      return { dryRun: options.dryRun, items };
+    } catch (error) {
+      // Only a run that finished spends one of the hourly hits.
+      await release?.();
+      throw error;
+    }
+  }
+
+  private spendRun(auth: AuthContext): Promise<() => Promise<void>> {
+    return this.rateLimit.reserve(
+      [`contest-publish:user:${auth.principal.userId}`],
+      PUBLISH_LIMIT,
+      PUBLISH_WINDOW_SECONDS,
+    );
+  }
+
+  private async publishAll(
+    auth: AuthContext,
+    contest: ContestDocument,
+    run: PublishRun,
+  ): Promise<PublishedProblemResponse[]> {
     const items: PublishedProblemResponse[] = [];
     for (const entry of [...contest.problems].sort(
       (left, right) => left.order - right.order,
     ))
-      items.push(
-        await this.publishOne(auth, uuidStr(entry.problem), {
-          ...options,
-          now,
-        }),
-      );
-    return { dryRun: options.dryRun, items };
+      items.push(await this.publishOne(auth, uuidStr(entry.problem), run));
+    return items;
   }
 
   private async publishOne(
@@ -88,7 +97,8 @@ export class ContestPublishService {
         : null;
     return {
       problemId,
-      code: problem?.code ?? null,
+      // A problem the actor has no rights on stays anonymous: its code is not theirs to learn.
+      code: verdict.reason === 'no_permission' ? null : (problem?.code ?? null),
       outcome: verdict.outcome,
       reason: verdict.reason,
       editorial,
@@ -138,9 +148,8 @@ export class ContestPublishService {
     now: Date,
   ): Promise<void> {
     const before = problem.toObject().solution!;
-    await this.problems.update(problem._id, {
-      solution: { ...before, isPublic: true, publishOn: now },
-    });
+    // Guarded write: of two concurrent runs only the one that finds the editorial unreleased records a revision.
+    if (!(await this.problems.releaseSolution(problem._id, now))) return;
     await this.revisions.append({
       entity: 'problem',
       entityId: problem._id,
@@ -156,3 +165,10 @@ export class ContestPublishService {
     });
   }
 }
+
+const contestNotEnded = (): AppError => {
+  const message = 'Problems can be published after the contest ends';
+  return new AppError('contest_not_ended', 409, message, undefined, undefined, {
+    issues: [{ field: 'endTime', code: 'contest_not_ended', message }],
+  });
+};
