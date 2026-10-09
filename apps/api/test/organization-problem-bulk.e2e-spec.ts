@@ -143,6 +143,13 @@ describe('organization problem bulk actions', () => {
     await bulk(world, { codes: [problem.code], action: 'add-tag' }).expect(400);
     await bulk(world, {
       codes: [problem.code],
+      action: 'archive',
+      tagId: 'not-a-uuid',
+    })
+      .expect(400)
+      .expect(issueCodes(['unexpected_tag']));
+    await bulk(world, {
+      codes: [problem.code],
       action: 'add-tag',
       tagId: foreignTag._id,
     })

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ApiPaginatedResponse } from '@libs/common';
+import { ApiPaginatedResponse, RefuseNullFieldsPipe } from '@libs/common';
 import type { Paginated } from '@libs/common';
 import { OrganizationSlugParamDto } from '../core/dto/organization-params.dto';
 import {
@@ -50,7 +50,7 @@ export class ProblemTagsController {
   update(
     @CurrentAuth() auth: AuthContext,
     @Param() target: ProblemTagParamsDto,
-    @Body() body: UpdateProblemTagDto,
+    @Body(new RefuseNullFieldsPipe()) body: UpdateProblemTagDto,
   ): Promise<ProblemTagResponse> {
     return this.tags.update(auth.principal, target, body);
   }

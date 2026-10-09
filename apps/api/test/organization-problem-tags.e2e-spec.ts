@@ -108,7 +108,11 @@ describe('organization problem tags', () => {
     })
       .expect(409)
       .expect(errorCode('conflict'))
-      .expect(issueCodes(['tag_limit_reached']));
+      .expect(issueCodes(['tag_limit_reached']))
+      .expect(
+        ({ body }: { body: { error: { issues: { field: string }[] } } }) =>
+          expect(body.error.issues[0].field).toBe(''),
+      );
   });
 
   it('validates slug and colour', async () => {
@@ -142,6 +146,11 @@ describe('organization problem tags', () => {
         slug: 'old',
       }),
     ).toMatchObject({ name: 'New', color: 'tag-5' });
+    await patch('/old', world.admin.session, { name: null })
+      .expect(400)
+      .expect(issueCodes(['must_not_be_null']));
+    await patch('/old', world.admin.session, { color: null }).expect(400);
+    expect(await tags.countDocuments({ slug: 'old', name: null })).toBe(0);
     await patch('/missing', world.admin.session, { name: 'x' }).expect(404);
     await patch('/old', world.member.session, { name: 'x' }).expect(403);
   });

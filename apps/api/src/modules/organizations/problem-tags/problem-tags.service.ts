@@ -53,7 +53,7 @@ export class ProblemTagsService {
     const organization = await this.organizations.administered(principal, slug);
     if ((await this.tags.count(organization._id)) >= MAX_ORGANIZATION_TAGS)
       throw conflictIssue(
-        'slug',
+        '',
         'tag_limit_reached',
         `An organization may have at most ${MAX_ORGANIZATION_TAGS} problem tags`,
       );

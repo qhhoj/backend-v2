@@ -32,7 +32,7 @@ export class OrganizationProblemBulkService {
     dto: BulkProblemsDto,
   ): Promise<BulkProblemsResponse> {
     const organization = await this.organizations.administered(principal, slug);
-    if (dto.tagId) await this.requireTag(organization._id, dto.tagId);
+    if (dto.tagId) await this.requireTag(organization._id, dto);
     await this.rateLimit.reserve(
       [`org-problems-bulk:user:${principal.userId}`],
       BULK_LIMIT,
@@ -62,9 +62,15 @@ export class OrganizationProblemBulkService {
 
   private async requireTag(
     organizationId: string,
-    tagId: string,
+    { action, tagId }: BulkProblemsDto,
   ): Promise<void> {
-    if ((await this.tags.findByIds(organizationId, [tagId])).length !== 1)
+    if (action !== 'add-tag' && action !== 'remove-tag')
+      throw invalidField(
+        'tagId',
+        'Only add-tag and remove-tag take a tagId.',
+        'unexpected_tag',
+      );
+    if ((await this.tags.findByIds(organizationId, [tagId!])).length !== 1)
       throw invalidField('tagId', 'Unknown tag.', 'unknown_tag');
   }
 }
