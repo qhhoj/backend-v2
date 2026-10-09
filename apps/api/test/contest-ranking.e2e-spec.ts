@@ -304,7 +304,7 @@ describe('contest ranking', () => {
       organization: 'SCH',
     });
     expect(frozenBoard.rows[0].score).toBe(5);
-    expect(JSON.stringify(frozenBoard)).not.toContain('777');
+    expect(textWithoutIds(frozenBoard)).not.toContain('777');
     // Other tests scan whole boards for leaked numbers: leave the users as they were.
     await api.users.updateMany({}, { rating: null, organizations: [] });
   });
