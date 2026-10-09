@@ -94,6 +94,9 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 ## Judging and bridge
 
 - Judge protocol is the DMOJ protocol of the qhhoj judge-server fork, with submission ids as UUID strings — the fork must not treat ids as ints.
+- The judge↔bridge contract is `judge-v2/proto` (`qhhoj.judge.v1`); backend-v2 vendors it at a judge-v2 tag into `libs/judge-proto` with `proto.lock.json` and the committed ts-proto output, and CI fails when either drifts — the Rust build needs the file at compile time, and the judge's releases are the versioned side.
+- Inside v1 changes are additive only (new fields, oneof members, enum values; removed fields reserved), checked against `proto/compat/v1.shape.json`; `uint64` values stay ≤ 2^53 − 1 because the TypeScript side reads them as numbers.
+- Conformance scenarios (`proto/conformance/scenarios`) are wire transcripts played by both repos: judge-v2 against its fake bridge and daemon, backend-v2 against the real bridge and Mongo; one matcher table pins both matchers.
 - Mongo is the queue truth (`QU` plus `priority`); the bridge claims QU -> P before sending and the in-memory queue is rebuilt on start — a bridge restart loses nothing and never ends in IE.
 - API -> bridge commands go over a Redis stream, fire-and-forget; a lost `judge` command waits for the bridge's resync — no RPC coupling, Mongo is the backstop.
 - Every packet's write filters `{_id, judgedOn, status}` — stale or duplicate packets are no-ops.

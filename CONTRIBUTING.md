@@ -298,6 +298,12 @@ user-activity/
 - Actions: invisible problem -> 404; abort (owner unless rejudged, or `judge.abort_any_submission`), rejudge/reject (`judge.rejudge_submission`/`judge.reject_submission` + edit rights; 409 while unfinished; rejudge: while in flight or locked), bulk rejudge per problem (more than 10 needs `judge.rejudge_submission_lot`, locked only with `force`; counts first, then streams chunks of at most 1000 ids)
 - Judges admin (`judge.change_judge`): `/api/internal/judges`; keys are shown once; rotate and block force-disconnect
 
+## Judge protocol
+
+- The contract is `libs/judge-proto/proto/qhhoj/judge/v1/judge.proto`, a copy of judge-v2 `proto/` at the tag named in `libs/judge-proto/proto.lock.json`. Never edit the copy or `libs/judge-proto/src/generated`: change judge-v2, tag it (`proto-v1.<minor>`), then `npm run judge-proto:sync -- ../judge-v2 <tag>` and commit `libs/judge-proto`.
+- `npm run judge-proto:check` (CI) checks the copy against the lock and regenerates the TypeScript; `npm run judge-proto:check -- ../judge-v2` also checks the lock against the judge-v2 tag.
+- Import types and the service from `@libs/judge-proto`; oneof bodies are `{ $case, <name> }` unions, 64-bit fields are numbers. Golden fixtures (`proto/golden`) and conformance scenarios (`proto/conformance`) come with the copy.
+
 ## Local judge
 
 **Temporary, local-only dev/test judge, to be replaced by our judge-server rewrite; never use it in production.** A real DMOJ judge in podman, so submissions are compiled and judged for real (PY3 and C++ runtimes).
