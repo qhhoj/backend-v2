@@ -2512,6 +2512,27 @@
         ],
         "type": "object"
       },
+      "CreateShortLinkDto": {
+        "properties": {
+          "code": {
+            "description": "Staff only.",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "Staff only.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Checked against the same-site allow-list by the service (a 400 `path` issue), not by a pattern here.",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
       "CreateTagProblemDto": {
         "properties": {
           "link": {
@@ -6358,6 +6379,54 @@
           "createdAt"
         ],
         "type": "object"
+      },
+      "ShortLinkResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "hits": {
+            "type": "number"
+          },
+          "isAuto": {
+            "description": "Made for anyone by path (idempotent) rather than chosen by staff.",
+            "type": "boolean"
+          },
+          "lastHitAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "path",
+          "isAuto",
+          "hits",
+          "lastHitAt",
+          "expiresAt",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "ShortLinkScope": {
+        "enum": [
+          "all",
+          "own"
+        ],
+        "type": "string"
       },
       "SimilarityFragmentResponse": {
         "properties": {
@@ -20623,6 +20692,192 @@
         ]
       }
     },
+    "/api/internal/short-links": {
+      "get": {
+        "operationId": "ShortLinksController_list",
+        "parameters": [
+          {
+            "description": "`ShortLinkScope` is an alias of a union, so the plugin would drop it: spelled out (SDK R3).",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ShortLinkScope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/ShortLinkResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ShortLinks"
+        ],
+        "x-enveloped": true
+      },
+      "post": {
+        "operationId": "ShortLinksController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShortLinkDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ShortLinkResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ShortLinks"
+        ]
+      }
+    },
+    "/api/internal/short-links/{code}": {
+      "delete": {
+        "operationId": "ShortLinksController_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ShortLinks"
+        ]
+      }
+    },
     "/api/internal/similarity/pairs/{pairId}": {
       "get": {
         "operationId": "SimilarityPairsController_detail",
@@ -22993,6 +23248,49 @@
         },
         "tags": [
           "Health"
+        ]
+      }
+    },
+    "/s/{code}": {
+      "get": {
+        "operationId": "ShortLinkRedirectController_go",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the stored site path"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A `@Res()` handler returns no body: the 302 is documented by hand. The error envelope is the global `default` response, nothing per route. This route is not added to `UNDOCUMENTED_BODY`.",
+        "tags": [
+          "ShortLinkRedirect"
         ]
       }
     }
