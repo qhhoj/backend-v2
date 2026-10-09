@@ -4,7 +4,12 @@ import { uuidStr } from '@libs/database';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest } from './setup';
 
-const JOBS = ['contests'];
+const JOBS = [
+  'contests',
+  'contest-announcements',
+  'contest-ranking-links',
+  'contest-official-rankings',
+];
 
 describe('contest jobs', () => {
   let harness: Awaited<ReturnType<typeof setupMigratorTest>>;
@@ -75,6 +80,60 @@ describe('contest jobs', () => {
         'judge_contest:5002 og_image/logo_override_image not migrated',
       ]),
     );
+  });
+
+  it('maps announcements with rendered text and skips orphans', async () => {
+    expect(
+      await harness.docOf(
+        'contestAnnouncements',
+        'judge_contestannouncement',
+        5001,
+      ),
+    ).toMatchObject({
+      title: 'Hi',
+      descriptionHtml: expect.stringContaining('<em>x</em>') as string,
+      createdAt: new Date('2022-01-01T01:00:00Z'),
+    });
+    expect(
+      await harness.docOf(
+        'contestAnnouncements',
+        'judge_contestannouncement',
+        5002,
+      ),
+    ).toBeNull();
+  });
+
+  it('maps a public ranking link and the parsed official ranking', async () => {
+    expect(
+      await harness.docOf(
+        'contestPublicRankingLinks',
+        'judge_contestpublicrankinglink',
+        5001,
+      ),
+    ).toMatchObject({
+      token: 'abcdefghijklmnopqr',
+      status: 'public',
+      expiryMode: 'U',
+      expiryAmount: null,
+      regeneratedAt: new Date('2022-01-02T00:00:00Z'),
+    });
+    expect(
+      await harness.docOf('contestOfficialRankings', 'judge_contest', 5001),
+    ).toMatchObject({
+      url: null,
+      problems: ['A', 'B'],
+      rows: [
+        {
+          username: 'ana',
+          fullName: 'Ana',
+          scores: [100, 50],
+          totalScore: 150,
+        },
+      ],
+    });
+    expect(
+      await harness.docOf('contestOfficialRankings', 'judge_contest', 5002),
+    ).toBeNull();
   });
 
   it('verifies clean', async () => {

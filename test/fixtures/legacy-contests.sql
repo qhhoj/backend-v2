@@ -16,4 +16,6 @@ INSERT INTO judge_contest_authors (id, contest_id, profile_id) VALUES (5001,5001
 INSERT INTO judge_contest_tags (id, contest_id, contesttag_id) VALUES (5001,5001,5001),(5002,5001,5002);
 INSERT INTO judge_contest_banned_judges (id, contest_id, judge_id) VALUES (5001,5001,5001);
 INSERT INTO judge_contest_organizations (id, contest_id, organization_id) VALUES (5001,5001,1);
+INSERT INTO judge_contestannouncement (id, title, description, date, contest_id) VALUES (5001,'Hi','*x*','2022-01-01 01:00:00',5001),(5002,'Lost','','2022-01-01 01:00:00',5999);
+INSERT INTO judge_contestpublicrankinglink (id, token, status, expiry_mode, expiry_amount, expires_at, regenerated_at, contest_id) VALUES (5001,'abcdefghijklmnopqr','public','U',0,NULL,'2022-01-02 00:00:00',5001);
 SET FOREIGN_KEY_CHECKS=1;
