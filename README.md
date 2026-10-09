@@ -38,7 +38,7 @@ The settings default to off or to the site defaults, so after deploying set in t
 Deploy requirements:
 
 - nginx: serve `/media/submission_file/` with `Content-Disposition: attachment`, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff`
-- judges must reach `SITE_URL` + `MEDIA_URL` over HTTP(S) (file submissions are sent to them as absolute URLs)
+- judges need no HTTP access to the site: file submissions are streamed over the judge link (`FetchSource`)
 - purge the contest ranking caches built before this deploy; they lack `rating` and `organization` until recomputed
 
 Local mail: start Mailpit (`docker compose up -d mailpit`), then `npm run seed:e2e` (see Run) sets `mail.smtpUrl` to it, or PATCH `mail.smtpUrl` to `smtp://localhost:1025` yourself.
@@ -133,7 +133,7 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | Org PP, ranks, interaction gate, comment and blog rules                     | `libs/community/src`                                                                                                                                                                                         |
 | Rating                                                                      | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating`                                                                                                                          |
 | Points, PP, problem stats                                                   | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects`                                                                                                                                      |
-| Judge protocol, dispatch, grading                                           | `apps/bridge/src/{protocol,dispatch,judges,submissions}`                                                                                                                                                     |
+| Judge protocol, dispatch, grading                                           | `apps/bridge/src/{link,dispatch,judges,submissions}`                                                                                                                                                         |
 | SSE channels and limits                                                     | `apps/api/src/modules/events/`, channel services under `submissions/streams` and `contests/announcements`                                                                                                    |
 | Auth, sessions, permissions                                                 | `libs/auth/src`, flows in `modules/auth/<flow>/`; new permissions in `libs/auth/src/principal/permissions.ts`                                                                                                |
 | Markdown rendering                                                          | `libs/render/src` (goldens in `src/fixtures`)                                                                                                                                                                |

@@ -11,7 +11,7 @@ import {
 const MAX_DESCRIPTION_LENGTH = 10000;
 
 export class CreateJudgeDto {
-  /** Hostname-style: the judge-server sends it as its handshake `id`. */
+  /** Hostname-style: the judge sends it as `x-judge-name` metadata when it opens the judge link. */
   @IsString()
   @Matches(JUDGE_NAME_PATTERN, {
     message: 'Use letters, digits, "_", "." or "-" (at most 50).',

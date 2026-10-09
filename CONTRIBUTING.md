@@ -142,7 +142,7 @@ user-activity/
   staff/           logs, summary, CSV export, live, deletes (`judge.can_see_user_activity`)
 ```
 
-- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|store|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|handler|oauth-provider|spec`
+- File names: `<feature>.<role>.ts`, role in `controller|service|querier|repository|store|events|guard|decorators|module|schema|dto|mapper|command|filter|interceptor|pipe|error|processor|oauth-provider|spec`
 - A class is named after its file: `<Name><Role>` in `<name>.<role>.ts` (`ContestEditFieldsService` in `contest-edit-fields.service.ts`), so a `*.service.ts` class always ends in `Service`
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
@@ -150,7 +150,6 @@ user-activity/
 - Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
 - Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`, `similarity`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-data`) and `libs/community/src/queues.ts` (`organization-points`, `user-data`, `contribution-points`, `discord-webhook`)
-- `handler`: one instance per judge socket (`apps/bridge/src/judges/judge.handler.ts`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
 - Reference: `libs/auth/src/groups/` (module + querier + spec)
 - `<feature>.events.ts`: in-process `EventEmitter` wrapper for notifying other modules (`problem.events.ts`)
@@ -172,7 +171,7 @@ user-activity/
 
 ## Runtime settings
 
-- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SSE_IP_ALLOWLIST`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `LEGACY_MYSQL_URL`, `LEGACY_SECRET_KEY`, `TEST_MYSQL_URL`, `TEST_REDIS_URL`
+- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SSE_IP_ALLOWLIST`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `JUDGE_BRIDGE_TLS_CERT`, `JUDGE_BRIDGE_TLS_KEY`, `LEGACY_MYSQL_URL`, `LEGACY_SECRET_KEY`, `TEST_MYSQL_URL`, `TEST_REDIS_URL`
 - Settings (the admin edits them, no restart): `site.timeZone`, `contest.officialMode`, `contest.banAfterDisqualifications`, `discord.webhooks`, `mail.from`, `mail.smtpUrl`, `auth.pwnedApiUrl`, `auth.google`, `auth.github`, `auth.facebook`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `similarity.minPercent`, `similarity.maxPairs`, `similarity.maxSubmissions`
 - Add one: a `define({ type, default, description, secret, combine? })` entry in `SETTINGS` (`libs/settings/src/registry.ts`), `type` from `setting-types.ts` (add a type there when none fits); no other file changes, the admin API and revisions pick it up. `secret: true` encrypts the whole value, `secret: ['clientSecret']` those top-level fields; `combine` merges a PATCH into the stored object (the `auth.*` clients), without it the patch replaces the value
 - Read: inject `SettingsService` and call `settings.get('<key>')` where the value is used, never cache it (it is a synchronous read of an in-memory snapshot kept fresh by change stream plus a one-minute resync, so a change reaches api, worker and bridge within seconds); a consumer that builds something expensive keys it by the value (the mailer keeps its SMTP transport per URL)

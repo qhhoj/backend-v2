@@ -2410,7 +2410,7 @@
             "type": "string"
           },
           "name": {
-            "description": "Hostname-style: the judge-server sends it as its handshake `id`.",
+            "description": "Hostname-style: the judge sends it as `x-judge-name` metadata when it opens the judge link.",
             "type": "string"
           }
         },
