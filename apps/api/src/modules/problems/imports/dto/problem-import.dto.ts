@@ -1,4 +1,4 @@
-import { PROBLEM_CODE_PATTERN, PROBLEM_LIMITS } from '@libs/database';
+import { PROBLEM_LIMITS } from '@libs/database';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -13,6 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { IsProblemCode } from '../../core/dto/problem-code.decorator';
 import { toArray, toBoolean } from '../../core/dto/transforms';
 
 export const IMPORT_MODES = ['create', 'update'] as const;
@@ -22,9 +23,7 @@ const LANGUAGE_PAIR = /^[a-z]+=(en|vi)$/;
 
 /** Options travel in the query string: the multipart body carries only the package. */
 export class PolygonImportQueryDto {
-  @Matches(PROBLEM_CODE_PATTERN, {
-    message: 'Only lowercase letters, digits and underscores (1-32).',
-  })
+  @IsProblemCode()
   code!: string;
   @ApiPropertyOptional()
   @IsOptional()

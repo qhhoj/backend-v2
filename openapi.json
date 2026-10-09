@@ -424,6 +424,7 @@
       "CloneProblemDto": {
         "properties": {
           "code": {
+            "pattern": "^[a-z0-9_]{1,32}$",
             "type": "string"
           }
         },
@@ -2202,6 +2203,7 @@
             "type": "array"
           },
           "code": {
+            "pattern": "^[a-z0-9_]{1,32}$",
             "type": "string"
           },
           "curators": {
@@ -5947,6 +5949,7 @@
           "mail.smtpUrl",
           "pdf.maxBytes",
           "pdf.renderTimeoutMs",
+          "problem.deleteGraceDays",
           "similarity.maxPairs",
           "similarity.maxSubmissions",
           "similarity.minPercent",
@@ -8408,6 +8411,7 @@
             "type": "array"
           },
           "code": {
+            "pattern": "^[a-z0-9_]{1,32}$",
             "type": "string"
           },
           "curators": {
@@ -17802,6 +17806,15 @@
         "parameters": [
           {
             "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z0-9_]{1,32}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "mode",
             "required": false,
             "schema": {
@@ -17838,14 +17851,6 @@
             "schema": {
               "default": false,
               "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "code",
-            "required": true,
-            "schema": {
-              "type": "string"
             }
           },
           {

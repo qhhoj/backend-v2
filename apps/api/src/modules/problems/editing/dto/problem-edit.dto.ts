@@ -1,6 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
 import {
-  PROBLEM_CODE_PATTERN,
   PROBLEM_LIMITS,
   SUBMISSION_SOURCE_VISIBILITIES,
   TESTCASE_RESULT_VISIBILITIES,
@@ -22,13 +21,13 @@ import {
   IsString,
   IsUUID,
   Length,
-  Matches,
   Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
 import { MAX_MARKDOWN_LENGTH } from '../../core/dto/limits';
+import { IsProblemCode } from '../../core/dto/problem-code.decorator';
 import { IsStatementText } from '../../core/dto/statement-text';
 import { IsTimestamp } from '../../core/dto/timestamp';
 
@@ -49,9 +48,7 @@ export class LanguageLimitDto {
  * Defaults come from the schema, or from `ProblemEditingService.create`.
  */
 export class CreateProblemDto {
-  @Matches(PROBLEM_CODE_PATTERN, {
-    message: 'Only lowercase letters, digits and underscores (1-32).',
-  })
+  @IsProblemCode()
   code!: string;
   @IsStatementText() @Length(1, 100) name!: string;
   @IsOptional() @IsString() @MaxLength(200) source?: string;

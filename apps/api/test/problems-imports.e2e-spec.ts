@@ -197,6 +197,17 @@ describe('Polygon import routes', () => {
     await statusOf(UNKNOWN_ID, creator).expect(404);
     await statusOf('not-a-uuid', creator).expect(400);
   });
+  it('refuses the reserved problem codes in both modes and stores nothing', async () => {
+    const before = storedPackages().length;
+    for (const code of ['meta', 'deleted', 'imports'])
+      for (const mode of ['create', 'update'])
+        expect(
+          fieldsOf(
+            await upload(`code=${code}&mode=${mode}`, creator).expect(400),
+          ),
+        ).toHaveProperty('code');
+    expect(storedPackages()).toHaveLength(before);
+  });
   it('validates the query strictly before storing anything', async () => {
     const before = storedPackages().length;
     expect(

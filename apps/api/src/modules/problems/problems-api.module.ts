@@ -3,7 +3,13 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
-import { PDF_QUEUE, POLYGON_QUEUE } from '@libs/problems';
+import {
+  PACKAGE_QUEUE,
+  PDF_QUEUE,
+  POLYGON_QUEUE,
+  PROBLEM_PURGE_QUEUE,
+  PROBLEM_SOLVERS_QUEUE,
+} from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { DiscordModule } from '../discord/discord.module';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
@@ -57,6 +63,9 @@ const repositories = [
       { name: PDF_QUEUE },
       { name: POLYGON_QUEUE },
       { name: PROBLEM_RESCORE_QUEUE },
+      { name: PACKAGE_QUEUE },
+      { name: PROBLEM_PURGE_QUEUE },
+      { name: PROBLEM_SOLVERS_QUEUE },
     ),
   ],
   controllers: [

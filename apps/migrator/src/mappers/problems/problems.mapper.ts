@@ -119,6 +119,8 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
       userCount: Number(row.user_count ?? 0),
       acRate: Number(row.ac_rate ?? 0),
       dataVersion: 0,
+      // deletedAt, deletedBy, purgeStartedAt and purgedAt stay absent on purpose: a live problem has no such key
+      // (`{ deletedAt: null }` reads "live"), and the legacy site has no deleted problems.
       createdAt: ctx.date(row.date),
       updatedAt: ctx.date(row.date),
     };

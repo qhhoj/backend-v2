@@ -65,6 +65,13 @@ export const SETTINGS = {
       'Disqualifications (in contests that are not organization-private) that ban an account; 0 turns the ban off.',
     secret: false,
   }),
+  'problem.deleteGraceDays': define({
+    type: integerType(1, 365),
+    default: 30,
+    description:
+      'Days a deleted problem can be restored; after that its data is purged and only a tombstone (code and name) stays. Submissions are never deleted.',
+    secret: false,
+  }),
   'discord.webhooks': define({
     type: webhooksType,
     default: {},

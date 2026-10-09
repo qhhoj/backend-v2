@@ -8,4 +8,5 @@ export interface PermissionGrant {
 
 export const PERMISSION_GRANTS: readonly PermissionGrant[] = [
   { permission: 'judge.change_contest_tag', heldBy: 'judge.edit_all_contest' },
+  { permission: 'judge.delete_problem', heldBy: 'judge.edit_all_problem' },
 ];

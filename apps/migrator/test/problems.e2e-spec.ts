@@ -45,6 +45,12 @@ describe('problems job', () => {
     );
   });
 
+  it('stores every migrated problem live: no soft-delete key at all', async () => {
+    const stored = await problem(4001);
+    for (const key of ['deletedAt', 'deletedBy', 'purgeStartedAt', 'purgedAt'])
+      expect(stored).not.toHaveProperty(key);
+  });
+
   it('puts a bare pdf path under MEDIA_URL and keeps http(s) and site paths', async () => {
     expect((await problem(4005))!.pdfStatementUrl).toBe(
       '/media/statements/low.pdf',

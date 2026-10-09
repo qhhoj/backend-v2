@@ -6,6 +6,8 @@ import { ProblemData, ProblemDataSchema } from './problem-data.schema';
 const UUID = MongooseSchema.Types.UUID;
 
 export const PROBLEM_CODE_PATTERN = /^[a-z0-9_]{1,32}$/;
+/** Static `GET /problems/<x>` routes own these segments, so no problem may take them. */
+export const RESERVED_PROBLEM_CODES = ['deleted', 'meta', 'imports'] as const;
 export const STATEMENT_LANGUAGES = ['en', 'vi'] as const;
 export type StatementLanguage = (typeof STATEMENT_LANGUAGES)[number];
 /** Filter for the compare-and-set on `dataVersion`; a missing counter counts as 0. */
@@ -119,6 +121,13 @@ export class Problem {
   data!: ProblemData | null;
   /** Compare-and-set counter for `data`: bumped by every data write so concurrent editors cannot overwrite each other. */
   @Prop({ default: 0 }) dataVersion!: number;
+  /** Soft delete: set while the problem is in its grace period, and afterwards on the tombstone. Absent while the problem is live (restore `$unset`s it), so `{deletedAt: null}` reads "live". */
+  @Prop({ type: Date }) deletedAt?: Date;
+  @Prop({ type: UUID }) deletedBy?: string;
+  /** Set when a purge claims the problem: from now on it cannot be restored. A purge that dies leaves it set while `purgedAt` is absent, and the daily sweep retries it once the claim is an hour old. */
+  @Prop({ type: Date }) purgeStartedAt?: Date;
+  /** Set last, when the purge job has removed the heavy assets and emptied the document; it stays as a tombstone keeping `code` and `name`. */
+  @Prop({ type: Date }) purgedAt?: Date;
 }
 
 export const ProblemSchema = SchemaFactory.createForClass(Problem);
@@ -129,6 +138,8 @@ ProblemSchema.index({ authors: 1 });
 ProblemSchema.index({ curators: 1 });
 ProblemSchema.index({ testers: 1 });
 ProblemSchema.index({ suggester: 1 });
+// The deleted list and the purge scan read it by range; live problems are not indexed.
+ProblemSchema.index({ deletedAt: 1 }, { sparse: true });
 // `translations[].language` holds en|vi; a text index reads a field named `language` as the per-document
 // text language and rejects `vi`, so the override points at an unused field. No stemming: statements are Vietnamese.
 ProblemSchema.index(
