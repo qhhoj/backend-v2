@@ -110,7 +110,7 @@ export class TicketNotificationsService {
     );
   }
 
-  /** Who joined is alerted, who left no longer has the ticket's unread rows. */
+  /** Who joined is alerted, who left no longer has the ticket's unread rows (the owner keeps theirs: they still own the ticket). */
   private async assigneesChanged(
     input: UpdatedTicket,
     assigneesNow: string[],
@@ -119,7 +119,7 @@ export class TicketNotificationsService {
       (id) => !input.assigneesBefore.includes(id),
     );
     const removed = input.assigneesBefore.filter(
-      (id) => !assigneesNow.includes(id),
+      (id) => !assigneesNow.includes(id) && id !== input.owner,
     );
     await this.notifications.notify(
       ticketRecipients(input.actor, added),

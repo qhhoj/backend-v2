@@ -272,6 +272,20 @@ describe('ticket alerts', () => {
         [groupOf(other._id)]: true,
       });
     });
+
+    it('keeps the unread rows of an owner who is removed as an assignee', async () => {
+      const ticket = await createTicket(api, {
+        creator: people.creator.id,
+        assignees: [people.creator.id],
+      });
+      await post('staff', ticket._id, 'answer').expect(201);
+      await patch('staff', ticket._id, { assignees: ['newcomer'] }).expect(200);
+      const [row] = await rowsOf('creator');
+      expect(row).toMatchObject({
+        groupKey: groupOf(ticket._id),
+        unread: true,
+      });
+    });
   });
 
   it('never fails the ticket write when the inbox write fails', async () => {

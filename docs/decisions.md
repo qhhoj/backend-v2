@@ -273,6 +273,14 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - The fan-out job keeps the last 20 announcement ids on the row (`refs`, indexed with `user`), skips users whose row, read or unread, already has the id, and orders text by the announcement's `createdAt` with `$max` — a BullMQ retry or reordered run neither double-counts, reopens a read row, nor puts older text on top; a user whose insert loses to a racing writer is merged again (3 rounds) and the text step always runs; rows expire 90 days from processing time; a resend reuses the id and so notifies only users not yet reached.
 - Inbox writes under impersonation are 204 no-ops — a superuser must not clear the impersonated user's unread state, and the UI must not error.
 - The inbox keeps 90 days after the last activity and 500 rows per user (nightly trim of every user over the cap, found by count) — a pointer list, not an archive; no per-user mute in v1.
+- Ticket timeline entries are `$push`ed with `$slice: -200` in the same `updateOne` as the state change (compare-and-set on the changed fields, 409 `conflict` when it moved) — a full timeline drops its oldest entry instead of refusing the change; the detail keeps `messages` and adds a merged `timeline` (wire fields never change).
+- `lastMessageByStaff` is stored on the ticket, not derived — who counts as staff changes over time; a ticket that predates the flag counts as waiting until its next message.
+- Migrated tickets lack `lastMessageByStaff` (raw bulk write, no schema defaults), so `awaitingStaff` counts `lastMessageByStaff: {$in: [false, null]}` — a missing field matches null.
+- Ticket alerts reach `change_ticket` holders for tickets nobody is assigned to, but not superusers (they hold every permission) and at most 100 — an alert to every superuser or every moderator would be noise; `users` is indexed on `permissions` and `groups` for the lookup.
+- A removed assignee's unread inbox rows for the ticket are marked read (except the owner's own), and a newly assigned user is alerted — the spec only listed removal.
+- Canned replies are capped at 100 and listed in one page; `{tên}`/`{bài}` are replaced in the SPA — no server templating, no injection surface.
+- The canned-reply cap is a count-then-insert, so concurrent creates can briefly exceed 100 — staff-only, harmless, no lock for it.
+- A canned reply's automatic `order` (last + 1) is not bounded by the explicit `order` maximum of 10000, so `nextOrder` can exceed it — only reachable by placing a reply near 10000 first.
 
 ## Settings
 
