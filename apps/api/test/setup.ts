@@ -63,6 +63,7 @@ import { ProblemTypesQuerier } from '../src/modules/problems/catalog/problem-typ
 import { TagGroupsQuerier } from '../src/modules/tags/tag-groups.querier';
 import { TagsQuerier } from '../src/modules/tags/tags.querier';
 import { NavigationQuerier } from '../src/modules/site/public/navigation.querier';
+import { ContestTagsQuerier } from '../src/modules/contests/tags/contest-tags.querier';
 import { MiscConfigQuerier } from '../src/modules/site/public/misc-config.querier';
 import { setupOpenApi } from '../src/openapi';
 
@@ -231,6 +232,7 @@ export async function setupApiTest({
           LanguagesQuerier,
           TagGroupsQuerier,
           TagsQuerier,
+          ContestTagsQuerier,
           NavigationQuerier,
           MiscConfigQuerier,
         ].map((querier) => readyApp.get(querier).resync()),

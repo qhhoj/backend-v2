@@ -1619,6 +1619,52 @@
         ],
         "type": "object"
       },
+      "ContestTagColor": {
+        "description": "A theme token key (`tag-1`..`tag-8`), never a hex.",
+        "enum": [
+          "tag-1",
+          "tag-2",
+          "tag-3",
+          "tag-4",
+          "tag-5",
+          "tag-6",
+          "tag-7",
+          "tag-8"
+        ],
+        "type": "string"
+      },
+      "ContestTagResponse": {
+        "properties": {
+          "color": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestTagColor"
+              }
+            ],
+            "description": "A theme token key (`tag-1`..`tag-8`), never a hex."
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "color",
+          "slug",
+          "name",
+          "description",
+          "order"
+        ],
+        "type": "object"
+      },
       "ContestViewerResponse": {
         "properties": {
           "canEdit": {
@@ -1904,6 +1950,41 @@
           "name",
           "startTime",
           "endTime"
+        ],
+        "type": "object"
+      },
+      "CreateContestTagDto": {
+        "properties": {
+          "color": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestTagColor"
+              }
+            ],
+            "description": "A union alias: the plugin drops it without the explicit decorator (R3)."
+          },
+          "description": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "order": {
+            "maximum": 1000,
+            "minimum": -1000,
+            "type": "number"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "color",
+          "slug",
+          "name"
         ],
         "type": "object"
       },
@@ -8153,6 +8234,33 @@
         },
         "type": "object"
       },
+      "UpdateContestTagDto": {
+        "properties": {
+          "color": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestTagColor"
+              }
+            ],
+            "description": "A union alias: the plugin drops it without the explicit decorator (R3)."
+          },
+          "description": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "order": {
+            "maximum": 1000,
+            "minimum": -1000,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "UpdateFlatpageDto": {
         "properties": {
           "content": {
@@ -13134,6 +13242,248 @@
         },
         "tags": [
           "CommentModeration"
+        ]
+      }
+    },
+    "/api/internal/contest-tags": {
+      "get": {
+        "operationId": "ContestTagsController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/ContestTagResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ContestTags"
+        ],
+        "x-enveloped": true
+      },
+      "post": {
+        "operationId": "ContestTagsController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContestTagDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ContestTagResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ContestTags"
+        ]
+      }
+    },
+    "/api/internal/contest-tags/{slug}": {
+      "delete": {
+        "operationId": "ContestTagsController_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ContestTags"
+        ]
+      },
+      "patch": {
+        "operationId": "ContestTagsController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateContestTagDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ContestTagResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ContestTags"
         ]
       }
     },

@@ -13,6 +13,7 @@ import { EventsModule } from '../events/events.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { ContestAccessModule } from './core/contest-access.module';
+import { ContestTagsModule } from './tags/contest-tags.module';
 import { AnnouncementsRepository } from './announcements/announcements.repository';
 import { ContestAnnouncementsController } from './announcements/contest-announcements.controller';
 import { ContestAnnouncementsService } from './announcements/contest-announcements.service';
@@ -52,6 +53,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
   imports: [
     AuthModule,
     ContestAccessModule,
+    ContestTagsModule,
     EventsModule,
     ProblemsApiModule,
     SubmissionsApiModule,
