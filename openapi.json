@@ -286,6 +286,107 @@
         ],
         "type": "object"
       },
+      "BalloonPageMetaResponse": {
+        "properties": {
+          "deliveredTotal": {
+            "nullable": true,
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          },
+          "pendingTotal": {
+            "nullable": true,
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "pendingTotal",
+          "deliveredTotal",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "type": "object"
+      },
+      "BalloonResponse": {
+        "properties": {
+          "deliveredAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "deliveredBy": {
+            "description": "Username of the volunteer who delivered it.",
+            "nullable": true,
+            "type": "string"
+          },
+          "isFirst": {
+            "type": "boolean"
+          },
+          "participationId": {
+            "type": "string"
+          },
+          "problemCode": {
+            "type": "string"
+          },
+          "problemId": {
+            "type": "string"
+          },
+          "problemLabel": {
+            "type": "string"
+          },
+          "solvedAt": {
+            "description": "Seconds from the team's start; null when the format keeps no solve time, and for a reader who cannot edit while the contest is frozen.",
+            "nullable": true,
+            "type": "number"
+          },
+          "team": {
+            "$ref": "#/components/schemas/BalloonTeamResponse"
+          }
+        },
+        "required": [
+          "solvedAt",
+          "deliveredAt",
+          "deliveredBy",
+          "participationId",
+          "problemId",
+          "problemCode",
+          "problemLabel",
+          "team",
+          "isFirst"
+        ],
+        "type": "object"
+      },
+      "BalloonState": {
+        "enum": [
+          "all",
+          "delivered",
+          "pending"
+        ],
+        "type": "string"
+      },
+      "BalloonTeamResponse": {
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "username"
+        ],
+        "type": "object"
+      },
       "BanDto": {
         "properties": {
           "reason": {
@@ -15467,6 +15568,221 @@
         },
         "tags": [
           "ContestAnnouncements"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/balloons": {
+      "get": {
+        "operationId": "BalloonsController_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BalloonState"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/BalloonResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/BalloonPageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Balloons"
+        ],
+        "x-enveloped": true
+      }
+    },
+    "/api/internal/contests/{key}/balloons/{participation}/{problem}/deliver": {
+      "post": {
+        "operationId": "BalloonsController_deliver",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participation",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "problem",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Balloons"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/balloons/{participation}/{problem}/undeliver": {
+      "post": {
+        "operationId": "BalloonsController_undeliver",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participation",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "problem",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Balloons"
         ]
       }
     },
