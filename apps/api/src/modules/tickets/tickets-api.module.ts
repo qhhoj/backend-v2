@@ -6,6 +6,9 @@ import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { DiscordModule } from '../discord/discord.module';
 import { EventsModule } from '../events/events.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
+import { CannedRepliesController } from './canned/canned-replies.controller';
+import { CannedRepliesRepository } from './canned/canned-replies.repository';
+import { CannedRepliesService } from './canned/canned-replies.service';
 import { TicketGateService } from './core/ticket-gate.service';
 import { TicketContextService } from './core/ticket-context.service';
 import { TicketResponsesService } from './core/ticket-responses.service';
@@ -32,6 +35,7 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     ProblemsApiModule,
   ],
   controllers: [
+    CannedRepliesController,
     TicketsController,
     TicketCreationController,
     TicketMessagesController,
@@ -39,6 +43,8 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     TicketStreamsController,
   ],
   providers: [
+    CannedRepliesRepository,
+    CannedRepliesService,
     TicketsRepository,
     TicketContextService,
     TicketResponsesService,
