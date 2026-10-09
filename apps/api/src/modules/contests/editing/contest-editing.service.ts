@@ -112,6 +112,7 @@ export class ContestEditingService {
       virtualCount: 0,
       lockedAfter: null,
       dataPreparedAt: null,
+      managedBy: null,
       organizations: ids(copied.organizations),
       privateContestants: ids(copied.privateContestants),
       viewContestScoreboard: ids(copied.viewContestScoreboard),

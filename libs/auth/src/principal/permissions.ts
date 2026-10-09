@@ -70,6 +70,9 @@ export const PERMISSIONS = [
   'flatpages.delete_flatpage',
   'judge.change_navigationbar',
   'judge.change_miscconfig',
+  // VNOI ports: short links and external-system credentials.
+  'judge.manage_short_link',
+  'judge.manage_integration',
   // Languages admin: legacy Django codenames.
   'judge.add_language',
   'judge.change_language',

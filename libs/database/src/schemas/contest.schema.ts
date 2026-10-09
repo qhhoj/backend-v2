@@ -149,6 +149,8 @@ export class Contest {
   @Prop({ default: 0 }) virtualCount!: number;
   /** Legacy `data_last_downloaded`: when an editor last asked for the data zip. */
   @Prop({ type: Date, default: null }) dataPreparedAt!: Date | null;
+  /** The integration client that created the contest through the sync API; only that client may change it. Null: made by a person. */
+  @Prop({ type: UUID, default: null }) managedBy!: string | null;
   @Prop({
     type: [ContestProblemSchema],
     default: [],
@@ -180,5 +182,6 @@ ContestSchema.index({ authors: 1 });
 ContestSchema.index({ curators: 1 });
 ContestSchema.index({ testers: 1 });
 ContestSchema.index({ organizations: 1 });
+ContestSchema.index({ managedBy: 1 }, { sparse: true });
 // A problem rescore finds the contests that list the problem.
 ContestSchema.index({ 'problems.problem': 1 });

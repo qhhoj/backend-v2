@@ -48,6 +48,10 @@ import { Notification, NotificationSchema } from './notification.schema';
 import { Organization, OrganizationSchema } from './organization.schema';
 import { Rating, RatingSchema } from './rating.schema';
 import { Group, GroupSchema } from './group.schema';
+import {
+  IntegrationClient,
+  IntegrationClientSchema,
+} from './integration-client.schema';
 import { Judge, JudgeSchema } from './judge.schema';
 import { Language, LanguageSchema } from './language.schema';
 import { License, LicenseSchema } from './license.schema';
@@ -60,6 +64,7 @@ import {
   SettingRevisionSchema,
 } from './setting-revision.schema';
 import { Setting, SettingSchema } from './setting.schema';
+import { ShortLink, ShortLinkSchema } from './short-link.schema';
 import { SimilarityPair, SimilarityPairSchema } from './similarity-pair.schema';
 import { SimilarityRun, SimilarityRunSchema } from './similarity-run.schema';
 import {
@@ -98,6 +103,7 @@ export * from './contest.schema';
 export * from './flatpage.schema';
 export * from './general-issue.schema';
 export * from './group.schema';
+export * from './integration-client.schema';
 export * from './judge.schema';
 export * from './language.schema';
 export * from './license.schema';
@@ -114,6 +120,7 @@ export * from './rating.schema';
 export * from './revision.schema';
 export * from './setting-revision.schema';
 export * from './setting.schema';
+export * from './short-link.schema';
 export * from './similarity-pair.schema';
 export * from './similarity-run.schema';
 export * from './submission-source.schema';
@@ -156,6 +163,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: ContestSubmission.name, schema: ContestSubmissionSchema },
   { name: ContestTag.name, schema: ContestTagSchema },
   { name: Group.name, schema: GroupSchema },
+  { name: IntegrationClient.name, schema: IntegrationClientSchema },
   { name: Judge.name, schema: JudgeSchema },
   { name: Language.name, schema: LanguageSchema },
   { name: License.name, schema: LicenseSchema },
@@ -168,6 +176,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: Revision.name, schema: RevisionSchema },
   { name: SettingRevision.name, schema: SettingRevisionSchema },
   { name: Setting.name, schema: SettingSchema },
+  { name: ShortLink.name, schema: ShortLinkSchema },
   { name: SimilarityPair.name, schema: SimilarityPairSchema },
   { name: SimilarityRun.name, schema: SimilarityRunSchema },
   { name: SubmissionSource.name, schema: SubmissionSourceSchema },
