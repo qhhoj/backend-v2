@@ -1,3 +1,4 @@
+import { hashPassword, verifyPassword } from '@libs/auth';
 import { decrypt, encryptionKey } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { Binary, Document } from 'mongodb';
@@ -16,6 +17,7 @@ const fixtures = JSON.parse(
 describe('users job', () => {
   let harness: Awaited<ReturnType<typeof setupMigratorTest>>;
   let migration: MigrationService;
+  let legacyHash: string;
   let reports: Record<string, string[]>;
   const user = async (id: number) =>
     (await harness.docOf('users', 'auth_user', id)) as Document | null;
@@ -23,6 +25,11 @@ describe('users job', () => {
   beforeAll(async () => {
     harness = await setupMigratorTest();
     migration = harness.testingModule.get(MigrationService);
+    legacyHash = await hashPassword('s3cret pass', 1000);
+    await harness.mysql.query(
+      'UPDATE auth_user SET password = ? WHERE id = 1001',
+      [legacyHash],
+    );
     reports = await migration.backfill(['users']);
   });
   afterAll(() => harness.teardown());
@@ -45,6 +52,17 @@ describe('users job', () => {
       apiTokenHash: null,
       badges: [],
     });
+  });
+
+  it('copies the legacy password hash byte for byte and it still verifies', async () => {
+    const ana = (await user(1001))!;
+    expect(ana.password).toBe(legacyHash);
+    expect(await verifyPassword('s3cret pass', ana.password as string)).toBe(
+      true,
+    );
+    expect(await verifyPassword('wrong pass', ana.password as string)).toBe(
+      false,
+    );
   });
 
   it('orders organizations by sort value and resolves groups and language', async () => {
@@ -86,6 +104,16 @@ describe('users job', () => {
     expect(reports.users).toContain(
       'staff flags kept on deactivated auth_user:1002',
     );
+    expect(await user(1005)).toMatchObject({
+      banReason: LEGACY_DEACTIVATED_REASON,
+      displayRank: 'banned',
+      isUnlisted: true,
+      isActive: false,
+    });
+    expect(reports.users).not.toContain(
+      'staff flags kept on deactivated auth_user:1005',
+    );
+    expect((await user(1002))!.isSuperuser).toBe(false);
     expect(await user(1003)).toMatchObject({
       banReason: null,
       isUnlisted: false,
@@ -96,6 +124,7 @@ describe('users job', () => {
   it('re-seals the Fernet TOTP secrets and derives the legacy WebAuthn handle', async () => {
     const alice = (await user(1))!;
     const key = encryptionKey(TEST_KEY);
+    expect(alice.isTotpEnabled).toBe(true);
     expect(decrypt(alice.totpKey as string, key)).toBe(
       fixtures.fernet[0].plain,
     );

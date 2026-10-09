@@ -48,9 +48,14 @@ export class LegacySecrets {
     }
   }
 
-  /** Plain text for verify: the random IV makes two seals of one secret differ. */
+  /** Plain text for verify: the random IV makes two seals of one secret differ. A seal under another key opens as null, so verify counts a mismatch instead of aborting. */
   open(sealed: unknown): string | null {
-    return typeof sealed === 'string' ? decrypt(sealed, this.key) : null;
+    if (typeof sealed !== 'string') return null;
+    try {
+      return decrypt(sealed, this.key);
+    } catch {
+      return null;
+    }
   }
 
   handle(profileId: number): Binary {
