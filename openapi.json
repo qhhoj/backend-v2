@@ -6895,6 +6895,195 @@
         ],
         "type": "object"
       },
+      "ReplayGhostResponse": {
+        "properties": {
+          "caption": {
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "gap": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GhostGap"
+              }
+            ],
+            "description": "Same named enum as `GhostResponse.gap`; R3: an alias of a union needs the explicit decorator.",
+            "nullable": true
+          },
+          "isUnranked": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "gap",
+          "events",
+          "label",
+          "caption",
+          "isUnranked"
+        ],
+        "type": "object"
+      },
+      "ReplayParticipantResponse": {
+        "properties": {
+          "participationId": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/ReplayUserResponse"
+          }
+        },
+        "required": [
+          "participationId",
+          "user"
+        ],
+        "type": "object"
+      },
+      "ReplayProblemResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "points": {
+            "type": "number"
+          },
+          "problemId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "problemId",
+          "code",
+          "label",
+          "points"
+        ],
+        "type": "object"
+      },
+      "ReplayResponse": {
+        "properties": {
+          "buildId": {
+            "description": "The build every later chunk request must send as `build`; null while building.",
+            "nullable": true,
+            "type": "string"
+          },
+          "builtAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "chunk": {
+            "type": "number"
+          },
+          "chunkCount": {
+            "type": "number"
+          },
+          "events": {
+            "description": "Seconds from the participation's own start; see `REPLAY_EVENTS_SCHEMA` for the tuple.",
+            "items": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "ghosts": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayGhostResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "participants": {
+            "description": "Chunk 0 only; explicit, so the plugin does not lose the element class behind `| null`.",
+            "items": {
+              "$ref": "#/components/schemas/ReplayParticipantResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayProblemResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "state": {
+            "description": "`building`: a build is queued or running; retry in a few seconds.",
+            "enum": [
+              "building",
+              "ready"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "participants",
+          "problems",
+          "ghosts",
+          "events",
+          "state",
+          "buildId",
+          "builtAt",
+          "chunk",
+          "chunkCount"
+        ],
+        "type": "object"
+      },
+      "ReplayUserResponse": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "organization": {
+            "nullable": true,
+            "type": "string"
+          },
+          "rating": {
+            "nullable": true,
+            "type": "number"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "rating",
+          "organization"
+        ],
+        "type": "object"
+      },
       "ResendActivationDto": {
         "properties": {
           "email": {
@@ -17694,6 +17883,143 @@
         },
         "tags": [
           "ContestParticipation"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/replay": {
+      "get": {
+        "operationId": "ReplayController_replay",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Chunk index, 0 first (it also carries participants, problems and ghosts).",
+            "in": "query",
+            "name": "chunk",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "description": "The `buildId` chunk 0 returned; required for `chunk > 0`, so a reader never mixes builds.",
+            "in": "query",
+            "name": "build",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReplayResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`private`: the body depends on who asks (freeze), so no shared cache may keep it. A `building` answer is 202 and never cached.",
+        "tags": [
+          "Replay"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/replay/rebuild": {
+      "post": {
+        "operationId": "ReplayController_rebuild",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/QueuedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Replay"
         ]
       }
     },
