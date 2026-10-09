@@ -1,5 +1,7 @@
+import { getModelToken } from '@nestjs/mongoose';
 import { Queue } from 'bullmq';
-import { newId, toUuid } from '@libs/database';
+import type { Model } from 'mongoose';
+import { Group, newId, toUuid } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { ContestPublishRepository } from '../src/jobs/contest-publish/contest-publish.repository';
 import { ContestPublishService } from '../src/jobs/contest-publish/contest-publish.service';
@@ -130,6 +132,61 @@ describe('automatic publish after the contest', () => {
         .filter(Boolean)
         .sort(),
     ).toEqual([own._id, withEditorial._id].sort());
+  });
+
+  it('honours rights the editor holds through a group', async () => {
+    const groups = worker.module.get<Model<Group>>(getModelToken(Group.name));
+    const group = await groups.create({
+      name: 'Publishers',
+      permissions: RIGHTS,
+    });
+    const editor = await seedUser(worker, { groups: [group._id] });
+    const problem = await seedProblem(worker, {
+      isPublic: false,
+      authors: [editor._id],
+    });
+    const contest = await contestOf(editor._id, [problem]);
+    expect(await service.run(contest._id)).toBe('published');
+    expect(await isPublic(problem)).toBe(true);
+  });
+
+  it('treats a contest row without an outcome field as due', async () => {
+    const editor = await seedUser(worker, { permissions: RIGHTS });
+    const problem = await seedProblem(worker, {
+      isPublic: false,
+      authors: [editor._id],
+    });
+    const contest = await contestOf(editor._id, [problem]);
+    await worker.db
+      .collection('contests')
+      .updateOne(
+        { _id: toUuid(contest._id) as never },
+        { $unset: { autoPublishOutcome: '' } },
+      );
+    expect(await service.run(contest._id)).toBe('published');
+    expect(await isPublic(problem)).toBe(true);
+  });
+
+  it('does not publish or release a problem deleted after it was read', async () => {
+    const repository = worker.module.get(ContestPublishRepository);
+    const problem = await seedProblem(worker, {
+      isPublic: false,
+      solution: solution(),
+      deletedAt: new Date(),
+    });
+    const stored = (await worker.problems.findById(problem._id).lean())!;
+    expect(
+      await repository.publishProblem(problem._id, {
+        contestKey: 'k',
+        actorId: newId(),
+      }),
+    ).toBe(false);
+    expect(
+      await repository.releaseEditorial(stored, {
+        actorId: newId(),
+        now: new Date(),
+      }),
+    ).toBe(false);
   });
 
   it('does nothing the second time', async () => {

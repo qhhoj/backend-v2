@@ -94,10 +94,11 @@ export class ContestPublishService {
     return 'published';
   }
 
+  /** A row written before the field existed has none (a lean read leaves it `undefined`): that is no outcome yet, as in the sweep's `null` filter. */
   private isDue(contest: PublishableContest, now: Date): boolean {
     return (
       contest.publishAfterEnd &&
-      contest.autoPublishOutcome === null &&
+      (contest.autoPublishOutcome ?? null) === null &&
       contestPhase(contest, now) === 'ended'
     );
   }

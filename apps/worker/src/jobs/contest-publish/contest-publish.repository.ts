@@ -86,7 +86,7 @@ export class ContestPublishRepository {
   ): Promise<boolean> {
     const { matchedCount } = await this.problems
       .updateOne(
-        { _id: problemId, isPublic: false },
+        { _id: problemId, isPublic: false, deletedAt: null },
         { $set: { isPublic: true } },
       )
       .exec();
@@ -112,6 +112,7 @@ export class ContestPublishRepository {
       .updateOne(
         {
           _id: problemId,
+          deletedAt: null,
           solution: { $ne: null },
           $or: [
             { 'solution.isPublic': false },

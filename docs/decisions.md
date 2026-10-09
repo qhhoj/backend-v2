@@ -410,3 +410,12 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `GET /admin/site/pages/deleted` (B-8f2-9): deleted flatpages `{ id, url, deletedAt }` from their `delete` revisions, newest first; `pages/:id/revisions` already reads them by id, and "recreate" is a normal POST with the old values.
 - Not done: B-8f6 (data version, image listing, structured feedback), B-8f2-1b/2/3b/6b/7b — each needs a product or model decision (organization delete, report model, global audit scope) or a response redesign.
 - Rehearsal (2026-10-09, real dump, no 2FA): verify 0 mismatches ×3; read-only window ≈3.5 min; legacy contests 185 and 187 were flagged rated but never rated, so the v2 re-rating rates them (22 extra ratings) — accepted under the re-rate-everything decision.
+- Contest tag cap is count-then-insert, so a race can exceed 100; the cost is a few extra tags, a lock would add a dependency for no real harm.
+- The contest tag catalogue is cached per API instance (`ContestTagsQuerier`), so a new tag can be unknown on another instance until its resync.
+- Contest rules acceptance is enforced where a participation is created: register, first live join and every virtual join; a repeat live join keeps the stored acceptance.
+- `rulesRevision` is compare-and-set, so a concurrent save of the rules gets 409 instead of a lost update.
+- New issue codes `rules_not_accepted` (field `acceptRules`) and `unknown_tag` (field `tags`, one issue per slug).
+- Manual publish (`publish-problems`) costs 5 per hour per user; dry runs are free and only completed runs count (a failed run is refunded).
+- The editorial release is compare-and-set on the stored solution, so racing runs write one revision.
+- The publish worker re-checks the recorded editor at job time (account active, rights now, group rights included), because rights may be revoked between switch and end; it skips deleted problems.
+- Cloning a contest resets `publishAfterEnd`, `publishAfterEndBy` and `autoPublishOutcome`: the clone is a new contest and must not publish on a copied switch.
