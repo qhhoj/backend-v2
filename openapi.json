@@ -2558,12 +2558,13 @@
           },
           "slug": {
             "maxLength": 128,
+            "pattern": "^[A-Za-z][-A-Za-z0-9_]*$",
             "type": "string"
           }
         },
         "required": [
-          "name",
-          "slug"
+          "slug",
+          "name"
         ],
         "type": "object"
       },
@@ -7299,6 +7300,12 @@
           "pdf.maxBytes",
           "pdf.renderTimeoutMs",
           "problem.deleteGraceDays",
+          "quota.cost.contest",
+          "quota.cost.dataPer10MiB",
+          "quota.cost.problem",
+          "quota.defaultMonthlyCredits",
+          "quota.defaultStorageBytes",
+          "quota.enforce",
           "similarity.maxPairs",
           "similarity.maxSubmissions",
           "similarity.minPercent",
@@ -10131,6 +10138,7 @@
           },
           "slug": {
             "maxLength": 128,
+            "pattern": "^[A-Za-z][-A-Za-z0-9_]*$",
             "type": "string"
           }
         },
