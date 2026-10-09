@@ -16,4 +16,5 @@ INSERT INTO judge_submissiontestcase (id, `case`, status, time, memory, points, 
  (7002,3,'ZZ',0,0,0,0,NULL,'','','',7001),
  (7005,4,'RJ',0,0,0,0,NULL,'','','',7001),
  (7004,1,'AC',0.1,1024,1,1,NULL,'','','',7003);
+INSERT INTO judge_submissionsource (id, source, submission_id) VALUES (7001,'int main() {}',7001),(7002,'/submission_file/p7/2/a.sb3',7002),(7003,'x',7003);
 SET FOREIGN_KEY_CHECKS=1;

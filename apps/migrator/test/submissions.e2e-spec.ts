@@ -15,7 +15,7 @@ describe('submissions job', () => {
     harness = await setupMigratorTest();
     migration = harness.testingModule.get(MigrationService);
     migration.batchSize = 1;
-    reports = await migration.backfill(['submissions']);
+    reports = await migration.backfill(['submissions', 'submission-sources']);
   });
   afterAll(() => harness.teardown());
 
@@ -71,7 +71,21 @@ describe('submissions job', () => {
     );
   });
 
+  it('stores sources under the submission id and rewrites file-only sources to the media URL', async () => {
+    const source = async (id: number) =>
+      harness.db
+        .collection('submissionSources')
+        .findOne({ _id: await harness.uuidOf('judge_submission', id) });
+    expect(await source(7001)).toMatchObject({ source: 'int main() {}' });
+    expect(await source(7002)).toMatchObject({
+      source: '/media/submission_file/p7/2/a.sb3',
+    });
+    expect(await source(7003)).toBeNull();
+  });
+
   it('verifies clean', async () => {
-    expect(await migration.verify(['submissions'])).toBe(0);
+    expect(await migration.verify(['submissions', 'submission-sources'])).toBe(
+      0,
+    );
   });
 });
