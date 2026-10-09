@@ -8,9 +8,13 @@ import { inlineEnumSites, looseSites } from './schema-scans';
 import { frameDataKeys, streamEventNames } from './stream-frames';
 
 /** The routes this lane owns: community, tickets, site, settings and activity (plus the blog and comments modules). */
-const OWNED =
+const OWNED_ROUTE =
   /\/api\/internal\/(posts|admin\/posts|users\/\{username\}\/blog|organizations\/\{slug\}\/posts|comments|tickets|problems\/\{code\}\/tickets|admin\/site|admin\/settings|admin\/user-activity|home|feeds|events\/tickets)\b/;
-const OWNED_SCHEMAS = /^schema (VoteDto|UpdateSettingDto)\b/;
+/** Sites are labelled `GET <route> parameter <name>` or `schema <Name>.<property> ...`; enum sites are JSON paths. */
+const OWNED_SCHEMA =
+  /^schema (VoteDto|UpdateSettingDto|Post|Comment|Recent|Vote|Ticket|Setting|Activity|Flatpage|Site|Navigation|Live|Create|Update|New|Hide|PutMisc|Page|Blog)|\/components\/schemas\/(Post|Comment|Vote|Ticket|Setting|Activity|Flatpage|Site|Navigation|Live|Recent)/;
+const isOwned = (site: string) =>
+  OWNED_ROUTE.test(site) || OWNED_SCHEMA.test(site);
 
 const PAGED = [
   '/api/internal/posts',
@@ -55,14 +59,10 @@ describe('community, ticket, site, settings and activity schemas', () => {
     if (!found) throw new Error(`The document has no schema ${name}`);
     return found as SchemaObject;
   };
-  const ownedSites = (sites: string[]) =>
-    sites.filter((site) => OWNED.test(site));
+  const ownedSites = (sites: string[]) => sites.filter(isOwned);
 
   it('has no untyped parameter or empty schema on the routes and DTOs it owns', () => {
-    const owned = looseSites(document).filter(
-      (site) => OWNED.test(site) || OWNED_SCHEMAS.test(site),
-    );
-    expect(owned).toEqual([]);
+    expect(ownedSites(looseSites(document))).toEqual([]);
   });
 
   it('types paging and day windows as optional numbers', () => {

@@ -7,7 +7,7 @@ export type PostFeed = (typeof POST_FEEDS)[number];
 
 /** Legacy `PostList`: the newsfeed (global posts, sticky first) or every personal post. */
 export class PostListQueryDto {
-  @ApiPropertyOptional({ enum: POST_FEEDS })
+  @ApiPropertyOptional({ enum: POST_FEEDS, enumName: 'PostFeed' })
   @IsOptional()
   @IsIn(POST_FEEDS)
   feed: PostFeed = 'global';

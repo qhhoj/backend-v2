@@ -4114,6 +4114,13 @@
         ],
         "type": "object"
       },
+      "PostFeed": {
+        "enum": [
+          "global",
+          "all"
+        ],
+        "type": "string"
+      },
       "PostListItemResponse": {
         "properties": {
           "authors": {
@@ -16405,12 +16412,7 @@
             "name": "feed",
             "required": false,
             "schema": {
-              "default": "global",
-              "enum": [
-                "global",
-                "all"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/PostFeed"
             }
           },
           {
