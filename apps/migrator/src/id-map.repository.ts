@@ -75,22 +75,24 @@ export class IdMapRepository {
     return id;
   }
 
+  /** Memory stays bounded by one batch: existing entries are looked up per batch, never cached whole (tables reach tens of millions of rows). */
   private async sync<Row extends { id: number }>(
     table: string,
     rows: AsyncIterable<Row>,
     resolve: (row: Row) => string,
   ) {
     this.cache.delete(table);
-    await this.load([table]);
-    const known = this.cache.get(table)!;
     for await (const batch of batched(rows, 5000)) {
+      const known = new Set(
+        await this.collection.distinct('legacyId', {
+          table,
+          legacyId: { $in: batch.map((row) => row.id) },
+        }),
+      );
       const fresh = batch
         .filter((row) => !known.has(row.id))
         .map((row) => ({ table, legacyId: row.id, id: resolve(row) }));
-      if (!fresh.length) continue;
-      await this.collection.insertMany(fresh);
-      for (const entry of fresh) known.set(entry.legacyId, entry.id);
+      if (fresh.length) await this.collection.insertMany(fresh);
     }
-    this.cache.delete(table);
   }
 }

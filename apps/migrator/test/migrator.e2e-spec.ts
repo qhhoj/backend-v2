@@ -73,6 +73,33 @@ describe('migrator framework', () => {
     expect(await migration.verify()).toBe(0);
   });
 
+  it('maps tables larger than one batch once each, stably across re-runs', async () => {
+    await harness.mysql.query(
+      `INSERT INTO ${harness.name}.judge_useractivity (timestamp, path, method, ip_address, user_agent, referer)
+       WITH RECURSIVE seq (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 110)
+       SELECT NOW(), '/', 'GET', '127.0.0.1', '', '' FROM seq a, seq b`,
+    );
+    const [rows] = await harness.mysql.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM ${harness.name}.judge_useractivity`,
+    );
+    const entries = harness.db.collection('migrationIdMap');
+    const snapshot = async () =>
+      (
+        await entries
+          .find({ table: 'judge_useractivity' })
+          .sort({ legacyId: 1 })
+          .toArray()
+      ).map((entry) => `${entry.legacyId}:${entry.id}`);
+    await migration.backfill(['groups']);
+    const first = await snapshot();
+    expect(first).toHaveLength(Number(rows[0].total));
+    expect(new Set(first.map((entry) => entry.split(':')[1])).size).toBe(
+      first.length,
+    );
+    await migration.backfill(['groups']);
+    expect(await snapshot()).toEqual(first);
+  });
+
   it('selects jobs by name', async () => {
     await expect(migration.backfill(['groups'])).resolves.toBeUndefined();
     await expect(migration.backfill(['nope'])).rejects.toThrow(
