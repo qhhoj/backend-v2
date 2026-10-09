@@ -3603,6 +3603,98 @@
         ],
         "type": "object"
       },
+      "NotificationKind": {
+        "enum": [
+          "contest-announcement",
+          "organization-request-decided",
+          "ticket-message",
+          "ticket-new",
+          "ticket-status"
+        ],
+        "type": "string"
+      },
+      "NotificationPriority": {
+        "enum": [
+          "high",
+          "normal"
+        ],
+        "type": "string"
+      },
+      "NotificationResponse": {
+        "properties": {
+          "body": {
+            "description": "Plain text.",
+            "type": "string"
+          },
+          "count": {
+            "description": "Events merged into this row.",
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationKind"
+              }
+            ]
+          },
+          "lastActivityAt": {
+            "description": "The list is ordered by this.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "path": {
+            "description": "Internal SPA path.",
+            "type": "string"
+          },
+          "priority": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NotificationPriority"
+              }
+            ]
+          },
+          "readAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "priority",
+          "readAt",
+          "id",
+          "title",
+          "body",
+          "path",
+          "count",
+          "unread",
+          "createdAt",
+          "lastActivityAt"
+        ],
+        "type": "object"
+      },
+      "NotificationState": {
+        "enum": [
+          "all",
+          "read",
+          "unread"
+        ],
+        "type": "string"
+      },
       "OfficialRankingResponse": {
         "properties": {
           "problems": {
@@ -7803,6 +7895,17 @@
         "required": [
           "methods",
           "username"
+        ],
+        "type": "object"
+      },
+      "UnreadCountResponse": {
+        "properties": {
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "count"
         ],
         "type": "object"
       },
@@ -15859,6 +15962,227 @@
         },
         "tags": [
           "Judges"
+        ]
+      }
+    },
+    "/api/internal/notifications": {
+      "get": {
+        "operationId": "NotificationsController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/NotificationState"
+            }
+          },
+          {
+            "description": "The banner asks for `state=unread&priority=high`.",
+            "in": "query",
+            "name": "priority",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/NotificationPriority"
+            }
+          },
+          {
+            "description": "Repeat the parameter (`kind=ticket-new&kind=ticket-message`); the inbox \"Loại\" chips send the kinds of their group.",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/NotificationKind"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/NotificationResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Notifications"
+        ],
+        "x-enveloped": true
+      }
+    },
+    "/api/internal/notifications/read-all": {
+      "post": {
+        "operationId": "NotificationsController_readAll",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/internal/notifications/unread-count": {
+      "get": {
+        "operationId": "NotificationsController_unreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UnreadCountResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The bell polls this every 60 s and on window focus.",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/internal/notifications/{id}/read": {
+      "post": {
+        "operationId": "NotificationsController_read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Notifications"
         ]
       }
     },
