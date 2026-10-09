@@ -101,14 +101,14 @@ export class JudgesRepository {
     await this.judges.updateOne({ name, startTime }, { $set: { problems } });
   }
 
-  /** A session said Hello: the row shows it online with what it reported; `startTime` names the session. */
+  /** A session said Hello: the row shows it online with what it reported; `startTime` names the session. An older session's late write never displaces a newer one. */
   async markSessionOnline(
     name: string,
     startTime: Date,
     details: SessionDetails,
   ): Promise<void> {
     await this.judges.updateOne(
-      { name },
+      { name, startTime: { $not: { $gt: startTime } } },
       {
         $set: {
           online: true,

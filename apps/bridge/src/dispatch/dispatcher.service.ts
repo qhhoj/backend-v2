@@ -71,6 +71,8 @@ export class DispatcherService {
     const resuming: Resuming = { judge, plan };
     this.resuming.set(judge.name, resuming);
     for (const { ref } of listed) await this.resumeOne(judge, ref, plan);
+    // replaced meanwhile: the newer handshake decides what expires
+    if (judge.isClosed) return plan;
     const listedIds = new Set(listed.map(({ ref }) => ref.submissionId));
     for (const entry of this.grace.of(judge.name))
       if (!listedIds.has(entry.ref.submissionId))
@@ -138,6 +140,7 @@ export class DispatcherService {
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return false;
     judge.inFlight.delete(ref.submissionId);
     judge.winding.add(windingKey(ref));
+    this.runs.forget(ref);
     return true;
   }
 
@@ -242,9 +245,10 @@ export class DispatcherService {
     return this.stopped;
   }
 
+  /** A row read before a claim that went through (a resync racing a dispatch) is stale: the session keeps its run, nothing is re-dispatched. */
   private async enqueueOne(submission: QueuedSubmission): Promise<void> {
-    if (this.isClaiming(submission.id)) return;
     this.voidOlderRuns(submission);
+    if (this.isHeld(submission.id)) return;
     const queued = this.queued.get(submission.id);
     if (queued && isSameEntry(queued, submission)) return;
     this.removeQueued(submission.id);
@@ -254,22 +258,21 @@ export class DispatcherService {
     this.queued.set(submission.id, submission);
   }
 
-  /** The row is QU at `generation`, so a run of that generation or older still held (live or in grace) is void: a live judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read) is kept. */
+  /** The row is QU at `generation`, so a run of that generation or older still held (live, resumed by a handshaking session, or in grace) is void: the judge is told to stop, and the slot comes back with its `Final{ABORTED}` (`winding`). A newer run (claimed after the row was read) or a claim in flight is kept. */
   private voidOlderRuns(submission: QueuedSubmission): void {
     this.grace.discard(submission.id, submission.generation);
-    for (const judge of this.judges.values()) {
+    for (const judge of this.sessions()) {
       const generation = judge.inFlight.get(submission.id);
       if (!generation || generation > submission.generation) continue;
       const ref = { submissionId: submission.id, generation };
       this.windDown(judge, ref);
-      judge.abort(ref);
+      this.sendAbort(judge, ref);
     }
   }
 
-  private isClaiming(submissionId: string): boolean {
-    return [...this.judges.values()].some(
-      (judge) => judge.inFlight.get(submissionId) === 0,
-    );
+  /** Some session holds a run of it, or is claiming it. */
+  private isHeld(submissionId: string): boolean {
+    return this.sessions().some((judge) => judge.inFlight.has(submissionId));
   }
 
   private async resumeOne(
@@ -284,6 +287,7 @@ export class DispatcherService {
     if (stored === null) {
       // judge-v2 ends a dropped run with Final{ABORTED}; until then it holds a slot
       judge.winding.add(windingKey(ref));
+      this.runs.forget(ref);
       plan.resume.push({ ref, action: Resume_Action.ACTION_DROP, fromSeq: 0 });
       return;
     }
@@ -319,18 +323,26 @@ export class DispatcherService {
 
   /** An abort for a run a handshaking session resumed: into its Welcome's abort list while that is open, else straight to the judge. */
   private abortResumed(submissionId: string): boolean {
-    for (const { judge, plan } of this.resuming.values()) {
+    for (const { judge } of this.resuming.values()) {
       const generation = judge.inFlight.get(submissionId);
       if (!generation) continue;
-      const ref = { submissionId, generation };
-      if (!plan) judge.abort(ref);
-      else if (
-        !plan.abort.some((listed) => listed.submissionId === submissionId)
-      )
-        plan.abort.push(ref);
+      this.sendAbort(judge, { submissionId, generation });
       return true;
     }
     return false;
+  }
+
+  /** An Abort for a session still building its Welcome joins the Welcome's abort list (nothing may precede the Welcome); otherwise it goes out now. */
+  private sendAbort(judge: DispatchTarget, ref: AssignmentRef): void {
+    const plan = this.resuming.get(judge.name)?.plan;
+    if (this.resuming.get(judge.name)?.judge !== judge || !plan)
+      return judge.abort(ref);
+    const listed = plan.abort.some(
+      (entry) =>
+        entry.submissionId === ref.submissionId &&
+        entry.generation === ref.generation,
+    );
+    if (!listed) plan.abort.push(ref);
   }
 
   /** Held runs wait in grace, unless a newer session of the judge already resumed them; winding runs are over for the bridge, and the session that counted them is gone. */
@@ -389,6 +401,8 @@ export class DispatcherService {
     judge: DispatchTarget,
     submission: QueuedSubmission,
   ): Promise<void> {
+    // never over a run some session holds: its live ref would be lost
+    if (this.isHeld(submission.id)) return;
     judge.inFlight.set(submission.id, 0);
     let claimed: Claimed | null;
     try {
@@ -401,7 +415,7 @@ export class DispatcherService {
       return this.giveBack(judge, submission, claimed);
     if (!claimed) return void judge.inFlight.delete(submission.id);
     judge.inFlight.set(submission.id, claimed.request.ref.generation);
-    this.runs.sent(claimed.subject);
+    this.runs.sent(claimed);
     judge.assign(claimed.request);
   }
 

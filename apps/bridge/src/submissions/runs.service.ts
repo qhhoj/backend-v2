@@ -35,6 +35,8 @@ export type GraceOutcome = 'requeued' | 'failed' | 'aborted' | 'stale';
 
 interface Tracked {
   subject: SubmissionGradedJob;
+  /** The run being tracked: `forget` of an older generation leaves a newer one alone. */
+  generation: number;
   progressAt: number;
 }
 
@@ -79,9 +81,20 @@ export class RunsService {
   }
 
   /** The Assign is about to reach the judge: events start here, so a judge that vanished mid-claim leaves no `processing` behind. */
-  sent(subject: SubmissionGradedJob): void {
-    this.tracked.set(subject.submissionId, { subject, progressAt: 0 });
+  sent({ subject, request }: Claimed): void {
+    const { generation } = request.ref;
+    this.tracked.set(subject.submissionId, {
+      subject,
+      generation,
+      progressAt: 0,
+    });
     this.publish(subject, 'processing', 'P');
+  }
+
+  /** The bridge let go of the run (wound down or dropped) and will not see it end: its events stop here. */
+  forget(ref: AssignmentRef): void {
+    if (this.tracked.get(ref.submissionId)?.generation === ref.generation)
+      this.tracked.delete(ref.submissionId);
   }
 
   /** The judge never accepted the run (or vanished before it was sent): back to the queue without spending the requeue. */

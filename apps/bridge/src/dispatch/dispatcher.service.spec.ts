@@ -62,20 +62,26 @@ describe('DispatcherService', () => {
   let stored: Map<string, number | null>;
   /** `resumableSeq` of these submissions waits on their promise: a handshake held open mid-resume. */
   let resumeGates: Map<string, Promise<void>>;
+  /** When set, every claim waits on it: a dispatch held open between its read and its claim. */
+  let claimGate: Promise<void> | null;
   let expired: Array<{ ref: AssignmentRef; abortRequested: boolean }>;
   let dispatcher: DispatcherService;
   const runs = {
-    claim: (queued: QueuedSubmission) => {
-      const generation = (generations.get(queued.id) ?? 0) + 1;
+    /** Mongo's compare-and-set: a row read before a later claim is no longer QU at that generation, so the claim misses. */
+    claim: async (queued: QueuedSubmission) => {
+      await claimGate;
+      if ((generations.get(queued.id) ?? 0) !== queued.generation) return null;
+      const generation = queued.generation + 1;
       generations.set(queued.id, generation);
-      return Promise.resolve({
+      return {
         request: {
           ref: { submissionId: queued.id, generation },
         } as AssignRequest,
         subject: { submissionId: queued.id, userId: 'u', problemId: 'p' },
-      });
+      };
     },
     sent: () => undefined,
+    forget: () => undefined,
     release: () => Promise.resolve(true),
     resumableSeq: async (ref: AssignmentRef) => {
       await resumeGates.get(ref.submissionId);
@@ -115,6 +121,7 @@ describe('DispatcherService', () => {
     rows = new Map();
     stored = new Map();
     resumeGates = new Map();
+    claimGate = null;
     expired = [];
     dispatcher = new DispatcherService(submissions, runs, TIMINGS);
   });
@@ -211,6 +218,93 @@ describe('DispatcherService', () => {
     await dispatcher.enqueue([{ ...submission, generation: 0 }]);
     expect(judge.aborted).toEqual([]);
     expect(judge.inFlight.get(submission.id)).toBe(1);
+    expect(dispatcher.queuedIds()).toEqual([]);
+  });
+
+  it('never re-dispatches a run a judge holds when resync ticks interleave with its dispatch (a two-slot judge)', async () => {
+    const judge = await online(new Target('j1', 2));
+    const submission = entry();
+    rows.set(submission.id, submission);
+    let open: () => void = () => undefined;
+    claimGate = new Promise((resolve) => (open = resolve));
+    // tick 1 reads the row QU at generation 0, and its enqueue starts a dispatch whose claim is still in Mongo
+    const dispatching = dispatcher.enqueue([submission]);
+    await flush();
+    // tick 2 read the same row before that claim: it finds the claim in flight
+    const secondTick = dispatcher.enqueue([{ ...submission }]);
+    await flush();
+    open();
+    await Promise.all([dispatching, secondTick]);
+    claimGate = null;
+    // tick 3 read the row before the claim landed, and enqueues after it
+    await dispatcher.enqueue([{ ...submission }]);
+    expect(judge.assigned.map((request) => request.ref)).toEqual([
+      { submissionId: submission.id, generation: 1 },
+    ]);
+    expect(judge.inFlight.get(submission.id)).toBe(1);
+    expect(judge.aborted).toEqual([]);
+    expect(dispatcher.heldIds()).toEqual([submission.id]);
+    expect(dispatcher.queuedIds()).toEqual([]);
+  });
+
+  it('never dispatches over a run its judge holds, even from a queue entry left behind', async () => {
+    const judge = await online(new Target('j1', 2));
+    await dispatcher.setDisabled('j1', true);
+    const submission = entry();
+    await queue(submission);
+    judge.inFlight.set(submission.id, 1);
+    await dispatcher.setDisabled('j1', false);
+    expect(judge.assigned).toEqual([]);
+    expect(judge.inFlight.get(submission.id)).toBe(1);
+  });
+
+  it('voids a run resumed by a session still in its handshake when its row is rejudged: the Abort follows the Welcome and the new generation takes a spare slot', async () => {
+    // three slots: the other resumed run is live, the voided one winds down, a rejudge never takes the last opening slot
+    const judge = await online(new Target('j1', 3));
+    const [rejudged, other] = [entry(), entry()];
+    await queue(rejudged, other);
+    await dispatcher.judgeLost(judge);
+    for (const { id } of [rejudged, other]) stored.set(`${id}.1`, 1);
+    let open: () => void = () => undefined;
+    resumeGates.set(other.id, new Promise((resolve) => (open = resolve)));
+    const back = new Target('j1', 3);
+    const resuming = dispatcher.resume(
+      back,
+      [rejudged, other].map(({ id }) => ({
+        ref: { submissionId: id, generation: 1 },
+        lastSeqSent: 1,
+      })),
+    );
+    await flush();
+    await queue({ ...rejudged, priority: 2, generation: 1 });
+    open();
+    const plan = await resuming;
+    expect(plan.abort).toEqual([{ submissionId: rejudged.id, generation: 1 }]);
+    expect(back.aborted).toEqual([]);
+    expect([...back.winding]).toEqual([`${rejudged.id}.1`]);
+    expect(back.inFlight.has(rejudged.id)).toBe(false);
+    await dispatcher.register(back);
+    expect(back.assigned.map((request) => request.ref)).toEqual([
+      { submissionId: rejudged.id, generation: 2 },
+    ]);
+    expect([...back.winding]).toEqual([`${rejudged.id}.1`]);
+  });
+
+  it('sends the Abort of a voided resumed run at once when the Welcome already went out', async () => {
+    const judge = await online(new Target('j1', 2));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.judgeLost(judge);
+    stored.set(`${submission.id}.1`, 1);
+    const back = new Target('j1', 2);
+    await dispatcher.resume(back, [
+      { ref: { submissionId: submission.id, generation: 1 }, lastSeqSent: 1 },
+    ]);
+    await queue({ ...submission, priority: 2, generation: 1 });
+    expect(back.aborted).toEqual([
+      { submissionId: submission.id, generation: 1 },
+    ]);
+    expect(back.inFlight.has(submission.id)).toBe(false);
   });
 
   it('holds a lost judge’s runs in grace and resumes them on reconnect without a requeue', async () => {
@@ -405,6 +499,42 @@ describe('DispatcherService', () => {
     jest.advanceTimersByTime(30_000);
     await flush();
     expect(expired).toEqual([]);
+  });
+
+  it('lets only the newer handshake expire grace entries, so a run it is reading stays in grace', async () => {
+    const judge = await online(new Target('j1', 2));
+    const [olderRun, newerRun] = [entry(), entry()];
+    await queue(olderRun, newerRun);
+    await dispatcher.judgeLost(judge);
+    for (const { id } of [olderRun, newerRun]) stored.set(`${id}.1`, 1);
+    const listing = (id: string) => [
+      { ref: { submissionId: id, generation: 1 }, lastSeqSent: 1 },
+    ];
+    let openOlder: () => void = () => undefined;
+    let openNewer: () => void = () => undefined;
+    resumeGates.set(
+      olderRun.id,
+      new Promise((resolve) => (openOlder = resolve)),
+    );
+    resumeGates.set(
+      newerRun.id,
+      new Promise((resolve) => (openNewer = resolve)),
+    );
+    const older = dispatcher.resume(new Target('j1', 2), listing(olderRun.id));
+    await flush();
+    const newer = new Target('j1', 2);
+    const newerResume = dispatcher.resume(newer, listing(newerRun.id));
+    await flush();
+    openOlder();
+    await older;
+    await flush();
+    expect(expired).toEqual([]);
+    openNewer();
+    expect((await newerResume).resume).toEqual([
+      expect.objectContaining({ action: Resume_Action.ACTION_CONTINUE }),
+    ]);
+    await flush();
+    expect(expired.map(({ ref }) => ref.submissionId)).toEqual([olderRun.id]);
   });
 
   it('leaves a run in grace, with its abort, when reading it for a resume fails', async () => {

@@ -345,7 +345,7 @@ export class JudgeSession implements DispatchTarget {
     }
   }
 
-  /** The judge resent the Final of a run it already got an ack for (it may not have seen the ack): the write finds it stored, the ack goes out again; the slot was freed the first time. Anything else is treated as an unheld ref. */
+  /** The judge resent the Final of a run it already got an ack for (it may not have seen the ack): the write finds it stored, the ack goes out again; the slot was freed the first time. Anything else is treated as an unheld ref (`applied` cannot happen: the stored Final already advanced `judgeSeq` past this seq's filter). */
   private async replayedFinal(
     ref: AssignmentRef,
     seq: number,

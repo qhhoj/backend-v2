@@ -51,7 +51,7 @@ describe('RunsService (events and graded jobs of a run)', () => {
   const claim = async (id: string) => {
     const [queued] = await repository.loadQueued([id]);
     const claimed = (await runs.claim(queued, JUDGE))!;
-    runs.sent(claimed.subject);
+    runs.sent(claimed);
     const ref: AssignmentRef = claimed.request.ref;
     return { ref, key: (seq: number) => ({ ref, judgeName: JUDGE, seq }) };
   };
@@ -187,6 +187,16 @@ describe('RunsService (events and graded jobs of a run)', () => {
       ['processing', 'P'],
       ['done', 'IE'],
     ]);
+  });
+
+  it('stops tracking a run the bridge let go of, but not a newer run of the same submission', async () => {
+    const before = runs.trackedCount();
+    const { ref } = await newRun();
+    expect(runs.trackedCount()).toBe(before + 1);
+    runs.forget({ ...ref, generation: ref.generation + 1 });
+    expect(runs.trackedCount()).toBe(before + 1);
+    runs.forget(ref);
+    expect(runs.trackedCount()).toBe(before);
   });
 
   it('publishes queued when an unaccepted run is released, and nothing for another judge', async () => {
