@@ -222,6 +222,11 @@ function exactly(entry: Entry): Transform {
 /** Every byte offset in an archive comes from the (untrusted) archive, so a single reader validates them all: yauzl's own fd reader throws a RangeError from inside a callback for offsets past 2^53, which leaves the open hanging and the descriptor leaked. */
 class FileHandleReader extends yauzl.RandomAccessReader {
   private closing?: Promise<void>;
+  private markClosed!: () => void;
+  /** Settles once the handle is closed, whichever path closed it. */
+  readonly closed = new Promise<void>((resolve) => {
+    this.markClosed = resolve;
+  });
 
   constructor(private readonly handle: FileHandle) {
     super();
@@ -275,16 +280,18 @@ class FileHandleReader extends yauzl.RandomAccessReader {
 
   /** Closes the handle exactly once, however many paths ask. */
   closeOnce(): Promise<void> {
-    this.closing ??= this.handle.close();
+    this.closing ??= this.handle.close().finally(this.markClosed);
     return this.closing;
   }
 }
 
 /** Read-only view of a zip with every bound of `ZIP_LIMITS` enforced; file entries only. */
 export class ZipArchive {
+  /** `closed` settles once the file under `zip` is closed; yauzl closes it when the archive and every stream from it have let go. */
   private constructor(
     private readonly zip: ZipFile,
     private readonly entries: Map<string, Entry>,
+    private readonly closed: Promise<void>,
   ) {}
 
   static async open(path: string): Promise<ZipArchive> {
@@ -297,8 +304,10 @@ export class ZipArchive {
       const zip = await openZipFile((callback) =>
         yauzl.fromRandomAccessReader(reader, size, OPEN_OPTIONS, callback),
       );
-      return await ZipArchive.collect(zip, (position, length) =>
-        reader.readAt(position, length),
+      return await ZipArchive.collect(
+        zip,
+        (position, length) => reader.readAt(position, length),
+        reader.closed,
       );
     } catch (error) {
       await reader.closeOnce();
@@ -314,17 +323,19 @@ export class ZipArchive {
         yauzl.fromBuffer(buffer, OPEN_OPTIONS, callback),
       ),
       readAt,
+      Promise.resolve(),
     );
   }
 
   private static async collect(
     zip: ZipFile,
     readAt: ReadAt,
+    closed: Promise<void>,
   ): Promise<ZipArchive> {
     try {
       const entries = await collectEntries(zip);
       await assertCentralDirectoryIsConsistent(zip, readAt);
-      return new ZipArchive(zip, entries);
+      return new ZipArchive(zip, entries, closed);
     } catch (error) {
       zip.close();
       throw error;
@@ -369,8 +380,10 @@ export class ZipArchive {
     return Buffer.concat(chunks);
   }
 
-  close(): void {
+  /** Resolves once the file is closed, so a caller that awaits it holds no descriptor afterwards. Open streams keep it open until they end or are destroyed. */
+  close(): Promise<void> {
     this.zip.close();
+    return this.closed;
   }
 
   private entry(name: string): Entry {
@@ -386,6 +399,6 @@ export async function listZipEntries(path: string): Promise<string[]> {
   try {
     return zip.names();
   } finally {
-    zip.close();
+    await zip.close();
   }
 }

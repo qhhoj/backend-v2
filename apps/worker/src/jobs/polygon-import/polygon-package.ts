@@ -46,7 +46,7 @@ export class PolygonPackage {
       throw asImportError(error);
     }
     if (!zip.has(PROBLEM_XML)) {
-      zip.close();
+      await zip.close();
       throw new PolygonImportError('problem.xml not found');
     }
     return new PolygonPackage(zip);
@@ -98,8 +98,8 @@ export class PolygonPackage {
     }
   }
 
-  close(): void {
-    this.zip.close();
+  close(): Promise<void> {
+    return this.zip.close();
   }
 
   private member(name: string): string {

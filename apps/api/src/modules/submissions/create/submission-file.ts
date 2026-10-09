@@ -66,6 +66,6 @@ async function scratchProject(
   } catch (error) {
     throw error instanceof ZipError ? refuse(error.message) : error;
   } finally {
-    archive?.close();
+    await archive?.close();
   }
 }

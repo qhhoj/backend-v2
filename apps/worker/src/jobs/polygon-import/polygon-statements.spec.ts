@@ -101,7 +101,7 @@ describe('polygon statements', () => {
     await expect(
       rehostImages('![image](missing.png)', 'statements/english', pkg, save),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
   it('picks the main statement, maps the others to site languages and the tutorial', async () => {
     const pkg = await openPackage({
@@ -168,7 +168,7 @@ describe('polygon statements', () => {
         saveImage: save,
       }),
     ).rejects.toThrow('invalid main tutorial language');
-    pkg.close();
+    await pkg.close();
   });
   it('requires a statement and problem-properties.json', async () => {
     const none = await openPackage({ tests: [{ input: '1', answer: '1' }] });
@@ -180,7 +180,7 @@ describe('polygon statements', () => {
         saveImage: () => Promise.resolve(''),
       }),
     ).rejects.toThrow('statement not found');
-    none.close();
+    await none.close();
   });
   it('appends the main solution as a spoiler with the language fence', () => {
     expect(withMainSolution('Tutorial.\n', 'int main() {}', 'cpp.g++17')).toBe(
@@ -219,7 +219,7 @@ describe('rehostImages containment and content', () => {
     await expect(
       rehostImages(`![image](${path})`, 'statements/english', pkg, saveEcho()),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
   it('rejects an image that sits in the package but outside the statement folder', async () => {
     const pkg = await openPackage({
@@ -242,7 +242,7 @@ describe('rehostImages containment and content', () => {
         saveEcho(),
       ),
     ).rejects.toThrow('image not found');
-    pkg.close();
+    await pkg.close();
   });
   it('rehosts images from nested folders of the statement', async () => {
     const pkg = await englishPackage({ 'img/fig.png': PNG });
@@ -254,7 +254,7 @@ describe('rehostImages containment and content', () => {
         saveEcho(),
       ),
     ).toBe('![image](/media/images/1)');
-    pkg.close();
+    await pkg.close();
   });
   it('rejects bytes that are not an image, whatever the file name says', async () => {
     const pkg = await englishPackage({
@@ -263,7 +263,7 @@ describe('rehostImages containment and content', () => {
     await expect(
       rehostImages('![image](fig.png)', 'statements/english', pkg, saveEcho()),
     ).rejects.toThrow('not a supported image');
-    pkg.close();
+    await pkg.close();
   });
   it('sanitizes SVG before it is saved and names the file by its sniffed type', async () => {
     const pkg = await englishPackage({ 'fig.png': SVG_WITH_SCRIPT });
@@ -278,7 +278,7 @@ describe('rehostImages containment and content', () => {
     expect(saved[0].name).toBe('fig.svg');
     expect(saved[0].bytes.toString()).toContain('<svg');
     expect(saved[0].bytes.toString()).not.toMatch(/script|onload|alert/);
-    pkg.close();
+    await pkg.close();
   });
   it('rejects an image above the size cap', async () => {
     const pkg = await englishPackage({
@@ -287,7 +287,7 @@ describe('rehostImages containment and content', () => {
     await expect(
       rehostImages('![image](fig.png)', 'statements/english', pkg, saveEcho()),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
   it('enforces the SVG byte cap exactly', async () => {
     const svgOfSize = (bytes: number) => {
@@ -309,7 +309,7 @@ describe('rehostImages containment and content', () => {
           saveEcho(),
         );
       } finally {
-        pkg.close();
+        await pkg.close();
       }
     };
     await expect(rehost(svgOfSize(SVG_MAX_BYTES))).resolves.toContain(
@@ -328,7 +328,7 @@ describe('rehostImages containment and content', () => {
       () => Promise.resolve('/media/$&$1.png'),
     );
     expect(text).toBe('<img src="/media/$&$1.png">');
-    pkg.close();
+    await pkg.close();
   });
   it('scans in linear time on unterminated image syntax', async () => {
     const pkg = await englishPackage({ 'fig.png': PNG });
@@ -348,7 +348,7 @@ describe('rehostImages containment and content', () => {
     const small = await time(20000);
     const large = await time(80000);
     expect(large / small).toBeLessThan(10);
-    pkg.close();
+    await pkg.close();
   });
 });
 
@@ -369,7 +369,7 @@ describe('statement paths and validation', () => {
         saveImage: saveEcho(),
       }),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
   it('accepts ordinary statements and rejects what an editor would reject', () => {
     expect(() =>
@@ -404,7 +404,7 @@ describe('statement paths and validation', () => {
         saveImage: saveEcho(),
       }),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
   it('rejects malformed problem-properties.json as an import error', async () => {
     const pkg = await openPackage({
@@ -421,7 +421,7 @@ describe('statement paths and validation', () => {
         saveImage: saveEcho(),
       }),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
 });
 
@@ -444,7 +444,7 @@ describe('hostile problem.xml values', () => {
           saveImage: saveEcho(),
         }),
       ).rejects.toThrow(`invalid site language for ${language}`);
-      pkg.close();
+      await pkg.close();
     },
   );
   it('refuses two statements in one language', async () => {
@@ -474,7 +474,7 @@ describe('hostile problem.xml values', () => {
         saveImage: saveEcho(),
       }),
     ).rejects.toThrow('two statements in the language english');
-    pkg.close();
+    await pkg.close();
   });
   it.each([
     ['empty', ''],
@@ -493,7 +493,7 @@ describe('hostile problem.xml values', () => {
         saveImage: saveEcho(),
       }),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
 });
 
@@ -515,7 +515,7 @@ describe('leftover image references', () => {
     await expect(
       rehostImages(text, 'statements/english', pkg, saveEcho()),
     ).rejects.toThrow('unsupported image reference');
-    pkg.close();
+    await pkg.close();
   });
   it('rewrites only the real src of a tag that also has data-src', async () => {
     const pkg = await englishPackage({ 'fig.png': PNG });
@@ -526,7 +526,7 @@ describe('leftover image references', () => {
       saveEcho(),
     );
     expect(text).toBe('<img data-src="x" src="/media/images/1">');
-    pkg.close();
+    await pkg.close();
   });
 });
 
@@ -544,7 +544,7 @@ describe('mainSolution', () => {
       code: 'print(1)',
       sourceType: 'python.3',
     });
-    pkg.close();
+    await pkg.close();
   });
   it('fails when there is no main solution or its source is not in the package', async () => {
     const none = await openPackage({
@@ -554,7 +554,7 @@ describe('mainSolution', () => {
     await expect(mainSolution(await none.problemXml(), none)).rejects.toThrow(
       'main solution not found',
     );
-    none.close();
+    await none.close();
     const missing = await openPackage({
       tests: [{ input: '1', answer: '1' }],
       omitEntries: ['solutions/main.cpp'],
@@ -562,7 +562,7 @@ describe('mainSolution', () => {
     await expect(
       mainSolution(await missing.problemXml(), missing),
     ).rejects.toThrow(PolygonImportError);
-    missing.close();
+    await missing.close();
   });
 });
 
@@ -711,7 +711,7 @@ describe('parseStatements error order when a package has several faults', () => 
   ])('reports %s', async (_label, makePackage, overrides, message) => {
     const pkg = await makePackage();
     await expect(parseWith(pkg, overrides)).rejects.toThrow(message);
-    pkg.close();
+    await pkg.close();
   });
 
   it('refuses two statements mapped to one site language', async () => {
@@ -733,7 +733,7 @@ describe('parseStatements error order when a package has several faults', () => 
         statementLanguages: { vietnamese: 'vi', french: 'vi' },
       }),
     ).rejects.toThrow('two statements map to the site language vi');
-    pkg.close();
+    await pkg.close();
   });
 
   it('saves no image when the main statement language is invalid', async () => {
@@ -758,7 +758,7 @@ describe('parseStatements error order when a package has several faults', () => 
       'invalid main statement language',
     );
     expect(saved).toEqual([]);
-    pkg.close();
+    await pkg.close();
   });
 });
 
@@ -778,7 +778,7 @@ describe('problem-properties.json shape', () => {
         saveImage: saveEcho(),
       });
     } finally {
-      pkg.close();
+      await pkg.close();
     }
   };
   const textKeys = [

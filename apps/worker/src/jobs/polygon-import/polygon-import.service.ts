@@ -158,7 +158,7 @@ export class PolygonImportService {
       if (!committed) await this.undo(job, savedImages, staged);
       throw error;
     } finally {
-      pkg.close();
+      await pkg.close();
     }
   }
 

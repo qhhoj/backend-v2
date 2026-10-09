@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { crc32, deflateRawSync } from 'node:zlib';
@@ -60,13 +61,13 @@ describe('ZipArchive', () => {
     await expect(zip.read('nope')).rejects.toThrow(
       new ZipError('No such file in the archive: nope'),
     );
-    zip.close();
+    await zip.close();
   });
 
   it('keeps non-ASCII names intact', async () => {
     const zip = await open([{ name: 'bài/đề.inp', content: 'x' }]);
     expect(zip.names()).toEqual(['bài/đề.inp']);
-    zip.close();
+    await zip.close();
   });
 
   it.each([
@@ -143,7 +144,7 @@ describe('ZipArchive', () => {
     const three = [{ name: 'a' }, { name: 'b' }, { name: 'c' }];
     const zip = await ZipArchive.fromBuffer(buildZip(three, { zip64: true }));
     expect(zip.names()).toEqual(['a', 'b', 'c']);
-    zip.close();
+    await zip.close();
     await expect(
       ZipArchive.fromBuffer(
         buildZip(three, { zip64: true, declaredEntryCount: 1 }),
@@ -281,7 +282,7 @@ describe('ZipArchive', () => {
     await expect(zip.read('big')).rejects.toThrow(
       new ZipError('big is too large to read'),
     );
-    zip.close();
+    await zip.close();
   });
 
   it('rejects members whose inflated size differs from the declared one', async () => {
@@ -301,7 +302,7 @@ describe('ZipArchive', () => {
     ]);
     await expect(zip.read('longer')).rejects.toThrow(ZipError);
     await expect(zip.read('shorter')).rejects.toThrow(ZipError);
-    zip.close();
+    await zip.close();
   });
 
   it('reports corrupt, truncated and wrongly checksummed members as ZipError', async () => {
@@ -323,7 +324,7 @@ describe('ZipArchive', () => {
     ]);
     for (const name of zip.names())
       await expect(zip.read(name)).rejects.toThrow(ZipError);
-    zip.close();
+    await zip.close();
   });
 
   it('stops inflating a lying member before handing out the excess', async () => {
@@ -343,7 +344,7 @@ describe('ZipArchive', () => {
       })(),
     ).rejects.toThrow(ZipError);
     expect(received).toBeLessThanOrEqual(1024);
-    zip.close();
+    await zip.close();
   });
 
   it('aborts a deflate bomb that declares a small size without leaking a descriptor', async () => {
@@ -363,11 +364,29 @@ describe('ZipArchive', () => {
       })(),
     ).rejects.toThrow(ZipError);
     expect(received).toBeLessThanOrEqual(1024);
-    zip.close();
+    await zip.close();
     expect(descriptorsOpenOn(directory)).toEqual([]);
   });
 
-  it('opens from disk and leaks no file descriptor on any failing open', async () => {
+  /** Makes every file close take one extra turn of the event loop, as it does under load, so a close that is not awaited is caught every run. */
+  const slowCloses = () => {
+    const realOpen = fsPromises.open;
+    const opens = jest.fn(async (...args: Parameters<typeof realOpen>) => {
+      const handle = await realOpen(...args);
+      const realClose = handle.close.bind(handle);
+      handle.close = () =>
+        new Promise((resolve) => setImmediate(resolve)).then(realClose);
+      return handle;
+    });
+    // fs/promises exports are writable but not configurable, so jest.spyOn cannot wrap them.
+    (fsPromises as { open: unknown }).open = opens;
+    return {
+      opens,
+      restore: () => ((fsPromises as { open: unknown }).open = realOpen),
+    };
+  };
+
+  it('opens from disk and has closed the file by the time any open, listing or close settles', async () => {
     const good = join(directory, 'good.zip');
     writeFileSync(good, buildZip([{ name: 'a', content: 'x' }]));
     const bad = join(directory, 'bad.zip');
@@ -387,18 +406,24 @@ describe('ZipArchive', () => {
       ]),
     );
     const missing = join(directory, 'missing.zip');
-    for (let round = 0; round < 200; round++) {
-      await expect(ZipArchive.open(bad)).rejects.toThrow(ZipError);
-      await expect(ZipArchive.open(garbage)).rejects.toThrow(ZipError);
-      await expect(ZipArchive.open(missing)).rejects.toThrow(ZipError);
-      await expect(listZipEntries(bad)).rejects.toThrow(ZipError);
+    const slow = slowCloses();
+    try {
+      for (const path of [bad, garbage, missing]) {
+        await expect(ZipArchive.open(path)).rejects.toThrow(ZipError);
+        expect(descriptorsOpenOn(directory)).toEqual([]);
+        await expect(listZipEntries(path)).rejects.toThrow(ZipError);
+        expect(descriptorsOpenOn(directory)).toEqual([]);
+      }
       const zip = await ZipArchive.open(lying);
       await expect(zip.read('a')).rejects.toThrow(ZipError);
-      zip.close();
+      await zip.close();
+      expect(descriptorsOpenOn(directory)).toEqual([]);
       await expect(listZipEntries(good)).resolves.toEqual(['a']);
+      expect(descriptorsOpenOn(directory)).toEqual([]);
+      expect(slow.opens).toHaveBeenCalled();
+    } finally {
+      slow.restore();
     }
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(descriptorsOpenOn(directory)).toEqual([]);
   });
 
   it('lists 25000 entries from disk in time linear in the entry count', async () => {

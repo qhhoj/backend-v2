@@ -98,7 +98,7 @@ describe('PolygonPackage', () => {
     await expect(pkg.read('missing', SOURCE_MAX_BYTES)).rejects.toThrow(
       'missing not found in the package',
     );
-    pkg.close();
+    await pkg.close();
   });
 
   it('checks the declared size before inflating and still stops a lying member', async () => {
@@ -114,7 +114,7 @@ describe('PolygonPackage', () => {
       'honest-large is larger than 1000 bytes',
     );
     await expect(pkg.read('liar', 1000)).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
 
   it('turns an unreadable archive and an oversized or hostile problem.xml into import errors', async () => {
@@ -132,7 +132,7 @@ describe('PolygonPackage', () => {
     await expect(hostile.problemXml()).rejects.toThrow(
       new PolygonImportError('problem.xml must not declare a DOCTYPE'),
     );
-    hostile.close();
+    await hostile.close();
   });
 
   it('never resolves member names outside the package namespace', async () => {
@@ -153,7 +153,7 @@ describe('PolygonPackage', () => {
       await expect(pkg.stream(name)).rejects.toThrow(PolygonImportError);
       expect(() => pkg.sizeOf(name)).toThrow(PolygonImportError);
     }
-    pkg.close();
+    await pkg.close();
   });
 });
 
@@ -207,8 +207,8 @@ describe('repackTests', () => {
     ]);
     expect((await repacked.read('02.inp')).toString()).toBe('4 5\n');
     expect((await repacked.read('01.out')).toString()).toBe('3\n');
-    repacked.close();
-    pkg.close();
+    await repacked.close();
+    await pkg.close();
   });
 
   it('rejects instead of hanging when a member lies about its size', async () => {
@@ -230,7 +230,7 @@ describe('repackTests', () => {
         drain(repackTests(pkg, [planned('tests/01', 'tests/01.a')])),
       ),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
   });
 
   it('rejects, without an unhandled error, on a closed package', async () => {
@@ -238,7 +238,7 @@ describe('repackTests', () => {
     process.on('unhandledRejection', unhandled);
     process.on('uncaughtException', unhandled);
     const pkg = await opened(buildPolygonPackage(oneTest));
-    pkg.close();
+    await pkg.close();
     await expect(
       withinTimeout(
         drain(repackTests(pkg, [planned('tests/01', 'tests/01.a')])),
@@ -262,7 +262,7 @@ describe('repackTests', () => {
     const output = repackTests(pkg, [planned('tests/01', 'tests/01.a')]);
     await output[Symbol.asyncIterator]().next();
     output.destroy();
-    pkg.close();
+    await pkg.close();
     expect(await descriptorsAfterRelease(baseline)).toBe(baseline);
   });
 
@@ -286,7 +286,7 @@ describe('repackTests', () => {
         ),
       ),
     ).rejects.toThrow(PolygonImportError);
-    pkg.close();
+    await pkg.close();
     expect(await descriptorsAfterRelease(baseline)).toBe(baseline);
   });
 
@@ -294,7 +294,7 @@ describe('repackTests', () => {
     const pkg = await opened(buildPolygonPackage(oneTest));
     const long = `${'a/'.repeat(500)}x`;
     await expect(pkg.read(long, 10)).rejects.toThrow(/^.{0,200}$/);
-    pkg.close();
+    await pkg.close();
   });
 
   it.each([
@@ -309,6 +309,6 @@ describe('repackTests', () => {
     await expect(
       drain(repackTests(pkg, [planned(inputPath, 'tests/01.a')])),
     ).rejects.toThrow(new PolygonImportError(message));
-    pkg.close();
+    await pkg.close();
   });
 });
