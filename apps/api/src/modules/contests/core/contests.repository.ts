@@ -51,6 +51,14 @@ export class ContestsRepository {
     return row ? uuidStr(row._id) : null;
   }
 
+  /** Whether any contest, past or future, lists the problem (`problems.problem` index): such a problem cannot be deleted. */
+  async isProblemInAnyContest(problemId: string): Promise<boolean> {
+    return (
+      (await this.contests.exists({ 'problems.problem': problemId }).exec()) !==
+      null
+    );
+  }
+
   async setDataPreparedAt(contestId: string, preparedAt: Date): Promise<void> {
     await this.contests
       .updateOne({ _id: contestId }, { $set: { dataPreparedAt: preparedAt } })

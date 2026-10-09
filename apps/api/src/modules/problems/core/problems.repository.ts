@@ -36,6 +36,11 @@ const ACCESS_FIELDS = {
   suggester: 1,
 } as const;
 
+/** A live problem: `deletedAt` is absent (never set, or restored). Every finder that discovers problems spreads this in. */
+const LIVE = { deletedAt: null } as const;
+/** A problem in its grace period, or a tombstone. A range (not `$ne: null`) so the sparse `{deletedAt: 1}` index serves it. */
+const DELETED = { deletedAt: { $gt: new Date(0) } } as const;
+
 @Injectable()
 export class ProblemsRepository {
   constructor(
@@ -43,15 +48,18 @@ export class ProblemsRepository {
   ) {}
 
   findByCode(code: string): Promise<ProblemDocument | null> {
-    return this.problems.findOne({ code }).exec();
+    return this.problems.findOne({ code, ...LIVE }).exec();
   }
 
   /** `data` is `select: false` (it can hold thousands of cases); only the data editor loads it. */
   findByCodeWithData(code: string): Promise<ProblemDocument | null> {
-    return this.problems.findOne({ code }).select('+data').exec();
+    return this.problems
+      .findOne({ code, ...LIVE })
+      .select('+data')
+      .exec();
   }
 
-  /** Test cases of the problem (`C` rows: batch members included, `S`/`E` markers not), counted in the database so the 10000-row array never loads. */
+  /** Test cases of a problem the caller already resolved (`C` rows: batch members included, `S`/`E` markers not), counted in the database so the 10000-row array never loads; it follows an id, so it does not filter. */
   async caseCount(problemId: string): Promise<number> {
     const [row] = await this.problems.aggregate<{ count: number }>([
       { $match: { _id: toUuid(problemId) } },
@@ -72,7 +80,7 @@ export class ProblemsRepository {
   }
 
   findById(id: string): Promise<ProblemDocument | null> {
-    return this.problems.findById(id).exec();
+    return this.problems.findOne({ _id: id, ...LIVE }).exec();
   }
 
   /** The flags that put a problem's submissions on the public feed. */
@@ -80,7 +88,7 @@ export class ProblemsRepository {
     id: string,
   ): Promise<Pick<Problem, 'isPublic' | 'isOrganizationPrivate'> | null> {
     return this.problems
-      .findById(id, { isPublic: 1, isOrganizationPrivate: 1 })
+      .findOne({ _id: id, ...LIVE }, { isPublic: 1, isOrganizationPrivate: 1 })
       .lean<Pick<Problem, 'isPublic' | 'isOrganizationPrivate'>>()
       .exec();
   }
@@ -88,13 +96,13 @@ export class ProblemsRepository {
   /** Only the fields `ProblemAccess.accessView` reads: no statement, no data. */
   findForAccess(id: string): Promise<ProblemDocument | null> {
     return isUuid(id)
-      ? this.problems.findById(id, ACCESS_FIELDS).exec()
+      ? this.problems.findOne({ _id: id, ...LIVE }, ACCESS_FIELDS).exec()
       : Promise.resolve(null);
   }
 
   /** `findForAccess` by code. */
   findForAccessByCode(code: string): Promise<ProblemDocument | null> {
-    return this.problems.findOne({ code }, ACCESS_FIELDS).exec();
+    return this.problems.findOne({ code, ...LIVE }, ACCESS_FIELDS).exec();
   }
 
   async list(
@@ -117,7 +125,7 @@ export class ProblemsRepository {
     pageSize: number,
   ): Promise<ProblemDocument[]> {
     return this.problems
-      .find(filter, LIST_PROJECTION)
+      .find({ ...filter, ...LIVE }, LIST_PROJECTION)
       .collation(CI)
       .sort(sort)
       .skip((page - 1) * pageSize)
@@ -126,7 +134,10 @@ export class ProblemsRepository {
   }
 
   count(filter: FilterQuery<Problem>): Promise<number> {
-    return this.problems.countDocuments(filter).collation(CI).exec();
+    return this.problems
+      .countDocuments({ ...filter, ...LIVE })
+      .collation(CI)
+      .exec();
   }
 
   create(fields: Partial<Problem>): Promise<ProblemDocument> {
@@ -157,7 +168,7 @@ export class ProblemsRepository {
     return matchedCount === 1;
   }
 
-  /** Other problems still pointing at an uploaded file (clones copy the urls). */
+  /** Other problems still pointing at an uploaded file (clones copy the urls). Deleted problems count: a restorable problem still owns its upload, so this is S. */
   countOtherReferences(
     field: 'pdfStatementUrl' | 'materialUrl',
     url: string,
@@ -188,27 +199,104 @@ export class ProblemsRepository {
         .exec();
   }
 
-  /** Ids of the problems matching `filter` (a `ProblemAccess.visibleFilter`), for submission lists. */
+  /** Ids of the live problems matching `filter` (a `ProblemAccess.visibleFilter`), for submission lists. */
   async visibleIds(filter: FilterQuery<Problem>): Promise<string[]> {
-    return (await this.problems.distinct('_id', filter).exec()).map(uuidStr);
+    return (
+      await this.problems.distinct('_id', { ...filter, ...LIVE }).exec()
+    ).map(uuidStr);
   }
 
   findSummaries(ids: string[]): Promise<ProblemDocument[]> {
     return this.problems
-      .find({ _id: { $in: ids } }, { code: 1, name: 1 })
+      .find({ _id: { $in: ids }, ...LIVE }, { code: 1, name: 1 })
       .exec();
   }
 
-  /** List rows (no statement, editorial body or data); unknown and malformed ids are skipped. */
+  /** List rows (no statement, editorial body or data); unknown, deleted and malformed ids are skipped. */
   findByIds(ids: readonly string[]): Promise<ProblemDocument[]> {
     const valid = ids.filter(isUuid);
     return valid.length
-      ? this.problems.find({ _id: { $in: valid } }, LIST_PROJECTION).exec()
+      ? this.problems
+          .find({ _id: { $in: valid }, ...LIVE }, LIST_PROJECTION)
+          .exec()
       : Promise.resolve([]);
   }
 
   async idByCode(code: string): Promise<string | null> {
-    const row = await this.problems.findOne({ code }, { _id: 1 }).lean().exec();
+    const row = await this.problems
+      .findOne({ code, ...LIVE }, { _id: 1 })
+      .lean()
+      .exec();
     return row ? uuidStr(row._id) : null;
+  }
+
+  // --- Deliberately S: they see deleted problems and tombstones. Callers say why. ---
+
+  /** The staff restore and purge routes: a problem in its grace period or a tombstone, by code. */
+  findDeletedByCode(code: string): Promise<ProblemDocument | null> {
+    return this.problems.findOne({ code, ...DELETED }).exec();
+  }
+
+  /** A submission's problem, deleted or not: history must keep rendering. Callers decide who may see it. */
+  findIncludingDeleted(id: string): Promise<ProblemDocument | null> {
+    return isUuid(id)
+      ? this.problems.findById(id).exec()
+      : Promise.resolve(null);
+  }
+
+  /** Names for submission rows, deleted problems included. */
+  findSummariesIncludingDeleted(ids: string[]): Promise<ProblemDocument[]> {
+    return this.problems
+      .find(
+        { _id: { $in: ids } },
+        { code: 1, name: 1, deletedAt: 1, purgedAt: 1 },
+      )
+      .exec();
+  }
+
+  /** The deleted list: problems in their grace period or tombstoned that match `filter` (a `ProblemAccess.visibleFilter`), newest deletion first. */
+  async deletedPage(
+    filter: FilterQuery<Problem>,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: ProblemDocument[]; total: number }> {
+    const where = { ...filter, ...DELETED };
+    const [items, total] = await Promise.all([
+      this.problems
+        .find(where, LIST_PROJECTION)
+        .sort({ deletedAt: -1, _id: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .exec(),
+      this.problems.countDocuments(where).exec(),
+    ]);
+    return { items, total };
+  }
+
+  /** Every deleted problem's id: a small set, used to scope submission lists. */
+  async deletedIds(): Promise<string[]> {
+    return (await this.problems.distinct('_id', DELETED).exec()).map(uuidStr);
+  }
+
+  /** False when it was already deleted (or is gone): the guard makes a double delete a no-op. */
+  async markDeleted(id: string, actorId: string, now: Date): Promise<boolean> {
+    const { matchedCount } = await this.problems
+      .updateOne(
+        { _id: id, ...LIVE },
+        { $set: { deletedAt: now, deletedBy: actorId } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** False when the problem is live, unknown, or a purge has claimed it (`purgeStartedAt`) or finished it (`purgedAt`): a half-purged problem cannot come back either. */
+  async restore(id: string): Promise<boolean> {
+    const { matchedCount } = await this.problems
+      .updateOne(
+        { _id: id, ...DELETED, purgeStartedAt: null, purgedAt: null },
+        { $unset: { deletedAt: '', deletedBy: '' } },
+      )
+      .exec();
+    return matchedCount === 1;
   }
 }
