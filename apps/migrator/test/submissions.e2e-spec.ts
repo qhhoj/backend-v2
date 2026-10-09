@@ -1,3 +1,4 @@
+import { UUID } from 'mongodb';
 import { uuidStr } from '@libs/database';
 import type { Submission, SubmissionCase } from '@libs/database';
 import { MigrationService } from '../src/migration.service';
@@ -74,7 +75,7 @@ describe('submissions job', () => {
   it('stores sources under the submission id and rewrites file-only sources to the media URL', async () => {
     const source = async (id: number) =>
       harness.db
-        .collection('submissionSources')
+        .collection<{ _id: UUID; source: string }>('submissionSources')
         .findOne({ _id: await harness.uuidOf('judge_submission', id) });
     expect(await source(7001)).toMatchObject({ source: 'int main() {}' });
     expect(await source(7002)).toMatchObject({
