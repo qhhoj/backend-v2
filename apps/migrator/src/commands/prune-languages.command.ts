@@ -32,7 +32,6 @@ export class PruneLanguagesCommand extends CommandRunner {
       dryRun,
     });
     this.logger.log(JSON.stringify({ dryRun, ...summary }));
-    process.exitCode = summary.unknownKeep.length ? 1 : 0;
   }
 
   @Option({

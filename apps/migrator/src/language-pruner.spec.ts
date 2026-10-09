@@ -73,7 +73,6 @@ describe('pruneLanguages', () => {
     expect(summary).toEqual({
       keptLanguages: ['CPP17', 'PY3'],
       prunedLanguages: ['PY2', 'RUST'],
-      unknownKeep: [],
       problemsChanged: 2,
       languagesDisabled: 2,
       emptiedProblems: ['legacy_only'],
@@ -94,14 +93,27 @@ describe('pruneLanguages', () => {
     });
   });
 
-  it('matches keys case-insensitively and reports keep keys that name no language', async () => {
+  it('matches keys case-insensitively', async () => {
     const summary = await pruneLanguages(connection, {
-      keep: ['py3', 'CPP17', 'RUST', 'KOTLIN'],
+      keep: ['py3', 'CPP17', 'RUST'],
       dryRun: false,
     });
     expect(summary.prunedLanguages).toEqual(['PY2']);
-    expect(summary.unknownKeep).toEqual(['KOTLIN']);
     expect(await allowedOf('mixed')).toEqual([ids.PY3, ids.RUST].sort());
+  });
+
+  it('refuses a keep key that names no language before writing anything', async () => {
+    await expect(
+      pruneLanguages(connection, {
+        keep: ['PY3', 'CPP17', 'KOTLINN'],
+        dryRun: false,
+      }),
+    ).rejects.toThrow('--keep names no language: KOTLINN; nothing changed');
+    expect(await allowedOf('mixed')).toEqual(
+      [ids.PY3, ids.PY2, ids.RUST].sort(),
+    );
+    const rows = await languages().find({}, { includeInProblem: 1 }).lean();
+    expect(rows.every((row) => row.includeInProblem)).toBe(true);
   });
 
   it('is idempotent', async () => {
@@ -180,6 +192,14 @@ describe('pruneLanguages', () => {
 describe('parseKeep', () => {
   it('trims, upper-cases and de-duplicates', () => {
     expect(parseKeep(' py3,CPP17 ,PY3,,')).toEqual(['PY3', 'CPP17']);
+  });
+
+  it('refuses a list without a runtime language, as from an unset fleet variable', () => {
+    for (const unset of [',OUTPUT', 'OUTPUT,TEXT', ' , output '])
+      expect(() => parseKeep(unset)).toThrow(
+        '--keep names no runtime language',
+      );
+    expect(parseKeep(',OUTPUT,PY3')).toEqual(['OUTPUT', 'PY3']);
   });
 
   it('refuses an empty list', () => {

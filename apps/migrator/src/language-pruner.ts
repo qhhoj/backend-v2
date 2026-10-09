@@ -10,8 +10,6 @@ import type { Connection } from 'mongoose';
 export interface PruneSummary {
   keptLanguages: string[];
   prunedLanguages: string[];
-  /** Keep keys that name no Language row: a typo here would otherwise prune a language the fleet runs. */
-  unknownKeep: string[];
   problemsChanged: number;
   languagesDisabled: number;
   /** Codes of problems the prune leaves with no allowed language: nobody can submit to them until an editor adds one. */
@@ -28,6 +26,9 @@ interface LanguageRow {
   key: string;
 }
 
+/** Keys that need no judge runtime; a keep list of only these is a mistake (an empty fleet list). */
+const FILE_ONLY_KEYS = new Set(['OUTPUT', 'TEXT']);
+
 export function parseKeep(value: string): string[] {
   const keys = [
     ...new Set(
@@ -38,6 +39,11 @@ export function parseKeep(value: string): string[] {
     ),
   ];
   if (!keys.length) throw new Error('--keep needs at least one language key');
+  // `--keep "$UNSET,OUTPUT"` must never strip every runtime language from every problem.
+  if (keys.every((key) => FILE_ONLY_KEYS.has(key)))
+    throw new Error(
+      `--keep names no runtime language (only ${keys.join(', ')}): is the fleet list empty?`,
+    );
   return keys;
 }
 
@@ -104,7 +110,7 @@ async function applyPrune(
   };
 }
 
-/** Judge-v2 cutover: only languages the judge fleet runs stay allowed; the other rows stay for history (past submissions), disabled. Idempotent. */
+/** Judge-v2 cutover: only languages the judge fleet runs stay allowed (an unknown keep key is refused before any write); the other rows stay for history (past submissions), disabled. Idempotent. */
 export async function pruneLanguages(
   connection: Connection,
   { keep, dryRun }: PruneOptions,
@@ -112,6 +118,12 @@ export async function pruneLanguages(
   const wanted = new Set(keep.map((key) => key.toUpperCase()));
   const { kept, pruned } = await splitLanguages(connection, wanted);
   const known = new Set(kept.map((row) => row.key.toUpperCase()));
+  const unknownKeep = [...wanted].filter((key) => !known.has(key));
+  // Refused before any write: a typo would otherwise prune a language the fleet runs (and `$pull` cannot be undone).
+  if (unknownKeep.length)
+    throw new Error(
+      `--keep names no language: ${unknownKeep.join(', ')}; nothing changed`,
+    );
   const prunedIds = pruned.map((row) => row._id);
   const emptiedProblems = prunedIds.length
     ? await emptiedBy(connection, prunedIds)
@@ -122,7 +134,6 @@ export async function pruneLanguages(
   return {
     keptLanguages: kept.map((row) => row.key),
     prunedLanguages: pruned.map((row) => row.key),
-    unknownKeep: [...wanted].filter((key) => !known.has(key)),
     ...counts,
     emptiedProblems,
   };
