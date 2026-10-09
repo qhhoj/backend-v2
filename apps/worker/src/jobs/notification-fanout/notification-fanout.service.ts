@@ -30,14 +30,11 @@ export class NotificationFanoutService {
     );
     let recipients = 0;
     for await (const userIds of this.recipientChunks(contest, now)) {
-      const done = await this.fanout.appliedUsers(userIds, announcementId);
-      const pending = userIds.filter((userId) => !done.has(userId));
-      if (pending.length)
-        await this.fanout.upsertRows(pending, draft, {
-          ref: announcementId,
-          at: announcement.createdAt,
-          now,
-        });
+      await this.fanout.upsertRows(userIds, draft, {
+        ref: announcementId,
+        at: announcement.createdAt,
+        now,
+      });
       recipients += userIds.length;
     }
     return recipients;

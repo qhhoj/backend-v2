@@ -124,17 +124,16 @@ export class NotificationFanoutRepository {
     return new Set(rows.map((row) => uuidStr(row.user)));
   }
 
-  /** Per user: merge into the unread row of the group, else insert (the filter names `unread: true`, the partial unique index). A user whose insert lost to a concurrent writer is merged again, up to `MERGE_ROUNDS`. Then the texts follow the newest announcement only: `lastActivityAt` moves forward with `$max`, so a reordered run puts nothing older on top. Call it for users `appliedUsers` did not return. */
+  /** Per user: merge into the unread row of the group, else insert (the filter names `unread: true`, the partial unique index). A user whose insert lost to a concurrent writer is merged again, up to `MERGE_ROUNDS`. Then the texts follow the newest announcement only: `lastActivityAt` moves forward with `$max`, so a reordered run puts nothing older on top. Users who already took the announcement are not merged again but still get the text step, so a retry repairs text a failed run left stale. */
   async upsertRows(
     userIds: readonly string[],
     draft: NotificationDraft,
     stamp: AnnouncementStamp,
   ): Promise<void> {
-    let pending = userIds;
+    let pending = await this.unapplied(userIds, stamp.ref);
     for (let round = 1; pending.length; round += 1) {
       const lost = await this.mergeCounts(pending, draft, stamp);
-      const done = await this.appliedUsers(lost, stamp.ref);
-      pending = lost.filter((user) => !done.has(user));
+      pending = await this.unapplied(lost, stamp.ref);
       if (pending.length && round >= MERGE_ROUNDS)
         throw new Error(
           `Fan-out of ${stamp.ref}: ${pending.length} inserts keep losing`,
@@ -154,6 +153,15 @@ export class NotificationFanoutRepository {
       })),
       { ordered: false },
     );
+  }
+
+  private async unapplied(
+    userIds: readonly string[],
+    ref: string,
+  ): Promise<string[]> {
+    if (!userIds.length) return [];
+    const done = await this.appliedUsers(userIds, ref);
+    return userIds.filter((user) => !done.has(user));
   }
 
   /** Returns the users whose insert lost on the unique partial index (to be merged again); any other error is thrown. */

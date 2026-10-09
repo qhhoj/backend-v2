@@ -229,6 +229,25 @@ describe('notification fan-out', () => {
     }
   });
 
+  it('a retry repairs the text a failed run left stale, without counting again', async () => {
+    const round = await contest();
+    const user = newId();
+    await join(round._id, user);
+    const older = await announcement(round._id, 'Older', minutesFromNow(-5));
+    const newer = await announcement(round._id, 'Newer');
+    await fanout.announce(older._id);
+    await fanout.announce(newer._id);
+    // A run that merged `newer` but died before the text step.
+    await worker.notifications.updateOne(
+      { user },
+      { $set: { title: 'Older', body: 'Older' } },
+    );
+    await fanout.announce(newer._id);
+    const [row] = await rowsOf(user);
+    expect(row).toMatchObject({ count: 2, body: 'Newer', title: row.title });
+    expect(row.title).not.toBe('Older');
+  });
+
   it('expires a row 90 days after processing, even for an old announcement', async () => {
     const round = await contest();
     const user = newId();
