@@ -59,6 +59,7 @@ export class GhostsService {
     dto: ImportGhostsDto,
   ): Promise<GhostImportResponse> {
     const contest = await this.editable(principal, key);
+    this.assertImportable(contest);
     const columns = await this.columnsOf(contest);
     const parsed = parseGhostCsv(
       dto.csv,
@@ -120,19 +121,22 @@ export class GhostsService {
     });
   }
 
-  /** Editors only, and not for a format whose scores exist only after the final judge. */
-  private async editable(
+  /** Editors only (403), and a contest the user cannot see is a 404. */
+  private editable(
     principal: Principal,
     key: string,
   ): Promise<ContestDocument> {
-    const contest = await this.viewers.editableContest(principal, key);
+    return this.viewers.editableContest(principal, key);
+  }
+
+  /** Only an import is refused for a format whose scores exist only after the final judge; stored ghosts stay listable and deletable. */
+  private assertImportable(contest: ContestDocument): void {
     if (contest.formatName === 'final_submission')
       throw new AppError(
         'ghost_unsupported_format',
         409,
         'Ghosts are not supported for final-submission contests',
       );
-    return contest;
   }
 
   /** The contest's problems in order, with their codes (the CSV's columns). A problem with no summary falls back to its id. */

@@ -259,6 +259,39 @@ describe('contest ghosts', () => {
     ]);
   });
 
+  it('refuses a non-editor on every read, and answers 404 for a contest the user cannot see', async () => {
+    const contest = await icpcContest();
+    await put('editor', contest.key, { csv: CSV }).expect(200);
+    for (const suffix of ['', '/csv'])
+      await authed(
+        api.http().get(url(contest.key, suffix)),
+        sessions.plain,
+      ).expect(403);
+    const hidden = await icpcContest({ isVisible: false });
+    for (const suffix of ['', '/csv'])
+      await authed(
+        api.http().get(url(hidden.key, suffix)),
+        sessions.plain,
+      ).expect(404);
+  });
+
+  it('keeps stored ghosts listable and deletable in a final-submission contest, and refuses only the import', async () => {
+    const contest = await icpcContest();
+    await put('editor', contest.key, { csv: CSV }).expect(200);
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { formatName: 'final_submission' },
+    );
+    expect(await list(contest.key)).toHaveLength(2);
+    await put('editor', contest.key, { csv: CSV })
+      .expect(409)
+      .expect(errorCode('ghost_unsupported_format'));
+    await authed(api.http().delete(url(contest.key)), sessions.editor).expect(
+      204,
+    );
+    expect(await list(contest.key)).toEqual([]);
+  });
+
   it('deletes the set, refuses a final-submission contest, and never touches the ranking or ratings', async () => {
     const contest = await icpcContest();
     await joinParticipation(api, contest._id, users.plain._id, { score: 50 });
