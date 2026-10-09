@@ -33,7 +33,7 @@ libs/
   problems/   init.yml compiler, zip reader, problem data and PDF cache file services, statement helpers, queue contracts (`queues.ts`)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep, similarity), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
   contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
-  community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, tickets (limits, Discord texts), ticket-events contract, flatpage urls, user activity rules (session keys, user agent classifier, CSV cells), queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook)
+  community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, tickets (limits, Discord texts), ticket-events contract, flatpage urls, user activity rules (session keys, user agent classifier, CSV cells), queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook), notifications (drafts, event contract, queues, repository, service, module)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
 tools/legacy/   regenerates the fixtures
@@ -116,6 +116,10 @@ tickets/
   posting/         file a ticket (problem, general), messages
   editing/         PATCH: open/close, good, notes, assignees
   streams/         TicketEventsService (publish), ticket streams (SSE)
+notifications/
+  notifications-api.module.ts
+  core/            inbox endpoints (list, unread-count, read, read-all), inbox repository and service, rate-limits, dto
+  streams/         the `events/user` channel (notification nudges), own module
 site/
   site-api.module.ts
   public/          flatpages, navigation and misc config queriers, `GET /site`
@@ -325,8 +329,8 @@ user-activity/
 - `viewerStatus` (`solved | attempted | null`) on problem list/detail: one aggregate per page (`ViewerStatusRepository`)
 - Events: Redis pub/sub `submission-events` (`SubmissionEventsService`), fire-and-forget (1 s bound, skipped while Redis is not ready), ids and status only, published by whoever writes the status. Bridge: `processing` when the request is sent to the judge, `grading-begin`, `test-case` (at most 4/s per submission), `done`, requeues as `queued`. Api: submit/rejudge -> `queued`, abort of a queued submission and reject -> `done`; bulk rejudge publishes nothing
 - SSE: `GET /api/internal/events/submissions/:id` (detail rules; `state` first, read after the stream is registered; `test-case` only when every case result is visible; `resync` after a lost subscription) and `GET /api/internal/events/submissions` (public feed: public, non-org-private problems, no progress); one subscriber connection per api process
-- SSE layout: `modules/events/` holds the generic `EventStreamHub` (one Redis subscriber, caps, drain/buffer limits, heartbeat, recheck, resubscribe, shutdown) and `sse.ts`; a channel implements `EventChannel` and registers itself with the hub: `submissions/streams/submission-streams.service.ts` (submissions and feed) and `contests/announcements/contest-streams.service.ts` (contest announcements). A new channel = a service like those, a controller and a Redis channel name
-- Stream limits (`events/stream-limits.ts`, per api process): 8 per user, 16 per IP, 5000 total, 1000 feed, 2000 contest; a client is dropped when a write stays undrained or the backlog stays above 16 KiB for 2 s in total, or at once above 256 KiB; 15 s heartbeat; access (session, user, detail rules) re-checked every 60 s
+- SSE layout: `modules/events/` holds the generic `EventStreamHub` (one Redis subscriber, caps, drain/buffer limits, heartbeat, recheck, resubscribe, shutdown) and `sse.ts`; a channel implements `EventChannel` and registers itself with the hub: `submissions/streams/submission-streams.service.ts` (submissions and feed) and `contests/announcements/contest-streams.service.ts` (contest announcements) and `notifications/streams/user-streams.service.ts` (`GET /events/user`, the owner's notification nudges). A new channel = a service like those, a controller and a Redis channel name
+- Stream limits (`events/stream-limits.ts`, per api process): 12 per user, 16 per IP, 5000 total, 1000 feed, 2000 contest, 2500 user (notification) streams; a client is dropped when a write stays undrained or the backlog stays above 16 KiB for 2 s in total, or at once above 256 KiB; 15 s heartbeat; access (session, user, detail rules) re-checked every 60 s
 
 ## Contests
 
@@ -427,6 +431,16 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - Staff API `api/internal/admin/user-activity` (`judge.can_see_user_activity`): `logs` (page + `hasMore`), `logs/export` (CSV, at most 100000 rows, formula-safe cells), `users/:username/logs|summary`, `DELETE users/:username|anonymous`, `live`
 - Site content staff API: see the `Site content` bullet under Blog and comments (flatpages use the `blog` style); admin screens read `GET /site` with `cache: 'no-cache'`, because the route is `private, max-age=60` and a plain read would show pre-edit data for up to a minute
 - Tests: `setupApiTest` exposes `tickets`, `generalIssues`, `flatpages`, `navigationItems`, `miscConfigs`, `userSessions`, `userActivities`; `setupWorkerTest` `tickets`; fixtures in `apps/api/test/ticket-fixtures.ts`; `streamsOf` counts ticket streams too
+
+## Notifications
+
+- Collections and indexes: `notifications`, one unread row per `user` + `groupKey` (partial unique index); lists order by `lastActivityAt, _id`; TTL on `expiresAt` = last activity + 90 days
+- Writing: `NotificationsService.notify(recipients, draft)` in `libs/community/src/notifications/` never throws, merges into the unread row (`$inc count`, never lowers `high`), retries once as a merge on E11000, cuts texts to 100/200 code points, refuses a `path` that is not an internal `^/(?!/)...` path, takes at most 200 recipients; `dismiss` marks a group read
+- Producers in B1: contest announcements (the `notification-fanout` job) and a decided organization join request
+- Realtime: `notification-events` carries `{ userId, id }`; `GET /events/user` sends `notification {id}`; contest announcements send no nudge; the bell polls `GET /notifications/unread-count` every 60 s and on focus
+- Inbox API: `GET /notifications`, `GET /notifications/unread-count` (cached 15 s), `POST /notifications/:id/read`, `POST /notifications/read-all` (30/min); under impersonation both POSTs are 204 no-ops
+- Jobs: `notification-fanout` (concurrency 2, idempotent through `lastRef`); `notification-trim` nightly at 03:30 through `upsertJobScheduler`, keeps the newest 500 per user, only for users active in the last 25 h
+- Tests: `setupApiTest` exposes `notifications`, `setupWorkerTest` exposes `notifications` and `announcements`; `NotificationsService` is `app.get`-able
 
 ## Data conventions
 
