@@ -424,6 +424,58 @@ describe('DispatcherService', () => {
     ]);
   });
 
+  it('keeps an abort sent to a judge already gone: a resume aborts the run after the Welcome, an expiry writes AB', async () => {
+    const judge = await online(new Target('j1', 2));
+    const [resumed, expiring] = [entry(), entry()];
+    await queue(resumed, expiring);
+    // the stream died; the bridge has not handled the loss yet
+    judge.isClosed = true;
+    dispatcher.abort(resumed.id);
+    dispatcher.abort(expiring.id);
+    await dispatcher.judgeLost(judge);
+    stored.set(`${resumed.id}.1`, 1);
+    const plan = await dispatcher.resume(new Target('j1', 2), [
+      { ref: { submissionId: resumed.id, generation: 1 }, lastSeqSent: 1 },
+    ]);
+    expect(plan.abort).toEqual([{ submissionId: resumed.id, generation: 1 }]);
+    expect(expired).toEqual([
+      {
+        ref: { submissionId: expiring.id, generation: 1 },
+        abortRequested: true,
+      },
+    ]);
+  });
+
+  it('keeps an abort waiting for the Welcome of a handshake that dies before sending it', async () => {
+    const judge = await online(new Target('j1', 2));
+    const [resumed, waiting] = [entry(), entry()];
+    await queue(resumed, waiting);
+    await dispatcher.judgeLost(judge);
+    for (const { id } of [resumed, waiting]) stored.set(`${id}.1`, 1);
+    let open: () => void = () => undefined;
+    resumeGates.set(waiting.id, new Promise((resolve) => (open = resolve)));
+    const back = new Target('j1', 2);
+    const resuming = dispatcher.resume(
+      back,
+      [resumed, waiting].map(({ id }) => ({
+        ref: { submissionId: id, generation: 1 },
+        lastSeqSent: 1,
+      })),
+    );
+    await flush();
+    dispatcher.abort(resumed.id);
+    back.isClosed = true;
+    await dispatcher.judgeLost(back);
+    open();
+    await resuming;
+    jest.advanceTimersByTime(TIMINGS.resumeGraceMs);
+    await flush();
+    expect(expired).toContainEqual({
+      ref: { submissionId: resumed.id, generation: 1 },
+      abortRequested: true,
+    });
+  });
+
   it('moves the runs of a replaced session to the new one', async () => {
     const first = await online(new Target('j1'));
     const submission = entry();

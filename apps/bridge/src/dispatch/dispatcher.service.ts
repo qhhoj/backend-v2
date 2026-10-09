@@ -48,6 +48,8 @@ export class DispatcherService {
   /** Sessions still in their handshake, by judge name. */
   private readonly resuming = new Map<string, Resuming>();
   private readonly grace: GraceRegistry;
+  /** `windingKey`s of held runs the api aborted, until they leave their session: a run that enters grace carries the abort even when its Abort reached a stream already dead. */
+  private readonly abortsRequested = new Set<string>();
   private stopped = false;
 
   constructor(
@@ -114,6 +116,7 @@ export class DispatcherService {
   ): Promise<void> {
     if (judge.inFlight.get(ref.submissionId) === ref.generation)
       judge.inFlight.delete(ref.submissionId);
+    this.abortsRequested.delete(windingKey(ref));
     if (retried) {
       const rows = await this.submissions.loadQueued([ref.submissionId]);
       await this.enqueue(
@@ -148,6 +151,7 @@ export class DispatcherService {
   private keepSlotWinding(judge: DispatchTarget, ref: AssignmentRef): boolean {
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return false;
     judge.inFlight.delete(ref.submissionId);
+    this.abortsRequested.delete(windingKey(ref));
     judge.winding.add(windingKey(ref));
     return true;
   }
@@ -166,11 +170,14 @@ export class DispatcherService {
     for (const other of this.connected()) await this.offerWork(other);
   }
 
-  /** A running run is told to stop (the judge answers Final ABORTED); one in grace is aborted when it resumes or expires; a queued one is dropped (the api already wrote AB). Best-effort: a run still being claimed is not reached, the user aborts again. */
+  /** A running run is told to stop (the judge answers Final ABORTED); one in grace is aborted when it resumes or expires; a queued one is dropped (the api already wrote AB). The abort sticks when the judge turns out to be gone (`abortsRequested`). Best-effort: a run still being claimed is not reached, the user aborts again. */
   abort(submissionId: string): void {
     for (const judge of this.judges.values()) {
       const generation = judge.inFlight.get(submissionId);
-      if (generation) return judge.abort({ submissionId, generation });
+      if (!generation) continue;
+      const ref = { submissionId, generation };
+      this.abortsRequested.add(windingKey(ref));
+      return judge.abort(ref);
     }
     if (this.abortResumed(submissionId)) return;
     if (this.grace.requestAbort(submissionId)) return;
@@ -308,7 +315,9 @@ export class DispatcherService {
       action: Resume_Action.ACTION_CONTINUE,
       fromSeq: stored + 1,
     });
-    if (waiting?.abortRequested) plan.abort.push(ref);
+    if (!waiting?.abortRequested) return;
+    this.abortsRequested.add(windingKey(ref));
+    plan.abort.push(ref);
   }
 
   /** A newer session of the same judge takes over (the registered one, or one still in its handshake): the old one's runs wait in grace for it to resume them. */
@@ -337,7 +346,9 @@ export class DispatcherService {
     for (const { judge } of this.resuming.values()) {
       const generation = judge.inFlight.get(submissionId);
       if (!generation) continue;
-      this.sendAbort(judge, { submissionId, generation });
+      const ref = { submissionId, generation };
+      this.abortsRequested.add(windingKey(ref));
+      this.sendAbort(judge, ref);
       return true;
     }
     return false;
@@ -356,11 +367,17 @@ export class DispatcherService {
     if (!listed) plan.abort.push(ref);
   }
 
-  /** Held runs wait in grace, unless a newer session of the judge already resumed them; winding runs are over for the bridge, and the session that counted them is gone. */
+  /** Held runs wait in grace, carrying an api abort, unless a newer session of the judge already resumed them; winding runs are over for the bridge, and the session that counted them is gone. */
   private holdInGrace(judge: DispatchTarget): void {
-    for (const [submissionId, generation] of judge.inFlight)
+    for (const [submissionId, generation] of judge.inFlight) {
+      const ref = { submissionId, generation };
       if (generation > 0 && !this.heldElsewhere(judge, submissionId))
-        this.grace.hold({ submissionId, generation }, judge.name);
+        this.grace.hold(
+          ref,
+          judge.name,
+          this.abortsRequested.delete(windingKey(ref)),
+        );
+    }
     judge.inFlight.clear();
     judge.winding.clear();
   }

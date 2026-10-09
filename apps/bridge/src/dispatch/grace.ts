@@ -27,7 +27,11 @@ export class GraceRegistry {
     private readonly onExpire: (entry: GraceEntry) => void,
   ) {}
 
-  hold(ref: AssignmentRef, judgeName: string): void {
+  /** `abortRequested`: the api aborted the run before the bridge noticed the judge was gone; an abort already recorded for this generation is kept. */
+  hold(ref: AssignmentRef, judgeName: string, abortRequested = false): void {
+    const earlier = this.held.get(ref.submissionId);
+    const abortKept =
+      earlier?.ref.generation === ref.generation && earlier.abortRequested;
     this.remove(ref.submissionId);
     const timer = setTimeout(
       () => this.expireNow(ref.submissionId),
@@ -36,7 +40,7 @@ export class GraceRegistry {
     this.held.set(ref.submissionId, {
       ref,
       judgeName,
-      abortRequested: false,
+      abortRequested: abortRequested || abortKept,
       timer,
     });
   }

@@ -116,6 +116,9 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Case output is shown unless `testcaseVisibility` is `O` (editors always) — default author-only problems must not leak outputs.
 - Detail loads the thin row, checks access, then loads cases only when needed — avoids hydrating 10000 cases for a request that will be refused.
 - Abort of a running submission is best-effort; the user aborts again — a lost `abort` would otherwise need a reliable channel.
+- An abort the bridge handled sticks even when its Abort reached a judge already gone: the dispatcher remembers api aborts of held runs and a run entering grace carries one, so a resume sends Abort right after the Welcome and an expiry writes AB — a user's abort must not be graded; best-effort above still covers a lost command or a run in its claim.
+- Protocol v1.2 candidate "abort racing a disconnect" (not vendored, needs a hook holding the bridge's loss handling): Accepted s1.1, ack, stream dies, api abort, reconnect Hello{inFlight s1.1} → Welcome{CONTINUE s1.1} → Abort s1.1 → Final ABORTED → ack, AB; with no reconnect the grace expiry writes AB and nothing is reassigned.
+- Protocol v1.2 candidate "rejudge during handshake" (not vendored, needs a hook holding the resume read): Hello{inFlight s1.1}, api rejudge s1 → Welcome{CONTINUE s1.1} → Abort s1.1 → Final ABORTED (winding, no ack) → Assign s1.2 — nothing may precede the Welcome.
 - Bulk rejudge counts first (more than 10 needs `judge.rejudge_submission_lot`), then streams ids in chunks of at most 1000, skips locked rows without `force` — no full materialisation.
 - The bridge is a single instance; the API and bridge refuse to boot while Redis is down (boot ping) — the orchestrator restarts them.
 - Judge containers need a restart policy — the fork exits on a dropped socket.

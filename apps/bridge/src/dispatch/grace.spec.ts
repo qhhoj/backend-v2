@@ -28,6 +28,24 @@ describe('GraceRegistry', () => {
     expect(grace.ids()).toEqual([]);
   });
 
+  it('holds a run with an abort given at hold time, and a re-hold of the same generation keeps an earlier abort', () => {
+    const ref = { submissionId: newId(), generation: 2 };
+    grace.hold(ref, 'j1', true);
+    grace.hold(ref, 'j1');
+    const newer = { submissionId: newId(), generation: 1 };
+    grace.hold(newer, 'j1', true);
+    grace.hold({ ...newer, generation: 2 }, 'j1');
+    jest.advanceTimersByTime(30_000);
+    expect(expired).toEqual([
+      { ref, judgeName: 'j1', abortRequested: true },
+      {
+        ref: { ...newer, generation: 2 },
+        judgeName: 'j1',
+        abortRequested: false,
+      },
+    ]);
+  });
+
   it('hands a run back only to the same judge and generation, and then never expires it', () => {
     const ref = { submissionId: newId(), generation: 3 };
     grace.hold(ref, 'j1');
