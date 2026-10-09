@@ -139,7 +139,20 @@ export class QuotaService implements OnApplicationBootstrap {
       this.logger.warn(
         `Organization ${key.organizationId} is over its credit limit in ${key.month}: ${used}/${limit}`,
       );
-    await this.record(key, charge.kind, charge);
+    await this.recordOrGiveBack(key, charge);
+  }
+
+  /** The ledger row is the audit trail of the counter: if it cannot be written, the credits just taken go back so counter and ledger never drift. */
+  private async recordOrGiveBack(
+    key: UsageKey,
+    charge: PricedCharge,
+  ): Promise<void> {
+    try {
+      await this.record(key, charge.kind, charge);
+    } catch (error) {
+      await this.giveBack(key, charge.amount);
+      throw error;
+    }
   }
 
   private async ensureUsageRow(key: UsageKey): Promise<void> {
@@ -193,20 +206,26 @@ export class QuotaService implements OnApplicationBootstrap {
     });
   }
 
-  /** Gives the credits back when the guarded write failed; never masks the write's own error. */
+  /** Lowers the counter by `amount` unless it is already lower (the guard); true when it did. */
+  private async giveBack(key: UsageKey, amount: number): Promise<boolean> {
+    const { matchedCount } = await this.usage
+      .updateOne(
+        {
+          organization: key.organizationId,
+          month: key.month,
+          creditsUsed: { $gte: amount },
+        },
+        { $inc: { creditsUsed: -amount } },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** Gives the credits back when the guarded write failed and logs a `refund` row only if the counter really moved; never masks the write's own error. */
   private async refund(key: UsageKey, charge: PricedCharge): Promise<void> {
     try {
-      await this.usage
-        .updateOne(
-          {
-            organization: key.organizationId,
-            month: key.month,
-            creditsUsed: { $gte: charge.amount },
-          },
-          { $inc: { creditsUsed: -charge.amount } },
-        )
-        .exec();
-      await this.record(key, 'refund', { ...charge, amount: -charge.amount });
+      if (await this.giveBack(key, charge.amount))
+        await this.record(key, 'refund', { ...charge, amount: -charge.amount });
     } catch (error) {
       this.logger.error(
         `Refund of ${charge.amount} credits to ${key.organizationId} failed: ${(error as Error).message}`,
@@ -279,12 +298,11 @@ export class QuotaService implements OnApplicationBootstrap {
   }
 }
 
-const quotaExceeded = (details: QuotaRefusal): AppError =>
-  new AppError(
-    'quota_exceeded',
-    403,
-    `The organization has no ${details.meter} left`,
-    undefined,
-    undefined,
-    { details },
-  );
+/** 403 with an `issues[]` entry on the exhausted meter (`credits` or `storage`), so clients read it like a field error. */
+const quotaExceeded = (details: QuotaRefusal): AppError => {
+  const message = `The organization has no ${details.meter} left`;
+  return new AppError('quota_exceeded', 403, message, undefined, undefined, {
+    details,
+    issues: [{ field: details.meter, code: 'quota_exceeded', message }],
+  });
+};

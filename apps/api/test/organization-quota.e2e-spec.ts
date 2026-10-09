@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { REDIS } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
@@ -122,6 +122,59 @@ describe('organization quota', () => {
       ['problem', 10],
       ['refund', -10],
     ]);
+  });
+
+  it('puts an issue with the exhausted meter and code on the refusal', async () => {
+    const organization = await limited(5);
+    const refusal = await quota
+      .charged(organization._id, request(), () => Promise.resolve(1))
+      .catch((error: AppError) => error);
+    expect(refusal).toBeInstanceOf(AppError);
+    expect((refusal as AppError).extra).toMatchObject({
+      issues: [{ field: 'credits', code: 'quota_exceeded' }],
+      details: { meter: 'credits' },
+    });
+    const storage = await createOrganization(api, { quotaStorageBytes: 10 });
+    await expect(
+      quota.assertStorage(storage._id, { usedBytes: 10, addedBytes: 1 }),
+    ).rejects.toMatchObject({
+      extra: { issues: [{ field: 'storage', code: 'quota_exceeded' }] },
+    });
+  });
+
+  it('returns the credits when the ledger row cannot be written, and never runs the work', async () => {
+    const organization = await limited(100);
+    const failing = jest
+      .spyOn(ledger, 'create')
+      .mockRejectedValueOnce(new Error('ledger down'));
+    const work = jest.fn(() => Promise.resolve(1));
+    await expect(
+      quota.charged(organization._id, request(), work),
+    ).rejects.toThrow('ledger down');
+    failing.mockRestore();
+    expect(work).not.toHaveBeenCalled();
+    expect(await usedBy(organization._id)).toBe(0);
+    expect(
+      await ledger.countDocuments({ organization: organization._id }),
+    ).toBe(0);
+  });
+
+  it('writes no refund row when the counter was already lowered below the price', async () => {
+    const organization = await limited(100);
+    await expect(
+      quota.charged(organization._id, request(), async () => {
+        await usage.updateOne(
+          { organization: organization._id },
+          { $set: { creditsUsed: 0 } },
+        );
+        throw new Error('work failed');
+      }),
+    ).rejects.toThrow('work failed');
+    expect(await usedBy(organization._id)).toBe(0);
+    const reasons = (
+      await ledger.find({ organization: organization._id }).lean()
+    ).map(({ reason }) => reason);
+    expect(reasons).toEqual(['problem']);
   });
 
   it('starts a new month at zero in the site time zone', async () => {

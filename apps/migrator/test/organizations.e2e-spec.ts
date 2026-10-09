@@ -34,6 +34,8 @@ describe('organizations jobs', () => {
       isOpen: false,
       isUnlisted: false,
       slots: 30,
+      quotaStorageBytes: null,
+      quotaMonthlyCredits: null,
       logoOverrideImage: '/media/logo.png',
       createdAt: new Date('2021-02-03T04:05:06Z'),
     });

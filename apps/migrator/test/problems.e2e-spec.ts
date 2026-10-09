@@ -39,6 +39,7 @@ describe('problems job', () => {
       pdfStatementUrl: null,
       date: new Date('2021-01-01T00:00:00Z'),
       dataVersion: 0,
+      dataBytes: 0,
     });
     expect((await problem(4002))!.pdfStatementUrl).toBe(
       'https://cdn.example/p.pdf',
