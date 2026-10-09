@@ -67,6 +67,7 @@ describe('seed:e2e', () => {
       admin: 'e2e_admin',
       user: 'e2e_user',
       problems: ['e2e_sum', 'e2e_max'],
+      outputProblem: 'e2e_output',
       contests: ['e2e_live', 'e2e_past'],
       language: 'PY3',
       judge: 'seed-judge',
@@ -132,6 +133,32 @@ describe('seed:e2e', () => {
     );
   });
 
+  it('seeds a hidden output-only problem whose only language is the OUTPUT zip', async () => {
+    await seedE2e(connection, options());
+    const problems = connection.model(Problem.name, ProblemSchema);
+    const problem = await problems.findOne({ code: 'e2e_output' }).lean();
+    expect(problem).toMatchObject({ isPublic: false });
+    const languages = await connection
+      .model(Language.name, LanguageSchema)
+      .find({ _id: { $in: problem!.allowedLanguages } })
+      .lean();
+    expect(
+      languages.map((language) => [
+        language.key,
+        language.fileOnly,
+        language.extension,
+        language.includeInProblem,
+      ]),
+    ).toEqual([['OUTPUT', true, 'zip', false]]);
+    expect(readFileSync(join(root, 'e2e_output', '1.out'), 'utf8')).toBe('3\n');
+    expect(
+      readFileSync(join(root, 'e2e_output', '.data-version'), 'utf8'),
+    ).toBe(`${problem!.dataVersion}\n`);
+    const sum = await problems.findOne({ code: 'e2e_sum' }).lean();
+    expect(sum!.allowedLanguages.map(uuidStr)).not.toContain(
+      uuidStr(languages[0]._id),
+    );
+  });
   it('registers a judge whose stored key is the hash, and never rewrites it', async () => {
     const judges = connection.model<Judge>(Judge.name, JudgeSchema);
     await seedE2e(connection, options());

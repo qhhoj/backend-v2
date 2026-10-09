@@ -38,6 +38,7 @@ export interface SeedSummary {
   admin: string;
   user: string;
   problems: string[];
+  outputProblem: string;
   contests: string[];
   language: string;
   judge: string;
@@ -143,6 +144,8 @@ export interface ProblemSpec {
   files: Record<string, string>;
   /** Set when the files are packed into this zip in the problem directory instead of written loose. */
   archive?: string;
+  /** Hidden from the problem list (default public). */
+  isPublic?: boolean;
 }
 
 const SUM_PROBLEM: ProblemSpec = {
@@ -159,6 +162,35 @@ const MAX_PROBLEM: ProblemSpec = {
   files: MAX_FILES,
   archive: 'tests.zip',
 };
+
+/** J8's output-only problem: the same case as e2e_sum, hidden from the problem list, OUTPUT zips only. */
+const OUTPUT_PROBLEM: ProblemSpec = {
+  code: 'e2e_output',
+  name: 'A plus B (output only)',
+  description: 'Upload a zip holding 1.out.',
+  files: { '1.in': '1 2\n', '1.out': '3\n' },
+  isPublic: false,
+};
+
+/** The file-only language J8 submits; never a default for new problems. */
+async function seedOutputLanguage(connection: Connection) {
+  return ensure(
+    connection.model<Language>(Language.name, LanguageSchema),
+    { key: 'OUTPUT' },
+    {
+      key: 'OUTPUT',
+      name: 'Output (zip)',
+      commonName: 'Output',
+      ace: 'text',
+      pygments: 'text',
+      extension: 'zip',
+      fileOnly: true,
+      fileSizeLimit: 1,
+      includeInProblem: false,
+    },
+    { isCaseInsensitive: true },
+  );
+}
 
 /** One test case per `N.in` file; 100 points in total, the last case takes the remainder. */
 function casesOf(files: Record<string, string>) {
@@ -183,11 +215,13 @@ async function seedProblem(
     catalog,
     authorId,
     problemDataRoot,
+    languageIds,
   }: {
     spec: ProblemSpec;
     catalog: Awaited<ReturnType<typeof seedCatalog>>;
     authorId: string;
     problemDataRoot: string;
+    languageIds: string[];
   },
 ): Promise<string> {
   const sample = {
@@ -206,12 +240,12 @@ async function seedProblem(
       timeLimit: 1,
       memoryLimit: 262144,
       points: 1000,
-      isPublic: true,
+      isPublic: spec.isPublic ?? true,
       date: new Date(),
       typeIds: [catalog.type._id],
       groupId: catalog.group._id,
       authors: [authorId],
-      allowedLanguages: [catalog.language._id],
+      allowedLanguages: languageIds,
       description: spec.description,
       descriptionHtml: html,
       translations: [
@@ -259,15 +293,22 @@ export async function seedE2e(
 ): Promise<SeedSummary> {
   const { admin, user } = await seedUsers(connection, options);
   const catalog = await seedCatalog(connection);
+  const outputLanguage = await seedOutputLanguage(connection);
   await seedMailSetting(connection, options.encryptionKey);
   await seedJudge(connection, options);
   const common = {
     catalog,
     authorId: admin._id,
     problemDataRoot: options.problemDataRoot,
+    languageIds: [catalog.language._id],
   };
   const sumId = await seedProblem(connection, { spec: SUM_PROBLEM, ...common });
   const maxId = await seedProblem(connection, { spec: MAX_PROBLEM, ...common });
+  await seedProblem(connection, {
+    spec: OUTPUT_PROBLEM,
+    ...common,
+    languageIds: [outputLanguage._id],
+  });
   const contests = await seedContests(connection, {
     authorId: admin._id,
     specs: [
@@ -293,6 +334,7 @@ export async function seedE2e(
     admin: admin.username,
     user: user.username,
     problems: [SUM_PROBLEM.code, MAX_PROBLEM.code],
+    outputProblem: OUTPUT_PROBLEM.code,
     contests,
     language: catalog.language.key,
     judge: options.judgeName,
