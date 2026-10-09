@@ -54,6 +54,15 @@ describe('fitDraft', () => {
     expect(fitDraft(draft())).toEqual(draft());
   });
 
+  it('refuses an unknown kind and a groupKey that is empty or too long', () => {
+    expect(() => fitDraft(draft({ kind: 'bogus' as never }))).toThrow(/kind/i);
+    expect(() => fitDraft(draft({ groupKey: '' }))).toThrow(/groupKey/);
+    expect(() => fitDraft(draft({ groupKey: 'g'.repeat(101) }))).toThrow(
+      /groupKey/,
+    );
+    expect(fitDraft(draft({ groupKey: 'g'.repeat(100) }))).toBeDefined();
+  });
+
   it('refuses a path that leaves the site', () => {
     expect(() => fitDraft(draft({ path: '//evil.com' }))).toThrow(/path/i);
   });
@@ -104,6 +113,17 @@ describe('draft builders', () => {
       announcementTitle: 'x',
     });
     expect(one.groupKey).not.toBe(other.groupKey);
+  });
+
+  it('escapes characters encodeURIComponent leaves bare, so the path stays safe', () => {
+    const built = contestAnnouncementDraft({
+      contestId: 'c1',
+      contestKey: "it's(1)*~!",
+      contestName: 'X',
+      announcementTitle: 'A',
+    });
+    expect(isSafeNotificationPath(built.path)).toBe(true);
+    expect(() => fitDraft(built)).not.toThrow();
   });
 
   it('says whether the join request was approved or refused, and points to the organization', () => {

@@ -1,5 +1,7 @@
 import {
   NOTIFICATION_BODY_MAX,
+  NOTIFICATION_GROUP_KEY_MAX,
+  NOTIFICATION_KINDS,
   NOTIFICATION_PATH_MAX,
   NOTIFICATION_PATH_PATTERN,
   NOTIFICATION_TITLE_MAX,
@@ -15,6 +17,13 @@ export const NOTIFICATIONS_PAGE_SIZE = 20;
 /** Recipients one `notify` call writes; a longer list is cut and logged. */
 export const NOTIFY_RECIPIENT_LIMIT = 200;
 const DAY_MS = 86_400_000;
+
+/** `encodeURIComponent` leaves `! ' ( ) * ~` bare, which the path pattern refuses: escape them too. */
+const pathSegment = (value: string): string =>
+  encodeURIComponent(value).replace(
+    /[!'()*~]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 
 /** What a producer says; `NotificationsService.notify` stores it per recipient. */
 export interface NotificationDraft {
@@ -36,8 +45,12 @@ export const isSafeNotificationPath = (path: string): boolean =>
 export const notificationExpiry = (lastActivityAt: Date): Date =>
   new Date(lastActivityAt.getTime() + NOTIFICATION_RETENTION_DAYS * DAY_MS);
 
-/** Cuts the texts to their column sizes (bulk writes skip schema validation). An unsafe path is a programming error: it throws. */
+/** Checks kind and groupKey (the merge path skips schema validation) and cuts the texts to their column sizes (bulk writes skip schema validation). An unsafe path is a programming error: it throws. */
 export function fitDraft(draft: NotificationDraft): NotificationDraft {
+  if (!NOTIFICATION_KINDS.includes(draft.kind))
+    throw new Error(`Unknown notification kind: ${draft.kind}`);
+  if (!draft.groupKey || draft.groupKey.length > NOTIFICATION_GROUP_KEY_MAX)
+    throw new Error(`Invalid notification groupKey: ${draft.groupKey}`);
   if (!isSafeNotificationPath(draft.path))
     throw new Error(`Unsafe notification path: ${draft.path}`);
   return {
@@ -64,7 +77,7 @@ export const contestAnnouncementDraft = ({
   kind: 'contest-announcement',
   title: `Thông báo mới trong "${contestName}"`,
   body: announcementTitle,
-  path: `/contests/${encodeURIComponent(contestKey)}/announcements`,
+  path: `/contests/${pathSegment(contestKey)}/announcements`,
   priority: 'high',
   groupKey: `contest-ann:${contestId}`,
 });
@@ -87,7 +100,7 @@ export const organizationRequestDraft = ({
     ? `Yêu cầu tham gia "${organizationName}" đã được duyệt`
     : `Yêu cầu tham gia "${organizationName}" đã bị từ chối`,
   body: '',
-  path: `/organizations/${encodeURIComponent(slug)}`,
+  path: `/organizations/${pathSegment(slug)}`,
   priority: 'normal',
   groupKey: `org-request:${requestId}`,
 });

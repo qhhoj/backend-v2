@@ -6,7 +6,10 @@ import type Redis from 'ioredis';
 import { newId, NotificationSchema, uuidStr } from '@libs/database';
 import type { Notification } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
-import { NOTIFY_RECIPIENT_LIMIT } from './notification-draft';
+import {
+  NOTIFY_RECIPIENT_LIMIT,
+  notificationExpiry,
+} from './notification-draft';
 import type { NotificationDraft } from './notification-draft';
 import { NOTIFICATION_EVENTS_CHANNEL } from './notification-events';
 import { NotificationsRepository } from './notifications.repository';
@@ -176,5 +179,40 @@ describe('NotificationsService', () => {
       );
     expect(await state(alice)).toEqual({ 'ticket:1': false, 'ticket:2': true });
     expect(await state(bob)).toEqual({ 'ticket:1': true, 'ticket:2': true });
+  });
+
+  it('never moves a row back in time when a late writer holds an older clock', async () => {
+    const user = newId();
+    await service.notify([user], draft('a'), at(30));
+    await service.notify([user], draft('a', { title: 'late' }), at(5));
+    const [row] = await rowsOf(user);
+    expect(row).toMatchObject({ title: 'late', count: 2 });
+    expect(row.lastActivityAt).toEqual(at(30));
+    expect(row.expiresAt).toEqual(notificationExpiry(at(30)));
+  });
+
+  it('opens a fresh unread row when the racing row is read before the retry', async () => {
+    const user = newId();
+    const create = rows.create.bind(rows) as (doc: unknown) => Promise<unknown>;
+    jest.spyOn(rows, 'create').mockImplementationOnce(((
+      doc: Record<string, unknown>,
+    ) =>
+      create({ ...doc, _id: newId() })
+        .then(() => create(doc))
+        .catch(async (error: unknown) => {
+          await rows.updateOne({ user }, { $set: { unread: false } });
+          throw error;
+        })) as never);
+    await service.notify([user], draft('a'), at(1));
+    jest.restoreAllMocks();
+    const stored = await rowsOf(user);
+    expect(stored.map((row) => row.unread).sort()).toEqual([false, true]);
+  });
+
+  it('refuses a groupKey that is too long or a kind that is unknown, writing nothing', async () => {
+    const user = newId();
+    await service.notify([user], draft('x'.repeat(101)));
+    await service.notify([user], draft('a', { kind: 'bogus' as never }));
+    expect(await rowsOf(user)).toHaveLength(0);
   });
 });

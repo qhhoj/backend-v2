@@ -18,6 +18,7 @@ export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
 export const NOTIFICATION_TITLE_MAX = 100;
 export const NOTIFICATION_BODY_MAX = 200;
 export const NOTIFICATION_PATH_MAX = 200;
+export const NOTIFICATION_GROUP_KEY_MAX = 100;
 /** An internal path only: the `(?!/)` lookahead refuses `//host`, and `\`, `:` and spaces are not allowed. */
 export const NOTIFICATION_PATH_PATTERN = /^\/(?!\/)[A-Za-z0-9/_\-.?=&%]*$/;
 
@@ -44,7 +45,8 @@ export class Notification {
   @Prop({ type: String, enum: [...NOTIFICATION_PRIORITIES], default: 'normal' })
   priority!: NotificationPriority;
   /** What merges: `ticket:<id>`, `contest-ann:<contestId>`, `org-request:<id>`. */
-  @Prop({ required: true, maxlength: 100 }) groupKey!: string;
+  @Prop({ required: true, maxlength: NOTIFICATION_GROUP_KEY_MAX })
+  groupKey!: string;
   /** Events merged into this row. */
   @Prop({ default: 1, min: 1 }) count!: number;
   @Prop({ default: true }) unread!: boolean;
@@ -68,7 +70,5 @@ NotificationSchema.index(
   { user: 1, groupKey: 1 },
   { unique: true, partialFilterExpression: { unread: true } },
 );
-// The nightly trim visits users with recent activity.
-NotificationSchema.index({ lastActivityAt: -1 });
 // Retention.
 NotificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
