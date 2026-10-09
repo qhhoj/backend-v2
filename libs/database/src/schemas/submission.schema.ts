@@ -130,6 +130,14 @@ export class Submission {
   @Prop({ type: UUID, default: null }) contest!: string | null;
   /** Judge disconnects survived while in flight; the second one is an internal error. */
   @Prop({ default: 0 }) requeueCount!: number;
+  /** Bumped by every claim and never reset: a judge message names the generation it belongs to, so writes of an earlier run (before a requeue or rejudge) match nothing. */
+  @Prop({ default: 0 }) judgeGeneration!: number;
+  /** Seq of the last judge message stored for the current generation; the next one must be `judgeSeq + 1`. Reset to 0 by the claim. */
+  @Prop({ default: 0 }) judgeSeq!: number;
+  /** The problem data version the judge graded with (`Final.dataVersionUsed`, 0 = unstamped data); null until a judge finished it. */
+  @Prop({ type: Number, default: null }) judgedDataVersion!: number | null;
+  /** `Final{RETRY}` answers since the last rejudge (the judge could not run it: data not visible yet, runtime missing, sandbox failure); the third is IE. */
+  @Prop({ default: 0 }) retryCount!: number;
   /** Up to 10000 rows; loaded only by the detail view and the bridge's grading end. */
   @Prop({ type: [SubmissionCaseSchema], default: [], select: false })
   cases!: SubmissionCase[];

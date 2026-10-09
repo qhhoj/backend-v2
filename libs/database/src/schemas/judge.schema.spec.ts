@@ -26,6 +26,11 @@ describe('Judge schema', () => {
       load: null,
       problems: [],
       runtimes: [],
+      slots: 0,
+      busy: 0,
+      build: '',
+      protocolMinor: 0,
+      features: [],
     });
   });
   it('rejects a duplicate name and names that are not hostname-like', async () => {

@@ -32,6 +32,16 @@ export class Judge {
   @Prop({ type: [String], default: [] }) problems!: string[];
   @Prop({ type: [SchemaFactory.createForClass(JudgeRuntime)], default: [] })
   runtimes!: JudgeRuntime[];
+  /** Assignments the judge runs at once (`Hello.slots`); kept after it goes offline. */
+  @Prop({ default: 0 }) slots!: number;
+  /** Slots in use at its last pong; 0 while offline. */
+  @Prop({ default: 0 }) busy!: number;
+  /** The judge's build string from Hello. */
+  @Prop({ default: '' }) build!: string;
+  /** Protocol minor the judge speaks (`Hello.protocolMinor`). */
+  @Prop({ default: 0 }) protocolMinor!: number;
+  /** Optional features the judge reports (`interactive`, `file_io`, `checker.testlib`, ...). */
+  @Prop({ type: [String], default: [] }) features!: string[];
 }
 export const JudgeSchema = SchemaFactory.createForClass(Judge);
 JudgeSchema.index({ name: 1 }, { unique: true });

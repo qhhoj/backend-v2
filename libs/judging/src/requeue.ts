@@ -7,7 +7,7 @@ export const JUDGEABLE_PENDING = {
   result: { $ne: 'RJ' },
 } as const;
 
-/** Legacy `judge_submission`: back to QU at `priority` with every result cleared. The requeue allowance is restored: a rejudge is a fresh attempt. Shared by the api's rejudges and the worker's final judging, so every requeue path resets the same fields. */
+/** Legacy `judge_submission`: back to QU at `priority` with every result cleared. The requeue and retry allowances are restored and `judgeGeneration` is kept (the next claim bumps it): a rejudge is a fresh attempt. Shared by the api's rejudges and the worker's final judging, so every requeue path resets the same fields. */
 export const requeueUpdate = (priority: number): UpdateQuery<Submission> => ({
   $set: {
     status: 'QU',
@@ -27,5 +27,6 @@ export const requeueUpdate = (priority: number): UpdateQuery<Submission> => ({
     rejudgedDate: new Date(),
     priority,
     requeueCount: 0,
+    retryCount: 0,
   },
 });
