@@ -30,7 +30,7 @@ export class ContestExportController {
     return this.exports.request(auth.principal, key);
   }
 
-  /** Always an attachment with `nosniff`; the file name is the contest key (`[a-z0-9_]`), nothing to escape. */
+  /** Always a `private, no-store` attachment with `nosniff` (the zip holds every contestant's source); the file name is the contest key (`[a-z0-9_]`), nothing to escape. */
   @ApiFileResponse('application/zip')
   @RawResponse()
   @Get(':key/export/download')
@@ -43,7 +43,8 @@ export class ContestExportController {
     reply
       .type('application/zip')
       .header('Content-Disposition', `attachment; filename="${file.filename}"`)
-      .header('X-Content-Type-Options', 'nosniff');
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Cache-Control', 'private, no-store');
     return file.stream;
   }
 }

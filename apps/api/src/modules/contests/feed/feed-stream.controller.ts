@@ -1,9 +1,9 @@
 import { Controller, Get, Param, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public } from '@libs/auth';
-import { ApiEventStream } from '@libs/common';
+import { ApiNdjsonStream } from '@libs/common';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
-import { FeedEventFrame } from './dto/feed-frame.response';
+import { FeedLineResponse } from './dto/feed-frame.response';
 import { FeedStreamService } from './feed-stream.service';
 
 /** Under the events prefix: nginx serves it unbuffered with a long read timeout (decisions.md). */
@@ -11,9 +11,9 @@ import { FeedStreamService } from './feed-stream.service';
 export class FeedStreamController {
   constructor(private readonly streams: FeedStreamService) {}
 
-  /** The feed as a stream: the snapshot, then new events. HTTP Basic like the snapshot URL. */
+  /** The feed as a stream: the snapshot, then new events, one NDJSON line each. HTTP Basic like the snapshot URL. */
   @Public()
-  @ApiEventStream(FeedEventFrame)
+  @ApiNdjsonStream(FeedLineResponse)
   @Get(':key/feed')
   async feed(
     @Param() { key }: ContestKeyParamDto,

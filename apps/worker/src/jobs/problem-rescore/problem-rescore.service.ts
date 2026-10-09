@@ -31,7 +31,8 @@ export class ProblemRescoreService {
     problemId: string,
   ): Promise<{ rescored: number; users: number }> {
     const problem = await this.effectsRepository.findProblem(problemId);
-    if (!problem) return { rescored: 0, users: 0 };
+    // A deleted problem's points no longer count anywhere; the delete's solvers recompute moves its users.
+    if (!problem || problem.deletedAt) return { rescored: 0, users: 0 };
     const userIds = new Set<string>();
     let pending: RescoredRow[] = [];
     let rescored = 0;

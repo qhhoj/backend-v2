@@ -16,7 +16,7 @@ import {
   contestProblem,
   createContest,
 } from './contest-fixtures';
-import { tombstone } from './deleted-problem-fixtures';
+import { softDelete, tombstone } from './deleted-problem-fixtures';
 import {
   authed,
   createProblem,
@@ -220,6 +220,47 @@ describe('problem delete, restore and purge-now', () => {
     ).toBeUndefined();
     expect(await reasons()).toEqual([]);
   });
+
+  it.each([
+    ['update', { name: 'Renamed' }],
+    ['updateRules', { name: 'Renamed', rules: 'New rules' }],
+  ] as const)(
+    'refuses a contest save (%s) that a delete overtook between its problem check and its write, and puts the contest back',
+    async (method, edit) => {
+      const problem = await owned({ isPublic: true });
+      const contest = await createContest(api, { authors: [ids.root] });
+      const contests = api.app.get(ContestsRepository);
+      const write = contests[method].bind(contests) as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      const spy = jest.spyOn(contests, method).mockImplementationOnce((async (
+        ...args: unknown[]
+      ) => {
+        await softDelete(api, problem._id);
+        return write(...args);
+      }) as never);
+      await authed(
+        api.http().patch(`/api/internal/contests/${contest.key}`),
+        sessions.root,
+      )
+        .send({ ...edit, problems: [{ problem: problem._id, points: 1 }] })
+        .expect(400)
+        .expect(errorCode('validation_failed'));
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+      const stored = (await api.contests.findById(contest._id).lean())!;
+      expect([stored.name, stored.rules, stored.problems]).toEqual([
+        contest.name,
+        contest.rules,
+        [],
+      ]);
+      // Revisions only go up: a number never names two rules texts.
+      expect(stored.rulesRevision).toBe(
+        contest.rulesRevision + ('rules' in edit ? 1 : 0),
+      );
+      expect(await contests.isProblemInAnyContest(problem._id)).toBe(false);
+    },
+  );
 
   it("refreshes the suggester's contribution points on delete and restore", async () => {
     const problem = await owned({ isPublic: true, suggester: ids.stranger });

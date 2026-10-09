@@ -50,11 +50,12 @@ describe('contest export', () => {
     participation: ContestParticipation,
     fields: { result: 'AC' | 'WA'; points: number },
     source: string,
+    problem: Problem = sum,
   ) => {
     const submission = await seedContestSubmission(
       worker,
       participation,
-      sum._id,
+      problem._id,
       {
         fields: { language: cpp._id, ...fields },
         points: fields.points,
@@ -139,6 +140,41 @@ describe('contest export', () => {
       rows.find((line) => line.startsWith(right._id))!.endsWith(',false'),
     ).toBe(true);
     expect(rows.join('\n')).not.toContain('dave');
+  });
+
+  it("keeps a deleted problem's submissions in the CSV but leaves their sources out, also after it left the contest", async () => {
+    const gone = await seedProblem(worker, { code: 'gone' });
+    const removed = await seedProblem(worker, { code: 'removed' });
+    contest = await seedContest(worker, {
+      problems: [entry(sum, 0), entry(gone, 1), entry(removed, 2)],
+    });
+    const alice = await joinAs('alice');
+    const live = await submit(
+      alice,
+      { result: 'AC', points: 100 },
+      'int a() {}',
+    );
+    const hidden = [
+      await submit(alice, { result: 'AC', points: 100 }, 'int g() {}', gone),
+      await submit(alice, { result: 'AC', points: 100 }, 'int r() {}', removed),
+    ];
+    // The delete route refuses a problem in a contest, so the usual path is: take it out, then delete it.
+    await worker.contests.updateOne(
+      { _id: contest._id },
+      { $pull: { problems: { problem: removed._id } } },
+    );
+    await worker.problems.updateMany(
+      { _id: { $in: [gone._id, removed._id] } },
+      { $set: { deletedAt: new Date() } },
+    );
+    expect(await service.prepare({ contestId: contest._id })).toBe(2);
+    const files = await readZip(zipPath());
+    expect(Object.keys(files).sort()).toEqual(
+      ['submissions.csv', `sources/sum/${live._id}.cpp`].sort(),
+    );
+    const rows = await csvRows();
+    for (const submission of hidden)
+      expect(rows.some((line) => line.startsWith(submission._id))).toBe(true);
   });
 
   it('counts a windowed participation from its own start in contest_seconds', async () => {

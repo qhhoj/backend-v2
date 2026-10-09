@@ -219,7 +219,7 @@ describe('feed keys and feed authorisation', () => {
     });
   });
 
-  it('locks an IP and contest after five wrong attempts, even for the right key, and lets successes pass freely', async () => {
+  it('locks an IP after five wrong attempts, even for the right key, and lets successes pass freely', async () => {
     const contest = await newContest();
     const { key } = await mint(contest);
     for (let count = 0; count < 10; count += 1)
@@ -285,14 +285,28 @@ describe('feed keys and feed authorisation', () => {
     ).toBeNull();
   });
 
-  it('counts failed attempts on unknown contests in one shared bucket per IP, so fake keys cannot grow the counters', async () => {
+  it('once an IP is locked by fake contest keys, answers every contest the same 429, real, hidden or made up', async () => {
+    const hidden = await createContest(api, {
+      authors: [users.editor._id],
+      isVisible: false,
+    });
+    const { key } = await mint(hidden);
     for (let count = 0; count < 5; count += 1)
       await expect(
         attempt({ key: `fake_${count}` } as Contest, basic('feed', 'qhf_x')),
       ).rejects.toMatchObject({ status: 401 });
-    await expect(
-      attempt({ key: 'fake_5' } as Contest, basic('feed', 'qhf_x')),
-    ).rejects.toMatchObject({ status: 429 });
+    const statusOf = (answer: Promise<unknown>) =>
+      answer.then(
+        () => 200,
+        (error: { status: number }) => error.status,
+      );
+    expect([
+      await statusOf(
+        attempt({ key: 'fake_5' } as Contest, basic('feed', 'qhf_x')),
+      ),
+      await statusOf(attempt(hidden, basic('feed', 'qhf_x'))),
+      await statusOf(attempt(hidden, basic('feed', key))),
+    ]).toEqual([429, 429, 429]);
   });
 
   it('lets only editors mint, revoke, release and read the status', async () => {

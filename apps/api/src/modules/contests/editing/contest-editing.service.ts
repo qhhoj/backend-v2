@@ -26,6 +26,7 @@ import type {
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestsRepository } from '../core/contests.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
@@ -83,6 +84,7 @@ export class ContestEditingService {
     private readonly contests: ContestsRepository,
     private readonly contestsService: ContestsService,
     private readonly editFields: ContestEditFieldsService,
+    private readonly problems: ProblemsRepository,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
     @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
@@ -216,10 +218,15 @@ export class ContestEditingService {
     guard: FilterQuery<Contest> = {},
   ): Promise<void> {
     await this.assertFormatChangeAllowed(contest, fields);
+    // The re-check runs inside the charged work, so a save it undoes is refunded like any failed save.
     const updated = await this.quota.charged(
       newlyChargedOrganization(principal, contest, fields),
       { kind: 'contest', userId: principal.userId, ref: contest.key },
-      () => this.save(contest, fields, guard),
+      async () => {
+        const saved = await this.save(contest, fields, guard);
+        await this.undoIfProblemDeleted(contest, fields);
+        return saved;
+      },
     );
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
@@ -232,6 +239,23 @@ export class ContestEditingService {
       !sameJson(fields.lockedAfter, contest.lockedAfter)
     )
       await this.contests.propagateLock(contest._id, fields.lockedAfter);
+  }
+
+  /** The problems were resolved live before the write, but a delete can land between that check and the write (the delete's own re-check covers the other order): check again and put every saved field back, so the edit is refused as if the delete had come first. A save landing between the write and the revert is overwritten (last write wins, as between two editors). */
+  private async undoIfProblemDeleted(
+    contest: ContestDocument,
+    fields: Partial<Contest>,
+  ): Promise<void> {
+    if (fields.problems === undefined) return;
+    const ids = fields.problems.map((entry) => uuidStr(entry.problem));
+    if ((await this.problems.findByIds(ids)).length === ids.length) return;
+    await this.contests.revert(
+      contest,
+      Object.keys(fields) as (keyof Contest)[],
+    );
+    // A board built while the saved problems were live must not outlive the revert.
+    await purgeRankingCache(this.redis, contest._id);
+    throw invalidField('problems', 'Unknown problem.');
   }
 
   /** Pending final submissions would never be judged once the contest leaves `final_submission`. */

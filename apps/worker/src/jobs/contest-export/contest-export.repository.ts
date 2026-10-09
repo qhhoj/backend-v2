@@ -57,6 +57,7 @@ function toExportRow(
     username: string | undefined;
     language: { name: string; extension: string } | undefined;
   },
+  deletedProblems: ReadonlySet<string>,
 ): ExportRow {
   const start = participationStart(contest, participation);
   return {
@@ -72,6 +73,7 @@ function toExportRow(
     points: row.points,
     isDisqualified: participation.isDisqualified,
     extension: names.language?.extension ?? 'txt',
+    hasSource: !deletedProblems.has(uuidStr(row.problem)),
   };
 }
 
@@ -135,12 +137,15 @@ export class ContestExportRepository {
     const details = await this.submissionDetails(
       contestRows.map((row) => uuidStr(row._id)),
     );
-    const [usernames, languages] = await Promise.all([
+    const [usernames, languages, deletedProblems] = await Promise.all([
       this.usernames([
         ...new Set([...live.values()].map((row) => uuidStr(row.user))),
       ]),
       this.languageRows([
         ...new Set([...details.values()].map((row) => row.language)),
+      ]),
+      this.deletedProblems([
+        ...new Set(contestRows.map((row) => uuidStr(row.problem))),
       ]),
     ]);
     return contestRows
@@ -155,6 +160,7 @@ export class ContestExportRepository {
             username: usernames.get(uuidStr(participation.user)),
             language: languages.get(detail.language),
           },
+          deletedProblems,
         );
       })
       .sort(
@@ -220,6 +226,15 @@ export class ContestExportRepository {
           language: uuidStr(row.language),
         });
     return found;
+  }
+
+  /** Problems of the exported submissions deleted since the contest, including ones taken out of the contest first (the delete requires it). */
+  private async deletedProblems(ids: string[]): Promise<Set<string>> {
+    const rows = await this.problems
+      .find({ _id: { $in: ids }, deletedAt: { $ne: null } }, { _id: 1 })
+      .lean()
+      .exec();
+    return new Set(rows.map((row) => uuidStr(row._id)));
   }
 
   private async usernames(ids: string[]): Promise<Map<string, string>> {

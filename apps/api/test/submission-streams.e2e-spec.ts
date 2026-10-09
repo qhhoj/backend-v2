@@ -16,6 +16,7 @@ import { STREAM_LIMITS } from '../src/modules/events/stream-limits';
 import type { StreamLimits } from '../src/modules/events/stream-limits';
 import { softDelete } from './deleted-problem-fixtures';
 import {
+  authed,
   createProblem,
   createUserWith,
   loginAs,
@@ -36,6 +37,7 @@ const LIMITS: StreamLimits = {
   total: 50,
   feedTotal: 4,
   contestTotal: 4,
+  contestFeedTotal: 4,
   userTotal: 50,
   maxBufferedBytes: 256 * 1024,
   ticketBacklog: 1000,
@@ -105,6 +107,7 @@ describe('submission event streams', () => {
       ['stream_flip', {}],
       ['stream_gone', {}],
       ['stream_dead', {}],
+      ['stream_warm', {}],
     ] as const)
       problems[code] = (
         await createProblem(api, catalog, { code, ...extra })
@@ -209,6 +212,33 @@ describe('submission event streams', () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(feed.messages).toEqual([]);
+  });
+
+  it('public feed: deleting a problem it already trusts drops its submissions at once, restoring brings them back', async () => {
+    const feed = await open(null, EVENTS);
+    await waitUntil(() => streams.openCounts().feed === 1);
+    /** Publishes the submission, then a marker on a live problem; events arrive in order, so the next frame tells. */
+    const delivered = async (submission: Submission) => {
+      const marker = await seed('stream_a');
+      await publish(submission, 'done', 'D');
+      await publish(marker, 'done', 'D');
+      const { submissionId } = (await feed.next('done')).data as {
+        submissionId: string;
+      };
+      if (submissionId === marker._id) return false;
+      await feed.next('done');
+      return submissionId === submission._id;
+    };
+    const lifecycle = (method: 'delete' | 'post', path: string) =>
+      authed(
+        api.http()[method](`/api/internal/problems/stream_warm${path}`),
+        sessions.root,
+      ).send({ confirmCode: 'stream_warm' });
+    expect(await delivered(await seed('stream_warm'))).toBe(true);
+    await lifecycle('delete', '').expect(204);
+    expect(await delivered(await seed('stream_warm'))).toBe(false);
+    await lifecycle('post', '/restore').expect(204);
+    expect(await delivered(await seed('stream_warm'))).toBe(true);
   });
 
   it('a deleted problem: owner and staff watch the status but never the cases, others get 404', async () => {

@@ -26,7 +26,7 @@ export const DEFAULT_FEED_STREAM_OPTIONS: FeedStreamOptions = {
 /** A tick whose build fails for a reason that may pass (a database blip) is retried on the next tick; the stream ends after this many in a row. */
 export const MAX_FAILED_TICKS = 3;
 /** A resolver needs one or two. */
-export const FEED_STREAMS_PER_KEY = 2;
+const FEED_STREAMS_PER_KEY = 2;
 
 const STREAM_HEADERS = {
   'Content-Type': 'application/x-ndjson; charset=utf-8',
@@ -48,7 +48,7 @@ const once = (action: () => void): (() => void) => {
 export class FeedStreamService implements OnModuleDestroy {
   private readonly logger = new Logger(FeedStreamService.name);
   private readonly openByKey = new Map<string, number>();
-  /** Open feed streams of this process, held under the hub's `feedTotal`. */
+  /** Open feed streams of this process, held under `contestFeedTotal` (counted into the shared reserve for submission and ticket streams). */
   private openCount = 0;
   /** Hijacked responses keep the HTTP server from closing: shutdown ends every one. */
   private readonly responses = new Set<ServerResponse>();
@@ -108,7 +108,7 @@ export class FeedStreamService implements OnModuleDestroy {
 
   private reserve(ip: string, keyId: string): () => void {
     const holding = this.openByKey.get(keyId) ?? 0;
-    if (this.openCount >= this.limits.feedTotal)
+    if (this.openCount >= this.limits.contestFeedTotal)
       throw new AppError('rate_limited', 429, 'Too many open feed streams');
     if (holding >= FEED_STREAMS_PER_KEY)
       throw new AppError(

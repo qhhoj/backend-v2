@@ -601,6 +601,7 @@ describe('OpenAPI document', () => {
             return response &&
               !response.content?.['application/json']?.schema &&
               !response.content?.['text/event-stream']?.schema &&
+              !response.content?.['application/x-ndjson']?.schema &&
               !operation['x-raw']
               ? [`${method.toUpperCase()} ${path} ${status}`]
               : [];

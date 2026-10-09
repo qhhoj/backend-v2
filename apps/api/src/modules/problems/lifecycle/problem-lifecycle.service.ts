@@ -22,9 +22,9 @@ import type {
   SolversRecomputeReason,
 } from '@libs/problems';
 import { SettingsService } from '@libs/settings';
-import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import { ContestsRepository } from '../../contests/core/contests.repository';
 import { ProblemAccess } from '../core/problem-access';
+import { ProblemEvents } from '../core/problem.events';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
@@ -59,7 +59,7 @@ export class ProblemLifecycleService {
     private readonly solvers: Queue<ProblemSolversJob>,
     @InjectQueue(PROBLEM_PURGE_QUEUE)
     private readonly purges: Queue<ProblemPurgeJob>,
-    private readonly contributions: ContributionPointsService,
+    private readonly events: ProblemEvents,
   ) {}
 
   async remove(
@@ -100,7 +100,7 @@ export class ProblemLifecycleService {
     );
   }
 
-  /** Delete and restore both move the solvers' points and the suggester's contribution points (a suggested problem counts only while it is live and public). */
+  /** Delete and restore both move the solvers' points, and both change who can see the problem as `publicityChanged` does: its listeners drop the public submission feed's cached eligibility at once, rescore, and move the suggester's contribution points (a suggested problem counts only while it is live and public). */
   private async notifyEffects(
     problem: ProblemDocument,
     reason: SolversRecomputeReason,
@@ -110,8 +110,11 @@ export class ProblemLifecycleService {
       { problemId: problem._id, reason },
       this.logger,
     );
-    if (problem.suggester)
-      await this.contributions.refresh([uuidStr(problem.suggester)]);
+    this.events.emit(
+      'publicityChanged',
+      problem._id,
+      problem.suggester ? uuidStr(problem.suggester) : null,
+    );
   }
 
   async restore(auth: AuthContext, code: string): Promise<void> {

@@ -164,6 +164,25 @@ export class ContestsRepository {
       .exec();
   }
 
+  /** Puts `keys` back to their values in `previous` (a key it lacked is unset): undoes a save that turned out invalid. A raised `rulesRevision` stays raised, so a revision number never names two rules texts. */
+  async revert(
+    previous: ContestDocument,
+    keys: (keyof Contest)[],
+  ): Promise<void> {
+    const stored = previous.toObject() as Partial<Contest>;
+    const restored = keys.filter((key) => stored[key] !== undefined);
+    const missing = keys.filter((key) => stored[key] === undefined);
+    await this.contests
+      .updateOne(
+        { _id: previous._id },
+        {
+          $set: Object.fromEntries(restored.map((key) => [key, stored[key]])),
+          $unset: Object.fromEntries(missing.map((key) => [key, ''])),
+        },
+      )
+      .exec();
+  }
+
   /** Writes `changes` and raises `rulesRevision` by one in the same update, only while the stored rules are still `previousRules`; null when another save changed them first. */
   async updateRules(
     id: string,

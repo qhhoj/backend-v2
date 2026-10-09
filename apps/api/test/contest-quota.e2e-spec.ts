@@ -7,7 +7,14 @@ import { ContestsRepository } from '../src/modules/contests/core/contests.reposi
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { contestUrl, createContest, hoursFromNow } from './contest-fixtures';
 import { createOrganization } from './organization-fixtures';
-import { authed, createUserWith, loginAs } from './problem-fixtures';
+import { softDelete } from './deleted-problem-fixtures';
+import {
+  authed,
+  createProblem,
+  createUserWith,
+  loginAs,
+  seedCatalog,
+} from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
@@ -208,6 +215,37 @@ describe('contest quota', () => {
         ['contest', 20],
         ['refund', -20],
       ]);
+    });
+
+    it('refunds when a problem added by the save was deleted meanwhile and the save is undone', async () => {
+      const organization = await limited(100);
+      const contest = await owned();
+      const problem = await createProblem(api, await seedCatalog(api), {
+        code: `quotagone${counter}`,
+        isPublic: true,
+      });
+      const contests = api.app.get(ContestsRepository);
+      const write = contests.update.bind(contests);
+      const overtaken = jest
+        .spyOn(contests, 'update')
+        .mockImplementationOnce(async (...args) => {
+          await softDelete(api, problem._id);
+          return write(...args);
+        });
+      await patch(contest.key, {
+        isOrganizationPrivate: true,
+        organizations: [organization._id],
+        problems: [{ problem: problem._id, points: 1 }],
+      })
+        .expect(400)
+        .expect(errorCode('validation_failed'));
+      overtaken.mockRestore();
+      const stored = await api.contests.findOne({ key: contest.key }).lean();
+      expect([stored?.isOrganizationPrivate, stored?.problems]).toEqual([
+        false,
+        [],
+      ]);
+      expect(await usedBy(organization._id)).toBe(0);
     });
   });
 });

@@ -12,7 +12,7 @@ One zip with everything a problem consists of, built by the `problem-package` jo
 | `sources/` | custom checker, grader, header and generator files |
 | `material/` | the uploaded material file |
 
-- The cache file is `<PDF_CACHE_ROOT>/packages/<code>.<dataVersion>.<contentHash>.zip`; the hash covers the manifest, every statement text and the two upload URLs, so any edit gives a new key and only the newest key of a problem is kept. A daily sweep drops zips older than 24 hours; a code rename or a purge drops them all.
+- The cache file is `<PDF_CACHE_ROOT>/packages/<code>.<dataVersion>.<contentHash>.zip`; the hash covers the manifest, every statement text and the two upload URLs, so any edit gives a new key and only the newest key of a problem is kept. A cache hit refreshes the zip's mtime, so the daily sweep drops zips not used for 24 hours; a code rename or a purge drops them all.
 - The cache is least-recently-used: a hit refreshes the file time and eviction removes the oldest first.
 - Size cap 512 MiB of content, checked before any file is written and enforced again while streaming (`409 package_too_large`); the whole cache is capped at 8 GiB and one user can request 10 packages an hour (3 per problem).
 - There is no import in this program.

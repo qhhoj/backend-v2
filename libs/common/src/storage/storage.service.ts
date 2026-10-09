@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { rm } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { ENV, type Env } from '../env/env';
-import { writeFileAtomically } from './atomic-write';
+import { assertRealPathInside, writeFileAtomically } from './atomic-write';
 
 export const SAFE_SEGMENT = /^[\w-][\w.-]*$/;
 
@@ -26,8 +26,11 @@ export class StorageService {
     return this.publicUrl(relativePath);
   }
 
+  /** Refuses a path whose directory resolves outside MEDIA_ROOT through a symlink (an rsync'd legacy tree may hold one), so `rm` never reaches a file outside the root; a symlinked file itself is fine, `rm` removes only the link. */
   async delete(relativePath: string): Promise<void> {
-    await rm(this.resolveInside(relativePath), { force: true });
+    const target = this.resolveInside(relativePath);
+    await assertRealPathInside(this.root, dirname(target));
+    await rm(target, { force: true });
   }
 
   /** Relative path of a url this service produced, only if it is exactly `pdf/<name>` (kind `pdf`) or `materials/<problemId>/<name>` (kind `materials`) with safe single segments; else null. */

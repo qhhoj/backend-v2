@@ -26,7 +26,7 @@ export class ContestExportService {
     @Inject(CONTEST_EXPORT_LIMITS) private readonly limits: ContestExportLimits,
   ) {}
 
-  /** `submissions.csv` first, then `sources/<problem code>/<submission id>.<ext>` for every row. The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
+  /** `submissions.csv` first, then `sources/<problem code>/<submission id>.<ext>` for every row whose problem was not deleted since the contest (B4: a deleted problem's sources are for their owners and staff only, and the zip goes to any editor). The previous zip goes first; the new one is written beside it and renamed into place. Returns the entry count. */
   async prepare({ contestId }: ContestExportJob): Promise<number> {
     const root = this.env.contestDataRoot;
     if (!root)
@@ -49,15 +49,16 @@ export class ContestExportService {
     path: string,
     temporaryPath: string,
   ): Promise<number> {
+    const withSource = rows.filter((row) => row.hasSource);
     const names = [
       'submissions.csv',
-      ...rows.map(
+      ...withSource.map(
         (row) =>
           `sources/${row.problem}/${row.submissionId}.${safeSuffix(row.extension)}`,
       ),
     ];
     const source = chunkedSources(
-      rows.map((row) => row.submissionId),
+      withSource.map((row) => row.submissionId),
       this.limits.sourceChunk,
       (ids) => this.repository.sources(ids),
     );

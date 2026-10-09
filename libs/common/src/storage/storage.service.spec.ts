@@ -1,9 +1,12 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,6 +54,27 @@ describe('StorageService', () => {
     await expect(storage.delete('../x')).rejects.toThrow(
       'Path escapes MEDIA_ROOT',
     );
+  });
+  it('refuses to delete through a directory symlink that leaves the root, and keeps the outside file', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));
+    writeFileSync(join(outside, 'data.zip'), 'keep');
+    mkdirSync(join(root, 'materials'), { recursive: true });
+    symlinkSync(outside, join(root, 'materials', 'linked'));
+    await expect(storage.delete('materials/linked/data.zip')).rejects.toThrow(
+      'through a symlink',
+    );
+    expect(readFileSync(join(outside, 'data.zip'), 'utf8')).toBe('keep');
+    rmSync(outside, { recursive: true, force: true });
+  });
+  it('deletes a symlinked file by removing the link, never its target', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));
+    writeFileSync(join(outside, 'shared.pdf'), 'keep');
+    mkdirSync(join(root, 'pdf'), { recursive: true });
+    symlinkSync(join(outside, 'shared.pdf'), join(root, 'pdf', 'link.pdf'));
+    await storage.delete('pdf/link.pdf');
+    expect(existsSync(join(root, 'pdf', 'link.pdf'))).toBe(false);
+    expect(readFileSync(join(outside, 'shared.pdf'), 'utf8')).toBe('keep');
+    rmSync(outside, { recursive: true, force: true });
   });
   it.each([
     ['/media/pdf/a.pdf', 'pdf', 'pdf/a.pdf'],

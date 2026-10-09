@@ -13,6 +13,8 @@ export interface ExportRow {
   isDisqualified: boolean;
   /** For the source's file name. */
   extension: string;
+  /** False for a problem deleted since the contest: its sources are for their owners and staff only, so only the CSV row is exported. */
+  hasSource: boolean;
 }
 
 /** A spreadsheet runs a cell that starts with one of these as a formula: a username may start with them. */

@@ -291,10 +291,10 @@ describe('contest event feed stream', () => {
   it('holds feed streams to the feed cap and to the per-IP cap, and frees the slot on close', async () => {
     const { contest } = await seed();
     const key = await mint(contest);
-    streamLimits.feedTotal = 1;
+    streamLimits.contestFeedTotal = 1;
     const only = await connect(contest, key);
     expect((await connect(contest, key)).status).toBe(429);
-    streamLimits.feedTotal = DEFAULT_STREAM_LIMITS.feedTotal;
+    streamLimits.contestFeedTotal = DEFAULT_STREAM_LIMITS.contestFeedTotal;
     streamLimits.perIp = 1;
     expect((await connect(contest, key)).status).toBe(429);
     only.close();

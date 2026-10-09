@@ -168,6 +168,16 @@ describe('problem rescore', () => {
     expect(await userPointsOf(user._id)).toBe(0);
   });
 
+  it('rescores nothing for a deleted problem (its delete event queues one)', async () => {
+    const user = await seedUser(worker);
+    const problem = await seedProblem(worker, { deletedAt: new Date() });
+    await seedGraded(worker, user._id, problem._id);
+    expect(await rescores.rescore(problem._id)).toEqual({
+      rescored: 0,
+      users: 0,
+    });
+  });
+
   it('streams a 100k-submission problem in chunks of at most 1000 writes', async () => {
     const problem = await seedProblem(worker, { points: 1000, partial: true });
     const userIds = await Promise.all(

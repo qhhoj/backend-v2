@@ -62,18 +62,18 @@ export class FeedAuthService {
     private readonly rateLimit: RateLimitService,
   ) {}
 
-  /** HTTP Basic, user `feed`, password the contest's newest feed key. Wrong attempts spend the IP and contest budget (a right key gives its hit back), then a right key spends the key's own request budget. A contest key that does not exist shares one `unknown` bucket per IP, so fake keys cannot create unbounded counters. */
+  /** HTTP Basic, user `feed`, password the contest's newest feed key. Every attempt spends one per-IP budget before the contest is looked up (a right key gives its hit back), so a locked IP gets the same 429 for every contest key, real, hidden or made up, and the answer never tells whether a contest exists. A right key then spends the key's own request budget. */
   async authorize(
     request: FeedRequest,
     contestKey: string,
     now = new Date(),
   ): Promise<FeedContext> {
-    const contest = await this.contests.findByKey(contestKey);
     const release = await this.rateLimit.reserve(
-      [`feed-fail:${request.ip}:${contest?._id ?? 'unknown'}`],
+      [`feed-fail:${request.ip}`],
       FEED_FAIL_LIMIT,
       FEED_FAIL_WINDOW_SECONDS,
     );
+    const contest = await this.contests.findByKey(contestKey);
     const context = await this.verified(request.authorization, contest, now);
     await release();
     await this.rateLimit.reserve(

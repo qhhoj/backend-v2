@@ -83,10 +83,10 @@ const contentOf = (operation: OperationObject): Record<string, unknown> =>
   (operation.responses['200'] as { content?: Record<string, unknown> })
     ?.content ?? {};
 
-/** Each scan below covers route sites (`GET /x ...`) and schema sites (`schema Name...`, `/components/schemas/Name/...`): never filter them by a route prefix. */
 /** Finite NDJSON bodies (one request, one answer): not event streams, so they live outside `/events/`. */
 const NDJSON_SNAPSHOTS = ['GET /api/internal/contests/{key}/feed'];
 
+/** Each scan below covers route sites (`GET /x ...`) and schema sites (`schema Name...`, `/components/schemas/Name/...`): never filter them by a route prefix. */
 describe('OpenAPI schema quality', () => {
   let document: OpenAPIObject;
   beforeAll(async () => {

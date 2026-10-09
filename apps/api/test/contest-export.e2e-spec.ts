@@ -131,7 +131,7 @@ describe('contest submissions export', () => {
     });
   });
 
-  it('serves the zip as an attachment to editors only, 404 while none exists', async () => {
+  it('serves the zip as an uncached attachment to editors only, 404 while none exists', async () => {
     const missing = await download('editor', ended.key).expect(404);
     expect(issueCodes(missing)).toEqual(['export_not_prepared']);
     writeFileSync(zipFile(), 'zip bytes');
@@ -141,6 +141,7 @@ describe('contest submissions export', () => {
       `attachment; filename="${ended.key}-export.zip"`,
     );
     expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['cache-control']).toBe('private, no-store');
     expect(
       existsSync(contestExportPath(api.contestDataRoot, running._id)),
     ).toBe(false);

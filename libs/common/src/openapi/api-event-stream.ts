@@ -21,3 +21,15 @@ export const ApiEventStream = (...frames: Type[]) =>
       },
     }),
   );
+
+/** Documents a stream of newline-delimited JSON (`application/x-ndjson`): each line is one `line` object; there are no SSE frames or event names. */
+export const ApiNdjsonStream = (line: Type) =>
+  applyDecorators(
+    ApiExtraModels(line),
+    ApiOkResponse({
+      description: 'A stream of JSON objects, one per line.',
+      content: {
+        'application/x-ndjson': { schema: { $ref: getSchemaPath(line) } },
+      },
+    }),
+  );

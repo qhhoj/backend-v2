@@ -43,8 +43,8 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'the post-migration file check verifies the files of every problem row, deleted or not',
   ],
   'apps/worker/src/jobs/contest-export/contest-export.repository.ts': [
-    'S',
-    'the export names every contest problem, including ones deleted since the contest',
+    'F+S',
+    'the export names every contest problem, including ones deleted since the contest (S); the sources of any deleted problem are left out (F)',
   ],
   'apps/worker/src/jobs/contest-data/contest-data.repository.ts': [
     'F',
@@ -95,16 +95,33 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     "a user's data export still lists their submissions with the problem code",
   ],
+  'apps/worker/src/jobs/migration-recompute/migration-recompute.service.ts': [
+    'S',
+    'the one-off post-migration recompute walks every problem row, deleted ones included, by collection name',
+  ],
+  'apps/migrator/src/integrity-check.service.ts': [
+    'S',
+    'the post-migration integrity check resolves references against every problem row, deleted or not',
+  ],
 };
+
+/** Calls that take `'problems'` first but name a field or a feed type, not the collection. */
+const NOT_COLLECTION_CALLS = ['invalidField', 'simple'];
 
 const READ_PATTERNS = [
   /InjectModel\(\s*Problem\.name\s*\)/,
   /getModelToken\(\s*Problem\b/,
-  /from:\s*['"]problems['"]/,
-  /collection\(\s*['"]problems['"]\s*\)/,
+  /\bmodel\(\s*(?:Problem\.name|['"]Problem['"])/,
   /Model<Problem>/,
   /\bProblem\.collection\b/,
+  // The collection by name: a `$lookup`/reference (`from:`, `foreign:`) or any call that takes it first, e.g. `connection.collection('problems')`, `lookup('problems', ...)`, `each('problems', ...)`.
+  /\b(?:from|foreign)\s*:\s*['"]problems['"]/,
+  new RegExp(
+    `\\b(?!(?:${NOT_COLLECTION_CALLS.join('|')})\\b)\\w+(?:<[^>()]*>)?\\(\\s*['"]problems['"]`,
+  ),
 ];
+const readsProblems = (source: string): boolean =>
+  READ_PATTERNS.some((pattern) => pattern.test(source));
 const SKIPPED = [
   /\.spec\.ts$/,
   /\.e2e-spec\.ts$/,
@@ -131,13 +148,33 @@ const readersFound = (): string[] =>
   ['apps', 'libs']
     .flatMap((folder) => sourceFiles(join(ROOT, folder)))
     .filter((file) => {
-      const source = readFileSync(file, 'utf8');
-      return READ_PATTERNS.some((pattern) => pattern.test(source));
+      return readsProblems(readFileSync(file, 'utf8'));
     })
     .map((file) => relative(ROOT, file).split(sep).join('/'))
     .sort();
 
 describe('direct readers of the problems collection', () => {
+  it.each([
+    "connection.collection('problems').find({})",
+    'db.collection("problems")',
+    "connection.collection<Problem>('problems')",
+    "this.each('problems', (id) => id)",
+    "lookup('problems', 'problem', 'target')",
+    "{ $lookup: { from: 'problems', localField: 'problem' } }",
+    "{ field: 'problem', foreign: 'problems' }",
+    '@InjectModel(Problem.name) private readonly problems: Model<Problem>',
+    "connection.model('Problem')",
+  ])('recognises a read written as %s', (source) => {
+    expect(readsProblems(source)).toBe(true);
+  });
+  it.each([
+    "throw invalidField('problems', 'Unknown problem.')",
+    "simple('problems', problem.id, {})",
+    "const KINDS = ['blog', 'problems'] as const",
+  ])('ignores %s, which names no collection', (source) => {
+    expect(readsProblems(source)).toBe(false);
+  });
+
   it('are exactly the files classified in PROBLEM_READERS', () => {
     expect(readersFound()).toEqual(Object.keys(PROBLEM_READERS).sort());
   });

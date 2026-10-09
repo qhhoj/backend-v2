@@ -3348,32 +3348,6 @@
         ],
         "type": "object"
       },
-      "FeedEventFrame": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/FeedLineResponse"
-          },
-          "event": {
-            "enum": [
-              "contest",
-              "groups",
-              "judgement-types",
-              "judgements",
-              "languages",
-              "problems",
-              "state",
-              "submissions",
-              "teams"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "event",
-          "data"
-        ],
-        "type": "object"
-      },
       "FeedKeyMode": {
         "enum": [
           "frozen-until-release",
@@ -16944,7 +16918,7 @@
             }
           }
         },
-        "summary": "Always an attachment with `nosniff`; the file name is the contest key (`[a-z0-9_]`), nothing to escape.",
+        "summary": "Always a `private, no-store` attachment with `nosniff` (the zip holds every contestant's source); the file name is the contest key (`[a-z0-9_]`), nothing to escape.",
         "tags": [
           "ContestExport"
         ],
@@ -18969,17 +18943,13 @@
         "responses": {
           "200": {
             "content": {
-              "text/event-stream": {
+              "application/x-ndjson": {
                 "schema": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/FeedEventFrame"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/FeedLineResponse"
                 }
               }
             },
-            "description": "A stream of frames; `event` names each one."
+            "description": "A stream of JSON objects, one per line."
           },
           "default": {
             "content": {
@@ -19001,7 +18971,7 @@
             }
           }
         },
-        "summary": "The feed as a stream: the snapshot, then new events. HTTP Basic like the snapshot URL.",
+        "summary": "The feed as a stream: the snapshot, then new events, one NDJSON line each. HTTP Basic like the snapshot URL.",
         "tags": [
           "FeedStream"
         ]

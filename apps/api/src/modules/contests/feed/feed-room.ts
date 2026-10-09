@@ -1,18 +1,19 @@
 import { createHash } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
+import { frozenTime } from '@libs/contests';
 import type { FeedEvent } from '@libs/contests';
 import type { FeedContext } from './feed-auth.service';
 import { FeedService, newFeedSession } from './feed.service';
 
 /** A built event with what a stream needs to diff it: its identity and a hash of its content. */
-export interface DigestedEvent {
+interface DigestedEvent {
   event: FeedEvent;
   slot: string;
   digest: string;
 }
 
 /** The slot is the event's identity (a re-judged submission replaces its old content); the digest changes when the content does. */
-export const digestedOf = (event: FeedEvent): DigestedEvent => ({
+const digestedOf = (event: FeedEvent): DigestedEvent => ({
   event,
   slot: `${event.type}:${event.id ?? ''}`,
   digest: createHash('sha1')
@@ -32,14 +33,13 @@ export interface FeedSubscriber {
   keepAlive?: NodeJS.Timeout;
 }
 
-/** What a build depends on besides the contest's rows: the key's state and the freeze config, so an editor's freeze change is never served from a build made just before it. */
+/** What a build depends on besides the contest's rows: the key's state and the freeze time (`frozenTime` follows the format, the freeze minutes and the end), so an editor's freeze change is never served from a build made just before it. */
 const variantOf = ({ contest, feedKey }: FeedContext): string =>
   [
     feedKey.id,
     feedKey.mode,
     feedKey.releasedAt?.getTime() ?? '',
-    contest.frozenLastMinutes,
-    contest.endTime.getTime(),
+    frozenTime(contest)?.getTime() ?? '',
   ].join('|');
 
 interface Build {

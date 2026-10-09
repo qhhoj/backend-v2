@@ -4,9 +4,13 @@ import type { FeedService } from './feed.service';
 
 const NOW = new Date('2026-01-01T12:00:00Z');
 
-const contextOf = (frozenLastMinutes: number, endTime: Date): FeedContext =>
+const contextOf = (
+  frozenLastMinutes: number,
+  endTime: Date,
+  formatName = 'icpc',
+): FeedContext =>
   ({
-    contest: { _id: 'c1', frozenLastMinutes, endTime },
+    contest: { _id: 'c1', frozenLastMinutes, endTime, formatName },
     feedKey: { id: 'k1', mode: 'frozen-until-release', releasedAt: null },
   }) as unknown as FeedContext;
 
@@ -36,6 +40,15 @@ describe('FeedRoom.build', () => {
     await room.build(contextOf(60, end), NOW);
     await room.build(
       contextOf(60, new Date(end.getTime() + 60_000)),
+      new Date(NOW.getTime() + 1_000),
+    );
+    expect(eventsFor).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds again at once when an editor switches the format to one that freezes', async () => {
+    await room.build(contextOf(60, end, 'default'), NOW);
+    await room.build(
+      contextOf(60, end, 'icpc'),
       new Date(NOW.getTime() + 1_000),
     );
     expect(eventsFor).toHaveBeenCalledTimes(2);

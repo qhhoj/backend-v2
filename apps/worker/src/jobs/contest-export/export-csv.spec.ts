@@ -14,6 +14,7 @@ const row = (extra: Partial<ExportRow> = {}): ExportRow => ({
   points: 100,
   isDisqualified: false,
   extension: 'cpp',
+  hasSource: true,
   ...extra,
 });
 

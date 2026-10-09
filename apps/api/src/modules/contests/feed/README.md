@@ -14,7 +14,7 @@ Teams: live, non-disqualified participations only (no virtual, spectating or dis
 
 ## Keys
 
-Per contest, `qhf_` + 32 url-safe characters, shown once, stored as sha256, compared in constant time. Expires after 14 days (1 to 30 at mint). Bound to the editor who minted it: it stops working when that user is deactivated or can no longer edit the contest. Minting a new key revokes the older ones. Every failure is the same 401 with `WWW-Authenticate: Basic realm="feed"`. Five wrong attempts per IP and contest per 10 minutes lock that pair; a key may make 60 requests a minute.
+Per contest, `qhf_` + 32 url-safe characters, shown once, stored as sha256, compared in constant time. Expires after 14 days (1 to 30 at mint). Bound to the editor who minted it: it stops working when that user is deactivated or can no longer edit the contest. Minting a new key revokes the older ones. Every failure is the same 401 with `WWW-Authenticate: Basic realm="feed"`. Five wrong attempts per IP per 10 minutes lock that IP out of every contest's feed with the same 429, whether the contest exists or not, so a locked prober cannot tell a hidden contest key from a made-up one; a key may make 60 requests a minute.
 
 Modes: `frozen-until-release` (default) and `live`. While the contest is frozen and the key is `frozen-until-release` and unreleased, no submission or judgement dated at or after the freeze is published and `state.frozen` is set. "Release to resolver" (only while the contest is frozen, `409 not_frozen` otherwise) or unfreezing the contest lifts the cut; a release counts only for the freeze that was current when it was made, so it cannot open a later freeze. `live` is never cut.
 
@@ -31,6 +31,6 @@ Modes: `frozen-until-release` (default) and `live`. While the contest is frozen 
 | `CE`                                | `CE`           | no              |
 | `IE`, `AB`, `RJ`, or not yet judged | no judgement   |                 |
 
-Streams of one contest share one feed build per tick (each stream only diffs against what it was sent); each stream re-checks its key every 10 s and ends when it stops qualifying; a contest that grows past 20 000 submissions ends its streams; at most two streams per key, counted in the shared SSE caps (`feedTotal`, `perIp`, `total`).
+Streams of one contest share one feed build per tick (each stream only diffs against what it was sent); each stream re-checks its key every 10 s and ends when it stops qualifying; a contest that grows past 20 000 submissions ends its streams; at most two streams per key, capped at `contestFeedTotal` (100) per api process and counted in the shared SSE caps (`perIp`, `total`).
 
 A contest with more than 100 000 submissions answers `409 feed_too_large`; one with more than 20 000 cannot be streamed (`409 feed_too_large_for_stream`, poll the snapshot). A submission whose problem left the contest, whose language is not listed or whose team is not a feed team is not published.
