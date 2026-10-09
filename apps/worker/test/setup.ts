@@ -11,6 +11,8 @@ import { CONTEST_FINAL_JUDGE_QUEUE } from '@libs/contests';
 import { EFFECTS_SWEEP_QUEUE } from '@libs/judging';
 import {
   Contest,
+  ContestAnnouncement,
+  Notification,
   SimilarityPair,
   SimilarityRun,
   ContestParticipation,
@@ -152,6 +154,12 @@ export async function setupWorkerTest({
     blogPosts: ready.get<Model<BlogPost>>(getModelToken(BlogPost.name)),
     comments: ready.get<Model<Comment>>(getModelToken(Comment.name)),
     tickets: ready.get<Model<Ticket>>(getModelToken(Ticket.name)),
+    notifications: ready.get<Model<Notification>>(
+      getModelToken(Notification.name),
+    ),
+    announcements: ready.get<Model<ContestAnnouncement>>(
+      getModelToken(ContestAnnouncement.name),
+    ),
     tagProblems: ready.get<Model<TagProblem>>(getModelToken(TagProblem.name)),
     db: ready.get<Connection>(getConnectionToken()).db!,
     ...roots,

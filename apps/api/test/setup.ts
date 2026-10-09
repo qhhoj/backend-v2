@@ -16,6 +16,7 @@ import {
   GeneralIssue,
   MiscConfig,
   NavigationItem,
+  Notification,
   Ticket,
   UserActivity,
   UserSession,
@@ -208,6 +209,9 @@ export async function setupApiTest({
     ),
     userSessions: readyApp.get<Model<UserSession>>(
       getModelToken(UserSession.name),
+    ),
+    notifications: readyApp.get<Model<Notification>>(
+      getModelToken(Notification.name),
     ),
     userActivities: readyApp.get<Model<UserActivity>>(
       getModelToken(UserActivity.name),
