@@ -120,7 +120,7 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
 
   /**
    * A graded submission on a clamped problem is scored against the clamped points, as `problem-rescore` would; the legacy value was scaled to the old points.
-   * So is a stale legacy score above its problem's points (the points were lowered without a rescore), reported.
+   * A stale legacy score above an unclamped problem's points (lowered without a rescore) is capped at them, counted per problem.
    */
   private pointsOf(row: Row, ctx: MapCtx): number | null {
     const problem = this.problems.get(Number(row.problem_id));
@@ -128,8 +128,9 @@ export class SubmissionsMapper implements Mapper<Row, CaseRow> {
     if (!problem.clamped) {
       if (Number(row.points) <= problem.points) return row.points;
       ctx.report(
-        `judge_submission:${row.id} scored above its problem's points, rescored`,
+        `judge_problem:${row.problem_id} scores above its points capped`,
       );
+      return problem.points;
     }
     return submissionPoints(
       Number(row.case_points ?? 0),

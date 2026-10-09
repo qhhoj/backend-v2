@@ -15,7 +15,7 @@ INSERT INTO judge_submission (id, date, points, status, result, case_points, cas
  (7011,'2023-03-02 10:01:00',50,'D','WA',1,2,4,4005,1),
  (7012,'2023-03-02 10:02:00',9000,'D','AC',2,2,4,4006,1),
  (7013,'2023-03-02 10:03:00',NULL,'G',NULL,0,0,4,4005,2),
- (7014,'2023-03-02 10:04:00',1250,'D','AC',2,2,4,7001,2);
+ (7014,'2023-03-02 10:04:00',1250,'D','AC',0,0,4,7001,2);
 INSERT INTO judge_submissiontestcase (id, `case`, status, time, memory, points, total, batch, feedback, extended_feedback, output, submission_id) VALUES
  (7003,2,'WA',0.2,1024,0,1.5,NULL,'wrong','','',7001),
  (7001,1,'AC',0.1,1024,1,1,NULL,'','',REPEAT('é',300),7001),
