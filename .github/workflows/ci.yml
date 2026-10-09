@@ -67,4 +67,5 @@ jobs:
       - run: npm ci
       - run: npm run openapi:emit
       - name: openapi.json is up to date
-        run: git diff --exit-code -- openapi.json || (echo "openapi.json is stale: run npm run openapi:emit and commit it" && exit 1)
+        run: |
+          git diff --exit-code -- openapi.json || (echo "openapi.json is stale: run npm run openapi:emit and commit it" && exit 1)
