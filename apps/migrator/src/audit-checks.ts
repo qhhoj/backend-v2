@@ -33,9 +33,9 @@ const NOTE = false;
  */
 export const RANGE_CHECKS: readonly [string, string, boolean][] = [
   [
-    'judge_problem.points outside 800..3500',
+    'judge_problem.points outside 800..3500 (clamped by the problems job)',
     count('judge_problem WHERE points < 800 OR points > 3500'),
-    BOUND,
+    NOTE,
   ],
   [
     'judge_problem.time_limit outside 0.01..60',
@@ -94,9 +94,14 @@ export const RANGE_CHECKS: readonly [string, string, boolean][] = [
     BOUND,
   ],
   [
-    'judge_judge.name outside ^[A-Za-z0-9_.-]{1,50}$',
-    notMatching('judge_judge', 'name', '^[A-Za-z0-9_.-]{1,50}$'),
-    BOUND,
+    'judge_judge rows (not migrated: judge-v2 registers judges fresh)',
+    count('judge_judge'),
+    NOTE,
+  ],
+  [
+    'judge_submissiontestcase.status RJ (mapped to IE)',
+    count("judge_submissiontestcase WHERE status = 'RJ'"),
+    NOTE,
   ],
   [
     'judge_tagproblem.code outside ^[a-zA-Z0-9_]{1,32}$',
@@ -308,7 +313,7 @@ export const ENUM_CHECKS: readonly [string, string, readonly string[]][] = [
   ['judge_contest', 'scoreboard_visibility', SCOREBOARD_VISIBILITIES],
   ['judge_submission', 'status', SUBMISSION_STATUSES],
   ['judge_submission', 'result', [...SUBMISSION_RESULTS, '']],
-  ['judge_submissiontestcase', 'status', CASE_STATUSES],
+  ['judge_submissiontestcase', 'status', [...CASE_STATUSES, 'RJ']],
   ['judge_problemdata', 'checker', [...CHECKERS, 'rstripped']],
   ['judge_problemdata', 'grader', GRADERS],
   ['judge_problemtestcase', 'checker', [...CASE_CHECKERS, 'rstripped']],
@@ -352,4 +357,25 @@ export const ORPHAN_CHECKS: readonly [string, string, string][] = [
   ['judge_comment', 'parent_id', 'judge_comment'],
   ['judge_ticket', 'user_id', 'judge_profile'],
   ['judge_ticketmessage', 'ticket_id', 'judge_ticket'],
+];
+
+/** Tables whose out-of-enum values are audit errors: the problem-data job cannot represent them (Task 10), so the Step 6 stop is mechanical. */
+export const ENUM_ERROR_TABLES: readonly string[] = [
+  'judge_problemdata',
+  'judge_problemtestcase',
+];
+
+/** Password-hash algorithm names Django writes before the first `$`; anything else is never printed. */
+export const KNOWN_HASH_ALGORITHMS: readonly string[] = [
+  'pbkdf2_sha256',
+  'pbkdf2_sha1',
+  'argon2',
+  'bcrypt',
+  'bcrypt_sha256',
+  'scrypt',
+  'sha1',
+  'md5',
+  'unsalted_sha1',
+  'unsalted_md5',
+  'crypt',
 ];

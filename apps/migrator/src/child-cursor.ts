@@ -36,6 +36,13 @@ export class ChildCursor<Child extends object> {
     return count;
   }
 
+  /** Ends the underlying stream early (a failed job), which releases its pooled connection. */
+  async close(): Promise<void> {
+    this.finished = true;
+    this.pending = null;
+    await this.iterator.return?.();
+  }
+
   private keyOf(child: Child): number {
     return Number(child[this.key]);
   }

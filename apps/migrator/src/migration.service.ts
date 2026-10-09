@@ -7,7 +7,7 @@ import { ChildCursor } from './child-cursor';
 import { IdMapRepository } from './id-map.repository';
 import { LegacySourceService } from './legacy-source.service';
 import { createMapCtx } from './map-ctx';
-import { batched, MappedDocument, Mapper, MAPPERS } from './mapper';
+import { batched, MapCtx, MappedDocument, Mapper, MAPPERS } from './mapper';
 import { MigrationReport } from './migration-report';
 import { schemaErrors } from './schema-check';
 import { skippedLines } from './skipped-tables';
@@ -170,6 +170,22 @@ export class MigrationService {
           mapper.children.key,
         )
       : null;
+    try {
+      yield* this.mappedBatches(mapper, ctx, report, children);
+      const leftover = await children?.drain();
+      if (leftover)
+        report.add(`${leftover} child row(s) after the last parent`);
+    } finally {
+      await children?.close();
+    }
+  }
+
+  private async *mappedBatches(
+    mapper: Mapper,
+    ctx: MapCtx,
+    report: MigrationReport,
+    children: ChildCursor<Document> | null,
+  ): AsyncGenerator<MappedDocument[]> {
     for await (const rows of batched(
       this.source.stream<{ id: number }>(mapper.sql),
       this.batchSize,
@@ -183,10 +199,8 @@ export class MigrationService {
         })
         .filter(isDocument);
       for (const key of grouped?.keys() ?? [])
-        report.add(`child rows of missing parent ${key}`);
+        report.add(`${mapper.name}: child rows of missing parent ${key}`);
     }
-    const leftover = await children?.drain();
-    if (leftover) report.add(`${leftover} child row(s) after the last parent`);
   }
 
   private select(jobs: string[] = []): Mapper[] {

@@ -102,10 +102,63 @@ describe('migrator framework extensions', () => {
     expect(
       reports['test-tag-groups'].some((line) => line.includes('dup key')),
     ).toBe(false);
+    expect(
+      reports['test-tag-groups'].some((line) =>
+        line.split(/[\s"':]+/).includes('A'),
+      ),
+    ).toBe(false);
   });
 
   it('counts the refused row as the only verify failure; skipped rows count nothing', async () => {
     // 505: one mismatch (mapped, absent) plus the count line (5 mapped rows, 4 documents).
     expect(await migration.verify()).toBe(2);
+  });
+
+  describe('failure paths', () => {
+    const rowsOf = (mapper: Mapper<Group, Tag>) =>
+      new MigrationService(
+        [mapper],
+        harness.testingModule.get<Connection>(getConnectionToken()),
+        harness.testingModule.get(LegacySourceService),
+        harness.testingModule.get(IdMapRepository),
+      );
+
+    it('verify counts a mapped document the v2 schema refuses and a stray key', async () => {
+      const invalid: Mapper<Group, Tag> = {
+        ...groupsWithTags,
+        name: 'test-invalid-groups',
+        collection: 'groups',
+        sql: 'SELECT id, code, name FROM judge_taggroup WHERE id IN (503, 504) ORDER BY id',
+        children: undefined,
+        map: (row, ctx) =>
+          row.id === 503
+            ? { _id: ctx.ref('judge_taggroup', row.id)!, permissions: [] }
+            : {
+                _id: ctx.ref('judge_taggroup', row.id)!,
+                name: 'ok',
+                permissions: [],
+                typo: 1,
+              },
+      };
+      const job = rowsOf(invalid);
+      await job.backfill();
+      // 503: name required; 504: field not in the model.
+      expect(await job.verify()).toBe(2);
+    });
+
+    it('releases the children stream when a job fails mid-run, so repeated failures never exhaust the pool', async () => {
+      const failing: Mapper<Group, Tag> = {
+        ...groupsWithTags,
+        name: 'test-failing-groups',
+        map: (row, ctx, tags) => {
+          if (row.id === 504) throw new Error('boom');
+          return groupsWithTags.map(row, ctx, tags);
+        },
+      };
+      const job = rowsOf(failing);
+      job.batchSize = 2;
+      for (let attempt = 0; attempt < 6; attempt++)
+        await expect(job.verify()).rejects.toThrow('boom');
+    }, 30000);
   });
 });

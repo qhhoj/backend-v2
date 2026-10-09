@@ -1,5 +1,8 @@
 /** Legacy tables not migrated by decision (plan coverage table, decisions.md); `verify` lists them so a missing collection is never mistaken for a lost one. */
 export const SKIPPED_TABLES: readonly { table: string; reason: string }[] = [
+  { table: 'judge_judge', reason: 'judge-v2 registers judges fresh' },
+  { table: 'judge_judge_problems', reason: 'judge-v2 registers judges fresh' },
+  { table: 'judge_judge_runtimes', reason: 'judge-v2 registers judges fresh' },
   { table: 'judge_badge', reason: 'badges dropped' },
   { table: 'judge_profile_badges', reason: 'badges dropped' },
   {

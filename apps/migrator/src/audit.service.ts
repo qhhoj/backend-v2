@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { ENUM_CHECKS, ORPHAN_CHECKS, RANGE_CHECKS } from './audit-checks';
+import {
+  ENUM_CHECKS,
+  ENUM_ERROR_TABLES,
+  KNOWN_HASH_ALGORITHMS,
+  ORPHAN_CHECKS,
+  RANGE_CHECKS,
+} from './audit-checks';
 import { LegacySourceService } from './legacy-source.service';
 
 const JSON_COLUMNS = [
@@ -83,7 +89,7 @@ export class AuditService {
   private async checkCaseDuplicates({ errors, warnings }: AuditReport) {
     for (const [tableName, columnName, unique] of CASE_INSENSITIVE_COLUMNS) {
       const groups = await this.source.query<{ ids: string }>(
-        `SELECT GROUP_CONCAT(id ORDER BY id SEPARATOR ' ') ids FROM \`${tableName}\` WHERE \`${columnName}\` <> '' GROUP BY LOWER(\`${columnName}\`) HAVING COUNT(DISTINCT BINARY \`${columnName}\`) > 1 ORDER BY MIN(id)`,
+        `SELECT GROUP_CONCAT(id ORDER BY id SEPARATOR ' ') ids FROM \`${tableName}\` WHERE \`${columnName}\` <> '' GROUP BY LOWER(\`${columnName}\`) COLLATE utf8mb4_bin HAVING COUNT(DISTINCT BINARY \`${columnName}\`) > 1 ORDER BY MIN(id)`,
       );
       if (!groups.length) continue;
       const named = groups.map(({ ids }) =>
@@ -98,18 +104,24 @@ export class AuditService {
     }
   }
 
+  /** Prints only an algorithm name from the known list; a field without `$`, or with an unknown prefix, may be a raw hash or plaintext and is counted as "unrecognised format". */
   private async checkPasswordHashes({ warnings }: AuditReport) {
     const hashes = await this.source.query<{
       algorithm: string;
       total: number;
     }>(
-      "SELECT SUBSTRING_INDEX(password, '$', 1) algorithm, COUNT(*) total FROM auth_user GROUP BY algorithm",
+      "SELECT IF(LOCATE('$', password) > 0, SUBSTRING_INDEX(password, '$', 1), '') algorithm, COUNT(*) total FROM auth_user WHERE password NOT LIKE '!%' GROUP BY algorithm",
     );
-    for (const { algorithm, total } of hashes)
-      if (!SUPPORTED_HASHES.includes(algorithm) && !algorithm.startsWith('!'))
-        warnings.push(
-          `${total} user(s) with ${algorithm} passwords must reset`,
-        );
+    const mustReset = new Map<string, number>();
+    for (const { algorithm, total } of hashes) {
+      if (SUPPORTED_HASHES.includes(algorithm)) continue;
+      const label = KNOWN_HASH_ALGORITHMS.includes(algorithm)
+        ? algorithm
+        : 'unrecognised format';
+      mustReset.set(label, (mustReset.get(label) ?? 0) + Number(total));
+    }
+    for (const [label, total] of mustReset)
+      warnings.push(`${total} user(s) with ${label} passwords must reset`);
   }
 
   private async checkWebauthn({ warnings }: AuditReport) {
@@ -144,14 +156,14 @@ export class AuditService {
       );
   }
 
-  private async checkEnums({ warnings }: AuditReport) {
+  private async checkEnums({ errors, warnings }: AuditReport) {
     for (const [table, column, accepted] of ENUM_CHECKS) {
       const values = await this.source.query<{ value: string }>(
         `SELECT DISTINCT \`${column}\` AS value FROM \`${table}\` WHERE \`${column}\` IS NOT NULL`,
       );
       for (const { value } of values)
         if (!accepted.includes(value))
-          warnings.push(
+          (ENUM_ERROR_TABLES.includes(table) ? errors : warnings).push(
             `${table}.${column}: value "${value}" not in the v2 enum`,
           );
     }

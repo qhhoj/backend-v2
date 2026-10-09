@@ -9,6 +9,9 @@ describe('SKIPPED_TABLES', () => {
         'judge_badge',
         'judge_profile_badges',
         'judge_rating',
+        'judge_judge',
+        'judge_judge_problems',
+        'judge_judge_runtimes',
       ]),
     ));
   it('names each table once, with a reason', () => {

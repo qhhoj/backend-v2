@@ -56,9 +56,16 @@ export class IdMapRepository {
       { unique: true },
     );
     const wanted = new Set(tables);
+    // An alias reuses its target's uuids, so the target is always built.
+    for (const [alias, { target }] of Object.entries(ALIASES))
+      if (wanted.has(alias)) wanted.add(target);
     const existing = await this.source.query<{ tableName: string }>(
       "SELECT table_name AS tableName FROM information_schema.columns WHERE table_schema = DATABASE() AND column_name = 'id' AND column_key = 'PRI'",
     );
+    const found = new Set(existing.map(({ tableName }) => tableName));
+    for (const missing of wanted)
+      if (!found.has(missing))
+        this.logger.warn(`${missing}: no such table with an id primary key`);
     for (const { tableName } of existing)
       if (wanted.has(tableName) && !(tableName in ALIASES))
         await this.syncTable(tableName);
