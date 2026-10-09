@@ -27,7 +27,11 @@ describe('automatic publish with a deleted problem in the contest', () => {
 
   it('counts the deleted problem as skipped, leaves it alone and publishes the others', async () => {
     const editor = await seedUser(worker, {
-      permissions: ['judge.edit_own_problem', 'judge.change_public_visibility'],
+      permissions: [
+        'judge.edit_own_problem',
+        'judge.change_public_visibility',
+        'judge.edit_own_contest',
+      ],
     });
     const live = await seedProblem(worker, {
       isPublic: false,
@@ -43,6 +47,7 @@ describe('automatic publish with a deleted problem in the contest', () => {
       endTime: hours(-1),
       publishAfterEnd: true,
       publishAfterEndBy: editor._id,
+      authors: [editor._id],
       problems: [live, gone].map((problem, order) => ({
         problem: problem._id,
         points: 100,
