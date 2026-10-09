@@ -1,7 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { hashPassword } from '@libs/auth';
-import { CI } from '@libs/database';
 import {
   EMPTY_TEST_CASE,
   emptyProblemData,
@@ -20,7 +18,10 @@ import {
 } from '@libs/database';
 import { compileInitYaml } from '@libs/problems';
 import { SETTINGS, sealSetting } from '@libs/settings';
-import type { Connection, FilterQuery, Model } from 'mongoose';
+import type { Connection } from 'mongoose';
+import { MAX_FILES, seedContests } from './seed-content';
+import { ensure } from './seed-ensure';
+import { writeIfChanged, zipBytes } from './seed-files';
 import { seedJudge } from './seed-judge';
 
 export interface SeedOptions {
@@ -35,7 +36,8 @@ export interface SeedOptions {
 export interface SeedSummary {
   admin: string;
   user: string;
-  problem: string;
+  problems: string[];
+  contests: string[];
   language: string;
   judge: string;
 }
@@ -50,22 +52,6 @@ export function assertSeedAllowed(nodeEnv: string | undefined): void {
       `seed:e2e refuses to run unless NODE_ENV is test or development (got "${nodeEnv ?? ''}")`,
     );
 }
-
-/** The existing row, or a new one made from `fields`; an existing row is never touched. */
-async function ensure<Row extends { _id: string }>(
-  model: Model<Row>,
-  filter: FilterQuery<Row>,
-  fields: Partial<Row>,
-  { isCaseInsensitive = false }: { isCaseInsensitive?: boolean } = {},
-): Promise<Row> {
-  const query = model.findOne(filter);
-  const existing = await (
-    isCaseInsensitive ? query.collation(CI) : query
-  ).exec();
-  return existing ?? (await model.create(fields));
-}
-
-const SAMPLE_PROBLEM_CODE = 'e2e_sum';
 
 async function seedUsers(
   connection: Connection,
@@ -148,39 +134,74 @@ async function seedMailSetting(
   );
 }
 
-/** A plus B with one test case, its row and its judge files under `problemDataRoot`. */
-async function seedSampleProblem(
+export interface ProblemSpec {
+  code: string;
+  name: string;
+  description: string;
+  /** Test files by name; case i uses `<i>.in` / `<i>.out`. */
+  files: Record<string, string>;
+  /** Set when the files are packed into this zip in the problem directory instead of written loose. */
+  archive?: string;
+}
+
+const SUM_PROBLEM: ProblemSpec = {
+  code: 'e2e_sum',
+  name: 'A plus B',
+  description: 'Read two integers, print their sum.',
+  files: { '1.in': '1 2\n', '1.out': '3\n' },
+};
+
+const MAX_PROBLEM: ProblemSpec = {
+  code: 'e2e_max',
+  name: 'Max of two',
+  description: 'Print the larger of two integers.',
+  files: MAX_FILES,
+  archive: 'tests.zip',
+};
+
+/** One test case per `N.in` file; 100 points in total, the last case takes the remainder. */
+function casesOf(files: Record<string, string>) {
+  const inputs = Object.keys(files)
+    .filter((name) => name.endsWith('.in'))
+    .sort();
+  const each = Math.floor(100 / inputs.length);
+  return inputs.map((input, index) => ({
+    ...EMPTY_TEST_CASE,
+    type: 'C' as const,
+    input,
+    output: input.replace(/\.in$/, '.out'),
+    points: index === inputs.length - 1 ? 100 - each * index : each,
+  }));
+}
+
+/** The problem row and its judge files under `problemDataRoot`; an existing row is kept. */
+async function seedProblem(
   connection: Connection,
   {
+    spec,
     catalog,
     authorId,
     problemDataRoot,
   }: {
+    spec: ProblemSpec;
     catalog: Awaited<ReturnType<typeof seedCatalog>>;
     authorId: string;
     problemDataRoot: string;
   },
-): Promise<void> {
+): Promise<string> {
   const sample = {
     ...emptyProblemData(),
-    cases: [
-      {
-        ...EMPTY_TEST_CASE,
-        type: 'C' as const,
-        input: '1.in',
-        output: '1.out',
-        points: 100,
-      },
-    ],
+    cases: casesOf(spec.files),
+    archive: spec.archive ?? null,
   };
-  const compiled = compileInitYaml(sample, new Set(['1.in', '1.out']));
-  const problemData = { ...sample, cases: compiled.cases };
-  await ensure(
+  const compiled = compileInitYaml(sample, new Set(Object.keys(spec.files)));
+  const html = `<p>${spec.description}</p>`;
+  const problem = await ensure(
     connection.model<Problem>(Problem.name, ProblemSchema),
-    { code: SAMPLE_PROBLEM_CODE },
+    { code: spec.code },
     {
-      code: SAMPLE_PROBLEM_CODE,
-      name: 'A plus B',
+      code: spec.code,
+      name: spec.name,
       timeLimit: 1,
       memoryLimit: 262144,
       points: 1000,
@@ -190,24 +211,39 @@ async function seedSampleProblem(
       groupId: catalog.group._id,
       authors: [authorId],
       allowedLanguages: [catalog.language._id],
-      description: 'Read two integers, print their sum.',
-      descriptionHtml: '<p>Read two integers, print their sum.</p>',
+      description: spec.description,
+      descriptionHtml: html,
       translations: [
         {
           language: 'en',
-          name: 'A plus B',
-          description: 'Read two integers, print their sum.',
-          descriptionHtml: '<p>Read two integers, print their sum.</p>',
+          name: spec.name,
+          description: spec.description,
+          descriptionHtml: html,
         },
       ],
-      data: problemData,
+      data: { ...sample, cases: compiled.cases },
     },
   );
-  const directory = join(problemDataRoot, SAMPLE_PROBLEM_CODE);
-  await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, '1.in'), '1 2\n');
-  await writeFile(join(directory, '1.out'), '3\n');
-  await writeFile(join(directory, 'init.yml'), compiled.yaml ?? '');
+  await writeProblemFiles(
+    join(problemDataRoot, spec.code),
+    spec,
+    compiled.yaml,
+  );
+  return problem._id;
+}
+
+async function writeProblemFiles(
+  directory: string,
+  { files, archive }: ProblemSpec,
+  yaml: string | null,
+): Promise<void> {
+  await writeIfChanged(join(directory, 'init.yml'), yaml ?? '');
+  if (archive) {
+    await writeIfChanged(join(directory, archive), await zipBytes(files));
+    return;
+  }
+  for (const [name, content] of Object.entries(files))
+    await writeIfChanged(join(directory, name), content);
 }
 
 export async function seedE2e(
@@ -218,15 +254,39 @@ export async function seedE2e(
   const catalog = await seedCatalog(connection);
   await seedMailSetting(connection, options.encryptionKey);
   await seedJudge(connection, options);
-  await seedSampleProblem(connection, {
+  const common = {
     catalog,
     authorId: admin._id,
     problemDataRoot: options.problemDataRoot,
+  };
+  const sumId = await seedProblem(connection, { spec: SUM_PROBLEM, ...common });
+  const maxId = await seedProblem(connection, { spec: MAX_PROBLEM, ...common });
+  const contests = await seedContests(connection, {
+    authorId: admin._id,
+    specs: [
+      {
+        key: 'e2e_live',
+        name: 'E2E Live Round',
+        startOffsetDays: -1,
+        endOffsetDays: 30,
+        formatName: 'icpc',
+        problemIds: [sumId, maxId],
+      },
+      {
+        key: 'e2e_past',
+        name: 'E2E Past Round',
+        startOffsetDays: -3,
+        endOffsetDays: -2,
+        formatName: 'default',
+        problemIds: [sumId],
+      },
+    ],
   });
   return {
     admin: admin.username,
     user: user.username,
-    problem: SAMPLE_PROBLEM_CODE,
+    problems: [SUM_PROBLEM.code, MAX_PROBLEM.code],
+    contests,
     language: catalog.language.key,
     judge: options.judgeName,
   };

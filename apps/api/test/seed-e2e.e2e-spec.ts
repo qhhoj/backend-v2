@@ -66,7 +66,8 @@ describe('seed:e2e', () => {
     expect(first).toEqual({
       admin: 'e2e_admin',
       user: 'e2e_user',
-      problem: 'e2e_sum',
+      problems: ['e2e_sum', 'e2e_max'],
+      contests: ['e2e_live', 'e2e_past'],
       language: 'PY3',
       judge: 'seed-judge',
     });

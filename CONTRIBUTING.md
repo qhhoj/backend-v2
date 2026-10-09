@@ -231,7 +231,7 @@ user-activity/
 
 ## Seed script
 
-- `npm run seed:e2e` (`apps/api/src/seed/`) upserts by natural key and never touches an existing row: users `e2e_admin` (superuser) and `e2e_user`, language `PY3`, a problem type and group, public problem `e2e_sum` with one case (files in `PROBLEM_DATA_ROOT/e2e_sum/`), and `mail.smtpUrl` = `smtp://localhost:1025` (Mailpit) when it has no row
+- `npm run seed:e2e` (`apps/api/src/seed/`) upserts by natural key and never touches an existing row: users `e2e_admin` (superuser) and `e2e_user`, language `PY3`, a problem type and group, public problems `e2e_sum` (one case, files in `PROBLEM_DATA_ROOT/e2e_sum/`) and `e2e_max` (two cases packed in `tests.zip`), contests `e2e_live` (running, ICPC) and `e2e_past` (ended), judge `e2e-judge` (key `e2e-judge-key` unless `FAKE_JUDGE_KEY`; used by `apps/bridge/test/fake-judge-cli.ts`), and `mail.smtpUrl` = `smtp://localhost:1025` (Mailpit) when it has no row
 - Needs `MONGO_URL`, `PROBLEM_DATA_ROOT`, `ENCRYPTION_KEY`; passwords from `E2E_ADMIN_PASSWORD` / `E2E_USER_PASSWORD` (defaults in `main.ts`); refuses unless `NODE_ENV` is `test` or `development` (it writes known passwords); prints a JSON summary
 
 ## Problems
