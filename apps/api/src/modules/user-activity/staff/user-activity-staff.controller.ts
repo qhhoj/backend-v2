@@ -13,7 +13,7 @@ import { Readable } from 'node:stream';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiHasMoreResponse, RawResponse } from '@libs/common';
-import type { Paginated } from '@libs/common';
+import type { HasMorePageMetaResponse, Paginated } from '@libs/common';
 import { UsernameParamDto } from '../../users/core/dto/username-params.dto';
 import { ActivityExportService } from './activity-export.service';
 import { ActivityLiveService } from './activity-live.service';
@@ -45,7 +45,7 @@ export class UserActivityStaffController {
   @Get('logs')
   list(
     @Query() query: ActivityLogQueryDto,
-  ): Promise<Paginated<ActivityLogResponse>> {
+  ): Promise<Paginated<ActivityLogResponse, HasMorePageMetaResponse>> {
     return this.logs.list(query);
   }
 
@@ -74,7 +74,7 @@ export class UserActivityStaffController {
   userLogs(
     @Param() { username }: UsernameParamDto,
     @Query() query: ActivityLogQueryDto,
-  ): Promise<Paginated<ActivityLogResponse>> {
+  ): Promise<Paginated<ActivityLogResponse, HasMorePageMetaResponse>> {
     return this.logs.listForUser(username, query);
   }
 

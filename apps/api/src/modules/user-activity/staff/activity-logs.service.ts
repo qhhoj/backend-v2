@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import { AppError, Paginated, unique } from '@libs/common';
+import type { HasMorePageMetaResponse } from '@libs/common';
 import { ACTIVITY_PAGE_SIZE } from '@libs/community';
 import { activityFilter } from './activity-filter';
 import type { ActivityScope } from './activity-filter';
@@ -28,7 +29,7 @@ export class ActivityLogsService {
 
   async list(
     query: ActivityLogQueryDto,
-  ): Promise<Paginated<ActivityLogResponse>> {
+  ): Promise<Paginated<ActivityLogResponse, HasMorePageMetaResponse>> {
     const scope = await this.scopeOf(query.user);
     const meta = (hasMore: boolean) => ({
       page: query.page,
@@ -46,7 +47,7 @@ export class ActivityLogsService {
   async listForUser(
     username: string,
     query: ActivityLogQueryDto,
-  ): Promise<Paginated<ActivityLogResponse>> {
+  ): Promise<Paginated<ActivityLogResponse, HasMorePageMetaResponse>> {
     const id = await this.userId(username);
     const { rows, hasMore } = await this.logs.page(
       activityFilter({ days: query.days, scope: { kind: 'users', ids: [id] } }),

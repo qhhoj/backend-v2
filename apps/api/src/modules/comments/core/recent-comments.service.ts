@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
+import type { CursorPageMetaResponse } from '@libs/common';
 import { officialContestLocks, pageOf, pageRef } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment } from '@libs/database';
@@ -97,7 +98,7 @@ export class RecentCommentsService {
     principal: Principal | null,
     username: string,
     before?: string,
-  ): Promise<Paginated<RecentCommentResponse>> {
+  ): Promise<Paginated<RecentCommentResponse, CursorPageMetaResponse>> {
     if (!principal) throw new AppError('unauthorized', 401, 'Sign in first');
     if (!hasPermission(principal, 'judge.view_all_user_comment'))
       throw new AppError('forbidden', 403, "You cannot list a user's comments");

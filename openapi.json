@@ -2427,6 +2427,22 @@
         ],
         "type": "object"
       },
+      "CursorPageMetaResponse": {
+        "properties": {
+          "nextBefore": {
+            "nullable": true,
+            "type": "string"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "pageSize",
+          "nextBefore"
+        ],
+        "type": "object"
+      },
       "DecideOrganizationRequestDto": {
         "properties": {
           "state": {
@@ -15476,7 +15492,12 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "application/atom+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/rss+xml": {
                 "schema": {
                   "type": "string"
                 }
@@ -18495,7 +18516,7 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "text/yaml": {
                 "schema": {
                   "type": "string"
                 }
@@ -21505,7 +21526,7 @@
                       "type": "array"
                     },
                     "meta": {
-                      "$ref": "#/components/schemas/PageMetaResponse"
+                      "$ref": "#/components/schemas/CursorPageMetaResponse"
                     }
                   },
                   "required": [
@@ -21592,7 +21613,7 @@
                       "type": "array"
                     },
                     "meta": {
-                      "$ref": "#/components/schemas/PageMetaResponse"
+                      "$ref": "#/components/schemas/HasMorePageMetaResponse"
                     }
                   },
                   "required": [

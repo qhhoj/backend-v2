@@ -1,8 +1,16 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { ApiPaginatedResponse } from '@libs/common';
-import type { Paginated } from '@libs/common';
+import {
+  ApiCursorResponse,
+  ApiHasMoreResponse,
+  ApiPaginatedResponse,
+} from '@libs/common';
+import type {
+  CursorPageMetaResponse,
+  HasMorePageMetaResponse,
+  Paginated,
+} from '@libs/common';
 import { RecentCommentResponse } from '../../comments/core/dto/recent-comment.response';
 import { RecentCommentsService } from '../../comments/core/recent-comments.service';
 import { BlogPostsService } from '../../blog/core/blog-posts.service';
@@ -53,12 +61,12 @@ export class UserPagesController {
     return this.pages.solved(username);
   }
 
-  @ApiPaginatedResponse(PpEntryResponse)
+  @ApiHasMoreResponse(PpEntryResponse)
   @Get('pp-breakdown')
   ppBreakdown(
     @Param() { username }: UsernameParamDto,
     @Query() query: PpBreakdownQueryDto,
-  ): Promise<Paginated<PpEntryResponse>> {
+  ): Promise<Paginated<PpEntryResponse, HasMorePageMetaResponse>> {
     return this.pages.ppBreakdown(username, query);
   }
 
@@ -81,13 +89,13 @@ export class UserPagesController {
     return this.blogPosts.userPosts(optionalPrincipal(auth), username, page);
   }
 
-  @ApiPaginatedResponse(RecentCommentResponse)
+  @ApiCursorResponse(RecentCommentResponse)
   @Get('comments')
   comments(
     @CurrentAuth() auth: AuthContext | undefined,
     @Param() { username }: UsernameParamDto,
     @Query() { before }: UserCommentsQueryDto,
-  ): Promise<Paginated<RecentCommentResponse>> {
+  ): Promise<Paginated<RecentCommentResponse, CursorPageMetaResponse>> {
     return this.recentComments.userComments(
       optionalPrincipal(auth),
       username,

@@ -8,6 +8,7 @@ import {
   Paginated,
   REDIS,
 } from '@libs/common';
+import type { HasMorePageMetaResponse } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { PP_ENTRIES, PP_STEP } from '@libs/judging';
 import type Redis from 'ioredis';
@@ -177,7 +178,7 @@ export class UserPagesService {
   async ppBreakdown(
     username: string,
     { page, pageSize }: PpBreakdownQueryDto,
-  ): Promise<Paginated<PpEntryResponse>> {
+  ): Promise<Paginated<PpEntryResponse, HasMorePageMetaResponse>> {
     const user = await this.userOf(username);
     const entries = await this.ppEntries(user._id);
     const start = (page - 1) * pageSize;

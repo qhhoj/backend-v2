@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { Public } from '@libs/auth';
-import { RawResponse } from '@libs/common';
+import { ApiTextResponse, RawResponse } from '@libs/common';
 import { FeedParamsDto } from './dto/feed-params.dto';
 import { FeedsService } from './feeds.service';
 
@@ -12,6 +12,7 @@ export class FeedsController {
   constructor(private readonly feeds: FeedsService) {}
 
   @RawResponse()
+  @ApiTextResponse('application/rss+xml', 'application/atom+xml')
   @Get(':kind/:format')
   async feed(
     @Param() { kind, format }: FeedParamsDto,

@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getMetadataStorage } from 'class-validator';
-import type { OpenAPIObject, OperationObject } from '@nestjs/swagger';
+import type {
+  OpenAPIObject,
+  OperationObject,
+  ParameterObject,
+  SchemaObject,
+} from '@nestjs/swagger';
 import {
   CONTEST_FORMAT_NAMES,
   LABEL_STYLES,
@@ -23,6 +28,61 @@ type Metadatas = Map<{ name: string }, Array<{ propertyName: string }>>;
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 const STREAM_TYPES = ['text/event-stream', 'application/x-ndjson'];
 
+type Pools = { parameters: Set<string>; properties: Set<string> };
+
+/** Names the document spells: operation parameters (query/path DTOs are inlined as these) and every schema property (mapped-type DTOs are inlined into the schema they build). */
+function documentedNames(document: OpenAPIObject): Pools {
+  const parameters = new Set<string>();
+  for (const item of Object.values(document.paths))
+    for (const method of METHODS)
+      for (const parameter of (item[method]?.parameters ??
+        []) as ParameterObject[])
+        parameters.add(parameter.name);
+  const properties = new Set<string>();
+  for (const schema of Object.values(document.components?.schemas ?? {}))
+    for (const name of Object.keys((schema as SchemaObject).properties ?? {}))
+      properties.add(name);
+  return { parameters, properties };
+}
+
+/**
+ * A DTO with its own component must list the property. One without (a query or param DTO, or a mapped-type
+ * intermediate such as `PartialCreateProblemDto`) is checked by name: a parameter for `*QueryDto` / `*ParamDto` / `*ParamsDto` / `*ListDto`,
+ * a schema property for the rest. A class that is neither fails here instead of being skipped.
+ */
+function isDocumented(
+  document: OpenAPIObject,
+  pools: Pools,
+  className: string,
+  propertyName: string,
+): boolean {
+  const schema = document.components?.schemas?.[className] as
+    SchemaObject | undefined;
+  if (schema) return propertyName in (schema.properties ?? {});
+  const inlinedAsParameters = /(Query|Params?|List)Dto$/.test(className);
+  return (inlinedAsParameters ? pools.parameters : pools.properties).has(
+    propertyName,
+  );
+}
+
+type Flagged = Record<string, unknown>;
+const operations = (document: OpenAPIObject) =>
+  Object.entries(document.paths).flatMap(([route, item]) =>
+    METHODS.flatMap((method) =>
+      item[method]
+        ? [
+            {
+              label: `${method.toUpperCase()} ${route}`,
+              operation: item[method],
+            },
+          ]
+        : [],
+    ),
+  );
+const contentOf = (operation: OperationObject): Record<string, unknown> =>
+  (operation.responses['200'] as { content?: Record<string, unknown> })
+    ?.content ?? {};
+
 /** Each scan below covers route sites (`GET /x ...`) and schema sites (`schema Name...`, `/components/schemas/Name/...`): never filter them by a route prefix. */
 describe('OpenAPI schema quality', () => {
   let document: OpenAPIObject;
@@ -42,16 +102,12 @@ describe('OpenAPI schema quality', () => {
     const validated = (
       getMetadataStorage() as unknown as { validationMetadatas: Metadatas }
     ).validationMetadatas;
-    const schemas = document.components?.schemas ?? {};
+    const pools = documentedNames(document);
     const missing: string[] = [];
-    for (const [target, metadatas] of validated) {
-      const schema = schemas[target.name] as
-        { properties?: object } | undefined;
-      if (!schema) continue;
+    for (const [target, metadatas] of validated)
       for (const { propertyName } of metadatas)
-        if (!(propertyName in (schema.properties ?? {})))
+        if (!isDocumented(document, pools, target.name, propertyName))
           missing.push(`${target.name}.${propertyName}`);
-    }
     expect([...new Set(missing)]).toEqual([]);
   });
 
@@ -131,20 +187,31 @@ describe('OpenAPI schema quality', () => {
     expect(document.components?.schemas).not.toHaveProperty('ReadStream');
   });
 
-  it('gives every event stream a body (server-sent events or NDJSON)', () => {
-    const streams = Object.entries(document.paths).filter(([route]) =>
-      route.startsWith('/api/internal/events/'),
+  it('documents no raw (unenveloped) route as application/json, since it sends a file or text', () => {
+    const json = operations(document)
+      .filter(({ operation }) => (operation as unknown as Flagged)['x-raw'])
+      .filter(({ operation }) =>
+        Object.keys(contentOf(operation)).includes('application/json'),
+      )
+      .map(({ label }) => label);
+    expect(json).toEqual([]);
+  });
+
+  it('gives every event stream a body (server-sent events or NDJSON), and streams only under /events/', () => {
+    const isStream = (operation: OperationObject) =>
+      Object.values(operation.responses).some((response) =>
+        Object.keys((response as { content?: object }).content ?? {}).some(
+          (type) => STREAM_TYPES.includes(type),
+        ),
+      );
+    const all = operations(document);
+    const byBody = all.filter(({ operation }) => isStream(operation));
+    const byPath = all.filter(({ label }) =>
+      label.includes('/api/internal/events/'),
     );
-    expect(streams.length).toBeGreaterThan(0);
-    for (const [route, item] of streams) {
-      const content = (item.get as OperationObject).responses['200'] as {
-        content?: Record<string, unknown>;
-      };
-      const types = Object.keys(content.content ?? {});
-      expect({
-        route,
-        ok: types.some((type) => STREAM_TYPES.includes(type)),
-      }).toEqual({ route, ok: true });
-    }
+    expect(byBody.length).toBeGreaterThan(0);
+    expect(byBody.map(({ label }) => label).sort()).toEqual(
+      byPath.map(({ label }) => label).sort(),
+    );
   });
 });
