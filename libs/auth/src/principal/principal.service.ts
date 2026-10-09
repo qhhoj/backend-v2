@@ -3,7 +3,7 @@ import { uuidStr } from '@libs/database';
 import { GroupsQuerier } from '../groups/groups.querier';
 import { UserDocument } from '../users/users.repository';
 import { Principal } from './principal';
-import { permissionsOf } from './permissions-of';
+import { buildPrincipal } from './build-principal';
 
 @Injectable()
 export class PrincipalService {
@@ -11,16 +11,6 @@ export class PrincipalService {
 
   build(user: UserDocument): Principal {
     // UUID array `.map` yields raw MongooseBuffer, so normalise through uuidStr.
-    return {
-      userId: uuidStr(user._id),
-      username: user.username,
-      isSuperuser: user.isSuperuser,
-      isStaff: user.isStaff,
-      permissions: permissionsOf(
-        user,
-        this.groups.groupsOf(user.groups.map(uuidStr)),
-      ),
-      organizationIds: user.organizations.map(uuidStr),
-    };
+    return buildPrincipal(user, this.groups.groupsOf(user.groups.map(uuidStr)));
   }
 }

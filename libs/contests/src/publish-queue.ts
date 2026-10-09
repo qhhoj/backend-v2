@@ -24,7 +24,7 @@ export interface PublishTarget {
   publishAfterEnd: boolean;
 }
 
-/** After a create or an edit: the previous end's job goes, the new end's comes (delay 0 once past). Never throws: the worker's minute sweep publishes any ended contest whose job was lost. */
+/** After a create or an edit: the previous end's job goes, the new end's comes (delay 0 once past). Never throws: a failed removal is logged and the new job is still added (the old job finds a moved end or a cleared switch and does nothing), and the worker's minute sweep publishes any ended contest whose job was lost. */
 export async function reschedulePublish(
   queue: Queue<ContestPublishJob>,
   change: { previous: PublishTarget | null; next: PublishTarget },
@@ -38,28 +38,34 @@ export async function reschedulePublish(
     next.publishAfterEnd &&
     previous.endTime.getTime() === next.endTime.getTime();
   if (unchanged) return;
+  if (wasScheduled)
+    await attempt(logger, `removal for contest ${previous.id}`, () =>
+      queue.remove(publishJobId(previous.id, previous.endTime)),
+    );
+  if (next.publishAfterEnd)
+    await attempt(logger, `scheduling for contest ${next.id}`, () =>
+      queue.add(
+        CONTEST_PUBLISH_JOB,
+        { contestId: next.id },
+        {
+          jobId: publishJobId(next.id, next.endTime),
+          delay: Math.max(0, next.endTime.getTime() - now),
+          ...JOB_RETRY,
+          ...JOB_RETENTION,
+        },
+      ),
+    );
+}
+
+/** One queue call with its own timeout; a failure is logged, not thrown. */
+async function attempt(
+  logger: Logger,
+  what: string,
+  call: () => Promise<unknown>,
+): Promise<void> {
   try {
-    await withinTimeout(
-      (async () => {
-        if (wasScheduled)
-          await queue.remove(publishJobId(previous.id, previous.endTime));
-        if (next.publishAfterEnd)
-          await queue.add(
-            CONTEST_PUBLISH_JOB,
-            { contestId: next.id },
-            {
-              jobId: publishJobId(next.id, next.endTime),
-              delay: Math.max(0, next.endTime.getTime() - now),
-              ...JOB_RETRY,
-              ...JOB_RETENTION,
-            },
-          );
-      })(),
-      CONTEST_ENQUEUE_TIMEOUT_MS,
-    );
+    await withinTimeout(call(), CONTEST_ENQUEUE_TIMEOUT_MS);
   } catch (error) {
-    logger.error(
-      `Auto-publish of contest ${next.id} not scheduled: ${(error as Error).message}`,
-    );
+    logger.error(`Auto-publish ${what} failed: ${(error as Error).message}`);
   }
 }

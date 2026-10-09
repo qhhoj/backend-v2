@@ -6,6 +6,7 @@ import type { Principal } from '@libs/auth';
 import { AppError, invalidField, REDIS, sameJson, unique } from '@libs/common';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
+  CONTEST_PUBLISH_QUEUE,
   CONTEST_RESCORE_QUEUE,
   contestPhase,
   enqueueContestRescore,
@@ -13,11 +14,14 @@ import {
   purgeRankingCache,
   requestFinalJudge,
   rescheduleFinalJudge,
+  reschedulePublish,
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
+  ContestPublishJob,
   ContestRescoreJob,
   FinalJudgeTarget,
+  PublishTarget,
 } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
@@ -59,6 +63,12 @@ const finalJudgeTarget = (contest: Contest): FinalJudgeTarget => ({
   formatConfig: contest.formatConfig,
 });
 
+const publishTarget = (contest: Contest): PublishTarget => ({
+  id: uuidStr(contest._id),
+  endTime: contest.endTime,
+  publishAfterEnd: contest.publishAfterEnd,
+});
+
 @Injectable()
 export class ContestEditingService {
   private readonly logger = new Logger(ContestEditingService.name);
@@ -71,6 +81,8 @@ export class ContestEditingService {
     private readonly rescores: Queue<ContestRescoreJob>,
     @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
     private readonly finalJudges: Queue<ContestFinalJudgeJob>,
+    @InjectQueue(CONTEST_PUBLISH_QUEUE)
+    private readonly publishes: Queue<ContestPublishJob>,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -111,6 +123,9 @@ export class ContestEditingService {
       userCount: 0,
       virtualCount: 0,
       lockedAfter: null,
+      publishAfterEnd: false,
+      publishAfterEndBy: null,
+      autoPublishOutcome: null,
       dataPreparedAt: null,
       managedBy: null,
       balloonStaff: [],
@@ -141,12 +156,32 @@ export class ContestEditingService {
       ...fields,
       authors: unique([...(fields.authors ?? []), principal.userId]),
     });
+    await this.rescheduleEndJobs({ previous: null, next: contest });
+    return contest;
+  }
+
+  /** FSO judging and the automatic publish both fire at the end, so one change of end time or switch moves both. */
+  private async rescheduleEndJobs(change: {
+    previous: Contest | null;
+    next: Contest;
+  }): Promise<void> {
+    const { previous, next } = change;
     await rescheduleFinalJudge(
       this.finalJudges,
-      { previous: null, next: finalJudgeTarget(contest) },
+      {
+        previous: previous && finalJudgeTarget(previous),
+        next: finalJudgeTarget(next),
+      },
       this.logger,
     );
-    return contest;
+    await reschedulePublish(
+      this.publishes,
+      {
+        previous: previous && publishTarget(previous),
+        next: publishTarget(next),
+      },
+      this.logger,
+    );
   }
 
   /** Scoring edits queue a rescore; a new lock is copied onto live submissions. */
@@ -170,11 +205,7 @@ export class ContestEditingService {
     const updated = await this.save(contest, fields);
     // Cached boards embed the contest's problems, labels and timeout, not only standings.
     await purgeRankingCache(this.redis, contest._id);
-    await rescheduleFinalJudge(
-      this.finalJudges,
-      { previous: finalJudgeTarget(contest), next: finalJudgeTarget(updated) },
-      this.logger,
-    );
+    await this.rescheduleEndJobs({ previous: contest, next: updated });
     // `endTime` is part of the scoring: the rescore's follow-up re-rates a contest that has ratings.
     if (scoringOf(updated) !== scoringOf(contest))
       void notifyContestRescore(this.rescores, contest._id, this.logger);

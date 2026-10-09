@@ -12,6 +12,7 @@ import { SettingsModule } from '@libs/settings';
 import { ContestDataModule } from './jobs/contest-data/contest-data.module';
 import { ContestExportModule } from './jobs/contest-export/contest-export.module';
 import { ContestFinalJudgeModule } from './jobs/contest-final-judge/contest-final-judge.module';
+import { ContestPublishModule } from './jobs/contest-publish/contest-publish.module';
 import { ContestRatingModule } from './jobs/contest-rating/contest-rating.module';
 import { SimilarityModule } from './jobs/similarity/similarity.module';
 import { ContestReplayModule } from './jobs/contest-replay/contest-replay.module';
@@ -51,6 +52,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     ContestRescoreModule,
     ContestReplayModule,
     ContestFinalJudgeModule,
+    ContestPublishModule,
     ContestRatingModule,
     SimilarityModule,
     ContestDataModule,

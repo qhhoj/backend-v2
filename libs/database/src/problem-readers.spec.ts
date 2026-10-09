@@ -50,6 +50,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'F',
     'the contest data zip lists the contest problems that exist',
   ],
+  'apps/worker/src/jobs/contest-publish/contest-publish.repository.ts': [
+    'F',
+    'a deleted problem reads as missing and is skipped as not_found instead of failing the run',
+  ],
   'apps/worker/src/jobs/contribution-points/contribution-points.repository.ts':
     [
       'F',

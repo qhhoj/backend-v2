@@ -102,4 +102,18 @@ describe('reschedulePublish', () => {
       ),
     ).resolves.toBeUndefined();
   });
+
+  it('still adds the new job when removing the previous one throws', async () => {
+    const later = new Date(end.getTime() + 60_000);
+    const failingRemove = {
+      remove: () => Promise.reject(new Error('redis down')),
+      add: queue.add.bind(queue),
+    };
+    await reschedulePublish(
+      failingRemove as unknown as Queue<ContestPublishJob>,
+      { previous: target(), next: target({ endTime: later }) },
+      logger,
+    );
+    expect(await ids()).toEqual([publishJobId('c7', later)]);
+  });
 });
