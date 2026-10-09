@@ -17,6 +17,12 @@ function caseDifferences(label, left, right) {
 /** One line per differing field; time, memory, ids and (unless the label ends in +feedback) feedback are ignored. */
 export function differences(left, right) {
   const byLabel = new Map(right.map((r) => [r.label, r]));
+  const leftLabels = new Set(left.map((a) => a.label));
+  const leftOnly = right.filter((b) => !leftLabels.has(b.label)).map((b) => `${b.label}: missing on the left`);
+  return [...pairedDifferences(left, byLabel), ...leftOnly];
+}
+
+function pairedDifferences(left, byLabel) {
   return left.flatMap((a) => {
     const b = byLabel.get(a.label);
     if (!b) return [`${a.label}: missing on the right`];

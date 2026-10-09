@@ -75,6 +75,7 @@ const LANGUAGES = [
     extension: 'zip',
     fileOnly: true,
     fileSizeLimit: 1,
+    includeInProblem: false,
   },
 ];
 
@@ -94,7 +95,8 @@ async function seedLanguages(
     const row = await ensure(
       model,
       { key: language.key },
-      { ...language, includeInProblem: true },
+      // Like seed-e2e: OUTPUT is never a default language for new problems.
+      { includeInProblem: true, ...language },
       { isCaseInsensitive: true },
     );
     ids[language.key] = row._id;

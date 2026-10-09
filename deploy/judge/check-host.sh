@@ -69,7 +69,9 @@ enough_boxes() {
 # Saved output under CHECK_FIXTURES, else the real command.
 output_of() { # <fixture name> <command...>
   local name="$1"; shift
-  if [ -n "${CHECK_FIXTURES:-}" ]; then cat "$CHECK_FIXTURES/$name"; else "$@" 2>&1; fi
+  # The command's own status is ignored (isolate-check-environment exits 1 on the waived ASLR check, and pipefail
+  # would otherwise turn every caller's `!` into a pass): only its output is parsed.
+  if [ -n "${CHECK_FIXTURES:-}" ]; then cat "$CHECK_FIXTURES/$name"; else "$@" 2>&1 || true; fi
 }
 # isolate's check fails on ASLR=2 by design; that line is the one accepted waiver (RUNBOOK "Judge hosts" step 1).
 # Its output is coloured (`ESC[31mFAIL`): the escapes are stripped first, or no word boundary precedes the verdict.

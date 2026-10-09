@@ -72,6 +72,19 @@ expect_fail "isolate env problem besides ASLR" 'echo "WARNING: transparent hugep
 expect_fail "coloured FAIL besides ASLR" 'printf "Checking for simultaneous multithreading ... \\e[31mFAIL\\e[m\n" >> "$fixtures/isolate-check-environment"'
 expect_fail "coloured CAUTION (swap)" 'printf "Checking for swap ... \\e[33mCAUTION\\e[m\n" >> "$fixtures/isolate-check-environment"'
 expect_fail "egress policy accept" 'sed -i "s/policy drop/policy accept/" "$fixtures/nft-output"'
+# The real commands (stubs on PATH): isolate-check-environment exits 1 on the waived ASLR check, as on a real host.
+stubs="$(mktemp -d)"; trap 'rm -rf "$root" "$fixtures" "$stubs"' EXIT
+printf '#!/bin/sh\ncat "%s/isolate-check-environment"; exit 1\n' "$fixtures" > "$stubs/isolate-check-environment"
+printf '#!/bin/sh\ncat "%s/nft-output"\n' "$fixtures" > "$stubs/nft"
+printf '#!/bin/sh\necho "The process isolator 2.6"\n' > "$stubs/isolate"
+printf '#!/bin/sh\nexit 0\n' > "$stubs/systemctl"
+chmod +x "$stubs"/*
+run_commands() { PATH="$stubs:$PATH" CHECK_ROOT="$root" CHECK_KEY_OWNER="$(id -u)" bash "$here/check-host.sh"; }
+good_host
+run_commands >/dev/null || { echo "a good host must pass with its real commands" >&2; run_commands; exit 1; }
+good_host; echo "WARNING: transparent hugepages are enabled" >> "$fixtures/isolate-check-environment"
+if run_commands >/dev/null 2>&1; then echo "not caught: THP warning from a failing isolate-check-environment" >&2; exit 1; fi
+
 # Exactly enough boxes passes: 7 default slots (8 CPUs - 1) need 14 boxes from 0.
 expect_pass "num_boxes = box_base + 2*slots" 'sed -i "s/num_boxes = 1000/num_boxes = 14/" "$root/usr/local/etc/isolate"'
 # An explicit slots value wins over the CPU count.

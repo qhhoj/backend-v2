@@ -31,6 +31,7 @@ test('verdict, points and batch differences are reported per field', () => {
 test('a different case count and a missing run are differences', () => {
   assert.deepEqual(differences([run()], [run({ cases: [] })]), ['par_sum/PY3/ac: case count 1 → 0']);
   assert.deepEqual(differences([run()], []), ['par_sum/PY3/ac: missing on the right']);
+  assert.deepEqual(differences([], [run()]), ['par_sum/PY3/ac: missing on the left']);
 });
 
 test('feedback is compared only for +feedback runs', () => {

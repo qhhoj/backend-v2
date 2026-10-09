@@ -76,6 +76,7 @@ describe('pruneLanguages', () => {
       unknownKeep: [],
       problemsChanged: 2,
       languagesDisabled: 2,
+      emptiedProblems: ['legacy_only'],
     });
     expect(await allowedOf('mixed')).toEqual([ids.PY3]);
     expect(await allowedOf('clean')).toEqual([ids.CPP17]);
@@ -113,6 +114,7 @@ describe('pruneLanguages', () => {
       prunedLanguages: ['PY2', 'RUST'],
       problemsChanged: 0,
       languagesDisabled: 0,
+      emptiedProblems: [],
     });
   });
 
@@ -121,7 +123,11 @@ describe('pruneLanguages', () => {
       keep: ['PY3', 'CPP17'],
       dryRun: true,
     });
-    expect(summary).toMatchObject({ problemsChanged: 2, languagesDisabled: 2 });
+    expect(summary).toMatchObject({
+      problemsChanged: 2,
+      languagesDisabled: 2,
+      emptiedProblems: ['legacy_only'],
+    });
     expect(await allowedOf('mixed')).toEqual(
       [ids.PY3, ids.PY2, ids.RUST].sort(),
     );
@@ -156,6 +162,7 @@ describe('pruneLanguages', () => {
       prunedLanguages: ['GAS32'],
       problemsChanged: 1,
       languagesDisabled: 1,
+      emptiedProblems: ['asm'],
     });
     expect(await allowedOf('asm')).toEqual([]);
     const stored = await connection
