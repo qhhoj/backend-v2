@@ -1,5 +1,6 @@
 import { Type } from '@nestjs/common';
 import { Mapper } from '../../mapper';
+import { UsersMapper } from './users.mapper';
 
-/** This area's backfill jobs in run order; the lane fills it. */
-export const USERS_MAPPERS: Type<Mapper>[] = [];
+/** This area's backfill jobs in run order. */
+export const USERS_MAPPERS: Type<Mapper>[] = [UsersMapper];
