@@ -6,6 +6,8 @@ import type { Problem } from '@libs/database';
 import { excerpt } from '@libs/community';
 import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
 import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
+import { chargedOrganization } from '../../organizations/quota/quota-charge';
+import { QuotaService } from '../../organizations/quota/quota.service';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
 import { LanguagesQuerier } from '../catalog/languages.querier';
@@ -82,6 +84,7 @@ export class ProblemEditingService {
     private readonly events: ProblemEvents,
     private readonly dataFiles: ProblemDataFilesService,
     private readonly discord: DiscordWebhooksService,
+    private readonly quota: QuotaService,
   ) {}
 
   async create(
@@ -93,7 +96,31 @@ export class ProblemEditingService {
     const fields = toFields(dto);
     this.policy.assertCreateGates(principal, dto, fields);
     await this.policy.assertReferences(dto);
-    const problem = await withCodeTaken(() =>
+    // Validation is done: spend now, refund if the insert fails (a taken code included).
+    const problem = await this.quota.charged(
+      chargedOrganization(principal, fields),
+      { kind: 'problem', userId: principal.userId, ref: dto.code },
+      () => this.insert(principal, fields, mode),
+    );
+    await this.revisions.append({
+      entity: 'problem',
+      entityId: problem._id,
+      action: mode,
+      userId: principal.userId,
+      changes: fieldDiff({}, withoutRenderedHtml(problem.toJSON())),
+      comment: 'Created on site',
+    });
+    if (mode === 'suggest' || problem.isOrganizationPrivate)
+      await this.announce(problem, mode, principal.username);
+    return this.problems.detail(principal, problem.code, 'en');
+  }
+
+  private insert(
+    principal: Principal,
+    fields: ProblemFields,
+    mode: 'create' | 'suggest',
+  ): Promise<ProblemDocument> {
+    return withCodeTaken(() =>
       this.repository.create({
         ...fields,
         descriptionHtml: renderField(
@@ -112,17 +139,6 @@ export class ProblemEditingService {
             }),
       }),
     );
-    await this.revisions.append({
-      entity: 'problem',
-      entityId: problem._id,
-      action: mode,
-      userId: principal.userId,
-      changes: fieldDiff({}, withoutRenderedHtml(problem.toJSON())),
-      comment: 'Created on site',
-    });
-    if (mode === 'suggest' || problem.isOrganizationPrivate)
-      await this.announce(problem, mode, principal.username);
-    return this.problems.detail(principal, problem.code, 'en');
   }
 
   /** Legacy `on_new_problem` (organization problems) and `on_new_suggested_problem`. The author is the creator: the suggester in suggest mode, a curator otherwise (legacy: `suggester or authors.first()`). Legacy's trailing `Organizations:` line is omitted on purpose (less exposure). */

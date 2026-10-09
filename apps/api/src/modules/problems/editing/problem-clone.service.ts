@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
+import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { fieldDiff } from '@libs/problems';
+import { chargedOrganization } from '../../organizations/quota/quota-charge';
+import { QuotaService } from '../../organizations/quota/quota.service';
 import { CloneProblemDto } from './dto/clone.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
@@ -73,6 +76,7 @@ export class ProblemCloneService {
     private readonly revisions: RevisionsRepository,
     private readonly problems: ProblemsService,
     private readonly policy: ProblemEditPolicyService,
+    private readonly quota: QuotaService,
   ) {}
 
   async clone(
@@ -86,13 +90,22 @@ export class ProblemCloneService {
         CLONE_COPIED_FIELDS.includes(field),
       ),
     ) as Partial<Problem>;
-    const clone = await withCodeTaken(() =>
-      this.repository.create({
-        ...copied,
-        code: dto.code,
-        date: new Date(),
-        curators: [auth.principal.userId],
-      }),
+    const organizationId = chargedOrganization(auth.principal, {
+      isOrganizationPrivate: source.isOrganizationPrivate,
+      organizations: source.organizations.map(uuidStr),
+    });
+    const clone = await this.quota.charged(
+      organizationId,
+      { kind: 'problem', userId: auth.principal.userId, ref: dto.code },
+      () =>
+        withCodeTaken(() =>
+          this.repository.create({
+            ...copied,
+            code: dto.code,
+            date: new Date(),
+            curators: [auth.principal.userId],
+          }),
+        ),
     );
     await this.revisions.append({
       entity: 'problem',

@@ -12,6 +12,7 @@ import {
 } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ContributionsModule } from '../contributions/contributions.module';
+import { OrganizationQuotaModule } from '../organizations/quota/organization-quota.module';
 import { DiscordModule } from '../discord/discord.module';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
 import { LanguagesAdminService } from './catalog/languages-admin.service';
@@ -63,6 +64,7 @@ const repositories = [
   imports: [
     ContestAccessModule,
     DiscordModule,
+    OrganizationQuotaModule,
     AuthModule,
     forwardRef(() => ContributionsModule),
     BullModule.registerQueue(
