@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts mongod, redis, api, worker, bridge, an optional fake judge and vite preview on private ports.
+# Starts mongod, redis, api, worker, bridge, an optional gRPC fake judge and vite preview on private ports.
 # Env: RUN FRONTEND_DIR MONGOD_BIN STACK_SKIP_REDIS=1 (use REDIS_URL) STACK_JUDGE=fake|none
 #      PORT_MONGO PORT_REDIS PORT_API PORT_BRIDGE PORT_PREVIEW
 set -euo pipefail

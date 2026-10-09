@@ -476,6 +476,68 @@ describe('DispatcherService', () => {
     });
   });
 
+  describe('abort marks', () => {
+    /** The dispatcher's remembered api aborts of held runs (`id.generation`). */
+    const marks = () =>
+      (dispatcher as unknown as { abortsRequested: Set<string> })
+        .abortsRequested;
+
+    it('drops the mark when the aborted run ends normally', async () => {
+      const judge = await online(new Target('j1'));
+      const submission = entry();
+      await queue(submission);
+      dispatcher.abort(submission.id);
+      expect([...marks()]).toEqual([`${submission.id}.1`]);
+      await dispatcher.runEnded(
+        judge,
+        { submissionId: submission.id, generation: 1 },
+        { retried: false },
+      );
+      expect(marks().size).toBe(0);
+    });
+
+    it('drops the mark when the aborted run is rejudged, and the new generation is not aborted', async () => {
+      const judge = await online(new Target('j1', 3));
+      const submission = entry();
+      await queue(submission);
+      dispatcher.abort(submission.id);
+      await queue({ ...submission, priority: 2, generation: 1 });
+      expect(marks().size).toBe(0);
+      await dispatcher.judgeLost(judge);
+      expect(dispatcher.heldIds()).toEqual([submission.id]);
+      expect(expired).toEqual([]);
+      jest.advanceTimersByTime(60_000);
+      await flush();
+      expect(expired).toEqual([
+        {
+          ref: { submissionId: submission.id, generation: 2 },
+          abortRequested: false,
+        },
+      ]);
+    });
+
+    it('keeps the mark of a run another live session holds, so its holder still honours the abort', async () => {
+      const dead = await online(new Target('j1'));
+      const submission = entry();
+      await queue(submission);
+      dispatcher.abort(submission.id);
+      const holder = new Target('j2');
+      holder.inFlight.set(submission.id, 1);
+      await online(holder);
+      await dispatcher.judgeLost(dead);
+      jest.advanceTimersByTime(60_000);
+      await flush();
+      expect(expired).toEqual([]);
+      expect([...marks()]).toEqual([`${submission.id}.1`]);
+      await dispatcher.runEnded(
+        holder,
+        { submissionId: submission.id, generation: 1 },
+        { retried: false },
+      );
+      expect(marks().size).toBe(0);
+    });
+  });
+
   it('moves the runs of a replaced session to the new one', async () => {
     const first = await online(new Target('j1'));
     const submission = entry();

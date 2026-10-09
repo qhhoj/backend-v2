@@ -371,6 +371,7 @@ export class DispatcherService {
   private holdInGrace(judge: DispatchTarget): void {
     for (const [submissionId, generation] of judge.inFlight) {
       const ref = { submissionId, generation };
+      // a run another live session holds keeps its mark: that holder owns the abort (it ends with `runEnded` or `keepSlotWinding`)
       if (generation > 0 && !this.heldElsewhere(judge, submissionId))
         this.grace.hold(
           ref,

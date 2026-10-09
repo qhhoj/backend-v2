@@ -1,6 +1,6 @@
 # QHHOJ backend-v2
 
-Backend of the QHHOJ online judge: NestJS 11 (Fastify) + Mongoose 8 on MongoDB, with Redis and BullMQ. It replaces the Django/MariaDB site; judges (DMOJ protocol) connect to its bridge.
+Backend of the QHHOJ online judge: NestJS 11 (Fastify) + Mongoose 8 on MongoDB, with Redis and BullMQ. It replaces the Django/MariaDB site; judge-v2 judges connect to its bridge over gRPC (TLS).
 
 ## Requirements
 
@@ -83,7 +83,7 @@ libs/          common, database, auth, render, problems, judging, contests, comm
 ### Submission flow
 
 1. The api accepts `POST /api/internal/problems/:code/submit`, stores the submission as `QU` and sends a `judge` command on the Redis stream `bridge:commands`.
-2. The **bridge** claims it (`QU` -> `P`), picks a judge by priority and load, and sends it over the DMOJ protocol. Mongo is the queue truth; the bridge rebuilds its queue from it on start.
+2. The **bridge** claims it (`QU` -> `P`), picks a judge by priority and load, and sends it to a free judge slot over gRPC (`qhhoj.judge.v1`). Mongo is the queue truth; the bridge rebuilds its queue from it on start.
 3. The **judge** returns case results and a verdict; the bridge writes them and publishes progress on Redis `submission-events`.
 4. On finish the bridge enqueues a `submission-graded` job.
 5. The worker's **effects** (`submission-effects`) recompute user points/PP, problem stats and, for contest submissions, the participation and ranking. A sweep repairs lost jobs.
