@@ -1,8 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { waitUntil } from '@libs/common/testing';
 import {
   CONTEST_RATING_QUEUE,
+  CONTEST_REPLAY_JOB,
+  CONTEST_REPLAY_QUEUE,
   CONTEST_RESCORE_QUEUE,
   enqueueContestRescore,
 } from '@libs/contests';
@@ -380,6 +383,88 @@ describe('contest rescore', () => {
       spy.mockRestore();
     }
   });
+  describe('replay rebuild request', () => {
+    const endedContest = () =>
+      contestWith({
+        startTime: new Date(Date.now() - 6 * 3_600_000),
+        endTime: new Date(Date.now() - 3_600_000),
+      });
+    /** Spies on the replay queue's adds; every add still reaches Redis unless `fail` is set. */
+    const spyReplayAdds = (fail = false) => {
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- re-applied with the queue as `this`
+      const add = Queue.prototype.add;
+      const requested: { name: string; data: unknown; delay?: number }[] = [];
+      const spy = jest
+        .spyOn(Queue.prototype, 'add')
+        .mockImplementation(function (this: Queue, ...args) {
+          if (this.name !== CONTEST_REPLAY_QUEUE) return add.apply(this, args);
+          const options = args[2];
+          requested.push({
+            name: args[0] as string,
+            data: args[1] as unknown,
+            delay: options?.delay,
+          });
+          return fail
+            ? Promise.reject(new Error('redis down'))
+            : add.apply(this, args);
+        });
+      return { requested, spy };
+    };
+
+    it('requests one replay build for the contest when its rescore finishes', async () => {
+      const { contest } = await endedContest();
+      const { requested, spy } = spyReplayAdds();
+      try {
+        await rescores.rescore(contest._id);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(requested).toEqual([
+        {
+          name: CONTEST_REPLAY_JOB,
+          data: { contestId: contest._id },
+          delay: 0,
+        },
+      ]);
+    });
+
+    it('delays the build until the judge has settled when the rescore runs just after the end', async () => {
+      const minute = 60_000;
+      const { contest } = await contestWith({
+        startTime: new Date(Date.now() - 3 * 3_600_000),
+        endTime: new Date(Date.now() - 2 * minute),
+      });
+      const { requested, spy } = spyReplayAdds();
+      try {
+        await rescores.rescore(contest._id);
+      } finally {
+        spy.mockRestore();
+      }
+      const [build] = requested;
+      expect(build.name).toBe(CONTEST_REPLAY_JOB);
+      // Settle is 10 minutes after the end; 2 minutes have passed, so about 8 minutes remain.
+      expect(build.delay).toBeGreaterThan(7 * minute);
+      expect(build.delay).toBeLessThanOrEqual(8 * minute);
+    });
+
+    it('still completes the rescore, and logs the failure, when the replay request cannot be queued', async () => {
+      const { contest } = await contestWith();
+      const logged = jest.spyOn(Logger.prototype, 'error');
+      const { spy } = spyReplayAdds(true);
+      try {
+        await expect(rescores.rescore(contest._id)).resolves.toMatchObject({
+          participations: 1,
+        });
+        expect(logged).toHaveBeenCalledWith(
+          expect.stringContaining(contest._id),
+        );
+      } finally {
+        spy.mockRestore();
+        logged.mockRestore();
+      }
+    });
+  });
+
   describe('contest rating follow-up', () => {
     const endedRatedContest = () =>
       contestWith({
