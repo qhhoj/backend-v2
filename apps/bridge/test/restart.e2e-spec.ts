@@ -18,31 +18,16 @@ import {
 } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
 import { BridgeModule } from '../src/bridge.module';
-import { BridgeService } from '../src/bridge.service';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
+import { countResyncTicks, resyncTicks } from './resync-ticks';
 import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 const KEY = 'restart key';
 /** Ticks every 300 ms; a judge here always accepts, so a loaded machine must not turn a slow Accepted into an accept timeout. */
 const TIMINGS = { resyncMs: 300, resumeGraceMs: 30_000, acceptMs: 10_000 };
-
-/** BridgeService's private resync tick, seen from the test. */
-interface Resyncing {
-  resyncing: boolean;
-  resync: (this: Resyncing) => Promise<void>;
-}
-/** Completed resync ticks, across restarts (a tick skipped because the previous one still ran is not counted). */
-let ticks = 0;
-const prototype = BridgeService.prototype as unknown as Resyncing;
-const resync = prototype.resync;
-/** Resolves once `count` more resync ticks completed: the tests wait on ticks, never on the clock. */
-const resyncTicks = async (count: number) => {
-  const target = ticks + count;
-  await waitUntil(() => ticks >= target, 10_000);
-};
 
 describe('Bridge restart', () => {
   let bridge: BridgeTest;
@@ -64,13 +49,7 @@ describe('Bridge restart', () => {
   };
 
   beforeAll(async () => {
-    jest.spyOn(prototype, 'resync').mockImplementation(async function (
-      this: Resyncing,
-    ) {
-      const skipped = this.resyncing;
-      await resync.call(this);
-      if (!skipped) ticks += 1;
-    });
+    countResyncTicks();
     bridge = await setupBridgeTest({
       timings: TIMINGS,
     });

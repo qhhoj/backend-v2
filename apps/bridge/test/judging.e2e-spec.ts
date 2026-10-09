@@ -27,6 +27,7 @@ import { BRIDGE_TIMINGS } from '../src/bridge-timings';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 import { FakeJudge } from './fake-judge';
 import { waitUntil } from './fixtures';
+import { countResyncTicks, resyncTicks } from './resync-ticks';
 import { FAST_TIMINGS } from './setup';
 
 const SUBMISSIONS = '/api/internal/submissions';
@@ -96,6 +97,7 @@ describe('judging across the api and the bridge', () => {
     waitUntil(async () => (await row(id)).status === status);
 
   beforeAll(async () => {
+    countResyncTicks();
     api = await setupApiTest();
     Object.assign(process.env, {
       JUDGE_BRIDGE_HOST: '127.0.0.1',
@@ -152,6 +154,7 @@ describe('judging across the api and the bridge', () => {
     await judge?.close();
     await bridge?.close();
     await api.teardown();
+    jest.restoreAllMocks();
   });
 
   it('dispatches a submit, grades it to D and enqueues exactly one graded job', async () => {
@@ -199,7 +202,7 @@ describe('judging across the api and the bridge', () => {
     gradeAcWa(running);
     await finished(running, 'D');
     // two resync ticks: the aborted row must not come back
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await resyncTicks(2);
     expect(judge.seen('assign')).toEqual([]);
     expect(await row(queued)).toMatchObject({ status: 'AB', judgedOn: null });
   });

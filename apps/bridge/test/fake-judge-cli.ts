@@ -47,6 +47,8 @@ const keyOf = (ref: AssignmentRef) => `${ref.submissionId}.${ref.generation}`;
 async function passGate(stage: 'ack' | 'begin' | 'end'): Promise<void> {
   if (!controlDir) return;
   const gate = join(controlDir, `hold-${stage}`);
+  if (!(await exists(gate))) return;
+  console.log(`holding at ${stage}`);
   while (await exists(gate)) await sleep(GATE_POLL_MS);
 }
 

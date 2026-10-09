@@ -89,8 +89,8 @@ describe('fake-judge-cli', () => {
       problem: problem._id,
     });
     await commands.judge([held._id]);
+    await waitUntil(() => output.includes('holding at begin'), 10_000);
     await waitUntil(async () => (await row(held._id)).judgeSeq === 1, 10_000);
-    await new Promise((resolve) => setTimeout(resolve, 500));
     expect(await row(held._id)).toMatchObject({ status: 'P' });
     rmSync(join(control, 'hold-begin'));
     await waitUntil(async () => (await row(held._id)).status === 'D', 10_000);
