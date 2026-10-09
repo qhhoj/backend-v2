@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { constantTimeEqual, sha256 } from '@libs/auth';
 import { Judge, JUDGE_NAME_PATTERN } from '@libs/database';
+import type { HelloRuntime } from '../link/messages';
 import type { Runtime } from '../protocol/judge-packets';
 
 /** What a judge row holds while no connection serves it; written by `markOffline` and by the bridge's start-up sweep. */
@@ -11,7 +12,18 @@ export const OFFLINE_FIELDS = {
   ping: null,
   load: null,
   runtimes: [],
+  busy: 0,
 } as const;
+
+/** What a judge's Hello and connection tell the admin page. */
+export interface SessionDetails {
+  slots: number;
+  build: string;
+  protocolMinor: number;
+  features: string[];
+  runtimes: HelloRuntime[];
+  lastIp: string | null;
+}
 
 export interface JudgeAccess {
   name: string;
@@ -87,6 +99,36 @@ export class JudgesRepository {
     problems: string[],
   ): Promise<void> {
     await this.judges.updateOne({ name, startTime }, { $set: { problems } });
+  }
+
+  /** A session said Hello: the row shows it online with what it reported; `startTime` names the session. */
+  async markSessionOnline(
+    name: string,
+    startTime: Date,
+    details: SessionDetails,
+  ): Promise<void> {
+    await this.judges.updateOne(
+      { name },
+      {
+        $set: {
+          online: true,
+          startTime,
+          ping: null,
+          load: null,
+          busy: 0,
+          ...details,
+        },
+      },
+    );
+  }
+
+  /** A pong: the mean round trip, the judge's load and its busy slots. */
+  async recordPong(
+    name: string,
+    startTime: Date,
+    pong: { ping: number; load: number | null; busy: number },
+  ): Promise<void> {
+    await this.judges.updateOne({ name, startTime }, { $set: pong });
   }
 
   /** Bridge start and stop: no judge is connected, whatever the last run left behind. */
