@@ -16,6 +16,7 @@ Restart=always
 RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=strict
+# Edit if the data roots live elsewhere
 ReadWritePaths=/srv/qhhoj
 ProtectHome=read-only
 PrivateTmp=true
