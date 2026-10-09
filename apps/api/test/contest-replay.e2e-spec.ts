@@ -2,6 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { CONTEST_REPLAY_QUEUE, REPLAY_FORMAT_VERSION } from '@libs/contests';
 import type { ContestReplayJob } from '@libs/contests';
+import { RateLimitService } from '@libs/common';
 import { newId, uuidStr } from '@libs/database';
 import type { Contest, User } from '@libs/database';
 import type { ReplayResponse } from '../src/modules/contests/replay/dto/replay.dto';
@@ -356,25 +357,69 @@ describe('contest replay', () => {
     expect(body.ghosts![1999].events).toHaveLength(20);
   });
 
-  it('lets editors request a rebuild of an ended contest, three times an hour, and nobody else', async () => {
+  it('lets editors queue a rebuild of an ended contest three times an hour, and nobody else', async () => {
     const contest = await endedContest();
     await authed(
       api.http().post(url(contest.key, '/rebuild')),
       sessions.alice,
     ).expect(403);
-    for (let attempt = 0; attempt < 3; attempt += 1)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await authed(
+        api.http().post(url(contest.key, '/rebuild')),
+        sessions.editor,
+      ).expect(202);
+      expect(await waitingJobs()).toBe(1);
+      // The build ran.
+      await queue.obliterate({ force: true });
+    }
+    await authed(
+      api.http().post(url(contest.key, '/rebuild')),
+      sessions.editor,
+    ).expect(429);
+    expect(await waitingJobs()).toBe(0);
+  });
+
+  it("gives the editor's budget back when a build that has not started yet already covers the request", async () => {
+    const contest = await endedContest();
+    await queue.add('build', { contestId: contest._id });
+    for (let attempt = 0; attempt < 5; attempt += 1)
       await authed(
         api.http().post(url(contest.key, '/rebuild')),
         sessions.editor,
       ).expect(202);
     expect(await waitingJobs()).toBe(1);
+  });
+
+  it('moves a build queued for the old end forward when the contest was ended early, for the editor and for readers', async () => {
+    const contest = await endedContest();
+    // A rescore at hour 1 of a 5-hour contest queued a build for its old end plus the settle time.
+    await queue.add(
+      'build',
+      { contestId: contest._id },
+      { delay: 3 * 3_600_000 },
+    );
     await authed(
       api.http().post(url(contest.key, '/rebuild')),
       sessions.editor,
-    ).expect(429);
+    ).expect(202);
+    const jobs = await queue.getJobs(['waiting', 'delayed']);
+    expect(jobs.map((job) => [job.data.contestId, job.opts.delay])).toEqual([
+      [contest._id, 0],
+    ]);
+    const other = await endedContest();
+    await queue.add(
+      'build',
+      { contestId: other._id },
+      { delay: 3 * 3_600_000 },
+    );
+    await get(other.key, 'alice').expect(202);
+    const moved = (await queue.getJobs(['waiting', 'delayed'])).filter(
+      (job) => job.data.contestId === other._id,
+    );
+    expect(moved.map((job) => job.opts.delay)).toEqual([0]);
   });
 
-  it("gives the editor's rebuild budget back when the queue refuses the request", async () => {
+  it("answers 503 replay_unavailable and gives the editor's budget back when the queue refuses the request", async () => {
     const contest = await endedContest();
     await queue.obliterate({ force: true });
     const rebuild = () =>
@@ -383,11 +428,35 @@ describe('contest replay', () => {
       .spyOn(Queue.prototype, 'add')
       .mockRejectedValue(new Error('redis down'));
     for (let attempt = 0; attempt < 4; attempt += 1)
-      await rebuild().expect(500);
+      await rebuild().expect(503).expect(errorCode('replay_unavailable'));
     failing.mockRestore();
-    for (let attempt = 0; attempt < 3; attempt += 1)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       await rebuild().expect(202);
+      await queue.obliterate({ force: true });
+    }
     await rebuild().expect(429);
+  });
+
+  it('answers coded refusals, not a bare 500, when the rate limiter cannot reach Redis', async () => {
+    const contest = await endedContest();
+    const down = new Error('redis down');
+    const hit = jest
+      .spyOn(RateLimitService.prototype, 'hit')
+      .mockRejectedValue(down);
+    try {
+      await get(contest.key, 'alice')
+        .expect(404)
+        .expect(errorCode('replay_not_ready'));
+      await authed(
+        api.http().post(url(contest.key, '/rebuild')),
+        sessions.editor,
+      )
+        .expect(503)
+        .expect(errorCode('replay_unavailable'));
+    } finally {
+      hit.mockRestore();
+    }
+    expect(await waitingJobs()).toBe(0);
   });
 
   it("refuses a rebuild while the contest runs, without queueing or spending the editor's budget", async () => {
@@ -460,11 +529,13 @@ describe('contest replay', () => {
     ];
     for (const [pending, code] of refusals)
       expect(issueCodes((await pending).body)).toEqual([code]);
-    for (let attempt = 0; attempt < 3; attempt += 1)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       await authed(
         api.http().post(url(settled.key, '/rebuild')),
         sessions.editor,
       ).expect(202);
+      await queue.obliterate({ force: true });
+    }
     const limited = await authed(
       api.http().post(url(settled.key, '/rebuild')),
       sessions.editor,

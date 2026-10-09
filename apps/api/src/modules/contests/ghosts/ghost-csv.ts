@@ -268,14 +268,17 @@ const quote = (value: string): string =>
 const cellText = (cell: GhostCell): string =>
   `${cell.points === null ? '' : `${cell.points}@`}${cell.minute}${cell.rejectedBefore === null ? '' : `+${cell.rejectedBefore}`}`;
 
-/** The current set in the import grammar, so it can be downloaded, edited and uploaded again. */
+/** Excel reads a CSV as UTF-8 only after this mark; the import strips it. */
+const UTF8_BOM = '\uFEFF';
+
+/** The current set in the import grammar, so it can be downloaded, edited and uploaded again (in Excel too: BOM first). */
 export function ghostsToCsv(
   ghosts: readonly GhostInput[],
   columns: ReadonlyArray<{ problemId: string; code: string }>,
 ): string {
   const header = ['label', 'caption', ...columns.map((column) => column.code)];
   const rows = ghosts.map((ghost) => ghostRowOf(ghost, columns));
-  return `${[header, ...rows].map((fields) => fields.map(quote).join(',')).join('\r\n')}\r\n`;
+  return `${UTF8_BOM}${[header, ...rows].map((fields) => fields.map(quote).join(',')).join('\r\n')}\r\n`;
 }
 
 function ghostRowOf(

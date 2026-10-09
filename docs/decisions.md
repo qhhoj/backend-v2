@@ -249,6 +249,13 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - A shared build error retries on the next tick and ends the streams only after repeated failures; the room cache key includes the freeze config, so an editor's freeze change is served at once — one failed read must not drop every resolver.
 - The submissions export is editors-only, once a day, and includes the sources — sources are private data, and a zip of a large contest is expensive.
 - `thawed` is null until a real release — a key that was never released has not thawed anything.
+- A verdict graded after a contest's end on a live, qualified participation queues a coalesced replay rebuild from the effects job — a judge backlog past end + settle would otherwise leave the replay's final frame behind the board forever; virtual and spectating rows never queue (they submit to ended contests indefinitely).
+- A replay request that finds the contest's build delayed past its own time removes it and adds one at the new delay (never `changeDelay`, whose delay is relative to the call, so `timestamp + delay` stays the true due time) — a build queued for the old end must not hold back a contest ended early; the editor's rebuild budget is given back when a not-yet-started build already covers the request.
+- Replay build ids are UUIDv7 taken before a build reads anything; the head is swapped only to a later-started build, and a build deletes only chunks of builds that started before it — a run re-started after its lock lapsed can never delete or overtake a newer build still being written.
+- The ghost list and the replay compute ranked/unranked over the contest's current problems only (`currentGhostGap`) — a removed problem's cell must not unrank a ghost in one view and not the other.
+- The ghost CSV download starts with a UTF-8 BOM — Excel shows Vietnamese labels as mojibake without it; the import already strips it.
+- A hidden board is 403 `forbidden` with issue `board_hidden` on both the replay and the sync standings — one wire shape, so clients match the issue code.
+- Replay Redis failures are coded: the lazy read answers 404 `replay_not_ready`, the editor's rebuild 503 `replay_unavailable` (budget refunded), never a bare 500.
 
 ## Organizations and users
 

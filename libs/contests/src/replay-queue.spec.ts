@@ -12,6 +12,10 @@ import type { ContestReplayJob } from './replay-queue';
 interface FakeJob {
   contestId: string;
   state: JobType;
+  /** Milliseconds from now until a delayed job may run; 0 by default. */
+  dueInMs?: number;
+  /** The job started before it could be removed. */
+  isLocked?: boolean;
 }
 const fakeQueue = (jobs: FakeJob[], fails = false) => {
   const add = jest.fn<Promise<void>, unknown[]>(() =>
@@ -22,7 +26,17 @@ const fakeQueue = (jobs: FakeJob[], fails = false) => {
       Promise.resolve(
         jobs
           .filter((job) => types.includes(job.state))
-          .map((job) => ({ data: { contestId: job.contestId } })),
+          .map((job) => ({
+            data: { contestId: job.contestId },
+            timestamp: Date.now() - 1000,
+            delay: 1000 + (job.dueInMs ?? 0),
+            remove: () => {
+              if (job.isLocked)
+                return Promise.reject(new Error('job is locked'));
+              jobs.splice(jobs.indexOf(job), 1);
+              return Promise.resolve();
+            },
+          })),
       ),
     add,
   } as unknown as Queue<ContestReplayJob>;
@@ -32,7 +46,7 @@ const fakeQueue = (jobs: FakeJob[], fails = false) => {
 describe('requestReplayBuild', () => {
   it('queues a build for an idle contest, to start at once by default', async () => {
     const { queue, add } = fakeQueue([]);
-    await requestReplayBuild(queue, 'c1');
+    expect(await requestReplayBuild(queue, 'c1')).toBe('queued');
     expect(add).toHaveBeenCalledTimes(1);
     expect(add.mock.calls[0][2]).toMatchObject({ delay: 0 });
   });
@@ -47,10 +61,46 @@ describe('requestReplayBuild', () => {
     'adds nothing while a %s build for the contest exists',
     async (state) => {
       const { queue, add } = fakeQueue([{ contestId: 'c1', state }]);
-      await requestReplayBuild(queue, 'c1');
+      expect(await requestReplayBuild(queue, 'c1')).toBe('coalesced');
       expect(add).not.toHaveBeenCalled();
     },
   );
+
+  it('moves a build delayed past the requested time forward: the end moved earlier since it was queued', async () => {
+    const jobs: FakeJob[] = [
+      { contestId: 'c1', state: 'delayed', dueInMs: 3 * 3_600_000 },
+    ];
+    const { queue, add } = fakeQueue(jobs);
+    expect(
+      await requestReplayBuild(queue, 'c1', { delayMs: REPLAY_SETTLE_MS }),
+    ).toBe('rescheduled');
+    expect(jobs).toEqual([]);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(add.mock.calls[0][2]).toMatchObject({ delay: REPLAY_SETTLE_MS });
+  });
+
+  it('keeps a delayed build that is due no later than the requested time', async () => {
+    const { queue, add } = fakeQueue([
+      { contestId: 'c1', state: 'delayed', dueInMs: 60_000 },
+    ]);
+    expect(
+      await requestReplayBuild(queue, 'c1', { delayMs: REPLAY_SETTLE_MS }),
+    ).toBe('coalesced');
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it('queues a build when the late delayed one started before it could be replaced', async () => {
+    const { queue, add } = fakeQueue([
+      {
+        contestId: 'c1',
+        state: 'delayed',
+        dueInMs: 3_600_000,
+        isLocked: true,
+      },
+    ]);
+    expect(await requestReplayBuild(queue, 'c1')).toBe('queued');
+    expect(add.mock.calls[0][2]).toMatchObject({ delay: 0 });
+  });
 
   it('queues another build while one is running by default, because the running one read older data', async () => {
     const { queue, add } = fakeQueue([{ contestId: 'c1', state: 'active' }]);

@@ -60,7 +60,7 @@ export class ContestReplayService {
     private readonly repository: ContestReplayRepository,
   ) {}
 
-  /** Chunks under a new build id, then the head, then the old build's chunks go: an api read always sees one complete build. Before `endTime + REPLAY_SETTLE_MS` (the judge is still working, or the contest runs), for `final_submission` (its scores exist only after the final judge) and for a vanished contest there is no replay and any head is removed; a delayed job that runs a hair early (clock skew) removes nothing useful, and the next reader's poll queues it again. */
+  /** Chunks under a new build id, then the head (unless a later-started build already wrote one), then older builds' chunks go: an api read always sees one complete build. Before `endTime + REPLAY_SETTLE_MS` (the judge is still working, or the contest runs), for `final_submission` (its scores exist only after the final judge) and for a vanished contest there is no replay and any head is removed; a delayed job that runs a hair early (clock skew) removes nothing useful, and the next reader's poll queues it again. */
   async build(
     contestId: string,
     { now = new Date(), maxEvents = REPLAY_MAX_EVENTS }: BuildOptions = {},
@@ -70,13 +70,16 @@ export class ContestReplayService {
       await this.repository.removeAll(contestId);
       return { events: 0 };
     }
-    const build = await this.computeBuild(contest, now, maxEvents);
+    // Taken before any read: a build that read newer data has the larger id.
+    const buildId = newId();
+    const build = await this.computeBuild(contest, buildId, now, maxEvents);
     await this.publish(contest, build);
     return { events: build.eventCount };
   }
 
   private async computeBuild(
     contest: ScoringContest,
+    buildId: string,
     now: Date,
     maxEvents: number,
   ): Promise<ReplayBuild> {
@@ -93,7 +96,7 @@ export class ContestReplayService {
     );
     return {
       contestId: contest._id,
-      buildId: newId(),
+      buildId,
       builtAt: now,
       participations,
       eventCount: events.length,
@@ -122,8 +125,9 @@ export class ContestReplayService {
       'ghost',
       build.ghostChunks,
     );
-    await this.repository.replaceHead(this.headOf(contest, build));
-    await this.repository.deleteOtherBuilds(contestId, buildId);
+    if (await this.repository.replaceHead(this.headOf(contest, build)))
+      await this.repository.deleteBuildsBefore(contestId, buildId);
+    else await this.repository.deleteBuild(contestId, buildId);
   }
 
   private hasReplay(contest: ScoringContest, now: Date): boolean {

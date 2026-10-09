@@ -1,5 +1,5 @@
 import type { Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
 import {
   CONTEST_ENQUEUE_TIMEOUT_MS,
@@ -34,32 +34,64 @@ export const replayDelayMs = (endTime: Date, now: Date): number =>
 export const isReplayFinal = (builtAt: Date, endTime: Date): boolean =>
   builtAt.getTime() >= replayReadyAt(endTime).getTime();
 
+/** What a request did: added a build, moved a later delayed build forward (removed and added again), or left a build that has not started yet, which will read current data. */
+export type ReplayRequestOutcome = 'queued' | 'rescheduled' | 'coalesced';
+
+/** When a not-yet-started job may run. Jobs are never `changeDelay`ed (its delay counts from the call, not from `timestamp`), so this is exact. */
+const dueAt = (job: Job<ContestReplayJob>): number =>
+  job.timestamp + (job.delay ?? 0);
+
 /** `contestActionState` reports 'running' first, so it hides a build that waits behind the running one. */
-const hasWaitingBuild = async (
+const waitingBuildOf = async (
   queue: Queue<ContestReplayJob>,
   contestId: string,
-): Promise<boolean> =>
-  (await queue.getJobs(WAITING_JOB_TYPES)).some(
+): Promise<Job<ContestReplayJob> | undefined> =>
+  (await queue.getJobs(WAITING_JOB_TYPES)).find(
     (job) => job.data.contestId === contestId,
   );
 
-/** Coalesces per contest: a build that has not started yet (waiting or delayed) will read current data, so a second request adds nothing; a running one adds at most one waiting build, and none when `ifRunning` is 'skip'. */
-export async function requestReplayBuild(
+/** False when the job started meanwhile (a running job cannot be removed). */
+const removedBeforeStart = async (
+  job: Job<ContestReplayJob>,
+): Promise<boolean> => {
+  try {
+    await job.remove();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const addBuild = (
   queue: Queue<ContestReplayJob>,
   contestId: string,
-  { ifRunning = 'queue', delayMs = 0 }: ReplayRequestOptions = {},
-): Promise<void> {
-  if (await hasWaitingBuild(queue, contestId)) return;
-  if (
-    ifRunning === 'skip' &&
-    (await contestActionState(queue, contestId)) === 'running'
-  )
-    return;
-  await queue.add(
+  delayMs: number,
+) =>
+  queue.add(
     CONTEST_REPLAY_JOB,
     { contestId },
     { ...JOB_RETRY, ...JOB_RETENTION, delay: delayMs },
   );
+
+/** Coalesces per contest: a build that has not started yet (waiting or delayed) will read current data, so a second request adds nothing, unless that build is delayed past this request's time (queued during the contest for an end that moved earlier): then it is replaced. A running build adds at most one waiting build, and none when `ifRunning` is 'skip'. */
+export async function requestReplayBuild(
+  queue: Queue<ContestReplayJob>,
+  contestId: string,
+  { ifRunning = 'queue', delayMs = 0 }: ReplayRequestOptions = {},
+): Promise<ReplayRequestOutcome> {
+  const waiting = await waitingBuildOf(queue, contestId);
+  if (waiting && dueAt(waiting) <= Date.now() + delayMs) return 'coalesced';
+  if (waiting && (await removedBeforeStart(waiting))) {
+    await addBuild(queue, contestId, delayMs);
+    return 'rescheduled';
+  }
+  if (
+    ifRunning === 'skip' &&
+    (await contestActionState(queue, contestId)) === 'running'
+  )
+    return 'coalesced';
+  await addBuild(queue, contestId, delayMs);
+  return 'queued';
 }
 
 /** Never throws: the replay is derived data, and the next trigger repairs a lost request (logged). */

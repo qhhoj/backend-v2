@@ -9,16 +9,22 @@ import {
 } from '@libs/community';
 import type { OrganizationPointsJob } from '@libs/community';
 import {
+  CONTEST_REPLAY_QUEUE,
   contestSubmissionPoints,
   disqualify,
+  LIVE,
+  notifyReplayBuild,
   purgeRankingCache,
+  replayDelayMs,
   scoreParticipation,
   scoringContextOf,
 } from '@libs/contests';
+import type { ContestReplayJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { acceptanceRate, userPoints } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import { ContestResultsRepository } from './contest-results.repository';
+import type { ScoringContest } from './contest-results.repository';
 import { SubmissionEffectsRepository } from './submission-effects.repository';
 
 /** The only place a user's points, a problem's stats or a contest participation's results are recomputed (graded jobs, the sweep, rescores). Each recompute reads Mongo and `$set`s, serialised per key across processes. */
@@ -32,6 +38,8 @@ export class SubmissionEffectsService {
     @Inject(REDIS) private readonly redis: Redis,
     @InjectQueue(ORGANIZATION_POINTS_QUEUE)
     private readonly organizationPoints: Queue<OrganizationPointsJob>,
+    @InjectQueue(CONTEST_REPLAY_QUEUE)
+    private readonly replayQueue: Queue<ContestReplayJob>,
   ) {}
 
   /** Legacy `on_grading_end`: the user only when the problem counts for points, then the problem's stats. A deleted problem has nothing to update; its pending gradings finish without effects. */
@@ -69,6 +77,26 @@ export class SubmissionEffectsService {
       ),
     );
     await this.recomputeParticipation(uuidStr(entry.participation));
+    await this.requestReplayAfterEnd(contest, uuidStr(entry.participation));
+  }
+
+  /** A verdict that lands after the end (judge backlog, rejudge) is missing from a replay built earlier, so it queues a rebuild through the coalescing helper (one build at a time per contest, waiting for the settle time). Only live, qualified rows are in the replay; `final_submission` has none. Never throws: derived data. */
+  private async requestReplayAfterEnd(
+    contest: ScoringContest,
+    participationId: string,
+    now = new Date(),
+  ): Promise<void> {
+    if (now < contest.endTime || contest.formatName === 'final_submission')
+      return;
+    const participation =
+      await this.contestResults.findParticipation(participationId);
+    if (participation?.virtual !== LIVE || participation.isDisqualified) return;
+    await notifyReplayBuild(
+      this.replayQueue,
+      uuidStr(participation.contest),
+      this.logger,
+      { delayMs: replayDelayMs(contest.endTime, now) },
+    );
   }
 
   /** Legacy `recompute_results` through the contest's format, then the contest's ranking cache is dropped (all four keys). */

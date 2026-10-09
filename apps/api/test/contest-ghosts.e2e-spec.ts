@@ -105,6 +105,20 @@ describe('contest ghosts', () => {
     ]);
   });
 
+  it('ranks a ghost whose only missing value is on a problem removed from the contest, like the replay does', async () => {
+    const contest = await icpcContest();
+    await put('editor', contest.key, {
+      csv: 'label,caption,ghost_a,ghost_b\r\nBob,,30,45+0',
+    }).expect(200);
+    expect((await list(contest.key))[0].isUnranked).toBe(true);
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { problems: [contestProblem(problems[1]._id, 0)] },
+    );
+    const [bob] = await list(contest.key);
+    expect([bob.isUnranked, bob.gap]).toEqual([false, null]);
+  });
+
   it('previews without storing on dryRun and replaces the whole set otherwise', async () => {
     const contest = await icpcContest();
     const preview = dataOf<GhostImportResponse>(
@@ -226,6 +240,8 @@ describe('contest ghosts', () => {
     expect(download.headers['content-type']).toMatch(/text\/csv/);
     expect(download.headers['content-disposition']).toMatch(/attachment/);
     expect(download.headers['x-content-type-options']).toBe('nosniff');
+    // Excel reads UTF-8 (Vietnamese labels) only after a BOM.
+    expect(download.text.startsWith('\uFEFFlabel,caption,')).toBe(true);
     const before = await list(contest.key);
     await put('editor', contest.key, { csv: download.text }).expect(200);
     expect(await list(contest.key)).toEqual(before);

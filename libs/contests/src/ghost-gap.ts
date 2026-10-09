@@ -30,3 +30,14 @@ export function ghostGap(
     return 'rejectedBefore';
   return null;
 }
+
+/** The gap over the cells of the contest's current problems only: a cell of a removed problem neither ranks nor unranks a ghost. The ghost list and the replay both use this, so they agree. */
+export const currentGhostGap = (
+  format: FormatSetting,
+  cells: readonly GhostCell[],
+  problemIds: ReadonlySet<string>,
+): GhostGap | null =>
+  ghostGap(
+    format,
+    cells.filter((cell) => problemIds.has(cell.problemId)),
+  );

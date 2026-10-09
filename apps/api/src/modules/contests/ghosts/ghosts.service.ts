@@ -6,7 +6,7 @@ import { AppError } from '@libs/common';
 import {
   CONTEST_REPLAY_QUEUE,
   contestPhase,
-  ghostGap,
+  currentGhostGap,
   notifyReplayBuild,
   replayDelayMs,
 } from '@libs/contests';
@@ -165,8 +165,9 @@ export class GhostsService {
       columns.map((column) => [column.problemId, column.code]),
     );
     const format = { name: contest.formatName, config: contest.formatConfig };
+    const problemIds = new Set(codes.keys());
     return ghosts.map((ghost) => {
-      const gap = ghostGap(format, ghost.cells);
+      const gap = currentGhostGap(format, ghost.cells, problemIds);
       return {
         label: ghost.label,
         caption: ghost.caption,

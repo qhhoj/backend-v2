@@ -1,6 +1,12 @@
 import { newId, uuidStr } from '@libs/database';
 import type { Contest, ContestParticipation, Problem } from '@libs/database';
-import { REPLAY_FORMAT_VERSION, REPLAY_SETTLE_MS } from '@libs/contests';
+import { Queue } from 'bullmq';
+import { waitUntil } from '@libs/common/testing';
+import {
+  CONTEST_REPLAY_QUEUE,
+  REPLAY_FORMAT_VERSION,
+  REPLAY_SETTLE_MS,
+} from '@libs/contests';
 import { ContestReplayProcessor } from '../src/jobs/contest-replay/contest-replay.processor';
 import { ContestReplayRepository } from '../src/jobs/contest-replay/contest-replay.repository';
 import { ContestReplayService } from '../src/jobs/contest-replay/contest-replay.service';
@@ -96,8 +102,33 @@ describe('contest replay build', () => {
   });
   afterAll(() => worker.teardown());
 
+  /** The replay's final frame is the live board: each participant's last event carries its stored totals, and its last event per problem the stored cell. */
+  const expectFinalFrameStored = async (contest: Contest) => {
+    const head = (await headOf(contest))!;
+    const events = await eventsOf(contest);
+    const problemIds = head.problems.map((problem) =>
+      uuidStr(problem.problemId),
+    );
+    for (const [index, participant] of head.participants.entries()) {
+      const stored = (await worker.participations
+        .findById(participant.participationId)
+        .lean())!;
+      const own = events.filter((event) => event[1] === index);
+      expect(own.at(-1)!.slice(4)).toEqual([
+        stored.score,
+        stored.cumtime,
+        stored.tiebreaker,
+      ]);
+      for (const [problemIndex, problemId] of problemIds.entries()) {
+        const last = own.filter((event) => event[2] === problemIndex).at(-1);
+        if (last) expect(last[3]).toEqual(stored.formatData[problemId]);
+      }
+    }
+    return events;
+  };
+
   it.each(['default', 'ioi', 'icpc', 'vnoj', 'ultimate'] as const)(
-    "%s: each participant's last event carries the totals stored on the live board",
+    "%s: each participant's last event carries the totals and cells stored on the live board",
     async (formatName) => {
       const contest = await contestOf({ formatName });
       const ann = await join(contest);
@@ -107,25 +138,124 @@ describe('contest replay build', () => {
       await submit(contest, ann, max, { after: 30, result: 'WA', points: 40 });
       await submit(contest, bob, max, { after: 8, result: 'AC', points: 100 });
       await service.build(contest._id);
+      expect(await expectFinalFrameStored(contest)).toHaveLength(4);
       const head = (await headOf(contest))!;
-      const events = await eventsOf(contest);
-      for (const [index, participant] of head.participants.entries()) {
-        const stored = (await worker.participations
-          .findById(participant.participationId)
-          .lean())!;
-        const last = events.filter((event) => event[1] === index).at(-1)!;
-        expect(last.slice(4)).toEqual([
-          stored.score,
-          stored.cumtime,
-          stored.tiebreaker,
-        ]);
-      }
       expect(head.formatVersion).toBe(REPLAY_FORMAT_VERSION);
       expect(
         head.problems.map((problem) => uuidStr(problem.problemId)),
       ).toEqual([sum._id, max._id]);
     },
   );
+
+  it("ioi16: each participant's last event carries the batch-scored totals and cells stored on the live board", async () => {
+    const batched = await seedProblem(worker, {
+      code: 'rbatch',
+      data: {
+        cases: [
+          { type: 'S', points: 30 },
+          { type: 'C', points: 0 },
+          { type: 'E' },
+          { type: 'C', points: 20 },
+        ],
+      } as never,
+    });
+    const contest = await seedContest(worker, {
+      formatName: 'ioi16',
+      problems: [entry(batched, 0)],
+      ...ENDED(),
+    });
+    const ann = await join(contest);
+    const bob = await join(contest);
+    const cases = (batchPoints: number, otherPoints: number) =>
+      [
+        { position: 1, status: 'AC', points: batchPoints, total: 30, batch: 1 },
+        {
+          position: 2,
+          status: 'AC',
+          points: otherPoints,
+          total: 20,
+          batch: null,
+        },
+      ] as never;
+    const graded = async (
+      participation: ContestParticipation,
+      after: number,
+      caseRows: never,
+    ) => {
+      await seedContestSubmission(worker, participation, batched._id, {
+        fields: {
+          date: new Date(contest.startTime.getTime() + after * MINUTE),
+          cases: caseRows,
+        },
+      });
+      await effects.recomputeParticipation(participation._id);
+    };
+    await graded(ann, 5, cases(0, 20));
+    await graded(ann, 9, cases(30, 0));
+    await graded(bob, 7, cases(30, 20));
+    await service.build(contest._id);
+    await expectFinalFrameStored(contest);
+    const scores = (
+      await worker.participations
+        .find({ contest: contest._id })
+        .sort({ _id: 1 })
+        .lean()
+    ).map((row) => row.score);
+    // Batch 1 (30 of 50 data points) and the plain case (20) scaled to 100.
+    expect(scores).toEqual([100, 100]);
+  });
+
+  it('puts a verdict that lands after the build into the replay: the late grading queues a rebuild', async () => {
+    const contest = await contestOf();
+    const ann = await join(contest);
+    const bob = await join(contest);
+    await submit(contest, ann, sum, { after: 5, result: 'AC', points: 100 });
+    await service.build(contest._id);
+    const first = uuidStr((await headOf(contest))!.buildId);
+    expect(await eventsOf(contest)).toHaveLength(1);
+    // Submitted during the contest, judged after the build (a judge backlog).
+    const late = await seedContestSubmission(worker, bob, max._id, {
+      fields: { date: new Date(contest.startTime.getTime() + 50 * MINUTE) },
+      points: 0,
+    });
+    await effects.applyContest(late._id);
+    await waitUntil(
+      async () => uuidStr((await headOf(contest))?.buildId) !== first,
+      10_000,
+    );
+    const events = await expectFinalFrameStored(contest);
+    expect(events.map((event) => event[0])).toEqual([300, 3000]);
+  });
+
+  it('queues no rebuild for a late verdict of a virtual or spectating row, or one graded while the contest runs', async () => {
+    const add = jest.spyOn(Queue.prototype, 'add');
+    const replayAdds = () =>
+      add.mock.contexts.filter(
+        (queue) => (queue as Queue).name === CONTEST_REPLAY_QUEUE,
+      ).length;
+    try {
+      const ended = await contestOf();
+      const running = await contestOf({
+        endTime: new Date(Date.now() + HOUR),
+      });
+      const rows = [
+        await join(ended, { virtual: 1 }),
+        await join(ended, { virtual: -1 }),
+        await join(running),
+      ];
+      for (const row of rows) {
+        const submission = await seedContestSubmission(worker, row, sum._id);
+        await effects.applyContest(submission._id);
+      }
+      expect(replayAdds()).toBe(0);
+      const live = await join(ended);
+      const submission = await seedContestSubmission(worker, live, sum._id);
+      await effects.applyContest(submission._id);
+      expect(replayAdds()).toBe(1);
+    } finally {
+      add.mockRestore();
+    }
+  });
 
   it('writes no head before the end plus the settle time, and drops a head built earlier', async () => {
     const contest = await contestOf();
@@ -277,6 +407,82 @@ describe('contest replay build', () => {
         buildId: second.buildId,
       }),
     ).toBe(second.chunkCount + second.ghostChunkCount);
+  });
+
+  it('never deletes the chunks of a build that started later and is still being written', async () => {
+    const contest = await contestOf();
+    const ann = await join(contest);
+    await submit(contest, ann, sum, { after: 5, result: 'AC', points: 100 });
+    await service.build(contest._id);
+    const old = (await headOf(contest))!.buildId;
+    let later = '';
+    const swap = repository.replaceHead.bind(repository);
+    jest
+      .spyOn(repository, 'replaceHead')
+      .mockImplementationOnce(async (head) => {
+        later = newId();
+        // A second run, started after this one, has written a chunk and not yet its head.
+        await worker.replayChunks.create({
+          contest: contest._id,
+          buildId: later,
+          stream: 'real',
+          chunk: 0,
+          events: [],
+        });
+        return swap(head);
+      });
+    await service.build(contest._id);
+    expect(
+      await worker.replayChunks.countDocuments({
+        contest: contest._id,
+        buildId: later,
+      }),
+    ).toBe(1);
+    expect(
+      await worker.replayChunks.countDocuments({
+        contest: contest._id,
+        buildId: old,
+      }),
+    ).toBe(0);
+  });
+
+  it('leaves the head of a build that started later, and drops its own chunks, when it finishes last', async () => {
+    const contest = await contestOf();
+    const ann = await join(contest);
+    await submit(contest, ann, sum, { after: 5, result: 'AC', points: 100 });
+    let later = '';
+    const swap = repository.replaceHead.bind(repository);
+    let overtaken = '';
+    jest
+      .spyOn(repository, 'replaceHead')
+      .mockImplementationOnce(async (head) => {
+        overtaken = head.buildId;
+        later = newId();
+        // The later run finished first.
+        await worker.replayChunks.create({
+          contest: contest._id,
+          buildId: later,
+          stream: 'real',
+          chunk: 0,
+          events: [],
+        });
+        await swap({ ...head, buildId: later });
+        return swap(head);
+      });
+    await service.build(contest._id);
+    expect(uuidStr((await headOf(contest))!.buildId)).toBe(later);
+    expect(
+      await worker.replayChunks.countDocuments({
+        contest: contest._id,
+        buildId: overtaken,
+      }),
+    ).toBe(0);
+    expect(
+      await worker.replayChunks.countDocuments({
+        contest: contest._id,
+        buildId: later,
+      }),
+    ).toBe(1);
   });
 
   it('keeps serving the previous build when a rebuild dies before the head swap', async () => {

@@ -352,9 +352,14 @@ describe('sync API: participants, removal and standings', () => {
         { key },
         { $set: { scoreboardVisibility: 'H' } },
       );
-      await standings(bearer, key)
+      const refused = await standings(bearer, key)
         .expect(403)
-        .expect(errorCode('board_hidden'));
+        .expect(errorCode('forbidden'));
+      expect(
+        (
+          refused.body as { error: { issues: Array<{ code: string }> } }
+        ).error.issues.map((issue) => issue.code),
+      ).toEqual(['board_hidden']);
     });
 
     it('needs the read scope and ownership, with one 404 body for every key that is not its own', async () => {

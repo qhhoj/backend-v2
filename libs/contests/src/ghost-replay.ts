@@ -1,6 +1,6 @@
 import type { ScoringContext, ScoringRow } from './formats/format';
 import type { FormatSetting } from './formats/registry';
-import { ghostGap } from './ghost-gap';
+import { currentGhostGap, ghostGap } from './ghost-gap';
 import type { GhostGap } from './ghost-gap';
 import type { GhostCell, GhostInput } from './ghost-types';
 import { replayEvents } from './replay-events';
@@ -81,10 +81,7 @@ export function ghostReplays(
 ): GhostReplay[] {
   const ids = new Set(setup.problems.map((problem) => problem.problemId));
   const isRanked = (ghost: GhostInput): boolean =>
-    ghostGap(
-      setup.format,
-      ghost.cells.filter((cell) => ids.has(cell.problemId)),
-    ) === null;
+    currentGhostGap(setup.format, ghost.cells, ids) === null;
   const byLabel = [...ghosts].sort((left, right) =>
     left.label < right.label ? -1 : left.label > right.label ? 1 : 0,
   );

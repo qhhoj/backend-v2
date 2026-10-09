@@ -190,6 +190,25 @@ describe('ghostsToCsv', () => {
     );
   });
 
+  it('starts with a UTF-8 BOM so Excel shows Vietnamese text, and still imports back', () => {
+    const ghosts = [
+      {
+        label: 'Nguyễn Văn Ánh',
+        caption: 'Trường Đại học',
+        cells: [
+          { problemId: 'id-sum', minute: 5, rejectedBefore: 1, points: null },
+        ],
+      },
+    ];
+    const columns = [
+      { problemId: 'id-sum', code: 'sum' },
+      { problemId: 'id-max', code: 'max' },
+    ];
+    const csv = ghostsToCsv(ghosts, columns);
+    expect(csv.startsWith('\uFEFFlabel,caption,sum,max\r\n')).toBe(true);
+    expect(parseGhostCsv(csv, IDS).ghosts).toEqual(ghosts);
+  });
+
   it('round-trips through the parser', () => {
     const csv = [HEADER, 'Ann,"School, A",12+2,', 'Bob,,70@30,45@50+1'].join(
       '\r\n',

@@ -9,6 +9,15 @@ import { SyncActsAsService } from './sync-acts-as.service';
 import { SyncContestOwnership } from './sync-contest-ownership.service';
 import { SyncRateLimit } from './sync-rate-limit.service';
 
+const BOARD_HIDDEN = 'The ranking of this contest is hidden';
+/** Same wire shape as the contest replay's refusal: `forbidden`, with the reason as the issue code. */
+const boardHidden = () =>
+  new AppError('forbidden', 403, BOARD_HIDDEN, undefined, undefined, {
+    issues: [
+      { field: 'standings', code: 'board_hidden', message: BOARD_HIDDEN },
+    ],
+  });
+
 @Injectable()
 export class SyncStandingsService {
   constructor(
@@ -30,11 +39,7 @@ export class SyncStandingsService {
     if (
       !ContestAccess.boardVisible(null, ContestAccess.accessView(contest), now)
     )
-      throw new AppError(
-        'board_hidden',
-        403,
-        'The ranking of this contest is hidden',
-      );
+      throw boardHidden();
     return this.ranking.board(contest, {
       withVirtual: false,
       isFrozenView: isFrozenFor(contest, now, false),

@@ -2,8 +2,9 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
-import { RateLimitService, unique } from '@libs/common';
+import { AppError, RateLimitService, unique } from '@libs/common';
 import {
+  CONTEST_ENQUEUE_TIMEOUT_MS,
   CONTEST_REPLAY_QUEUE,
   isReplayFinal,
   notifyReplayBuild,
@@ -12,7 +13,12 @@ import {
   replayDelayMs,
   requestReplayBuild,
 } from '@libs/contests';
-import type { ContestReplayJob, ReplayEvent } from '@libs/contests';
+import type {
+  ContestReplayJob,
+  ReplayEvent,
+  ReplayRequestOutcome,
+} from '@libs/contests';
+import { withinTimeout } from '@libs/judging';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { ContestViewerService } from '../core/contest-viewer.service';
 import type { ContestDocument } from '../core/contests.repository';
@@ -55,6 +61,9 @@ const replayChanged = () =>
     'The replay was rebuilt; reload it from chunk 0',
   );
 
+const notReady = () =>
+  replayRefusal(404, 'replay_not_ready', 'The replay is not available yet');
+
 /** A head of the current format, built after the end plus the settle time. */
 const isServable = (
   head: StoredReplayHead,
@@ -94,7 +103,7 @@ export class ReplayService {
     });
   }
 
-  /** Ended contests only (the worker builds nothing earlier); waits for the settle time when the end is recent. A failed enqueue gives the editor's budget back. */
+  /** Ended contests only (the worker builds nothing earlier); waits for the settle time when the end is recent. The editor's budget is given back when nothing was queued (a build that has not started yet will read current data) or the queue failed (503 `replay_unavailable`). */
   rebuild(
     principal: Principal,
     key: string,
@@ -103,21 +112,63 @@ export class ReplayService {
     return withCodedRefusals(async () => {
       const contest = await this.viewers.editableContest(principal, key);
       assertEnded(contest, now);
-      const refund = await this.rateLimit.reserve(
-        [`replay-rebuild:${contest._id}:${principal.userId}`],
-        REPLAY_REBUILD_LIMIT,
-        REPLAY_REBUILD_WINDOW_SECONDS,
+      const refund = await this.reserveRebuild(contest, principal);
+      const outcome = await this.requestRebuild(contest, now).catch(
+        async (error: unknown) => {
+          await refund().catch(() => undefined);
+          throw error;
+        },
       );
-      try {
-        await requestReplayBuild(this.queue, contest._id, {
-          delayMs: replayDelayMs(contest.endTime, now),
-        });
-      } catch (error) {
-        await refund();
-        throw error;
-      }
+      if (outcome === 'coalesced') await refund();
       return { queued: true };
     });
+  }
+
+  /** The editor's 429 passes; Redis down is a 503, not a bare 500. */
+  private async reserveRebuild(
+    contest: ContestDocument,
+    principal: Principal,
+  ): Promise<() => Promise<void>> {
+    try {
+      return await withinTimeout(
+        this.rateLimit.reserve(
+          [`replay-rebuild:${contest._id}:${principal.userId}`],
+          REPLAY_REBUILD_LIMIT,
+          REPLAY_REBUILD_WINDOW_SECONDS,
+        ),
+        CONTEST_ENQUEUE_TIMEOUT_MS,
+      );
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw this.unavailable(contest._id, error);
+    }
+  }
+
+  private unavailable(contestId: string, error: unknown): AppError {
+    this.logger.error(
+      `Replay of contest ${contestId} not enqueued: ${(error as Error).message}`,
+    );
+    return replayRefusal(
+      503,
+      'replay_unavailable',
+      'The replay cannot be rebuilt right now; try again later',
+    );
+  }
+
+  private async requestRebuild(
+    contest: ContestDocument,
+    now: Date,
+  ): Promise<ReplayRequestOutcome> {
+    try {
+      return await withinTimeout(
+        requestReplayBuild(this.queue, contest._id, {
+          delayMs: replayDelayMs(contest.endTime, now),
+        }),
+        CONTEST_ENQUEUE_TIMEOUT_MS,
+      );
+    } catch (error) {
+      throw this.unavailable(contest._id, error);
+    }
   }
 
   private async chunkResponse(
@@ -182,22 +233,27 @@ export class ReplayService {
         delayMs: replayDelayMs(contest.endTime, now),
       },
     );
-    if (!isQueued)
-      throw replayRefusal(
-        404,
-        'replay_not_ready',
-        'The replay is not available yet',
-      );
+    if (!isQueued) throw notReady();
     return BUILDING;
   }
 
+  /** Redis down counts as "no": the caller then answers 404 `replay_not_ready`, never a bare 500. */
   private async mayEnqueue(contestId: string): Promise<boolean> {
-    return (
-      (await this.rateLimit.hit(
-        `replay-lazy:${contestId}`,
-        LAZY_BUILD_WINDOW_SECONDS,
-      )) === 1
-    );
+    try {
+      const hits = await withinTimeout(
+        this.rateLimit.hit(
+          `replay-lazy:${contestId}`,
+          LAZY_BUILD_WINDOW_SECONDS,
+        ),
+        CONTEST_ENQUEUE_TIMEOUT_MS,
+      );
+      return hits === 1;
+    } catch (error) {
+      this.logger.error(
+        `Replay of contest ${contestId} not enqueued: ${(error as Error).message}`,
+      );
+      throw notReady();
+    }
   }
 
   private async firstChunkParts(
