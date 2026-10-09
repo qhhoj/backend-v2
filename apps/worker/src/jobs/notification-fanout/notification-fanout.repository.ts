@@ -7,6 +7,7 @@ import {
   isUuid,
   newId,
   Notification,
+  uuidStr,
 } from '@libs/database';
 import type { ContestFormatName } from '@libs/database';
 import { notificationExpiry } from '@libs/community';
@@ -32,6 +33,16 @@ export interface ParticipantRow {
 }
 
 const MONGO_DUPLICATE_KEY = 11000;
+/** Announcements remembered per row: a retry older than this many announcements on one unread row would count again. */
+const REFS_KEPT = 20;
+
+const textFields = (draft: NotificationDraft) => ({
+  kind: draft.kind,
+  title: draft.title,
+  body: draft.body,
+  path: draft.path,
+  priority: draft.priority,
+});
 
 /** A retried upsert loses against the row its first run wrote (unique partial index): that is the idempotent outcome, not an error. */
 function onlyDuplicateKeys(error: unknown): boolean {
@@ -93,14 +104,27 @@ export class NotificationFanoutRepository {
       .cursor();
   }
 
-  /** Per user: merge into the unread row of the group unless it already took this announcement (`lastRef`), else insert. The filter names `unread: true` (the partial unique index). Unordered, so one lost race does not stop the chunk. */
+  /** The users of `userIds` that already took announcement `ref`, in an unread or a read row: found by `{user, refs}`. */
+  async appliedUsers(
+    userIds: readonly string[],
+    ref: string,
+  ): Promise<Set<string>> {
+    const rows = await this.notifications
+      .find({ user: { $in: userIds }, refs: ref }, { user: 1 })
+      .lean<{ user: unknown }[]>()
+      .exec();
+    return new Set(rows.map((row) => uuidStr(row.user)));
+  }
+
+  /** Per user, an announcement made at `at`: merge into the unread row of the group, else insert (the filter names `unread: true`, the partial unique index). `lastActivityAt` only moves forward and the texts follow only the newest announcement, so a reordered run puts nothing older on top. Call it for users `appliedUsers` did not return. Unordered, so one lost race does not stop the chunk. */
   async upsertRows(
     userIds: readonly string[],
     draft: NotificationDraft,
     ref: string,
-    now: Date,
+    at: Date,
   ): Promise<void> {
     try {
+      await this.mergeCounts(userIds, draft, ref, at);
       await this.notifications.bulkWrite(
         userIds.map((user) => ({
           updateOne: {
@@ -108,24 +132,9 @@ export class NotificationFanoutRepository {
               user,
               groupKey: draft.groupKey,
               unread: true,
-              lastRef: { $ne: ref },
+              lastActivityAt: at,
             },
-            update: {
-              $inc: { count: 1 },
-              $set: {
-                kind: draft.kind,
-                title: draft.title,
-                body: draft.body,
-                path: draft.path,
-                priority: draft.priority,
-                lastActivityAt: now,
-                expiresAt: notificationExpiry(now),
-                lastRef: ref,
-              },
-              $setOnInsert: { _id: newId(), readAt: null, createdAt: now },
-            },
-            upsert: true,
-            setDefaultsOnInsert: false,
+            update: { $set: textFields(draft) },
           },
         })),
         { ordered: false },
@@ -133,5 +142,39 @@ export class NotificationFanoutRepository {
     } catch (error) {
       if (!onlyDuplicateKeys(error)) throw error;
     }
+  }
+
+  private mergeCounts(
+    userIds: readonly string[],
+    draft: NotificationDraft,
+    ref: string,
+    at: Date,
+  ) {
+    return this.notifications.bulkWrite(
+      userIds.map((user) => ({
+        updateOne: {
+          filter: {
+            user,
+            groupKey: draft.groupKey,
+            unread: true,
+            refs: { $ne: ref },
+          },
+          update: {
+            $inc: { count: 1 },
+            $max: { lastActivityAt: at, expiresAt: notificationExpiry(at) },
+            $push: { refs: { $each: [ref], $slice: -REFS_KEPT } },
+            $setOnInsert: {
+              _id: newId(),
+              ...textFields(draft),
+              readAt: null,
+              createdAt: at,
+            },
+          },
+          upsert: true,
+          setDefaultsOnInsert: false,
+        },
+      })),
+      { ordered: false },
+    );
   }
 }

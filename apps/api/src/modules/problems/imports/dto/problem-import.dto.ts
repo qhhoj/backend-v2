@@ -14,7 +14,8 @@ import {
   Min,
 } from 'class-validator';
 import { IsProblemCode } from '../../core/dto/problem-code.decorator';
-import { toArray, toBoolean } from '../../core/dto/transforms';
+import { toArray } from '@libs/common';
+import { toBoolean } from '../../core/dto/transforms';
 
 export const IMPORT_MODES = ['create', 'update'] as const;
 export type ImportMode = (typeof IMPORT_MODES)[number];

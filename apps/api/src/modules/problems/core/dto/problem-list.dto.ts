@@ -15,7 +15,8 @@ import {
   Min,
 } from 'class-validator';
 import { PROBLEM_SORT_OPTIONS } from '../problem-search';
-import { toArray, toBoolean } from './transforms';
+import { toArray } from '@libs/common';
+import { toBoolean } from './transforms';
 
 export const PROBLEM_VISIBILITIES = ['public', 'private', 'all'] as const;
 export type ProblemVisibility = (typeof PROBLEM_VISIBILITIES)[number];

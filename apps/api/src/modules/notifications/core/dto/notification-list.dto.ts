@@ -11,7 +11,7 @@ import {
 } from 'class-validator';
 import { NOTIFICATION_KINDS, NOTIFICATION_PRIORITIES } from '@libs/database';
 import type { NotificationKind, NotificationPriority } from '@libs/database';
-import { toArray } from '../../../problems/core/dto/transforms';
+import { toArray } from '@libs/common';
 
 export const NOTIFICATION_STATES = ['all', 'unread', 'read'] as const;
 export type NotificationState = (typeof NOTIFICATION_STATES)[number];

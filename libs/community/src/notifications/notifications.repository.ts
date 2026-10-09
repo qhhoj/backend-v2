@@ -96,7 +96,7 @@ export class NotificationsRepository {
       count: 1,
       unread: true,
       readAt: null,
-      lastRef: null,
+      refs: [],
       lastActivityAt: now,
       createdAt: now,
       expiresAt: notificationExpiry(now),

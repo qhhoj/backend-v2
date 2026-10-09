@@ -27,12 +27,17 @@ describe('notification fan-out', () => {
       isVisible: true,
       ...overrides,
     });
-  const announcement = (contestId: string, title: string) =>
+  const announcement = (
+    contestId: string,
+    title: string,
+    createdAt = new Date(),
+  ) =>
     worker.announcements.create({
       contest: contestId,
       title,
       description: '',
       descriptionHtml: '',
+      createdAt,
     });
   const join = (
     contestId: string,
@@ -135,11 +140,52 @@ describe('notification fan-out', () => {
     await join(round._id, user);
     const saved = await announcement(round._id, 'Once');
     await fanout.announce(saved._id);
-    await expect(fanout.announce(saved._id)).resolves.toBeGreaterThanOrEqual(0);
+    await expect(fanout.announce(saved._id)).resolves.toBe(1);
     await fanout.announce(saved._id);
     const rows = await rowsOf(user);
     expect(rows).toHaveLength(1);
     expect(rows[0].count).toBe(1);
+  });
+
+  it('a retry after the user read the row opens no second unread row', async () => {
+    const round = await contest();
+    const user = newId();
+    await join(round._id, user);
+    const saved = await announcement(round._id, 'Read meanwhile');
+    await fanout.announce(saved._id);
+    await worker.notifications.updateOne(
+      { user },
+      { $set: { unread: false, readAt: new Date() } },
+    );
+    await fanout.announce(saved._id);
+    const rows = await rowsOf(user);
+    expect(rows.map((row) => [row.unread, row.count])).toEqual([[false, 1]]);
+  });
+
+  it('a delayed retry of an older announcement neither counts again nor puts its text back on top', async () => {
+    const round = await contest();
+    const user = newId();
+    await join(round._id, user);
+    const older = await announcement(round._id, 'Older', minutesFromNow(-5));
+    const newer = await announcement(round._id, 'Newer');
+    await fanout.announce(older._id);
+    await fanout.announce(newer._id);
+    await fanout.announce(older._id);
+    const [row] = await rowsOf(user);
+    expect(row).toMatchObject({ count: 2, body: 'Newer' });
+    expect(row.lastActivityAt).toEqual(newer.createdAt);
+  });
+
+  it('applied out of order, the newest announcement still shows on top with both counted', async () => {
+    const round = await contest();
+    const user = newId();
+    await join(round._id, user);
+    const older = await announcement(round._id, 'Older', minutesFromNow(-5));
+    const newer = await announcement(round._id, 'Newer');
+    await fanout.announce(newer._id);
+    await fanout.announce(older._id);
+    const [row] = await rowsOf(user);
+    expect(row).toMatchObject({ count: 2, body: 'Newer' });
   });
 
   it('writes every recipient of a large contest across chunks', async () => {

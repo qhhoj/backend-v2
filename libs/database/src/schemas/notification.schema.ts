@@ -51,8 +51,8 @@ export class Notification {
   @Prop({ default: 1, min: 1 }) count!: number;
   @Prop({ default: true }) unread!: boolean;
   @Prop({ type: Date, default: null }) readAt!: Date | null;
-  /** The announcement id last merged by the fan-out job: makes a retried job a no-op. */
-  @Prop({ type: String, default: null, maxlength: 64 }) lastRef!: string | null;
+  /** The latest announcement ids merged into this row by the fan-out job (bounded): makes a retried or reordered job a no-op. */
+  @Prop({ type: [String], default: [] }) refs!: string[];
   /** Lists order by this, not by `_id`: a merge moves the row to the top. */
   @Prop({ type: Date, required: true }) lastActivityAt!: Date;
   @Prop({ type: Date, required: true }) createdAt!: Date;
@@ -65,6 +65,8 @@ export const NotificationSchema = SchemaFactory.createForClass(Notification);
 NotificationSchema.index({ user: 1, lastActivityAt: -1, _id: -1 });
 // Unread and read lists, the unread count and the high-priority banner.
 NotificationSchema.index({ user: 1, unread: 1, lastActivityAt: -1, _id: -1 });
+// "Did this user already take announcement X", read rows included (the fan-out's idempotency check).
+NotificationSchema.index({ user: 1, refs: 1 });
 // The nightly trim's scan for users active since a time; `user` rides along so the scan is covered.
 NotificationSchema.index({ lastActivityAt: -1, user: 1 });
 // One unread row per user and group: the merge target.

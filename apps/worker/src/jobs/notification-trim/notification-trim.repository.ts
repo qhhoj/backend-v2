@@ -3,10 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Notification, uuidStr } from '@libs/database';
 import type { Model, PipelineStage } from 'mongoose';
 
-/** Distinct users with a row touched since `since`: the first stage is served by `{lastActivityAt: -1, user: 1}`. */
-export const activeUsersPipeline = (since: Date): PipelineStage[] => [
-  { $match: { lastActivityAt: { $gte: since } } },
-  { $group: { _id: '$user' } },
+/** The index the over-cap scan reads whole: `{user, lastActivityAt, _id}` covers the group, so no document is fetched. */
+export const OVER_CAP_SCAN_INDEX = { user: 1, lastActivityAt: -1, _id: -1 };
+
+/** Users holding more than `cap` rows. */
+export const overCapUsersPipeline = (cap: number): PipelineStage[] => [
+  { $group: { _id: '$user', rows: { $sum: 1 } } },
+  { $match: { rows: { $gt: cap } } },
 ];
 
 /** A user's rows newest first, served by `{user, lastActivityAt, _id}` with no sort stage. */
@@ -28,15 +31,12 @@ export class NotificationTrimRepository {
     private readonly notifications: Model<Notification>,
   ) {}
 
-  async activeSince(since: Date): Promise<string[]> {
+  async overCap(cap: number): Promise<string[]> {
     const groups = await this.notifications
-      .aggregate<{ _id: unknown }>(activeUsersPipeline(since))
+      .aggregate<{ _id: unknown }>(overCapUsersPipeline(cap))
+      .hint(OVER_CAP_SCAN_INDEX)
       .exec();
     return groups.map((group) => uuidStr(group._id));
-  }
-
-  count(userId: string): Promise<number> {
-    return this.notifications.countDocuments({ user: userId }).exec();
   }
 
   /** Up to `limit` rows past the newest `keep`. */

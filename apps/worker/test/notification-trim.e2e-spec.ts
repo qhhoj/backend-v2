@@ -12,7 +12,8 @@ import { NotificationTrimProcessor } from '../src/jobs/notification-trim/notific
 import { NotificationTrimRepository } from '../src/jobs/notification-trim/notification-trim.repository';
 import { NotificationTrimService } from '../src/jobs/notification-trim/notification-trim.service';
 import {
-  activeUsersPipeline,
+  OVER_CAP_SCAN_INDEX,
+  overCapUsersPipeline,
   newestFirstQuery,
 } from '../src/jobs/notification-trim/notification-trim.repository';
 import { setupWorkerTest } from './setup';
@@ -41,7 +42,7 @@ describe('notification trim', () => {
           count: 1,
           unread: index % 2 === 0,
           readAt: null,
-          lastRef: null,
+          refs: [],
           lastActivityAt: at,
           createdAt: at,
           expiresAt: new Date(at.getTime() + 90 * DAY),
@@ -94,11 +95,11 @@ describe('notification trim', () => {
     expect([await countOf(one), await countOf(two)]).toEqual([500, 500]);
   });
 
-  it('only visits users with activity in the last 25 hours', async () => {
+  it('trims a user over the cap whose last activity is days old (a skipped night leaves nobody behind)', async () => {
     const dormant = newId();
     await seed(dormant, NOTIFICATION_CAP_PER_USER + 10, 3 * DAY);
-    expect(await trims.trim()).toEqual({ users: 0, deleted: 0 });
-    expect(await countOf(dormant)).toBe(NOTIFICATION_CAP_PER_USER + 10);
+    expect(await trims.trim()).toEqual({ users: 1, deleted: 10 });
+    expect(await countOf(dormant)).toBe(NOTIFICATION_CAP_PER_USER);
   });
 
   it('spares a row that a merge moved between the read and the delete', async () => {
@@ -123,15 +124,15 @@ describe('notification trim', () => {
     expect(await worker.notifications.exists({ _id: stale.id })).toBeNull();
   });
 
-  it('finds the active users and the newest rows through indexes, not a collection scan', async () => {
-    const since = new Date(Date.now() - DAY);
-    const activePlan = JSON.stringify(
+  it('finds the over-cap users and the newest rows through indexes, not a collection scan', async () => {
+    const overCapPlan = JSON.stringify(
       await worker.notifications
-        .aggregate(activeUsersPipeline(since))
+        .aggregate(overCapUsersPipeline(NOTIFICATION_CAP_PER_USER))
+        .hint(OVER_CAP_SCAN_INDEX)
         .explain('queryPlanner'),
     );
-    expect(activePlan).toContain('IXSCAN');
-    expect(activePlan).not.toContain('COLLSCAN');
+    expect(overCapPlan).toContain('IXSCAN');
+    expect(overCapPlan).not.toContain('COLLSCAN');
     const newest = (await newestFirstQuery(worker.notifications, newId())
       .skip(NOTIFICATION_CAP_PER_USER)
       .limit(1000)

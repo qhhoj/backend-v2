@@ -141,7 +141,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - SSE client limits: per user, per IP, total, feed and contest caps; slow clients are dropped on sustained backlog (2 s) or at once above 256 KiB; hijacked replies skip `onSend`, so streams never refresh the session cookie — memory stays bounded.
 - Case events stream only when every case result is visible to the viewer; the public feed covers public non-org-private problems with no cases — no leak through progress events.
 - Notification nudges ride a new per-user SSE channel, `GET /api/internal/events/user` (frame `notification {id}`), instead of a stream per feature — one stream per signed-in tab, with its own `userTotal` cap.
-- Notification streams get their own cap: perUser 8 -> 12 (a tab holds a user stream plus up to three page streams), userTotal 2500 (half of `total`) so they never take submission, contest or ticket slots; perIp stays 16 (labs use `SSE_IP_ALLOWLIST`); limits stay per api process.
+- Notification streams get their own cap: perUser 8 -> 12 (a tab holds a user stream plus up to three page streams), userTotal 2000, with feedTotal 1000 and contestTotal 1500 (was 2000) the capped channels sum to 4500 of `total` 5000, so submission and ticket streams always have a floor of 500 slots (a spec pins `total` minus the sum >= 500); perIp stays 16 (labs use `SSE_IP_ALLOWLIST`); limits stay per api process.
 - Contest announcements write inbox rows through the `notification-fanout` job and send no SSE nudge — the contest stream already shows them; the bell catches up by polling.
 
 ## Contests
@@ -268,11 +268,11 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Ticket `open` filters both ways; absent means both — the closed-ticket view needs `open=false` and the default list must not change.
 - Flatpage preview is its own route (`flatpages.change_flatpage`) rather than loosening the problems preview, which needs `edit_own_problem`; it shares the `render-preview:user:<id>` budget with the statement preview, so one per-user limit covers both.
 - Flatpage revisions answer 400 for a malformed page id, but the existing `/pages/:id` routes keep 404 — the ruling kept the older routes unchanged rather than align them.
-- Notifications: one unread row per user and `groupKey` (partial unique index), a repeated event merges into it and moves it to the top by `lastActivityAt`, a concurrent insert that loses on E11000 retries once as a merge — the row is unique by construction.
+- Notifications: one unread row per user and `groupKey` (partial unique index), a repeated event merges into it and moves it to the top by `lastActivityAt`, a concurrent insert that loses on E11000 retries as a merge (up to 3 attempts) — the row is unique by construction.
 - `NotificationsService` lives in `libs/community`, not an api module — the worker writes rows too; it never throws, so a notification problem never fails the write that caused it.
-- The fan-out job stores the announcement id as `lastRef` and treats the duplicate-key error of a retried upsert as done — a BullMQ retry must not double-count.
+- The fan-out job keeps the last 20 announcement ids on the row (`refs`, indexed with `user`), skips users whose row, read or unread, already has the id, and orders text by the announcement's `createdAt` with `$max` — a BullMQ retry or reordered run neither double-counts, reopens a read row, nor puts older text on top; a duplicate-key error of a racing upsert counts as done.
 - Inbox writes under impersonation are 204 no-ops — a superuser must not clear the impersonated user's unread state, and the UI must not error.
-- The inbox keeps 90 days after the last activity and 500 rows per user (nightly trim over users active in the last 25 h) — a pointer list, not an archive; no per-user mute in v1.
+- The inbox keeps 90 days after the last activity and 500 rows per user (nightly trim of every user over the cap, found by count) — a pointer list, not an archive; no per-user mute in v1.
 
 ## Settings
 

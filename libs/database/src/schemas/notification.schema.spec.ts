@@ -43,7 +43,7 @@ describe('Notification schema', () => {
       priority: 'normal',
       body: '',
       readAt: null,
-      lastRef: null,
+      refs: [],
     });
   });
 

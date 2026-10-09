@@ -47,6 +47,13 @@ describe('notification inbox', () => {
     authed(api.http().get(`${INBOX}${path}`), people[who].session);
   const post = (who: string, path: string) =>
     authed(api.http().post(`${INBOX}${path}`), people[who].session);
+  /** The wire error of a failed call: its code and the codes of its field issues. */
+  const errorOf = (response: { body: unknown }) => {
+    const { error } = response.body as {
+      error: { code: string; issues?: { field: string; code: string }[] };
+    };
+    return { code: error.code, issues: error.issues ?? [] };
+  };
   const items = async (who: string, query = '') =>
     dataOf<NotificationResponse[]>(await get(who, query).expect(200));
   const titles = async (who: string, query = '') =>
@@ -138,13 +145,22 @@ describe('notification inbox', () => {
   });
 
   it('refuses an unknown kind, an empty kind and more kinds than exist', async () => {
-    await get('alice', '?kind=bogus').expect(400);
-    await get('alice', '?kind=').expect(400);
+    const bogus = errorOf(await get('alice', '?kind=bogus').expect(400));
+    expect(bogus.issues).toEqual([
+      expect.objectContaining({ field: 'kind', code: 'is_in' }),
+    ]);
+    const empty = errorOf(await get('alice', '?kind=').expect(400));
+    expect(empty.issues).toEqual([
+      expect.objectContaining({ field: 'kind', code: 'is_in' }),
+    ]);
     const tooMany = Array.from(
       { length: NOTIFICATION_KINDS.length + 1 },
       () => 'kind=ticket-new',
     ).join('&');
-    await get('alice', `?${tooMany}`).expect(400);
+    const many = errorOf(await get('alice', `?${tooMany}`).expect(400));
+    expect(many.issues).toEqual([
+      expect.objectContaining({ field: 'kind', code: 'array_max_size' }),
+    ]);
   });
 
   it('counts only unread rows and lets the browser cache the count for 15 seconds', async () => {
@@ -181,11 +197,18 @@ describe('notification inbox', () => {
   it('answers 404 for another users row, an unknown id and a malformed id, and leaves the row unread', async () => {
     await notify('bob', 'b', 1);
     const [bobsRow] = await items('bob');
-    await post('alice', `/${bobsRow.id}/read`).expect(404);
-    await post('alice', '/00000000-0000-7000-8000-000000000000/read').expect(
-      404,
-    );
-    await post('alice', '/not-a-uuid/read').expect(404);
+    const refused = [
+      await post('alice', `/${bobsRow.id}/read`).expect(404),
+      await post('alice', '/00000000-0000-7000-8000-000000000000/read').expect(
+        404,
+      ),
+      await post('alice', '/not-a-uuid/read').expect(404),
+    ].map(errorOf);
+    expect(refused.map((error) => error.code)).toEqual([
+      'not_found',
+      'not_found',
+      'not_found',
+    ]);
     expect(await unreadOf('bob')).toBe(1);
   });
 
@@ -201,7 +224,9 @@ describe('notification inbox', () => {
   it('limits read-all to 30 a minute per user', async () => {
     for (let call = 0; call < 30; call += 1)
       await post('alice', '/read-all').expect(204);
-    await post('alice', '/read-all').expect(429);
+    expect(errorOf(await post('alice', '/read-all').expect(429)).code).toBe(
+      'rate_limited',
+    );
     await post('bob', '/read-all').expect(204);
   });
 
@@ -243,9 +268,13 @@ describe('notification inbox', () => {
   });
 
   it('refuses an unknown state, priority or page', async () => {
-    await get('alice', '?state=bogus').expect(400);
-    await get('alice', '?priority=urgent').expect(400);
-    await get('alice', '?page=0').expect(400);
+    const codes = async (query: string) =>
+      errorOf(await get('alice', query).expect(400)).issues.map(
+        ({ field, code }) => [field, code],
+      );
+    expect(await codes('?state=bogus')).toEqual([['state', 'is_in']]);
+    expect(await codes('?priority=urgent')).toEqual([['priority', 'is_in']]);
+    expect(await codes('?page=0')).toEqual([['page', 'min']]);
   });
 
   it('serves every list from an index: no collection scan, no sort stage, a page of documents', async () => {

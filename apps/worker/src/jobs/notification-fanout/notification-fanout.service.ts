@@ -13,7 +13,7 @@ import type { AnnouncedContest } from './notification-fanout.repository';
 export class NotificationFanoutService {
   constructor(private readonly fanout: NotificationFanoutRepository) {}
 
-  /** Idempotent: a retry merges nothing twice (`lastRef`). An announcement or contest deleted since is skipped. Returns the number of recipients. */
+  /** Idempotent: a retry, or a read between two runs, merges nothing twice (`refs`). An announcement or contest deleted since is skipped. Returns the number of recipients. */
   async announce(announcementId: string, now = new Date()): Promise<number> {
     const announcement = await this.fanout.announcement(announcementId);
     const contest =
@@ -30,7 +30,15 @@ export class NotificationFanoutService {
     );
     let recipients = 0;
     for await (const userIds of this.recipientChunks(contest, now)) {
-      await this.fanout.upsertRows(userIds, draft, announcementId, now);
+      const done = await this.fanout.appliedUsers(userIds, announcementId);
+      const pending = userIds.filter((userId) => !done.has(userId));
+      if (pending.length)
+        await this.fanout.upsertRows(
+          pending,
+          draft,
+          announcementId,
+          announcement.createdAt,
+        );
       recipients += userIds.length;
     }
     return recipients;

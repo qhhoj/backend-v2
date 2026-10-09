@@ -9,7 +9,8 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { toArray, toBoolean } from '../../../problems/core/dto/transforms';
+import { toArray } from '@libs/common';
+import { toBoolean } from '../../../problems/core/dto/transforms';
 
 export class TicketPageQueryDto {
   @ApiPropertyOptional()

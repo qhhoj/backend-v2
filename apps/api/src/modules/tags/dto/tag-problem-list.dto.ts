@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { toArray } from '../../problems/core/dto/transforms';
+import { toArray } from '@libs/common';
 import { TAG_JUDGES } from '../tag-links';
 
 export class TagProblemListQueryDto {

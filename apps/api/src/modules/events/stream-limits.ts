@@ -12,7 +12,7 @@ export interface StreamLimits {
   feedTotal: number;
   /** Open contest streams per api process (anonymous viewers of public contests included, so they get their own cap like the feed). */
   contestTotal: number;
-  /** Open `user` (notification) streams per api process: one per signed-in tab, with their own cap like the feed. Kept well below `total` (half): at `total` itself notification streams (every signed-in tab holds one) could take every slot and starve submission, contest and ticket streams. */
+  /** Open `user` (notification) streams per api process: one per signed-in tab, with their own cap like the feed. Together with `feedTotal` and `contestTotal` it must leave `total` minus their sum (500 by default) to the submission and ticket streams, which have no cap of their own: those slots are reserved for them. */
   userTotal: number;
   /** Hard bound on a client's backlog (`response.writableLength`: output queue plus socket write buffer; memory); a client that merely stops draining is dropped sooner, after `DRAIN_GRACE_MS`. The kernel's socket buffers hold more on top, per connection. */
   maxBufferedBytes: number;
@@ -29,8 +29,8 @@ export const DEFAULT_STREAM_LIMITS: StreamLimits = {
   perAllowlistedIp: 512,
   total: 5000,
   feedTotal: 1000,
-  contestTotal: 2000,
-  userTotal: 2500,
+  contestTotal: 1500,
+  userTotal: 2000,
   maxBufferedBytes: 256 * 1024,
   ticketBacklog: 1000,
   heartbeatMs: 15_000,

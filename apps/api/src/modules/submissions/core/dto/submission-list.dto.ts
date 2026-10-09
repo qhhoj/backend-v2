@@ -13,7 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { toArray } from '../../../problems/core/dto/transforms';
+import { toArray } from '@libs/common';
 
 export class SubmissionListQueryDto {
   @ApiPropertyOptional()

@@ -435,11 +435,11 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 ## Notifications
 
 - Collections and indexes: `notifications`, one unread row per `user` + `groupKey` (partial unique index); lists order by `lastActivityAt, _id`; TTL on `expiresAt` = last activity + 90 days
-- Writing: `NotificationsService.notify(recipients, draft)` in `libs/community/src/notifications/` never throws, merges into the unread row (`$inc count`, never lowers `high`), retries once as a merge on E11000, cuts texts to 100/200 code points, refuses a `path` that is not an internal `^/(?!/)...` path, takes at most 200 recipients; `dismiss` marks a group read
+- Writing: `NotificationsService.notify(recipients, draft)` in `libs/community/src/notifications/` never throws, merges into the unread row (`$inc count`, never lowers `high`), retries as a merge on E11000 (up to 3 attempts), cuts texts to 100/200 code points, refuses a `path` that is not an internal `^/(?!/)...` path, takes at most 200 recipients; `dismiss` marks a group read
 - Producers in B1: contest announcements (the `notification-fanout` job) and a decided organization join request
 - Realtime: `notification-events` carries `{ userId, id }`; `GET /events/user` sends `notification {id}`; contest announcements send no nudge; the bell polls `GET /notifications/unread-count` every 60 s and on focus
 - Inbox API: `GET /notifications`, `GET /notifications/unread-count` (cached 15 s), `POST /notifications/:id/read`, `POST /notifications/read-all` (30/min); under impersonation both POSTs are 204 no-ops
-- Jobs: `notification-fanout` (concurrency 2, idempotent through `lastRef`); `notification-trim` nightly at 03:30 through `upsertJobScheduler`, keeps the newest 500 per user, only for users active in the last 25 h
+- Jobs: `notification-fanout` (concurrency 2, idempotent through the row's `refs`, read rows included); `notification-trim` nightly at 03:30 through `upsertJobScheduler`, keeps the newest 500 per user, for every user over the cap, found by count
 - Tests: `setupApiTest` exposes `notifications`, `setupWorkerTest` exposes `notifications` and `announcements`; `NotificationsService` is `app.get`-able
 
 ## Data conventions
