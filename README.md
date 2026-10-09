@@ -47,12 +47,12 @@ Local mail: start Mailpit (`docker compose up -d mailpit`), then `npm run seed:e
 
 Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
 
-| App                                    | Dev                       | Production                                                |
-| -------------------------------------- | ------------------------- | --------------------------------------------------------- |
-| api (`:3000`)                          | `npm run start:dev`       | `npm run build && npm run start:prod`                     |
-| worker                                 | `npm run start:worker`    | `npx nest build worker && npm run start:prod:worker`      |
-| bridge (`:9999`, exactly one instance) | `npm run start:bridge`    | `npx nest build bridge && npm run start:prod:bridge`      |
-| migrator (CLI)                         | `npx nest build migrator` | `node dist/apps/migrator/main backfill\|verify [jobs...]` |
+| App                                    | Dev                       | Production                                           |
+| -------------------------------------- | ------------------------- | ---------------------------------------------------- |
+| api (`:3000`)                          | `npm run start:dev`       | `npm run build && npm run start:prod`                |
+| worker                                 | `npm run start:worker`    | `npx nest build worker && npm run start:prod:worker` |
+| bridge (`:9999`, exactly one instance) | `npm run start:bridge`    | `npx nest build bridge && npm run start:prod:bridge` |
+| migrator (CLI)                         | `npx nest build migrator` | `node dist/apps/migrator/main <command>`             |
 
 OpenAPI JSON: `GET /api/internal/openapi.json` (request and response schemas of every route); the committed copy is `openapi.json` (`npm run openapi:emit` rewrites it offline); the frontend generates its types from it. `npm run test:openapi` checks the schemas.
 
@@ -76,7 +76,7 @@ npm run typecheck
 apps/api       HTTP: /api/internal (SPA), SSE streams
 apps/bridge    judge TCP server, dispatch queue, grading
 apps/worker    BullMQ jobs
-apps/migrator  MariaDB -> MongoDB backfill/verify CLI
+apps/migrator  MariaDB -> MongoDB migration CLI
 libs/          common, database, auth, render, problems, judging, contests, community
 ```
 
@@ -112,38 +112,57 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 
 ## Where to change what
 
-| To change                                                      | Look in                                                                                                                                                                                                                 |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An HTTP endpoint                                               | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `tags/`, `judges/` use their own module file) |
-| Who can see/edit a problem or contest                          | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts`                                                                                                                                    |
-| A contest scoring format                                       | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts`                                                                                                                                                      |
-| Contest viewer fields (list `viewer`, detail `viewerResult`, `solverCount`) | `modules/contests/core/contest-viewer.service.ts`, `core/contest-problem-facts.service.ts`, `core/solver-counts.service.ts`, `core/viewer-problem-results.ts` |
-| Contest register/join/leave refusal codes | `modules/contests/participation/participation-refusals.ts` |
-| Who can see/administer an organization                         | `modules/organizations/core/organization-access.ts`                                                                                                                                                                     |
-| Who can see/edit a blog post                                   | `modules/blog/core/blog-access.ts`                                                                                                                                                                                      |
-| Which comment pages a viewer may read (and comment page types) | `modules/comments/core/comment-pages.service.ts`                                                                                                                                                                        |
-| Votes, contribution points                                     | `modules/contributions/`, `libs/community/src/contribution.ts`, job in `apps/worker/src/jobs/contribution-points`                                                                                                       |
-| Homepage data, RSS/Atom feeds                                  | `apps/api/src/modules/home/`                                                                                                                                                                                            |
-| Code similarity                                                | `modules/similarity/`, job in `apps/worker/src/jobs/similarity`, language families in `similarity-languages.ts`                                                                                                         |
-| Discord webhooks                                               | `libs/community/src/discord.ts`, `modules/discord/`, job in `apps/worker/src/jobs/discord-webhook`                                                                                                                      |
-| Who can see/edit a ticket                                      | `modules/tickets/core/ticket-access.ts` (list filter: `ProblemAccess.editableFilter`)                                                                                                                                   |
-| Ticket events (SSE) and Discord texts                          | `modules/tickets/streams/`, `libs/community/src/ticket-events.ts`, `libs/community/src/tickets.ts`                                                                                                                      |
-| Flatpages, navigation bar, misc config                         | `modules/site/`                                                                                                                                                                                                         |
-| User activity capture and its staff API                        | `modules/user-activity/capture/`, `modules/user-activity/staff/`, rules in `libs/community/src/user-activity.ts`                                                                                                        |
-| Org PP, ranks, interaction gate, comment and blog rules        | `libs/community/src`                                                                                                                                                                                                    |
-| Rating                                                         | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating`                                                                                                                                     |
-| Points, PP, problem stats                                      | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects`                                                                                                                                                 |
-| Judge protocol, dispatch, grading                              | `apps/bridge/src/{protocol,dispatch,judges,submissions}`                                                                                                                                                                |
-| SSE channels and limits                                        | `apps/api/src/modules/events/`, channel services under `submissions/streams` and `contests/announcements`                                                                                                               |
-| Auth, sessions, permissions                                    | `libs/auth/src`, flows in `modules/auth/<flow>/`; new permissions in `libs/auth/src/principal/permissions.ts`                                                                                                           |
-| Markdown rendering                                             | `libs/render/src` (goldens in `src/fixtures`)                                                                                                                                                                           |
-| `init.yml`, zip handling, data files                           | `libs/problems/src`, routes in `modules/problems/data`                                                                                                                                                                  |
-| A Mongo schema                                                 | `libs/database/src/schemas/` (register in `SCHEMAS`)                                                                                                                                                                    |
-| A background job                                               | `apps/worker/src/jobs/<job>/` and its queue contract in `libs/<lib>/src/queues.ts`                                                                                                                                      |
-| A legacy import                                                | `apps/migrator/src/mappers/`                                                                                                                                                                                            |
-| Env variables                                                  | `libs/common/src/env/`, `.env.example`                                                                                                                                                                                  |
-| A runtime setting (admin-editable)                             | one entry in `libs/settings/src/registry.ts`; admin API in `modules/settings/`                                                                                                                                          |
-| OpenAPI schemas                                                | `dto/*.response.ts`; `libs/common/src/openapi/`                                                                                                                                                                         |
+| To change                                                                   | Look in                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| An HTTP endpoint                                                            | `apps/api/src/modules/<feature>/<sub-feature>/` (controller, service, `dto/`); register it in the feature's `*-api.module.ts` (flat modules such as `events/`, `tags/`, `judges/` use their own module file) |
+| Who can see/edit a problem or contest                                       | `modules/problems/core/problem-access.ts`, `modules/contests/core/contest-access.ts`                                                                                                                         |
+| A contest scoring format                                                    | `libs/contests/src/formats/<kebab-case-name>.ts` and `registry.ts`                                                                                                                                           |
+| Contest viewer fields (list `viewer`, detail `viewerResult`, `solverCount`) | `modules/contests/core/contest-viewer.service.ts`, `core/contest-problem-facts.service.ts`, `core/solver-counts.service.ts`, `core/viewer-problem-results.ts`                                                |
+| Contest register/join/leave refusal codes                                   | `modules/contests/participation/participation-refusals.ts`                                                                                                                                                   |
+| Who can see/administer an organization                                      | `modules/organizations/core/organization-access.ts`                                                                                                                                                          |
+| Who can see/edit a blog post                                                | `modules/blog/core/blog-access.ts`                                                                                                                                                                           |
+| Which comment pages a viewer may read (and comment page types)              | `modules/comments/core/comment-pages.service.ts`                                                                                                                                                             |
+| Votes, contribution points                                                  | `modules/contributions/`, `libs/community/src/contribution.ts`, job in `apps/worker/src/jobs/contribution-points`                                                                                            |
+| Homepage data, RSS/Atom feeds                                               | `apps/api/src/modules/home/`                                                                                                                                                                                 |
+| Code similarity                                                             | `modules/similarity/`, job in `apps/worker/src/jobs/similarity`, language families in `similarity-languages.ts`                                                                                              |
+| Discord webhooks                                                            | `libs/community/src/discord.ts`, `modules/discord/`, job in `apps/worker/src/jobs/discord-webhook`                                                                                                           |
+| Who can see/edit a ticket                                                   | `modules/tickets/core/ticket-access.ts` (list filter: `ProblemAccess.editableFilter`)                                                                                                                        |
+| Ticket events (SSE) and Discord texts                                       | `modules/tickets/streams/`, `libs/community/src/ticket-events.ts`, `libs/community/src/tickets.ts`                                                                                                           |
+| Flatpages, navigation bar, misc config                                      | `modules/site/`                                                                                                                                                                                              |
+| User activity capture and its staff API                                     | `modules/user-activity/capture/`, `modules/user-activity/staff/`, rules in `libs/community/src/user-activity.ts`                                                                                             |
+| Org PP, ranks, interaction gate, comment and blog rules                     | `libs/community/src`                                                                                                                                                                                         |
+| Rating                                                                      | `libs/contests/src/rating/elo-mmr.ts`, job in `apps/worker/src/jobs/contest-rating`                                                                                                                          |
+| Points, PP, problem stats                                                   | `libs/judging/src/points.ts`, `apps/worker/src/jobs/submission-effects`                                                                                                                                      |
+| Judge protocol, dispatch, grading                                           | `apps/bridge/src/{protocol,dispatch,judges,submissions}`                                                                                                                                                     |
+| SSE channels and limits                                                     | `apps/api/src/modules/events/`, channel services under `submissions/streams` and `contests/announcements`                                                                                                    |
+| Auth, sessions, permissions                                                 | `libs/auth/src`, flows in `modules/auth/<flow>/`; new permissions in `libs/auth/src/principal/permissions.ts`                                                                                                |
+| Markdown rendering                                                          | `libs/render/src` (goldens in `src/fixtures`)                                                                                                                                                                |
+| `init.yml`, zip handling, data files                                        | `libs/problems/src`, routes in `modules/problems/data`                                                                                                                                                       |
+| A Mongo schema                                                              | `libs/database/src/schemas/` (register in `SCHEMAS`)                                                                                                                                                         |
+| A background job                                                            | `apps/worker/src/jobs/<job>/` and its queue contract in `libs/<lib>/src/queues.ts`                                                                                                                           |
+| A legacy import                                                             | `apps/migrator/src/mappers/`                                                                                                                                                                                 |
+| Env variables                                                               | `libs/common/src/env/`, `.env.example`                                                                                                                                                                       |
+| A runtime setting (admin-editable)                                          | one entry in `libs/settings/src/registry.ts`; admin API in `modules/settings/`                                                                                                                               |
+| OpenAPI schemas                                                             | `dto/*.response.ts`; `libs/common/src/openapi/`                                                                                                                                                              |
+
+## Migrator
+
+`npx nest build migrator`, then `node dist/apps/migrator/main <command>`:
+
+`audit | backfill [jobs...] [--fresh] | verify [jobs...] | recompute | check-files | check-integrity | finish`
+
+| Variable                              | Needed by                                |
+| ------------------------------------- | ---------------------------------------- |
+| `MONGO_URL`                           | every command                            |
+| `LEGACY_MYSQL_URL`                    | audit, backfill, verify, check-integrity |
+| `LEGACY_SECRET_KEY`, `ENCRYPTION_KEY` | backfill (users)                         |
+| `MEDIA_URL` (default `/media`)        | backfill (problems, sources)             |
+| `REDIS_URL`                           | recompute                                |
+| `PROBLEM_DATA_ROOT`, `MEDIA_ROOT`     | check-files                              |
+
+Jobs (`backfill`/`verify` names are in `apps/migrator/src/mappers/`): groups, users, organizations, organizationRequests, problemTypes, problemGroups, licenses, tagGroups, tags, tagProblems, languages, problems, contests, contestAnnouncements, contestPublicRankingLinks, contestOfficialRankings, contestParticipations, contestSubmissions, submissions, submissionSources, comments, commentVotes, commentLocks, blogPosts, blogVotes, generalIssues, tickets, flatpages, miscConfig, navigationBar (collections written). Ratings come from the worker's re-rating, judges register fresh.
+
+Order of a real run: `audit`, `backfill`, `verify`, `recompute`, `check-files`, `check-integrity`, `finish`. The full runbook, with the manual checks, is in [deploy/RUNBOOK.md](deploy/RUNBOOK.md#migration-run).
 
 ## More
 

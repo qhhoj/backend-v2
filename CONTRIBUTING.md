@@ -437,7 +437,7 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 
 ## Backfill jobs (migrator)
 
-Work on the migrator is paused; the framework exists.
+Commands: `audit | backfill | verify | recompute | check-files | check-integrity | finish`; the run order and manual checks are in `deploy/RUNBOOK.md`. A new legacy table gets a mapper in `apps/migrator/src/mappers/<area>/`, its `refTables`, a `legacy-<area>.sql` seed (ids in the area's range) and an e2e that ends with `verify` = 0.
 
 - Build first (`npx nest build migrator`), then `node dist/apps/migrator/main backfill [jobs...] [--fresh]`: idempotent upsert by `_id`; `--fresh` empties each selected collection first
 - `node dist/apps/migrator/main verify [jobs...]`: compares Mongo vs MariaDB, exit code 1 on mismatch
@@ -538,7 +538,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 ## Env and deploy
 
 - Production install, nginx, systemd units, env template, cutover and rollback: `deploy/RUNBOOK.md`
-- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env); the migrator reads only `MONGO_URL` and `LEGACY_*`
+- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env); the migrator reads only `MONGO_URL`, `LEGACY_*`, `ENCRYPTION_KEY`, `MEDIA_URL`, `REDIS_URL` and, for `check-files`, `PROBLEM_DATA_ROOT` and `MEDIA_ROOT`
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
