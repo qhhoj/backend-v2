@@ -782,6 +782,17 @@
         ],
         "type": "object"
       },
+      "ConfirmCodeDto": {
+        "properties": {
+          "confirmCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmCode"
+        ],
+        "type": "object"
+      },
       "ContestActionState": {
         "enum": [
           "idle",
@@ -2736,6 +2747,46 @@
         },
         "required": [
           "state"
+        ],
+        "type": "object"
+      },
+      "DeletedProblemResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "daysLeft": {
+            "description": "Whole days before the purge job may take it; 0 once the grace period is over.",
+            "type": "number"
+          },
+          "deletedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deletedBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "isPurged": {
+            "description": "The heavy data is gone; only the tombstone (code and name) stays and it cannot be restored.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "deletedAt",
+          "deletedBy",
+          "daysLeft",
+          "isPurged"
         ],
         "type": "object"
       },
@@ -5777,6 +5828,17 @@
           "editorial",
           "problemId",
           "code"
+        ],
+        "type": "object"
+      },
+      "PurgeQueuedResponse": {
+        "properties": {
+          "queued": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
         ],
         "type": "object"
       },
@@ -19111,6 +19173,85 @@
         ]
       }
     },
+    "/api/internal/problems/deleted": {
+      "get": {
+        "operationId": "ProblemLifecycleController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/DeletedProblemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProblemLifecycle"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/problems/imports": {
       "post": {
         "operationId": "ProblemImportsController_start",
@@ -19602,6 +19743,56 @@
       }
     },
     "/api/internal/problems/{code}": {
+      "delete": {
+        "operationId": "ProblemLifecycleController_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmCodeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProblemLifecycle"
+        ]
+      },
       "get": {
         "operationId": "ProblemsController_detail",
         "parameters": [
@@ -20544,6 +20735,115 @@
           "ProblemPdf"
         ],
         "x-enveloped": true
+      }
+    },
+    "/api/internal/problems/{code}/purge-now": {
+      "post": {
+        "operationId": "ProblemLifecycleController_purgeNow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmCodeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PurgeQueuedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProblemLifecycle"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/restore": {
+      "post": {
+        "operationId": "ProblemLifecycleController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ProblemLifecycle"
+        ]
       }
     },
     "/api/internal/problems/{code}/statement": {

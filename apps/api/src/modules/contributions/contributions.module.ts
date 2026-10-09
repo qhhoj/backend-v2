@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { CONTRIBUTION_POINTS_QUEUE } from '@libs/community';
@@ -12,7 +12,7 @@ import { VotesService } from './votes.service';
 @Module({
   imports: [
     AuthModule,
-    ProblemsApiModule,
+    forwardRef(() => ProblemsApiModule),
     BullModule.registerQueue({ name: CONTRIBUTION_POINTS_QUEUE }),
   ],
   providers: [

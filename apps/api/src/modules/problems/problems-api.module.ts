@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
@@ -11,6 +11,7 @@ import {
   PROBLEM_SOLVERS_QUEUE,
 } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
+import { ContributionsModule } from '../contributions/contributions.module';
 import { DiscordModule } from '../discord/discord.module';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
 import { LanguagesAdminService } from './catalog/languages-admin.service';
@@ -30,6 +31,8 @@ import { ProblemCloneService } from './editing/problem-clone.service';
 import { ProblemStatementEditingService } from './editing/problem-statement-editing.service';
 import { ProblemImportsController } from './imports/problem-imports.controller';
 import { ProblemImportsService } from './imports/problem-imports.service';
+import { ProblemLifecycleController } from './lifecycle/problem-lifecycle.controller';
+import { ProblemLifecycleService } from './lifecycle/problem-lifecycle.service';
 import { ProblemPdfController } from './pdf/problem-pdf.controller';
 import { ProblemPdfService } from './pdf/problem-pdf.service';
 import { ProblemUploadsController } from './uploads/problem-uploads.controller';
@@ -59,6 +62,7 @@ const repositories = [
     ContestAccessModule,
     DiscordModule,
     AuthModule,
+    forwardRef(() => ContributionsModule),
     BullModule.registerQueue(
       { name: PDF_QUEUE },
       { name: POLYGON_QUEUE },
@@ -76,6 +80,7 @@ const repositories = [
     ProblemUploadsController,
     ProblemDataController,
     ProblemPdfController,
+    ProblemLifecycleController,
   ],
   providers: [
     ...queriers,
@@ -93,6 +98,7 @@ const repositories = [
     ProblemDataLifecycleService,
     ProblemImportsService,
     ProblemPdfService,
+    ProblemLifecycleService,
     ProblemRescoreEnqueuerService,
     ProblemEvents,
     RateLimitService,
