@@ -54,11 +54,11 @@ const FileName = () =>
 
 export class TestCaseDto {
   @IsIn(CASE_TYPES) type!: CaseType;
-  @FileName() input = '';
-  @FileName() output = '';
+  @FileName() input: string = '';
+  @FileName() output: string = '';
   @NullableCount() points: number | null = null;
-  @IsBoolean() isPretest = false;
-  @IsString() @MaxLength(1000) generatorArgs = '';
+  @IsBoolean() isPretest: boolean = false;
+  @IsString() @MaxLength(1000) generatorArgs: string = '';
   /** Never `bridged`: a custom checker is problem-wide only. */
   @IsIn(CASE_CHECKERS) checker: CaseChecker = '';
   @JsonArgs() checkerArgs: JsonObject | null = null;
@@ -74,8 +74,8 @@ export class PutProblemDataDto {
   @JsonArgs() graderArgs: JsonObject | null = null;
   @NullableCount() outputPrefix: number | null = null;
   @NullableCount() outputLimit: number | null = null;
-  @IsBoolean() unicode = false;
-  @IsBoolean() nobigmath = false;
+  @IsBoolean() unicode: boolean = false;
+  @IsBoolean() nobigmath: boolean = false;
   @IsArray()
   @ArrayMaxSize(MAX_TESTCASES_MASS)
   @ValidateNested({ each: true })

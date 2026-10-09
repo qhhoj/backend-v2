@@ -16,7 +16,7 @@ import { createReadStream } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { RawResponse } from '@libs/common';
+import { ApiFileResponse, RawResponse } from '@libs/common';
 import { DATA_BODY_LIMIT_BYTES } from '../core/dto/limits';
 import {
   DataFileKindParamDto,
@@ -95,6 +95,7 @@ export class ProblemDataController {
   }
 
   /** Always an attachment with `nosniff`: uploaded files are never rendered by the browser. */
+  @ApiFileResponse('application/octet-stream')
   @RawResponse()
   @Get(':code/data/files/:name')
   async download(

@@ -1,6 +1,7 @@
 import { STATEMENT_LANGUAGES } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import { Transform, Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsIn,
@@ -20,8 +21,20 @@ export const PROBLEM_VISIBILITIES = ['public', 'private', 'all'] as const;
 export type ProblemVisibility = (typeof PROBLEM_VISIBILITIES)[number];
 
 export class ProblemListQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 50;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize: number = 50;
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -39,6 +52,15 @@ export class ProblemListQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() solved?: boolean;
   @IsOptional() @IsIn(PROBLEM_VISIBILITIES) visibility: ProblemVisibility =
     'public';
-  @IsOptional() @IsIn(PROBLEM_SORT_OPTIONS) sort = '-date';
-  @IsOptional() @IsIn(STATEMENT_LANGUAGES) lang: StatementLanguage = 'en';
+  @ApiPropertyOptional({ enum: PROBLEM_SORT_OPTIONS, enumName: 'ProblemSort' })
+  @IsOptional()
+  @IsIn(PROBLEM_SORT_OPTIONS)
+  sort: string = '-date';
+  @ApiPropertyOptional({
+    enum: STATEMENT_LANGUAGES,
+    enumName: 'StatementLanguage',
+  })
+  @IsOptional()
+  @IsIn(STATEMENT_LANGUAGES)
+  lang: StatementLanguage = 'en';
 }

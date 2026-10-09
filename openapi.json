@@ -3545,10 +3545,6 @@
         ],
         "type": "object"
       },
-      "Object": {
-        "properties": {},
-        "type": "object"
-      },
       "OfficialRankingResponse": {
         "properties": {
           "problems": {
@@ -4416,11 +4412,7 @@
           },
           "availableTranslations": {
             "items": {
-              "enum": [
-                "en",
-                "vi"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/StatementLanguage"
             },
             "type": "array"
           },
@@ -4484,11 +4476,11 @@
             "type": "boolean"
           },
           "language": {
-            "enum": [
-              "en",
-              "vi"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StatementLanguage"
+              }
+            ]
           },
           "languageLimits": {
             "items": {
@@ -4572,10 +4564,11 @@
           }
         },
         "required": [
+          "language",
+          "availableTranslations",
           "id",
           "code",
           "name",
-          "language",
           "translated",
           "descriptionHtml",
           "source",
@@ -4598,7 +4591,6 @@
           "languageLimits",
           "pdfStatementUrl",
           "materialUrl",
-          "availableTranslations",
           "hasEditorial",
           "submissionSourceVisibility",
           "testcaseVisibility",
@@ -4861,17 +4853,34 @@
         ],
         "type": "object"
       },
+      "ProblemSort": {
+        "enum": [
+          "date",
+          "-date",
+          "code",
+          "-code",
+          "name",
+          "-name",
+          "points",
+          "-points",
+          "acRate",
+          "-acRate",
+          "userCount",
+          "-userCount"
+        ],
+        "type": "string"
+      },
       "ProblemTranslationResponse": {
         "properties": {
           "description": {
             "type": "string"
           },
           "language": {
-            "enum": [
-              "en",
-              "vi"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StatementLanguage"
+              }
+            ]
           },
           "name": {
             "type": "string"
@@ -5111,7 +5120,7 @@
           },
           "nobigmath": {
             "default": false,
-            "type": "object"
+            "type": "boolean"
           },
           "outputLimit": {
             "default": null,
@@ -5125,7 +5134,7 @@
           },
           "unicode": {
             "default": false,
-            "type": "object"
+            "type": "boolean"
           }
         },
         "required": [
@@ -5437,10 +5446,6 @@
           "max",
           "contests"
         ],
-        "type": "object"
-      },
-      "ReadStream": {
-        "properties": {},
         "type": "object"
       },
       "RecentCommentResponse": {
@@ -6405,6 +6410,13 @@
         ],
         "type": "object"
       },
+      "StatementLanguage": {
+        "enum": [
+          "en",
+          "vi"
+        ],
+        "type": "string"
+      },
       "SubmissionBatchResponse": {
         "properties": {
           "batch": {
@@ -7269,19 +7281,19 @@
           "generatorArgs": {
             "default": "",
             "maxLength": 1000,
-            "type": "object"
+            "type": "string"
           },
           "input": {
             "default": "",
-            "type": "object"
+            "type": "string"
           },
           "isPretest": {
             "default": false,
-            "type": "object"
+            "type": "boolean"
           },
           "output": {
             "default": "",
-            "type": "object"
+            "type": "string"
           },
           "outputLimit": {
             "default": null,
@@ -16922,31 +16934,39 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 50,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProblemSort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StatementLanguage"
             }
           },
           {
@@ -17023,32 +17043,6 @@
                 "public",
                 "private",
                 "all"
-              ],
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": "-date"
-            }
-          },
-          {
-            "in": "query",
-            "name": "lang",
-            "required": true,
-            "schema": {
-              "default": "en",
-              "enum": [
-                "en",
-                "vi"
               ],
               "type": "string"
             }
@@ -17168,6 +17162,33 @@
         "parameters": [
           {
             "in": "query",
+            "name": "ignoreZeroPointBatches",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ignoreZeroPointCases",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "appendMainSolution",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "code",
             "required": true,
             "schema": {
@@ -17269,45 +17290,6 @@
             "schema": {
               "maxLength": 30,
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "ignoreZeroPointBatches",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": false
-            }
-          },
-          {
-            "in": "query",
-            "name": "ignoreZeroPointCases",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": false
-            }
-          },
-          {
-            "in": "query",
-            "name": "appendMainSolution",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": false
             }
           }
         ],
@@ -17640,14 +17622,9 @@
           {
             "in": "query",
             "name": "lang",
-            "required": true,
+            "required": false,
             "schema": {
-              "default": "en",
-              "enum": [
-                "en",
-                "vi"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/StatementLanguage"
             }
           }
         ],
@@ -18172,13 +18149,14 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "application/octet-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReadStream"
+                  "format": "binary",
+                  "type": "string"
                 }
               }
             },
-            "description": ""
+            "description": "The file, as an attachment."
           },
           "default": {
             "content": {
@@ -18272,14 +18250,9 @@
           {
             "in": "query",
             "name": "lang",
-            "required": true,
+            "required": false,
             "schema": {
-              "default": "en",
-              "enum": [
-                "en",
-                "vi"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/StatementLanguage"
             }
           }
         ],
@@ -18449,14 +18422,9 @@
           {
             "in": "query",
             "name": "lang",
-            "required": true,
+            "required": false,
             "schema": {
-              "default": "en",
-              "enum": [
-                "en",
-                "vi"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/StatementLanguage"
             }
           }
         ],
@@ -18885,21 +18853,17 @@
         "parameters": [
           {
             "in": "path",
-            "name": "code",
+            "name": "lang",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/StatementLanguage"
             }
           },
           {
             "in": "path",
-            "name": "lang",
+            "name": "code",
             "required": true,
             "schema": {
-              "enum": [
-                "en",
-                "vi"
-              ],
               "type": "string"
             }
           }
@@ -20136,31 +20100,23 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 50,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {

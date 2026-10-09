@@ -1,4 +1,5 @@
 import { PROBLEM_CODE_PATTERN, PROBLEM_LIMITS } from '@libs/database';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -51,10 +52,21 @@ export class PolygonImportQueryDto {
   @Matches(LANGUAGE_PAIR, { each: true })
   statementLanguages?: string[];
   @IsOptional() @IsString() @MaxLength(30) tutorialLanguage?: string;
-  @IsOptional() @Transform(toBoolean) @IsBoolean() ignoreZeroPointBatches =
-    false;
-  @IsOptional() @Transform(toBoolean) @IsBoolean() ignoreZeroPointCases = false;
-  @IsOptional() @Transform(toBoolean) @IsBoolean() appendMainSolution = false;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  ignoreZeroPointBatches: boolean = false;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  ignoreZeroPointCases: boolean = false;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  appendMainSolution: boolean = false;
 }
 
 export class ImportJobParamDto {

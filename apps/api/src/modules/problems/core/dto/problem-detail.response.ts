@@ -1,6 +1,7 @@
 import type { UserDocument } from '@libs/auth';
-import { uuidStr } from '@libs/database';
+import { STATEMENT_LANGUAGES, uuidStr } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
+import { ApiProperty } from '@nestjs/swagger';
 import { LanguagesQuerier } from '../../catalog/languages.querier';
 import { LicensesQuerier } from '../../catalog/licenses.querier';
 import { ProblemGroupsQuerier } from '../../catalog/problem-groups.querier';
@@ -37,6 +38,7 @@ export class LanguageLimitResponse {
 }
 
 export class ProblemTranslationResponse {
+  @ApiProperty({ enum: STATEMENT_LANGUAGES, enumName: 'StatementLanguage' })
   language!: StatementLanguage;
   name!: string;
   description!: string;
@@ -105,6 +107,7 @@ export class ProblemDetailResponse {
   id!: string;
   code!: string;
   name!: string;
+  @ApiProperty({ enum: STATEMENT_LANGUAGES, enumName: 'StatementLanguage' })
   language!: StatementLanguage;
   translated!: boolean;
   descriptionHtml!: string;
@@ -128,6 +131,11 @@ export class ProblemDetailResponse {
   languageLimits!: LanguageLimitResponse[];
   pdfStatementUrl!: string | null;
   materialUrl!: string | null;
+  @ApiProperty({
+    enum: STATEMENT_LANGUAGES,
+    enumName: 'StatementLanguage',
+    isArray: true,
+  })
   availableTranslations!: StatementLanguage[];
   hasEditorial!: boolean;
   submissionSourceVisibility!: string;

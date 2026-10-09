@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsIn,
@@ -13,8 +14,20 @@ import { toArray } from '../../problems/core/dto/transforms';
 import { TAG_JUDGES } from '../tag-links';
 
 export class TagProblemListQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 50;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize: number = 50;
   /** Case-insensitive substring of the code or name (legacy `icontains`). */
   @IsOptional()
   @IsString()
