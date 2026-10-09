@@ -2241,6 +2241,51 @@
         ],
         "type": "object"
       },
+      "CreateIntegrationClientDto": {
+        "properties": {
+          "actsAs": {
+            "description": "Username of the user the client acts as.",
+            "maxLength": 150,
+            "minLength": 1,
+            "type": "string"
+          },
+          "allowedCidrs": {
+            "description": "CIDR blocks the client may call from; each is parsed by the service.",
+            "items": {
+              "maxLength": 60,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "expiresAt": {
+            "description": "When the key stops working; omitted, it works until revoked. Must be in the future.",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrationScope"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "scopes",
+          "name",
+          "allowedCidrs",
+          "actsAs"
+        ],
+        "type": "object"
+      },
       "CreateJudgeDto": {
         "properties": {
           "description": {
@@ -2684,6 +2729,78 @@
         "required": [
           "link",
           "name"
+        ],
+        "type": "object"
+      },
+      "CreatedIntegrationClientResponse": {
+        "properties": {
+          "actsAs": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IntegrationClientActingUserResponse"
+              }
+            ],
+            "description": "The user whose permissions bound the client."
+          },
+          "allowedCidrs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "The key stops working at this instant; null when it never expires.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "description": "Shown once; only its hash is stored.",
+            "type": "string"
+          },
+          "keyPrefix": {
+            "description": "First characters of the key, to recognise it in this list.",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrationScope"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes",
+          "id",
+          "name",
+          "keyPrefix",
+          "allowedCidrs",
+          "actsAs",
+          "lastUsedAt",
+          "revokedAt",
+          "expiresAt",
+          "createdAt",
+          "key"
         ],
         "type": "object"
       },
@@ -3545,6 +3662,95 @@
           "code"
         ],
         "type": "object"
+      },
+      "IntegrationClientActingUserResponse": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username"
+        ],
+        "type": "object"
+      },
+      "IntegrationClientResponse": {
+        "properties": {
+          "actsAs": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IntegrationClientActingUserResponse"
+              }
+            ],
+            "description": "The user whose permissions bound the client."
+          },
+          "allowedCidrs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "The key stops working at this instant; null when it never expires.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "keyPrefix": {
+            "description": "First characters of the key, to recognise it in this list.",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrationScope"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes",
+          "id",
+          "name",
+          "keyPrefix",
+          "allowedCidrs",
+          "actsAs",
+          "lastUsedAt",
+          "revokedAt",
+          "expiresAt",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "enum": [
+          "contests:read",
+          "contests:write"
+        ],
+        "type": "string"
       },
       "JoinBodyDto": {
         "properties": {
@@ -17632,6 +17838,183 @@
         },
         "tags": [
           "Home"
+        ]
+      }
+    },
+    "/api/internal/integration-clients": {
+      "get": {
+        "operationId": "IntegrationClientsController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/IntegrationClientResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "IntegrationClients"
+        ],
+        "x-enveloped": true
+      },
+      "post": {
+        "operationId": "IntegrationClientsController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIntegrationClientDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CreatedIntegrationClientResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "IntegrationClients"
+        ]
+      }
+    },
+    "/api/internal/integration-clients/{id}": {
+      "delete": {
+        "operationId": "IntegrationClientsController_revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "IntegrationClients"
         ]
       }
     },

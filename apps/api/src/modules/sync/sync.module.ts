@@ -1,10 +1,16 @@
 import { Inject, Logger, Module } from '@nestjs/common';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { AuthModule, IntegrationClientsRepository } from '@libs/auth';
-import { ENV, type Env } from '@libs/common';
+import { ENV, RateLimitService, type Env } from '@libs/common';
+import { IntegrationClientsController } from './clients/integration-clients.controller';
+import { IntegrationClientsService } from './clients/integration-clients.service';
 
 /** The sync API for integration clients and the administration of their keys. */
-@Module({ imports: [AuthModule], controllers: [], providers: [] })
+@Module({
+  imports: [AuthModule],
+  controllers: [IntegrationClientsController],
+  providers: [IntegrationClientsService, RateLimitService],
+})
 export class SyncModule implements OnApplicationBootstrap {
   private readonly logger = new Logger(SyncModule.name);
 
