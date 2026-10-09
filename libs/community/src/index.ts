@@ -14,3 +14,5 @@ export * from './flatpages';
 export * from './user-activity';
 export * from './site-content';
 export * from './notifications';
+export * from './ticket-timeline';
+export * from './ticket-canned-replies';
