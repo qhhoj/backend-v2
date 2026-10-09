@@ -1,6 +1,6 @@
 /** Live event streams, counted per api process. */
 export interface StreamLimits {
-  /** Open streams per signed-in user. */
+  /** Open streams per signed-in user: one `user` stream per tab plus a submission, ticket or contest stream on some pages. */
   perUser: number;
   /** Open streams (all channels) per client IP (`request.ip`, which honours `TRUST_PROXY`). */
   perIp: number;
@@ -12,6 +12,8 @@ export interface StreamLimits {
   feedTotal: number;
   /** Open contest streams per api process (anonymous viewers of public contests included, so they get their own cap like the feed). */
   contestTotal: number;
+  /** Open `user` (notification) streams per api process: one per signed-in tab, with their own cap like the feed so they can never take the slots of submission and contest streams. */
+  userTotal: number;
   /** Hard bound on a client's backlog (`response.writableLength`: output queue plus socket write buffer; memory); a client that merely stops draining is dropped sooner, after `DRAIN_GRACE_MS`. The kernel's socket buffers hold more on top, per connection. */
   maxBufferedBytes: number;
   /** Ticket events waiting for their lookup per api process; beyond it events are dropped and the streams told to resync. */
@@ -22,12 +24,13 @@ export interface StreamLimits {
 }
 export const STREAM_LIMITS = Symbol('STREAM_LIMITS');
 export const DEFAULT_STREAM_LIMITS: StreamLimits = {
-  perUser: 8,
+  perUser: 12,
   perIp: 16,
   perAllowlistedIp: 512,
   total: 5000,
   feedTotal: 1000,
   contestTotal: 2000,
+  userTotal: 5000,
   maxBufferedBytes: 256 * 1024,
   ticketBacklog: 1000,
   heartbeatMs: 15_000,

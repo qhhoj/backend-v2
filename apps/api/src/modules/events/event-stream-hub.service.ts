@@ -199,18 +199,35 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
   private async recheck(): Promise<void> {
     if (this.rechecking) return;
     this.rechecking = true;
+    const verdicts = new Map<string, Promise<Principal | null>>();
     try {
-      for (const entry of [...this.streams]) await this.recheckStream(entry);
+      for (const entry of [...this.streams])
+        await this.recheckStream(entry, verdicts);
     } finally {
       this.rechecking = false;
     }
   }
 
-  private async recheckStream(entry: OpenStream): Promise<void> {
+  /** One `currentPrincipal` lookup per session id and tick: every tab of a session shares it. */
+  private principalOf(
+    auth: AuthContext,
+    verdicts: Map<string, Promise<Principal | null>>,
+  ): Promise<Principal | null> {
+    if (auth.sessionId === null) return this.currentPrincipal(auth);
+    const known = verdicts.get(auth.sessionId) ?? this.currentPrincipal(auth);
+    verdicts.set(auth.sessionId, known);
+    return known;
+  }
+
+  private async recheckStream(
+    entry: OpenStream,
+    verdicts: Map<string, Promise<Principal | null>>,
+  ): Promise<void> {
     const { channel } = entry;
     if (!channel.recheck) return;
     try {
-      const principal = entry.auth && (await this.currentPrincipal(entry.auth));
+      const principal =
+        entry.auth && (await this.principalOf(entry.auth, verdicts));
       if (entry.auth && !principal) return entry.stream.close();
       await channel.recheck(entry, principal);
     } catch (error) {

@@ -3603,6 +3603,35 @@
         ],
         "type": "object"
       },
+      "NotificationEventResponse": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "NotificationFrame": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NotificationEventResponse"
+          },
+          "event": {
+            "enum": [
+              "notification"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
       "NotificationKind": {
         "enum": [
           "contest-announcement",
@@ -15559,6 +15588,54 @@
         "summary": "The same frames for one ticket.",
         "tags": [
           "TicketStreams"
+        ]
+      }
+    },
+    "/api/internal/events/user": {
+      "get": {
+        "operationId": "UserStreamsController_open",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/NotificationFrame"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResyncFrame"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A stream of frames; `event` names each one."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`notification` (`{ id }`: a row of the viewer's inbox was created or merged) and `resync` after a lost subscription.",
+        "tags": [
+          "UserStreams"
         ]
       }
     },
