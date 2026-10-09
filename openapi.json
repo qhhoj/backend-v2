@@ -3154,6 +3154,32 @@
         ],
         "type": "object"
       },
+      "FeedEventFrame": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FeedLineResponse"
+          },
+          "event": {
+            "enum": [
+              "contest",
+              "groups",
+              "judgement-types",
+              "judgements",
+              "languages",
+              "problems",
+              "state",
+              "submissions",
+              "teams"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
       "FeedKeyMode": {
         "enum": [
           "frozen-until-release",
@@ -3194,6 +3220,42 @@
           "expiresAt",
           "releasedAt",
           "createdBy"
+        ],
+        "type": "object"
+      },
+      "FeedLineResponse": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "id": {
+            "nullable": true,
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "contest",
+              "groups",
+              "judgement-types",
+              "judgements",
+              "languages",
+              "problems",
+              "state",
+              "submissions",
+              "teams"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "data",
+          "token"
         ],
         "type": "object"
       },
@@ -18413,6 +18475,60 @@
         "summary": "Contest announcements as ids (`announcement`), for anyone who sees the contest; `resync` after a lost subscription.",
         "tags": [
           "ContestStreams"
+        ]
+      }
+    },
+    "/api/internal/events/contests/{key}/feed": {
+      "get": {
+        "operationId": "FeedStreamController_feed",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/FeedEventFrame"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A stream of frames; `event` names each one."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The feed as a stream: the snapshot, then new events. HTTP Basic like the snapshot URL.",
+        "tags": [
+          "FeedStream"
         ]
       }
     },

@@ -9,10 +9,19 @@ import {
 import type { FeedEvent, FeedInput } from '@libs/contests';
 import { AppError } from '@libs/common';
 import { uuidStr } from '@libs/database';
+import type { FeedLineResponse } from './dto/feed-frame.response';
 import type { FeedContext } from './feed-auth.service';
 import type { ContestDocument } from '../core/contests.repository';
 import { FeedDataRepository } from './feed-data.repository';
 import type { FeedSubmissionRow, FeedTeamRow } from './feed-data.repository';
+
+/** The one place a feed line is shaped: the stream's documented payload is its return type. */
+export const feedLineOf = (event: FeedEvent): FeedLineResponse => ({
+  type: event.type,
+  id: event.id,
+  data: event.data,
+  token: event.token,
+});
 
 export const FEED_LIMITS = Symbol('FEED_LIMITS');
 export interface FeedLimits {
@@ -137,7 +146,9 @@ export class FeedService {
   }
 
   ndjson(events: readonly FeedEvent[]): string {
-    return events.map((event) => `${JSON.stringify(event)}\n`).join('');
+    return events
+      .map((event) => `${JSON.stringify(feedLineOf(event))}\n`)
+      .join('');
   }
 
   private async assertSize(
