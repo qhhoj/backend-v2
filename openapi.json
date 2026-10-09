@@ -1,15 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AccessCodeDto": {
-        "properties": {
-          "accessCode": {
-            "maxLength": 255,
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "ActivityCountResponse": {
         "properties": {
           "count": {
@@ -977,6 +968,15 @@
             "description": "The public ranking links ask for a ranking access code.",
             "type": "boolean"
           },
+          "rules": {
+            "type": "string"
+          },
+          "rulesHtml": {
+            "type": "string"
+          },
+          "rulesRevision": {
+            "type": "number"
+          },
           "runPretestsOnly": {
             "type": "boolean"
           },
@@ -1038,6 +1038,9 @@
           "formatConfig",
           "description",
           "descriptionHtml",
+          "rules",
+          "rulesHtml",
+          "rulesRevision",
           "authors",
           "frozenLastMinutes",
           "showSubmissionList",
@@ -1542,6 +1545,14 @@
             },
             "type": "array"
           },
+          "publishAfterEnd": {
+            "type": "boolean"
+          },
+          "publishAfterEndBy": {
+            "description": "The editor whose rights the automatic publish re-checks at the end.",
+            "nullable": true,
+            "type": "string"
+          },
           "pushAnnouncements": {
             "type": "boolean"
           },
@@ -1603,6 +1614,8 @@
           "ratingFloor",
           "ratingCeiling",
           "pushAnnouncements",
+          "publishAfterEnd",
+          "publishAfterEndBy",
           "hasRankingAccessCode",
           "problemOutputPrefixes",
           "users"
@@ -1866,6 +1879,9 @@
             },
             "type": "array"
           },
+          "publishAfterEnd": {
+            "type": "boolean"
+          },
           "pushAnnouncements": {
             "type": "boolean"
           },
@@ -1898,6 +1914,11 @@
           },
           "registrationStart": {
             "nullable": true,
+            "type": "string"
+          },
+          "rules": {
+            "description": "Markdown, trimmed at save; empty or whitespace: no rules.",
+            "maxLength": 8192,
             "type": "string"
           },
           "runPretestsOnly": {
@@ -3092,6 +3113,18 @@
         ],
         "type": "object"
       },
+      "JoinBodyDto": {
+        "properties": {
+          "acceptRules": {
+            "type": "boolean"
+          },
+          "accessCode": {
+            "maxLength": 255,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "JudgeKeyResponse": {
         "properties": {
           "authKey": {
@@ -4160,6 +4193,17 @@
             "format": "date-time",
             "type": "string"
           },
+          "rulesAcceptedAt": {
+            "description": "When this participation accepted the contest rules; null when the contest had no rules then (or the row predates rules).",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "rulesAcceptedRevision": {
+            "description": "The rules revision accepted: it may be older than the contest's current `rulesRevision`.",
+            "nullable": true,
+            "type": "number"
+          },
           "score": {
             "type": "number"
           },
@@ -4175,6 +4219,8 @@
           }
         },
         "required": [
+          "rulesAcceptedAt",
+          "rulesAcceptedRevision",
           "cells",
           "user",
           "score",
@@ -4208,12 +4254,25 @@
             "format": "date-time",
             "type": "string"
           },
+          "rulesAcceptedAt": {
+            "description": "When this participation accepted the contest rules; null when the contest had no rules then (or the row predates rules).",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "rulesAcceptedRevision": {
+            "description": "The rules revision accepted: it may be older than the contest's current `rulesRevision`.",
+            "nullable": true,
+            "type": "number"
+          },
           "virtual": {
             "description": "0 live, -1 spectate, n ≥ 1 virtual.",
             "type": "number"
           }
         },
         "required": [
+          "rulesAcceptedAt",
+          "rulesAcceptedRevision",
           "id",
           "virtual",
           "isRegistered",
@@ -8154,6 +8213,9 @@
             },
             "type": "array"
           },
+          "publishAfterEnd": {
+            "type": "boolean"
+          },
           "pushAnnouncements": {
             "type": "boolean"
           },
@@ -8186,6 +8248,11 @@
           },
           "registrationStart": {
             "nullable": true,
+            "type": "string"
+          },
+          "rules": {
+            "description": "Markdown, trimmed at save; empty or whitespace: no rules.",
+            "maxLength": 8192,
             "type": "string"
           },
           "runPretestsOnly": {
@@ -14434,7 +14501,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AccessCodeDto"
+                "$ref": "#/components/schemas/JoinBodyDto"
               }
             }
           },
@@ -15302,7 +15369,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AccessCodeDto"
+                "$ref": "#/components/schemas/JoinBodyDto"
               }
             }
           },

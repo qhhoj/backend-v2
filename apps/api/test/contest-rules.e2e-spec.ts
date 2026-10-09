@@ -74,10 +74,10 @@ describe('contest rules in the editor and the detail', () => {
 
   it('refuses rules past 8192 characters', async () => {
     const contest = await createContest(api, { authors: [editorId] });
-    const { body } = await patch(contest.key, {
+    const response = await patch(contest.key, {
       rules: 'x'.repeat(8193),
     }).expect(400);
-    const { error } = body as {
+    const { error } = response.body as {
       error: { issues: { field: string; code: string }[] };
     };
     expect(error.issues).toEqual([
