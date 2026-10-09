@@ -73,14 +73,11 @@ export function replayEvents(
   );
 }
 
-/** One time-ordered stream from the per-participant streams; the sort is stable, so one participant's equal keys keep their order. */
+/** One time-ordered stream from the per-participant streams. Ties break by participant only: the sort is stable, so one participant's same-second events keep their submission order (never reordered by problem). */
 export const mergeEvents = (streams: readonly ReplayEvent[][]): ReplayEvent[] =>
   streams
     .flat()
-    .sort(
-      (left, right) =>
-        left[0] - right[0] || left[1] - right[1] || left[2] - right[2],
-    );
+    .sort((left, right) => left[0] - right[0] || left[1] - right[1]);
 
 export function chunkEvents(
   events: readonly ReplayEvent[],

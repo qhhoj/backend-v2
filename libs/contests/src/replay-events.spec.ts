@@ -115,16 +115,28 @@ describe('mergeEvents', () => {
     problem = 0,
   ): ReplayEvent => [seconds, participant, problem, {}, 0, 0, 0];
 
-  it('orders by time, then participant, then problem, whatever the stream order', () => {
+  it('orders by time, then participant, whatever the stream order', () => {
     const merged = mergeEvents([
       [event(30, 1), event(60, 1)],
-      [event(30, 0, 1), event(10, 0)],
+      [event(10, 0), event(30, 0, 1)],
     ]);
     expect(merged.map((item) => item.slice(0, 3))).toEqual([
       [10, 0, 0],
       [30, 0, 1],
       [30, 1, 0],
       [60, 1, 0],
+    ]);
+  });
+
+  it("keeps one participant's same-second events in submission order, even when the later one is on a lower problem", () => {
+    const merged = mergeEvents([
+      [event(30, 0, 2), event(30, 0, 1)],
+      [event(30, 1, 0)],
+    ]);
+    expect(merged.map((item) => item.slice(0, 3))).toEqual([
+      [30, 0, 2],
+      [30, 0, 1],
+      [30, 1, 0],
     ]);
   });
 });

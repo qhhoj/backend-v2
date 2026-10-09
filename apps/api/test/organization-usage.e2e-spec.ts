@@ -1,7 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
+import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
+import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
+import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { QuotaService } from '../src/modules/organizations/quota/quota.service';
 import { createOrganization } from './organization-fixtures';
 import { seedOrganizationWorld } from './organization-problem-fixtures';
@@ -112,6 +115,29 @@ describe('organization usage', () => {
       ['problem', 10],
     ]);
   });
+
+  it.each(['enforce', 'warn'])(
+    'reports both meters full and over at limit 0 with nothing used (%s mode)',
+    async (mode) => {
+      await api.setSetting('quota.enforce', mode);
+      const redis = api.app.get<Redis>(REDIS);
+      if (mode === 'enforce') await redis.set(QUOTA_BACKFILL_DONE_KEY, '1');
+      else await redis.del(QUOTA_BACKFILL_DONE_KEY);
+      const world = await seedOrganizationWorld(api, {
+        quotaMonthlyCredits: 0,
+        quotaStorageBytes: 0,
+      });
+      const body = dataOf<Usage>(
+        await get(
+          usageUrl(world.organization.slug),
+          world.admin.session,
+        ).expect(200),
+      );
+      const full = { used: 0, limit: 0, isNearLimit: true, isOver: true };
+      expect(body.credits).toEqual(full);
+      expect(body.storage).toEqual(full);
+    },
+  );
 
   it('names who spent each credit entry, and gives null for a system entry or a user that vanished', async () => {
     const world = await seedOrganizationWorld(api);

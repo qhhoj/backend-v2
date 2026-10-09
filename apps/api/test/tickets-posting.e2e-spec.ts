@@ -346,6 +346,27 @@ describe('filing tickets and posting messages', () => {
     }).expect(403);
   });
 
+  it('tells a muted reply (issue code muted) from a lost-access reply (issue code forbidden)', async () => {
+    const lost = await createTicket(api, { creator: people.filer.id });
+    interface Refusal {
+      error: { code: string; issues?: Array<{ field: string; code: string }> };
+    }
+    const mutedReply = await post('muted', ticketUrl(lost._id, '/messages'), {
+      body: 'hi',
+    }).expect(403);
+    expect((mutedReply.body as Refusal).error).toMatchObject({
+      code: 'forbidden',
+      issues: [{ field: '', code: 'muted' }],
+    });
+    const lostReply = await post('outsider', ticketUrl(lost._id, '/messages'), {
+      body: 'hi',
+    }).expect(403);
+    expect((lostReply.body as Refusal).error.code).toBe('forbidden');
+    expect((lostReply.body as Refusal).error.issues).toEqual([
+      expect.objectContaining({ field: '', code: 'forbidden' }),
+    ]);
+  });
+
   it('keeps at most 500 messages under parallel posts', async () => {
     const filler = Array.from({ length: 498 }, () => ({
       _id: newId(),

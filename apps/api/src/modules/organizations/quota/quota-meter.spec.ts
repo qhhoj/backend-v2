@@ -20,7 +20,7 @@ describe('meterOf', () => {
     });
   });
   it('treats a zero limit as full as soon as anything is used', () => {
-    expect(meterOf(0, 0)).toMatchObject({ isNearLimit: false, isOver: false });
+    expect(meterOf(0, 0)).toMatchObject({ isNearLimit: true, isOver: true });
     expect(meterOf(1, 0)).toMatchObject({ isNearLimit: true, isOver: true });
   });
 });
