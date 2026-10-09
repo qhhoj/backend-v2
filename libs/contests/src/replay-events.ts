@@ -3,8 +3,8 @@ import { scoreParticipation } from './formats/registry';
 import type { FormatSetting } from './formats/registry';
 import { byDateThenId, secondsSince } from './formats/shared';
 
-/** Bump when the tuple shape or its meaning changes: a head of another version is rebuilt, never served. */
-export const REPLAY_FORMAT_VERSION = 1;
+/** Bump when the tuple shape or its meaning changes: a head of another version is rebuilt, never served. 2: same-second events ordered by participant, then submission. */
+export const REPLAY_FORMAT_VERSION = 2;
 /** Events per stored chunk document: well under the 16 MB document limit, and no cap on the total. */
 export const REPLAY_CHUNK_EVENTS = 5000;
 /** Safety valve, not a product cap: a build of more events fails and the previous head stays. Rescoring is O(rows^2) per participation. */
