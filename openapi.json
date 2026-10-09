@@ -2899,6 +2899,49 @@
         ],
         "type": "object"
       },
+      "FeedKeyMode": {
+        "enum": [
+          "frozen-until-release",
+          "live"
+        ],
+        "type": "string"
+      },
+      "FeedKeyStatusResponse": {
+        "properties": {
+          "createdBy": {
+            "description": "Username of the editor the key is bound to.",
+            "nullable": true,
+            "type": "string"
+          },
+          "expiresAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FeedKeyMode"
+              }
+            ],
+            "nullable": true
+          },
+          "releasedAt": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "isActive",
+          "expiresAt",
+          "releasedAt",
+          "createdBy"
+        ],
+        "type": "object"
+      },
       "FieldChangeResponse": {
         "properties": {
           "after": {
@@ -3949,6 +3992,52 @@
           "performancePoints",
           "problemCount",
           "rating"
+        ],
+        "type": "object"
+      },
+      "MintFeedKeyDto": {
+        "properties": {
+          "expiresInDays": {
+            "maximum": 30,
+            "minimum": 1,
+            "type": "number"
+          },
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FeedKeyMode"
+              }
+            ],
+            "description": "Default `frozen-until-release`; `live` is an explicit opt-in."
+          }
+        },
+        "type": "object"
+      },
+      "MintedFeedKeyResponse": {
+        "properties": {
+          "expiresAt": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FeedKeyMode"
+              }
+            ]
+          },
+          "username": {
+            "description": "The Basic user name, always `feed`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "username",
+          "key",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -15149,6 +15238,210 @@
           "ContestData"
         ],
         "x-raw": true
+      }
+    },
+    "/api/internal/contests/{key}/feed-key": {
+      "delete": {
+        "operationId": "FeedKeysController_revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "FeedKeys"
+        ]
+      },
+      "get": {
+        "operationId": "FeedKeysController_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FeedKeyStatusResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "FeedKeys"
+        ]
+      },
+      "post": {
+        "operationId": "FeedKeysController_mint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintFeedKeyDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/MintedFeedKeyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "FeedKeys"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/feed-key/release": {
+      "post": {
+        "operationId": "FeedKeysController_release",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "FeedKeys"
+        ]
       }
     },
     "/api/internal/contests/{key}/ghosts": {
