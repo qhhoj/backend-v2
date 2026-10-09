@@ -12,6 +12,6 @@ async function bootstrap() {
   );
   await configureApp(app);
   setupOpenApi(app);
-  await app.listen(env.port, '0.0.0.0');
+  await app.listen(env.port, env.host);
 }
 void bootstrap();

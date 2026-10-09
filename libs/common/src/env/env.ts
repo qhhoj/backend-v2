@@ -7,6 +7,8 @@ export interface Env {
   encryptionKey: string;
   tokenSecret: string;
   siteUrl: string;
+  /** Interface the api listens on: loopback in production (nginx is the edge), all interfaces otherwise (dev servers, containers). */
+  host: string;
   port: number;
   logLevel: string;
   /** false, or a comma-separated list of proxy addresses (IPs/CIDRs/`loopback`) whose forwarding headers are trusted. */
@@ -113,6 +115,12 @@ class EnvReader {
   }
 }
 
+function defaultListenHost(reader: EnvReader): string {
+  return reader.textOr('NODE_ENV', '') === 'production'
+    ? '127.0.0.1'
+    : '0.0.0.0';
+}
+
 /** Every field, read in this order so problems are reported in it. */
 function readEnv(reader: EnvReader): Env {
   return {
@@ -121,6 +129,7 @@ function readEnv(reader: EnvReader): Env {
     encryptionKey: reader.textOr('ENCRYPTION_KEY', ''),
     tokenSecret: reader.textOr('TOKEN_SECRET', ''),
     siteUrl: reader.required('SITE_URL'),
+    host: reader.nonBlankOr('LISTEN_HOST', defaultListenHost(reader)),
     port: reader.portNumber('PORT', 3000, 1),
     logLevel: reader.textOr('LOG_LEVEL', 'info'),
     trustProxy: reader.proxyList('TRUST_PROXY'),

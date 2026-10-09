@@ -19,6 +19,7 @@ describe('loadEnv', () => {
       encryptionKey: valid.ENCRYPTION_KEY,
       tokenSecret: valid.TOKEN_SECRET,
       siteUrl: valid.SITE_URL,
+      host: '0.0.0.0',
       port: 3000,
       logLevel: 'info',
       trustProxy: false,
@@ -159,6 +160,17 @@ describe('loadEnv', () => {
       trustProxy: 'loopback,10.0.0.0/8',
       cookieSecure: false,
     }));
+  it('listens on loopback in production unless LISTEN_HOST says otherwise', () => {
+    expect(loadEnv({ ...valid, NODE_ENV: 'production' }).host).toBe(
+      '127.0.0.1',
+    );
+    expect(
+      loadEnv({ ...valid, NODE_ENV: 'production', LISTEN_HOST: '10.0.0.5' })
+        .host,
+    ).toBe('10.0.0.5');
+    expect(loadEnv({ ...valid, NODE_ENV: 'development' }).host).toBe('0.0.0.0');
+  });
+
   it('reads PDF_CONCURRENCY', () =>
     expect(loadEnv({ ...valid, PDF_CONCURRENCY: '4' }).pdfConcurrency).toBe(4));
   it.each(['0', '-1', '1.5', 'abc', ''])(
