@@ -47,7 +47,9 @@ export class MigrationService {
     fresh = false,
   ): Promise<Record<string, string[]>> {
     const selected = this.select(jobs);
-    await this.ids.build();
+    await this.ids.build([
+      ...new Set(this.mappers.flatMap((mapper) => mapper.refTables)),
+    ]);
     await this.conn.syncIndexes();
     const reports: Record<string, string[]> = {};
     for (const mapper of selected)

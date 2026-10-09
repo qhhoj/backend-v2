@@ -22,6 +22,7 @@ describe('migrator framework', () => {
 
   it('maps every legacy id to a uuid and aliases profiles to their user', async () => {
     const ids = harness.testingModule.get(IdMapRepository);
+    await ids.build(['auth_user', 'judge_profile']);
     await ids.load(['auth_user', 'judge_profile']);
     const [rows] = await harness.mysql.query<RowDataPacket[]>(
       `SELECT id, user_id FROM ${harness.name}.judge_profile LIMIT 1`,
@@ -90,13 +91,14 @@ describe('migrator framework', () => {
           .sort({ legacyId: 1 })
           .toArray()
       ).map((entry) => `${entry.legacyId}:${entry.id}`);
-    await migration.backfill(['groups']);
+    const ids = harness.testingModule.get(IdMapRepository);
+    await ids.build(['judge_useractivity']);
     const first = await snapshot();
     expect(first).toHaveLength(Number(rows[0].total));
     expect(new Set(first.map((entry) => entry.split(':')[1])).size).toBe(
       first.length,
     );
-    await migration.backfill(['groups']);
+    await ids.build(['judge_useractivity']);
     expect(await snapshot()).toEqual(first);
   });
 
@@ -129,5 +131,50 @@ describe('migrator framework', () => {
       permissions: ['judge.edit_all_problem'],
     });
     expect(await migration.verify(['groups'])).toBe(0);
+  });
+
+  it('maps only the tables the jobs reference', async () => {
+    await harness.mysql.query(
+      `INSERT INTO ${harness.name}.judge_usersession (id, session_key, ip_address, user_agent, device_type, browser, os, created_at, last_activity, is_active, user_id)
+       VALUES (901, 'k', '127.0.0.1', '', 'desktop', '', '', NOW(), NOW(), 1, 1)`,
+    );
+    await migration.backfill(['groups']);
+    const entries = harness.db.collection('migrationIdMap');
+    expect(await entries.countDocuments({ table: 'judge_usersession' })).toBe(
+      0,
+    );
+    expect(
+      await entries.countDocuments({ table: 'auth_group' }),
+    ).toBeGreaterThan(0);
+  });
+
+  it('mints creation-time ids for timed tables, ordered by time not by legacy id', async () => {
+    await harness.mysql.query(
+      `INSERT INTO ${harness.name}.judge_comment (id, time, page, score, body, hidden, lft, rght, tree_id, level, author_id, parent_id, revisions)
+       VALUES (901, '2021-05-01 00:00:00', 'p:x', 0, 'b', 0, 1, 2, 901, 0, 1, NULL, 0),
+              (902, '2019-01-01 00:00:00', 'p:x', 0, 'b', 0, 1, 2, 902, 0, 1, NULL, 0)`,
+    );
+    const ids = harness.testingModule.get(IdMapRepository);
+    await ids.build(['judge_comment']);
+    await ids.load(['judge_comment']);
+    const millis = (id: string) =>
+      parseInt(id.replace(/-/g, '').slice(0, 12), 16);
+    expect(millis(ids.get('judge_comment', 901))).toBe(Date.UTC(2021, 4, 1));
+    expect(ids.get('judge_comment', 902) < ids.get('judge_comment', 901)).toBe(
+      true,
+    );
+  });
+
+  it('skips a profile whose user is gone instead of aborting the build', async () => {
+    await harness.mysql.query(
+      `SET FOREIGN_KEY_CHECKS=0; INSERT INTO ${harness.name}.judge_profile (id, user_id, timezone, display_rank, ace_theme, math_engine, site_theme) VALUES (990, 99990, 'UTC', 'user', 'auto', 'auto', 'auto'); SET FOREIGN_KEY_CHECKS=1;`,
+    );
+    const ids = harness.testingModule.get(IdMapRepository);
+    await expect(
+      ids.build(['auth_user', 'judge_profile']),
+    ).resolves.toBeUndefined();
+    await ids.load(['judge_profile']);
+    expect(ids.find('judge_profile', 990)).toBeUndefined();
+    expect(ids.find('judge_profile', 1)).toBe(ids.get('auth_user', 1));
   });
 });

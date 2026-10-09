@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { newId } from '@libs/database';
 import { Connection } from 'mongoose';
+import { v7 } from 'uuid';
 import { LegacySourceService } from './legacy-source.service';
 import { batched } from './mapper';
 
@@ -13,10 +14,29 @@ const ALIASES: Record<string, { sql: string; target: string }> = {
   },
 };
 
+/** Tables whose uuids carry the legacy creation time, so `-_id` lists stay in time order (decisions.md: ticket ids are stamped). */
+export const TIMED_TABLES: Record<string, string> = {
+  judge_submission: 'date',
+  judge_comment: 'time',
+  judge_blogpost: 'publish_on',
+  judge_ticket: 'time',
+  judge_ticketmessage: 'time',
+  judge_contestannouncement: 'date',
+  judge_organizationrequest: 'time',
+};
+
+const isValidDate = (at: unknown): at is Date =>
+  at instanceof Date && !isNaN(at.getTime());
+
+/** A UUIDv7 stamped with `at`; a missing or zero date falls back to now. */
+export const newIdAt = (at: unknown): string =>
+  isValidDate(at) ? v7({ msecs: at.getTime() }) : newId();
+
 type IdEntry = { table: string; legacyId: number; id: string };
 
 @Injectable()
 export class IdMapRepository {
+  private readonly logger = new Logger(IdMapRepository.name);
   private cache = new Map<string, Map<number, string>>();
 
   constructor(
@@ -28,32 +48,63 @@ export class IdMapRepository {
     return this.conn.collection<IdEntry>('migrationIdMap');
   }
 
-  /** Incremental and stable: only legacy ids without an entry get a new uuid. */
-  async build() {
+  /** Incremental and stable for the given tables (the union of the jobs' `refTables`): only legacy ids without an entry get a new uuid. Tables no job references get no entries (13M-row logs stay out). */
+  async build(tables: readonly string[]) {
     this.cache.clear();
     await this.collection.createIndex(
       { table: 1, legacyId: 1 },
       { unique: true },
     );
-    const tables = await this.source.query<{ tableName: string }>(
+    const wanted = new Set(tables);
+    const existing = await this.source.query<{ tableName: string }>(
       "SELECT table_name AS tableName FROM information_schema.columns WHERE table_schema = DATABASE() AND column_name = 'id' AND column_key = 'PRI'",
     );
-    for (const { tableName } of tables.filter(
-      ({ tableName }) => !(tableName in ALIASES),
-    ))
+    for (const { tableName } of existing)
+      if (wanted.has(tableName) && !(tableName in ALIASES))
+        await this.syncTable(tableName);
+    for (const [tableName, { sql, target }] of Object.entries(ALIASES))
+      if (wanted.has(tableName)) {
+        await this.load([target]);
+        // A profile whose user is gone gets no entry (the audit counts it): one orphan must not abort the build.
+        const orphans = await this.sync(
+          tableName,
+          this.source.stream<{ id: number; target: number }>(sql),
+          (row) => this.find(target, row.target),
+        );
+        if (orphans)
+          this.logger.warn(
+            `${tableName}: ${orphans} row(s) whose ${target} is gone get no id`,
+          );
+      }
+  }
+
+  private async syncTable(table: string): Promise<void> {
+    const column = TIMED_TABLES[table];
+    if (!column) {
       await this.sync(
-        tableName,
-        this.source.stream<{ id: number }>(`SELECT id FROM \`${tableName}\``),
+        table,
+        this.source.stream<{ id: number }>(
+          `SELECT id FROM \`${table}\` ORDER BY id`,
+        ),
         () => newId(),
       );
-    for (const [tableName, { sql, target }] of Object.entries(ALIASES)) {
-      await this.load([target]);
-      await this.sync(
-        tableName,
-        this.source.stream<{ id: number; target: number }>(sql),
-        (row) => this.get(target, row.target),
-      );
+      return;
     }
+    let undated = 0;
+    await this.sync(
+      table,
+      this.source.stream<{ id: number; at: unknown }>(
+        `SELECT id, \`${column}\` AS at FROM \`${table}\` ORDER BY id`,
+      ),
+      (row) => {
+        if (!isValidDate(row.at)) undated += 1;
+        return newIdAt(row.at);
+      },
+    );
+    if (undated)
+      this.logger.warn(
+        `${table}: ${undated} row(s) without a creation time get a current-time id`,
+      );
   }
 
   async load(tables: string[]) {
@@ -80,13 +131,14 @@ export class IdMapRepository {
     return id;
   }
 
-  /** Memory stays bounded by one batch: existing entries are looked up per batch, never cached whole (tables reach tens of millions of rows). */
+  /** Memory stays bounded by one batch: existing entries are looked up per batch, never cached whole (tables reach tens of millions of rows). Returns how many rows got no entry. */
   private async sync<Row extends { id: number }>(
     table: string,
     rows: AsyncIterable<Row>,
-    resolve: (row: Row) => string,
-  ) {
+    resolve: (row: Row) => string | undefined,
+  ): Promise<number> {
     this.cache.delete(table);
+    let unresolved = 0;
     for await (const batch of batched(rows, 5000)) {
       const known = new Set(
         await this.collection.distinct('legacyId', {
@@ -96,8 +148,13 @@ export class IdMapRepository {
       );
       const fresh = batch
         .filter((row) => !known.has(row.id))
-        .map((row) => ({ table, legacyId: row.id, id: resolve(row) }));
+        .flatMap((row) => {
+          const id = resolve(row);
+          if (id === undefined) unresolved += 1;
+          return id === undefined ? [] : [{ table, legacyId: row.id, id }];
+        });
       if (fresh.length) await this.collection.insertMany(fresh);
     }
+    return unresolved;
   }
 }
