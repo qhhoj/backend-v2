@@ -2,6 +2,8 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import {
+  CONTEST_EXPORT_JOB,
+  CONTEST_EXPORT_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
@@ -9,11 +11,13 @@ import {
   CONTEST_RESCORE_QUEUE,
   enqueueContestRating,
   enqueueContestRescore,
+  oneJobPerContest,
   requestFinalJudge,
   requestReplayBuild,
   reschedulePublish,
 } from '@libs/contests';
 import type {
+  ContestExportJob,
   ContestFinalJudgeJob,
   ContestPublishJob,
   ContestRatingJob,
@@ -36,6 +40,7 @@ describe('contest action status', () => {
   let ratings: Queue<ContestRatingJob>;
   let publishes: Queue<ContestPublishJob>;
   let replays: Queue<ContestReplayJob>;
+  let exports: Queue<ContestExportJob>;
   let editor: TestSession;
   let plain: TestSession;
   let editorId: string;
@@ -55,6 +60,7 @@ describe('contest action status', () => {
     rate: 'idle',
     publish: 'idle',
     replay: 'idle',
+    export: 'idle',
     autoPublish: null,
   };
 
@@ -65,6 +71,7 @@ describe('contest action status', () => {
     ratings = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
     publishes = api.app.get(getQueueToken(CONTEST_PUBLISH_QUEUE));
     replays = api.app.get(getQueueToken(CONTEST_REPLAY_QUEUE));
+    exports = api.app.get(getQueueToken(CONTEST_EXPORT_QUEUE));
     editorId = (
       await createUserWith(api, 'actions_editor', {
         permissions: ['judge.add_contest', 'judge.edit_own_contest'],
@@ -83,6 +90,7 @@ describe('contest action status', () => {
     await ratings.obliterate({ force: true });
     await publishes.obliterate({ force: true });
     await replays.obliterate({ force: true });
+    await exports.obliterate({ force: true });
   });
 
   it('reports every action idle without a job', async () => {
@@ -94,6 +102,20 @@ describe('contest action status', () => {
     const contest = await createContest(api, { authors: [editorId] });
     await enqueueContestRescore(rescores, contest._id);
     expect(await statusOf(contest.key)).toEqual({ ...idle, rescore: 'queued' });
+  });
+
+  it('reports an export queued while its job waits, and idle for another contest', async () => {
+    const [mine, other] = [
+      await createContest(api, { authors: [editorId] }),
+      await createContest(api, { authors: [editorId] }),
+    ];
+    await exports.add(
+      CONTEST_EXPORT_JOB,
+      { contestId: mine._id },
+      { ...oneJobPerContest('export', mine._id), delay: 60_000 },
+    );
+    expect(await statusOf(mine.key)).toEqual({ ...idle, export: 'queued' });
+    expect(await statusOf(other.key)).toEqual(idle);
   });
 
   it('reports a rating queued while its request waits', async () => {

@@ -5,6 +5,7 @@ import { NOTIFICATION_FANOUT_QUEUE } from '@libs/community';
 import { RateLimitService } from '@libs/common';
 import {
   CONTEST_DATA_QUEUE,
+  CONTEST_EXPORT_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
@@ -78,6 +79,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
       { name: CONTEST_RATING_QUEUE },
       { name: CONTEST_DATA_QUEUE },
       { name: CONTEST_REPLAY_QUEUE },
+      { name: CONTEST_EXPORT_QUEUE },
       { name: NOTIFICATION_FANOUT_QUEUE },
     ),
   ],

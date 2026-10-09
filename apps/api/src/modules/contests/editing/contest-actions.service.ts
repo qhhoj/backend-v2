@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import type { Principal } from '@libs/auth';
 import {
+  CONTEST_EXPORT_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
   CONTEST_RATING_QUEUE,
@@ -11,6 +12,7 @@ import {
   contestActionState,
 } from '@libs/contests';
 import type {
+  ContestExportJob,
   ContestFinalJudgeJob,
   ContestPublishJob,
   ContestRatingJob,
@@ -34,6 +36,8 @@ export class ContestActionsService {
     private readonly publishes: Queue<ContestPublishJob>,
     @InjectQueue(CONTEST_REPLAY_QUEUE)
     private readonly replays: Queue<ContestReplayJob>,
+    @InjectQueue(CONTEST_EXPORT_QUEUE)
+    private readonly exports: Queue<ContestExportJob>,
   ) {}
 
   /** Editors only, like `rescore`. The automatic final judging at the end is not an editor's request, so it is filtered out. */
@@ -42,13 +46,19 @@ export class ContestActionsService {
     key: string,
   ): Promise<ContestActionsResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
-    const [rescore, judgeFinal, rate, publish, replay] = await Promise.all([
-      contestActionState(this.rescores, contest._id),
-      contestActionState(this.finalJudges, contest._id, (data) => data.manual),
-      contestActionState(this.ratings, contest._id),
-      contestActionState(this.publishes, contest._id),
-      contestActionState(this.replays, contest._id),
-    ]);
+    const [rescore, judgeFinal, rate, publish, replay, dataExport] =
+      await Promise.all([
+        contestActionState(this.rescores, contest._id),
+        contestActionState(
+          this.finalJudges,
+          contest._id,
+          (data) => data.manual,
+        ),
+        contestActionState(this.ratings, contest._id),
+        contestActionState(this.publishes, contest._id),
+        contestActionState(this.replays, contest._id),
+        contestActionState(this.exports, contest._id),
+      ]);
     const outcome = contest.autoPublishOutcome;
     return {
       rescore,
@@ -56,6 +66,7 @@ export class ContestActionsService {
       rate,
       publish,
       replay,
+      export: dataExport,
       autoPublish: outcome && {
         at: outcome.at,
         status: outcome.status,

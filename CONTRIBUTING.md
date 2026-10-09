@@ -23,7 +23,7 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts, modules/ (feature modules incl. `mail/` (SMTP mailer) and `settings/` (admin API)), seed/ (`npm run seed:e2e`)
   migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
-  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, organization-points, user-data, contribution-points, discord-webhook)
+  worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, contest-export, organization-points, user-data, contribution-points, discord-webhook)
   bridge/     judge gRPC server (qhhoj.judge.v1): link/ (server, sessions, messages, FetchSource), dispatch/ (slots, grace, dispatcher, commands), judges/, submissions/ (claims, run writes, runs), bridge-core.module.ts, bridge.service.ts
   worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, contest-replay, organization-points, user-data, contribution-points, discord-webhook)
   bridge/     judge TCP server (DMOJ protocol): protocol/, dispatch/, judges/, submissions/, bridge.service.ts
@@ -36,6 +36,7 @@ libs/
   judge-proto/ the vendored qhhoj.judge.v1 contract and its generated TypeScript (see Judge protocol)
   judging/    scoring, points/PP formulas (`points.ts`), queue contracts (`queues.ts`: submission-graded, problem-rescore, effects-sweep, similarity), bridge commands + `BridgeCommandsService`, submission events + `SubmissionEventsService`, `notifyGraded`/`notifyRescore`
   contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data, contest-replay), replay queue, events and ghost scoring (`replay-queue`, `replay-events`, `ghost-replay`), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
+  contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data), `balloons`, `feed-events`, `contest-export`, Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
   community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, tickets (limits, Discord texts), ticket-events contract, flatpage urls, user activity rules (session keys, user agent classifier, CSV cells), queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook), notifications (drafts, event contract, queues, repository, service, module)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
 test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
@@ -71,6 +72,9 @@ contests/
   rating/          rate endpoint, ratings.repository
   announcements/   announcements, contest-events (SSE pushes)
   stats/  data/  submissions/
+  balloons/        balloons.* (queue, deliver, undeliver)
+  feed/            feed.* (NDJSON snapshot and stream), feed-keys.* (mint, revoke, release), feed-auth, README (verdict table)
+  export/          contest-export.* (request, status, download)
   editing/         create/update, clone
   ghosts/          ghosts.* (staff CSV import, list, csv download, delete), ghost-csv
   replay/          replay.* (GET replay chunks, POST rebuild), replay-access, replays.repository

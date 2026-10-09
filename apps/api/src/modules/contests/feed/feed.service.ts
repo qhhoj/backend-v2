@@ -52,6 +52,10 @@ const FULL_RELOAD_MS = 10 * 60_000;
 /** Re-reads a minute of overlap: merging by id makes a repeated row harmless, and a clock gap cannot lose one. */
 const TICK_OVERLAP_MS = 60_000;
 
+/** The first tick and every tenth minute read all rows; a count first keeps a contest that outgrew the cap from loading them. */
+const isFullRead = (session: FeedSession, now: Date): boolean =>
+  session.since === null || now.getTime() - session.loadedAt > FULL_RELOAD_MS;
+
 /** A release applies to the freeze that was current when it was made: a key released before the freeze began (or before an editor raised the freeze minutes) is cut again. */
 const isReleasedForFreeze = (
   releasedAt: Date | null,
@@ -121,7 +125,7 @@ export class FeedService {
     session?: FeedSession,
   ): Promise<FeedEvent[]> {
     const { contest } = context;
-    if (!session || session.since === null)
+    if (!session || isFullRead(session, now))
       await this.assertSize(contest._id, session !== undefined);
     const teams = await this.data.teams(contest._id);
     const submissions = await this.submissionsOf(contest._id, now, session);
@@ -181,9 +185,7 @@ export class FeedService {
     session?: FeedSession,
   ): Promise<FeedSubmissionRow[]> {
     if (!session) return this.data.allSubmissions(contestId);
-    const isFull =
-      session.since === null ||
-      now.getTime() - session.loadedAt > FULL_RELOAD_MS;
+    const isFull = isFullRead(session, now);
     const fresh = isFull
       ? await this.data.allSubmissions(contestId)
       : await this.data.changedSubmissions(contestId, session.since as Date);

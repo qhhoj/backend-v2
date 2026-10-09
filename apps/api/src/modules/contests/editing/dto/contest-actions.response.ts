@@ -23,12 +23,13 @@ export class ContestAutoPublishResponse {
   skipped!: number;
 }
 
-/** Each editor action's state for the contest: `queued` waits for the worker, `running` is being worked on now. Failed and completed jobs are removed, so a failed action reads `idle`. `publish` is `queued` while the automatic publish is scheduled for the end or waits for the worker; its result is `autoPublish`. `replay` is a replay build waiting or running. */
+/** Each editor action's state for the contest: `queued` waits for the worker, `running` is being worked on now. Failed and completed jobs are removed, so a failed action reads `idle`. `publish` is `queued` while the automatic publish is scheduled for the end or waits for the worker; its result is `autoPublish`. `replay` is a replay build waiting or running. `export` is the submissions export. */
 export class ContestActionsResponse {
   @ApiProperty(ACTION_STATE) rescore!: ContestActionState;
   @ApiProperty(ACTION_STATE) judgeFinal!: ContestActionState;
   @ApiProperty(ACTION_STATE) rate!: ContestActionState;
   @ApiProperty(ACTION_STATE) publish!: ContestActionState;
   @ApiProperty(ACTION_STATE) replay!: ContestActionState;
+  @ApiProperty(ACTION_STATE) export!: ContestActionState;
   autoPublish!: ContestAutoPublishResponse | null;
 }

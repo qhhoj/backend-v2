@@ -9,7 +9,7 @@ import { ContestAccess } from '../core/contest-access';
 import { ContestViewerService } from '../core/contest-viewer.service';
 import type { ContestDocument } from '../core/contests.repository';
 import { RankingUsersRepository } from '../ranking/ranking-users.repository';
-import { balloonRefusal, withIssueCode } from './balloon-refusal';
+import { refusalsOf } from '../core/coded-refusal';
 import { BalloonsRepository } from './balloons.repository';
 import type { DeliveryRecord, LiveBalloonRow } from './balloons.repository';
 import type {
@@ -23,6 +23,8 @@ import {
   BALLOON_WRITE_WINDOW_SECONDS,
   FROZEN_READ_AUDIT_WINDOW_SECONDS,
 } from './rate-limits';
+
+const balloonRefusal = refusalsOf('balloons');
 
 /** One balloon: a team's solved problem. */
 export interface BalloonTarget {
@@ -133,11 +135,7 @@ export class BalloonsService {
     principal: Principal,
     key: string,
   ): Promise<ContestDocument> {
-    const contest = await this.viewers
-      .visibleContest(principal, key)
-      .catch((error: unknown) => {
-        throw withIssueCode(error);
-      });
+    const contest = await this.viewers.visibleContest(principal, key);
     if (!contest.balloons)
       throw balloonRefusal(
         404,
@@ -191,15 +189,11 @@ export class BalloonsService {
     key: string,
   ): Promise<ContestDocument> {
     const contest = await this.balloonContest(principal, key);
-    await this.rateLimit
-      .reserve(
-        [`balloon-write:${principal.userId}`],
-        BALLOON_WRITE_LIMIT,
-        BALLOON_WRITE_WINDOW_SECONDS,
-      )
-      .catch((error: unknown) => {
-        throw withIssueCode(error);
-      });
+    await this.rateLimit.reserve(
+      [`balloon-write:${principal.userId}`],
+      BALLOON_WRITE_LIMIT,
+      BALLOON_WRITE_WINDOW_SECONDS,
+    );
     return contest;
   }
 

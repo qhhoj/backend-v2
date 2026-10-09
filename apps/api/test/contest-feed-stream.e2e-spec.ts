@@ -16,6 +16,7 @@ import {
 import {
   FEED_STREAM_OPTIONS,
   FeedStreamService,
+  MAX_FAILED_TICKS,
 } from '../src/modules/contests/feed/feed-stream.service';
 import type { MintedFeedKeyResponse } from '../src/modules/contests/feed/dto/feed-key.dto';
 import {
@@ -357,6 +358,42 @@ describe('contest event feed stream', () => {
       await new Promise((resolve) => setTimeout(resolve, TICK_MS * 10));
       expect(spy.mock.calls.length).toBeGreaterThan(5);
       expect(spy.mock.calls.length).toBeLessThanOrEqual(12);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('retries a failed shared build on the next tick and keeps every stream open', async () => {
+    const { contest } = await seed();
+    const key = await mint(contest);
+    const [one, two] = [
+      await connect(contest, key),
+      await connect(contest, key),
+    ];
+    await until(() => one.events.length > 0 && two.events.length > 0);
+    const spy = jest
+      .spyOn(api.app.get(FeedService), 'eventsFor')
+      .mockRejectedValueOnce(new Error('transient'));
+    let hasEnded = false;
+    void one.closed.then(() => (hasEnded = true));
+    try {
+      await until(() => spy.mock.calls.length >= 3);
+      expect(hasEnded).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('ends the streams only after the build failed several ticks in a row', async () => {
+    const { contest } = await seed();
+    const stream = await connect(contest, await mint(contest));
+    await until(() => stream.events.length > 0);
+    const spy = jest
+      .spyOn(api.app.get(FeedService), 'eventsFor')
+      .mockRejectedValue(new Error('still down'));
+    try {
+      await stream.closed;
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(MAX_FAILED_TICKS);
     } finally {
       spy.mockRestore();
     }

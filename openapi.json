@@ -913,6 +913,13 @@
             "nullable": true,
             "type": "object"
           },
+          "export": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestActionState"
+              }
+            ]
+          },
           "judgeFinal": {
             "allOf": [
               {
@@ -955,6 +962,7 @@
           "rate",
           "publish",
           "replay",
+          "export",
           "autoPublish"
         ],
         "type": "object"

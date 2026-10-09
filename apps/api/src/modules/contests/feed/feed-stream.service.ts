@@ -23,6 +23,8 @@ export const DEFAULT_FEED_STREAM_OPTIONS: FeedStreamOptions = {
   intervalMs: 10_000,
   keepAliveMs: 30_000,
 };
+/** A tick whose build fails for a reason that may pass (a database blip) is retried on the next tick; the stream ends after this many in a row. */
+export const MAX_FAILED_TICKS = 3;
 /** A resolver needs one or two. */
 export const FEED_STREAMS_PER_KEY = 2;
 
@@ -78,6 +80,7 @@ export class FeedStreamService implements OnModuleDestroy {
       context,
       sent: new Map(),
       nextToken: 1,
+      failedTicks: 0,
     };
     const leave = once(() => {
       clearInterval(subscriber.keepAlive);
@@ -184,7 +187,7 @@ export class FeedStreamService implements OnModuleDestroy {
     }
   }
 
-  /** The stream's new events, or the end of the stream when its key stopped qualifying. */
+  /** The stream's new events, or the end of the stream when its key stopped qualifying or its builds keep failing. */
   private async push(
     room: FeedRoom,
     subscriber: FeedSubscriber,
@@ -195,15 +198,23 @@ export class FeedStreamService implements OnModuleDestroy {
       const { contest, feedKey } = subscriber.context;
       const fresh = await this.auth.reauthorize(contest._id, feedKey.id, now);
       const events = unsentOf(subscriber, await room.build(fresh, now));
+      subscriber.failedTicks = 0;
       if (events.length) response.write(this.feeds.ndjson(events));
       if (response.writableLength > this.limits.maxBufferedBytes)
         response.destroy();
     } catch (error) {
-      if (!(error instanceof AppError))
-        this.logger.error(
-          `Feed stream tick failed: ${(error as Error).message}`,
-        );
+      if (this.isRetryable(subscriber, error)) return;
       response.end();
     }
+  }
+
+  /** A refusal (`AppError`: key revoked, contest too large) is final. Anything else is logged and given a few more ticks. */
+  private isRetryable(subscriber: FeedSubscriber, error: unknown): boolean {
+    if (error instanceof AppError) return false;
+    subscriber.failedTicks += 1;
+    this.logger.error(
+      `Feed stream tick failed (${subscriber.failedTicks}/${MAX_FAILED_TICKS}): ${(error as Error).message}`,
+    );
+    return subscriber.failedTicks < MAX_FAILED_TICKS;
   }
 }

@@ -240,6 +240,15 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `final_submission` contests refuse only the ghost PUT (409 `ghost_unsupported_format`): scores exist only after the final judge, and listing, download and delete must still clean up what exists.
 - Replay chunks of a build that died after `insertChunks` are orphans until the next good build (accepted); a contest delete path must remove the head, chunks and ghosts.
 - Replay and ghost JSON is compressed by the nginx gzip location; the api registers no compression plugin.
+- Balloons check order is `canSee` (404) then `canViewBalloons` (403) — a hidden contest stays invisible to someone who may not see it.
+- Balloon refusals are coded `issues[]` under `conflict` or `not_found` — the SPA maps codes, never messages.
+- Balloons store only deliveries; the queue and first flag are derived from live cells on every read, so a GET writes nothing and a rescore leaves no stale flag. During a freeze volunteers still see live cells (runners must not stall), but contestants are refused, non-editors read `solvedAt: null`, and frozen reads are audited.
+- Feed keys are stored hashed (sha256), compared in constant time, and only the newest key of a contest is accepted — minting revokes the rest, so a leaked old key dies with the next mint.
+- The feed snapshot is NDJSON, not JSON: resolver tools read lines; `schema-quality` exempts it from the event-stream rule through `NDJSON_SNAPSHOTS`.
+- The live feed stream sits under `/events/` with the other streams, one shared room per contest (one build per tick for all its streams), caps of 1000 feed streams in total and 2 per key — N resolvers must cost one build, not N.
+- A shared build error retries on the next tick and ends the streams only after repeated failures; the room cache key includes the freeze config, so an editor's freeze change is served at once — one failed read must not drop every resolver.
+- The submissions export is editors-only, once a day, and includes the sources — sources are private data, and a zip of a large contest is expensive.
+- `thawed` is null until a real release — a key that was never released has not thawed anything.
 
 ## Organizations and users
 

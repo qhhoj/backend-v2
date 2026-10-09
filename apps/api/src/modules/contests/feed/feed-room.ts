@@ -27,8 +27,20 @@ export interface FeedSubscriber {
   /** Slot to digest of what this stream has been sent. */
   sent: Map<string, string>;
   nextToken: number;
+  /** Ticks in a row whose build failed; a good tick resets it. */
+  failedTicks: number;
   keepAlive?: NodeJS.Timeout;
 }
+
+/** What a build depends on besides the contest's rows: the key's state and the freeze config, so an editor's freeze change is never served from a build made just before it. */
+const variantOf = ({ contest, feedKey }: FeedContext): string =>
+  [
+    feedKey.id,
+    feedKey.mode,
+    feedKey.releasedAt?.getTime() ?? '',
+    contest.frozenLastMinutes,
+    contest.endTime.getTime(),
+  ].join('|');
 
 interface Build {
   at: number;
@@ -53,8 +65,7 @@ export class FeedRoom {
 
   /** The feed as the key sees it, built once per key state and tick. */
   build(context: FeedContext, now = new Date()): Promise<DigestedEvent[]> {
-    const { feedKey } = context;
-    const variant = `${feedKey.id}|${feedKey.mode}|${feedKey.releasedAt?.getTime() ?? ''}`;
+    const variant = variantOf(context);
     for (const [name, build] of this.builds)
       if (now.getTime() - build.at >= this.reuseMs) this.builds.delete(name);
     const known = this.builds.get(variant);

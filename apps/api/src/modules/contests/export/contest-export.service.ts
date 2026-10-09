@@ -24,7 +24,9 @@ import { ContestsRepository } from '../core/contests.repository';
 import type { ContestDocument } from '../core/contests.repository';
 import type { QueuedResponse } from '../core/dto/queued.response';
 import type { ContestExportStatusResponse } from './dto/contest-export.dto';
-import { exportRefusal, withIssueCode } from './export-refusal';
+import { refusalsOf } from '../core/coded-refusal';
+
+const exportRefusal = refusalsOf('export');
 
 /** Split out of `status` to keep its complexity under the gate. */
 const stateOf = (
@@ -144,11 +146,7 @@ export class ContestExportService {
         'export_not_configured',
         'Contest export is not configured',
       );
-    const contest = await this.viewers
-      .editableContest(principal, key)
-      .catch((error: unknown) => {
-        throw withIssueCode(error);
-      });
+    const contest = await this.viewers.editableContest(principal, key);
     if (contestPhase(contest, now) !== 'ended')
       throw exportRefusal(
         409,
