@@ -208,6 +208,20 @@ describe('JudgeSession', () => {
     expect([...session.executors]).toEqual(['CPP17']);
   });
 
+  it('leaves the admin row to the newer session when it is replaced during its resume', async () => {
+    dispatch.resume = record('resume', () => {
+      session.replaced();
+      return { resume: [], abort: [] };
+    });
+    try {
+      await online();
+      expect(calls.markSessionOnline).toBeUndefined();
+      expect(calls.register).toBeUndefined();
+    } finally {
+      dispatch.resume = record('resume', { resume: [], abort: [] });
+    }
+  });
+
   it('refuses a second Hello', async () => {
     await online();
     await receive(HELLO);

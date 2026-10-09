@@ -277,6 +277,8 @@ export class JudgeSession implements DispatchTarget {
   private async welcome(info: HelloInfo): Promise<void> {
     const { dispatch, judges, timings } = this.services;
     const plan = await dispatch.resume(this, info.inFlight);
+    // replaced while resuming: the newer session owns the admin row
+    if (this.isClosed) return;
     this.send({
       $case: 'welcome',
       welcome: {
