@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, escapeRegExp, Paginated } from '@libs/common';
+import { escapeRegExp, Paginated } from '@libs/common';
 import { contestPhase, liveStatusOf } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
@@ -161,13 +161,7 @@ export class ContestsService {
   }
 
   /** `visibleContest` plus legacy `is_editable_by` (403 when visible but not editable). */
-  async editableContest(
-    principal: Principal,
-    key: string,
-  ): Promise<ContestDocument> {
-    const contest = await this.visibleContest(principal, key);
-    if (!ContestAccess.canEdit(principal, ContestAccess.accessView(contest)))
-      throw new AppError('forbidden', 403, 'You cannot edit this contest');
-    return contest;
+  editableContest(principal: Principal, key: string): Promise<ContestDocument> {
+    return this.viewers.editableContest(principal, key);
   }
 }

@@ -13,6 +13,7 @@ import { ContestDataModule } from './jobs/contest-data/contest-data.module';
 import { ContestFinalJudgeModule } from './jobs/contest-final-judge/contest-final-judge.module';
 import { ContestRatingModule } from './jobs/contest-rating/contest-rating.module';
 import { SimilarityModule } from './jobs/similarity/similarity.module';
+import { ContestReplayModule } from './jobs/contest-replay/contest-replay.module';
 import { ContestRescoreModule } from './jobs/contest-rescore/contest-rescore.module';
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
 import { MigrationRecomputeModule } from './jobs/migration-recompute/migration-recompute.module';
@@ -43,6 +44,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     EffectsSweepModule,
     ProblemRescoreModule,
     ContestRescoreModule,
+    ContestReplayModule,
     ContestFinalJudgeModule,
     ContestRatingModule,
     SimilarityModule,
