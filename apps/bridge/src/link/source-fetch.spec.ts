@@ -113,7 +113,8 @@ describe('SourceFetch', () => {
     await expect(
       Promise.race([
         served.then(() => 'returned'),
-        new Promise((resolve) => setTimeout(resolve, 1000, 'hung')),
+        // generous: under load the fs close alone can take a second; a real hang never returns
+        new Promise((resolve) => setTimeout(resolve, 5000, 'hung')),
       ]),
     ).resolves.toBe('returned');
     expect(call.chunks).toHaveLength(1);

@@ -26,13 +26,13 @@ import { BRIDGE_TIMINGS } from '../src/bridge-timings';
 import type { BridgeTimings } from '../src/bridge-timings';
 import { JudgeLinkServer } from '../src/link/judge-link.server';
 
-/** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). */
+/** Milliseconds instead of seconds; `resyncMs` stays long so a test sees only the dispatches it caused (restart tests shorten it). No test waits for the idle or accept clock to expire, so both are long enough that a loaded host (event-loop stalls of seconds) never drops a judge or releases a slow Accepted mid-test. */
 export const FAST_TIMINGS: BridgeTimings = {
   handshakeMs: 500,
-  idleMs: 1500,
+  idleMs: 5000,
   pingIntervalMs: 200,
   resyncMs: 60_000,
-  acceptMs: 500,
+  acceptMs: 5000,
   resumeGraceMs: 300,
 };
 

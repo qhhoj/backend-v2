@@ -117,11 +117,15 @@ describe('ticket updates', () => {
 
   it('keeps the flag and the recompute consistent under parallel toggles', async () => {
     const ticket = await createTicket(api, { creator: people.creator.id });
-    await Promise.all(
-      [true, false, true, true].map((isContributive) =>
-        patch('staff', ticket._id, { isContributive }).expect(200),
+    // the update is compare-and-set: a toggle that read a value another one already changed is refused with 409
+    const statuses = await Promise.all(
+      [true, false, true, true].map(
+        async (isContributive) =>
+          (await patch('staff', ticket._id, { isContributive })).status,
       ),
     );
+    expect(statuses).toContain(200);
+    for (const code of statuses) expect([200, 409]).toContain(code);
     await patch('staff', ticket._id, { isContributive: true }).expect(200);
     expect((await stored(ticket._id))!.isContributive).toBe(true);
     expect(new Set((await queuedUsers()).map((job) => job.userId))).toEqual(

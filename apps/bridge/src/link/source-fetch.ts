@@ -3,6 +3,7 @@ import type { ServerWritableStream } from '@grpc/grpc-js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { once } from 'node:events';
 import { constants } from 'node:fs';
+import type { ReadStream } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -49,6 +50,16 @@ async function drained(call: SourceCall): Promise<boolean> {
   } finally {
     stop.abort();
   }
+}
+
+/** Destroys the stream and waits for its `close`: a read still in flight holds the handle, and `FileHandle.close()` then resolves before the descriptor is really closed. */
+async function destroyed(file: ReadStream): Promise<void> {
+  // a plain listener, not `once()`: that rejects on the abort error a destroyed iterator emits, before `close`
+  const closed = file.closed
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => file.once('close', () => resolve()));
+  file.destroy();
+  await closed;
 }
 
 /** FetchSource: the file of a file-only submission, only for a run the calling judge's live session holds (otherwise any judge key could read any user's upload). Judges need no HTTP access to the site. */
@@ -138,7 +149,7 @@ export class SourceFetch {
       );
       this.refuse(call, status.INTERNAL, 'reading the file failed');
     } finally {
-      file.destroy();
+      await destroyed(file);
     }
   }
 
