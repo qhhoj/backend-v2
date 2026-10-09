@@ -25,3 +25,4 @@ export * from './first-solves';
 export * from './rating/elo-mmr';
 export * from './official-ranking';
 export * from './publish-queue';
+export * from './balloons';
