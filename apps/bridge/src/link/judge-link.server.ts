@@ -17,6 +17,7 @@ import { JudgesRepository } from '../judges/judges.repository';
 import { RunsService } from '../submissions/runs.service';
 import { AuthFailures } from './auth-failures';
 import { ConnectionGuard, peerOfCall } from './connection-guard';
+import type { UnauthenticatedClose } from './connection-guard';
 import { addressOf, authenticateCall, loggableNameOf } from './judge-auth';
 import { JudgeSession } from './judge-session';
 import type {
@@ -84,6 +85,11 @@ export class JudgeLinkServer {
     maxPerWindow: MAX_FAILED_AUTH_PER_ADDRESS,
     windowMs: FAILED_AUTH_WINDOW_MS,
   });
+  /** Addresses whose unauthenticated socket close was logged in the current window. */
+  private readonly silentCloses = new AuthFailures({
+    maxPerWindow: 1,
+    windowMs: FAILED_AUTH_WINDOW_MS,
+  });
   /** Bumped by each `revoke`; per judge, the value its last revoke set. A key check that started before it is refused. */
   private revision = 0;
   private readonly revokedAt = new Map<string, number>();
@@ -97,11 +103,14 @@ export class JudgeLinkServer {
     private readonly sources: SourceFetch,
   ) {
     this.services = { dispatch, runs, judges, timings };
-    this.guard = new ConnectionGuard({
-      maxUnauthenticatedPerAddress: MAX_UNAUTHENTICATED_PER_ADDRESS,
-      deadlineMs: timings.handshakeMs,
-      flushMs: SOCKET_FLUSH_MS,
-    });
+    this.guard = new ConnectionGuard(
+      {
+        maxUnauthenticatedPerAddress: MAX_UNAUTHENTICATED_PER_ADDRESS,
+        deadlineMs: timings.handshakeMs,
+        flushMs: SOCKET_FLUSH_MS,
+      },
+      (closed) => this.unauthenticatedClosed(closed),
+    );
   }
 
   /** Binds the port and holds whoever connects: a second bridge process fails here, before it touches Mongo, and a judge that connects during start-up waits instead of being dropped. A non-loopback host without TLS refuses to start. */
@@ -246,6 +255,17 @@ export class JudgeLinkServer {
       call,
       status.UNAUTHENTICATED,
       'unknown judge, wrong key or blocked',
+    );
+  }
+
+  /** A judge with a wrong CA, SNI or certificate fails its TLS handshake before any key check: logged by address, once per address and window (a scanner cannot flood the journal). grpc-js hides the TLS alert itself. */
+  private unauthenticatedClosed(closed: UnauthenticatedClose): void {
+    if (this.closing || this.silentCloses.record(closed.address) > 1) return;
+    const how = closed.timedOut
+      ? `timed out after ${closed.aliveMs} ms`
+      : `closed after ${closed.aliveMs} ms`;
+    this.logger.warn(
+      `Connection from ${closed.address} ${how} with no authenticated session (read ${closed.bytesRead} bytes): a failed or unfinished TLS/HTTP2 handshake, or a refused key; further ones from it are not logged for ${FAILED_AUTH_WINDOW_MS / 1000} s`,
     );
   }
 

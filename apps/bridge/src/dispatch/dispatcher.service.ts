@@ -7,7 +7,7 @@ import type { BridgeTimings } from '../bridge-timings';
 import type { JudgeAccess } from '../judges/judges.repository';
 import type { ResumeCandidate } from '../link/messages';
 import { RunsService } from '../submissions/runs.service';
-import type { Claimed } from '../submissions/runs.service';
+import type { Claimed, GraceOutcome } from '../submissions/runs.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { GraceRegistry } from './grace';
 import type { GraceEntry } from './grace';
@@ -25,6 +25,17 @@ export interface ResumePlan {
   resume: Resume[];
   abort: AssignmentRef[];
 }
+
+/** `<submissionId> gen <generation>`, for log lines. */
+const runOf = (ref: AssignmentRef): string =>
+  `${ref.submissionId} gen ${ref.generation}`;
+
+const GRACE_OUTCOME_TEXT: Record<GraceOutcome, string> = {
+  requeued: 'requeued',
+  failed: 'internal error (second judge loss)',
+  aborted: 'aborted (the user aborted it meanwhile)',
+  stale: 'nothing to do (the row moved on)',
+};
 
 const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.priority === right.priority &&
@@ -133,6 +144,9 @@ export class DispatcherService {
   ): Promise<void> {
     // still tracked: the release publishes `queued`
     if (!this.keepSlotWinding(judge, ref)) return;
+    this.logger.warn(
+      `Judge ${judge.name} did not accept submission ${runOf(ref)} in time; aborted and requeued`,
+    );
     judge.abort(ref);
     if (await this.runs.release(ref, judge.name))
       await this.enqueue(await this.submissions.loadQueued([ref.submissionId]));
@@ -302,6 +316,10 @@ export class DispatcherService {
     // taken only now: while Mongo is read the entry stays in grace, where an abort or a failed read leaves it
     if (judge.isClosed) return;
     const waiting = this.grace.take(ref, judge.name);
+    if (waiting)
+      this.logger.log(
+        `Grace of submission ${runOf(ref)} on judge ${judge.name}: ${stored === null ? 'dropped on resume (the row moved on)' : 'resumed'}`,
+      );
     if (stored === null) {
       // judge-v2 ends a dropped run with Final{ABORTED}; until then it holds a slot
       judge.winding.add(windingKey(ref));
@@ -369,16 +387,23 @@ export class DispatcherService {
 
   /** Held runs wait in grace, carrying an api abort, unless a newer session of the judge already resumed them; winding runs are over for the bridge, and the session that counted them is gone. */
   private holdInGrace(judge: DispatchTarget): void {
+    const held: string[] = [];
     for (const [submissionId, generation] of judge.inFlight) {
       const ref = { submissionId, generation };
       // a run another live session holds keeps its mark: that holder owns the abort (it ends with `runEnded` or `keepSlotWinding`)
-      if (generation > 0 && !this.heldElsewhere(judge, submissionId))
+      if (generation > 0 && !this.heldElsewhere(judge, submissionId)) {
         this.grace.hold(
           ref,
           judge.name,
           this.abortsRequested.delete(windingKey(ref)),
         );
+        held.push(runOf(ref));
+      }
     }
+    if (held.length)
+      this.logger.warn(
+        `Judge ${judge.name} lost; submissions in grace: ${held.join(', ')}`,
+      );
     judge.inFlight.clear();
     judge.winding.clear();
   }
@@ -398,22 +423,34 @@ export class DispatcherService {
     ]);
   }
 
+  /** A failed write (Mongo) holds the run in grace again, so the retry still spends the requeue; the resync's stranded-run reset would not. */
   private async graceExpired(entry: GraceEntry): Promise<void> {
+    const { ref, judgeName, abortRequested } = entry;
     try {
       const outcome = await this.runs.graceExpired(
-        entry.ref,
-        entry.judgeName,
-        entry.abortRequested,
+        ref,
+        judgeName,
+        abortRequested,
+      );
+      this.logger.warn(
+        `Grace of submission ${runOf(ref)} on judge ${judgeName} expired: ${GRACE_OUTCOME_TEXT[outcome]}`,
       );
       if (outcome === 'requeued')
         await this.enqueue(
-          await this.submissions.loadQueued([entry.ref.submissionId]),
+          await this.submissions.loadQueued([ref.submissionId]),
         );
     } catch (error) {
       this.logger.error(
-        `Grace expiry of ${entry.ref.submissionId} failed, the resync recovers it: ${(error as Error).message}`,
+        `Grace expiry of submission ${runOf(ref)} on judge ${judgeName} failed, held again: ${(error as Error).message}`,
       );
+      this.holdAgain(entry);
     }
+  }
+
+  private holdAgain({ ref, judgeName, abortRequested }: GraceEntry): void {
+    const id = ref.submissionId;
+    if (!this.stopped && !this.isHeld(id) && !this.grace.ids().includes(id))
+      this.grace.hold(ref, judgeName, abortRequested);
   }
 
   private takesWork(judge: DispatchTarget): boolean {

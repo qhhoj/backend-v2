@@ -10,6 +10,17 @@ interface Tracked {
   /** The deadline, or the delayed destroy once retired. */
   timer: NodeJS.Timeout | null;
   isRetiring: boolean;
+  openedAt: number;
+  /** Destroyed by the deadline rather than closed by either side. */
+  timedOut: boolean;
+}
+
+/** A socket that closed without any session authenticating on it: a TLS or HTTP/2 handshake that failed or never finished, a refused key, or a probe. */
+export interface UnauthenticatedClose {
+  address: string;
+  aliveMs: number;
+  bytesRead: number;
+  timedOut: boolean;
 }
 
 export interface GuardLimits {
@@ -36,7 +47,12 @@ export class ConnectionGuard {
   /** Each judge's socket of its newest session. */
   private readonly newest = new Map<string, Tracked>();
 
-  constructor(private readonly limits: GuardLimits) {}
+  constructor(
+    private readonly limits: GuardLimits,
+    private readonly onUnauthenticatedClose: (
+      closed: UnauthenticatedClose,
+    ) => void = () => undefined,
+  ) {}
 
   /** False: refuse the socket (the caller destroys it). */
   admit(socket: Socket): boolean {
@@ -54,6 +70,8 @@ export class ConnectionGuard {
       open: new Map(),
       timer: null,
       isRetiring: false,
+      openedAt: Date.now(),
+      timedOut: false,
     };
     this.sockets.set(peer, tracked);
     this.armDeadline(tracked);
@@ -113,10 +131,10 @@ export class ConnectionGuard {
 
   private armDeadline(tracked: Tracked): void {
     this.clearTimer(tracked);
-    tracked.timer = setTimeout(
-      () => tracked.socket.destroy(),
-      this.limits.deadlineMs,
-    );
+    tracked.timer = setTimeout(() => {
+      tracked.timedOut = true;
+      tracked.socket.destroy();
+    }, this.limits.deadlineMs);
   }
 
   private retire(tracked: Tracked): void {
@@ -137,6 +155,13 @@ export class ConnectionGuard {
   private forget(peer: string, tracked: Tracked): void {
     this.clearTimer(tracked);
     this.sockets.delete(peer);
+    if (!tracked.judge)
+      this.onUnauthenticatedClose({
+        address: tracked.address,
+        aliveMs: Date.now() - tracked.openedAt,
+        bytesRead: tracked.socket.bytesRead,
+        timedOut: tracked.timedOut,
+      });
     if (tracked.judge && this.newest.get(tracked.judge) === tracked)
       this.newest.delete(tracked.judge);
   }

@@ -12,6 +12,7 @@ import {
 import type { SubmissionEventType, SubmissionGradedJob } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import type { QueuedSubmission } from '../dispatch/slots';
+import { loggableText } from '../link/messages';
 import type { FinalReport } from '../link/messages';
 import type { AssignRequest } from './assign-request';
 import { RunWritesRepository } from './run-writes.repository';
@@ -149,7 +150,7 @@ export class RunsService {
     return outcome;
   }
 
-  /** The run's last message. Acked only after the write and the graded job, so a bridge crash in between makes the judge resend it: the duplicate re-enqueues the same job id, which BullMQ drops while the first still waits. */
+  /** The run's last message. Acked only after the write and the graded job: a Final resent before its ack is a duplicate that re-enqueues the same job id, which BullMQ drops while the first still waits. After a bridge crash the resend is dropped (the row is no longer P/G); the write's `effectsDueAt` lets the worker's effects sweep repair a job lost that way. */
   async final(key: RunKey, report: FinalReport): Promise<WriteOutcome> {
     const { kind } = report;
     if (kind === 'retry') return this.retried(key, report.log);
@@ -197,9 +198,14 @@ export class RunsService {
     return this.tracked.size;
   }
 
+  /** Logged with the judge's reason: a host that answers RETRY to everything (a broken data mount) shows up by name. */
   private async retried(key: RunKey, log: string): Promise<WriteOutcome> {
     const written: RetryOutcome = await this.writes.retry(key, log);
     if (written.outcome !== 'applied') return written.outcome;
+    const { ref, judgeName } = key;
+    this.logger.warn(
+      `Judge ${judgeName} answered RETRY for submission ${ref.submissionId} gen ${ref.generation} (${written.requeued ? 'requeued' : 'internal error, retry cap reached'}): ${loggableText(log)}`,
+    );
     if (written.requeued) this.requeued(key.ref.submissionId);
     else await this.finished(written.job, 'IE', key.ref.generation);
     return written.outcome;

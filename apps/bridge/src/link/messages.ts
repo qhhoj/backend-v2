@@ -45,6 +45,18 @@ export function clipBytes(text: string, maxBytes: number): string {
   return bytes.subarray(0, end).toString('utf8');
 }
 
+/** Longest judge-sent text (a build, a RETRY reason) quoted in a log line. */
+const MAX_LOGGED_CHARS = 200;
+
+/** Judge-sent text fit for one log line: control characters (newlines included) become spaces, clipped to `MAX_LOGGED_CHARS`. */
+export function loggableText(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  const flat = text.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+  return flat.length > MAX_LOGGED_CHARS
+    ? `${flat.slice(0, MAX_LOGGED_CHARS)}…`
+    : flat;
+}
+
 /** A language key as the judges admin stores it. */
 const RUNTIME_KEY = /^[A-Za-z0-9_]{1,10}$/;
 

@@ -2,7 +2,12 @@ import { status } from '@grpc/grpc-js';
 import type { ServerDuplexStream } from '@grpc/grpc-js';
 import { Logger } from '@nestjs/common';
 import { newId } from '@libs/database';
-import { BridgeMessage, ErrorCode, PROTOCOL_MINOR } from '@libs/judge-proto';
+import {
+  BridgeMessage,
+  ErrorCode,
+  PROTOCOL_MINOR,
+  Resume_Action,
+} from '@libs/judge-proto';
 import type {
   AssignmentRef,
   Final,
@@ -24,6 +29,7 @@ import {
   clipBytes,
   finalReportOf,
   helloOf,
+  loggableText,
   refOf,
   seqOf,
 } from './messages';
@@ -35,6 +41,19 @@ import { flood, ProtocolError, seqGap } from './protocol-error';
 const PING_SAMPLES = 6;
 /** Runs a session remembers as ended or aborted (a Final resent before its ack, a late Accepted, a second Abort): enough for any replay window, bounded for a session that lives for weeks. */
 const RUNS_REMEMBERED = 1024;
+
+/** What a judge message was about, for a server-side failure's log line: the run, generation and seq of a run message. */
+function messageContext(body: JudgeMessage['body']): string {
+  if (!body) return 'an empty message';
+  const inner = (body as Record<string, unknown>)[body.$case] as {
+    ref?: AssignmentRef;
+    seq?: number;
+  };
+  const ref = inner?.ref;
+  return ref
+    ? `${body.$case} of submission ${ref.submissionId} gen ${ref.generation} seq ${inner.seq}`
+    : body.$case;
+}
 
 /** Adds `key`, forgetting the oldest beyond `RUNS_REMEMBERED` (a Set keeps insertion order). */
 function remember(keys: Set<string>, key: string): void {
@@ -108,6 +127,8 @@ export class JudgeSession implements DispatchTarget {
   private readonly ended = new Set<string>();
   private readonly helloTimer: NodeJS.Timeout;
   private pingTimer?: NodeJS.Timeout;
+  /** Why the stream ended, for the disconnect line: the bridge's reason, or the stream error. */
+  private closeReason: string | null = null;
 
   constructor(
     private readonly call: SessionCall,
@@ -119,9 +140,10 @@ export class JudgeSession implements DispatchTarget {
     this.isDisabled = identity.isDisabled;
     call.on('data', (decoded: DecodedJudgeMessage) => this.receive(decoded));
     call.on('end', () => this.end(status.OK, 'the judge ended its stream'));
-    call.on('error', (error: Error) =>
-      this.logger.debug(`${this.name}: ${error.message}`),
-    );
+    call.on('error', (error: Error) => {
+      this.closeReason ??= error.message;
+      this.logger.debug(`${this.name}: ${error.message}`);
+    });
     this.finished = new Promise((resolve) =>
       call.once('close', () => void this.onClose().finally(resolve)),
     );
@@ -184,7 +206,7 @@ export class JudgeSession implements DispatchTarget {
     if (error !== undefined)
       this.send({ $case: 'error', error: { code: error, message: details } });
     this.isClosed = true;
-    this.logger.log(`${this.name}: closing (${details})`);
+    this.closeReason ??= details;
     if (code === status.OK) this.call.end();
     else this.call.emit('error', { code, details });
   }
@@ -227,7 +249,9 @@ export class JudgeSession implements DispatchTarget {
     } catch (error) {
       if (error instanceof ProtocolError)
         return this.end(error.grpcStatus, error.message, error.code);
-      this.logger.error(`${this.name}: ${(error as Error).message}`);
+      this.logger.error(
+        `Judge ${this.name}: handling ${messageContext(decoded.message.body)} failed: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -296,6 +320,12 @@ export class JudgeSession implements DispatchTarget {
     });
     for (const ref of plan.abort) this.abort(ref);
     const { slots, build, protocolMinor, features, runtimes } = info;
+    const resumed = plan.resume.filter(
+      ({ action }) => action === Resume_Action.ACTION_CONTINUE,
+    ).length;
+    this.logger.log(
+      `Judge ${this.name} connected from ${this.identity.address ?? 'unknown'}: build ${loggableText(build)}, protocol 1.${protocolMinor}, ${slots} slots, ${runtimes.length} runtimes, resumed ${resumed}, dropped ${plan.resume.length - resumed}`,
+    );
     await judges.markSessionOnline(this.name, this.connectedAt, {
       slots,
       build,
@@ -479,6 +509,9 @@ export class JudgeSession implements DispatchTarget {
     clearTimeout(this.helloTimer);
     clearInterval(this.pingTimer);
     for (const timer of this.acceptTimers.values()) clearTimeout(timer);
+    this.logger.log(
+      `Judge ${this.name} disconnected${this.helloed ? '' : ' before Hello'}: ${this.closeReason ?? 'connection lost'}; ${this.inFlight.size} runs held`,
+    );
     if (!this.helloed) return;
     const { dispatch, judges } = this.services;
     try {

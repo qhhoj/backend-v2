@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { newId } from '@libs/database';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
@@ -384,6 +385,69 @@ describe('DispatcherService', () => {
     ]);
     expect(other.assigned.map((request) => request.ref)).toEqual([
       { submissionId: submission.id, generation: 2 },
+    ]);
+  });
+
+  it('holds a run in grace again when its expiry write fails, so the retry still spends the requeue', async () => {
+    const lost = await online(new Target('lost'));
+    const submission = entry();
+    await queue(submission);
+    await dispatcher.judgeLost(lost);
+    const failing = jest
+      .spyOn(runs, 'graceExpired')
+      .mockRejectedValueOnce(new Error('mongo down'));
+    try {
+      jest.advanceTimersByTime(30_000);
+      await flush();
+      expect(dispatcher.heldIds()).toEqual([submission.id]);
+    } finally {
+      failing.mockRestore();
+    }
+    const other = await online(new Target('other'));
+    jest.advanceTimersByTime(30_000);
+    await flush();
+    expect(expired).toEqual([
+      {
+        ref: { submissionId: submission.id, generation: 1 },
+        abortRequested: false,
+      },
+    ]);
+    expect(other.assigned.map((request) => request.ref)).toEqual([
+      { submissionId: submission.id, generation: 2 },
+    ]);
+  });
+
+  it('logs the grace hold, its outcome and an accept timeout with the judge and the submission', async () => {
+    const lines: string[] = [];
+    const record = (message: unknown) => void lines.push(String(message));
+    const spies = [
+      jest.spyOn(Logger.prototype, 'log').mockImplementation(record),
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(record),
+    ];
+    try {
+      const lost = await online(new Target('lost'));
+      const [graced, slow] = [entry(), entry()];
+      await queue(graced);
+      await dispatcher.judgeLost(lost);
+      jest.advanceTimersByTime(30_000);
+      await flush();
+      const judge = await online(new Target('j1', 2));
+      await queue(slow);
+      await dispatcher.acceptTimedOut(judge, {
+        submissionId: slow.id,
+        generation: 1,
+      });
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(lines).toEqual([
+      expect.stringMatching(/Judge lost lost; submissions in grace: \S+ gen 1/),
+      expect.stringMatching(
+        /Grace of submission \S+ gen 1 on judge lost expired: requeued/,
+      ),
+      expect.stringMatching(
+        /Judge j1 did not accept submission \S+ gen 1 in time/,
+      ),
     ]);
   });
 

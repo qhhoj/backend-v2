@@ -1,5 +1,6 @@
 import { status } from '@grpc/grpc-js';
 import { EventEmitter } from 'node:events';
+import { Logger } from '@nestjs/common';
 import { newId } from '@libs/database';
 import {
   BridgeMessage,
@@ -559,18 +560,72 @@ describe('JudgeSession', () => {
     runs.compiled = record('compiled', () => outcome);
   });
 
-  it('keeps the session when the store fails, and logs it', async () => {
+  it('keeps the session when the store fails, and logs it with the run and seq', async () => {
     const ref = run(newId());
     await holding(ref);
     runs.compiled = () => Promise.reject(new Error('Mongo down'));
-    await receive(
-      JudgeMessage.fromPartial({
-        body: { $case: 'compiled', compiled: { ref, seq: 2 } },
-      }),
-    );
+    const errors = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      await receive(
+        JudgeMessage.fromPartial({
+          body: { $case: 'compiled', compiled: { ref, seq: 2 } },
+        }),
+      );
+      expect(errors.mock.calls).toEqual([
+        [
+          `Judge j1: handling compiled of submission ${ref.submissionId} gen 1 seq 2 failed: Mongo down`,
+        ],
+      ]);
+    } finally {
+      errors.mockRestore();
+    }
     expect(call.statuses).toEqual([]);
     expect(session.isClosed).toBe(false);
     expect(call.paused).toBe(false);
     runs.compiled = record('compiled', () => outcome);
+  });
+
+  it('logs the connect with the address, build and resume counts, and the disconnect with its reason', async () => {
+    dispatch.resume = record('resume', {
+      resume: [
+        { ref: run(newId()), action: Resume_Action.ACTION_CONTINUE },
+        { ref: run(newId()), action: Resume_Action.ACTION_DROP },
+      ],
+      abort: [],
+    });
+    const lines: string[] = [];
+    const logs = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation((message) => void lines.push(String(message)));
+    try {
+      await online();
+      call.emit('end');
+      await session.finished;
+    } finally {
+      logs.mockRestore();
+      dispatch.resume = record('resume', { resume: [], abort: [] });
+    }
+    expect(lines).toEqual([
+      'Judge j1 connected from 10.0.0.5: build qhhoj-judge 0.1.0, protocol 1.3, 2 slots, 1 runtimes, resumed 1, dropped 1',
+      'Judge j1 disconnected: the judge ended its stream; 0 runs held',
+    ]);
+  });
+
+  it('logs a lost connection, and a session that never said Hello', async () => {
+    const lines: string[] = [];
+    const logs = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation((message) => void lines.push(String(message)));
+    try {
+      jest.advanceTimersByTime(TIMINGS.handshakeMs);
+      await session.finished;
+    } finally {
+      logs.mockRestore();
+    }
+    expect(lines).toEqual([
+      'Judge j1 disconnected before Hello: no Hello in time; 0 runs held',
+    ]);
   });
 });

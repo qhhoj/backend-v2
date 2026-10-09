@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import type { SubmissionCase } from '@libs/database';
 import { recordSubmissionEvents } from '@libs/judging/testing';
@@ -132,6 +133,10 @@ describe('RunsService (events and graded jobs of a run)', () => {
   });
 
   it('publishes queued for a RETRY (a replay of it is a duplicate), and done IE with one graded job for the third', async () => {
+    const warnings: string[] = [];
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation((message) => void warnings.push(String(message)));
     const { id, key } = await newRun();
     await runs.accepted(key(1));
     expect(
@@ -145,8 +150,18 @@ describe('RunsService (events and graded jobs of a run)', () => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const again = await claim(id);
       await runs.accepted(again.key(1));
-      await runs.final(again.key(2), final({ kind: 'retry', log: 'no data' }));
+      await runs.final(
+        again.key(2),
+        final({ kind: 'retry', log: 'no data\nmount gone' }),
+      );
     }
+    warn.mockRestore();
+    expect(warnings).toEqual([
+      `Judge ${JUDGE} answered RETRY for submission ${id} gen 1 (requeued): no data`,
+      `Judge ${JUDGE} answered RETRY for submission ${id} gen 2 (requeued): no data mount gone`,
+      `Judge ${JUDGE} answered RETRY for submission ${id} gen 3 (internal error, retry cap reached): no data mount gone`,
+    ]);
+    expect((await stored(id)).effectsDueAt).toBeInstanceOf(Date);
     await recorder.waitFor(() =>
       eventsOf(id).some((event) => event.type === 'done'),
     );

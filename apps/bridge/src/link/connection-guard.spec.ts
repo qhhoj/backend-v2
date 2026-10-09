@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { ConnectionGuard, peerOfCall } from './connection-guard';
+import type { UnauthenticatedClose } from './connection-guard';
 
 let ports = 40000;
 const fakeSocket = (address: string) => {
@@ -9,10 +10,12 @@ const fakeSocket = (address: string) => {
     remotePort: number;
     destroyed: boolean;
     destroy: () => void;
+    bytesRead: number;
   };
   socket.remoteAddress = address;
   socket.remotePort = ports += 1;
   socket.destroyed = false;
+  socket.bytesRead = 0;
   socket.destroy = () => {
     socket.destroyed = true;
     socket.emit('close');
@@ -156,6 +159,27 @@ describe('ConnectionGuard', () => {
     guard.admit(asSocket(socket));
     guard.destroy(peerOf(socket));
     expect(socket.destroyed).toBe(true);
+  });
+
+  it('reports a socket that closes or times out with no authenticated session, never one a judge authenticated on', () => {
+    const closes: UnauthenticatedClose[] = [];
+    guard = new ConnectionGuard(
+      { maxUnauthenticatedPerAddress: 2, deadlineMs: 15_000, flushMs: 1000 },
+      (closed) => void closes.push(closed),
+    );
+    const refusedTls = fakeSocket('10.0.0.7');
+    guard.admit(asSocket(refusedTls));
+    jest.advanceTimersByTime(40);
+    refusedTls.emit('close');
+    guard.admit(asSocket(fakeSocket('10.0.0.8')));
+    jest.advanceTimersByTime(15_000);
+    const judge = withSession('10.0.0.9', 'j1');
+    guard.sessionClosed(peerOf(judge), 'j1');
+    judge.emit('close');
+    expect(closes).toEqual([
+      { address: '10.0.0.7', aliveMs: 40, bytesRead: 0, timedOut: false },
+      { address: '10.0.0.8', aliveMs: 15_000, bytesRead: 0, timedOut: true },
+    ]);
   });
 
   it('reads a grpc-js peer in the socket format, IPv6 included', () => {
