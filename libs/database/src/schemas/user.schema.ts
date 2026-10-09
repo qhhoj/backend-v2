@@ -119,6 +119,8 @@ export const LEADERBOARD_FIELDS = [
 export type LeaderboardField = (typeof LEADERBOARD_FIELDS)[number];
 for (const field of LEADERBOARD_FIELDS)
   UserSchema.index({ isUnlisted: 1, isActive: 1, [field]: -1, _id: 1 });
+// Staff list sorted by last access, either way (the id breaks ties in the same direction).
+UserSchema.index({ lastAccess: 1, _id: 1 });
 // Staff list of banned users; the ban reason is only set while banned.
 UserSchema.index(
   { banReason: 1 },

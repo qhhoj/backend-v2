@@ -17,6 +17,11 @@ const PROBLEMS = '/api/internal/problems';
 const fieldsOf = ({ body }: { body: unknown }) =>
   (body as { error: { fields: Record<string, string[]> } }).error.fields;
 
+const issueCodesOf = ({ body }: { body: unknown }) =>
+  (body as { error: { issues: { code: string }[] } }).error.issues.map(
+    (issue) => issue.code,
+  );
+
 describe('problem create, suggest and edit', () => {
   let api: ApiTest;
   let catalog: Catalog;
@@ -135,13 +140,11 @@ describe('problem create, suggest and edit', () => {
           .expect(400),
       ),
     ).toHaveProperty('testers');
-    expect(
-      fieldsOf(
-        await authed(api.http().post(PROBLEMS), setter)
-          .send({ ...valid, code: 'sum' })
-          .expect(400),
-      ),
-    ).toEqual({ code: ['Problem code is taken.'] });
+    const taken = await authed(api.http().post(PROBLEMS), setter)
+      .send({ ...valid, code: 'sum' })
+      .expect(400);
+    expect(fieldsOf(taken)).toEqual({ code: ['Problem code is taken.'] });
+    expect(issueCodesOf(taken)).toEqual(['code_taken']);
     await authed(api.http().post(PROBLEMS), setter)
       .send({ ...valid, code: 'extra', data: {} })
       .expect(400);
@@ -160,13 +163,11 @@ describe('problem create, suggest and edit', () => {
     await authed(api.http().post(PROBLEMS), setter)
       .send({ ...valid, code: 'staff', authors: [setterId] })
       .expect(403);
-    expect(
-      fieldsOf(
-        await authed(api.http().post(PROBLEMS), setter)
-          .send({ ...valid, code: 'slow', timeLimit: 10 })
-          .expect(400),
-      ),
-    ).toHaveProperty('timeLimit');
+    const slow = await authed(api.http().post(PROBLEMS), setter)
+      .send({ ...valid, code: 'slow', timeLimit: 10 })
+      .expect(400);
+    expect(fieldsOf(slow)).toHaveProperty('timeLimit');
+    expect(issueCodesOf(slow)).toEqual(['time_limit_too_high']);
     expect(
       fieldsOf(
         await authed(api.http().post(PROBLEMS), setter)

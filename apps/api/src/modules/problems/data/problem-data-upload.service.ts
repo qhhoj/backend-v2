@@ -59,7 +59,10 @@ export class ProblemDataUploadService {
         staged,
         (clientName) => {
           if (extensionOf(safeFileName(clientName)) !== 'zip')
-            throw rejectFile('The archive must be a .zip file.');
+            throw rejectFile(
+              'The archive must be a .zip file.',
+              'zip_required',
+            );
         },
       );
       const name = safeFileName(filename);
@@ -102,6 +105,7 @@ export class ProblemDataUploadService {
     if (!SOURCE_EXTENSIONS[kind].includes(extensionOf(name)))
       throw rejectFile(
         `Allowed extensions for ${kind}: ${SOURCE_EXTENSIONS[kind].join(', ')}`,
+        'extension_not_allowed',
       );
     const staged = await this.dataFiles.stageUpload(problem.code);
     try {
@@ -148,6 +152,7 @@ export class ProblemDataUploadService {
     )
       throw rejectFile(
         `The name ${name} is already used by another data file.`,
+        'data_file_name_taken',
       );
   }
 
@@ -155,7 +160,9 @@ export class ProblemDataUploadService {
     try {
       await listZipEntries(path);
     } catch (error) {
-      throw error instanceof ZipError ? rejectFile(error.message) : error;
+      throw error instanceof ZipError
+        ? rejectFile(error.message, error.code)
+        : error;
     }
   }
 

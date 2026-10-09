@@ -36,10 +36,10 @@ const MATERIAL_EXTENSIONS: ReadonlySet<string> = new Set(
 
 function sanitizedSvg(content: Buffer): Buffer {
   if (content.length > SVG_MAX_BYTES)
-    throw rejectFile('The SVG is too large or too complex.');
+    throw rejectFile('The SVG is too large or too complex.', 'svg_too_large');
   const svg = content.toString('utf8');
   if (!isSvgWithinLimits(svg))
-    throw rejectFile('The SVG is too large or too complex.');
+    throw rejectFile('The SVG is too large or too complex.', 'svg_too_large');
   return Buffer.from(sanitizeSvg(svg), 'utf8');
 }
 
@@ -67,7 +67,10 @@ export class ProblemUploadsService {
     const { content } = await this.readUpload(auth, request, IMAGE_MAX_BYTES);
     const kind = sniffImage(content);
     if (!kind)
-      throw rejectFile('Only JPG, PNG, GIF and SVG images are accepted.');
+      throw rejectFile(
+        'Only JPG, PNG, GIF and SVG images are accepted.',
+        'image_type_not_allowed',
+      );
     const stored = kind === 'svg' ? sanitizedSvg(content) : content;
     return {
       url: await this.storage.save(`images/${newId()}.${kind}`, stored),
@@ -85,7 +88,11 @@ export class ProblemUploadsService {
       request,
       STATEMENT_MAX_BYTES,
     );
-    if (!isPdf(content)) throw rejectFile('The statement must be a PDF file.');
+    if (!isPdf(content))
+      throw rejectFile(
+        'The statement must be a PDF file.',
+        'statement_not_pdf',
+      );
     const url = await this.replaceFile(auth, problem, {
       field: 'pdfStatementUrl',
       relativePath: `pdf/${newId()}.pdf`,
@@ -107,7 +114,10 @@ export class ProblemUploadsService {
     );
     const name = safeFileName(filename);
     if (!MATERIAL_EXTENSIONS.has(extensionOf(name)))
-      throw rejectFile('This file type is not allowed as problem material.');
+      throw rejectFile(
+        'This file type is not allowed as problem material.',
+        'material_type_not_allowed',
+      );
     const url = await this.replaceFile(auth, problem, {
       field: 'materialUrl',
       relativePath: `materials/${problem._id}/${name}`,

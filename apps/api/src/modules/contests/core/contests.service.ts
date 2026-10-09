@@ -76,8 +76,9 @@ export class ContestsService {
     if (query.tag) clauses.push({ tags: query.tag });
     if (query.organization) clauses.push({ organizations: query.organization });
     if (query.rated !== undefined) clauses.push({ isRated: query.rated });
-    if (query.search) {
-      const pattern = new RegExp(escapeRegExp(query.search), 'i');
+    const text = (query.q ?? query.search)?.trim();
+    if (text) {
+      const pattern = new RegExp(escapeRegExp(text), 'i');
       clauses.push({ $or: [{ key: pattern }, { name: pattern }] });
     }
     return { $and: clauses };

@@ -176,4 +176,27 @@ describe('staff user list', () => {
           expect(`${query} ${read.planSummary}`).toMatch(count);
     }
   });
+
+  it('sorts by last access either way, with never-seen users oldest, over a search', async () => {
+    await createUserWith(api, 'seen_old', {
+      lastAccess: new Date('2025-01-01T00:00:00Z'),
+    });
+    await createUserWith(api, 'seen_new', {
+      lastAccess: new Date('2026-06-01T00:00:00Z'),
+    });
+    await createUserWith(api, 'seen_never', { lastAccess: null });
+    expect(await names('?search=seen&sort=lastAccess')).toEqual([
+      'seen_never',
+      'seen_old',
+      'seen_new',
+    ]);
+    expect(await names('?search=seen&sort=-lastAccess')).toEqual([
+      'seen_new',
+      'seen_old',
+      'seen_never',
+    ]);
+    await authed(api.http().get(`${BASE}?sort=username`), moderator).expect(
+      400,
+    );
+  });
 });

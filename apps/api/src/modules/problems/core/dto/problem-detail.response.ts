@@ -52,6 +52,8 @@ export class ProblemEditorialDraftResponse {
 }
 
 export class ProblemEditorResponse {
+  /** The base (default-language) name, whatever `lang` the detail was read in; the detail's own `name` follows `lang`. */
+  baseName!: string;
   description!: string;
   translations!: ProblemTranslationResponse[];
   solution!: ProblemEditorialDraftResponse | null;
@@ -71,6 +73,7 @@ export class ProblemEditorResponse {
   ): ProblemEditorResponse {
     const { solution } = problem;
     return {
+      baseName: problem.name,
       description: problem.description,
       translations: problem.translations.map(
         ({ language, name, description }) => ({ language, name, description }),

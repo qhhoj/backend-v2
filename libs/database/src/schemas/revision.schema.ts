@@ -21,3 +21,8 @@ export class Revision {
 
 export const RevisionSchema = SchemaFactory.createForClass(Revision);
 RevisionSchema.index({ entity: 1, entityId: 1, createdAt: -1, _id: -1 });
+// Lists of deleted entities (flatpages), newest first.
+RevisionSchema.index(
+  { entity: 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { action: 'delete' } },
+);

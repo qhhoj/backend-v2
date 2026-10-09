@@ -1,4 +1,4 @@
-import { isDuplicateKey, AppError, unique } from '@libs/common';
+import { isDuplicateKey, unique, ValidationFailedError } from '@libs/common';
 import type { Problem } from '@libs/database';
 import type { UpdateProblemDto } from './dto/problem-edit.dto';
 
@@ -53,6 +53,16 @@ export function toFields(dto: UpdateProblemDto): Partial<Problem> {
   return fields;
 }
 
+/** A 400 on field `code` with the stable issue code `code_taken`. */
+export const codeTakenError = () =>
+  new ValidationFailedError('Problem code is taken', [
+    {
+      field: 'code',
+      code: 'code_taken',
+      message: 'Problem code is taken.',
+    },
+  ]);
+
 /** Runs a write, reporting a duplicate `code` as `validation_failed`. */
 export async function withCodeTaken<Result>(
   write: () => Promise<Result>,
@@ -60,10 +70,6 @@ export async function withCodeTaken<Result>(
   try {
     return await write();
   } catch (error) {
-    throw isDuplicateKey(error, 'code')
-      ? new AppError('validation_failed', 400, 'Problem code is taken', {
-          code: ['Problem code is taken.'],
-        })
-      : error;
+    throw isDuplicateKey(error, 'code') ? codeTakenError() : error;
   }
 }

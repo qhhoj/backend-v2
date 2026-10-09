@@ -29,6 +29,9 @@ const tests = (count: number) =>
     { name: `${index + 1}.out`, content: 'out' },
   ]).flat();
 
+const codeOf = ({ body }: { body: unknown }) =>
+  (body as { error: { issues: { code: string }[] } }).error.issues[0]?.code;
+
 describe('problem data files', () => {
   let api: ApiTest;
   let catalog: Catalog;
@@ -122,10 +125,23 @@ describe('problem data files', () => {
         ).expect(400),
       ),
     ).toHaveProperty('file');
-    await upload(archive, editor, Buffer.from('not a zip'), 'tests.zip').expect(
-      400,
-    );
-    await upload(archive, editor, buildZip(tests(1)), 'tests.rar').expect(400);
+    expect(
+      codeOf(
+        await upload(
+          archive,
+          editor,
+          Buffer.from('not a zip'),
+          'tests.zip',
+        ).expect(400),
+      ),
+    ).toBe('zip_invalid');
+    expect(
+      codeOf(
+        await upload(archive, editor, buildZip(tests(1)), 'tests.rar').expect(
+          400,
+        ),
+      ),
+    ).toBe('zip_required');
     await upload(archive, editor, Buffer.alloc(0), 'tests.zip').expect(400);
     await authed(api.http().post(archive), editor)
       .field('note', 'x')
@@ -165,12 +181,16 @@ describe('problem data files', () => {
       'int main(){}',
     );
     const files = `${PROBLEMS}/sum/data/files`;
-    await upload(
-      `${files}/customChecker`,
-      editor,
-      Buffer.from('print(1)'),
-      'chk.py',
-    ).expect(400);
+    expect(
+      codeOf(
+        await upload(
+          `${files}/customChecker`,
+          editor,
+          Buffer.from('print(1)'),
+          'chk.py',
+        ).expect(400),
+      ),
+    ).toBe('extension_not_allowed');
     await upload(
       `${files}/customHeader`,
       editor,

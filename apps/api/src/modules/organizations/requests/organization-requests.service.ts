@@ -33,10 +33,23 @@ import {
 import { OrganizationRequestResponse } from './dto/organization-request.response';
 import { usernamesById } from './request-usernames';
 
-const conflict = (message: string) => new AppError('conflict', 409, message);
-const DUPLICATE_MESSAGE =
-  'You already have a pending request to join this organization';
-const DECIDED_MESSAGE = 'This request has already been decided';
+/** A 409 whose `issues: [{ field, code, message }]` carry the stable code (documented in docs/decisions.md). */
+const conflict = (message: string, field: string, code: string) =>
+  new AppError('conflict', 409, message, undefined, undefined, {
+    issues: [{ field, code, message }],
+  });
+const duplicateRequest = () =>
+  conflict(
+    'You already have a pending request to join this organization',
+    'request',
+    'request_pending',
+  );
+const alreadyDecided = () =>
+  conflict(
+    'This request has already been decided',
+    'state',
+    'request_already_decided',
+  );
 
 @Injectable()
 export class OrganizationRequestsService {
@@ -58,11 +71,19 @@ export class OrganizationRequestsService {
   ): Promise<OrganizationRequestResponse> {
     const organization = await this.organizationsService.bySlug(slug);
     if (organization.isOpen)
-      throw conflict('This organization is open; join it directly');
+      throw conflict(
+        'This organization is open; join it directly',
+        'organization',
+        'organization_open',
+      );
     if (await this.members.isMember(principal.userId, organization._id))
-      throw conflict('You are already in this organization');
+      throw conflict(
+        'You are already in this organization',
+        'user',
+        'already_member',
+      );
     if (await this.requests.pendingIdOf(organization._id, principal.userId))
-      throw conflict(DUPLICATE_MESSAGE);
+      throw duplicateRequest();
     const release = await this.rateLimits.reserve(
       [`organization-request:user:${principal.userId}`],
       JOIN_REQUEST_LIMIT,
@@ -82,7 +103,7 @@ export class OrganizationRequestsService {
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
       await release();
-      throw conflict(DUPLICATE_MESSAGE);
+      throw duplicateRequest();
     }
   }
 
@@ -177,14 +198,18 @@ export class OrganizationRequestsService {
     const organization = await this.organizationsService.bySlug(slug);
     // A decided request never adds a member.
     if ((await this.requests.findById(id))?.state !== 'P')
-      throw conflict(DECIDED_MESSAGE);
+      throw alreadyDecided();
     if (!(await this.members.isMember(userId, organization._id))) {
       if (
         organization.slots !== null &&
         (await this.members.countMembers(organization._id)) >=
           organization.slots
       )
-        throw conflict('The organization is full');
+        throw conflict(
+          'The organization is full',
+          'organization',
+          'organization_full',
+        );
       await this.members.addMembers([userId], organization._id);
     }
     await this.finish(id, 'A', principal.userId, now);
@@ -198,7 +223,7 @@ export class OrganizationRequestsService {
     decidedAt: Date,
   ): Promise<void> {
     if (!(await this.requests.decide(id, state, decidedBy, decidedAt)))
-      throw conflict(DECIDED_MESSAGE);
+      throw alreadyDecided();
   }
 
   private async requestOf(slug: string, id: string) {

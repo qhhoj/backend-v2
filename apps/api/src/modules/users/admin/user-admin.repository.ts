@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { CI, User } from '@libs/database';
 import type { FilterQuery, Model } from 'mongoose';
+import type { StaffUserSort } from './dto/user-admin.dto';
 
 export type StaffUserRow = Pick<
   User,
@@ -37,6 +38,7 @@ export interface StaffUserFilter {
   search?: string;
   /** Unset: everyone. True: banned only. False: not banned only. */
   banned?: boolean;
+  sort?: StaffUserSort;
 }
 
 const searchFilter = (search?: string): FilterQuery<User> =>
@@ -48,9 +50,14 @@ const bannedFilter = (banned?: boolean): FilterQuery<User> => {
   return { banReason: banned ? { $type: 'string' } : null };
 };
 
-/** A search is ordered by username so the username index serves the order; otherwise newest first. */
-const orderOf = (search?: string): Record<string, 1 | -1> =>
-  search ? { username: 1 } : { _id: -1 };
+/** An explicit sort wins; a search is ordered by username so the username index serves the order; otherwise newest first. */
+const orderOf = ({ search, sort }: StaffUserFilter): Record<string, 1 | -1> => {
+  if (sort) {
+    const direction = sort.startsWith('-') ? -1 : 1;
+    return { lastAccess: direction, _id: direction };
+  }
+  return search ? { username: 1 } : { _id: -1 };
+};
 
 @Injectable()
 export class UserAdminRepository {
@@ -58,10 +65,11 @@ export class UserAdminRepository {
 
   /** The search is a collated range over the username index, never a regex. */
   async page(
-    { search, banned }: StaffUserFilter,
+    criteria: StaffUserFilter,
     page: number,
     pageSize: number,
   ): Promise<{ items: StaffUserRow[]; total: number }> {
+    const { search, banned } = criteria;
     const filter: FilterQuery<User> = {
       ...searchFilter(search),
       ...bannedFilter(banned),
@@ -70,7 +78,7 @@ export class UserAdminRepository {
     const [items, total] = await Promise.all([
       this.users
         .find(filter, PROJECTION, options)
-        .sort(orderOf(search))
+        .sort(orderOf(criteria))
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean<StaffUserRow[]>()

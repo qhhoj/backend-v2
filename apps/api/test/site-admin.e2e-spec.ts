@@ -1,6 +1,7 @@
 import type { Test } from 'supertest';
 import type { Permission } from '@libs/auth';
 import type { FlatpageAdminResponse } from '../src/modules/site/admin/dto/flatpage-admin.response';
+import type { FlatpageDeletedResponse } from '../src/modules/site/admin/dto/flatpage-revision.response';
 import type { MiscConfigResponse } from '../src/modules/site/admin/dto/misc-config.response';
 import type {
   NavigationItemResponse,
@@ -99,6 +100,12 @@ describe('site content administration', () => {
           method: 'get',
           path: `/pages/${await page()}`,
         }),
+      },
+      {
+        name: 'GET pages/deleted',
+        permission: 'flatpages.change_flatpage',
+        status: 200,
+        prepare: () => ({ method: 'get', path: '/pages/deleted' }),
       },
       {
         name: 'GET pages/:id/revisions',
@@ -473,6 +480,25 @@ describe('site content administration', () => {
         before: '/history',
         after: null,
       });
+      const listed = await send('get', '/pages/deleted', pageEditor).expect(
+        200,
+      );
+      expect(dataOf<FlatpageDeletedResponse[]>(listed)).toContainEqual({
+        id: created.id,
+        url: '/history',
+        deletedAt: expect.any(String) as string,
+      });
+      const live = await create({
+        url: '/still-here',
+        title: 'S',
+        content: 'x',
+      });
+      await send('get', '/pages/deleted', pageEditor).expect(
+        (response: { body: unknown }) =>
+          expect(JSON.stringify(response.body)).not.toContain(
+            dataOf<FlatpageAdminResponse>(live).id,
+          ),
+      );
     });
   });
 

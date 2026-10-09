@@ -11,11 +11,12 @@ export class UserAdminService {
   async list({
     search,
     banned,
+    sort,
     page,
     pageSize,
   }: UserAdminQueryDto): Promise<Paginated<StaffUserResponse>> {
     const { items, total } = await this.repository.page(
-      { search, banned },
+      { search, banned, sort },
       page,
       pageSize,
     );

@@ -7,7 +7,7 @@ export const RELEASE_LOCK_SCRIPT =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0";
 const logger = new Logger('RedisLock');
 
-/** Runs `work` while holding `key` (expires after `ttlSeconds`); a held lock is a 409 `conflict` at once, no waiting. The owner-checked release never throws: a failure is logged, the work's result stands. */
+/** Runs `work` while holding `key` (expires after `ttlSeconds`); a held lock is a 409 `conflict` at once, no waiting, with `issues: [{ field: 'lock', code: 'busy', message }]`. The owner-checked release never throws: a failure is logged, the work's result stands. */
 export async function withRedisLock<Result>(
   redis: Redis,
   lock: { key: string; ttlSeconds: number; busyMessage: string },
@@ -16,7 +16,9 @@ export async function withRedisLock<Result>(
   const { key, ttlSeconds, busyMessage } = lock;
   const token = randomBytes(16).toString('hex');
   if ((await redis.set(key, token, 'EX', ttlSeconds, 'NX')) !== 'OK')
-    throw new AppError('conflict', 409, busyMessage);
+    throw new AppError('conflict', 409, busyMessage, undefined, undefined, {
+      issues: [{ field: 'lock', code: 'busy', message: busyMessage }],
+    });
   try {
     return await work();
   } finally {

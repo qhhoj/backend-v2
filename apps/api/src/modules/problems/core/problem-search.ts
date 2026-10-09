@@ -28,6 +28,14 @@ export function searchFilter(search: string): FilterQuery<Problem> {
   };
 }
 
+/** Case-insensitive substring of the code or any title (`q` on the lists); the text is escaped, so it never acts as a pattern. */
+export function substringFilter(text: string): FilterQuery<Problem> {
+  const inside = new RegExp(escapeRegex(text), 'i');
+  return {
+    $or: [{ code: inside }, { name: inside }, { 'translations.name': inside }],
+  };
+}
+
 /** In-memory twin of `publicEditorialFilter`. */
 export const isEditorialPublished = (solution: Problem['solution']): boolean =>
   solution !== null && solution.isPublic && solution.publishOn <= new Date();

@@ -219,6 +219,16 @@ describe('problem detail and editorial', () => {
     });
   });
 
+  it('keeps the base name in the editor block whatever the requested language', async () => {
+    const detail = detailOf(
+      await authed(api.http().get(`${PROBLEMS}/sum?lang=vi`), author).expect(
+        200,
+      ),
+    );
+    expect(detail.name).toBe('Tổng');
+    expect(detail.editor).toMatchObject({ baseName: 'Sum' });
+  });
+
   it('gates the editorial on publication, permission and editorship', async () => {
     expect(
       editorialOf(

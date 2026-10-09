@@ -40,6 +40,13 @@ export class ProblemListQueryDto {
   @MaxLength(100)
   @Matches(/^[^\0]*$/)
   search?: string;
+  /** Case-insensitive substring of the code or any title; at most 100 characters. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Matches(/^[^\0]*$/)
+  // eslint-disable-next-line id-length -- the wire name, shared with the users list
+  q?: string;
   @IsOptional() @IsUUID('7') groupId?: string;
   @IsOptional()
   @Transform(toArray)

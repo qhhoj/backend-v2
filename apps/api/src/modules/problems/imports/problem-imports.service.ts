@@ -19,6 +19,7 @@ import type { PolygonImportJob, PolygonImportResult } from '@libs/problems';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { ImportJobResponse } from './dto/import-job.response';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
+import { codeTakenError } from '../editing/problem-edit-fields';
 import { rejectFile, saveMultipartFile } from '../core/multipart';
 import { ProblemDataStore } from '../data/problem-data.store';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
@@ -146,9 +147,7 @@ export class ProblemImportsService {
       (await this.repository.findByCode(query.code)) ||
       (await this.dataFiles.exists(query.code))
     )
-      throw new AppError('validation_failed', 400, 'Problem code is taken', {
-        code: ['Problem code is taken.'],
-      });
+      throw codeTakenError();
     return {
       ...options,
       curators: unique([...(query.curators ?? []), principal.userId]),
@@ -159,9 +158,14 @@ export class ProblemImportsService {
   private async assertPackage(packagePath: string): Promise<void> {
     try {
       if (!(await listZipEntries(packagePath)).includes('problem.xml'))
-        throw rejectFile('The package has no problem.xml at its root.');
+        throw rejectFile(
+          'The package has no problem.xml at its root.',
+          'no_problem_xml',
+        );
     } catch (error) {
-      throw error instanceof ZipError ? rejectFile(error.message) : error;
+      throw error instanceof ZipError
+        ? rejectFile(error.message, error.code)
+        : error;
     }
   }
 }

@@ -80,7 +80,7 @@ export class ContestEditingService {
     dto: CreateContestDto,
   ): Promise<ContestDetailResponse> {
     if (RESERVED_CONTEST_KEYS.includes(dto.key))
-      throw invalidField('key', 'This key is reserved.');
+      throw invalidField('key', 'This key is reserved.', 'key_reserved');
     const contest = await this.insert(principal, {
       ...(await this.editFields.toFields(principal, dto, null)),
       key: dto.key,
@@ -96,7 +96,7 @@ export class ContestEditingService {
   ): Promise<ContestDetailResponse> {
     const source = await this.contestsService.editableContest(principal, key);
     if (RESERVED_CONTEST_KEYS.includes(newKey))
-      throw invalidField('key', 'This key is reserved.');
+      throw invalidField('key', 'This key is reserved.', 'key_reserved');
     const { _id, createdAt, updatedAt, ...copied } =
       source.toObject() as Contest & {
         createdAt?: Date;

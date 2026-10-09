@@ -23,6 +23,7 @@ import {
   listSort,
   publicEditorialFilter,
   searchFilter,
+  substringFilter,
 } from './problem-search';
 import { ProblemsRepository } from './problems.repository';
 import type { ProblemDocument } from './problems.repository';
@@ -43,6 +44,16 @@ const byField =
   <Item>(field: keyof Item) =>
   (left: Item, right: Item) =>
     String(left[field]).localeCompare(String(right[field]));
+
+/** `search` (text index, prefix when short) and `q` (substring), both optional and both applied. */
+function textClauses(query: ProblemListQueryDto): FilterQuery<Problem>[] {
+  const search = query.search?.trim();
+  const substring = query.q?.trim();
+  return [
+    ...(search ? [searchFilter(search)] : []),
+    ...(substring ? [substringFilter(substring)] : []),
+  ];
+}
 
 @Injectable()
 export class ProblemsService {
@@ -310,8 +321,6 @@ export class ProblemsService {
         query.solved ? { _id: { $in: solved } } : { _id: { $nin: solved } },
       );
     }
-    const search = query.search?.trim();
-    if (search) clauses.push(searchFilter(search));
-    return { $and: clauses };
+    return { $and: [...clauses, ...textClauses(query)] };
   }
 }

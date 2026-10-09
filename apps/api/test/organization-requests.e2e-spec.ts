@@ -14,6 +14,10 @@ import { dataOf } from './submission-fixtures';
 import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
+/** The stable issue code of a 409: `error.issues[0].code`. */
+const issueCodeOf = ({ body }: { body: unknown }) =>
+  (body as { error: { issues: { code: string }[] } }).error.issues[0]?.code;
+
 describe('organization join requests', () => {
   let api: ApiTest;
   let queue: Queue<OrganizationPointsJob>;
@@ -109,7 +113,13 @@ describe('organization join requests', () => {
     expect(
       (await queue.getJobs(['waiting'])).map((job) => job.data.organizationId),
     ).toEqual([organization._id]);
-    await decide(organization.slug, created.id, ownerSession, 'R').expect(409);
+    expect(
+      issueCodeOf(
+        await decide(organization.slug, created.id, ownerSession, 'R').expect(
+          409,
+        ),
+      ),
+    ).toBe('request_already_decided');
     expect(
       dataOf<OrganizationRequestResponse[]>(
         await get(
@@ -128,9 +138,13 @@ describe('organization join requests', () => {
       adminIds: [owner._id],
     });
     const first = await request(organization.slug, session);
-    await post(organizationUrl(organization.slug, '/requests'), session, {
-      reason: 'again',
-    }).expect(409);
+    expect(
+      issueCodeOf(
+        await post(organizationUrl(organization.slug, '/requests'), session, {
+          reason: 'again',
+        }).expect(409),
+      ),
+    ).toBe('request_pending');
     await decide(organization.slug, first.id, ownerSession, 'R').expect(200);
     await request(organization.slug, session);
   });
@@ -139,12 +153,20 @@ describe('organization join requests', () => {
     const { user, session } = await person();
     const open = await createOrganization(api, { isOpen: true });
     const closed = await createOrganization(api, { isOpen: false }, [user._id]);
-    await post(organizationUrl(open.slug, '/requests'), session, {
-      reason: 'x',
-    }).expect(409);
-    await post(organizationUrl(closed.slug, '/requests'), session, {
-      reason: 'x',
-    }).expect(409);
+    expect(
+      issueCodeOf(
+        await post(organizationUrl(open.slug, '/requests'), session, {
+          reason: 'x',
+        }).expect(409),
+      ),
+    ).toBe('organization_open');
+    expect(
+      issueCodeOf(
+        await post(organizationUrl(closed.slug, '/requests'), session, {
+          reason: 'x',
+        }).expect(409),
+      ),
+    ).toBe('already_member');
     await post(organizationUrl(closed.slug, '/requests'), session, {
       reason: '',
     }).expect(400);
@@ -169,7 +191,13 @@ describe('organization join requests', () => {
     expect(await membershipsOf(busy._id)).toContain(organization._id);
     const { user: late, session: lateSession } = await person();
     const pending = await request(organization.slug, lateSession);
-    await decide(organization.slug, pending.id, ownerSession, 'A').expect(409);
+    expect(
+      issueCodeOf(
+        await decide(organization.slug, pending.id, ownerSession, 'A').expect(
+          409,
+        ),
+      ),
+    ).toBe('organization_full');
     expect(await membershipsOf(late._id)).toEqual([]);
     expect(
       (await api.organizationRequests.findById(pending.id).lean())!.state,
@@ -202,15 +230,18 @@ describe('organization join requests', () => {
     const requests = [];
     for (let index = 0; index < 10; index++)
       requests.push(await request(organization.slug, (await person()).session));
-    const statuses = (
+    const responses = (
       await Promise.all(
         requests.map((row) =>
           decide(organization.slug, row.id, ownerSession, 'A'),
         ),
       )
-    ).map((response) => response.status);
+    ).map((response) => response);
+    const statuses = responses.map((response) => response.status);
     expect(statuses.filter((status) => status === 200)).toHaveLength(1);
     expect(statuses.filter((status) => status === 409)).toHaveLength(9);
+    for (const refused of responses.filter((row) => row.status === 409))
+      expect(['busy', 'organization_full']).toContain(issueCodeOf(refused));
     expect(
       await api.users.countDocuments({ organizations: organization._id }),
     ).toBe(2);

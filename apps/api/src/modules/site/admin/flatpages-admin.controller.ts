@@ -23,7 +23,10 @@ import {
   FlatpageAdminResponse,
 } from './dto/flatpage-admin.response';
 import { FlatpagePreviewDto } from './dto/flatpage-preview.dto';
-import { FlatpageRevisionResponse } from './dto/flatpage-revision.response';
+import {
+  FlatpageDeletedResponse,
+  FlatpageRevisionResponse,
+} from './dto/flatpage-revision.response';
 import {
   FlatpageIdParamDto,
   PageListQueryDto,
@@ -56,6 +59,16 @@ export class FlatpagesAdminController {
     @Body() body: FlatpagePreviewDto,
   ): Promise<RenderPreviewResponse> {
     return this.history.preview(auth.principal, body);
+  }
+
+  /** Declared before `:id`, which would take `deleted` for an id. */
+  @ApiPaginatedResponse(FlatpageDeletedResponse)
+  @RequirePermission('flatpages.change_flatpage')
+  @Get('deleted')
+  deleted(
+    @Query() { page }: PageListQueryDto,
+  ): Promise<Paginated<FlatpageDeletedResponse>> {
+    return this.history.deleted(page);
   }
 
   @ApiPaginatedResponse(FlatpageRevisionResponse)

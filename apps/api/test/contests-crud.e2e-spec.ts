@@ -228,9 +228,12 @@ describe('contest CRUD', () => {
         startTime: hoursFromNow(1).toISOString(),
         endTime: hoursFromNow(1 + 15 * 24).toISOString(),
       };
-      expect(fieldsOf(await create('creator', long).expect(400))).toEqual([
-        'endTime',
-      ]);
+      const refused = await create('creator', long).expect(400);
+      expect(fieldsOf(refused)).toEqual(['endTime']);
+      expect(
+        (refused.body as { error: { issues: { code: string }[] } }).error
+          .issues,
+      ).toEqual([expect.objectContaining({ code: 'contest_too_long' })]);
       await create('longCreator', long).expect(201);
       // 14 days and 23 hours still count as 14 (legacy `timedelta.days`).
       await create('creator', {
@@ -304,6 +307,8 @@ describe('contest CRUD', () => {
       expect(await keysOf('&phase=ended')).toEqual([past.key]);
       expect(await keysOf('&rated=true')).toEqual([live.key]);
       expect(await keysOf('&search=fUtUrE')).toEqual([future.key]);
+      expect(await keysOf('&q=fUtUrE')).toEqual([future.key]);
+      expect(await keysOf(`&q=${encodeURIComponent('.*')}`)).toEqual([]);
       const page = await api
         .http()
         .get(`${CONTESTS}?tag=${tag}&pageSize=2&page=2`)

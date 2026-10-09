@@ -25,3 +25,19 @@ export class FlatpageRevisionResponse {
     };
   }
 }
+
+/** A deleted page: its id keeps the history readable at `pages/:id/revisions`. */
+export class FlatpageDeletedResponse {
+  id!: string;
+  /** The url the page had when it was deleted. */
+  url!: string;
+  deletedAt!: Date;
+
+  static from(row: Revision): FlatpageDeletedResponse {
+    return {
+      id: uuidStr(row.entityId),
+      url: String((row.changes.url?.before as string | null) ?? ''),
+      deletedAt: row.createdAt,
+    };
+  }
+}

@@ -41,7 +41,11 @@ export const CREATE_BASELINE: Partial<Record<keyof Contest, unknown>> = {
 export function assertWindow(principal: Principal, contest: Contest): void {
   const { startTime, endTime, registrationStart, registrationEnd } = contest;
   if (startTime >= endTime)
-    throw invalidField('endTime', 'The contest must end after it starts.');
+    throw invalidField(
+      'endTime',
+      'The contest must end after it starts.',
+      'contest_ends_before_start',
+    );
   if (
     registrationStart &&
     registrationEnd &&
@@ -50,16 +54,19 @@ export function assertWindow(principal: Principal, contest: Contest): void {
     throw invalidField(
       'registrationEnd',
       'Registration must end after it starts.',
+      'registration_ends_before_start',
     );
   if (registrationStart && registrationStart >= startTime)
     throw invalidField(
       'registrationStart',
       'Registration must start before the contest.',
+      'registration_starts_after_contest',
     );
   if (registrationEnd && registrationEnd >= endTime)
     throw invalidField(
       'registrationEnd',
       'Registration must end before the contest ends.',
+      'registration_ends_after_contest',
     );
   const days = Math.floor((endTime.getTime() - startTime.getTime()) / DAY_MS);
   if (
@@ -69,6 +76,7 @@ export function assertWindow(principal: Principal, contest: Contest): void {
     throw invalidField(
       'endTime',
       `A contest cannot last longer than ${CONTEST_DURATION_LIMIT_DAYS} days.`,
+      'contest_too_long',
     );
 }
 

@@ -46,13 +46,17 @@ const summarize = (
     : null;
 };
 const notFound = () => new AppError('not_found', 404, 'No such user');
-/** Judges who may ban see why a user is banned and whether they are a superuser. */
+/** Judges who may ban see why a user is banned, whether they are a superuser and whether the account was ever activated. */
 const staffViewOf = (
   principal: Principal | null,
-  user: { isSuperuser: boolean; banReason: string | null },
+  user: { isSuperuser: boolean; isActive: boolean; banReason: string | null },
 ): UserPageStaffResponse | null =>
   principal && hasPermission(principal, 'judge.ban_user')
-    ? { isSuperuser: user.isSuperuser, banReason: user.banReason }
+    ? {
+        isSuperuser: user.isSuperuser,
+        isActive: user.isActive,
+        banReason: user.banReason,
+      }
     : null;
 
 @Injectable()

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, unique } from '@libs/common';
+import { AppError, unique, ValidationFailedError } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { excerpt } from '@libs/community';
@@ -194,12 +194,13 @@ export class ProblemEditingService {
     const newCode = fields.code;
     const isRename = newCode !== undefined && newCode !== original.code;
     if (isRename && (await this.dataFiles.exists(newCode)))
-      throw new AppError(
-        'validation_failed',
-        400,
-        'Problem data directory is taken',
-        { code: ['A test data directory for this code already exists.'] },
-      );
+      throw new ValidationFailedError('Problem data directory is taken', [
+        {
+          field: 'code',
+          code: 'data_directory_taken',
+          message: 'A test data directory for this code already exists.',
+        },
+      ]);
   }
 
   private async recordRevisionAndEmitEvents(

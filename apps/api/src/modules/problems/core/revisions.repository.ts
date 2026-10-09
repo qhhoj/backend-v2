@@ -40,6 +40,26 @@ export class RevisionsRepository {
     return { items, total };
   }
 
+  /** One page of the `delete` revisions of an entity kind, newest first, through the partial `{entity, createdAt, _id}` index. */
+  async deletedPage(
+    entity: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: Revision[]; total: number }> {
+    const filter = { entity, action: 'delete' };
+    const [items, total] = await Promise.all([
+      this.revisions
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean<Revision[]>()
+        .exec(),
+      this.revisions.countDocuments(filter).exec(),
+    ]);
+    return { items, total };
+  }
+
   /** Newest first, through `{entity, entityId, createdAt, _id}`. */
   list(entity: string, entityId: string, limit = 100): Promise<Revision[]> {
     return this.revisions

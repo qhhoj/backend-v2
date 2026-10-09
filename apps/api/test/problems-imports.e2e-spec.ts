@@ -28,6 +28,9 @@ const jobIdOf = ({ body }: { body: unknown }) =>
   (body as { data: { jobId: string } }).data.jobId;
 const fieldsOf = ({ body }: { body: unknown }) =>
   (body as { error: { fields: Record<string, string[]> } }).error.fields;
+const issuesOf = ({ body }: { body: unknown }) =>
+  (body as { error: { issues: { field: string; code: string }[] } }).error
+    .issues;
 interface Status {
   id: string;
   state: string;
@@ -262,20 +265,22 @@ describe('Polygon import routes', () => {
   });
   it('refuses a package without problem.xml or a non-zip and removes the file', async () => {
     const before = storedPackages().length;
-    expect(
-      fieldsOf(
-        await upload(
-          'code=x2',
-          creator,
-          buildZip([{ name: 'readme.txt', content: 'x' }]),
-        ).expect(400),
-      ),
-    ).toHaveProperty('file');
-    expect(
-      fieldsOf(
-        await upload('code=x3', creator, Buffer.from('nope')).expect(400),
-      ),
-    ).toHaveProperty('file');
+    const noXml = await upload(
+      'code=x2',
+      creator,
+      buildZip([{ name: 'readme.txt', content: 'x' }]),
+    ).expect(400);
+    expect(fieldsOf(noXml)).toHaveProperty('file');
+    expect(issuesOf(noXml)).toEqual([
+      expect.objectContaining({ field: 'file', code: 'no_problem_xml' }),
+    ]);
+    const notZip = await upload('code=x3', creator, Buffer.from('nope')).expect(
+      400,
+    );
+    expect(fieldsOf(notZip)).toHaveProperty('file');
+    expect(issuesOf(notZip)).toEqual([
+      expect.objectContaining({ field: 'file', code: 'zip_invalid' }),
+    ]);
     expect(storedPackages()).toHaveLength(before);
   });
   it('needs judge.import_polygon_package', async () => {

@@ -17,7 +17,10 @@ import {
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { renderField } from '../../problems/editing/problem-markup';
 import type { FlatpagePreviewDto } from './dto/flatpage-preview.dto';
-import { FlatpageRevisionResponse } from './dto/flatpage-revision.response';
+import {
+  FlatpageDeletedResponse,
+  FlatpageRevisionResponse,
+} from './dto/flatpage-revision.response';
 import { PAGE_STYLE } from './flatpage-markup';
 
 const PAGE_SIZE = 20;
@@ -51,6 +54,23 @@ export class FlatpageHistoryService {
         ),
       ),
       { page, pageSize: PAGE_SIZE, total },
+    );
+  }
+
+  /** Pages whose last revision is a deletion, newest first; a recreated page has a new id, so every `delete` row is a page that is gone. */
+  async deleted(page: number): Promise<Paginated<FlatpageDeletedResponse>> {
+    const { items, total } = await this.revisions.deletedPage(
+      'flatpage',
+      page,
+      PAGE_SIZE,
+    );
+    return new Paginated(
+      items.map((row) => FlatpageDeletedResponse.from(row)),
+      {
+        page,
+        pageSize: PAGE_SIZE,
+        total,
+      },
     );
   }
 

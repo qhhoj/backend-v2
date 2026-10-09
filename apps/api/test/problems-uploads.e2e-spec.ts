@@ -17,6 +17,11 @@ const PROBLEMS = '/api/internal/problems';
 const urlOf = ({ body }: { body: unknown }) =>
   (body as { data: { url: string } }).data.url;
 
+/** The stable issue code of a file refusal: `issues: [{ field: 'file', code, message }]`. */
+const fileIssueCode = ({ body }: { body: unknown }) =>
+  (body as { error: { issues: { field: string; code: string }[] } }).error
+    .issues[0];
+
 describe('problem uploads', () => {
   let api: ApiTest;
   let catalog: Catalog;
@@ -101,6 +106,10 @@ describe('problem uploads', () => {
       (response.body as { error: { fields: Record<string, string[]> } }).error
         .fields,
     ).toHaveProperty('file');
+    expect(fileIssueCode(response)).toMatchObject({
+      field: 'file',
+      code: 'image_type_not_allowed',
+    });
     await upload(`${PROBLEMS}/uploads/image`, staff, {
       content: PDF,
       filename: 'doc.gif',
@@ -358,23 +367,26 @@ describe('problem uploads', () => {
       filename: 'e.png',
       contentType: 'image/png',
     }).expect(400);
-    await authed(api.http().post(path), staff)
+    const unexpected = await authed(api.http().post(path), staff)
       .field('note', 'x')
       .attach('file', PNG, { filename: 'p.png', contentType: 'image/png' })
       .expect(400)
       .expect(errorCode('validation_failed'));
-    await authed(api.http().post(path), staff)
+    expect(fileIssueCode(unexpected).code).toBe('upload_malformed');
+    const misnamed = await authed(api.http().post(path), staff)
       .attach('picture', PNG, { filename: 'p.png', contentType: 'image/png' })
       .expect(400)
       .expect(errorCode('validation_failed'));
+    expect(fileIssueCode(misnamed).code).toBe('exactly_one_file');
     const boundary = 'xBOUNDARYx';
     const raw = (body: Buffer) =>
       authed(api.http().post(path), staff)
         .set('Content-Type', `multipart/form-data; boundary=${boundary}`)
         .send(body);
-    await raw(Buffer.from('garbage, not multipart'))
+    const garbage = await raw(Buffer.from('garbage, not multipart'))
       .expect(400)
       .expect(errorCode('validation_failed'));
+    expect(fileIssueCode(garbage).code).toBe('upload_malformed');
     const head = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="p.png"\r\nContent-Type: image/png\r\n\r\n`;
     await raw(Buffer.concat([Buffer.from(head), PNG]))
       .expect(400)

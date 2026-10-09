@@ -59,7 +59,7 @@ describe('ZipArchive', () => {
       '1 2\n',
     );
     await expect(zip.read('nope')).rejects.toThrow(
-      new ZipError('No such file in the archive: nope'),
+      new ZipError('No such file in the archive: nope', 'zip_entry_missing'),
     );
     await zip.close();
   });
@@ -117,15 +117,23 @@ describe('ZipArchive', () => {
     return rejects([{ name: 'a.txt', centralExtra: field }], ZipError);
   });
 
+  it('tags refusals with a stable code', async () => {
+    const bad = await ZipArchive.fromBuffer(Buffer.from('not a zip')).catch(
+      (error: unknown) => error,
+    );
+    expect(bad).toMatchObject({ code: 'zip_invalid' });
+  });
+
   it('refuses a corrupt archive with a plain message', () =>
     expect(ZipArchive.fromBuffer(Buffer.from('not a zip'))).rejects.toThrow(
-      new ZipError('The archive is not a valid zip file.'),
+      new ZipError('The archive is not a valid zip file.', 'zip_invalid'),
     ));
 
   it('refuses an end record whose count hides central directory records', async () => {
     const three = [{ name: 'a' }, { name: 'b' }, { name: 'c' }];
     const inconsistent = new ZipError(
       'Archive central directory is inconsistent.',
+      'zip_inconsistent',
     );
     await expect(
       ZipArchive.fromBuffer(buildZip(three, { declaredEntryCount: 1 })),
@@ -150,7 +158,10 @@ describe('ZipArchive', () => {
         buildZip(three, { zip64: true, declaredEntryCount: 1 }),
       ),
     ).rejects.toThrow(
-      new ZipError('Archive central directory is inconsistent.'),
+      new ZipError(
+        'Archive central directory is inconsistent.',
+        'zip_inconsistent',
+      ),
     );
     const path = join(directory, 'zip64.zip');
     writeFileSync(path, buildZip(three, { zip64: true }));
@@ -280,7 +291,7 @@ describe('ZipArchive', () => {
       },
     ]);
     await expect(zip.read('big')).rejects.toThrow(
-      new ZipError('big is too large to read'),
+      new ZipError('big is too large to read', 'zip_entry_too_large'),
     );
     await zip.close();
   });

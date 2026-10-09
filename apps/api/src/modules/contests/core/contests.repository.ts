@@ -123,7 +123,22 @@ export class ContestsRepository {
       return await this.contests.create(fields);
     } catch (error) {
       if (isDuplicateKey(error, 'key'))
-        throw new AppError('conflict', 409, 'A contest with this key exists');
+        throw new AppError(
+          'conflict',
+          409,
+          'A contest with this key exists',
+          undefined,
+          undefined,
+          {
+            issues: [
+              {
+                field: 'key',
+                code: 'key_taken',
+                message: 'A contest with this key exists',
+              },
+            ],
+          },
+        );
       throw error;
     }
   }

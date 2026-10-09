@@ -26,6 +26,7 @@ export class ActivityLiveService {
     return {
       windowMinutes: ACTIVE_WINDOW_MS / 60_000,
       ...counts,
+      hasMore: page * ACTIVITY_PAGE_SIZE < counts.authenticatedUsers,
       users: entries.flatMap((entry) => {
         const user = found.get(entry.userId);
         return user

@@ -35,9 +35,12 @@ interface ArchiveBounds {
 }
 const UNICODE_PATH_EXTRA = 0x7075;
 
-/** A problem in an uploaded archive; the message is shown to the uploader. */
+/** A problem in an uploaded archive; the message is shown to the uploader, the snake_case `code` is the stable key (documented in docs/decisions.md). */
 export class ZipError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
     super(message);
     this.name = 'ZipError';
   }
@@ -139,7 +142,10 @@ async function assertCentralDirectoryIsConsistent(
 ): Promise<void> {
   const { readEntryCursor } = zip as unknown as ZipFileInternals;
   if (readEntryCursor !== (await expectedCentralEnd(zip, readAt)))
-    throw new ZipError('Archive central directory is inconsistent.');
+    throw new ZipError(
+      'Archive central directory is inconsistent.',
+      'zip_inconsistent',
+    );
 }
 
 /** Walks the central directory once (lazy entries, so memory is one entry at a time) and applies every bound. Every record counts, directories included. */
@@ -150,25 +156,32 @@ function collectEntries(zip: ZipFile): Promise<Map<string, Entry>> {
     const bounds = { fileSize, centralDirectoryStart: readEntryCursor };
     let records = 0;
     let totalBytes = 0;
-    const fail = (message: string) => {
+    const fail = (message: string, code: string) => {
       zip.removeAllListeners('entry');
-      reject(new ZipError(message));
+      reject(new ZipError(message, code));
     };
     zip.on('error', (error: Error) =>
-      fail(`The archive is not a valid zip file: ${shown(error.message)}`),
+      fail(
+        `The archive is not a valid zip file: ${shown(error.message)}`,
+        'zip_invalid',
+      ),
     );
     zip.on('end', () => resolve(entries));
     zip.on('entry', (entry: Entry) => {
       records += 1;
       const broken = violation(entry, records, bounds);
-      if (broken) return fail(broken);
+      if (broken) return fail(broken, 'zip_entry_rejected');
       if (isDirectory(entry)) return zip.readEntry();
       if (entries.has(entry.fileName))
-        return fail(`Duplicate file in the archive: ${shown(entry.fileName)}`);
+        return fail(
+          `Duplicate file in the archive: ${shown(entry.fileName)}`,
+          'zip_duplicate_entry',
+        );
       totalBytes += entry.uncompressedSize;
       if (totalBytes > ZIP_LIMITS.maxTotalBytes)
         return fail(
           `The archive is too large (limit ${ZIP_LIMITS.maxTotalBytes} bytes uncompressed).`,
+          'zip_too_large',
         );
       entries.set(entry.fileName, entry);
       zip.readEntry();
@@ -183,7 +196,9 @@ const openZipFile = (
   new Promise<ZipFile>((resolve, reject) =>
     opener((error, zip) =>
       error || !zip
-        ? reject(new ZipError('The archive is not a valid zip file.'))
+        ? reject(
+            new ZipError('The archive is not a valid zip file.', 'zip_invalid'),
+          )
         : resolve(zip),
     ),
   );
@@ -194,7 +209,10 @@ function exactly(entry: Entry): Transform {
   let seen = 0;
   let checksum = 0;
   const mismatch = () =>
-    new ZipError(`${name} does not match its declared size`);
+    new ZipError(
+      `${name} does not match its declared size`,
+      'zip_entry_corrupt',
+    );
   return new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       seen += chunk.length;
@@ -206,13 +224,19 @@ function exactly(entry: Entry): Transform {
       callback(
         checksum === entry.crc32
           ? null
-          : new ZipError(`${name} is corrupt: its checksum does not match`),
+          : new ZipError(
+              `${name} is corrupt: its checksum does not match`,
+              'zip_entry_corrupt',
+            ),
       );
     },
     destroy(error, callback) {
       callback(
         error && !(error instanceof ZipError)
-          ? new ZipError(`${name} is corrupt: ${error.message}`)
+          ? new ZipError(
+              `${name} is corrupt: ${error.message}`,
+              'zip_entry_corrupt',
+            )
           : error,
       );
     },
@@ -251,7 +275,12 @@ class FileHandleReader extends yauzl.RandomAccessReader {
     if (!valid)
       return new ReadableStream({
         read() {
-          this.destroy(new ZipError('The archive points outside itself.'));
+          this.destroy(
+            new ZipError(
+              'The archive points outside itself.',
+              'zip_points_outside',
+            ),
+          );
         },
       });
     let position = start;
@@ -296,7 +325,7 @@ export class ZipArchive {
 
   static async open(path: string): Promise<ZipArchive> {
     const handle = await openFile(path, 'r').catch(() => {
-      throw new ZipError('The archive is not a valid zip file.');
+      throw new ZipError('The archive is not a valid zip file.', 'zip_invalid');
     });
     const reader = new FileHandleReader(handle);
     try {
@@ -358,13 +387,17 @@ export class ZipArchive {
   async stream(name: string): Promise<Readable> {
     const entry = this.entry(name);
     if (entry.uncompressedSize > ZIP_LIMITS.maxEntryBytes)
-      throw new ZipError(`${shown(name)} is too large to read`);
+      throw new ZipError(
+        `${shown(name)} is too large to read`,
+        'zip_entry_too_large',
+      );
     const source = await new Promise<Readable>((resolve, reject) =>
       this.zip.openReadStream(entry, (error, stream) =>
         error || !stream
           ? reject(
               new ZipError(
                 `Cannot read ${shown(name)}: ${error?.message ?? 'unknown error'}`,
+                'zip_entry_unreadable',
               ),
             )
           : resolve(stream),
@@ -389,7 +422,10 @@ export class ZipArchive {
   private entry(name: string): Entry {
     const entry = this.entries.get(name);
     if (!entry)
-      throw new ZipError(`No such file in the archive: ${shown(name)}`);
+      throw new ZipError(
+        `No such file in the archive: ${shown(name)}`,
+        'zip_entry_missing',
+      );
     return entry;
   }
 }

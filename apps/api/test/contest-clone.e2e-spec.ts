@@ -24,6 +24,11 @@ import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
+const issueCodesOf = ({ body }: { body: unknown }) =>
+  (body as { error: { issues: { code: string }[] } }).error.issues.map(
+    (issue) => issue.code,
+  );
+
 describe('contest clone', () => {
   let api: ApiTest;
   let finalJudges: Queue<ContestFinalJudgeJob>;
@@ -145,12 +150,14 @@ describe('contest clone', () => {
     });
     await clone('editorOnly', source.key, { key: 'x_1' }).expect(403);
     await clone('cloneOutsider', source.key, { key: 'x_2' }).expect(403);
-    await clone('cloner', source.key, { key: source.key })
+    const taken = await clone('cloner', source.key, { key: source.key })
       .expect(409)
       .expect(errorCode('conflict'));
-    await clone('cloner', source.key, { key: 'current' })
+    expect(issueCodesOf(taken)).toEqual(['key_taken']);
+    const reserved = await clone('cloner', source.key, { key: 'current' })
       .expect(400)
       .expect(errorCode('validation_failed'));
+    expect(issueCodesOf(reserved)).toEqual(['key_reserved']);
     await clone('cloner', source.key, { key: 'Bad-Key' })
       .expect(400)
       .expect(errorCode('validation_failed'));

@@ -11,6 +11,8 @@ export class RatingSummaryResponse {
 /** Only for viewers who hold `judge.ban_user`; null for everyone else. */
 export class UserPageStaffResponse {
   isSuperuser!: boolean;
+  /** False for a never-activated account as well as a banned one; only an active account can be impersonated. */
+  isActive!: boolean;
   banReason!: string | null;
 }
 

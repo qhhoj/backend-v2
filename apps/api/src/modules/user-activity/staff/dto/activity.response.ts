@@ -57,4 +57,6 @@ export class LiveActivityResponse {
   bots!: number;
   /** Signed-in users, most recently seen first. */
   users!: LiveUserResponse[];
+  /** True when a later `page` has more signed-in users (measured on the live set, so a user without an account still counts). */
+  hasMore!: boolean;
 }

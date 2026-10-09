@@ -194,6 +194,19 @@ describe('GET /api/internal/problems', () => {
       'banana',
     ]);
   });
+  it('finds a substring of the code or a title with q, escaped and length-capped', async () => {
+    const find = async (text: string) =>
+      codesOf(await api.http().get(`${LIST}?q=${encodeURIComponent(text)}`));
+    expect(await find('PPL')).toEqual(['apple']);
+    expect(await find('rick')).toEqual(['cpp_tricks']);
+    expect(await find('hu')).toEqual(['banana']);
+    expect(await find('.*')).toEqual([]);
+    expect(await find('c+')).toEqual(['cpp_tricks']);
+    await api
+      .http()
+      .get(`${LIST}?q=${'x'.repeat(101)}`)
+      .expect(400);
+  });
   it('escapes regex metacharacters in short queries and accepts "C++"', async () => {
     expect(
       codesOf(

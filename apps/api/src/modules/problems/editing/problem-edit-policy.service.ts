@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
-import { AppError, sameJson, unique } from '@libs/common';
+import {
+  AppError,
+  sameJson,
+  unique,
+  ValidationFailedError,
+} from '@libs/common';
 import type { Problem } from '@libs/database';
 import type {
   CreateProblemDto,
@@ -134,11 +139,13 @@ export class ProblemEditPolicyService {
       ) &&
       !hasPermission(principal, 'judge.high_problem_timelimit')
     )
-      throw new AppError('validation_failed', 400, 'Time limit too high', {
-        timeLimit: [
-          `You cannot set time limit higher than ${TIME_LIMIT_WITHOUT_PERMISSION_SECONDS} seconds`,
-        ],
-      });
+      throw new ValidationFailedError('Time limit too high', [
+        {
+          field: 'timeLimit',
+          code: 'time_limit_too_high',
+          message: `You cannot set time limit higher than ${TIME_LIMIT_WITHOUT_PERMISSION_SECONDS} seconds`,
+        },
+      ]);
   }
 
   /** Unsanitized HTML (`problem-full`) is writable only with this permission. */

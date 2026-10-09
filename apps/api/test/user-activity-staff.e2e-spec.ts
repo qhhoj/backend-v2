@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { ACTIVITY_PAGE_SIZE } from '@libs/community';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { newId } from '@libs/database';
@@ -297,6 +299,26 @@ describe('user activity staff API', () => {
       'alice',
       'bob',
     ]);
+  });
+
+  it('reports hasMore while later live pages hold signed-in users', async () => {
+    const redis = api.app.get<Redis>(REDIS);
+    await redis.del('active:users', 'active:anonymous', 'active:bots');
+    const now = Date.now();
+    for (let index = 0; index <= ACTIVITY_PAGE_SIZE; index++)
+      await redis.zadd('active:users', now - index, randomUUID());
+    expect(
+      dataOf<LiveActivityResponse>(await get('/live?page=1').expect(200))
+        .hasMore,
+    ).toBe(true);
+    expect(
+      dataOf<LiveActivityResponse>(await get('/live?page=2').expect(200))
+        .hasMore,
+    ).toBe(false);
+    await redis.del('active:users');
+    expect(
+      dataOf<LiveActivityResponse>(await get('/live').expect(200)).hasMore,
+    ).toBe(false);
   });
 
   it("does not record the staff API's own requests", async () => {

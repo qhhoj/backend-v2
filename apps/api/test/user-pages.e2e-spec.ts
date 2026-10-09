@@ -503,6 +503,7 @@ describe('user pages', () => {
       isActive: false,
     });
     await createUserWith(api, 'root_page', { isSuperuser: true });
+    await createUserWith(api, 'fresh_page', { isActive: false });
     const moderator = await loginAs(
       api,
       (
@@ -521,10 +522,17 @@ describe('user pages', () => {
       ).staff;
     expect(await staffOf('banned_page', moderator)).toEqual({
       isSuperuser: false,
+      isActive: false,
       banReason: 'spam',
     });
     expect(await staffOf('root_page', moderator)).toEqual({
       isSuperuser: true,
+      isActive: true,
+      banReason: null,
+    });
+    expect(await staffOf('fresh_page', moderator)).toEqual({
+      isSuperuser: false,
+      isActive: false,
       banReason: null,
     });
     const superuser = await loginAs(
@@ -533,6 +541,7 @@ describe('user pages', () => {
     );
     expect(await staffOf('banned_page', superuser)).toEqual({
       isSuperuser: false,
+      isActive: false,
       banReason: 'spam',
     });
     expect(await staffOf('banned_page')).toBeNull();

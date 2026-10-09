@@ -22,8 +22,16 @@ export interface UploadedForm extends UploadedFile {
 /** Text fields carry ids and names, never content. */
 const FIELD_MAX_BYTES = 256;
 
-export const rejectFile = (message: string) =>
-  new AppError('validation_failed', 400, message, { file: [message] });
+/** A 400 on field `file` with a stable snake_case `code` in `issues` (documented in docs/decisions.md); the English message stays. */
+export const rejectFile = (message: string, code: string) =>
+  new AppError(
+    'validation_failed',
+    400,
+    message,
+    { file: [message] },
+    undefined,
+    { issues: [{ field: 'file', code, message }] },
+  );
 export const tooLarge = (maxBytes: number) =>
   new AppError('file_too_large', 413, `The file exceeds ${maxBytes} bytes`);
 
@@ -38,7 +46,10 @@ function acceptField(
     part.fieldname in fields ||
     part.valueTruncated
   )
-    throw rejectFile('Unexpected, repeated or oversized field.');
+    throw rejectFile(
+      'Unexpected, repeated or oversized field.',
+      'unexpected_field',
+    );
   fields[part.fieldname] = String(part.value);
 }
 
@@ -52,7 +63,10 @@ function assertSingleFilePart(
     part.fieldname !== 'file' ||
     filename !== undefined
   )
-    throw rejectFile('Send exactly one file in the "file" field.');
+    throw rejectFile(
+      'Send exactly one file in the "file" field.',
+      'exactly_one_file',
+    );
 }
 
 /** Busboy and Fastify failures become the upload contract's 400 or 413; our own AppErrors pass through. */
@@ -60,7 +74,7 @@ function uploadError(error: unknown, maxBytes: number): AppError {
   if (error instanceof AppError) return error;
   if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE')
     return tooLarge(maxBytes);
-  return rejectFile('The upload is malformed.');
+  return rejectFile('The upload is malformed.', 'upload_malformed');
 }
 
 /** The multipart contract of every upload route: exactly one file part named `file`, at most one of each of `fieldNames` (none by default), `maxBytes` per call (overrides the plugin default); `consume` drains the part. */
@@ -70,7 +84,8 @@ async function withMultipartFile(
   consume: (part: MultipartFile) => Promise<void>,
   fieldNames: readonly string[] = [],
 ): Promise<{ filename: string; fields: Record<string, string> }> {
-  if (!request.isMultipart()) throw rejectFile('A file is required.');
+  if (!request.isMultipart())
+    throw rejectFile('A file is required.', 'file_required');
   let filename: string | undefined;
   const fields: Record<string, string> = {};
   try {
@@ -95,7 +110,8 @@ async function withMultipartFile(
   } catch (error) {
     throw uploadError(error, maxBytes);
   }
-  if (filename === undefined) throw rejectFile('A file is required.');
+  if (filename === undefined)
+    throw rejectFile('A file is required.', 'file_required');
   return { filename, fields };
 }
 
@@ -123,7 +139,8 @@ export async function readMultipartForm(
     },
     fieldNames,
   );
-  if (!content.length) throw rejectFile('A non-empty file is required.');
+  if (!content.length)
+    throw rejectFile('A non-empty file is required.', 'file_empty');
   return { filename, content, fields };
 }
 
@@ -147,7 +164,7 @@ export async function saveMultipartFile(
         await pipeline(part.file, createWriteStream(targetPath));
       },
     );
-    if (!bytes) throw rejectFile('A non-empty file is required.');
+    if (!bytes) throw rejectFile('A non-empty file is required.', 'file_empty');
     return { filename, bytes };
   } catch (error) {
     await rm(targetPath, { force: true });
