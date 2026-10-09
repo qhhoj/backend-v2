@@ -269,7 +269,11 @@ describe('contest replay', () => {
   it('answers 202 and queues exactly one build when none is stored, then when the stored one has an old format version', async () => {
     const contest = await endedContest();
     expect(
-      (await api.http().get(url(contest.key)).expect(202)).body.data,
+      (
+        (await api.http().get(url(contest.key)).expect(202)).body as {
+          data: unknown;
+        }
+      ).data,
     ).toMatchObject({ state: 'building', events: [] });
     await get(contest.key, 'alice').expect(202);
     expect(await waitingJobs()).toBe(1);
@@ -300,7 +304,7 @@ describe('contest replay', () => {
     const contest = await endedContest({ endTime });
     await seedBuild(contest, { builtAt: new Date(endTime.getTime() - MINUTE) });
     const answer = await get(contest.key, 'alice').expect(202);
-    expect(answer.body.data).toMatchObject({
+    expect((answer.body as { data: unknown }).data).toMatchObject({
       state: 'building',
       events: [],
       participants: null,
@@ -330,8 +334,8 @@ describe('contest replay', () => {
       label: `g${String(index).padStart(4, '0')}`,
     }));
     const events = ghosts.flatMap((_ghost, index) =>
-      Array.from({ length: 20 }, (_unused, n) => [
-        60 * (n + 1),
+      Array.from({ length: 20 }, (_unused, minute) => [
+        60 * (minute + 1),
         index,
         0,
         cell,
