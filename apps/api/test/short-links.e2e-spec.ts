@@ -171,6 +171,22 @@ describe('short links', () => {
       await create(staff, { path: fresh(), code: 'ab' }).expect(400);
     });
 
+    it('gives the allowance back when a chosen code is taken', async () => {
+      await create(staff, { path: fresh(), code: 'refund-me' }).expect(201);
+      const spender = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'slrefund', {
+            permissions: ['judge.manage_short_link'],
+          })
+        )._id,
+      );
+      for (let index = 0; index < 25; index += 1)
+        await create(spender, { path: fresh(), code: 'refund-me' }).expect(409);
+      for (let index = 0; index < 20; index += 1)
+        await create(spender, { path: fresh() }).expect(201);
+    });
+
     it('allows 20 new links a day, and an existing link does not use the allowance up', async () => {
       const reused = fresh();
       await create(student, { path: reused }).expect(201);
@@ -187,6 +203,19 @@ describe('short links', () => {
   });
 
   describe('visiting', () => {
+    it('answers a HEAD probe like a visit but does not count it', async () => {
+      const path = fresh();
+      const { code } = dataOf<Link>(
+        await create(student, { path }).expect(201),
+      );
+      const response = await api.http().head(`/s/${code}`).redirects(0);
+      expect(response.status).toBe(302);
+      expect(response.headers.location).toBe(path);
+      expect(
+        await api.db.collection('shortLinks').findOne({ code }),
+      ).toMatchObject({ hits: 0 });
+    });
+
     it('redirects to the stored relative path, uncached, and counts the visit', async () => {
       const path = fresh();
       const { code } = dataOf<Link>(

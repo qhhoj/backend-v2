@@ -34,6 +34,14 @@ interface Row {
   prepare: (person: Person) => Attempt | Promise<Attempt>;
 }
 
+/** Every lock introduced with `locked_in_official_contest` also carries it as `error.issues[0].code`; the older `forbidden` locks carry none. */
+const errorIssueCode =
+  (code: string) =>
+  ({ body }: { body: { error: { issues?: { code: string }[] } } }) => {
+    if (code === 'forbidden') return;
+    expect(body.error.issues?.[0]?.code).toBe(code);
+  };
+
 const inAnHour = () => new Date(Date.now() + 3_600_000).toISOString();
 const aMinuteAgo = () => new Date(Date.now() - 60_000).toISOString();
 
@@ -167,7 +175,10 @@ describe('official contest mode', () => {
     await setMode(mode.on, mode.endsAt);
     const response = run(person.session);
     if (expected === 'locked')
-      await response.expect(403).expect(errorCode(row.lockedCode));
+      await response
+        .expect(403)
+        .expect(errorCode(row.lockedCode))
+        .expect(errorIssueCode(row.lockedCode));
     else await response.expect(row.okStatus);
   };
 
@@ -188,6 +199,16 @@ describe('official contest mode', () => {
       await attempt(row, { on: false }, 'open');
     },
   );
+
+  it('answers a locked badge change with 403 even when the badge is not the user own', async () => {
+    const person = await newPerson();
+    await clearRateLimits(api);
+    await setMode(true);
+    await authed(api.http().patch('/api/internal/profile'), person.session)
+      .send({ displayBadgeId: newId() })
+      .expect(403)
+      .expect(errorCode('locked_in_official_contest'));
+  });
 
   it('empties the recent comments of the home slice while locked and brings them back after the end time', async () => {
     const author = await newPerson();

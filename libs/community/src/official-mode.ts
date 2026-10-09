@@ -44,10 +44,18 @@ export function assertNotLockedByOfficialMode(
   viewer: { isSuperuser: boolean },
   now: Date = new Date(),
 ): void {
-  if (officialModeLocks(settings, viewer, now))
-    throw new AppError(
-      'locked_in_official_contest',
-      403,
-      'This is locked during the official contest',
-    );
+  if (!officialModeLocks(settings, viewer, now)) return;
+  const message = 'This is locked during the official contest';
+  throw new AppError(
+    'locked_in_official_contest',
+    403,
+    message,
+    undefined,
+    undefined,
+    {
+      issues: [
+        { field: 'officialMode', code: 'locked_in_official_contest', message },
+      ],
+    },
+  );
 }

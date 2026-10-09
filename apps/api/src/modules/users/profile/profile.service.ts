@@ -68,8 +68,8 @@ export class ProfileService {
       ...this.firstNameChange(principal, user, firstName),
       ...this.aboutChange(principal, user, about),
     };
-    this.assertReferences(user, dto);
     this.assertAppearanceUnlocked(principal, user, dto);
+    this.assertReferences(user, dto);
     if (organizations !== undefined)
       await this.reorder(
         principal,

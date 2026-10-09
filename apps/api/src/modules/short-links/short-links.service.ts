@@ -64,11 +64,17 @@ export class ShortLinksService {
       CREATE_LIMIT,
       CREATE_WINDOW_SECONDS,
     );
-    const { link, isNew } = isChosen
-      ? { link: await this.insertChosen(principal, path, dto), isNew: true }
-      : await this.automaticLink(principal, path);
-    if (!isNew) await release();
-    return ShortLinkResponse.from(link);
+    try {
+      const { link, isNew } = isChosen
+        ? { link: await this.insertChosen(principal, path, dto), isNew: true }
+        : await this.automaticLink(principal, path);
+      if (!isNew) await release();
+      return ShortLinkResponse.from(link);
+    } catch (error) {
+      // No link was made (taken code, no free code, database error): the slot goes back.
+      await release();
+      throw error;
+    }
   }
 
   private async automaticLink(
@@ -170,10 +176,10 @@ export class ShortLinksService {
     );
   }
 
-  /** The path to redirect to. The stored path is checked against the allow-list again, so a row written by older code or by hand never becomes a redirect. */
+  /** The path to redirect to. A visit with `isProbe` (a HEAD request from a link preview) redirects like any other but is not counted. The stored path is checked against the allow-list again, so a row written by older code or by hand never becomes a redirect. */
   async resolve(
     code: string,
-    visit: { ip: string; now?: Date },
+    visit: { ip: string; now?: Date; isProbe?: boolean },
   ): Promise<string> {
     await this.rateLimit.reserve(
       [`short-link-visit:ip:${visit.ip}`],
@@ -191,6 +197,7 @@ export class ShortLinksService {
       );
       throw notFound();
     }
+    if (visit.isProbe) return path;
     await this.links.recordHit(link._id, now).catch((error: Error) => {
       this.logger.error(
         `Hit of short link ${link.code} not counted: ${error.message}`,

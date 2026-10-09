@@ -6911,11 +6911,23 @@
               "$ref": "#/components/schemas/NavigationItemResponse"
             },
             "type": "array"
+          },
+          "officialMode": {
+            "description": "Official contest mode is on right now (the flag and its end time). The response is cached `private, max-age=60`, so the shell may show the banner up to a minute after the mode ends.",
+            "type": "boolean"
+          },
+          "officialModeEndsAt": {
+            "description": "The ISO 8601 UTC instant the mode switches itself off, or `null` when the mode is off or has no end time. Same cache as `officialMode`.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
+          "officialModeEndsAt",
           "navigation",
-          "config"
+          "config",
+          "officialMode"
         ],
         "type": "object"
       },

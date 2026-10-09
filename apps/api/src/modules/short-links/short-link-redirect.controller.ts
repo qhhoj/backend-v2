@@ -19,7 +19,10 @@ export class ShortLinkRedirectController {
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
-    const path = await this.links.resolve(code, { ip: request.ip });
+    const path = await this.links.resolve(code, {
+      ip: request.ip,
+      isProbe: request.method === 'HEAD',
+    });
     reply.header('Cache-Control', 'no-store').redirect(path, 302);
   }
 }
