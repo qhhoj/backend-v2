@@ -1,8 +1,21 @@
-import { Comment, CommentLock, CommentVote, uuidStr } from '@libs/database';
+import {
+  BlogPost,
+  BlogVote,
+  Comment,
+  CommentLock,
+  CommentVote,
+  uuidStr,
+} from '@libs/database';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest } from './setup';
 
-const JOBS = ['comments', 'comment-votes', 'comment-locks'];
+const JOBS = [
+  'comments',
+  'comment-votes',
+  'comment-locks',
+  'blog-posts',
+  'blog-votes',
+];
 
 describe('community jobs', () => {
   let harness: Awaited<ReturnType<typeof setupMigratorTest>>;
@@ -99,6 +112,29 @@ describe('community jobs', () => {
     expect(reports['comment-locks']).toContain(
       'skipped judge_commentlock:8003 (duplicate page)',
     );
+  });
+
+  it('maps posts with blog-style HTML and keeps only ±1 votes', async () => {
+    const post = (await docOf<BlogPost>('blogPosts', 'judge_blogpost', 8001))!;
+    expect(post).toMatchObject({
+      title: 'News',
+      slug: 'news',
+      visible: true,
+      sticky: false,
+      globalPost: true,
+      organization: null,
+      score: 3,
+      publishOn: new Date('2023-03-01T00:00:00Z'),
+    });
+    expect(post.contentHtml).toContain('<strong>big</strong>');
+    expect(post.summaryHtml).toContain('sum');
+    expect(post.authors.map(uuidStr)).toEqual([await id('auth_user', 1)]);
+    expect(
+      await docOf<BlogVote>('blogVotes', 'judge_blogvote', 8001),
+    ).toMatchObject({ score: -1 });
+    expect(
+      await docOf<BlogVote>('blogVotes', 'judge_blogvote', 8002),
+    ).toBeNull();
   });
 
   it('verifies clean', async () => {
