@@ -586,6 +586,15 @@ The app follows Semantic Versioning (`package.json` `version`, starting at 2.0.0
 - Every PR that changes behaviour adds a changeset: `npm run changeset` (pick the bump, write one line) and commit the `.changeset/*.md` file. CI runs `npx changeset status --since=origin/main` on pull requests; pushes to `main` are not checked.
 - Cutting a release: `npm run version` (bumps `package.json`, updates `CHANGELOG.md`, deletes the consumed changesets), commit, then `npm run release:tag` (creates the `v<version>` git tag locally).
 
+## Short links and the sync API
+
+- Modules: `modules/short-links/` (redirect `/s/:code`, staff list and delete) and `modules/sync/` (`clients/` admin routes, `contests/` the sync routes).
+- A route for external systems is `@ServiceOnly()` + `@RequireScope(...)` under `api/sync/v1`; the guard attaches `request.serviceClient` and never `request.auth`; a missing `@RequireScope` refuses every key.
+- Read official mode only through `isOfficialModeActive` / `officialModeLocks` / `assertNotLockedByOfficialMode` (`libs/community/src/official-mode.ts`); a structural spec fails on any other reader of `contest.officialMode*`.
+- Operator command `node dist/apps/migrator/main grant-permissions`: run once per deploy, then check one staff user after the groups resync; it grants `judge.manage_short_link` and `judge.manage_integration`.
+- Taking over a client-managed contest: clear `managedBy` in the contest editor, or revoke the client and edit the contest by hand; a revoked client leaves its contests behind.
+- Keys are `qhi_` + 256 random bits, shown once; only the sha256 is stored. Queries on `Contest.managedBy` must include `$type: 'binData'`.
+
 ## Commits
 
 - One-line conventional subject: `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`

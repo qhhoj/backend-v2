@@ -51,6 +51,34 @@ describe('OpenAPI document', () => {
     );
   });
 
+  it('lists the short link and sync routes and the site officialMode flag', async () => {
+    const response = await api
+      .http()
+      .get('/api/internal/openapi.json')
+      .expect(200);
+    const body = response.body as {
+      paths: Record<string, unknown>;
+      components: {
+        schemas: Record<string, { properties?: Record<string, unknown> }>;
+      };
+    };
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/internal/short-links',
+        '/api/internal/short-links/{code}',
+        '/s/{code}',
+        '/api/internal/integration-clients',
+        '/api/internal/integration-clients/{id}',
+        '/api/sync/v1/contests/{key}',
+        '/api/sync/v1/contests/{key}/participants',
+        '/api/sync/v1/contests/{key}/standings',
+      ]),
+    );
+    expect(
+      body.components.schemas.SiteResponse.properties?.officialMode,
+    ).toBeDefined();
+  });
+
   it('lists the problem endpoints', async () => {
     const response = await api
       .http()

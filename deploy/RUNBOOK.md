@@ -87,7 +87,15 @@ Manual items:
 - Log in, open a problem, submit a solution; a judge grades it; the verdict appears live.
 - A statement PDF renders (worker + Chromium + pandoc); an uploaded image shows from `/media/`.
 - `ss -ltn | grep 9999` is open locally but unreachable from outside the judge network; `systemctl status qhhoj-*` all active.
+- `curl -sI https://HOST/s/nonexistent` is 404 (not the SPA shell: proves the `/s/` location); an integration key from outside its `allowedCidrs` is refused on `/api/sync/v1/...`.
 - Registration works only after `mail.smtpUrl` is set (admin settings, `judge.change_settings`).
+
+## Integration clients (sync API)
+
+- `TRUST_PROXY` must be set behind nginx: each client's CIDR check and the failed-key lockout (20 bad `qhi_` keys in 10 minutes from one address answer 429 for every key from it) use `request.ip`; without it all clients share the proxy's address (the api logs a boot warning when active clients exist).
+- After `grant-permissions`, check at rehearsal that a migrated admin group holds `judge.manage_integration` (its anchor is `judge.change_miscconfig`); superusers bypass it.
+- A client's acting user must not be a superuser and must hold `judge.add_contest` and `judge.create_private_contest`; it may hold more than the key's creator, so use a dedicated account. Keys may carry `expiresAt`; each client gets 60 requests per minute.
+- nginx needs the `/s/` and `/api/sync/` locations from `deploy/nginx/qhhoj.conf`.
 
 ## Backup
 
