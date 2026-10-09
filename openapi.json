@@ -342,21 +342,7 @@
           },
           "results": {
             "items": {
-              "enum": [
-                "AC",
-                "WA",
-                "TLE",
-                "MLE",
-                "OLE",
-                "IR",
-                "RTE",
-                "CE",
-                "IE",
-                "SC",
-                "AB",
-                "RJ"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/SubmissionResult"
             },
             "type": "array"
           }
@@ -2464,12 +2450,9 @@
         "properties": {
           "force": {
             "default": false,
-            "type": "object"
+            "type": "boolean"
           }
         },
-        "required": [
-          "force"
-        ],
         "type": "object"
       },
       "DisqualifyDto": {
@@ -6600,35 +6583,19 @@
             "type": "string"
           },
           "result": {
-            "enum": [
-              "IE",
-              "CE",
-              "AB",
-              "AC",
-              "WA",
-              "TLE",
-              "MLE",
-              "OLE",
-              "IR",
-              "RTE",
-              "SC",
-              "RJ"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionResult"
+              }
             ],
-            "nullable": true,
-            "type": "string"
+            "nullable": true
           },
           "status": {
-            "enum": [
-              "QU",
-              "P",
-              "G",
-              "D",
-              "IE",
-              "CE",
-              "AB",
-              "PD"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              }
+            ]
           },
           "time": {
             "description": "Seconds (largest case).",
@@ -6654,13 +6621,13 @@
           }
         },
         "required": [
+          "status",
+          "result",
           "id",
           "user",
           "problem",
           "language",
           "date",
-          "status",
-          "result",
           "points",
           "casePoints",
           "caseTotal",
@@ -6677,6 +6644,64 @@
           "cases",
           "batches",
           "totalCases"
+        ],
+        "type": "object"
+      },
+      "SubmissionFeedEventResponse": {
+        "properties": {
+          "problemId": {
+            "type": "string"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              }
+            ]
+          },
+          "submissionId": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "queued",
+              "processing",
+              "grading-begin",
+              "done"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "submissionId",
+          "userId",
+          "problemId"
+        ],
+        "type": "object"
+      },
+      "SubmissionFeedFrame": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SubmissionFeedEventResponse"
+          },
+          "event": {
+            "enum": [
+              "queued",
+              "processing",
+              "grading-begin",
+              "done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
         ],
         "type": "object"
       },
@@ -6742,35 +6767,19 @@
             "type": "object"
           },
           "result": {
-            "enum": [
-              "IE",
-              "CE",
-              "AB",
-              "AC",
-              "WA",
-              "TLE",
-              "MLE",
-              "OLE",
-              "IR",
-              "RTE",
-              "SC",
-              "RJ"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionResult"
+              }
             ],
-            "nullable": true,
-            "type": "string"
+            "nullable": true
           },
           "status": {
-            "enum": [
-              "QU",
-              "P",
-              "G",
-              "D",
-              "IE",
-              "CE",
-              "AB",
-              "PD"
-            ],
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              }
+            ]
           },
           "time": {
             "description": "Seconds (largest case).",
@@ -6788,13 +6797,13 @@
           }
         },
         "required": [
+          "status",
+          "result",
           "id",
           "user",
           "problem",
           "language",
           "date",
-          "status",
-          "result",
           "points",
           "casePoints",
           "caseTotal",
@@ -6818,8 +6827,73 @@
         ],
         "type": "object"
       },
+      "SubmissionProgressEventResponse": {
+        "properties": {
+          "currentTestcase": {
+            "description": "The next case being judged on `test-case`, else 0.",
+            "type": "number"
+          },
+          "problemId": {
+            "type": "string"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              }
+            ]
+          },
+          "submissionId": {
+            "type": "string"
+          },
+          "type": {
+            "description": "The SSE event name repeats it.",
+            "enum": [
+              "queued",
+              "processing",
+              "grading-begin",
+              "test-case",
+              "done"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "submissionId",
+          "userId",
+          "problemId",
+          "currentTestcase"
+        ],
+        "type": "object"
+      },
+      "SubmissionProgressFrame": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SubmissionProgressEventResponse"
+          },
+          "event": {
+            "enum": [
+              "queued",
+              "processing",
+              "grading-begin",
+              "test-case",
+              "done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
       "SubmissionResult": {
-        "description": "Legacy `submission_results`; empty or absent: every result.",
         "enum": [
           "AC",
           "WA",
@@ -6851,6 +6925,71 @@
         ],
         "type": "object"
       },
+      "SubmissionStateEventResponse": {
+        "properties": {
+          "casePoints": {
+            "type": "number"
+          },
+          "caseTotal": {
+            "type": "number"
+          },
+          "currentTestcase": {
+            "description": "The progress `test-case` events carry; null when the viewer may not see case results.",
+            "nullable": true,
+            "type": "number"
+          },
+          "points": {
+            "nullable": true,
+            "type": "number"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionResult"
+              }
+            ],
+            "nullable": true
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              }
+            ]
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "result",
+          "submissionId",
+          "points",
+          "casePoints",
+          "caseTotal",
+          "currentTestcase"
+        ],
+        "type": "object"
+      },
+      "SubmissionStateFrame": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SubmissionStateEventResponse"
+          },
+          "event": {
+            "enum": [
+              "state"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
       "SubmissionStatsResponse": {
         "properties": {
           "acceptedToday": {
@@ -6877,6 +7016,19 @@
           "judgesTotal"
         ],
         "type": "object"
+      },
+      "SubmissionStatus": {
+        "enum": [
+          "QU",
+          "P",
+          "G",
+          "D",
+          "IE",
+          "CE",
+          "AB",
+          "PD"
+        ],
+        "type": "string"
       },
       "SubmissionViewerResponse": {
         "properties": {
@@ -14605,31 +14757,45 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 50,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "result",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SubmissionResult"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              },
+              "type": "array"
             }
           },
           {
@@ -14663,52 +14829,6 @@
                 "type": "string"
               },
               "maxItems": 50,
-              "type": "array"
-            }
-          },
-          {
-            "in": "query",
-            "name": "result",
-            "required": false,
-            "schema": {
-              "items": {
-                "enum": [
-                  "AC",
-                  "WA",
-                  "TLE",
-                  "MLE",
-                  "OLE",
-                  "IR",
-                  "RTE",
-                  "CE",
-                  "IE",
-                  "SC",
-                  "AB",
-                  "RJ"
-                ],
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "items": {
-                "enum": [
-                  "QU",
-                  "P",
-                  "G",
-                  "D",
-                  "IE",
-                  "CE",
-                  "AB",
-                  "PD"
-                ],
-                "type": "string"
-              },
               "type": "array"
             }
           }
@@ -14907,7 +15027,21 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SubmissionFeedFrame"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResyncFrame"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A stream of frames; `event` names each one."
           },
           "default": {
             "content": {
@@ -14950,7 +15084,24 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SubmissionProgressFrame"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SubmissionStateFrame"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResyncFrame"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A stream of frames; `event` names each one."
           },
           "default": {
             "content": {
@@ -19345,6 +19496,28 @@
           },
           {
             "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "problemId",
             "required": false,
             "schema": {
@@ -19370,36 +19543,6 @@
               "maximum": 1,
               "minimum": 0,
               "type": "number"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": true,
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
-              "default": 50,
-              "maximum": 100,
-              "minimum": 1
             }
           }
         ],
@@ -19511,31 +19654,45 @@
           {
             "in": "query",
             "name": "page",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 1,
               "maximum": 10000,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
             "in": "query",
             "name": "pageSize",
-            "required": true,
+            "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 50,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "result",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SubmissionResult"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              },
+              "type": "array"
             }
           },
           {
@@ -19569,52 +19726,6 @@
                 "type": "string"
               },
               "maxItems": 50,
-              "type": "array"
-            }
-          },
-          {
-            "in": "query",
-            "name": "result",
-            "required": false,
-            "schema": {
-              "items": {
-                "enum": [
-                  "AC",
-                  "WA",
-                  "TLE",
-                  "MLE",
-                  "OLE",
-                  "IR",
-                  "RTE",
-                  "CE",
-                  "IE",
-                  "SC",
-                  "AB",
-                  "RJ"
-                ],
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "items": {
-                "enum": [
-                  "QU",
-                  "P",
-                  "G",
-                  "D",
-                  "IE",
-                  "CE",
-                  "AB",
-                  "PD"
-                ],
-                "type": "string"
-              },
               "type": "array"
             }
           }

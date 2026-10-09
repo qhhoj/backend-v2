@@ -19,6 +19,10 @@ import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { SubmissionsRepository } from '../core/submissions.repository';
 import type { SubmissionState } from '../core/submissions.repository';
 import { SubmissionsService } from '../core/submissions.service';
+import type {
+  SubmissionFeedEventResponse,
+  SubmissionStateEventResponse,
+} from './dto/submission-stream-frames.response';
 
 /** How long the feed trusts a problem's publicity; a `publicityChanged` in this process drops it at once. */
 const FEED_PROBLEM_TTL_MS = 30_000;
@@ -32,7 +36,10 @@ interface SubmissionStream extends OpenStream {
 }
 
 /** What a stream starts with, so a page that reconnects never misses the end. */
-const stateOf = (submission: SubmissionState, caseEvents: boolean) => ({
+export const stateOf = (
+  submission: SubmissionState,
+  caseEvents: boolean,
+): SubmissionStateEventResponse => ({
   submissionId: uuidStr(submission._id),
   status: submission.status,
   result: submission.result,
@@ -41,6 +48,21 @@ const stateOf = (submission: SubmissionState, caseEvents: boolean) => ({
   caseTotal: submission.caseTotal,
   // The progress `test-case` events carry, withheld like them.
   currentTestcase: caseEvents ? submission.currentTestcase : null,
+});
+
+/** What the public feed shows of an event: ids and status. */
+export const feedEventOf = ({
+  submissionId,
+  userId,
+  problemId,
+  type,
+  status,
+}: SubmissionEvent): SubmissionFeedEventResponse => ({
+  submissionId,
+  userId,
+  problemId,
+  type,
+  status,
 });
 
 /** The `submission-events` channel: one stream per watched submission and the public feed. */
@@ -193,14 +215,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
       );
       return;
     }
-    const { submissionId, userId, problemId, type, status } = event;
-    const frame = sseFrame(type, {
-      submissionId,
-      userId,
-      problemId,
-      type,
-      status,
-    });
+    const frame = sseFrame(event.type, feedEventOf(event));
     for (const entry of this.feed) entry.stream.send(frame);
   }
 

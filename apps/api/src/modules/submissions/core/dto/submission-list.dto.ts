@@ -1,5 +1,6 @@
 import { SUBMISSION_RESULTS, SUBMISSION_STATUSES } from '@libs/database';
 import type { SubmissionResult, SubmissionStatus } from '@libs/database';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -15,8 +16,20 @@ import {
 import { toArray } from '../../../problems/core/dto/transforms';
 
 export class SubmissionListQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) page = 1;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 50;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize: number = 50;
   /** Username. */
   @IsOptional() @IsString() @MaxLength(30) user?: string;
   /** Problem code. */
@@ -27,11 +40,21 @@ export class SubmissionListQueryDto {
   @ArrayMaxSize(50)
   @IsUUID('7', { each: true })
   language?: string[];
+  @ApiPropertyOptional({
+    enum: SUBMISSION_RESULTS,
+    enumName: 'SubmissionResult',
+    isArray: true,
+  })
   @IsOptional()
   @Transform(toArray)
   @ArrayMaxSize(SUBMISSION_RESULTS.length)
   @IsIn(SUBMISSION_RESULTS, { each: true })
   result?: SubmissionResult[];
+  @ApiPropertyOptional({
+    enum: SUBMISSION_STATUSES,
+    enumName: 'SubmissionStatus',
+    isArray: true,
+  })
   @IsOptional()
   @Transform(toArray)
   @ArrayMaxSize(SUBMISSION_STATUSES.length)

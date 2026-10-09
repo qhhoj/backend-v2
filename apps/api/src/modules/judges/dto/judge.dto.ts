@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { JUDGE_NAME_PATTERN } from '@libs/database';
 import {
   IsBoolean,
@@ -32,7 +33,7 @@ export class UpdateJudgeDto {
 }
 
 export class DisconnectJudgeDto {
-  @IsOptional() @IsBoolean() force = false;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() force: boolean = false;
 }
 
 /** Unvalidated shape: a malformed name is a 404, like an unknown one. */

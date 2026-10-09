@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsInt,
@@ -24,16 +25,18 @@ export class SimilarityPairListDto {
   @Min(0)
   @Max(1)
   minSimilarity?: number;
+  @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(MAX_PAGE)
-  page = 1;
+  page: number = 1;
+  @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(MAX_PAGE_SIZE)
-  pageSize = DEFAULT_PAGE_SIZE;
+  pageSize: number = DEFAULT_PAGE_SIZE;
 }

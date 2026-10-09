@@ -1,5 +1,10 @@
+import { ApiProperty } from '@nestjs/swagger';
 import type { UserDocument } from '@libs/auth';
-import { uuidStr } from '@libs/database';
+import {
+  SUBMISSION_RESULTS,
+  SUBMISSION_STATUSES,
+  uuidStr,
+} from '@libs/database';
 import type {
   Language,
   Problem,
@@ -33,7 +38,13 @@ export class SubmissionListItemResponse {
   problem!: SubmissionProblemResponse | null;
   language!: SubmissionLanguageResponse | null;
   date!: Date;
+  @ApiProperty({ enum: SUBMISSION_STATUSES, enumName: 'SubmissionStatus' })
   status!: SubmissionStatus;
+  @ApiProperty({
+    enum: SUBMISSION_RESULTS,
+    enumName: 'SubmissionResult',
+    nullable: true,
+  })
   result!: SubmissionResult | null;
   points!: number | null;
   casePoints!: number;

@@ -1,5 +1,6 @@
 import { PROBLEM_CODE_PATTERN, SUBMISSION_RESULTS } from '@libs/database';
 import type { SubmissionResult } from '@libs/database';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
@@ -22,6 +23,11 @@ export class BulkRejudgeDto {
   @ArrayMaxSize(50)
   @IsUUID('7', { each: true })
   languages?: string[];
+  @ApiPropertyOptional({
+    enum: SUBMISSION_RESULTS,
+    enumName: 'SubmissionResult',
+    isArray: true,
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(SUBMISSION_RESULTS.length)
