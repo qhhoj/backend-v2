@@ -38,6 +38,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the post-migration file check verifies the files of every problem row, deleted or not',
   ],
+  'apps/worker/src/jobs/contest-export/contest-export.repository.ts': [
+    'S',
+    'the export names every contest problem, including ones deleted since the contest',
+  ],
   'apps/worker/src/jobs/contest-data/contest-data.repository.ts': [
     'F',
     'the contest data zip lists the contest problems that exist',
