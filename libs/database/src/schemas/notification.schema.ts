@@ -65,6 +65,8 @@ export const NotificationSchema = SchemaFactory.createForClass(Notification);
 NotificationSchema.index({ user: 1, lastActivityAt: -1, _id: -1 });
 // Unread and read lists, the unread count and the high-priority banner.
 NotificationSchema.index({ user: 1, unread: 1, lastActivityAt: -1, _id: -1 });
+// The nightly trim's scan for users active since a time; `user` rides along so the scan is covered.
+NotificationSchema.index({ lastActivityAt: -1, user: 1 });
 // One unread row per user and group: the merge target.
 NotificationSchema.index(
   { user: 1, groupKey: 1 },
