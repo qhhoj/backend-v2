@@ -10,8 +10,10 @@ export class CsvRankingError extends Error {}
 
 const BYTE_ORDER_MARK = 0xfeff;
 const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
+/** Any C0 control or DEL; a CSV field holding one is refused by both the ranking and the ghost import. */
 // eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
+export const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
 /** Fields of every record; quoted fields may hold commas and quotes (""); a newline is lexed but later refused as a control character. */
 class CsvRecordReader {
@@ -105,6 +107,12 @@ class CsvRecordReader {
   }
 }
 
+/** The records of a CSV text: quotes honoured, the same row, column and field caps as the official ranking. The byte cap is the caller's (the route body limit). */
+export const readCsvRecords = (text: string): string[][] =>
+  CsvRecordReader.readAll(
+    text.charCodeAt(0) === BYTE_ORDER_MARK ? text.slice(1) : text,
+  );
+
 const number = (value: string, what: string): number => {
   const trimmed = value.trim();
   const parsed = DECIMAL.test(trimmed) ? Number(trimmed) : NaN;
@@ -121,11 +129,9 @@ export function parseOfficialRanking(csv: string): {
 } {
   if (Buffer.byteLength(csv) > OFFICIAL_RANKING_LIMITS.bytes)
     throw new CsvRankingError('The CSV is larger than 1 MiB');
-  const [header, ...lines] = CsvRecordReader.readAll(
-    csv.charCodeAt(0) === BYTE_ORDER_MARK ? csv.slice(1) : csv,
-  );
+  const [header, ...lines] = readCsvRecords(csv);
   if (!header) throw new CsvRankingError('The CSV is empty');
-  if (header.some((cell) => CONTROL.test(cell)))
+  if (header.some((cell) => CONTROL_CHARACTER.test(cell)))
     throw new CsvRankingError('The header holds a control character');
   const column = (name: string) => {
     const position = header.indexOf(name);
@@ -144,7 +150,7 @@ export function parseOfficialRanking(csv: string): {
       throw new CsvRankingError(
         `Row ${line + 2} has ${fields.length} fields, the header ${header.length}`,
       );
-    if (fields.some((field) => CONTROL.test(field)))
+    if (fields.some((field) => CONTROL_CHARACTER.test(field)))
       throw new CsvRankingError(`Row ${line + 2} holds a control character`);
     return {
       username: fields[username],

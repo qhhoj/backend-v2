@@ -9,6 +9,7 @@ export * from './standings';
 export * from './queues';
 export * from './replay-queue';
 export * from './ghost-types';
+export * from './ghost-gap';
 export * from './formats/format';
 export * from './formats/default';
 export * from './formats/ioi';
