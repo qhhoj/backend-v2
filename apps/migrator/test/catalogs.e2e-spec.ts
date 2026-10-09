@@ -9,6 +9,7 @@ const JOBS = [
   'tag-groups',
   'tags',
   'tag-problems',
+  'languages',
 ];
 
 type Doc = Record<string, unknown>;
@@ -73,6 +74,20 @@ describe('catalog jobs', () => {
       (await docOf('tagProblems', 'judge_tagproblem', 3002))!.judge,
     ).toBeNull();
     expect(reports['tag-problems']).toContain('dangling judge_profile:3999');
+  });
+
+  it('copies languages, nullable short names included', async () => {
+    expect(await docOf('languages', 'judge_language', 12)).toMatchObject({
+      key: 'SCRATCH',
+      extension: 'sb3',
+      fileOnly: true,
+      fileSizeLimit: 1,
+    });
+    expect(await docOf('languages', 'judge_language', 5)).toMatchObject({
+      key: 'C',
+      shortName: null,
+      commonName: 'C',
+    });
   });
 
   it('verifies clean', async () => {
