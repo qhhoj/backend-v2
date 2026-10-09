@@ -1,3 +1,4 @@
+import { ProblemDataFilesService } from '@libs/problems';
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -424,6 +425,30 @@ describe('problem data editor', () => {
     ).toBe(400);
     expect((await put('hidden', plain, body)).status).toBe(404);
     expect((await put('mirror', editor, body)).status).toBe(403);
+  });
+
+  it('holds the judge writing marker while it stamps and drops it after the response, also after a lost CAS', async () => {
+    const files = api.app.get(ProblemDataFilesService);
+    const marker = join(api.problemDataRoot, 'sum', '.data-version.writing');
+    const original = files.writeDataVersion.bind(files);
+    const seen: boolean[] = [];
+    const spy = jest
+      .spyOn(files, 'writeDataVersion')
+      .mockImplementation(async (code, version) => {
+        seen.push(existsSync(marker));
+        await original(code, version);
+      });
+    await put('sum', editor, config([plainCase(1)])).expect(200);
+    spy.mockRestore();
+    expect(seen).toEqual([true]);
+    expect(existsSync(marker)).toBe(false);
+    const repository = api.app.get(ProblemsRepository);
+    const update = jest
+      .spyOn(repository, 'updateData')
+      .mockResolvedValue(false);
+    await put('sum', editor, config([plainCase(1)])).expect(409);
+    update.mockRestore();
+    expect(existsSync(marker)).toBe(false);
   });
 
   it('lets exactly one of two concurrent writers win and keeps init.yml in step with Mongo', async () => {

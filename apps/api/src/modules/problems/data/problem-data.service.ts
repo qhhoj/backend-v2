@@ -44,16 +44,22 @@ export class ProblemDataService {
       );
     this.assertArgsSize(dto);
     const { data: previous, version } = await this.store.loadData(problem);
-    const { stored, archiveFiles } = await this.store.compileAndStore(
+    const { stored, archiveFiles } = await this.store.withDataWrite(
       problem,
-      {
-        ...previous,
-        ...dto,
-        cases: dto.cases.map((row) => ({ ...row })),
+      async () => {
+        const written = await this.store.compileAndStore(
+          problem,
+          {
+            ...previous,
+            ...dto,
+            cases: dto.cases.map((row) => ({ ...row })),
+          },
+          version,
+        );
+        await this.store.stampVersion(problem, version);
+        return written;
       },
-      version,
     );
-    await this.store.stampVersion(problem, version);
     await this.store.recordChange(auth, problem, {
       before: previous,
       after: stored,
@@ -78,14 +84,20 @@ export class ProblemDataService {
   ): Promise<ProblemDataResponse> {
     const problem = await this.store.writableProblem(auth.principal, code);
     const { data: previous, version } = await this.store.loadData(problem);
-    const { stored, archiveFiles } = await this.store.compileAndStore(
+    const { stored, archiveFiles } = await this.store.withDataWrite(
       problem,
-      { ...previous, [kind]: null },
-      version,
+      async () => {
+        const written = await this.store.compileAndStore(
+          problem,
+          { ...previous, [kind]: null },
+          version,
+        );
+        const name = previous[kind];
+        if (name) await this.dataFiles.removeFile(problem.code, name);
+        await this.store.stampVersion(problem, version);
+        return written;
+      },
     );
-    const name = previous[kind];
-    if (name) await this.dataFiles.removeFile(problem.code, name);
-    await this.store.stampVersion(problem, version);
     await this.store.recordChange(auth, problem, {
       before: previous,
       after: stored,

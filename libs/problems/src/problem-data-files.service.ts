@@ -24,6 +24,8 @@ import { PROBLEM_CODE_PATTERN } from '@libs/database';
 export const INIT_FILE = 'init.yml';
 /** The judge's cache key for `<code>/`: the problem's `dataVersion`, written last. Dot-prefixed, so no client file (`safeName`) can take the name. */
 export const DATA_VERSION_FILE = '.data-version';
+/** judge-v2 waits while this exists: up before the first file change of a data write, down after the stamp. */
+export const DATA_WRITING_MARKER = '.data-version.writing';
 const IMPORTS_DIRECTORY = '.imports';
 /** Dot-prefixed: `safeName` refuses leading dots, so no client file can ever be named like a staged upload. */
 const UPLOAD_PREFIX = '.upload-';
@@ -35,6 +37,10 @@ const STALE_IMPORT_MS = 2 * 24 * 60 * 60 * 1000;
 @Injectable()
 export class ProblemDataFilesService {
   private readonly root: string;
+  /** Overlapping data writes of one problem share its marker: the last one out removes it. */
+  private readonly writersOf = new Map<string, number>();
+  /** Per-problem tail of the stamp writes, so a read-compare-rename never interleaves with another in this process. */
+  private readonly stampTail = new Map<string, Promise<unknown>>();
 
   constructor(@Inject(ENV) env: Env) {
     this.root = resolve(env.problemDataRoot);
@@ -84,8 +90,42 @@ export class ProblemDataFilesService {
     return this.removeFile(code, INIT_FILE);
   }
 
-  /** Written atomically after every other file of a data change (init.yml, committed uploads, removals), so a judge that reads version N sees N's files; a judge that sees an older stamp waits for the newer one. */
-  async writeDataVersion(code: string, version: number): Promise<void> {
+  /** Runs one data change under the marker; removed on success and on every error path. */
+  async withDataWrite<T>(code: string, work: () => Promise<T>): Promise<T> {
+    const marker = this.markerPath(code);
+    const writers = this.writersOf.get(code) ?? 0;
+    this.writersOf.set(code, writers + 1);
+    try {
+      if (writers === 0)
+        await writeFileAtomically(marker, Buffer.alloc(0), this.root);
+      return await work();
+    } finally {
+      const left = (this.writersOf.get(code) ?? 1) - 1;
+      if (left > 0) this.writersOf.set(code, left);
+      else {
+        this.writersOf.delete(code);
+        await rm(marker, { force: true });
+      }
+    }
+  }
+
+  /** Written atomically after every other file of a data change (init.yml, committed uploads, removals), so a judge that reads version N sees N's files; a judge that sees an older stamp waits for the newer one. Never lowers the stamp: two overlapping edits can finish out of order, and the newer version must win. */
+  writeDataVersion(code: string, version: number): Promise<void> {
+    const previous = this.stampTail.get(code) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(() => this.raiseDataVersion(code, version));
+    this.stampTail.set(code, run);
+    const forget = () => {
+      if (this.stampTail.get(code) === run) this.stampTail.delete(code);
+    };
+    run.then(forget, forget);
+    return run;
+  }
+
+  private async raiseDataVersion(code: string, version: number): Promise<void> {
+    const current = await this.readDataVersion(code);
+    if (current !== null && current >= version) return;
     await writeFileAtomically(
       this.dataVersionPath(code),
       Buffer.from(`${version}\n`, 'utf8'),
@@ -93,16 +133,21 @@ export class ProblemDataFilesService {
     );
   }
 
-  /** The stamped version, or null when the directory has none (legacy rsync data). */
+  /** The stamped version, or null when the directory has none (legacy rsync data) or the stamp is not a number. */
   async readDataVersion(code: string): Promise<number | null> {
     const path = this.dataVersionPath(code);
     await assertRealPathInside(this.root, path);
     try {
-      return Number((await readFile(path, 'utf8')).trim());
+      const version = Number((await readFile(path, 'utf8')).trim());
+      return Number.isSafeInteger(version) ? version : null;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
+  }
+
+  private markerPath(code: string): string {
+    return this.resolveInside(`${this.codeOf(code)}/${DATA_WRITING_MARKER}`);
   }
 
   private dataVersionPath(code: string): string {
@@ -161,12 +206,14 @@ export class ProblemDataFilesService {
     return stagedPath;
   }
 
-  /** Staged files left by a crashed request: dropped once an hour old, so abandoned uploads never pile up. */
+  /** Staged files left by a crashed request, and a writing marker no live writer holds (its process was killed): dropped once an hour old, so abandoned uploads never pile up and no problem waits on a dead marker. */
   private async sweepStaleUploads(code: string): Promise<void> {
     const directory = this.directoryOf(code);
     const oldest = Date.now() - STALE_UPLOAD_MS;
     for (const entry of await readdir(directory)) {
-      if (!entry.startsWith(UPLOAD_PREFIX)) continue;
+      const staleMarker =
+        entry === DATA_WRITING_MARKER && !this.writersOf.has(code);
+      if (!entry.startsWith(UPLOAD_PREFIX) && !staleMarker) continue;
       const path = this.resolveInside(`${code}/${entry}`);
       const stats = await lstat(path).catch(() => null);
       if (stats?.isFile() && stats.mtimeMs < oldest)

@@ -287,7 +287,9 @@ describe('problem data files', () => {
       expect((await storedData()).archiveFiles).toEqual(before);
       expect(initArchive()).toBe('race.zip');
       expect(
-        readdirSync(directory).filter((name) => name.startsWith('.upload-')),
+        readdirSync(directory).filter(
+          (name) => name.startsWith('.') && name !== '.data-version',
+        ),
       ).toEqual([]);
     });
     it('lets exactly one of two concurrent same-name archive uploads win, intact on disk', async () => {
@@ -337,7 +339,9 @@ describe('problem data files', () => {
         readdirSync(directory).filter((name) => name.endsWith('.zip')),
       ).toEqual(['tests.zip']);
       expect(
-        readdirSync(directory).filter((name) => name.startsWith('.upload-')),
+        readdirSync(directory).filter(
+          (name) => name.startsWith('.') && name !== '.data-version',
+        ),
       ).toEqual([]);
     });
     it('keeps the old source when a same-name re-upload loses the CAS', async () => {
@@ -376,7 +380,9 @@ describe('problem data files', () => {
       );
       expect(existsSync(join(directory, 'first.cpp'))).toBe(false);
       expect(
-        readdirSync(directory).filter((name) => name.startsWith('.upload-')),
+        readdirSync(directory).filter(
+          (name) => name.startsWith('.') && name !== '.data-version',
+        ),
       ).toEqual([]);
     });
   });

@@ -162,15 +162,29 @@ export class PolygonImportService {
     }
   }
 
-  /** Everything after the commit: a failure here leaves the problem imported, so it is logged with its cause and reported to the requester as an import that needs attention, never as "Import failed". */
+  /** Everything after the commit: a failure here leaves the problem imported, so it is logged with its cause and reported to the requester as an import that needs attention, never as "Import failed". The data steps run under the judge's writing marker, ending with the stamp. */
   private async finish(
     code: string,
     applied: AppliedImport,
     staged: StagedFile[],
     yaml: string | null,
   ): Promise<void> {
+    await this.dataFiles.withDataWrite(code, () =>
+      this.runSteps(code, this.dataSteps(code, applied, staged, yaml)),
+    );
+    await this.runSteps(code, [
+      ['dropping the cached PDFs', () => this.dropPdfs(code)],
+    ]);
+  }
+
+  private dataSteps(
+    code: string,
+    applied: AppliedImport,
+    staged: StagedFile[],
+    yaml: string | null,
+  ): Array<[string, () => Promise<unknown>]> {
     const kept = new Set(staged.map(({ name }) => name));
-    const steps: Array<[string, () => Promise<unknown>]> = [
+    return [
       [
         'moving the data files into place',
         async () => {
@@ -196,8 +210,13 @@ export class PolygonImportService {
         'stamping the data version',
         () => this.dataFiles.writeDataVersion(code, applied.dataVersion),
       ],
-      ['dropping the cached PDFs', () => this.dropPdfs(code)],
     ];
+  }
+
+  private async runSteps(
+    code: string,
+    steps: Array<[string, () => Promise<unknown>]>,
+  ): Promise<void> {
     for (const [step, work] of steps)
       try {
         await work();

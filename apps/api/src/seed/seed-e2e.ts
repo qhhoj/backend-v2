@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { hashPassword } from '@libs/auth';
 import {
@@ -16,7 +17,7 @@ import {
   User,
   UserSchema,
 } from '@libs/database';
-import { compileInitYaml } from '@libs/problems';
+import { compileInitYaml, DATA_WRITING_MARKER } from '@libs/problems';
 import { SETTINGS, sealSetting } from '@libs/settings';
 import type { Connection } from 'mongoose';
 import { MAX_FILES, seedContests } from './seed-content';
@@ -231,19 +232,25 @@ async function seedProblem(
   return problem._id;
 }
 
-/** The stamp goes last, like the api's data writes: a judge that reads it sees the files. */
+/** Under the judge's writing marker, the stamp last: a judge that reads it sees the files. */
 async function writeProblemFiles(
   directory: string,
   { files, archive }: ProblemSpec,
   { yaml, dataVersion }: { yaml: string | null; dataVersion: number },
 ): Promise<void> {
-  await writeIfChanged(join(directory, 'init.yml'), yaml ?? '');
-  if (archive)
-    await writeIfChanged(join(directory, archive), await zipBytes(files));
-  else
-    for (const [name, content] of Object.entries(files))
-      await writeIfChanged(join(directory, name), content);
-  await writeIfChanged(join(directory, '.data-version'), `${dataVersion}\n`);
+  const marker = join(directory, DATA_WRITING_MARKER);
+  await writeIfChanged(marker, '');
+  try {
+    await writeIfChanged(join(directory, 'init.yml'), yaml ?? '');
+    if (archive)
+      await writeIfChanged(join(directory, archive), await zipBytes(files));
+    else
+      for (const [name, content] of Object.entries(files))
+        await writeIfChanged(join(directory, name), content);
+    await writeIfChanged(join(directory, '.data-version'), `${dataVersion}\n`);
+  } finally {
+    await rm(marker, { force: true });
+  }
 }
 
 export async function seedE2e(

@@ -47,6 +47,67 @@ describe('ProblemDataFilesService', () => {
       'init.yml',
     ]);
   });
+  it('never lowers the stamp, even when overlapping writes finish out of order', async () => {
+    await files.writeDataVersion('monotonic', 5);
+    await files.writeDataVersion('monotonic', 4);
+    expect(await files.readDataVersion('monotonic')).toBe(5);
+    await Promise.all(
+      [7, 9, 6, 8].map((version) => files.writeDataVersion('racing', version)),
+    );
+    expect(await files.readDataVersion('racing')).toBe(9);
+  });
+  it('reads a corrupt stamp as none', async () => {
+    mkdirSync(join(root, 'corrupt'), { recursive: true });
+    writeFileSync(join(root, 'corrupt', '.data-version'), 'oops\n');
+    expect(await files.readDataVersion('corrupt')).toBeNull();
+  });
+  describe('writing marker', () => {
+    const markerOf = (code: string) =>
+      join(root, code, '.data-version.writing');
+    it('is up while the change runs and gone after it, with its result returned', async () => {
+      const result = await files.withDataWrite('marked', () => {
+        expect(existsSync(markerOf('marked'))).toBe(true);
+        return Promise.resolve(42);
+      });
+      expect(result).toBe(42);
+      expect(existsSync(markerOf('marked'))).toBe(false);
+    });
+    it('is gone after the change fails', async () => {
+      await expect(
+        files.withDataWrite('marked', () => Promise.reject(new Error('boom'))),
+      ).rejects.toThrow('boom');
+      expect(existsSync(markerOf('marked'))).toBe(false);
+    });
+    it('stays up until the last of two overlapping changes ends', async () => {
+      let release!: () => void;
+      let running!: () => void;
+      const started = new Promise<void>((resolve) => (running = resolve));
+      const slow = files.withDataWrite(
+        'overlap',
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+            running();
+          }),
+      );
+      await started;
+      await files.withDataWrite('overlap', () => Promise.resolve());
+      expect(existsSync(markerOf('overlap'))).toBe(true);
+      release();
+      await slow;
+      expect(existsSync(markerOf('overlap'))).toBe(false);
+    });
+    it('is swept when stale and left by no live writer, kept when fresh', async () => {
+      mkdirSync(join(root, 'dead'), { recursive: true });
+      writeFileSync(markerOf('dead'), '');
+      await files.stageUpload('dead');
+      expect(existsSync(markerOf('dead'))).toBe(true);
+      const longAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      utimesSync(markerOf('dead'), longAgo, longAgo);
+      await files.stageUpload('dead');
+      expect(existsSync(markerOf('dead'))).toBe(false);
+    });
+  });
   it('moves the stamp with a renamed directory', async () => {
     await files.writeDataVersion('before_rename', 7);
     await files.rename('before_rename', 'after_rename');

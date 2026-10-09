@@ -73,7 +73,15 @@ export class ProblemDataStore {
     return problem;
   }
 
-  /** Last step of every data change, after init.yml and every file move or removal: stamps `<code>/.data-version` with the version `compileAndStore` wrote (`expected + 1`), the judges' cache key. */
+  /** Runs a data change under the judge's writing marker (see `ProblemDataFilesService.withDataWrite`). */
+  withDataWrite<T>(
+    problem: ProblemDocument,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.dataFiles.withDataWrite(problem.code, work);
+  }
+
+  /** Last step of every data change, after init.yml and every file move or removal: stamps `<code>/.data-version` with the version `compileAndStore` wrote (`expected + 1`), the judges' cache key. If a step fails after the Mongo write the stamp stays old, so judges wait and the problem fails closed until the next save. */
   stampVersion(problem: ProblemDocument, expected: number): Promise<void> {
     return this.dataFiles.writeDataVersion(problem.code, expected + 1);
   }

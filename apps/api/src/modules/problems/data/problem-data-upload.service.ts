@@ -69,15 +69,21 @@ export class ProblemDataUploadService {
       await this.assertZip(staged);
       const { data: previous, version } = await this.store.loadData(problem);
       this.assertNameFree(previous, 'archive', name);
-      const { stored, archiveFiles } = await this.store.compileAndStore(
+      const { stored, archiveFiles } = await this.store.withDataWrite(
         problem,
-        { ...previous, archive: name },
-        version,
-        staged,
+        async () => {
+          const written = await this.store.compileAndStore(
+            problem,
+            { ...previous, archive: name },
+            version,
+            staged,
+          );
+          await this.dataFiles.commitUpload(problem.code, staged, name);
+          await this.removeReplaced(problem.code, previous.archive, name);
+          await this.store.stampVersion(problem, version);
+          return written;
+        },
       );
-      await this.dataFiles.commitUpload(problem.code, staged, name);
-      await this.removeReplaced(problem.code, previous.archive, name);
-      await this.store.stampVersion(problem, version);
       await this.store.recordChange(auth, problem, {
         before: previous,
         after: stored,
@@ -113,14 +119,20 @@ export class ProblemDataUploadService {
       await writeFileAtomically(staged, content);
       const { data: previous, version } = await this.store.loadData(problem);
       this.assertNameFree(previous, kind, name);
-      const { stored, archiveFiles } = await this.store.compileAndStore(
+      const { stored, archiveFiles } = await this.store.withDataWrite(
         problem,
-        { ...previous, [kind]: name },
-        version,
+        async () => {
+          const written = await this.store.compileAndStore(
+            problem,
+            { ...previous, [kind]: name },
+            version,
+          );
+          await this.dataFiles.commitUpload(problem.code, staged, name);
+          await this.removeReplaced(problem.code, previous[kind], name);
+          await this.store.stampVersion(problem, version);
+          return written;
+        },
       );
-      await this.dataFiles.commitUpload(problem.code, staged, name);
-      await this.removeReplaced(problem.code, previous[kind], name);
-      await this.store.stampVersion(problem, version);
       await this.store.recordChange(auth, problem, {
         before: previous,
         after: stored,
