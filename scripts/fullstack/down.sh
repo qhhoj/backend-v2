@@ -29,7 +29,7 @@ signal_all KILL
 rm -f "$PIDS"
 
 if [ "${STACK_KEEP_DATA:-0}" != 1 ] && [ -e "$RUN_MARKER" ]; then
-  rm -rf "$RUN"/{mongo,redis,media,problem-data,pdf,contest-data,user-data,control,dist} \
+  rm -rf "$RUN"/{mongo,redis,media,problem-data,pdf,contest-data,user-data,control,dist,judge-v2} \
     "$RUN"/*.log "$RUN/env" "$RUN_MARKER"
   rmdir "$RUN" 2>/dev/null || true
 fi
