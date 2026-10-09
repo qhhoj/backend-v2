@@ -22,6 +22,7 @@ export const CLONE_RESET_FIELDS = [
   'acRate',
   'data',
   'dataVersion',
+  'dataBytes',
   'deletedAt',
   'deletedBy',
   'purgeStartedAt',

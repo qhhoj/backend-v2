@@ -61,6 +61,9 @@ export class OrganizationsMapper implements Mapper<Row> {
       logoOverrideImage: row.logo_override_image ?? '',
       performancePoints: row.performance_points ?? 0,
       memberCount: row.member_count ?? 0,
+      // The legacy site had no quota: null falls back to the `quota.default*` settings.
+      quotaStorageBytes: null,
+      quotaMonthlyCredits: null,
       createdAt: ctx.date(row.creation_date),
       updatedAt: ctx.date(row.creation_date),
     };

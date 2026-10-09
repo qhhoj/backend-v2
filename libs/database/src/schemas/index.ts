@@ -45,6 +45,22 @@ import {
   OrganizationRequest,
   OrganizationRequestSchema,
 } from './organization-request.schema';
+import {
+  OrganizationCreditEntry,
+  OrganizationCreditEntrySchema,
+} from './organization-credit-entry.schema';
+import {
+  OrganizationProblemTag,
+  OrganizationProblemTagSchema,
+} from './organization-problem-tag.schema';
+import {
+  OrganizationProblem,
+  OrganizationProblemSchema,
+} from './organization-problem.schema';
+import {
+  OrganizationUsage,
+  OrganizationUsageSchema,
+} from './organization-usage.schema';
 import { Flatpage, FlatpageSchema } from './flatpage.schema';
 import { GeneralIssue, GeneralIssueSchema } from './general-issue.schema';
 import { MiscConfig, MiscConfigSchema } from './misc-config.schema';
@@ -117,7 +133,11 @@ export * from './license.schema';
 export * from './misc-config.schema';
 export * from './navigation-item.schema';
 export * from './notification.schema';
+export * from './organization-credit-entry.schema';
+export * from './organization-problem-tag.schema';
+export * from './organization-problem.schema';
 export * from './organization-request.schema';
+export * from './organization-usage.schema';
 export * from './organization.schema';
 export * from './problem-data.schema';
 export * from './problem-group.schema';
@@ -176,6 +196,10 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: Judge.name, schema: JudgeSchema },
   { name: Language.name, schema: LanguageSchema },
   { name: License.name, schema: LicenseSchema },
+  { name: OrganizationProblemTag.name, schema: OrganizationProblemTagSchema },
+  { name: OrganizationProblem.name, schema: OrganizationProblemSchema },
+  { name: OrganizationUsage.name, schema: OrganizationUsageSchema },
+  { name: OrganizationCreditEntry.name, schema: OrganizationCreditEntrySchema },
   { name: OrganizationRequest.name, schema: OrganizationRequestSchema },
   { name: Organization.name, schema: OrganizationSchema },
   { name: ProblemGroup.name, schema: ProblemGroupSchema },

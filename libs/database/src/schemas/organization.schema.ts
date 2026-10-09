@@ -30,6 +30,11 @@ export class Organization {
   @Prop({ default: 0 }) performancePoints!: number;
   /** Written only by the `organization-points` job. */
   @Prop({ default: 0, min: 0 }) memberCount!: number;
+  /** Staff-set caps; null falls back to the `quota.default*` settings. */
+  @Prop({ type: Number, default: null, min: 0 }) quotaStorageBytes!:
+    number | null;
+  @Prop({ type: Number, default: null, min: 0 }) quotaMonthlyCredits!:
+    number | null;
   createdAt!: Date;
 }
 

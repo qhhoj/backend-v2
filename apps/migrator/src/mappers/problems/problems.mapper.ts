@@ -119,6 +119,8 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
       userCount: Number(row.user_count ?? 0),
       acRate: Number(row.ac_rate ?? 0),
       dataVersion: 0,
+      // Recomputed from the data directory by the `problem-databytes` backfill job once the files are in place.
+      dataBytes: 0,
       // deletedAt, deletedBy, purgeStartedAt and purgedAt stay absent on purpose: a live problem has no such key
       // (`{ deletedAt: null }` reads "live"), and the legacy site has no deleted problems.
       createdAt: ctx.date(row.date),
