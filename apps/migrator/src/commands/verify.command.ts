@@ -1,5 +1,6 @@
-import { Command, CommandRunner } from 'nest-commander';
+import { Command, CommandRunner, Option } from 'nest-commander';
 import { MigrationService } from '../migration.service';
+import { setSkipLegacySecrets } from '../rehearsal';
 
 @Command({
   name: 'verify',
@@ -11,7 +12,17 @@ export class VerifyCommand extends CommandRunner {
     super();
   }
 
-  async run(jobs: string[]) {
+  async run(jobs: string[], options: { skipLegacySecrets?: boolean } = {}) {
+    setSkipLegacySecrets(options.skipLegacySecrets === true);
     process.exitCode = (await this.migration.verify(jobs)) ? 1 : 0;
+  }
+
+  @Option({
+    flags: '--skip-legacy-secrets',
+    description:
+      'Rehearsal only (needs MIGRATION_REHEARSAL=1): verify a backfill run with the same flag',
+  })
+  parseSkipLegacySecrets() {
+    return true;
   }
 }

@@ -21,4 +21,16 @@ describe('BackfillCommand', () => {
     expect(readFileSync(path, 'utf8').trim().split('\n')).toHaveLength(80);
     expect(log).toHaveBeenCalledWith(expect.stringContaining(path));
   });
+
+  it('refuses --skip-legacy-secrets without MIGRATION_REHEARSAL=1 before touching the marker', async () => {
+    delete process.env.MIGRATION_REHEARSAL;
+    const migration = { backfill: jest.fn() };
+    const state = { begin: jest.fn() };
+    const command = new BackfillCommand(migration as never, state as never);
+    await expect(command.run([], { skipLegacySecrets: true })).rejects.toThrow(
+      'needs MIGRATION_REHEARSAL=1',
+    );
+    expect(state.begin).not.toHaveBeenCalled();
+    expect(migration.backfill).not.toHaveBeenCalled();
+  });
 });

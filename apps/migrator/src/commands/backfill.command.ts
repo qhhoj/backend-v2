@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Command, CommandRunner, Option } from 'nest-commander';
 import { MigrationStateService } from '../migration-state.service';
 import { MigrationService } from '../migration.service';
+import { setSkipLegacySecrets } from '../rehearsal';
 import { writeReportFile } from '../report-file';
 
 @Command({
@@ -19,7 +20,11 @@ export class BackfillCommand extends CommandRunner {
     super();
   }
 
-  async run(jobs: string[], options: { fresh?: boolean; report?: string }) {
+  async run(
+    jobs: string[],
+    options: { fresh?: boolean; report?: string; skipLegacySecrets?: boolean },
+  ) {
+    setSkipLegacySecrets(options.skipLegacySecrets === true);
     await this.state.begin();
     const reports = await this.migration.backfill(jobs, options.fresh);
     const path =
@@ -44,5 +49,14 @@ export class BackfillCommand extends CommandRunner {
   })
   parseReport(path: string) {
     return path;
+  }
+
+  @Option({
+    flags: '--skip-legacy-secrets',
+    description:
+      'Rehearsal only (needs MIGRATION_REHEARSAL=1): no LEGACY_SECRET_KEY, users migrate with 2FA off',
+  })
+  parseSkipLegacySecrets() {
+    return true;
   }
 }

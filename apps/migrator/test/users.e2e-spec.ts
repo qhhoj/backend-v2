@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { LEGACY_DEACTIVATED_REASON } from '../src/mappers/users/user-fields';
 import { AuditService } from '../src/audit.service';
 import { MigrationService } from '../src/migration.service';
+import { setSkipLegacySecrets } from '../src/rehearsal';
 import { setupMigratorTest, TEST_KEY } from './setup';
 
 const fixtures = JSON.parse(
@@ -174,6 +175,54 @@ describe('users job', () => {
     expect(warnings).toContainEqual(
       expect.stringMatching(/^auth_user deactivated superusers .*: 1 /),
     );
+  });
+
+  describe('rehearsal without legacy secrets', () => {
+    let saved: NodeJS.ProcessEnv;
+    let skipped: Record<string, string[]>;
+
+    beforeAll(async () => {
+      saved = { ...process.env };
+      delete process.env.LEGACY_SECRET_KEY;
+      delete process.env.ENCRYPTION_KEY;
+      process.env.MIGRATION_REHEARSAL = '1';
+      setSkipLegacySecrets(true);
+      skipped = await migration.backfill(['users']);
+    });
+    afterAll(() => {
+      setSkipLegacySecrets(false);
+      process.env = saved;
+    });
+
+    it('migrates every user with 2FA off and counts the affected ones', async () => {
+      expect(await user(1)).toMatchObject({
+        username: 'alice',
+        isTotpEnabled: false,
+        totpKey: null,
+        scratchCodes: null,
+        isWebauthnEnabled: false,
+        webauthnUserHandle: null,
+      });
+      expect(skipped.users).toContain(
+        'REHEARSAL: legacy secrets skipped, canary skipped, 2FA off for every user',
+      );
+      expect(skipped.users).toContainEqual(
+        expect.stringMatching(
+          /^2FA off \(legacy secrets skipped, rehearsal\)( \(x\d+\))?$/,
+        ),
+      );
+    });
+
+    it('verifies clean under the same flag', async () => {
+      expect(await migration.verify(['users'])).toBe(0);
+    });
+
+    it('is refused without MIGRATION_REHEARSAL=1', () => {
+      delete process.env.MIGRATION_REHEARSAL;
+      expect(() => setSkipLegacySecrets(true)).toThrow(
+        'needs MIGRATION_REHEARSAL=1',
+      );
+    });
   });
 
   describe('canary without TOTP keys', () => {

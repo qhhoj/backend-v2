@@ -36,7 +36,7 @@ Run on the new host with the variables below in `/root/migrate.env` (mode 600; `
 
 `/etc/qhhoj/env` and `/root/migrate.env` must hold the same `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY` and `MEDIA_URL`. A different `ENCRYPTION_KEY` seals every migrated TOTP secret and scratch code under a key the api does not hold, and `verify` cannot see it (it opens them with the migrate key): every 2FA user would be locked out. Compare the values before the first `backfill`.
 
-For a rehearsal on the full dump run the migrator as `NODE_OPTIONS=--max-old-space-size=3072` inside a 4 GB limit. Time `audit` too: its zero-date scan reads every date column, including the 13M-row activity table.
+For a rehearsal on the full dump run the migrator as `NODE_OPTIONS=--max-old-space-size=3072` inside a 4 GB limit. A rehearsal without the legacy `SECRET_KEY` may run `backfill` and `verify` with `--skip-legacy-secrets` under `MIGRATION_REHEARSAL=1` (refused otherwise): no `LEGACY_SECRET_KEY` or `ENCRYPTION_KEY`, the canary is skipped, every user migrates with 2FA off (counted as `2FA off (legacy secrets skipped, rehearsal)`). The real cutover must never set `MIGRATION_REHEARSAL` or pass that flag: it would lock 2FA off for every account. Time `audit` too: its zero-date scan reads every date column, including the 13M-row activity table.
 
 Data dirs (`MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, and any MariaDB or Mongo datadir used in a rehearsal) must not be under `/tmp`: it is a size-limited tmpfs and a 4.5 GB import fills it ("table is full").
 
