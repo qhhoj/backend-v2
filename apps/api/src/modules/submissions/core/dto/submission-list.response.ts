@@ -17,6 +17,8 @@ import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.res
 export class SubmissionProblemResponse {
   code!: string;
   name!: string;
+  /** The problem was deleted or purged; its name is kept. */
+  isDeleted!: boolean;
 }
 
 export class SubmissionLanguageResponse {
@@ -28,7 +30,7 @@ export class SubmissionLanguageResponse {
 /** The rows resolved for one submission; a missing one renders as null. */
 export interface SubmissionRefs {
   user: UserDocument | undefined;
-  problem: Pick<Problem, 'code' | 'name'> | undefined;
+  problem: Pick<Problem, 'code' | 'name' | 'deletedAt'> | undefined;
   language: Language | null;
 }
 
@@ -61,7 +63,13 @@ export class SubmissionListItemResponse {
     return {
       id: uuidStr(submission._id),
       user: user ? UserSummaryResponse.from(user) : null,
-      problem: problem ? { code: problem.code, name: problem.name } : null,
+      problem: problem
+        ? {
+            code: problem.code,
+            name: problem.name,
+            isDeleted: problem.deletedAt != null,
+          }
+        : null,
       language: language
         ? { id: language._id, key: language.key, name: language.name }
         : null,

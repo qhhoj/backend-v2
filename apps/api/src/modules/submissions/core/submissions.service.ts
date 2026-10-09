@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { UsersRepository } from '@libs/auth';
+import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated, unique } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
-import { hasPermission } from '@libs/auth';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestViewerService } from '../../contests/core/contest-viewer.service';
 import { ContestsRepository } from '../../contests/core/contests.repository';
@@ -28,7 +27,11 @@ import {
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
-import type { DetailAccess, SubmissionActions } from './submission-access';
+import type {
+  CaseVisibility,
+  DetailAccess,
+  SubmissionActions,
+} from './submission-access';
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
@@ -39,6 +42,13 @@ export type SubmissionFilters = Pick<
 > & { result?: readonly string[]; status?: readonly string[] };
 
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
+
+/** What a deleted problem's submission shows of its cases: nothing. */
+const NO_CASE_DETAIL: CaseVisibility = {
+  cases: 'none',
+  feedback: false,
+  output: false,
+};
 
 /** `$in` clauses for the filters that match stored values directly. */
 const valueClauses = (
@@ -96,7 +106,7 @@ export class SubmissionsService {
       this.users.findByIds(
         unique(items.map((submission) => uuidStr(submission.user))),
       ),
-      this.problems.findSummaries(
+      this.problems.findSummariesIncludingDeleted(
         unique(items.map((submission) => uuidStr(submission.problem))),
       ),
     ]);
@@ -123,10 +133,12 @@ export class SubmissionsService {
     const scope = await this.viewerScope(principal);
     const viewed = await this.viewable(principal, id, scope);
     const { problem, canEdit } = viewed;
-    const visibility = caseVisibility(principal, problem, {
-      canEdit,
-      isInContest: scope !== null,
-    });
+    const visibility = problem.deletedAt
+      ? NO_CASE_DETAIL
+      : caseVisibility(principal, problem, {
+          canEdit,
+          isInContest: scope !== null,
+        });
     // Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them.
     const submission =
       visibility.cases === 'none'
@@ -184,6 +196,7 @@ export class SubmissionsService {
     return {
       submission,
       caseEvents:
+        !problem.deletedAt &&
         caseVisibility(principal, problem, {
           canEdit,
           isInContest: scope !== null,
@@ -206,7 +219,7 @@ export class SubmissionsService {
     };
   }
 
-  /** 404 for an unknown or malformed id or a problem the viewer cannot see, whoever owns the submission. */
+  /** 404 for an unknown or malformed id or a problem the viewer cannot see, whoever owns the submission; a deleted problem's history is the exception for the owner and for `judge.view_all_submission`. */
   async visible(
     principal: Principal,
     id: string,
@@ -214,15 +227,34 @@ export class SubmissionsService {
   ): Promise<{ submission: SubmissionDocument; problem: ProblemDocument }> {
     const submission = await this.submissions.findById(id);
     const problem =
-      submission && (await this.problems.findById(uuidStr(submission.problem)));
-    // Unlike legacy, the problem must be visible too (source visibility A never exposes a private problem).
+      submission &&
+      (await this.problems.findIncludingDeleted(uuidStr(submission.problem)));
     if (
       !submission ||
       !problem ||
-      !ProblemAccess.canSee(principal, ProblemAccess.accessView(problem), scope)
+      !this.mayRead(principal, submission, problem, scope)
     )
       throw new AppError('not_found', 404, 'No such submission');
     return { submission, problem };
+  }
+
+  /** A live problem must be visible to the viewer (source visibility A never exposes a private problem); a deleted or tombstoned one keeps its history for the submission's owner and for staff who see every submission. */
+  private mayRead(
+    principal: Principal,
+    submission: SubmissionDocument,
+    problem: ProblemDocument,
+    scope: ContestScope | null,
+  ): boolean {
+    if (problem.deletedAt)
+      return (
+        uuidStr(submission.user) === principal.userId ||
+        hasPermission(principal, 'judge.view_all_submission')
+      );
+    return ProblemAccess.canSee(
+      principal,
+      ProblemAccess.accessView(problem),
+      scope,
+    );
   }
 
   /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in; another user's contest submission also needs the contest's full submission list (never during a freeze), unless the viewer edits the contest or the problem or sees every submission. `contest_running` means the contest's list is not open to the viewer yet: running, frozen, or an ended contest whose scoreboard stays hidden. */
@@ -236,6 +268,7 @@ export class SubmissionsService {
     canEdit: boolean;
   }> {
     const { submission, problem } = await this.visible(principal, id, scope);
+    if (problem.deletedAt) return { submission, problem, canEdit: false };
     const view = ProblemAccess.accessView(problem);
     const canEdit = ProblemAccess.canEdit(principal, view);
     const ownerId = uuidStr(submission.user);
@@ -385,14 +418,31 @@ export class SubmissionsService {
     return [{ problem: problem._id }];
   }
 
+  /** The viewer's visible live problems, plus the history of deleted problems they may read (their own submissions, or every one for `judge.view_all_submission`). A viewer who sees every live problem still must not see deleted ones that are not theirs. */
   private async visibleProblemClauses(
     principal: Principal | null,
     scope: ContestScope | null,
   ): Promise<FilterQuery<Submission>[]> {
+    const deleted = await this.problems.deletedIds();
     const visible = ProblemAccess.visibleFilter(principal, scope);
-    return Object.keys(visible).length
-      ? [{ problem: { $in: await this.problems.visibleIds(visible) } }]
-      : [];
+    const live: FilterQuery<Submission> | null = Object.keys(visible).length
+      ? { problem: { $in: await this.problems.visibleIds(visible) } }
+      : deleted.length
+        ? { problem: { $nin: deleted } }
+        : null;
+    if (!live) return [];
+    const history = this.deletedHistoryClause(principal, deleted);
+    return [history ? { $or: [live, history] } : live];
+  }
+
+  private deletedHistoryClause(
+    principal: Principal | null,
+    deleted: readonly string[],
+  ): FilterQuery<Submission> | null {
+    if (!principal || !deleted.length) return null;
+    return hasPermission(principal, 'judge.view_all_submission')
+      ? { problem: { $in: deleted } }
+      : { problem: { $in: deleted }, user: principal.userId };
   }
 
   private async userClauses(

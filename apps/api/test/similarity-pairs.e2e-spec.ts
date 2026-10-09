@@ -193,6 +193,25 @@ describe('similarity pairs', () => {
       .expect(errorCode('not_found'));
   });
 
+  it('answers 404 for the pair detail of a deleted problem', async () => {
+    const pair = await addPair(0.9);
+    await get('editor', pairUrl(pair._id)).expect(200);
+    await api.problems.updateOne(
+      { _id: problem._id },
+      { $set: { deletedAt: new Date() } },
+    );
+    try {
+      await get('editor', pairUrl(pair._id))
+        .expect(404)
+        .expect(errorCode('not_found'));
+    } finally {
+      await api.problems.updateOne(
+        { _id: problem._id },
+        { $unset: { deletedAt: '' } },
+      );
+    }
+  });
+
   it('answers 404 for unknown and malformed ids', async () => {
     await get('editor', pairsOf(newId())).expect(404);
     await get('editor', pairsOf('not-a-uuid')).expect(404);

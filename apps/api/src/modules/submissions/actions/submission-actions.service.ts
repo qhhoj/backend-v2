@@ -69,6 +69,15 @@ function bulkFilter(
   };
 }
 
+/** A deleted or tombstoned problem's submissions are history: a rejudge or reject would overwrite their stored result and cases while the problem's data is gone or about to be purged. */
+function assertProblemLive(problem: { deletedAt?: Date | null }): void {
+  if (!problem.deletedAt) return;
+  const message = 'The problem is deleted; restore it first';
+  throw new AppError('problem_deleted', 409, message, undefined, undefined, {
+    issues: [{ field: 'problem', code: 'problem_deleted', message }],
+  });
+}
+
 @Injectable()
 export class SubmissionActionsService {
   private readonly logger = new Logger(SubmissionActionsService.name);
@@ -117,6 +126,7 @@ export class SubmissionActionsService {
     );
     if (!mayRejudgeSubmission(principal, editsProblem(principal, problem)))
       throw cannotManageProblem();
+    assertProblemLive(problem);
     if (isSubmissionLocked(submission.lockedAfter))
       throw new AppError('conflict', 409, 'The submission is locked');
     if (submission.status === 'PD')
@@ -147,6 +157,7 @@ export class SubmissionActionsService {
     );
     if (!mayRejectSubmission(principal, editsProblem(principal, problem)))
       throw cannotManageProblem();
+    assertProblemLive(problem);
     if (!(await this.submissions.reject(id)))
       throw new AppError(
         'conflict',

@@ -7722,13 +7722,18 @@
           "code": {
             "type": "string"
           },
+          "isDeleted": {
+            "description": "The problem was deleted or purged; its name is kept.",
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           }
         },
         "required": [
           "code",
-          "name"
+          "name",
+          "isDeleted"
         ],
         "type": "object"
       },
