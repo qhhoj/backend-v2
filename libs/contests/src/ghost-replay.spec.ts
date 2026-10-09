@@ -152,6 +152,15 @@ describe('ghostReplay', () => {
     expect(replay.events.at(-1)!.slice(4)).toEqual([200, 10 + 10 + 60, 10]);
   });
 
+  it("caps a ghost's points at the problem's points so a typo cannot inflate the board", () => {
+    const replay = ghostReplay(
+      ghost([{ minute: 20, points: 99999 }]),
+      0,
+      setup({ format: { name: 'ioi', config: {} } }),
+    );
+    expect(replay.events[0][4]).toBe(100);
+  });
+
   it('returns no events for a ghost with no cells and still ranks it', () => {
     expect(ghostReplay(ghost([]), 0, setup())).toMatchObject({
       isUnranked: false,

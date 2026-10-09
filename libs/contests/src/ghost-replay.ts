@@ -35,10 +35,11 @@ function rowsOfCell(
   problemPoints: number,
   setup: GhostSetup,
 ): ScoringRow[] {
+  // A typo such as 99999@5 must not inflate the board: a solve is worth at most the problem.
   const date = new Date(setup.startTime.getTime() + cell.minute * MINUTE_MS);
   const points = IGNORES_POINTS.includes(setup.format.name)
     ? problemPoints
-    : (cell.points ?? problemPoints);
+    : Math.min(cell.points ?? problemPoints, problemPoints);
   const attempt = (
     submissionId: string,
     attemptPoints: number,
