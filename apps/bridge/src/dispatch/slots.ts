@@ -1,0 +1,165 @@
+import { SUBMISSION_PRIORITY } from '@libs/database';
+import type { AssignmentRef } from '@libs/judge-proto';
+import type { AssignRequest } from '../submissions/assign-request';
+
+export interface QueuedSubmission {
+  id: string;
+  /** The code judges know the problem by: a mirror's root code. */
+  problemCode: string;
+  languageKey: string;
+  priority: number;
+  /** `judgeGeneration` of the row when it was read: a judge still holding this generation or an older one holds a void run. */
+  generation: number;
+  /** Only this judge may take it, even while disabled (submit with `judgeId`). */
+  judgeName: string | null;
+  /** Judges that must not see it: a live or spectating contest submission's contest bans (from Mongo) plus any the command adds. */
+  bannedJudges: string[];
+  /** Judges that answered `Final{RETRY}` for it; cleared on every resync tick. */
+  retryBannedJudges: string[];
+}
+
+export interface JudgeState {
+  readonly name: string;
+  executors: ReadonlySet<string>;
+  isDisabled: boolean;
+  /** The judge sent `Draining`: it finishes what it holds and takes nothing new. */
+  isDraining: boolean;
+  slots: number;
+  /** Submission id -> generation of each run it holds; 0 while the claim is still in flight. */
+  readonly inFlight: Map<string, number>;
+  /** `windingKey`s of runs the bridge let go of (accept timeout, rejudge void, resume DROP) that the judge has not ended yet: judge-v2 frees the slot only when the run's process returns, so the bridge counts it until that run's `Final{ABORTED}` (or the session's end). */
+  readonly winding: Set<string>;
+}
+
+/** `"<submissionId>.<generation>"`, the key of a winding run. */
+export const windingKey = (ref: AssignmentRef): string =>
+  `${ref.submissionId}.${ref.generation}`;
+
+/** Runs that occupy a slot on the judge: held ones and winding ones. */
+const busySlots = (judge: JudgeState): number =>
+  judge.inFlight.size + judge.winding.size;
+
+/** What the dispatcher needs from a connected judge (`JudgeSession`). */
+export interface DispatchTarget extends JudgeState {
+  /** Session id, sent in `Welcome`. */
+  readonly id: string;
+  /** True from the moment the session is ending; its close is handled a little later (`judgeLost`). */
+  readonly isClosed: boolean;
+  /** The key hash the judge authenticated with. */
+  readonly authKeyHash: string;
+  assign(request: AssignRequest): void;
+  abort(ref: AssignmentRef): void;
+  disconnect(options: { isForced: boolean; reason: string }): void;
+  /** A newer session of the same judge took over. */
+  replaced(): void;
+}
+
+/** Slots it can still fill; a draining judge has none. */
+export const freeSlots = (judge: JudgeState): number =>
+  judge.isDraining ? 0 : Math.max(0, judge.slots - busySlots(judge));
+
+/** Busy share of its slots (winding runs included). */
+export const loadOf = (judge: JudgeState): number =>
+  judge.slots > 0 ? busySlots(judge) / judge.slots : 1;
+
+/** Runs the language, is not banned, and is enabled (or asked for by name). */
+export const canJudge = (
+  judge: JudgeState,
+  submission: QueuedSubmission,
+): boolean =>
+  judge.executors.has(submission.languageKey) &&
+  !submission.bannedJudges.includes(judge.name) &&
+  !submission.retryBannedJudges.includes(judge.name) &&
+  (submission.judgeName === null
+    ? !judge.isDisabled
+    : judge.name === submission.judgeName);
+
+const sum = (values: number[]): number =>
+  values.reduce((total, value) => total + value, 0);
+
+/** Rejudges (priority ≥ 2) leave the last free slot to new submissions whenever the candidates have more than one slot in all. */
+const heldBack = (
+  submission: QueuedSubmission,
+  candidates: JudgeState[],
+): boolean =>
+  submission.priority >= SUBMISSION_PRIORITY.rejudge &&
+  sum(
+    candidates.filter((judge) => !judge.isDraining).map((judge) => judge.slots),
+  ) > 1 &&
+  sum(candidates.map(freeSlots)) === 1;
+
+/** The candidate with a free slot and the lowest load, ties broken by `random`; null keeps the submission queued. */
+export function pickJudge<Judge extends JudgeState>(
+  judges: Iterable<Judge>,
+  submission: QueuedSubmission,
+  /** Must return a value in [0, 1). */
+  random: () => number = Math.random,
+): Judge | null {
+  const candidates = [...judges].filter((judge) => canJudge(judge, submission));
+  const free = candidates.filter((judge) => freeSlots(judge) > 0);
+  if (!free.length || heldBack(submission, candidates)) return null;
+  const lowest = Math.min(...free.map(loadOf));
+  const tied = free.filter((judge) => loadOf(judge) === lowest);
+  return tied[Math.floor(random() * tied.length)];
+}
+
+const comesBefore = (
+  left: QueuedSubmission,
+  right: QueuedSubmission,
+): boolean =>
+  left.priority < right.priority ||
+  (left.priority === right.priority && left.id < right.id);
+
+/** Keeps `queue` in priority, then id order (UUIDv7 ids grow with time, so FIFO); binary search keeps a 100k-entry batch rejudge cheap. */
+export function insertQueued(
+  queue: QueuedSubmission[],
+  submission: QueuedSubmission,
+): void {
+  let low = 0;
+  let high = queue.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (comesBefore(submission, queue[middle])) high = middle;
+    else low = middle + 1;
+  }
+  queue.splice(low, 0, submission);
+}
+
+const candidateKey = (submission: QueuedSubmission): string =>
+  JSON.stringify([
+    submission.languageKey,
+    submission.judgeName,
+    submission.bannedJudges,
+    submission.retryBannedJudges,
+  ]);
+
+/**
+ * What a judge with a free slot takes next: the first queued submission it can judge that is not held back for new work.
+ * Hold-back is decided once per candidate set, so a batch rejudge scans in O(queue + judges).
+ */
+export function nextFor(
+  judge: JudgeState,
+  queue: readonly QueuedSubmission[],
+  judges: Iterable<JudgeState>,
+): QueuedSubmission | null {
+  const all = [...judges];
+  const heldByCandidates = new Map<string, boolean>();
+  const isHeld = (submission: QueuedSubmission): boolean => {
+    if (submission.priority < SUBMISSION_PRIORITY.rejudge) return false;
+    const key = candidateKey(submission);
+    let held = heldByCandidates.get(key);
+    if (held === undefined) {
+      held = heldBack(
+        submission,
+        all.filter((other) => canJudge(other, submission)),
+      );
+      heldByCandidates.set(key, held);
+    }
+    return held;
+  };
+  return (
+    queue.find(
+      (submission) => canJudge(judge, submission) && !isHeld(submission),
+    ) ?? null
+  );
+}
