@@ -1,6 +1,6 @@
 {
   "name": "qhhoj-backend",
-  "version": "0.0.1",
+  "version": "2.0.0",
   "description": "",
   "author": "",
   "private": true,
@@ -30,7 +30,10 @@
     "judge:down": "scripts/judge/judge-down.sh",
     "seed:e2e": "TS_NODE_TRANSPILE_ONLY=true ts-node -r tsconfig-paths/register apps/api/src/seed/main.ts",
     "stack:up": "bash scripts/fullstack/up.sh",
-    "stack:down": "bash scripts/fullstack/down.sh"
+    "stack:down": "bash scripts/fullstack/down.sh",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release:tag": "changeset tag"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0",

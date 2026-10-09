@@ -566,6 +566,13 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - Streams: nginx must not buffer `/api/internal/events/` (`proxy_buffering off`; the api also sends `X-Accel-Buffering: no`) and needs `proxy_read_timeout` well above the 15 s heartbeat
 - Worker tuning: `pdf.renderTimeoutMs` and `pdf.maxBytes` (settings), `PDF_CONCURRENCY` (env); the Polygon import queue runs one job at a time
 
+## Versioning and changelog
+
+The app follows Semantic Versioning (`package.json` `version`, starting at 2.0.0): major = breaking API, protocol or DB migration; minor = feature; patch = fix.
+
+- Every PR that changes behaviour adds a changeset: `npm run changeset` (pick the bump, write one line) and commit the `.changeset/*.md` file. CI runs `npx changeset status --since=origin/main` on pull requests; pushes to `main` are not checked.
+- Cutting a release: `npm run version` (bumps `package.json`, updates `CHANGELOG.md`, deletes the consumed changesets), commit, then `npm run release:tag` (creates the `v<version>` git tag locally).
+
 ## Commits
 
 - One-line conventional subject: `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`
