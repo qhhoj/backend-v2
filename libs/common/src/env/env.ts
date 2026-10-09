@@ -1,4 +1,5 @@
 import { checkDataRoots } from './data-roots';
+import { parseIpList } from './ip-allowlist';
 
 export interface Env {
   mongoUrl: string;
@@ -10,6 +11,8 @@ export interface Env {
   logLevel: string;
   /** false, or a comma-separated list of proxy addresses (IPs/CIDRs/`loopback`) whose forwarding headers are trusted. */
   trustProxy: false | string;
+  /** Client IPs/CIDRs (IPv4 or IPv6) that may hold more live event streams than `perIp` (a school lab behind one NAT); empty means none. */
+  sseIpAllowlist: string[];
   cookieSecure: boolean;
   /** Directory of uploaded files (images, PDF statements, materials); nginx serves it at `mediaUrl`. */
   mediaRoot: string;
@@ -83,6 +86,16 @@ class EnvReader {
     return value;
   }
 
+  /** Blank or unset is an empty list; each entry must be an IP or a CIDR. */
+  ipList(name: string): string[] {
+    const { entries, invalid } = parseIpList(this.source[name] ?? '');
+    if (invalid.length)
+      this.problems.push(
+        `${name} must be a comma-separated list of IPs or CIDRs, got ${invalid.join(', ')}`,
+      );
+    return invalid.length ? [] : entries;
+  }
+
   positiveInteger(name: string, fallback: number): number {
     const value = Number(this.source[name] ?? fallback);
     if (!Number.isInteger(value) || value < 1)
@@ -111,6 +124,7 @@ function readEnv(reader: EnvReader): Env {
     port: reader.portNumber('PORT', 3000, 1),
     logLevel: reader.textOr('LOG_LEVEL', 'info'),
     trustProxy: reader.proxyList('TRUST_PROXY'),
+    sseIpAllowlist: reader.ipList('SSE_IP_ALLOWLIST'),
     cookieSecure: reader.booleanFrom('COOKIE_SECURE', true),
     mediaRoot: reader.required('MEDIA_ROOT'),
     mediaUrl: reader.nonBlankOr('MEDIA_URL', '/media').replace(/\/+$/, ''),

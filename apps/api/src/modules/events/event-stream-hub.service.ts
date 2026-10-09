@@ -4,7 +4,7 @@ import type { FastifyReply } from 'fastify';
 import Redis from 'ioredis';
 import { PrincipalService, SessionService, UsersRepository } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
-import { AppError, ENV } from '@libs/common';
+import { AppError, ENV, ipMatcher } from '@libs/common';
 import type { Env } from '@libs/common';
 import { HEARTBEAT_FRAME, openEventStream, sseFrame } from './sse';
 import type { EventStream } from './sse';
@@ -52,6 +52,7 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
   private readonly perUser = new Map<string, number>();
   private readonly perIp = new Map<string, number>();
   private total = 0;
+  private readonly isAllowlisted: (ip: string) => boolean;
   private heartbeatTimer?: NodeJS.Timeout;
   private recheckTimer?: NodeJS.Timeout;
   private rechecking = false;
@@ -62,7 +63,9 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
     private readonly sessions: SessionService,
     private readonly users: UsersRepository,
     private readonly principals: PrincipalService,
-  ) {}
+  ) {
+    this.isAllowlisted = ipMatcher(env.sseIpAllowlist);
+  }
 
   /** Before `onModuleInit` (channels register in their constructors). */
   register(channel: EventChannel): void {
@@ -126,11 +129,17 @@ export class EventStreamHubService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  private ipLimit(ip: string): number {
+    return this.isAllowlisted(ip)
+      ? this.limits.perAllowlistedIp
+      : this.limits.perIp;
+  }
+
   /** Throws 429 before anything is written; the returned release is idempotent and goes to `open`. */
   reserve(ip: string, userId: string | null): () => void {
     if (
       this.total >= this.limits.total ||
-      (this.perIp.get(ip) ?? 0) >= this.limits.perIp ||
+      (this.perIp.get(ip) ?? 0) >= this.ipLimit(ip) ||
       (userId !== null &&
         (this.perUser.get(userId) ?? 0) >= this.limits.perUser)
     )

@@ -22,6 +22,7 @@ describe('loadEnv', () => {
       port: 3000,
       logLevel: 'info',
       trustProxy: false,
+      sseIpAllowlist: [],
       cookieSecure: true,
       mediaRoot: valid.MEDIA_ROOT,
       problemDataRoot: valid.PROBLEM_DATA_ROOT,
@@ -192,6 +193,31 @@ describe('loadEnv', () => {
   it.each(['true', '1', ''])('rejects TRUST_PROXY=%j', (value) =>
     expect(() => loadEnv({ ...valid, TRUST_PROXY: value })).toThrow(
       'TRUST_PROXY must be false or a comma-separated list of proxy addresses',
+    ),
+  );
+  it('reads SSE_IP_ALLOWLIST as trimmed IPs and CIDRs', () => {
+    expect(loadEnv({ ...valid, SSE_IP_ALLOWLIST: '' }).sseIpAllowlist).toEqual(
+      [],
+    );
+    expect(
+      loadEnv({
+        ...valid,
+        SSE_IP_ALLOWLIST: ' 203.0.113.7, 10.0.0.0/8 ,2001:db8::/32,',
+      }).sseIpAllowlist,
+    ).toEqual(['203.0.113.7', '10.0.0.0/8', '2001:db8::/32']);
+  });
+  it.each([
+    'nope',
+    '10.0.0.0/33',
+    '2001:db8::/129',
+    '1.2.3.4/',
+    '1.2.3/8',
+    '1.2.3.4/8/8',
+  ])('rejects SSE_IP_ALLOWLIST entry %j', (entry) =>
+    expect(() =>
+      loadEnv({ ...valid, SSE_IP_ALLOWLIST: `10.0.0.1,${entry}` }),
+    ).toThrow(
+      /SSE_IP_ALLOWLIST must be a comma-separated list of IPs or CIDRs/,
     ),
   );
   it('treats TRUST_PROXY=false as off', () =>

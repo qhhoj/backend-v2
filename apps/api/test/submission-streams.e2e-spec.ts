@@ -31,6 +31,7 @@ const EVENTS = '/api/internal/events/submissions';
 const LIMITS: StreamLimits = {
   perUser: 2,
   perIp: 5,
+  perAllowlistedIp: 512,
   total: 50,
   feedTotal: 4,
   contestTotal: 4,
