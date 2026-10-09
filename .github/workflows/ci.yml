@@ -50,6 +50,8 @@ jobs:
       - run: pandoc --version
       - run: npm run lint
       - run: npm run typecheck
+      # The vendored judge-v2 proto matches proto.lock.json and the committed TypeScript is current.
+      - run: npm run judge-proto:check
       # --forceExit: one leaked handle must not hang the job until the timeout.
       - run: npm test -- --forceExit
       # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config.

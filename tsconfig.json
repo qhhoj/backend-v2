@@ -59,6 +59,12 @@
       "@libs/judging/*": [
         "libs/judging/src/*"
       ],
+      "@libs/judge-proto": [
+        "libs/judge-proto/src"
+      ],
+      "@libs/judge-proto/*": [
+        "libs/judge-proto/src/*"
+      ],
       "@libs/contests": [
         "libs/contests/src"
       ],

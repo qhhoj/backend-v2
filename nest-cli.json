@@ -101,6 +101,15 @@
         "tsConfigPath": "libs/judging/tsconfig.lib.json"
       }
     },
+    "judge-proto": {
+      "type": "library",
+      "root": "libs/judge-proto",
+      "entryFile": "index",
+      "sourceRoot": "libs/judge-proto/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/judge-proto/tsconfig.lib.json"
+      }
+    },
     "contests": {
       "type": "library",
       "root": "libs/contests",

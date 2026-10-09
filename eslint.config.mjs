@@ -13,7 +13,11 @@ const MAX_PARAMS_SELECTOR =
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    ignores: [
+      'eslint.config.mjs',
+      'libs/judge-proto/src/generated/**',
+      'scripts/judge-proto/lock.js',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
