@@ -25,7 +25,7 @@ export class LeaderboardsController {
    * List users on the leaderboard
    *
    * @remarks
-   * Public. Pages of 100 listed, active users ranked by `sort` (`rating` by default, or `performancePoints`, `points`, `problemCount`). Ties share a rank. Each entry carries the user's first listed organization.
+   * Public. Pages of 100 listed, active users ranked by `sort` (`rating` by default, or `performancePoints`, `points`, `problemCount`, `contributionPoints`). Ties share a rank. Each entry carries the user's first listed organization.
    */
   @ApiPaginatedResponse(LeaderboardEntryResponse)
   @Get('users')
