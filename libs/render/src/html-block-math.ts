@@ -3,8 +3,8 @@ import { findDollarMath, findTildeMath, isEscaped } from './math';
 /** KaTeX HTML for one formula found in raw HTML (the caller applies the render budget and the blog style's deferral). */
 export type RenderFormula = (tex: string, displayMode: boolean) => string;
 
-/** A comment or a start/end tag; the text between two matches is element text. */
-const TAG = /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/g;
+/** A comment or a start/end tag; the text between two matches is element text. Quoted attribute values may hold `>`. */
+const TAG = /<!--[\s\S]*?-->|<\/?[A-Za-z](?:"[^"]*"|'[^']*'|[^'">])*>/g;
 /** Elements whose text is never math (the old site's MathJax skipped them too). */
 const LITERAL_ELEMENT = /^<(\/?)(?:pre|code|script|style|textarea)\b/i;
 const NAMED_ENTITIES: Record<string, string> = {

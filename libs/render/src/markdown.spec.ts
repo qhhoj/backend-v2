@@ -111,6 +111,14 @@ describe('renderMarkdown', () => {
     expect(full('    ##code')).toBe('<pre><code>##code\n</code></pre>\n');
     expect(full('####### seven')).toBe('<p>####### seven</p>\n');
   });
+  it('reads a line-start #word as a heading, as the old site did (code belongs in a fence)', () => {
+    expect(
+      renderMarkdown('#include <bits/stdc++.h>\n#12 is the issue', 'problem'),
+    ).toBe(
+      '<h3>include &lt;bits/stdc++.h&gt;</h3>\n<h3>12 is the issue</h3>\n',
+    );
+    expect(full('see #12 here')).toBe('<p>see #12 here</p>\n');
+  });
   it('ends an HTML block at a column-0 code fence', () => {
     const html = renderMarkdown(
       '<details>\n<summary>h</summary>\n```c++\nint x;\n```\n</details>',
@@ -141,6 +149,37 @@ describe('renderMarkdown', () => {
     expect(full('<div>cost \\$5 and $10</div>')).toBe(
       '<div>cost \\$5 and $10</div>',
     );
+  });
+  it.each(['problem', 'blog', 'problem-full'] as const)(
+    'never renders math inside a quoted attribute value (%s)',
+    (style) => {
+      const image = renderMarkdown('<img alt=">$x$" src="/a.png">', style);
+      expect(image).not.toContain('katex');
+      expect(image).toContain('src="/a.png"');
+      const titled = renderMarkdown('<div title="a>b $x$ c">$y$</div>', style);
+      expect(titled.match(/<span class="katex">/g)).toHaveLength(1);
+      expect(titled).toContain(
+        '<annotation encoding="application/x-tex">y</annotation>',
+      );
+    },
+  );
+  it.each(['problem', 'blog'] as const)(
+    'sanitizes hostile HTML next to HTML-block math (%s)',
+    (style) => {
+      const html = renderMarkdown(
+        '<div onclick="x()">$x$<script>alert(1)</script><img src="a.png" onerror="y()"> ~z~</div>',
+        style,
+      );
+      expect(html.match(/<span class="katex">/g)).toHaveLength(2);
+      expect(html).not.toMatch(/<script|onclick|onerror/);
+    },
+  );
+  it('keeps text literal until the outermost literal element closes', () => {
+    const html = full('<div><pre><code>$a$</code> $b$</pre> $c$</div>');
+    expect(html).toMatch(
+      /^<div><pre><code>\$a\$<\/code> \$b\$<\/pre> <span class="katex">/,
+    );
+    expect(html.match(/<span class="katex">/g)).toHaveLength(1);
   });
   it('renders math in raw HTML blocks of the blog style', () => {
     expect(renderMarkdown('<div>$x$</div>', 'blog')).toMatch(
