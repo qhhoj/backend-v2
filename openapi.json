@@ -4330,6 +4330,16 @@
             "description": "Job id.",
             "type": "string"
           },
+          "progress": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImportProgressResponse"
+              }
+            ],
+            "description": "Progress of the running step; null while queued and once finished.",
+            "nullable": true,
+            "type": "object"
+          },
           "result": {
             "allOf": [
               {
@@ -4343,11 +4353,25 @@
           "state": {
             "description": "BullMQ state: waiting | active | completed | failed | delayed | prioritized.",
             "type": "string"
+          },
+          "step": {
+            "description": "Step for a progress display: queued, then downloading (Polygon imports only), statements, tests, and done or failed.",
+            "enum": [
+              "done",
+              "downloading",
+              "failed",
+              "queued",
+              "statements",
+              "tests"
+            ],
+            "type": "string"
           }
         },
         "required": [
+          "step",
           "id",
           "state",
+          "progress",
           "result",
           "error"
         ],
@@ -4362,6 +4386,32 @@
         },
         "required": [
           "jobId"
+        ],
+        "type": "object"
+      },
+      "ImportProgressResponse": {
+        "properties": {
+          "done": {
+            "nullable": true,
+            "type": "number"
+          },
+          "step": {
+            "enum": [
+              "downloading",
+              "statements",
+              "tests"
+            ],
+            "type": "string"
+          },
+          "total": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "step",
+          "done",
+          "total"
         ],
         "type": "object"
       },
@@ -6053,6 +6103,301 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "PolygonLatestPackageResponse": {
+        "properties": {
+          "id": {
+            "nullable": true,
+            "type": "number"
+          },
+          "revision": {
+            "nullable": true,
+            "type": "number"
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonPackageState"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "PolygonLinkImportDto": {
+        "properties": {
+          "appendMainSolution": {
+            "default": false,
+            "description": "Append the package's main solution to the editorial.",
+            "type": "boolean"
+          },
+          "authors": {
+            "description": "Author user ids; repeat the parameter.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "autoSync": {
+            "default": false,
+            "type": "boolean"
+          },
+          "code": {
+            "description": "Code of the problem to create or update.",
+            "pattern": "^[a-z0-9_]{1,32}$",
+            "type": "string"
+          },
+          "curators": {
+            "description": "Curator user ids; repeat the parameter. On create the caller is added.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "groupId": {
+            "description": "Problem group id.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "ignoreZeroPointBatches": {
+            "default": false,
+            "description": "Skip batches worth zero points.",
+            "type": "boolean"
+          },
+          "ignoreZeroPointCases": {
+            "default": false,
+            "description": "Skip cases worth zero points.",
+            "type": "boolean"
+          },
+          "mainStatementLanguage": {
+            "description": "Polygon language of the statement stored as the base statement.",
+            "maxLength": 30,
+            "type": "string"
+          },
+          "mode": {
+            "default": "create",
+            "description": "`create` (default) makes a new problem; `update` replaces the data and statement of an existing one.",
+            "enum": [
+              "create",
+              "update"
+            ],
+            "type": "string"
+          },
+          "points": {
+            "description": "Points the problem is worth, 800 to 3500.",
+            "maximum": 3500,
+            "minimum": 800,
+            "type": "number"
+          },
+          "statementLanguages": {
+            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tutorialLanguage": {
+            "description": "Polygon language of the tutorial imported as the editorial.",
+            "maxLength": 30,
+            "type": "string"
+          },
+          "typeIds": {
+            "description": "Problem type ids; repeat the parameter.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "PolygonLinkResponse": {
+        "properties": {
+          "autoSync": {
+            "type": "boolean"
+          },
+          "lastSyncAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "lastSyncError": {
+            "description": "Why the last sync failed, as shown to the requester.",
+            "nullable": true,
+            "type": "string"
+          },
+          "lastSyncResult": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonSyncResult"
+              }
+            ],
+            "nullable": true
+          },
+          "linkedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "packageId": {
+            "type": "number"
+          },
+          "problemId": {
+            "description": "Polygon problem id.",
+            "type": "number"
+          },
+          "revision": {
+            "description": "Revision and package the problem's content was last taken from.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lastSyncResult",
+          "problemId",
+          "name",
+          "owner",
+          "revision",
+          "packageId",
+          "linkedAt",
+          "lastSyncAt",
+          "lastSyncError",
+          "autoSync"
+        ],
+        "type": "object"
+      },
+      "PolygonLinkStateResponse": {
+        "properties": {
+          "latestPackage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonLatestPackageResponse"
+              }
+            ],
+            "description": "The newest package on Polygon now; null when Polygon could not be asked (not connected, unreachable, access revoked).",
+            "nullable": true,
+            "type": "object"
+          },
+          "link": {
+            "$ref": "#/components/schemas/PolygonLinkResponse"
+          }
+        },
+        "required": [
+          "link",
+          "latestPackage"
+        ],
+        "type": "object"
+      },
+      "PolygonPackageState": {
+        "enum": [
+          "FAILED",
+          "NONE",
+          "READY",
+          "RUNNING"
+        ],
+        "type": "string"
+      },
+      "PolygonProblemResponse": {
+        "properties": {
+          "id": {
+            "description": "Polygon problem id.",
+            "type": "number"
+          },
+          "latestPackage": {
+            "$ref": "#/components/schemas/PolygonLatestPackageResponse"
+          },
+          "linkedProblemCode": {
+            "description": "Code of the QHHOJ problem already linked to it, or null.",
+            "nullable": true,
+            "type": "string"
+          },
+          "modified": {
+            "description": "The working copy has uncommitted changes.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Polygon short name.",
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "revision": {
+            "description": "Current revision of the problem on Polygon.",
+            "type": "number"
+          },
+          "title": {
+            "description": "Statement name (Vietnamese, else English, else any language); null when no statement is named.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "title",
+          "owner",
+          "revision",
+          "modified",
+          "latestPackage",
+          "linkedProblemCode"
+        ],
+        "type": "object"
+      },
+      "PolygonStatusResponse": {
+        "properties": {
+          "accountName": {
+            "description": "`polygon.accountName`: the login setters add as a READ co-author; empty when unset.",
+            "type": "string"
+          },
+          "connected": {
+            "description": "Both `polygon.apiKey` and `polygon.apiSecret` are set.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connected",
+          "accountName"
+        ],
+        "type": "object"
+      },
+      "PolygonSyncResult": {
+        "enum": [
+          "failed",
+          "ok"
+        ],
+        "type": "string"
+      },
+      "PolygonTestResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "problemCount": {
+            "description": "Problems the account can read.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ok",
+          "problemCount"
         ],
         "type": "object"
       },
@@ -8476,6 +8821,9 @@
           "mail.smtpUrl",
           "pdf.maxBytes",
           "pdf.renderTimeoutMs",
+          "polygon.accountName",
+          "polygon.apiKey",
+          "polygon.apiSecret",
           "problem.deleteGraceDays",
           "quota.cost.contest",
           "quota.cost.dataPer10MiB",
@@ -11702,6 +12050,17 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "UpdatePolygonLinkDto": {
+        "properties": {
+          "autoSync": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "autoSync"
+        ],
         "type": "object"
       },
       "UpdatePostDto": {
@@ -23488,6 +23847,258 @@
         ]
       }
     },
+    "/api/internal/polygon/problems": {
+      "get": {
+        "description": "Needs `judge.import_polygon_package`. Every problem the account can read,\nwith its newest package (`READY`, `RUNNING`, `FAILED` or `NONE`), its\nstatement title and the code of the QHHOJ problem already linked to it.\n`search` matches id, name, title or owner; `state` keeps one package state.\nThe list is cached for 60 seconds and titles for a day per revision;\n`refresh=true` skips the list cache and is limited to 6 a minute per user.\nErrors: 409 `polygon_not_connected`, 502 `polygon_unauthorized`,\n`polygon_clock_skew` or `polygon_failed`, 503 `polygon_unavailable`,\n429 `rate_limited`.",
+        "operationId": "PolygonController_problems",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PolygonPackageState"
+            }
+          },
+          {
+            "description": "Skip the 60-second cache; limited per user.",
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Case-insensitive match on id, name, title or owner.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/PolygonProblemResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the Polygon problems shared with the QHHOJ account",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/polygon/problems/{polygonId}/import": {
+      "post": {
+        "description": "Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a\nproblem or write access to the problem to update it. The body takes the zip\nimport's options (`code`, `mode`, authors, curators, group, types, points,\nstatement languages, zero-point and main-solution switches) and `autoSync`.\nThe server downloads the newest package itself and the same background job\nas the zip import applies it, then links the problem to Polygon. Answers 202\nwith a `jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes\nqueued, downloading, statements, tests, done or failed). Counts towards the\n10 imports an hour per user. Errors: 400 `code_taken`, 404 `not_found` (not\nshared with the account), 409 `polygon_package_not_ready`,\n`polygon_already_linked` or `polygon_not_connected`, 502/503 Polygon errors,\n429 `rate_limited`.",
+        "operationId": "PolygonController_importProblem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "polygonId",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolygonLinkImportDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ImportJobStartedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Import a Polygon problem and link it",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/polygon/status": {
+      "get": {
+        "description": "Needs `judge.import_polygon_package`. `connected` is true when both the API\nkey and secret are set in the admin settings; `accountName` is the Polygon\nlogin setters add as a READ co-author (empty when unset). No call to Polygon\nis made. The secret is never returned.",
+        "operationId": "PolygonController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolygonStatusResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get whether the Polygon account is connected",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/polygon/test": {
+      "post": {
+        "description": "Needs `judge.change_settings`. Calls Polygon's `problems.list` with the saved\nkey and secret and answers how many problems the account can read. Errors:\n409 `polygon_not_connected` (key or secret unset), 502\n`polygon_unauthorized` (wrong key or secret), 502 `polygon_clock_skew` (the\nserver clock is off by more than Polygon allows), 503 `polygon_unavailable`.",
+        "operationId": "PolygonConnectionController_test",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolygonTestResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Test the Polygon connection",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      }
+    },
     "/api/internal/posts": {
       "get": {
         "description": "Public. Returns published personal posts, newest first. `feed` is `global`\n(default: posts marked global, pinned ones first) or `all` (every\npublished personal post). Organization posts never appear here; see the\norganization posts endpoint. Paged with `page`.",
@@ -26128,6 +26739,237 @@
           "Problems"
         ],
         "x-enveloped": true
+      }
+    },
+    "/api/internal/problems/{code}/polygon": {
+      "delete": {
+        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Removes the link only; statement, tests and every other field stay.\nWrites a problem revision. Answers 204. Errors: 404 `polygon_not_linked`,\n409 `conflict` when the link changed meanwhile.",
+        "operationId": "ProblemPolygonLinkController_unlink",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Unlink a problem from Polygon",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "get": {
+        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Returns the link (Polygon id, synced revision and package, last sync\ntime, result and error, auto-sync switch) and Polygon's newest package,\nwhich is null when Polygon cannot be asked. Errors: 404 `not_found`, 404\n`polygon_not_linked`, 403 `forbidden`.",
+        "operationId": "ProblemPolygonLinkController_state",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolygonLinkStateResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a problem's Polygon link",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "patch": {
+        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. With `autoSync` on, the worker checks Polygon every 10 minutes and\nsyncs a newer READY package, except while a contest using the problem is\nrunning. Writes a problem revision. Errors: 404 `polygon_not_linked`, 409\n`conflict` when the link changed meanwhile.",
+        "operationId": "ProblemPolygonLinkController_update",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePolygonLinkDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolygonLinkResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Switch a problem's Polygon auto-sync",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/polygon/sync": {
+      "post": {
+        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial, tests, checker and limits are overwritten; code,\npoints, group, types, authors, curators and allowed languages are kept.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`. Counts towards the 10 imports an hour per\nuser. Errors: 404 `polygon_not_linked`, 409 `polygon_package_not_ready`,\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "operationId": "ProblemPolygonLinkController_sync",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ImportJobStartedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Sync a linked problem from Polygon",
+        "tags": [
+          "Problem editing"
+        ]
       }
     },
     "/api/internal/problems/{code}/purge-now": {
