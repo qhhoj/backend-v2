@@ -3,10 +3,7 @@ import type { Permission } from '@libs/auth';
 import type { FlatpageAdminResponse } from '../src/modules/site/admin/dto/flatpage-admin.response';
 import type { FlatpageDeletedResponse } from '../src/modules/site/admin/dto/flatpage-revision.response';
 import type { MiscConfigResponse } from '../src/modules/site/admin/dto/misc-config.response';
-import type {
-  NavigationItemResponse,
-  SiteResponse,
-} from '../src/modules/site/public/dto/site.response';
+import type { SiteResponse } from '../src/modules/site/public/dto/site.response';
 import { MAX_MARKDOWN_LENGTH } from '../src/modules/problems/core/dto/limits';
 import { authed } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
@@ -42,7 +39,6 @@ describe('site content administration', () => {
     ).error.issues.map(({ field, code }) => `${field}:${code}`);
 
   let pageEditor: Session;
-  let navigationEditor: Session;
   let configEditor: Session;
 
   beforeAll(async () => {
@@ -52,7 +48,6 @@ describe('site content administration', () => {
       'flatpages.change_flatpage',
       'flatpages.delete_flatpage',
     );
-    navigationEditor = await staff('judge.change_navigationbar');
     configEditor = await staff('judge.change_miscconfig');
   });
   afterAll(() => api.teardown());
@@ -74,15 +69,6 @@ describe('site content administration', () => {
         await api.flatpages.create({
           url: `/${unique('matrix')}`,
           title: 'Matrix',
-        })
-      )._id;
-    const entry = async () =>
-      (
-        await api.navigationItems.create({
-          key: unique('m'),
-          label: 'M',
-          path: '/m',
-          order: 1,
         })
       )._id;
     const routes: Route[] = [
@@ -156,35 +142,6 @@ describe('site content administration', () => {
         }),
       },
       {
-        name: 'POST navigation',
-        permission: 'judge.change_navigationbar',
-        status: 201,
-        prepare: () => ({
-          method: 'post',
-          path: '/navigation',
-          body: { key: unique('n'), label: 'N', path: '/n', order: 1 },
-        }),
-      },
-      {
-        name: 'PATCH navigation/:id',
-        permission: 'judge.change_navigationbar',
-        status: 200,
-        prepare: async () => ({
-          method: 'patch',
-          path: `/navigation/${await entry()}`,
-          body: { label: 'Changed' },
-        }),
-      },
-      {
-        name: 'DELETE navigation/:id',
-        permission: 'judge.change_navigationbar',
-        status: 204,
-        prepare: async () => ({
-          method: 'delete',
-          path: `/navigation/${await entry()}`,
-        }),
-      },
-      {
         name: 'PUT config/:key',
         permission: 'judge.change_miscconfig',
         status: 200,
@@ -220,7 +177,6 @@ describe('site content administration', () => {
             'flatpages.add_flatpage',
             'flatpages.change_flatpage',
             'flatpages.delete_flatpage',
-            'judge.change_navigationbar',
             'judge.change_miscconfig',
           ] as Permission[]
         ).filter((other) => other !== permission);
@@ -662,154 +618,6 @@ describe('site content administration', () => {
         .expect(errorCode('rate_limited'))
         .expect(issueCodes(['rate_limited']));
       expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
-    });
-  });
-
-  describe('navigation', () => {
-    const create = (body: object) =>
-      send('post', '/navigation', navigationEditor, body);
-    const entryBody = (key: string, extra: object = {}) => ({
-      key,
-      label: key,
-      path: `/${key}`,
-      regex: `^/${key}`,
-      order: 1,
-      ...extra,
-    });
-    const createdEntry = async (key: string, extra: object = {}) =>
-      dataOf<NavigationItemResponse>(
-        await create(entryBody(key, extra)).expect(201),
-      );
-
-    it('shows a new entry in GET /site right away, and edits and deletes too', async () => {
-      const created = await createdEntry('live', { hidden: true });
-      expect(created).toMatchObject({
-        key: 'live',
-        hidden: true,
-        parentId: null,
-      });
-      expect((await site()).navigation).toContainEqual(created);
-      await send('patch', `/navigation/${created.id}`, navigationEditor, {
-        label: 'Renamed',
-        order: 7,
-      }).expect(200);
-      expect(
-        (await site()).navigation.find(({ id }) => id === created.id),
-      ).toMatchObject({
-        label: 'Renamed',
-        order: 7,
-      });
-      await send(
-        'delete',
-        `/navigation/${created.id}`,
-        navigationEditor,
-      ).expect(204);
-      expect((await site()).navigation.map(({ id }) => id)).not.toContain(
-        created.id,
-      );
-      await send(
-        'delete',
-        `/navigation/${created.id}`,
-        navigationEditor,
-      ).expect(404);
-    });
-
-    it.each([
-      ['an uncompilable regex', { regex: '(' }, 'regex:invalid_regex'],
-      ['a 501 character regex', { regex: 'x'.repeat(501) }, 'regex:'],
-      [
-        'a javascript: path',
-        { path: 'javascript:alert(1)' },
-        'path:invalid_path',
-      ],
-      [
-        'a protocol-relative path',
-        { path: '//evil.example' },
-        'path:invalid_path',
-      ],
-      ['a 21 character label', { label: 'x'.repeat(21) }, 'label:'],
-      ['an 11 character key', { key: 'x'.repeat(11) }, 'key:'],
-      ['a negative order', { order: -1 }, 'order:'],
-      [
-        'an unknown parent',
-        { parentId: '019d0000-0000-7000-8000-000000000000' },
-        'parentId:parent_unknown',
-      ],
-      ['a malformed parent', { parentId: 'nope' }, 'parentId:parent_unknown'],
-    ])('refuses %s with a 400', async (_name, change, issue) => {
-      const response = await create(entryBody(unique('bad'), change)).expect(
-        400,
-      );
-      expect(issuesOf(response).some((found) => found.startsWith(issue))).toBe(
-        true,
-      );
-    });
-
-    it('refuses unsafe or empty-parent PATCHes and leaves the entry and GET /site unchanged', async () => {
-      const entry = await createdEntry('patch-keep');
-      const patch = (body: object) =>
-        send('patch', `/navigation/${entry.id}`, navigationEditor, body);
-      expect(
-        issuesOf(await patch({ path: 'javascript:alert(1)' }).expect(400)),
-      ).toContain('path:invalid_path');
-      expect(issuesOf(await patch({ regex: '(' }).expect(400))).toContain(
-        'regex:invalid_regex',
-      );
-      expect(issuesOf(await patch({ parentId: '' }).expect(400))).toContain(
-        'parentId:parent_unknown',
-      );
-      expect(
-        (await site()).navigation.find(({ id }) => id === entry.id),
-      ).toEqual(entry);
-    });
-
-    it('refuses a taken key with 409', async () => {
-      await createdEntry('same');
-      await create(entryBody('same')).expect(409).expect(errorCode('conflict'));
-      expect(await api.navigationItems.countDocuments({ key: 'same' })).toBe(1);
-    });
-
-    it('refuses cycles, moves an entry to the root with null and a parent delete with children with 409', async () => {
-      const root = await createdEntry('cyc-root');
-      const child = await createdEntry('cyc-child', { parentId: root.id });
-      const leaf = await createdEntry('cyc-leaf', { parentId: child.id });
-      const move = (id: string, body: object) =>
-        send('patch', `/navigation/${id}`, navigationEditor, body);
-      expect(
-        issuesOf(await move(root.id, { parentId: root.id }).expect(400)),
-      ).toContain('parentId:parent_cycle');
-      expect(
-        issuesOf(await move(root.id, { parentId: leaf.id }).expect(400)),
-      ).toContain('parentId:parent_cycle');
-      expect(
-        issuesOf(await move(child.id, { parentId: leaf.id }).expect(400)),
-      ).toContain('parentId:parent_cycle');
-      await send('delete', `/navigation/${child.id}`, navigationEditor)
-        .expect(409)
-        .expect(errorCode('conflict'));
-      await send('delete', `/navigation/${root.id}`, navigationEditor).expect(
-        409,
-      );
-      expect((await site()).navigation.map(({ id }) => id)).toEqual(
-        expect.arrayContaining([root.id, child.id, leaf.id]),
-      );
-      const moved = dataOf<NavigationItemResponse>(
-        await move(child.id, { parentId: null }).expect(200),
-      );
-      expect(moved.parentId).toBeNull();
-      expect(
-        (await site()).navigation.find(({ id }) => id === child.id)!.parentId,
-      ).toBeNull();
-      await move(child.id, { label: null }).expect(400);
-      await send('delete', `/navigation/${root.id}`, navigationEditor).expect(
-        204,
-      );
-      await send('delete', `/navigation/${leaf.id}`, navigationEditor).expect(
-        204,
-      );
-      await send('delete', `/navigation/${child.id}`, navigationEditor).expect(
-        204,
-      );
     });
   });
 

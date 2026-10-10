@@ -64,7 +64,6 @@ import {
 import { Flatpage, FlatpageSchema } from './flatpage.schema';
 import { GeneralIssue, GeneralIssueSchema } from './general-issue.schema';
 import { MiscConfig, MiscConfigSchema } from './misc-config.schema';
-import { NavigationItem, NavigationItemSchema } from './navigation-item.schema';
 import { Notification, NotificationSchema } from './notification.schema';
 import { Organization, OrganizationSchema } from './organization.schema';
 import { Rating, RatingSchema } from './rating.schema';
@@ -131,7 +130,6 @@ export * from './judge.schema';
 export * from './language.schema';
 export * from './license.schema';
 export * from './misc-config.schema';
-export * from './navigation-item.schema';
 export * from './notification.schema';
 export * from './organization-credit-entry.schema';
 export * from './organization-problem-tag.schema';
@@ -166,7 +164,6 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: Flatpage.name, schema: FlatpageSchema },
   { name: GeneralIssue.name, schema: GeneralIssueSchema },
   { name: MiscConfig.name, schema: MiscConfigSchema },
-  { name: NavigationItem.name, schema: NavigationItemSchema },
   { name: Notification.name, schema: NotificationSchema },
   { name: Ticket.name, schema: TicketSchema },
   { name: TicketCannedReply.name, schema: TicketCannedReplySchema },

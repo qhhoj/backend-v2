@@ -283,8 +283,6 @@ describe('OpenAPI document', () => {
         '/api/internal/pages/{path}',
         '/api/internal/admin/site/pages',
         '/api/internal/admin/site/pages/{id}',
-        '/api/internal/admin/site/navigation',
-        '/api/internal/admin/site/navigation/{id}',
         '/api/internal/admin/site/config/{key}',
         '/api/internal/admin/site/pages/{id}/revisions',
         '/api/internal/admin/site/pages/render-preview',

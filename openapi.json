@@ -2574,50 +2574,6 @@
         ],
         "type": "object"
       },
-      "CreateNavigationItemDto": {
-        "properties": {
-          "hidden": {
-            "type": "boolean"
-          },
-          "key": {
-            "maxLength": 10,
-            "minLength": 1,
-            "type": "string"
-          },
-          "label": {
-            "maxLength": 20,
-            "minLength": 1,
-            "type": "string"
-          },
-          "order": {
-            "maximum": 1000000,
-            "minimum": 0,
-            "type": "number"
-          },
-          "parentId": {
-            "description": "Id of an existing entry; absent or `null` = top level.",
-            "nullable": true,
-            "type": "string"
-          },
-          "path": {
-            "description": "A site path (`/problems`) or an http(s) URL.",
-            "maxLength": 255,
-            "type": "string"
-          },
-          "regex": {
-            "description": "A JavaScript regular expression the SPA tests against the current path (marks the entry active).",
-            "maxLength": 500,
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "label",
-          "path",
-          "order"
-        ],
-        "type": "object"
-      },
       "CreateOrganizationDto": {
         "properties": {
           "about": {
@@ -4635,47 +4591,6 @@
         "required": [
           "key",
           "value"
-        ],
-        "type": "object"
-      },
-      "NavigationItemResponse": {
-        "properties": {
-          "hidden": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "order": {
-            "type": "number"
-          },
-          "parentId": {
-            "nullable": true,
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "regex": {
-            "description": "A JavaScript regular expression for the SPA to test against the current path.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "key",
-          "label",
-          "path",
-          "regex",
-          "hidden",
-          "order",
-          "parentId"
         ],
         "type": "object"
       },
@@ -8185,12 +8100,6 @@
             "description": "Legacy misc config: free-form key/value text served to everyone, so it must never hold secrets.",
             "type": "object"
           },
-          "navigation": {
-            "items": {
-              "$ref": "#/components/schemas/NavigationItemResponse"
-            },
-            "type": "array"
-          },
           "officialMode": {
             "description": "Official contest mode is on right now (the flag and its end time). The response is cached `private, max-age=60`, so the shell may show the banner up to a minute after the mode ends.",
             "type": "boolean"
@@ -8204,7 +8113,6 @@
         },
         "required": [
           "officialModeEndsAt",
-          "navigation",
           "config",
           "officialMode"
         ],
@@ -10419,44 +10327,6 @@
         },
         "type": "object"
       },
-      "UpdateNavigationItemDto": {
-        "properties": {
-          "hidden": {
-            "type": "boolean"
-          },
-          "key": {
-            "maxLength": 10,
-            "minLength": 1,
-            "type": "string"
-          },
-          "label": {
-            "maxLength": 20,
-            "minLength": 1,
-            "type": "string"
-          },
-          "order": {
-            "maximum": 1000000,
-            "minimum": 0,
-            "type": "number"
-          },
-          "parentId": {
-            "description": "Id of an existing entry; absent or `null` = top level.",
-            "nullable": true,
-            "type": "string"
-          },
-          "path": {
-            "description": "A site path (`/problems`) or an http(s) URL.",
-            "maxLength": 255,
-            "type": "string"
-          },
-          "regex": {
-            "description": "A JavaScript regular expression the SPA tests against the current path (marks the entry active).",
-            "maxLength": 500,
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "UpdateOrganizationDto": {
         "properties": {
           "about": {
@@ -12077,171 +11947,6 @@
         },
         "tags": [
           "MiscConfigAdmin"
-        ]
-      }
-    },
-    "/api/internal/admin/site/navigation": {
-      "post": {
-        "operationId": "NavigationAdminController_create",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateNavigationItemDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/NavigationItemResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "NavigationAdmin"
-        ]
-      }
-    },
-    "/api/internal/admin/site/navigation/{id}": {
-      "delete": {
-        "operationId": "NavigationAdminController_delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "NavigationAdmin"
-        ]
-      },
-      "patch": {
-        "operationId": "NavigationAdminController_update",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateNavigationItemDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/NavigationItemResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "NavigationAdmin"
         ]
       }
     },

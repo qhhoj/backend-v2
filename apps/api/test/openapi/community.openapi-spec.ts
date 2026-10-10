@@ -13,7 +13,7 @@ const OWNED_ROUTE =
   /\/api\/internal\/(posts|admin\/posts|users\/\{username\}\/blog|organizations\/\{slug\}\/posts|comments|tickets|problems\/\{code\}\/tickets|admin\/site|admin\/settings|admin\/user-activity|home|feeds|events\/tickets)\b/;
 /** Sites are labelled `GET <route> parameter <name>` or `schema <Name>.<property> ...`; enum sites are JSON paths. */
 const OWNED_SCHEMA =
-  /^schema (VoteDto|UpdateSettingDto|Post|Comment|Recent|Vote|Ticket|Setting|Activity|Flatpage|Site|Navigation|Live|Create|Update|New|Hide|PutMisc|Page|Blog)|\/components\/schemas\/(Post|Comment|Vote|Ticket|Setting|Activity|Flatpage|Site|Navigation|Live|Recent)/;
+  /^schema (VoteDto|UpdateSettingDto|Post|Comment|Recent|Vote|Ticket|Setting|Activity|Flatpage|Site|Live|Create|Update|New|Hide|PutMisc|Page|Blog)|\/components\/schemas\/(Post|Comment|Vote|Ticket|Setting|Activity|Flatpage|Site|Live|Recent)/;
 const isOwned = (site: string) =>
   OWNED_ROUTE.test(site) || OWNED_SCHEMA.test(site);
 
