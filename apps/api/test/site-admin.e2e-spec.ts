@@ -508,7 +508,11 @@ describe('site content administration', () => {
         'edit',
         'create',
       ]);
-      expect(data[0].editor).toEqual({ id: user._id, username: user.username });
+      expect(data[0].editor).toEqual({
+        id: user._id,
+        username: user.username,
+        rating: null,
+      });
       expect(data[1].changes).toEqual({
         title: { before: 'One', after: 'Two' },
         content: { before: 'one', after: 'two' },
