@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '@libs/auth';
 import { RefuseNullFieldsPipe } from '@libs/common';
 import {
@@ -22,21 +23,49 @@ import {
 } from './dto/judge.response';
 import { JudgesService } from './judges.service';
 
+@ApiTags('Admin: judges & languages')
 @RequirePermission('judge.change_judge')
 @Controller('api/internal/judges')
 export class JudgesController {
   constructor(private readonly judges: JudgesService) {}
 
+  /**
+   * List judge servers
+   *
+   * @remarks
+   * Needs `judge.change_judge`. Returns every judge sorted by name with its
+   * online state, ping, load, slots in use, runtimes and last IP. Authentication
+   * keys are never returned.
+   */
   @Get()
   list(): Promise<JudgeResponse[]> {
     return this.judges.list();
   }
 
+  /**
+   * Register a judge server
+   *
+   * @remarks
+   * Needs `judge.change_judge`. `name` uses letters, digits, `_`, `.` or `-` (at
+   * most 50) and is what the judge sends when it connects. Returns the judge and
+   * its `authKey`, shown only this once (only a hash is stored). Responds 409
+   * `conflict` (issue `name_taken`) when the name exists.
+   */
   @Post()
   create(@Body() dto: CreateJudgeDto): Promise<CreatedJudgeResponse> {
     return this.judges.create(dto);
   }
 
+  /**
+   * Update a judge server
+   *
+   * @remarks
+   * Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,
+   * `isDisabled` and `description`. Blocking disconnects the judge and refuses
+   * it until unblocked; disabling tells a connected judge to stop taking work,
+   * enabling lets it resume. Responds 404 `not_found` (issue `judge_not_found`)
+   * for an unknown name.
+   */
   @Patch(':name')
   update(
     @Param() { name }: JudgeNameParamDto,
@@ -45,12 +74,28 @@ export class JudgesController {
     return this.judges.update(name, dto);
   }
 
+  /**
+   * Issue a new authentication key for a judge
+   *
+   * @remarks
+   * Needs `judge.change_judge`. The old key stops working and a connected judge
+   * is disconnected; it can only reconnect with the new `authKey`, returned only
+   * this once. Responds 404 `not_found` for an unknown name.
+   */
   @Post(':name/key')
   @HttpCode(200)
   rotateKey(@Param() { name }: JudgeNameParamDto): Promise<JudgeKeyResponse> {
     return this.judges.rotateKey(name);
   }
 
+  /**
+   * Disconnect a judge server
+   *
+   * @remarks
+   * Needs `judge.change_judge`. Asks the bridge to disconnect the judge; it may
+   * reconnect. With `force` every session and socket of the judge is retired at
+   * once. Answers 204; 404 `not_found` for an unknown name.
+   */
   @Post(':name/disconnect')
   @HttpCode(204)
   disconnect(

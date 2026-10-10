@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Req, Res } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CurrentAuth, Public } from '@libs/auth';
 import { ApiEventStream } from '@libs/common';
@@ -13,11 +14,25 @@ import {
 import { SubmissionStreamsService } from './submission-streams.service';
 
 /** Server-sent events. Plain `@Res()`: the service hijacks the reply; errors thrown before that reach the exception filter as usual. */
+@ApiTags('Live events')
 @Controller('api/internal/events/submissions')
 export class SubmissionStreamsController {
   constructor(private readonly streams: SubmissionStreamsService) {}
 
-  /** Public feed: `queued`, `processing`, `grading-begin` and `done` of the submissions the anonymous submission list shows (public, non-organisation-private problems; never a contest whose list is hidden, e.g. running or frozen), as ids and status. */
+  /**
+   * Stream the public submission feed
+   *
+   * @remarks
+   * Public Server-Sent Events stream (`text/event-stream`). Emits `queued`,
+   * `processing`, `grading-begin` and `done` for the submissions the anonymous
+   * submission list shows, with
+   * `{ submissionId, userId, problemId, type, status }` as data; per-case
+   * progress is never sent. A `resync` event means events may have been missed,
+   * so reload the list. A `: ping` comment is sent every 15 seconds and the
+   * stream asks clients to retry after 3 seconds, so `EventSource` reconnects by
+   * itself. Open streams are capped per client IP and per server (429
+   * `rate_limited`).
+   */
   @Public()
   @ApiEventStream(SubmissionFeedFrame, ResyncFrame)
   @Get()
@@ -25,7 +40,20 @@ export class SubmissionStreamsController {
     this.streams.openFeed(request, reply);
   }
 
-  /** One submission, gated like its detail: `state` first, then its events (`test-case` only when every case result is visible), `resync` after a lost subscription. */
+  /**
+   * Stream the live judging progress of one submission
+   *
+   * @remarks
+   * Needs a signed-in user who may see the submission's detail (same access
+   * rules and 404 or 403 errors). Server-Sent Events (`text/event-stream`): a
+   * `state` event first with the current status, result and points, then
+   * `queued`, `processing`, `grading-begin` and `done` events, and `test-case`
+   * events only when the viewer may see every case result. `resync` means events
+   * may have been missed, so reload the submission. Heartbeat `: ping` every 15
+   * seconds. Access is re-checked every minute and the stream closes when it is
+   * lost. Open streams are capped per user and per client IP (429
+   * `rate_limited`).
+   */
   @ApiEventStream(SubmissionProgressFrame, SubmissionStateFrame, ResyncFrame)
   @Get(':id')
   submission(

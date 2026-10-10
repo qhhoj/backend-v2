@@ -5,6 +5,7 @@ import {
   ApiExtraModels,
   ApiResponse,
   getSchemaPath,
+  ApiTags,
 } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CurrentAuth, optionalPrincipal, Public } from '@libs/auth';
@@ -19,14 +20,24 @@ import { ProblemPdfService } from './problem-pdf.service';
 /** Poll interval the frontend button waits between requests while rendering. */
 const RENDERING_RETRY_AFTER_SECONDS = 3;
 
+@ApiTags('Problems')
 @Controller('api/internal/problems')
 export class ProblemPdfController {
   constructor(private readonly pdfs: ProblemPdfService) {}
 
   /**
-   * Outcomes, documented here because the plain `@Res()` hides them from the plugin:
-   * 200 the PDF (`application/pdf`, inline); 202 `{ data: { status: 'rendering' } }` with `Retry-After` while the render is pending, poll the same URL;
-   * 503 `pdf_unavailable` with `Retry-After` when the render failed; 404 when the problem is not visible.
+   * Download the problem statement as a PDF
+   *
+   * @remarks
+   * Public for problems the viewer may see. The PDF is rendered by a background
+   * job and cached per problem and language: 200 returns the file inline
+   * (`application/pdf`); 202 `{ data: { status: 'rendering' } }` with
+   * `Retry-After` means the render is pending, so poll the same URL; 503
+   * `pdf_unavailable` with `Retry-After` means the last render failed. `lang`
+   * picks the statement language (falling back to the base one). Starting a
+   * render is limited to 30 per minute per client IP, `HEAD` requests never
+   * start one, and polling a pending render is free. Unknown or invisible
+   * problems are 404 `not_found`.
    */
   // The 202 below spells out its `{ data }` envelope itself.
   @ApiExtension('x-enveloped', true)
@@ -53,7 +64,7 @@ export class ProblemPdfController {
       'The render failed (`pdf_unavailable`); retry after Retry-After.',
     type: ErrorResponse,
   })
-  /** Plain `@Res()`: Nest's `reply()` applies the route's status (200) after a passthrough handler, which would clobber the 202; exceptions thrown before `send` still reach the filter. */
+  // Plain `@Res()`: Nest's `reply()` applies the route's status (200) after a passthrough handler, which would clobber the 202; exceptions thrown before `send` still reach the filter.
   @Public()
   @Get(':code/pdf')
   async pdf(

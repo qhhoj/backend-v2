@@ -10,19 +10,33 @@ import { ApiProperty } from '@nestjs/swagger';
 import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 
 export class ProblemListItemResponse {
+  /** Problem id. */
   id!: string;
+  /** Problem code, unique and used in URLs. */
   code!: string;
+  /** Title in the requested language, or the base language when untranslated. */
   name!: string;
+  /** Problem group; null when none. */
   group!: CatalogItemResponse | null;
+  /** Problem types. */
   types!: CatalogItemResponse[];
+  /** Points the problem is worth. */
   points!: number;
+  /** Whether partial scores are given. */
   partial!: boolean;
+  /** Number of users who solved the problem. */
   userCount!: number;
+  /** Percentage of accepted submissions, 0 to 100. */
   acRate!: number;
+  /** Publication date (ISO 8601); null when unset. */
   date!: string | null;
+  /** Whether the problem is public. */
   isPublic!: boolean;
+  /** Whether only members of the listed organizations can see it. */
   isOrganizationPrivate!: boolean;
+  /** Whether an editorial is published. */
   hasPublicEditorial!: boolean;
+  /** Whether a PDF statement was uploaded. */
   hasPdfStatement!: boolean;
   /** For the signed-in viewer; null when anonymous or never submitted. */
   @ApiProperty({ enum: VIEWER_MARKS, nullable: true })
@@ -62,5 +76,6 @@ export class ProblemListItemResponse {
 }
 
 export class RandomProblemResponse {
+  /** Code of the picked problem. */
   code!: string;
 }
