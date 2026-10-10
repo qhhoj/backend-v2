@@ -163,14 +163,6 @@ function problemFields(
     groupId: context.catalog.group._id,
     description: problem.code,
     descriptionHtml: html,
-    translations: [
-      {
-        language: 'en',
-        name: problem.code,
-        description: problem.code,
-        descriptionHtml: html,
-      },
-    ],
     data,
   };
 }

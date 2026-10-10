@@ -10,10 +10,10 @@ const problem = (extra: Record<string, unknown> = {}): Problem =>
   ({
     _id: newId(),
     code: 'sum',
-    name: 'Sum',
+    name: 'Tong',
     source: 'Practice',
-    description: 'Add two numbers.',
-    descriptionHtml: '<p>Add two numbers.</p>',
+    description: 'Cong hai so.',
+    descriptionHtml: '<p>Cong hai so.</p>',
     timeLimit: 1,
     memoryLimit: 65536,
     points: 1000,
@@ -63,11 +63,11 @@ const withData = (cases: unknown[], extra: Record<string, unknown> = {}) => ({
 });
 
 describe('packageStatements', () => {
-  it('starts with the English base statement and adds each translation', () => {
+  it('starts with the Vietnamese base statement and adds each translation', () => {
     const statements = packageStatements(
       problem({
         translations: [
-          { language: 'vi', name: 'Tong', description: 'Cong hai so.' },
+          { language: 'en', name: 'Sum', description: 'Add two numbers.' },
         ],
       }),
     );
@@ -79,13 +79,15 @@ describe('packageStatements', () => {
     ]);
   });
 
-  it('lets an English translation override the base statement', () => {
-    const [english] = packageStatements(
+  it('lets a base-language translation override the base statement', () => {
+    const [base] = packageStatements(
       problem({
-        translations: [{ language: 'en', name: 'Sum v2', description: 'Add.' }],
+        translations: [
+          { language: 'vi', name: 'Tong v2', description: 'Them.' },
+        ],
       }),
     );
-    expect(english).toMatchObject({ name: 'Sum v2', text: 'Add.' });
+    expect(base).toMatchObject({ name: 'Tong v2', text: 'Them.' });
   });
 });
 
@@ -98,11 +100,11 @@ describe('buildManifest', () => {
       format: 'qhhoj-package',
       formatVersion: 1,
       problem: { code: 'sum', points: 1000, timeLimit: 1, memoryLimit: 65536 },
-      statements: [{ language: 'en', name: 'Sum', file: 'statements/en.md' }],
+      statements: [{ language: 'vi', name: 'Tong', file: 'statements/vi.md' }],
       data: { checker: 'standard', files: { archive: 'tests.zip' } },
     });
     expect(manifest.data.cases).toHaveLength(1);
-    expect(JSON.stringify(manifest)).not.toContain('Add two numbers.');
+    expect(JSON.stringify(manifest)).not.toContain('Cong hai so.');
     expect(JSON.parse(JSON.stringify(manifest))).toEqual(manifest);
   });
 

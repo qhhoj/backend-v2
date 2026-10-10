@@ -6053,6 +6053,7 @@
             "type": "number"
           },
           "translated": {
+            "description": "True when the statement is in the requested language (the base language counts); false when it fell back to the base statement.",
             "type": "boolean"
           },
           "types": {

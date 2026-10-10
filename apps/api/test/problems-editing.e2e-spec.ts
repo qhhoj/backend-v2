@@ -85,6 +85,8 @@ describe('problem create, suggest and edit', () => {
       canEdit: true,
       isPublic: false,
       group: { fullName: 'VOI' },
+      language: 'vi',
+      translated: true,
     });
     expect(detail.descriptionHtml).toContain('<span class="katex">');
     expect(detail.descriptionHtml).toContain('<span class="math-error"');
@@ -226,6 +228,14 @@ describe('problem create, suggest and edit', () => {
   it('edits fields, records a revision diff and emits events', async () => {
     const problem = await createProblem(api, catalog, {
       code: 'edit_me',
+      translations: [
+        {
+          language: 'en',
+          name: 'Edit me',
+          description: 'x',
+          descriptionHtml: '<p>x</p>',
+        },
+      ],
       isPublic: false,
       authors: [setterId],
       points: 1000,
@@ -235,7 +245,12 @@ describe('problem create, suggest and edit', () => {
         .send({ name: 'Renamed', points: 1200, description: 'New $x$' })
         .expect(200),
     );
-    expect(detail).toMatchObject({ name: 'Renamed', points: 1200 });
+    expect(detail).toMatchObject({
+      name: 'Renamed',
+      points: 1200,
+      language: 'vi',
+      translated: true,
+    });
     expect(detail.descriptionHtml).toContain('katex');
     const [revision] = await api.revisions.find({
       entityId: problem._id,

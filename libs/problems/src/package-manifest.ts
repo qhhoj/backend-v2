@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   DATA_FILE_KINDS,
   emptyProblemData,
+  BASE_STATEMENT_LANGUAGE,
   STATEMENT_LANGUAGES,
   uuidStr,
 } from '@libs/database';
@@ -76,10 +77,15 @@ export const materialName = (url: string | null): string | null =>
 
 type Statements = Pick<Problem, 'name' | 'description' | 'translations'>;
 
-/** The English base statement, then each translation; a translation in the base language replaces the base. */
+/** The base statement (Vietnamese), then each translation; a translation in the base language replaces the base. */
 export function packageStatements(problem: Statements): PackageStatement[] {
   const byLanguage = new Map<StatementLanguage, { name: string; text: string }>(
-    [['en', { name: problem.name, text: problem.description }]],
+    [
+      [
+        BASE_STATEMENT_LANGUAGE,
+        { name: problem.name, text: problem.description },
+      ],
+    ],
   );
   for (const translation of problem.translations)
     byLanguage.set(translation.language, {

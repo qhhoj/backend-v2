@@ -182,6 +182,7 @@ describe('problem detail and editorial', () => {
       .expect(400)
       .expect(errorCode('validation_failed'));
   });
+
   it('answers 404 for unknown, malformed and invisible codes without leaking existence', async () => {
     await api
       .http()

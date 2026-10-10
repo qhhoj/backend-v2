@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, unique, ValidationFailedError } from '@libs/common';
-import { uuidStr } from '@libs/database';
+import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { excerpt } from '@libs/community';
 import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
@@ -112,7 +112,11 @@ export class ProblemEditingService {
     });
     if (mode === 'suggest' || problem.isOrganizationPrivate)
       await this.announce(problem, mode, principal.username);
-    return this.problems.detail(principal, problem.code, 'en');
+    return this.problems.detail(
+      principal,
+      problem.code,
+      BASE_STATEMENT_LANGUAGE,
+    );
   }
 
   private insert(
@@ -199,7 +203,11 @@ export class ProblemEditingService {
         changes,
         isStatementRerendered,
       });
-    return this.problems.detail(principal, updated.code, 'en');
+    return this.problems.detail(
+      principal,
+      updated.code,
+      BASE_STATEMENT_LANGUAGE,
+    );
   }
 
   /** A rename must not adopt the leftover test data directory of a deleted problem. */

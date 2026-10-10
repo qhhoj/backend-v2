@@ -40,13 +40,13 @@ describe('problem package build', () => {
   const seedPackageProblem = async (code: string) => {
     const problem = await seedProblem(worker, {
       code,
-      name: 'Sum',
-      description: 'Add two numbers.',
+      name: 'Tong',
+      description: 'Cong hai so.',
       translations: [
         {
-          language: 'vi',
-          name: 'Tong',
-          description: 'Cong hai so.',
+          language: 'en',
+          name: 'Sum',
+          description: 'Add two numbers.',
           descriptionHtml: '',
         },
       ],
@@ -182,7 +182,7 @@ describe('problem package build', () => {
     const first = await service.build({ code: problem.code, key: 'x' });
     await worker.problems.updateOne(
       { _id: problem._id },
-      { description: 'Add three numbers.' },
+      { description: 'Cong ba so.' },
     );
     const second = await service.build({ code: problem.code, key: first });
     expect(second).not.toBe(first);
@@ -191,8 +191,8 @@ describe('problem package build', () => {
     );
     expect(names).toEqual([`pkg_edit.${second}.zip`]);
     expect(
-      (await readZip(cache.pathOf(problem.code, second)))['statements/en.md'],
-    ).toBe('Add three numbers.');
+      (await readZip(cache.pathOf(problem.code, second)))['statements/vi.md'],
+    ).toBe('Cong ba so.');
   });
 
   it('refuses an oversize package before any file exists', async () => {

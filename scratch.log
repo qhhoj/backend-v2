@@ -1,0 +1,34 @@
+FAIL apps/api/src/modules/problems/core/problems.repository.spec.ts (5.175 s)
+  ● ProblemsRepository › picks a random code, retrying once when the set shrank between count and skip
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "withdata"
+    Received array: ["banana", "apple", "cherry"]
+
+      123 |     const code = await repository.randomCode({ isPublic: true });
+      124 |     jest.restoreAllMocks();
+    > 125 |     expect(['banana', 'apple', 'cherry']).toContain(code);
+          |                                           ^
+      126 |     expect(await repository.randomCode({ code: 'nothing' })).toBeNull();
+      127 |   });
+      128 | });
+
+      at Object.<anonymous> (apps/api/src/modules/problems/core/problems.repository.spec.ts:125:43)
+
+PASS apps/api/src/modules/problems/core/problem-access.spec.ts (9.869 s)
+PASS apps/api/src/modules/problems/catalog/languages.querier.spec.ts
+PASS apps/api/src/modules/problems/editing/problem-clone.service.spec.ts
+PASS apps/api/src/modules/problems/editing/dto/problem-codes.spec.ts
+PASS apps/api/src/modules/problems/core/multipart.spec.ts
+PASS apps/api/src/modules/problems/core/problem-search.spec.ts
+PASS apps/api/src/modules/problems/core/dto/timestamp.spec.ts
+PASS apps/api/src/modules/problems/core/problem.events.spec.ts
+PASS apps/api/src/modules/problems/lifecycle/problem-lifecycle-rules.spec.ts
+
+Test Suites: 1 failed, 9 passed, 10 total
+Tests:       1 failed, 381 passed, 382 total
+Snapshots:   0 total
+Time:        20.122 s
+Ran all test suites matching /apps\/api\/src\/modules\/problems/i.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

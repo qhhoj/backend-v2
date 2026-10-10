@@ -248,14 +248,6 @@ async function seedProblem(
       allowedLanguages: languageIds,
       description: spec.description,
       descriptionHtml: html,
-      translations: [
-        {
-          language: 'en',
-          name: spec.name,
-          description: spec.description,
-          descriptionHtml: html,
-        },
-      ],
       data: { ...sample, cases: compiled.cases },
     },
   );
