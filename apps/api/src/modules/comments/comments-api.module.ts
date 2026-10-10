@@ -17,6 +17,9 @@ import { CommentModerationController } from './moderation/comment-moderation.con
 import { CommentModerationService } from './moderation/comment-moderation.service';
 import { CommentPostingController } from './posting/comment-posting.controller';
 import { CommentPostingService } from './posting/comment-posting.service';
+import { CommentReportsController } from './reports/comment-reports.controller';
+import { CommentReportsRepository } from './reports/comment-reports.repository';
+import { CommentReportsService } from './reports/comment-reports.service';
 import { CommentVotesController } from './votes/comment-votes.controller';
 import { CommentVotesService } from './votes/comment-votes.service';
 
@@ -35,6 +38,7 @@ import { CommentVotesService } from './votes/comment-votes.service';
     CommentPostingController,
     CommentVotesController,
     CommentModerationController,
+    CommentReportsController,
   ],
   providers: [
     CommentsRepository,
@@ -45,6 +49,8 @@ import { CommentVotesService } from './votes/comment-votes.service';
     CommentVotesService,
     CommentModerationService,
     RecentCommentsService,
+    CommentReportsRepository,
+    CommentReportsService,
     RateLimitService,
   ],
   exports: [

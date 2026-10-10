@@ -108,6 +108,7 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | `organization-points` | organization PP and member counts                                       |
 | `user-data`           | user data export zips, hourly expiry sweep                              |
 | `contribution-points` | users' contribution points (votes, hidden comments, posts, suggestions) |
+| `comment-numbers`     | one-off: number comments posted before `Comment.number`                 |
 | `discord-webhook`     | Discord announcements                                                   |
 | `pdf-render`          | statement PDFs (Playwright)                                             |
 | `polygon-import`      | Polygon package import                                                  |

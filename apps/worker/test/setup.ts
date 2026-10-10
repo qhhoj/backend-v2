@@ -6,7 +6,7 @@ import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { TEST_ENV, TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
-import { USER_DATA_QUEUE } from '@libs/community';
+import { COMMENT_NUMBERS_QUEUE, USER_DATA_QUEUE } from '@libs/community';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
@@ -111,6 +111,7 @@ export async function setupWorkerTest({
         CONTEST_PUBLISH_QUEUE,
         USER_DATA_QUEUE,
         PROBLEM_DATABYTES_QUEUE,
+        COMMENT_NUMBERS_QUEUE,
       ].map((name) => testingModule!.get<Queue>(getQueueToken(name)));
       await waitUntil(async () => {
         for (const queue of sweepQueues) {

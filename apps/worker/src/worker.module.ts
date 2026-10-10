@@ -24,6 +24,7 @@ import { ProblemPackageModule } from './jobs/problem-package/problem-package.mod
 import { ProblemPurgeModule } from './jobs/problem-purge/problem-purge.module';
 import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { ProblemDataBytesModule } from './jobs/problem-databytes/problem-databytes.module';
+import { CommentNumbersModule } from './jobs/comment-numbers/comment-numbers.module';
 import { OrganizationUsageAuditModule } from './jobs/organization-usage-audit/organization-usage-audit.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
 import { PolygonAutoSyncModule } from './jobs/polygon-autosync/polygon-autosync.module';
@@ -54,6 +55,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     PolygonImportModule,
     PolygonAutoSyncModule,
     ProblemDataBytesModule,
+    CommentNumbersModule,
     SubmissionEffectsModule,
     EffectsSweepModule,
     ProblemRescoreModule,

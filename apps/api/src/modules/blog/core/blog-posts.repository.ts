@@ -13,6 +13,8 @@ import {
   BlogVote,
   Comment,
   CommentLock,
+  CommentPageCounter,
+  CommentReport,
   CommentVote,
   isUuid,
   uuidStr,
@@ -34,6 +36,10 @@ export class BlogPostsRepository {
     private readonly commentVotes: Model<CommentVote>,
     @InjectModel(CommentLock.name)
     private readonly commentLocks: Model<CommentLock>,
+    @InjectModel(CommentReport.name)
+    private readonly commentReports: Model<CommentReport>,
+    @InjectModel(CommentPageCounter.name)
+    private readonly commentCounters: Model<CommentPageCounter>,
   ) {}
 
   findById(id: string): Promise<BlogPostDocument | null> {
@@ -90,7 +96,7 @@ export class BlogPostsRepository {
     await this.posts.updateOne({ _id: id }, { $set: changes }).exec();
   }
 
-  /** The post and its discussion (votes, comments with their votes, the lock) in one transaction; legacy left the comments orphaned. Returns the comment authors, whose contribution points change. */
+  /** The post and its discussion (votes, comments with their votes and reports, the lock, the numbering counter) in one transaction; legacy left the comments orphaned. Returns the comment authors, whose contribution points change. */
   async deleteWithDiscussion(id: string): Promise<string[]> {
     const page = { 'page.type': 'blog', 'page.id': id };
     let authors: string[] = [];
@@ -108,6 +114,8 @@ export class BlogPostsRepository {
         .exec();
       await this.comments.deleteMany(page, { session }).exec();
       await this.commentLocks.deleteMany(page, { session }).exec();
+      await this.commentReports.deleteMany(page, { session }).exec();
+      await this.commentCounters.deleteMany(page, { session }).exec();
       await this.blogVotes.deleteMany({ blog: id }, { session }).exec();
       await this.posts.deleteOne({ _id: id }, { session }).exec();
     });

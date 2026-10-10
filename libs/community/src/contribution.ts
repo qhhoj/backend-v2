@@ -6,7 +6,7 @@ export const CONTRIBUTION_PER_GOOD_TICKET = 10;
 export const CONTRIBUTION_PER_PUBLIC_SUGGESTION = 20;
 
 export interface ContributionTotals {
-  /** Score of own comments that are not hidden. */
+  /** Score of own comments that are neither hidden nor deleted. */
   commentScore: number;
   /** Score of own visible posts without an organization. */
   postScore: number;

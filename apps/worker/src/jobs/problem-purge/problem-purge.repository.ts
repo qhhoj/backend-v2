@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import {
   Comment,
   CommentLock,
+  CommentPageCounter,
+  CommentReport,
   CommentVote,
   Problem,
   Revision,
@@ -38,6 +40,10 @@ export class ProblemPurgeRepository {
     private readonly commentVotes: Model<CommentVote>,
     @InjectModel(CommentLock.name)
     private readonly commentLocks: Model<CommentLock>,
+    @InjectModel(CommentReport.name)
+    private readonly commentReports: Model<CommentReport>,
+    @InjectModel(CommentPageCounter.name)
+    private readonly commentCounters: Model<CommentPageCounter>,
   ) {}
 
   /** Not purged yet and either deleted before `cutoff` with no claim, or claimed before `staleBefore` whatever its age: a claim that old belongs to a purge that died, and a superuser's purge-now must not wait out the grace period to be finished (sparse `{deletedAt}` index). */
@@ -91,7 +97,7 @@ export class ProblemPurgeRepository {
       .exec();
   }
 
-  /** The problem's comments with their votes, and the page locks. Returns the number of comments removed. */
+  /** The problem's comments with their votes and reports, and the page locks and numbering counters. Returns the number of comments removed. */
   async removeComments(problemId: string): Promise<number> {
     const page = {
       'page.type': { $in: PROBLEM_PAGE_TYPES },
@@ -104,6 +110,8 @@ export class ProblemPurgeRepository {
       await this.comments.deleteMany({ _id: { $in: chunk } }).exec();
     }
     await this.commentLocks.deleteMany(page).exec();
+    await this.commentReports.deleteMany(page).exec();
+    await this.commentCounters.deleteMany(page).exec();
     return ids.length;
   }
 

@@ -3,7 +3,6 @@ import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import {
-  canInteract,
   COMMENT_THREADS_PAGE_SIZE,
   officialModeLocks,
   pageOf,
@@ -23,10 +22,14 @@ import { CommentsRepository } from './comments.repository';
 import type { CommentDocument } from './comments.repository';
 import {
   CommentDetailResponse,
+  CommentLocationResponse,
   CommentPageLinkResponse,
   CommentPageResponse,
+  CommentPostBlockResponse,
   CommentResponse,
 } from './dto/comment.response';
+import { postBlockOf } from './post-block';
+import type { PageLock, PostBlock } from './post-block';
 
 @Injectable()
 export class CommentsService {
@@ -39,7 +42,7 @@ export class CommentsService {
     private readonly users: UsersRepository,
   ) {}
 
-  /** Legacy `CommentedDetailView.get_context_data`, one page of threads at a time. */
+  /** Legacy `CommentedDetailView.get_context_data`, one page of threads at a time. Moderators also get the hidden comments, flagged. */
   async page(
     principal: Principal | null,
     type: CommentPageType,
@@ -48,15 +51,18 @@ export class CommentsService {
   ): Promise<CommentPageResponse> {
     this.assertOpen(principal);
     const pageInfo = await this.pages.resolve(principal, type, key);
+    const withHidden = moderatesComments(principal);
     const { roots, total } = this.hidesThread(principal, pageInfo)
       ? { roots: [], total: 0 }
       : await this.comments.threads(
           pageInfo.page,
           pageNumber,
           COMMENT_THREADS_PAGE_SIZE,
+          withHidden,
         );
     const replies = await this.comments.replies(
       roots.map((root) => uuidStr(root._id)),
+      withHidden,
     );
     const ordered = roots.flatMap((root) => [
       root,
@@ -64,12 +70,15 @@ export class CommentsService {
         (reply) => uuidStr(reply.threadId) === uuidStr(root._id),
       ),
     ]);
-    const locked = await this.isLocked(principal, pageInfo);
-    const viewer = principal && (await this.users.findById(principal.userId));
+    const pageLocked = await this.locks.isLocked(pageInfo.page);
+    const lock = this.lockOf(principal, pageInfo, pageLocked);
+    const postBlock = await this.postBlock(principal, lock);
     return {
       page: CommentPageLinkResponse.from(pageInfo),
-      locked,
-      canComment: !locked && viewer !== null && canInteract(viewer),
+      locked: lock !== null,
+      pageLocked,
+      canComment: postBlock === null,
+      postBlock: CommentPostBlockResponse.from(postBlock),
       comments: await this.respond(principal, ordered),
       pagination: {
         page: pageNumber,
@@ -89,18 +98,37 @@ export class CommentsService {
       allowHidden: true,
     });
     const [response] = await this.respond(principal, [comment]);
+    return { ...response, page: CommentPageLinkResponse.from(pageInfo) };
+  }
+
+  /** The listing page holding the comment's thread for this viewer (moderators count hidden threads too), for `#comment-<id>` links. */
+  async locate(
+    principal: Principal | null,
+    id: string,
+  ): Promise<CommentLocationResponse> {
+    this.assertOpen(principal);
+    const { comment, pageInfo } = await this.visibleComment(principal, id, {
+      allowHidden: true,
+    });
+    const newer = await this.comments.rootsNewerThan(
+      pageInfo.page,
+      uuidStr(comment.threadId),
+      moderatesComments(principal),
+    );
     return {
-      ...response,
       page: CommentPageLinkResponse.from(pageInfo),
-      hidden: comment.hidden,
+      pageNumber: Math.floor(newer / COMMENT_THREADS_PAGE_SIZE) + 1,
     };
   }
 
-  /** 404 for malformed, unknown and unreadable comments; hidden ones only for `change_comment` when `allowHidden`. */
+  /** 404 for malformed, unknown and unreadable comments; hidden ones only for `change_comment` when `allowHidden`; deleted ones unless `allowDeleted` (reads show the placeholder, writes refuse it). */
   async visibleComment(
     principal: Principal | null,
     id: string,
-    { allowHidden }: { allowHidden: boolean },
+    {
+      allowHidden,
+      allowDeleted = true,
+    }: { allowHidden: boolean; allowDeleted?: boolean },
   ): Promise<{ comment: CommentDocument; pageInfo: PageInfo }> {
     const comment = await this.comments.findById(id);
     const moderates = moderatesComments(principal);
@@ -109,38 +137,43 @@ export class CommentsService {
       comment &&
       page &&
       (!comment.hidden || (allowHidden && moderates)) &&
+      (allowDeleted || !comment.deletedAt) &&
       (await this.pages.accessible(principal, [page])).get(pageRef(page));
     if (!comment || !pageInfo || this.hidesThread(principal, pageInfo))
       throw new AppError('not_found', 404, 'No such comment');
     return { comment, pageInfo };
   }
 
-  /** Authors in one read, the viewer's votes in one indexed read. */
+  /** Authors and hiding moderators in one read, the viewer's votes in one indexed read. */
   async respond(
     principal: Principal | null,
     comments: readonly Comment[],
   ): Promise<CommentResponse[]> {
     const ids = comments.map((comment) => uuidStr(comment._id));
-    const [authors, viewerVotes] = await Promise.all([
-      this.users.findByIds(
-        unique(comments.map((comment) => uuidStr(comment.author))),
-      ),
+    const userIds = comments.flatMap((comment) => [
+      uuidStr(comment.author),
+      ...(comment.hiddenByUser ? [uuidStr(comment.hiddenByUser)] : []),
+    ]);
+    const [users, viewerVotes] = await Promise.all([
+      this.users.findByIds(unique(userIds)),
       principal
         ? this.votes.viewerVotes('comment', ids, principal.userId)
         : Promise.resolve(new Map<string, VoteScore>()),
     ]);
-    const authorOf = new Map(
-      authors.map((user) => [user._id, UserSummaryResponse.from(user)]),
+    const summaryOf = new Map(
+      users.map((user) => [user._id, UserSummaryResponse.from(user)]),
     );
     const moderates = moderatesComments(principal);
     return comments.map((comment) => {
       const authorId = uuidStr(comment.author);
-      return CommentResponse.from(
-        comment,
-        authorOf.get(authorId) ?? null,
-        viewerVotes.get(uuidStr(comment._id)) ?? 0,
-        moderates || principal?.userId === authorId,
-      );
+      return CommentResponse.from(comment, {
+        author: summaryOf.get(authorId) ?? null,
+        hiddenBy: comment.hiddenByUser
+          ? (summaryOf.get(uuidStr(comment.hiddenByUser)) ?? null)
+          : null,
+        viewerVote: viewerVotes.get(uuidStr(comment._id)) ?? 0,
+        canEdit: moderates || principal?.userId === authorId,
+      });
     });
   }
 
@@ -166,12 +199,35 @@ export class CommentsService {
     );
   }
 
-  /** Legacy `is_comment_locked` plus the contest lock; `override_comment_lock` passes both. */
-  async isLocked(
+  /** Legacy `is_comment_locked` plus the contest lock, as it applies to the viewer; `override_comment_lock` passes both. */
+  lockOf(
     principal: Principal | null,
     pageInfo: PageInfo,
-  ): Promise<boolean> {
-    if (this.overridesLock(principal)) return false;
-    return pageInfo.contestLocked || (await this.locks.isLocked(pageInfo.page));
+    pageLocked: boolean,
+  ): PageLock {
+    if (this.overridesLock(principal)) return null;
+    if (pageInfo.contestLocked) return 'contest';
+    return pageLocked ? 'locked' : null;
+  }
+
+  /** Why the viewer cannot post on the page (`postBlockOf`); the listing reports it and posting refuses on it. */
+  async postBlock(
+    principal: Principal | null,
+    lock: PageLock,
+  ): Promise<PostBlock | null> {
+    const viewer = principal && (await this.users.findById(principal.userId));
+    return postBlockOf(viewer, lock);
+  }
+
+  /** `postBlock` for a page by its info, reading the lock. */
+  async postBlockOn(
+    principal: Principal | null,
+    pageInfo: PageInfo,
+  ): Promise<PostBlock | null> {
+    const pageLocked = await this.locks.isLocked(pageInfo.page);
+    return this.postBlock(
+      principal,
+      this.lockOf(principal, pageInfo, pageLocked),
+    );
   }
 }

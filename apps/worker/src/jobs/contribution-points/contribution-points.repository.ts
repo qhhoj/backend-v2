@@ -31,7 +31,13 @@ export class ContributionPointsRepository {
       [
         this.comments
           .aggregate<Total>([
-            { $match: { author: toUuid(userId), hidden: false } },
+            {
+              $match: {
+                author: toUuid(userId),
+                hidden: false,
+                deletedAt: null,
+              },
+            },
             { $group: { _id: null, total: { $sum: '$score' } } },
           ])
           .exec(),

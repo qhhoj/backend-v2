@@ -32,8 +32,9 @@ export class CommentModerationController {
    * @remarks
    * Requires `judge.change_comment`. Hides the comment together with its
    * replies, or restores what that comment had hidden, and recomputes the
-   * authors' contribution points. A comment under a hidden parent cannot be
-   * unhidden alone (409 `conflict`). Returns the comment.
+   * authors' contribution points; each hide and unhide is recorded with the
+   * moderator (shown to moderators as `hiddenBy`). A comment under a hidden
+   * parent cannot be unhidden alone (409 `conflict`). Returns the comment.
    */
   @Post(':id/hidden')
   @HttpCode(200)

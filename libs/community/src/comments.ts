@@ -13,6 +13,8 @@ export const COMMENT_REPLY_WINDOW_MS = 365 * 86_400_000;
 /** Legacy `DMOJ_COMMENT_VOTE_HIDE_THRESHOLD`: collapsed, still returned. */
 export const COMMENT_COLLAPSE_SCORE = -5;
 export const COMMENT_THREADS_PAGE_SIZE = 20;
+/** Stored `body` of a soft-deleted comment (the schema keeps `body` non-empty); never sent to clients. */
+export const COMMENT_DELETED_BODY = '[deleted]';
 /** Legacy homepage `Comment.most_recent(user, 10)`. */
 export const RECENT_COMMENTS_COUNT = 10;
 
@@ -69,3 +71,8 @@ export const canReplyAfter = (
 
 export const isCollapsed = (score: number): boolean =>
   score <= COMMENT_COLLAPSE_SCORE;
+
+/** One-off worker job numbering the comments posted before `Comment.number` existed (fixed job id: BullMQ keeps one). */
+export const COMMENT_NUMBERS_QUEUE = 'comment-numbers';
+export const COMMENT_NUMBERS_JOB = 'backfill';
+export const COMMENT_NUMBERS_JOB_ID = 'comment-numbers-backfill-v1';
