@@ -1,5 +1,24 @@
 # qhhoj-backend
 
+## 2.3.0
+
+### Minor Changes
+
+- 262ce35: Polygon integration: admin settings `polygon.apiKey`, `polygon.apiSecret` (encrypted), `polygon.accountName`; `GET /polygon/status`, `POST /polygon/test`, `GET /polygon/problems`, `POST /polygon/problems/{polygonId}/import`; `GET|PATCH|DELETE /problems/{code}/polygon` and `POST /problems/{code}/polygon/sync`; a 10-minute auto-sync worker job. Import job status gains `step` (queued, downloading, statements, tests, done, failed) and `progress`.
+- cbe4f79: Every user reference (`UserSummaryResponse`), the session user, balloon teams, contest participations and the staff user list carry `rating` (null when unrated), so clients colour names by tier.
+- a783f97: removed the unused navigation bar admin
+- 0192eef: Submission list items carry `problem.points`, the problem's max points (the denominator of a score).
+
+### Patch Changes
+
+- 8a09f53: API reference: summaries and descriptions for accounts, users, site, sync, short-link, notification and home endpoints.
+- dce495e: API reference: summaries and descriptions for contests, organizations, blog, comments and tickets endpoints.
+- 746448e: API reference: summaries and descriptions for problems, submissions, judging, judges, similarity and tags endpoints.
+- e8c244b: `GET /home` `counts.problems` counts every live problem (archive size), not only public ones.
+- 5c6f092: frontend deploy keeps the last 14 days of the kept releases' hashed assets in the new release, so open tabs on an older build no longer 404 on lazy chunks
+- 24ce416: Problem search matches substrings of the code and titles (every word, accent-insensitive) instead of whole words.
+- 9627284: `GET /users` accepts `sort=contributionPoints` (descending, ties share a rank, same as the other boards).
+
 ## 2.2.0
 
 ### Minor Changes
