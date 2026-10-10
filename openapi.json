@@ -24307,6 +24307,7 @@
         "operationId": "ArchiveNoticeController_archivedIn",
         "parameters": [
           {
+            "description": "Code of the problem.",
             "in": "path",
             "name": "code",
             "required": true,
