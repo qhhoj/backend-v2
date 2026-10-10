@@ -24,7 +24,12 @@ const expectProblemDeleted = ({ body }: { body: unknown }) => {
 
 interface Row {
   id: string;
-  problem: { code: string; name: string; isDeleted: boolean } | null;
+  problem: {
+    code: string;
+    name: string;
+    points: number;
+    isDeleted: boolean;
+  } | null;
 }
 
 describe('submissions of a deleted problem', () => {
@@ -125,6 +130,7 @@ describe('submissions of a deleted problem', () => {
     expect(rows.find((row) => row.id === mine)!.problem).toEqual({
       code: problem.code,
       name: problem.name,
+      points: problem.points,
       isDeleted: true,
     });
   });
@@ -169,6 +175,7 @@ describe('submissions of a deleted problem', () => {
     expect(detail.problem).toEqual({
       code: problem.code,
       name: problem.name,
+      points: problem.points,
       isDeleted: true,
     });
   });

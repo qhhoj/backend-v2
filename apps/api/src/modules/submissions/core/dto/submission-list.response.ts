@@ -17,6 +17,8 @@ import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.res
 export class SubmissionProblemResponse {
   code!: string;
   name!: string;
+  /** The problem's max points: the denominator of a submission's score. */
+  points!: number;
   /** The problem was deleted or purged; its name is kept. */
   isDeleted!: boolean;
 }
@@ -30,7 +32,7 @@ export class SubmissionLanguageResponse {
 /** The rows resolved for one submission; a missing one renders as null. */
 export interface SubmissionRefs {
   user: UserDocument | undefined;
-  problem: Pick<Problem, 'code' | 'name' | 'deletedAt'> | undefined;
+  problem: Pick<Problem, 'code' | 'name' | 'points' | 'deletedAt'> | undefined;
   language: Language | null;
 }
 
@@ -67,6 +69,7 @@ export class SubmissionListItemResponse {
         ? {
             code: problem.code,
             name: problem.name,
+            points: problem.points,
             isDeleted: problem.deletedAt != null,
           }
         : null,
