@@ -443,6 +443,10 @@
       },
       "BalloonTeamResponse": {
         "properties": {
+          "rating": {
+            "nullable": true,
+            "type": "number"
+          },
           "userId": {
             "type": "string"
           },
@@ -452,7 +456,8 @@
         },
         "required": [
           "userId",
-          "username"
+          "username",
+          "rating"
         ],
         "type": "object"
       },
@@ -9283,6 +9288,11 @@
             "nullable": true,
             "type": "string"
           },
+          "rating": {
+            "description": "Contest rating; null while unrated.",
+            "nullable": true,
+            "type": "number"
+          },
           "username": {
             "description": "Login name.",
             "type": "string"
@@ -9291,6 +9301,7 @@
         "required": [
           "id",
           "username",
+          "rating",
           "displayName",
           "displayRank",
           "isActive",
@@ -12485,6 +12496,11 @@
             },
             "type": "array"
           },
+          "rating": {
+            "description": "Contest rating; null while unrated.",
+            "nullable": true,
+            "type": "number"
+          },
           "siteTheme": {
             "description": "Theme id chosen in the profile.",
             "type": "string"
@@ -12497,6 +12513,7 @@
         "required": [
           "id",
           "username",
+          "rating",
           "email",
           "isStaff",
           "isSuperuser",
@@ -12515,6 +12532,11 @@
             "description": "User id.",
             "type": "string"
           },
+          "rating": {
+            "description": "Null when unrated; clients colour the name by it.",
+            "nullable": true,
+            "type": "number"
+          },
           "username": {
             "description": "Username.",
             "type": "string"
@@ -12522,7 +12544,8 @@
         },
         "required": [
           "id",
-          "username"
+          "username",
+          "rating"
         ],
         "type": "object"
       },
