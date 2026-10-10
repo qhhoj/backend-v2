@@ -137,7 +137,7 @@ describe('submission read flow', () => {
 
   describe('GET /submissions', () => {
     it('lists newest first with user, problem and language, paginated, without cases or source', async () => {
-      const problem = await problemWith('list');
+      const problem = await problemWith('list', { points: 1234 });
       const created: string[] = [];
       for (let index = 0; index < 3; index += 1)
         created.push(
@@ -154,7 +154,7 @@ describe('submission read flow', () => {
       expect(page.meta).toEqual({ page: 1, pageSize: 2, total: 3 });
       expect(page.data[0]).toMatchObject({
         user: { username: 'owner' },
-        problem: { code: 'list', name: 'LIST' },
+        problem: { code: 'list', name: 'LIST', points: 1234 },
         language: { key: 'CPP17' },
         status: 'D',
         result: 'AC',

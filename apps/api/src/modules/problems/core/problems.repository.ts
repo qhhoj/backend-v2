@@ -282,12 +282,12 @@ export class ProblemsRepository {
       : Promise.resolve(null);
   }
 
-  /** Names for submission rows, deleted problems included. */
+  /** Names and max points for submission rows, deleted problems included. */
   findSummariesIncludingDeleted(ids: string[]): Promise<ProblemDocument[]> {
     return this.problems
       .find(
         { _id: { $in: ids } },
-        { code: 1, name: 1, deletedAt: 1, purgedAt: 1 },
+        { code: 1, name: 1, points: 1, deletedAt: 1, purgedAt: 1 },
       )
       .exec();
   }
