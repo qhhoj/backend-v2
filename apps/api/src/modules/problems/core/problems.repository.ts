@@ -133,6 +133,21 @@ export class ProblemsRepository {
       .exec();
   }
 
+  /** Code of one uniformly random live problem matching `filter`: count, then a random offset (a `$sample` aggregate would skip the UUID casting `find` does on the filter). */
+  async randomCode(filter: FilterQuery<Problem>): Promise<string | null> {
+    const total = await this.count(filter);
+    if (!total) return null;
+    const [picked] = await this.problems
+      .find({ ...filter, ...LIVE }, { code: 1 })
+      .collation(CI)
+      .sort({ _id: 1 })
+      .skip(Math.floor(Math.random() * total))
+      .limit(1)
+      .lean()
+      .exec();
+    return picked?.code ?? null;
+  }
+
   count(filter: FilterQuery<Problem>): Promise<number> {
     return this.problems
       .countDocuments({ ...filter, ...LIVE })

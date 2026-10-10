@@ -9,8 +9,14 @@ import {
   ProblemCodeParamDto,
   StatementLangQueryDto,
 } from './dto/problem-params.dto';
-import { ProblemListQueryDto } from './dto/problem-list.dto';
-import { ProblemListItemResponse } from './dto/problem-list.response';
+import {
+  ProblemListQueryDto,
+  ProblemFilterQueryDto,
+} from './dto/problem-list.dto';
+import {
+  ProblemListItemResponse,
+  RandomProblemResponse,
+} from './dto/problem-list.response';
 import { ProblemMetaResponse } from './dto/problem-meta.response';
 import { ProblemsService } from './problems.service';
 
@@ -22,6 +28,15 @@ export class ProblemsController {
   @Get('meta')
   meta(): ProblemMetaResponse {
     return this.problems.meta();
+  }
+
+  @Public()
+  @Get('random')
+  random(
+    @Query() query: ProblemFilterQueryDto,
+    @CurrentAuth() auth: AuthContext | undefined,
+  ): Promise<RandomProblemResponse> {
+    return this.problems.randomCode(optionalPrincipal(auth), query);
   }
 
   @Public()

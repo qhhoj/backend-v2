@@ -7,7 +7,12 @@ const UUID = MongooseSchema.Types.UUID;
 
 export const PROBLEM_CODE_PATTERN = /^[a-z0-9_]{1,32}$/;
 /** Static `GET /problems/<x>` routes own these segments, so no problem may take them. */
-export const RESERVED_PROBLEM_CODES = ['deleted', 'meta', 'imports'] as const;
+export const RESERVED_PROBLEM_CODES = [
+  'deleted',
+  'meta',
+  'imports',
+  'random',
+] as const;
 export const STATEMENT_LANGUAGES = ['en', 'vi'] as const;
 export type StatementLanguage = (typeof STATEMENT_LANGUAGES)[number];
 /** Filter for the compare-and-set on `dataVersion`; a missing counter counts as 0. */

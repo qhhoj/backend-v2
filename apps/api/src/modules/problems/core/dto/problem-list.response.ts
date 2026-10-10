@@ -60,3 +60,7 @@ export class ProblemListItemResponse {
     };
   }
 }
+
+export class RandomProblemResponse {
+  code!: string;
+}

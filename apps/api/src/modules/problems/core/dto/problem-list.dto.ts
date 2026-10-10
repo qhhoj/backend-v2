@@ -21,21 +21,8 @@ import { toBoolean } from './transforms';
 export const PROBLEM_VISIBILITIES = ['public', 'private', 'all'] as const;
 export type ProblemVisibility = (typeof PROBLEM_VISIBILITIES)[number];
 
-export class ProblemListQueryDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(10000)
-  page: number = 1;
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  pageSize: number = 50;
+/** The filters shared by the list and the random pick. */
+export class ProblemFilterQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -62,10 +49,6 @@ export class ProblemListQueryDto {
   @IsOptional()
   @IsIn(PROBLEM_VISIBILITIES)
   visibility: ProblemVisibility = 'public';
-  @ApiPropertyOptional({ enum: PROBLEM_SORT_OPTIONS, enumName: 'ProblemSort' })
-  @IsOptional()
-  @IsIn(PROBLEM_SORT_OPTIONS)
-  sort: string = '-date';
   @ApiPropertyOptional({
     enum: STATEMENT_LANGUAGES,
     enumName: 'StatementLanguage',
@@ -73,4 +56,25 @@ export class ProblemListQueryDto {
   @IsOptional()
   @IsIn(STATEMENT_LANGUAGES)
   lang: StatementLanguage = 'en';
+}
+
+export class ProblemListQueryDto extends ProblemFilterQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize: number = 50;
+  @ApiPropertyOptional({ enum: PROBLEM_SORT_OPTIONS, enumName: 'ProblemSort' })
+  @IsOptional()
+  @IsIn(PROBLEM_SORT_OPTIONS)
+  sort: string = '-date';
 }

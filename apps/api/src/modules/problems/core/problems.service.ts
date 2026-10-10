@@ -14,8 +14,14 @@ import {
   ProblemDetailResponse,
 } from './dto/problem-detail.response';
 import { UserSummaryResponse } from './dto/user-summary.response';
-import { ProblemListQueryDto } from './dto/problem-list.dto';
-import { ProblemListItemResponse } from './dto/problem-list.response';
+import {
+  ProblemListQueryDto,
+  ProblemFilterQueryDto,
+} from './dto/problem-list.dto';
+import {
+  ProblemListItemResponse,
+  RandomProblemResponse,
+} from './dto/problem-list.response';
 import { ProblemAccess } from './problem-access';
 import type { ContestScope } from './problem-access';
 import {
@@ -46,7 +52,7 @@ const byField =
     String(left[field]).localeCompare(String(right[field]));
 
 /** `search` (text index, prefix when short) and `q` (substring), both optional and both applied. */
-function textClauses(query: ProblemListQueryDto): FilterQuery<Problem>[] {
+function textClauses(query: ProblemFilterQueryDto): FilterQuery<Problem>[] {
   const search = query.search?.trim();
   const substring = query.q?.trim();
   return [
@@ -119,6 +125,18 @@ export class ProblemsService {
       ),
       { page: query.page, pageSize: query.pageSize, total },
     );
+  }
+
+  /** Same filters and visibility as `list`; 404 when nothing matches. */
+  async randomCode(
+    principal: Principal | null,
+    query: ProblemFilterQueryDto,
+  ): Promise<RandomProblemResponse> {
+    const code = await this.repository.randomCode(
+      await this.listFilter(principal, query),
+    );
+    if (!code) throw new AppError('no_problem', 404, 'No matching problem');
+    return { code };
   }
 
   private async contestContext(
@@ -290,7 +308,7 @@ export class ProblemsService {
 
   private async listFilter(
     principal: Principal | null,
-    query: ProblemListQueryDto,
+    query: ProblemFilterQueryDto,
   ): Promise<FilterQuery<Problem>> {
     const clauses: FilterQuery<Problem>[] = [
       ProblemAccess.visibleFilter(
