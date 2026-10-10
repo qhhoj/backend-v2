@@ -54,8 +54,7 @@ backend_healthy() {
 }
 
 switch_backend() {
-  podman tag "$IMAGE:$1" "$IMAGE:current"
-  systemctl restart qhhoj.target
+  podman tag "$IMAGE:$1" "$IMAGE:current" && systemctl restart qhhoj.target
 }
 
 prune_images() {
@@ -77,25 +76,39 @@ deploy_backend() { # <tag> [--force]
   fi
   podman pull --authfile "$AUTHFILE" "$IMAGE:$tag"
   previous="$(live backend)"
-  switch_backend "$tag"
-  if backend_healthy; then
+  if switch_backend "$tag" && backend_healthy; then
     record backend "$tag"; prune_images; echo "deployed backend $tag"; return
   fi
-  echo "qhhoj-deploy: backend $tag unhealthy; restoring ${previous:-nothing}" >&2
-  if [ -n "$previous" ]; then switch_backend "$previous"; fi
+  echo "qhhoj-deploy: backend $tag failed; restoring ${previous:-nothing}" >&2
+  if [ -n "$previous" ] && ! switch_backend "$previous"; then
+    die "restoring $previous failed; live backend state unknown"
+  fi
   exit 1
 }
 
-rollback() { # backend|frontend
-  local app=$1 count target
-  count="$(wc -l < "$(history_file "$app")" 2>/dev/null || echo 0)"
-  [ "$count" -ge 2 ] || die "no previous $app version to roll back to"
-  drop_last "$app"; target="$(live "$app")"
+previous_entry() { # <app>: the history entry before the live one (empty when there is none)
+  local file; file="$(history_file "$1")"
+  [ -f "$file" ] && sed -n '$!p' "$file" | tail -n 1
+  return 0
+}
+
+target_present() { # <app> <version>: the image or release that a rollback would switch to still exists
+  if [ "$1" = backend ]; then podman image exists "$IMAGE:$2"; else [ -d "$WWW/releases/$2" ]; fi
+}
+
+rollback() { # backend|frontend: history moves only after the target is confirmed present
+  local app=$1 target
+  if [ "$app" = backend ] && migration_running; then defer "migration running"; fi
+  target="$(previous_entry "$app")"
+  [ -n "$target" ] || die "no previous $app version to roll back to"
+  target_present "$app" "$target" || die "$app $target is no longer present; history unchanged"
   if [ "$app" = backend ]; then
-    if migration_running; then defer "migration running"; fi
-    switch_backend "$target"; backend_healthy || die "backend $target unhealthy after rollback"
+    switch_backend "$target" || die "switching backend to $target failed"
+    drop_last backend
+    backend_healthy || die "backend $target unhealthy after rollback"
   else
-    point_frontend "$target"; frontend_healthy "$target" || die "frontend $target unhealthy after rollback"
+    point_frontend "$target"; drop_last frontend
+    frontend_healthy "$target" || die "frontend $target unhealthy after rollback"
   fi
   echo "rolled back $app to $target"
 }
@@ -123,12 +136,36 @@ frontend_healthy() { # <version>: nginx serves that release's index.html (loopba
   rm -f "$got"; return 1
 }
 
-unpack_frontend() { # <version>: verified tarball -> releases/<version>
+stage_incoming() { # <name>: root-owned private copies of the tarball and its checksum (symlinks copied as links, then refused)
+  local f
+  for f in "$1" "$1.sha256"; do
+    cp --no-dereference "$INCOMING/$f" "$STAGE/$f" || die "missing $INCOMING/$f"
+    [ -f "$STAGE/$f" ] && [ ! -L "$STAGE/$f" ] || die "$INCOMING/$f is not a regular file"
+    chmod 600 "$STAGE/$f"
+  done
+}
+
+verify_checksum() { # <dir> <name>: sha256 of the tarball equals the hash in <name>.sha256 (its file-name field is ignored)
+  local want got
+  want="$(cut -d' ' -f1 "$1/$2.sha256")"
+  got="$(sha256sum "$1/$2" | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$got" = "$want" ]
+}
+
+archive_safe() { # <tarball>: only regular files and directories, no absolute or '..' member names
+  local verbose names
+  verbose="$(tar -tvzf "$1")" && names="$(tar -tzf "$1")" || return 1
+  ! grep -qvE '^[-d]' <<<"$verbose" && ! grep -qE '(^/|(^|/)\.\.(/|$))' <<<"$names"
+}
+
+unpack_frontend() { # <version>: verified private copy of the incoming tarball -> releases/<version>
   local name="frontend-dist-$1.tar.gz" dir="$WWW/releases/$1"
-  [ -f "$INCOMING/$name" ] && [ -f "$INCOMING/$name.sha256" ] || die "missing $INCOMING/$name(.sha256)"
-  (cd "$INCOMING" && sha256sum -c --status "$name.sha256") || die "checksum mismatch for $name"
+  STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
+  stage_incoming "$name"
+  verify_checksum "$STAGE" "$name" || die "checksum mismatch for $name"
+  archive_safe "$STAGE/$name" || die "$name has a member that is not a file or directory, or an unsafe path"
   rm -rf "$dir.tmp"; mkdir -p "$dir.tmp"
-  tar -xzf "$INCOMING/$name" -C "$dir.tmp" --no-same-owner --no-same-permissions
+  tar -xzf "$STAGE/$name" -C "$dir.tmp" --no-same-owner --no-same-permissions || { rm -rf "$dir.tmp"; die "cannot unpack $name"; }
   [ -f "$dir.tmp/index.html" ] || { rm -rf "$dir.tmp"; die "$name has no index.html"; }
   chmod -R a+rX "$dir.tmp"
   rm -rf "$dir"; mv "$dir.tmp" "$dir"

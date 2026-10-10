@@ -11,7 +11,11 @@ fresh() {
   mkdir -p "$root/run" "$root/etc/qhhoj" "$root/var/lib/qhhoj-deploy/incoming" "$root/var/www/qhhoj/releases"
   printf 'MONGO_URL=mongodb://x\nPORT=3000\nSITE_URL=https://oj.test\n' > "$root/etc/qhhoj/env"
   : > "$calls"
-  stub podman; stub systemctl; stub sleep
+  # shellcheck disable=SC2016 # stub bodies are expanded when the stub runs
+  stub podman '[ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; true'
+  # shellcheck disable=SC2016
+  stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }; true'
+  stub sleep
   # shellcheck disable=SC2016 # stub bodies are written to files, expanded when the stub runs
   stub mongosh '[ -n "${STUB_CONTEST:-}" ] && echo "$STUB_CONTEST"; true'
   # shellcheck disable=SC2016
@@ -91,5 +95,76 @@ set +e; STUB_HEALTH=fail deploy frontend v2.4.0 >/dev/null 2>&1; code=$?; set -e
 tarball v2.5.0; deploy frontend v2.5.0 >/dev/null
 deploy rollback frontend >/dev/null || fail "frontend rollback"
 [ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "frontend rollback target"
+
+
+# --- fix round 1 ---
+inc="$root/var/lib/qhhoj-deploy/incoming"
+fhist() { cat "$root/var/lib/qhhoj-deploy/frontend.history"; }
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs
+frontend_curl='out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done; [ "${STUB_HEALTH:-ok}" = ok ] && cp "$QHHOJ_DEPLOY_ROOT/var/www/qhhoj/current/index.html" "$out"; [ "${STUB_HEALTH:-ok}" = ok ]'
+fresh_frontend() { fresh; stub curl "$frontend_curl"; }
+refused_frontend() { # <version> <label>: deploy must exit 1, leave current on v2.1.0 and create no release
+  local code
+  set +e; deploy frontend "$1" >/dev/null 2>&1; code=$?; set -e
+  [ "$code" = 1 ] || fail "$2 must exit 1, got $code"
+  [ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "$2 changed current"
+  [ ! -e "$www/releases/$1" ] || fail "$2 left a release"
+}
+tarball_linked() { # <version>: like tarball, plus a symlink member pointing at /etc
+  local src; src="$(mktemp -d)"
+  echo "<html>$1</html>" > "$src/index.html"; ln -s /etc "$src/leak"
+  tar -czf "$inc/frontend-dist-$1.tar.gz" -C "$src" .
+  (cd "$inc" && sha256sum "frontend-dist-$1.tar.gz" > "frontend-dist-$1.tar.gz.sha256")
+  rm -rf "$src"
+}
+tarball_escape() { # <version>: archive whose member name climbs out of the release dir
+  local src; src="$(mktemp -d)"
+  echo "<html>$1</html>" > "$src/index.html"; echo escaped > "$src/x.html"
+  tar -czf "$inc/frontend-dist-$1.tar.gz" -C "$src" --transform 's,^x\.html$,../escaped.html,' index.html x.html 2>/dev/null
+  (cd "$inc" && sha256sum "frontend-dist-$1.tar.gz" > "frontend-dist-$1.tar.gz.sha256")
+  rm -rf "$src"
+}
+
+fresh_frontend; tarball v2.1.0; deploy frontend v2.1.0 >/dev/null || fail "round-1 baseline"
+tarball_linked v2.6.0; refused_frontend v2.6.0 "symlink member"
+tarball_escape v2.9.0; refused_frontend v2.9.0 "parent-directory member"
+tarball v2.7.0; real="$(mktemp)"; mv "$inc/frontend-dist-v2.7.0.tar.gz" "$real"
+ln -s "$real" "$inc/frontend-dist-v2.7.0.tar.gz"; refused_frontend v2.7.0 "symlinked tarball"; rm -f "$real"
+tarball v2.8.0; echo decoy > "$inc/decoy.bin"
+echo "$(sha256sum "$inc/decoy.bin" | cut -d' ' -f1)  decoy.bin" > "$inc/frontend-dist-v2.8.0.tar.gz.sha256"
+refused_frontend v2.8.0 "decoy checksum"
+
+# a failed restart re-points the backend to the previous tag and is not recorded
+fresh; deploy backend v2.1.0 >/dev/null || fail "restart baseline"
+: > "$calls"; touch "$root/restart_fail"
+set +e; deploy backend v2.2.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "failed restart must exit 1, got $code"
+grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "failed restart did not restore v2.1.0"
+[ "$(hist)" = v2.1.0 ] || fail "failed restart must not be recorded"
+
+# rollback defers under the migrate lock before touching history
+fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null
+exec 8>"$root/run/qhhoj-migrate.lock"; flock 8
+set +e; deploy rollback backend >/dev/null; code=$?; set -e
+exec 8>&-
+[ "$code" = 75 ] || fail "rollback under migration lock must defer (75), got $code"
+[ "$(hist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "deferred rollback changed history"
+
+# rollback to a pruned backend image is refused with history unchanged
+fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null; : > "$calls"
+export STUB_IMAGE_MISSING=1
+set +e; deploy rollback backend >/dev/null 2>&1; code=$?; set -e
+unset STUB_IMAGE_MISSING
+[ "$code" = 1 ] || fail "rollback to a pruned image must exit 1, got $code"
+[ "$(hist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "pruned-image rollback changed history"
+! grep -q "podman tag" "$calls" || fail "pruned-image rollback re-tagged current"
+
+# rollback to a pruned frontend release is refused with history and current unchanged
+fresh_frontend; tarball v2.1.0; deploy frontend v2.1.0 >/dev/null
+tarball v2.2.0; deploy frontend v2.2.0 >/dev/null; rm -rf "$www/releases/v2.1.0"
+set +e; deploy rollback frontend >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "rollback to a pruned release must exit 1, got $code"
+[ "$(fhist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "pruned-release rollback changed history"
+[ "$(readlink "$www/current")" = releases/v2.2.0 ] || fail "pruned-release rollback moved current"
 
 echo "qhhoj-deploy backend ok"
