@@ -11,8 +11,8 @@ expect() { # <unit> <pattern>
 }
 
 for unit in qhhoj-api qhhoj-bridge qhhoj-worker; do
-  expect "$unit" '--network host'
-  expect "$unit" '--user 987:987'
+  expect "$unit" '--network[= ]host'
+  expect "$unit" '--user[= ]987:987'
   expect "$unit" '--read-only'
   expect "$unit" 'ghcr.io/qhhoj/backend-v2:current'
   expect "$unit" '--env-file /etc/qhhoj/env'
