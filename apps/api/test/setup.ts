@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Type } from '@nestjs/common';
@@ -264,6 +264,25 @@ export async function setupApiTest({
     /** Writes through the real service, so readers see it at once. */
     setSetting: (key: SettingKey, value: unknown) =>
       readyApp.get(SettingsService).set(key, value, null),
+    /** Empties every model, Redis, the mailer and the data roots, so specs merged into one app start clean. */
+    reset: async () => {
+      mailer.sent.length = 0;
+      await readyApp.get<Redis>(REDIS).flushdb();
+      const { models } = readyApp.get<Connection>(getConnectionToken());
+      await Promise.all(
+        Object.values(models).map((model) => model.deleteMany({})),
+      );
+      for (const root of [
+        mediaRoot,
+        problemDataRoot,
+        pdfCacheRoot,
+        contestDataRoot,
+        userDataRoot,
+      ]) {
+        rmSync(root, { recursive: true, force: true });
+        mkdirSync(root, { recursive: true });
+      }
+    },
     teardown: async () => {
       await readyApp.close();
       await replSet.stop();

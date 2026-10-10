@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
@@ -191,6 +191,18 @@ export async function setupWorkerTest({
     /** Writes through the real service, so readers see it at once. */
     setSetting: (key: SettingKey, value: unknown) =>
       ready.get(SettingsService).set(key, value, null),
+    /** Empties every model, Redis and the data roots, so specs merged into one app start clean. */
+    reset: async () => {
+      await flushRedis();
+      const { models } = ready.get<Connection>(getConnectionToken());
+      await Promise.all(
+        Object.values(models).map((model) => model.deleteMany({})),
+      );
+      for (const root of Object.values(roots)) {
+        rmSync(root, { recursive: true, force: true });
+        mkdirSync(root, { recursive: true });
+      }
+    },
     teardown: async () => {
       await ready.close();
       await cleanup();

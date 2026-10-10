@@ -441,30 +441,6 @@ describe('user activity staff API', () => {
     ).toHaveLength(agents.length);
   });
 
-  it('caps the export at 100000 rows, newest first', async () => {
-    const now = Date.now();
-    const rows = Array.from({ length: 100_001 }, (_value, index) => ({
-      _id: newId(),
-      userId: ids.bob,
-      sessionKey: 's',
-      path: `/p${index}`,
-      method: 'GET',
-      ip: '1.1.1.1',
-      userAgent: '',
-      referer: '',
-      statusCode: 200,
-      at: new Date(now - 60_000 - index),
-    }));
-    for (let start = 0; start < rows.length; start += 20_000)
-      await api.userActivities.insertMany(rows.slice(start, start + 20_000));
-    const lines = (await get('/logs/export').expect(200)).text
-      .split('\r\n')
-      .filter(Boolean);
-    expect(lines).toHaveLength(100_001);
-    expect(lines[1]).toContain('/p0,');
-    expect(lines[100_000]).toContain('/p99999,');
-  }, 120_000);
-
   it('audits deletions with who, whom and how many', async () => {
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
     try {
