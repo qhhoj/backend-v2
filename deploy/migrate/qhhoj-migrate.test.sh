@@ -41,6 +41,7 @@ EOF
   stub podman "case \"\$*\" in *inspect*) echo true ;; *recompute*) bash '$root/recompute.sh' ;; esac"
 }
 COVERAGE=$'[Nest] 1 ERROR [check-integrity] legacy-rated participations without a v2 rating: 3\n[Nest] 1 ERROR [check-integrity]   judge_contest:5: 3\n[Nest] 1 ERROR [check-integrity] rated contests: legacy 4, v2 3\n[Nest] 1 LOG [check-integrity] 3 broken invariant(s)'
+COLOURED=$'\e[31m  ERROR\e[39m \e[38;5;3m[check-integrity] \e[39m\e[31mlegacy-rated participations without a v2 rating: 3\e[39m\n\e[31m  ERROR\e[39m \e[38;5;3m[check-integrity] \e[39m\e[31m  judge_contest:5: 3\e[39m'
 REFERENCE=$'[Nest] 1 ERROR [check-integrity] submissions without a source: 2\n[Nest] 1 ERROR [check-integrity] legacy-rated participations without a v2 rating: 3'
 steps_run() { grep -oE 'backend-v2:current [a-z-]+' "$calls" | awk '{print $2}' | paste -sd' '; }
 
@@ -52,6 +53,7 @@ grep -q "systemctl stop qhhoj.target" "$calls" || fail "run stops the site first
 [ -s "$root/srv/qhhoj-migrate/last-run-ok" ] || fail "last-run-ok written"
 logdir="$(cat "$root/srv/qhhoj-migrate/last-run-ok")"
 [ -s "$logdir/summary.txt" ] && [ -s "$logdir/timings.tsv" ] || fail "summary and timings"
+grep -q -- "-e NO_COLOR=1 " "$calls" || fail "migrator output is uncoloured"
 grep -q -- "-e MEDIA_ROOT=/srv/qhhoj/media " "$calls" && grep -q -- "-e PROBLEM_DATA_ROOT=/srv/qhhoj/problem-data " "$calls" || fail "migrator gets the file roots"
 
 fresh; sed -i "s/^ENCRYPTION_KEY=.*/ENCRYPTION_KEY=other/" "$root/root/migrate.env"
@@ -132,6 +134,8 @@ grep -q "check-integrity: rating coverage accepted" "$logdir/summary.txt" || fai
 fresh; integrity_output "$COVERAGE"
 migrate run >/dev/null 2>&1 && fail "rating coverage stops without the flag"
 [ "$(steps_run)" = "audit backfill grant-permissions verify recompute check-files check-integrity" ] || fail "stops at check-integrity: $(steps_run)"
+fresh; integrity_output "$COLOURED"
+migrate run --accept-rating-coverage >/dev/null 2>&1 || fail "coloured rating coverage is accepted with the flag"
 fresh; integrity_output "$REFERENCE"
 migrate run --accept-rating-coverage >/dev/null 2>&1 && fail "a reference failure stops even with the flag"
 [ "$(steps_run)" = "audit backfill grant-permissions verify recompute check-files check-integrity" ] || fail "reference failure stops at check-integrity"
@@ -153,13 +157,15 @@ echo go-live | migrate go-live >/dev/null || fail "go-live resumes"
 [ "$(grep -c 'backend-v2:current finish' "$calls")" = 1 ] || fail "finish runs once"
 # I7: the Mongo URI reaches mongodump through a 600 config file, never argv
 grep -qx 600 "$root/cfgmode" || fail "dump config is mode 600"
-grep -q "uri: mongodb://m" "$root/cfgcopy" || fail "dump config holds the uri"
+grep -q "uri: 'mongodb://m'" "$root/cfgcopy" || fail "dump config holds the uri"
+[ -z "$(ls "$root/srv/qhhoj-migrate"/mongodump.* 2>/dev/null)" ] || fail "dump config removed after go-live"
 grep -q -e "$MONGO" "$calls" && fail "mongo uri in argv"
 
 # I7: the preview password reaches openssl on stdin, not argv
 fresh; stub nginx; mkdir -p "$root/etc/nginx/snippets"
 migrate preview on staff >/dev/null || fail "preview on"
 grep -q "$GENPW" "$calls" && fail "preview password in argv"
+
 
 # M3: import-dump refuses after go-live
 fresh; touch "$root/srv/qhhoj-migrate/went-live"; printf 'x' | gzip > "$root/dump.sql.gz"

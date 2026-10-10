@@ -25,6 +25,7 @@ HTPASSWD="$ROOT/etc/nginx/qhhoj-preview.htpasswd"
 LOGDIR=""
 ACCEPT_RATING=0
 ACCEPTED_NOTE=""
+DUMP_CFG=""
 
 die() { echo "qhhoj-migrate: $*" >&2; exit 1; }
 usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
@@ -62,7 +63,7 @@ preflight() {
 migrator() { # <command...> in the image, as uid 991, with the migrate env, the legacy URL and the file roots
   podman run --rm --network host --memory 4g \
     --env-file "$MIGRATE_ENV" --env-file "$WORK/legacy.env" \
-    -e APP=migrator -e NODE_OPTIONS=--max-old-space-size=3072 \
+    -e APP=migrator -e NODE_OPTIONS=--max-old-space-size=3072 -e NO_COLOR=1 \
     -e MEDIA_ROOT=/srv/qhhoj/media -e PROBLEM_DATA_ROOT=/srv/qhhoj/problem-data \
     -v "$DATA:/srv/qhhoj" -v "$LOGDIR:/reports" "$IMAGE" "$@"
 }
@@ -122,7 +123,7 @@ sync_files() {
 # Rating coverage lines (RUNBOOK "Rating coverage"); check-integrity logs problems as Nest ERROR lines.
 only_rating_coverage() { # <log>: every problem line is a rating-coverage line, and there is at least one
   local problems
-  problems="$(sed -n 's/.*ERROR \[check-integrity\] //p' "$1")"
+  problems="$(sed -n -e 's/\x1b\[[0-9;]*m//g' -e 's/.*ERROR \[check-integrity\] //p' "$1")"
   [ -n "$problems" ] || return 1
   ! grep -qvE -e '^legacy-rated participations without a v2 rating: [0-9]+$' \
     -e '^v2 ratings without a legacy rating: [0-9]+$' \
@@ -233,13 +234,12 @@ smoke() {
     || die "/s/ location missing"
 }
 
-dump_mongo() { # the URI goes through a mode-600 config file, never argv
-  local cfg rc=0
-  cfg="$(mktemp "$WORK/mongodump.XXXXXX")"
-  printf 'uri: %s\n' "$(value "$MIGRATE_ENV" MONGO_URL)" > "$cfg"
-  mongodump --config "$cfg" --gzip --archive="$ROOT/backup/qhhoj-cutover.gz" || rc=$?
-  rm -f "$cfg"
-  return "$rc"
+dump_mongo() { # the URI goes through a mode-600 config file, never argv; removed on any exit
+  local uri; uri="$(value "$MIGRATE_ENV" MONGO_URL)"
+  DUMP_CFG="$(mktemp "$WORK/mongodump.XXXXXX")"
+  trap 'rm -f "$DUMP_CFG"' EXIT
+  printf "uri: '%s'\n" "${uri//\'/\'\'}" > "$DUMP_CFG"
+  mongodump --config "$DUMP_CFG" --gzip --archive="$ROOT/backup/qhhoj-cutover.gz"
 }
 
 cmd_go_live() {
