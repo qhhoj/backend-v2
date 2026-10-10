@@ -22,6 +22,7 @@ describe('auth session endpoints', () => {
     api = await setupApiTest();
     await createUser(api.users, {
       username: 'Alice',
+      rating: 2350,
       siteTheme: 'glass',
       languageId: defaultLanguageId,
     });
@@ -61,7 +62,7 @@ describe('auth session endpoints', () => {
       expect(cookie).toContain(attribute);
     expect(cookie).not.toContain('Secure');
     expect(sessionOf(response)).toMatchObject({
-      user: { username: 'Alice', permissions: [] },
+      user: { username: 'Alice', rating: 2350, permissions: [] },
       twoFactorRequired: false,
       passwordChangeRequired: false,
     });

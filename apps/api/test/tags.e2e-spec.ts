@@ -238,7 +238,7 @@ describe('tag catalogue', () => {
         name: 'BFS',
         groupId: expect.any(String) as string,
       },
-      assigner: { id: taggerId, username: 'tagger' },
+      assigner: { id: taggerId, username: 'tagger', rating: null },
     });
     await api.http().get(`${TAGS}/GHOST`).expect(404);
     await api.http().get(`${TAGS}/not%20a%20code`).expect(404);

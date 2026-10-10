@@ -47,6 +47,7 @@ describe('problem detail and editorial', () => {
     api = await setupApiTest();
     catalog = await seedCatalog(api);
     const authorUser = await createUserWith(api, 'author', {
+      rating: 1650,
       permissions: ['judge.edit_own_problem'],
     });
     authorId = authorUser._id;
@@ -126,14 +127,16 @@ describe('problem detail and editorial', () => {
       group: { fullName: 'Uncategorized' },
       types: [{ name: 'uncategorized' }],
       license: { key: 'mit' },
-      authors: [{ id: authorId, username: 'author' }],
+      authors: [{ id: authorId, username: 'author', rating: 1650 }],
       languageLimits: [{ language: 'PY3', timeLimit: 3, memoryLimit: 262144 }],
       availableTranslations: ['en'],
       hasEditorial: true,
       canEdit: false,
       editor: null,
     });
-    expect(detail.authors).toEqual([{ id: authorId, username: 'author' }]);
+    expect(detail.authors).toEqual([
+      { id: authorId, username: 'author', rating: 1650 },
+    ]);
     expect(
       detailOf(
         await authed(api.http().get(`${PROBLEMS}/sum`), pendingAuthor).expect(
@@ -224,7 +227,7 @@ describe('problem detail and editorial', () => {
       solution: {
         isPublic: true,
         content: 'Just add.',
-        authors: [{ id: authorId, username: 'author' }],
+        authors: [{ id: authorId, username: 'author', rating: 1650 }],
       },
       curators: [],
       testers: [],

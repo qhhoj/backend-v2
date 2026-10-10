@@ -433,12 +433,12 @@ describe('contest CRUD', () => {
       expect(editor.settings!.users).toHaveLength(6);
       expect(editor.settings!.users).toEqual(
         expect.arrayContaining([
-          { id: users.tester._id, username: 'tester' },
-          { id: users.author._id, username: 'author' },
-          { id: users.plain._id, username: 'plain' },
-          { id: users.dave._id, username: 'dave' },
-          { id: users.erin._id, username: 'erin' },
-          { id: users.frank._id, username: 'frank' },
+          { id: users.tester._id, username: 'tester', rating: null },
+          { id: users.author._id, username: 'author', rating: null },
+          { id: users.plain._id, username: 'plain', rating: null },
+          { id: users.dave._id, username: 'dave', rating: null },
+          { id: users.erin._id, username: 'erin', rating: null },
+          { id: users.frank._id, username: 'frank', rating: null },
         ]),
       );
       expect(JSON.stringify(editor)).not.toContain(sha256('ranking'));
@@ -466,7 +466,9 @@ describe('contest CRUD', () => {
         balloonStaff: [users.dave._id],
       });
       expect(settings.users).toEqual(
-        expect.arrayContaining([{ id: users.dave._id, username: 'dave' }]),
+        expect.arrayContaining([
+          { id: users.dave._id, username: 'dave', rating: null },
+        ]),
       );
       expect((await detail(contest.key, 'plain')).settings).toBeNull();
       await patch('creator', contest.key, { balloonStaff: [newId()] }).expect(

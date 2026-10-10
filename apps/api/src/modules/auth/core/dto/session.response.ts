@@ -23,6 +23,8 @@ export class UserResponse {
   id!: string;
   /** Unique login name. */
   username!: string;
+  /** Contest rating; null while unrated. */
+  rating!: number | null;
   /** Account email address. */
   email!: string;
   /** Whether the user is staff. */
@@ -46,6 +48,7 @@ export class UserResponse {
     return {
       id: user._id,
       username: user.username,
+      rating: user.rating,
       email: user.email,
       isStaff: user.isStaff,
       isSuperuser: user.isSuperuser,

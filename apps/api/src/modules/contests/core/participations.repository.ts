@@ -15,6 +15,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import { VIRTUAL_JOIN_ATTEMPTS } from '../core/rate-limits';
+import type { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import type { OwnSubmission } from './viewer-problem-results';
 
 export type ParticipationDocument = HydratedDocument<ContestParticipation>;
@@ -376,11 +377,18 @@ export class ParticipationsRepository {
     );
   }
 
-  /** Lean usernames for boards of thousands of rows. */
-  async usernamesOf(userIds: string[]): Promise<Map<string, string>> {
+  /** Lean user references for boards of thousands of rows. */
+  async summariesOf(
+    userIds: string[],
+  ): Promise<Map<string, UserSummaryResponse>> {
     const rows = await this.users
-      .find({ _id: { $in: userIds } }, { username: 1 })
+      .find({ _id: { $in: userIds } }, { username: 1, rating: 1 })
       .lean();
-    return new Map(rows.map((row) => [uuidStr(row._id), row.username]));
+    return new Map(
+      rows.map((row) => {
+        const id = uuidStr(row._id);
+        return [id, { id, username: row.username, rating: row.rating }];
+      }),
+    );
   }
 }

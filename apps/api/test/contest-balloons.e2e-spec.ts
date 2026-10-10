@@ -114,7 +114,7 @@ describe('contest balloons', () => {
       ['editor', { permissions: ['judge.edit_own_contest'] }],
       ['volunteer', {}],
       ['plain', {}],
-      ['ann', {}],
+      ['ann', { rating: 1500 }],
       ['bob', {}],
       ['cy', {}],
     ];
@@ -134,6 +134,8 @@ describe('contest balloons', () => {
     const { contest } = await seed();
     const page = await read(contest);
     expect(names(page)).toEqual(['ann:bal_a*', 'bob:bal_a', 'bob:bal_b*']);
+    expect(page.data[0].team).toMatchObject({ username: 'ann', rating: 1500 });
+    expect(page.data[1].team).toMatchObject({ username: 'bob', rating: null });
     expect(page.data[0]).toMatchObject({
       problemLabel: '1',
       solvedAt: 600,

@@ -385,7 +385,7 @@ export class ContestParticipationService {
       query.page,
       query.pageSize,
     );
-    const usernames = await this.participationRows.usernamesOf(
+    const summaries = await this.participationRows.summariesOf(
       items.map((item) => uuidStr(item.user)),
     );
     const frozen = isFrozenFor(contest, now, canEdit);
@@ -395,7 +395,7 @@ export class ContestParticipationService {
         return ParticipationResponse.withUser(
           item,
           contest,
-          { id: userId, username: usernames.get(userId) ?? '' },
+          summaries.get(userId) ?? { id: userId, username: '', rating: null },
           frozen,
         );
       }),

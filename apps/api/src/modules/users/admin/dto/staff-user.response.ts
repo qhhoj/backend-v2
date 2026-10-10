@@ -7,6 +7,8 @@ export class StaffUserResponse {
   id!: string;
   /** Login name. */
   username!: string;
+  /** Contest rating; null while unrated. */
+  rating!: number | null;
   /** Name to show: the staff-set override, else the username. */
   displayName!: string;
   /** Rank title such as `user`, `admin` or `banned`. */
@@ -28,6 +30,7 @@ export class StaffUserResponse {
     return {
       id: uuidStr(row._id),
       username: row.username,
+      rating: row.rating,
       displayName: row.usernameDisplayOverride || row.username,
       displayRank: row.displayRank,
       isActive: row.isActive,
