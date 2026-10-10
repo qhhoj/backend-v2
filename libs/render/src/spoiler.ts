@@ -1,9 +1,9 @@
 import type MarkdownIt from 'markdown-it';
+import { classifyFenceLines } from './fences';
 
 const MAX_SPOILER_DEPTH = 20;
 const OPEN_TAG = /^<blockquote\s+class\s*=\s*(["'])spoiler\1\s*>\s*$/;
 const CLOSE_TAG = /^<\/blockquote>\s*$/;
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
 interface SpoilerEnv {
   spoilerDepth?: number;
@@ -72,14 +72,10 @@ export function spoilerRule(
 function matchHtmlSpoilers(lines: string[]): Map<number, number> {
   const openerOf = new Map<number, number>();
   const openLines: number[] = [];
-  let fence = '';
+  const fenceKinds = classifyFenceLines(lines);
   lines.forEach((text, line) => {
-    const marker = FENCE.exec(text)?.[1];
-    if (fence) {
-      if (marker?.startsWith(fence) && text.slice(marker.length).trim() === '')
-        fence = '';
-    } else if (marker) fence = marker;
-    else if (OPEN_TAG.test(text)) openLines.push(line);
+    if (fenceKinds[line] !== 'outside') return;
+    if (OPEN_TAG.test(text)) openLines.push(line);
     else if (CLOSE_TAG.test(text) && openLines.length) {
       if (openLines.length <= MAX_SPOILER_DEPTH)
         openerOf.set(line, openLines[openLines.length - 1]);

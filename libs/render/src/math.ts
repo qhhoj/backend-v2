@@ -203,7 +203,8 @@ export function renderMath(
   }
 }
 
-const isEscaped = (src: string, index: number): boolean => {
+/** Whether the character at `index` follows an odd run of backslashes. */
+export const isEscaped = (src: string, index: number): boolean => {
   let backslashes = 0;
   while (src.charCodeAt(index - 1 - backslashes) === BACKSLASH) backslashes++;
   return backslashes % 2 === 1;
@@ -254,8 +255,8 @@ function findClosingDollar(
   return endsAfterSpace || endsBeforeDigit ? -1 : end;
 }
 
-/** `$…$` (one line; not `$ x$`, `$x $` or `$5 and $10`) or `$$…$$` (may span lines) starting at `pos`; never crosses a backtick, so code spans win. */
-function findDollarMath(
+/** `$…$` (one line; not `$ x$`, `$x $` or `$5 and $10`) or `$$…$$` (may span lines) starting at `pos`. */
+export function findDollarMath(
   src: string,
   pos: number,
   posMax: number,
@@ -267,8 +268,39 @@ function findDollarMath(
   const end = findClosingDollar(src, isDisplay, start, posMax);
   if (end === -1) return null;
   const tex = src.slice(start, end);
-  if (tex.includes('`') || (!isDisplay && tex.includes('\n'))) return null;
+  if (!isDisplay && tex.includes('\n')) return null;
   return { tex, isDisplay, end, after: end + markerOf(isDisplay).length };
+}
+
+/** Start index of the last backtick run of each length in `src`. */
+function lastBacktickRuns(src: string): Map<number, number> {
+  const runs = new Map<number, number>();
+  for (const run of src.matchAll(/`+/g)) runs.set(run[0].length, run.index);
+  return runs;
+}
+const backtickRunsOf = new WeakMap<
+  MarkdownIt.StateInline,
+  Map<number, number>
+>();
+
+/**
+ * Whether a backtick run inside `src[start, end)` has an equal run later in the text, so a code span would open inside the
+ * formula and close past it: the code span wins then. A lone run (`~\texttt{``}~`) is just TeX, as on the old site.
+ */
+function crossesCodeSpan(
+  state: MarkdownIt.StateInline,
+  start: number,
+  end: number,
+): boolean {
+  const formula = state.src.slice(start, end);
+  if (!formula.includes('`')) return false;
+  let runs = backtickRunsOf.get(state);
+  if (!runs) backtickRunsOf.set(state, (runs = lastBacktickRuns(state.src)));
+  for (const run of formula.matchAll(/`+/g)) {
+    const runEnd = start + run.index + run[0].length;
+    if ((runs.get(run[0].length) ?? -1) >= runEnd) return true;
+  }
+  return false;
 }
 
 export function mathInlineRule(
@@ -276,7 +308,7 @@ export function mathInlineRule(
   silent: boolean,
 ): boolean {
   const math = findDollarMath(state.src, state.pos, state.posMax);
-  if (!math) return false;
+  if (!math || crossesCodeSpan(state, state.pos, math.end)) return false;
   if (!silent)
     state.push(
       math.isDisplay ? 'math_display' : 'math_inline',
@@ -287,26 +319,35 @@ export function mathInlineRule(
   return true;
 }
 
-/** `~x~` inline math (legacy `~.*?~`, so inner spaces are fine);  `~~` is strikethrough and is left to markdown-it. */
-export function mathTildeRule(
-  state: MarkdownIt.StateInline,
-  silent: boolean,
-): boolean {
-  const { src, pos, posMax } = state;
+/** `~x~` starting at `pos` (legacy `~.*?~`, so inner spaces are fine; one line, not blank); `~~` is strikethrough, not math. */
+export function findTildeMath(
+  src: string,
+  pos: number,
+  posMax: number,
+): { tex: string; end: number } | null {
   if (
     src.charCodeAt(pos) !== TILDE ||
     src.charCodeAt(pos + 1) === TILDE ||
     (pos > 0 && src.charCodeAt(pos - 1) === TILDE)
   )
-    return false;
+    return null;
   const start = pos + 1;
-  if (start >= posMax) return false;
+  if (start >= posMax) return null;
   const end = indexOfUnescaped(src, '~', start);
   if (end === -1 || end >= posMax || src.charCodeAt(end + 1) === TILDE)
-    return false;
+    return null;
   const tex = src.slice(start, end);
-  if (!tex.trim() || tex.includes('\n') || tex.includes('`')) return false;
-  if (!silent) state.push('math_inline', 'span', 0).content = tex;
-  state.pos = end + 1;
+  return !tex.trim() || tex.includes('\n') ? null : { tex, end };
+}
+
+/** `~x~` inline math; `~~` is strikethrough and is left to markdown-it. */
+export function mathTildeRule(
+  state: MarkdownIt.StateInline,
+  silent: boolean,
+): boolean {
+  const math = findTildeMath(state.src, state.pos, state.posMax);
+  if (!math || crossesCodeSpan(state, state.pos, math.end)) return false;
+  if (!silent) state.push('math_inline', 'span', 0).content = math.tex;
+  state.pos = math.end + 1;
   return true;
 }

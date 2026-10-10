@@ -9,6 +9,9 @@ import {
   renderMath,
 } from './math';
 import { RenderLimitError } from './render-limit.error';
+import { compactHeadingRule } from './compact-heading';
+import { separateFencesFromHtml } from './fences';
+import { renderHtmlBlockMath } from './html-block-math';
 import { MATH_SLOT_ATTRIBUTE, sanitizeBlogHtml } from './blog-sanitizer';
 import { sanitizeStatementHtml } from './sanitizer';
 import { rewriteHtmlSpoilers, spoilerRule } from './spoiler';
@@ -18,7 +21,6 @@ import {
   isUserAuthored,
   RenderStyle,
 } from './styles';
-import { dashesRule } from './typography';
 import { renderUserReference, userReferenceRule } from './user-reference';
 
 export { renderMath } from './math';
@@ -37,6 +39,10 @@ function deferMath(env: RenderEnv, html: string): string {
   formulas.push(html);
   return `<span ${MATH_SLOT_ATTRIBUTE}="${nonce}-${formulas.length - 1}"></span>`;
 }
+
+/** One formula of this render: KaTeX within the render's budget, deferred in the blog style. */
+const formulaHtml = (env: RenderEnv, tex: string, displayMode: boolean) =>
+  deferMath(env, renderMath(tex, displayMode, env.budget));
 
 function spliceMath(
   html: string,
@@ -70,9 +76,16 @@ function createMarkdown({
 }: {
   allowsHtml: boolean;
 }): MarkdownIt.MarkdownIt {
-  const markdown = new MarkdownIt({ html: allowsHtml, typographer: true });
-  markdown.disable('replacements');
-  markdown.core.ruler.after('smartquotes', 'dashes', dashesRule);
+  // No typographer: the old site kept straight quotes, `...` and `--` as written.
+  const markdown = new MarkdownIt({ html: allowsHtml });
+  markdown.block.ruler.before(
+    'heading',
+    'compact_heading',
+    compactHeadingRule,
+    {
+      alt: ['paragraph', 'reference', 'blockquote'],
+    },
+  );
   markdown.inline.ruler.before('escape', 'math_inline', mathInlineRule);
   markdown.inline.ruler.before('strikethrough', 'math_tilde', mathTildeRule);
   markdown.inline.ruler.before('link', 'user_reference', userReferenceRule);
@@ -80,14 +93,12 @@ function createMarkdown({
     alt: ['paragraph', 'reference', 'blockquote', 'list'],
   });
   markdown.renderer.rules.math_inline = (tokens, index, _options, env) =>
-    deferMath(
-      env as RenderEnv,
-      renderMath(tokens[index].content, false, (env as RenderEnv).budget),
-    );
+    formulaHtml(env as RenderEnv, tokens[index].content, false);
   markdown.renderer.rules.math_display = (tokens, index, _options, env) =>
-    deferMath(
-      env as RenderEnv,
-      renderMath(tokens[index].content, true, (env as RenderEnv).budget),
+    formulaHtml(env as RenderEnv, tokens[index].content, true);
+  markdown.renderer.rules.html_block = (tokens, index, _options, env) =>
+    renderHtmlBlockMath(tokens[index].content, (tex, displayMode) =>
+      formulaHtml(env as RenderEnv, tex, displayMode),
     );
   markdown.renderer.rules.user_reference = renderUserReference;
   // eslint-disable-next-line no-restricted-syntax -- markdown-it's renderer rule signature
@@ -140,7 +151,7 @@ export function renderMarkdown(text: string, style: RenderStyle): string {
   const rendered = wrapTables(
     shiftHeaders(
       markdowns[allowsRawHtml(style) ? 'raw' : 'escaped'].render(
-        rewriteHtmlSpoilers(text),
+        rewriteHtmlSpoilers(separateFencesFromHtml(text)),
         env,
       ),
     ),

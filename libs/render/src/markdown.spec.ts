@@ -97,13 +97,60 @@ describe('renderMarkdown', () => {
       '<p>see <a class="user-reference" href="/user/alice">alice</a>, <a class="user-reference user-rating" href="/user/bob">bob</a> and [user:bad name]</p>\n',
     );
   });
-  it('applies smart quotes, dashes and ellipses but not (c) or +-', () => {
-    expect(full('"quotes" -- --- ... (c) +- x+-y `--`')).toBe(
-      '<p>“quotes” – — … (c) +- x+-y <code>--</code></p>\n',
+  it('keeps quotes, dashes and ellipses as written, like the old site', () => {
+    expect(full('"quotes" \'single\' -- --- ... (c) +-')).toBe(
+      "<p>&quot;quotes&quot; 'single' -- --- ... (c) +-</p>\n",
     );
-    expect(full('Bài toán "Tính tổng" --- xong')).toBe(
-      '<p>Bài toán “Tính tổng” — xong</p>\n',
+  });
+  it('reads hashes followed directly by text as a heading', () => {
+    expect(full('##Input')).toBe('<h4>Input</h4>\n');
+    expect(full('###Output###')).toBe('<h5>Output</h5>\n');
+    expect(full('text\n##$n$')).toMatch(
+      /^<p>text<\/p>\n<h4><span class="katex">.*<\/h4>\n$/s,
     );
+    expect(full('    ##code')).toBe('<pre><code>##code\n</code></pre>\n');
+    expect(full('####### seven')).toBe('<p>####### seven</p>\n');
+  });
+  it('ends an HTML block at a column-0 code fence', () => {
+    const html = renderMarkdown(
+      '<details>\n<summary>h</summary>\n```c++\nint x;\n```\n</details>',
+      'problem',
+    );
+    expect(html).toBe(
+      '<details>\n<summary>h</summary>\n<pre><code class="language-c++">int x;\n</code></pre>\n</details>',
+    );
+  });
+  it('leaves fence markers inside a code block alone', () => {
+    expect(full('~~~\nx\n```\ny\n~~~')).toBe(
+      '<pre><code>x\n```\ny\n</code></pre>\n',
+    );
+  });
+  it('renders math in raw HTML blocks but not in their pre or code', () => {
+    const table = full('<table><tr><td>$n$</td><td>~m~</td></tr></table>');
+    expect(table.match(/<span class="katex">/g)).toHaveLength(2);
+    const afterImage = full('<img src="a.png" />\n~x~ and $$y$$');
+    expect(afterImage).toMatch(/^<img src="a.png" \/>\n<span class="katex">/);
+    expect(afterImage).toContain('<span class="katex-display">');
+    expect(full('<pre>$keep$ ~this~</pre>')).toBe('<pre>$keep$ ~this~</pre>');
+    expect(full('<div><code>$a$</code> $b$</div>')).toMatch(
+      /^<div><code>\$a\$<\/code> <span class="katex">/,
+    );
+    expect(full('<div>$a &lt; b$</div>')).toContain(
+      '<annotation encoding="application/x-tex">a &lt; b</annotation>',
+    );
+    expect(full('<div>cost \\$5 and $10</div>')).toBe(
+      '<div>cost \\$5 and $10</div>',
+    );
+  });
+  it('renders math in raw HTML blocks of the blog style', () => {
+    expect(renderMarkdown('<div>$x$</div>', 'blog')).toMatch(
+      /^<div><span class="katex">.*<\/span><\/div>$/s,
+    );
+  });
+  it('keeps a lone backtick run inside tilde math as TeX', () => {
+    const html = full("~\\texttt{``}~quote~\\texttt{''}~");
+    expect(html.match(/<span class="katex">/g)).toHaveLength(2);
+    expect(full('~x `y~ z`')).toBe('<p>~x <code>y~ z</code></p>\n');
   });
   it('keeps raw HTML in problem-full and sanitizes it in problem/solution', () => {
     const raw =
