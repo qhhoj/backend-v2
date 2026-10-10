@@ -62,10 +62,10 @@ describe('problem detail and editorial', () => {
     solutionReader = await loginAs(api, reader._id);
     await createProblem(api, catalog, {
       code: 'sum',
-      name: 'Sum',
+      name: 'Tổng',
       source: 'VOI',
-      description: 'Add $a+b$.',
-      descriptionHtml: '<p>Add <span class="katex">…</span>.</p>',
+      description: 'Cộng $a+b$.',
+      descriptionHtml: '<p>Cộng <span class="katex">…</span>.</p>',
       authors: [authorId],
       licenseId: catalog.licenses.mit,
       languageLimits: [
@@ -77,10 +77,10 @@ describe('problem detail and editorial', () => {
       ],
       translations: [
         {
-          language: 'vi',
-          name: 'Tổng',
-          description: 'Cộng $a+b$.',
-          descriptionHtml: '<p>Cộng …</p>',
+          language: 'en',
+          name: 'Sum',
+          description: 'Add $a+b$.',
+          descriptionHtml: '<p>Add …</p>',
         },
       ],
       solution: {
@@ -115,10 +115,10 @@ describe('problem detail and editorial', () => {
     );
     expect(detail).toMatchObject({
       code: 'sum',
-      name: 'Sum',
-      language: 'en',
-      translated: false,
-      descriptionHtml: '<p>Add <span class="katex">…</span>.</p>',
+      name: 'Tổng',
+      language: 'vi',
+      translated: true,
+      descriptionHtml: '<p>Cộng <span class="katex">…</span>.</p>',
       source: 'VOI',
       timeLimit: 1,
       memoryLimit: 262144,
@@ -128,7 +128,7 @@ describe('problem detail and editorial', () => {
       license: { key: 'mit' },
       authors: [{ id: authorId, username: 'author' }],
       languageLimits: [{ language: 'PY3', timeLimit: 3, memoryLimit: 262144 }],
-      availableTranslations: ['vi'],
+      availableTranslations: ['en'],
       hasEditorial: true,
       canEdit: false,
       editor: null,
@@ -148,27 +148,40 @@ describe('problem detail and editorial', () => {
     expect(detail).not.toHaveProperty('description');
   });
 
-  it('serves a translation with base fallback', async () => {
-    expect(
-      detailOf(await api.http().get(`${PROBLEMS}/sum?lang=vi`).expect(200)),
-    ).toMatchObject({
+  it('serves the Vietnamese base as asked, and English only where translated', async () => {
+    const statementOf = async (code: string, lang?: string) =>
+      detailOf(
+        await api
+          .http()
+          .get(`${PROBLEMS}/${code}${lang ? `?lang=${lang}` : ''}`)
+          .expect(200),
+      );
+    expect(await statementOf('sum', 'vi')).toMatchObject({
       name: 'Tổng',
       language: 'vi',
       translated: true,
-      descriptionHtml: '<p>Cộng …</p>',
     });
-    expect(
-      detailOf(
-        await api.http().get(`${PROBLEMS}/noeditorial?lang=vi`).expect(200),
-      ),
-    ).toMatchObject({ name: 'NOEDITORIAL', language: 'en', translated: false });
+    expect(await statementOf('sum', 'en')).toMatchObject({
+      name: 'Sum',
+      language: 'en',
+      translated: true,
+      descriptionHtml: '<p>Add …</p>',
+    });
+    expect(await statementOf('noeditorial', 'en')).toMatchObject({
+      name: 'NOEDITORIAL',
+      language: 'vi',
+      translated: false,
+    });
+    expect(await statementOf('noeditorial', 'vi')).toMatchObject({
+      language: 'vi',
+      translated: true,
+    });
     await api
       .http()
       .get(`${PROBLEMS}/sum?lang=fr`)
       .expect(400)
       .expect(errorCode('validation_failed'));
   });
-
   it('answers 404 for unknown, malformed and invisible codes without leaking existence', async () => {
     await api
       .http()
@@ -203,9 +216,9 @@ describe('problem detail and editorial', () => {
     );
     expect(detail.canEdit).toBe(true);
     expect(detail.editor).toMatchObject({
-      description: 'Add $a+b$.',
+      description: 'Cộng $a+b$.',
       translations: [
-        { language: 'vi', name: 'Tổng', description: 'Cộng $a+b$.' },
+        { language: 'en', name: 'Sum', description: 'Add $a+b$.' },
       ],
       solution: {
         isPublic: true,
@@ -221,21 +234,21 @@ describe('problem detail and editorial', () => {
 
   it('keeps the base name in the editor block whatever the requested language', async () => {
     const detail = detailOf(
-      await authed(api.http().get(`${PROBLEMS}/sum?lang=vi`), author).expect(
+      await authed(api.http().get(`${PROBLEMS}/sum?lang=en`), author).expect(
         200,
       ),
     );
-    expect(detail.name).toBe('Tổng');
-    expect(detail.editor).toMatchObject({ baseName: 'Sum' });
+    expect(detail.name).toBe('Sum');
+    expect(detail.editor).toMatchObject({ baseName: 'Tổng' });
   });
 
   it('gates the editorial on publication, permission and editorship', async () => {
     expect(
       editorialOf(
-        await api.http().get(`${PROBLEMS}/sum/editorial?lang=vi`).expect(200),
+        await api.http().get(`${PROBLEMS}/sum/editorial?lang=en`).expect(200),
       ),
     ).toMatchObject({
-      problem: { code: 'sum', name: 'Tổng' },
+      problem: { code: 'sum', name: 'Sum' },
       contentHtml: '<p>Just add.</p>',
       authors: [{ username: 'author' }],
       canEdit: false,

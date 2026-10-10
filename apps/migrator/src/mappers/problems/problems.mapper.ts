@@ -66,7 +66,7 @@ export class ProblemsMapper implements Mapper<ProblemRow> {
         style,
         `judge_problem:${row.id}`,
       ),
-      translations: this.statements.translationsOf(row.id, style, ctx),
+      translations: this.statements.translationsOf(row, style, ctx),
       solution: this.statements.solutionOf(row.id, ctx),
       data: this.data.dataOf({ id: row.id, code: row.code }, ctx),
     };

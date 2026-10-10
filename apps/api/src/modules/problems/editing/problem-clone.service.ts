@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
-import { uuidStr } from '@libs/database';
+import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { fieldDiff } from '@libs/problems';
 import { chargedOrganization } from '../../organizations/quota/quota-charge';
@@ -115,6 +115,10 @@ export class ProblemCloneService {
       changes: fieldDiff({}, withoutRenderedHtml(clone.toJSON())),
       comment: `Cloned problem from ${code}`,
     });
-    return this.problems.detail(auth.principal, clone.code, 'en');
+    return this.problems.detail(
+      auth.principal,
+      clone.code,
+      BASE_STATEMENT_LANGUAGE,
+    );
   }
 }

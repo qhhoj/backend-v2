@@ -117,6 +117,7 @@ export class ProblemDetailResponse {
   name!: string;
   @ApiProperty({ enum: STATEMENT_LANGUAGES, enumName: 'StatementLanguage' })
   language!: StatementLanguage;
+  /** True when the statement is in the requested language (the base language counts); false when it fell back to the base statement. */
   translated!: boolean;
   descriptionHtml!: string;
   source!: string;

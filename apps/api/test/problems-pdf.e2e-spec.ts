@@ -89,20 +89,20 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     expect(pending.headers['cache-control']).toBe('no-store');
     await api.http().get(`${PROBLEMS}/sum/pdf`).expect(202);
     await api.http().get(`${PROBLEMS}/duo/pdf?lang=vi`).expect(202);
-    await api.http().get(`${PROBLEMS}/sum/pdf?lang=vi`).expect(202);
-    expect((await queue.getJob(pdfJobId('sum', 'en')))?.data).toEqual({
+    await api.http().get(`${PROBLEMS}/sum/pdf?lang=en`).expect(202);
+    expect((await queue.getJob(pdfJobId('sum', 'vi')))?.data).toEqual({
       code: 'sum',
-      lang: 'en',
+      lang: 'vi',
     });
     expect((await queue.getJob(pdfJobId('duo', 'vi')))?.data).toEqual({
       code: 'duo',
       lang: 'vi',
     });
-    expect(await queue.getJob(pdfJobId('sum', 'vi'))).toBeUndefined();
+    expect(await queue.getJob(pdfJobId('sum', 'en'))).toBeUndefined();
     expect(await queue.getWaitingCount()).toBe(2);
   });
   it('serves the cached file inline', async () => {
-    cachePdf('sum.en.pdf');
+    cachePdf('sum.vi.pdf');
     const response = await api
       .http()
       .get(`${PROBLEMS}/sum/pdf`)
@@ -116,18 +116,18 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     expect(response.headers['content-type']).toBe('application/pdf');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['content-disposition']).toBe(
-      'inline; filename="sum.en.pdf"',
+      'inline; filename="sum.vi.pdf"',
     );
     expect(response.headers['content-length']).toBe('15');
     expect((response.body as Buffer).toString()).toBe('%PDF-1.4 cached');
   });
-  it('serves the base statement file when the translation is missing', async () => {
+  it('serves the base statement file when the translation is missing (English asked, Vietnamese base)', async () => {
     const response = await api
       .http()
-      .get(`${PROBLEMS}/sum/pdf?lang=vi`)
+      .get(`${PROBLEMS}/sum/pdf?lang=en`)
       .expect(200);
     expect(response.headers['content-disposition']).toBe(
-      'inline; filename="sum.en.pdf"',
+      'inline; filename="sum.vi.pdf"',
     );
   });
   it('enqueues again after the previous job completed', async () => {
@@ -138,18 +138,18 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     const completed = new Promise<void>((resolve) =>
       worker.on(
         'completed',
-        (job) => job.id === pdfJobId('again', 'en') && resolve(),
+        (job) => job.id === pdfJobId('again', 'vi') && resolve(),
       ),
     );
     await api.http().get(`${PROBLEMS}/again/pdf`).expect(202);
     await completed;
     await worker.close();
-    expect(await queue.getJob(pdfJobId('again', 'en'))).toBeUndefined();
+    expect(await queue.getJob(pdfJobId('again', 'vi'))).toBeUndefined();
     await api.http().get(`${PROBLEMS}/again/pdf`).expect(202);
-    expect(await queue.getJob(pdfJobId('again', 'en'))).toBeDefined();
+    expect(await queue.getJob(pdfJobId('again', 'vi'))).toBeDefined();
   }, 30000);
   it('hides invisible problems and validates the language', async () => {
-    writeFileSync(join(api.pdfCacheRoot, 'hidden.en.pdf'), '%PDF-1.4 secret');
+    writeFileSync(join(api.pdfCacheRoot, 'hidden.vi.pdf'), '%PDF-1.4 secret');
     await api.http().get(`${PROBLEMS}/hidden/pdf`).expect(404);
     await api.http().get(`${PROBLEMS}/nope/pdf`).expect(404);
     await api
@@ -198,10 +198,10 @@ describe('GET /api/internal/problems/:code/pdf', () => {
       .send({ description: 'Fixed text' })
       .expect(200);
     await waitUntil(
-      async () => !(await queue.getJob(pdfJobId('edited', 'en'))),
+      async () => !(await queue.getJob(pdfJobId('edited', 'vi'))),
     );
     await api.http().get(`${PROBLEMS}/edited/pdf`).expect(202);
-    const job = await queue.getJob(pdfJobId('edited', 'en'));
+    const job = await queue.getJob(pdfJobId('edited', 'vi'));
     expect(job).toBeDefined();
     expect(await job?.isFailed()).toBe(false);
   }, 30000);
@@ -214,7 +214,7 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     for (let cycle = 0; cycle < 6; cycle += 1) {
       await api.http().get(`${PROBLEMS}/cycles/pdf`).expect(202);
       await waitUntil(
-        async () => !(await queue.getJob(pdfJobId('cycles', 'en'))),
+        async () => !(await queue.getJob(pdfJobId('cycles', 'vi'))),
       );
     }
     await worker.close();
@@ -231,14 +231,14 @@ describe('GET /api/internal/problems/:code/pdf', () => {
   });
   it('does not spend the ip budget on cached hits', async () => {
     await resetBudget();
-    cachePdf('warm.en.pdf');
+    cachePdf('warm.vi.pdf');
     for (let hit = 0; hit < 40; hit += 1)
       await api.http().get(`${PROBLEMS}/warm/pdf`).expect(200);
     expect(await redis.keys('rate:*pdf-render*')).toEqual([]);
   });
   it('answers HEAD from the cache only, never enqueueing or spending budget', async () => {
     await resetBudget();
-    cachePdf('peek.en.pdf');
+    cachePdf('peek.vi.pdf');
     const cached = await api.http().head(`${PROBLEMS}/peek/pdf`).expect(200);
     expect(cached.headers['content-type']).toBe('application/pdf');
     await api.http().head(`${PROBLEMS}/again2/pdf`).expect(404);
@@ -260,7 +260,7 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     const completed = new Promise<void>((resolve) =>
       worker.on(
         'completed',
-        (job) => job.id === pdfJobId('rendered', 'en') && resolve(),
+        (job) => job.id === pdfJobId('rendered', 'vi') && resolve(),
       ),
     );
     try {
@@ -276,18 +276,18 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     const ready = await api.http().get(`${PROBLEMS}/rendered/pdf`).expect(200);
     expect(ready.headers['content-type']).toBe('application/pdf');
     expect(ready.headers['content-disposition']).toBe(
-      'inline; filename="rendered.en.pdf"',
+      'inline; filename="rendered.vi.pdf"',
     );
   }, 30000);
   it('falls back to rendering when the file vanishes before it is opened', async () => {
     await resetBudget();
-    cachePdf('raced.en.pdf');
+    cachePdf('raced.vi.pdf');
     const cache = api.app.get(PdfCacheService);
     const open = cache.open.bind(cache);
     const spy = jest
       .spyOn(cache, 'open')
       .mockImplementationOnce((code, lang) => {
-        rmSync(join(api.pdfCacheRoot, 'raced.en.pdf'));
+        rmSync(join(api.pdfCacheRoot, 'raced.vi.pdf'));
         return open(code, lang);
       });
     try {
@@ -295,6 +295,6 @@ describe('GET /api/internal/problems/:code/pdf', () => {
     } finally {
       spy.mockRestore();
     }
-    expect(await queue.getJob(pdfJobId('raced', 'en'))).toBeDefined();
+    expect(await queue.getJob(pdfJobId('raced', 'vi'))).toBeDefined();
   });
 });

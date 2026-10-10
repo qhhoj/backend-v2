@@ -1,4 +1,4 @@
-import { STATEMENT_LANGUAGES } from '@libs/database';
+import { BASE_STATEMENT_LANGUAGE, STATEMENT_LANGUAGES } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -55,7 +55,7 @@ export class ProblemFilterQueryDto {
   })
   @IsOptional()
   @IsIn(STATEMENT_LANGUAGES)
-  lang: StatementLanguage = 'en';
+  lang: StatementLanguage = BASE_STATEMENT_LANGUAGE;
 }
 
 export class ProblemListQueryDto extends ProblemFilterQueryDto {

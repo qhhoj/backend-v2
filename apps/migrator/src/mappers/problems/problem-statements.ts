@@ -1,4 +1,4 @@
-import { STATEMENT_LANGUAGES } from '@libs/database';
+import { BASE_STATEMENT_LANGUAGE, STATEMENT_LANGUAGES } from '@libs/database';
 import type { RenderStyle } from '@libs/render';
 import { LegacySourceService } from '../../legacy-source.service';
 import { groupBy, MapCtx } from '../../mapper';
@@ -46,11 +46,27 @@ export class ProblemStatements {
     );
   }
 
-  translationsOf(problemId: number, style: RenderStyle, ctx: MapCtx) {
+  /** A translation in the base language only matters when it differs from the problem's own text; an identical one is dropped (reported), a differing one is kept as the override the old site showed. */
+  translationsOf(
+    base: { id: number; name: string; description: string | null },
+    style: RenderStyle,
+    ctx: MapCtx,
+  ) {
+    const problemId = base.id;
     return (this.translations.get(problemId) ?? []).flatMap((row) => {
       if (!(STATEMENT_LANGUAGES as readonly string[]).includes(row.language)) {
         ctx.report(
           `dropped translation ${row.language} of judge_problem:${problemId}`,
+        );
+        return [];
+      }
+      if (
+        row.language === BASE_STATEMENT_LANGUAGE &&
+        row.name === base.name &&
+        (row.description ?? '') === (base.description ?? '')
+      ) {
+        ctx.report(
+          `dropped translation ${row.language} of judge_problem:${problemId}, same as the base statement`,
         );
         return [];
       }

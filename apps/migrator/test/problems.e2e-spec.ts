@@ -87,7 +87,7 @@ describe('problems job', () => {
     expect((await problem(4002))!.mirrorRoot).toBeNull();
   });
 
-  it('keeps en/vi translations and the editorial, rendered', async () => {
+  it('keeps the en translation, drops a vi one equal to the base, and keeps the editorial, rendered', async () => {
     const sum = (await problem(4001))!;
     expect(sum.translations).toEqual([
       {
@@ -116,6 +116,7 @@ describe('problems job', () => {
       expect.arrayContaining([
         'skipped judge_problem:4003 (group missing)',
         'dropped translation fr of judge_problem:4001',
+        'dropped translation vi of judge_problem:4001, same as the base statement',
         'dangling judge_problem:4999',
         'dangling judge_problem:4003',
       ]),

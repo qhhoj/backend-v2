@@ -12,7 +12,7 @@ INSERT INTO judge_problem_curators (id, problem_id, profile_id) VALUES (4001,400
 INSERT INTO judge_problem_organizations (id, problem_id, organization_id) VALUES (4001,4001,1);
 INSERT INTO judge_problem_allowed_languages (id, problem_id, language_id) VALUES (4001,4001,4),(4002,4001,5);
 INSERT INTO judge_languagelimit (id, time_limit, memory_limit, language_id, problem_id) VALUES (4001,2,524288,9,4001);
-INSERT INTO judge_problemtranslation (id, language, name, description, problem_id) VALUES (4001,'en','Sum','Add *two*',4001),(4002,'fr','Somme','x',4001);
+INSERT INTO judge_problemtranslation (id, language, name, description, problem_id) VALUES (4001,'en','Sum','Add *two*',4001),(4002,'fr','Somme','x',4001),(4003,'vi','Sum','Tính $a+b$ **nhanh**',4001);
 INSERT INTO judge_solution (id, is_public, publish_on, content, problem_id) VALUES (4001,1,'2021-02-01 00:00:00','Use **long long**',4001);
 INSERT INTO judge_solution_authors (id, solution_id, profile_id) VALUES (4001,4001,1);
 INSERT INTO judge_problem (id, code, name, time_limit, memory_limit, points, group_id, submission_source_visibility_mode, testcase_visibility_mode, testcase_result_visibility_mode, date) VALUES (4004,'sorted4','Sorted',1,65536,1000,4001,'F','O','A','2021-01-04 00:00:00');

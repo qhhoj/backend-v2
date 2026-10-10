@@ -15,6 +15,8 @@ export const RESERVED_PROBLEM_CODES = [
 ] as const;
 export const STATEMENT_LANGUAGES = ['en', 'vi'] as const;
 export type StatementLanguage = (typeof STATEMENT_LANGUAGES)[number];
+/** The language of `Problem.name`/`description`; `translations` hold the other languages only. */
+export const BASE_STATEMENT_LANGUAGE: StatementLanguage = 'vi';
 /** Filter for the compare-and-set on `dataVersion`; a missing counter counts as 0. */
 export const dataVersionIs = (version: number) =>
   version === 0 ? { $in: [0, null] } : version;
