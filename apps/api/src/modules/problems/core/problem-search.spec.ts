@@ -2,28 +2,27 @@ import type { Problem } from '@libs/database';
 import { isEditorialPublished, listSort, searchFilter } from './problem-search';
 
 describe('searchFilter', () => {
-  it('uses the text index for queries of three or more characters', () =>
-    expect(searchFilter('C++')).toEqual({ $text: { $search: 'C++' } }));
-  it('escapes short queries into anchored prefix regexes', () => {
-    const filter = searchFilter('c+') as {
-      $or: Array<Record<string, RegExp>>;
-    };
-    expect(filter.$or.map((clause) => Object.keys(clause)[0])).toEqual([
-      'code',
-      'name',
-      'translations.name',
-    ]);
-    expect(filter.$or[0].code.source).toBe('^c\\+');
-    expect(filter.$or[0].code.flags).toBe('i');
-    expect(
-      searchFilter('a(') as { $or: Array<Record<string, RegExp>> },
-    ).toMatchObject({
-      $or: [
-        { code: /^a\(/i },
-        { name: /^a\(/i },
-        { 'translations.name': /^a\(/i },
-      ],
-    });
+  const clauses = (search: string) =>
+    (searchFilter(search) as { $and: Array<{ $or: unknown[] }> }).$and;
+  it('filters nothing for a blank query', () => {
+    expect(searchFilter('')).toEqual({});
+    expect(searchFilter('   ')).toEqual({});
+  });
+  it('requires every word to match the code or a title', () => {
+    const words = clauses('luc  giac');
+    expect(words).toHaveLength(2);
+    expect(words[0].$or).toHaveLength(3);
+    const [code, name, translation] = words[0].$or as Array<
+      Record<string, RegExp>
+    >;
+    expect(Object.keys(code)).toEqual(['code']);
+    expect(Object.keys(name)).toEqual(['name']);
+    expect(Object.keys(translation)).toEqual(['translations.name']);
+    expect(code.code.test('Lục')).toBe(true);
+    expect(code.code.test('lxc')).toBe(false);
+  });
+  it('caps the number of words', () => {
+    expect(clauses('a b c d e f g h i j')).toHaveLength(8);
   });
 });
 

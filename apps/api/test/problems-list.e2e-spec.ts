@@ -180,19 +180,19 @@ describe('GET /api/internal/problems', () => {
       'cherry',
     ]);
   });
-  it('searches the text index and translated names, and prefix-matches short queries', async () => {
-    expect(codesOf(await api.http().get(`${LIST}?search=chuối`))).toEqual([
-      'banana',
-    ]);
-    expect(codesOf(await api.http().get(`${LIST}?search=VOI`))).toEqual([
-      'apple',
-    ]);
-    expect(codesOf(await api.http().get(`${LIST}?search=ch`))).toEqual([
-      'cherry',
-    ]);
-    expect(codesOf(await api.http().get(`${LIST}?search=Qu`))).toEqual([
-      'banana',
-    ]);
+  it('searches translated names and substrings of codes and titles, ignoring accents', async () => {
+    const find = async (text: string) =>
+      codesOf(
+        await api.http().get(`${LIST}?search=${encodeURIComponent(text)}`),
+      );
+    expect(await find('chuối')).toEqual(['banana']);
+    expect(await find('chuoi')).toEqual(['banana']);
+    expect(await find('QUA CHUOI')).toEqual(['banana']);
+    expect(await find('ppl')).toEqual(['apple']);
+    expect(await find('rick')).toEqual(['cpp_tricks']);
+    expect(await find('cpp trick')).toEqual(['cpp_tricks']);
+    expect(await find('cpp banana')).toEqual([]);
+    expect(await find('  ')).toHaveLength(4);
   });
   it('finds a substring of the code or a title with q, escaped and length-capped', async () => {
     const find = async (text: string) =>
