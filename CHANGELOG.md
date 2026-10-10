@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.3.1
+
+### Patch Changes
+
+- bd5d4de: Remove the finished old-site migration tooling: the migrator app, `qhhoj-migrate`, the worker `migration-recompute` job, the legacy fixtures and the MariaDB test dependency.
+
 ## 2.3.0
 
 ### Minor Changes
