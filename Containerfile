@@ -10,6 +10,7 @@ RUN npm run build && npx nest build bridge && npx nest build worker && npx nest 
 
 FROM node:22-bookworm-slim
 ARG QHHOJ_UID=987
+LABEL org.opencontainers.image.source=https://github.com/qhhoj/backend-v2
 ARG PANDOC_VERSION=3.1.3
 ARG PANDOC_SHA256=74bc434908e4d858b3edbfd6271d2e9e499477837e5df1d630df4e62f113803d
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright HOME=/tmp

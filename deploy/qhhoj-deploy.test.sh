@@ -10,6 +10,7 @@ fresh() {
   rm -rf "${root:?}"/*
   mkdir -p "$root/run" "$root/etc/qhhoj" "$root/var/lib/qhhoj-deploy/incoming" "$root/var/www/qhhoj/releases"
   printf 'MONGO_URL=mongodb://x\nPORT=3000\nSITE_URL=https://oj.test\n' > "$root/etc/qhhoj/env"
+  mkdir -p "$root/etc/nginx/conf.d"; echo "root /var/www/qhhoj/current;" > "$root/etc/nginx/conf.d/qhhoj.conf"
   : > "$calls"
   # shellcheck disable=SC2016 # stub bodies are expanded when the stub runs
   stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; true'
@@ -185,5 +186,58 @@ set +e; deploy backend v2.1.0 --bogus >/dev/null 2>&1; code=$?; set -e
 fresh; set +e; printf '\n' | deploy backend v2.1.0 --token-stdin >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "empty token must exit 1, got $code"
 ! grep -q "podman pull" "$calls" || fail "empty token must fail before pulling"
+
+# --- final-review fixes ---
+# I1: the migration check precedes the deploy lock; a held deploy lock defers (75) instead of failing
+fresh; exec 8>"$root/run/qhhoj-migrate.lock"; flock 8; exec 7>"$root/run/qhhoj-deploy.lock"; flock 7
+: > "$calls"; set +e; timeout 10 env QHHOJ_DEPLOY_LOCK_WAIT=60 bash -c 'PATH="$1:$PATH" QHHOJ_DEPLOY_ROOT="$2" exec bash "$3/qhhoj-deploy" backend v2.1.0 --force' _ "$bin" "$root" "$here" >/dev/null; code=$?
+timeout 10 env QHHOJ_DEPLOY_LOCK_WAIT=60 bash -c 'PATH="$1:$PATH" QHHOJ_DEPLOY_ROOT="$2" exec bash "$3/qhhoj-deploy" rollback backend' _ "$bin" "$root" "$here" >/dev/null; code2=$?; set -e
+exec 8>&-; exec 7>&-
+[ "$code" = 75 ] && [ "$code2" = 75 ] || fail "migration holding the deploy lock must defer at once (75), got $code/$code2"
+fresh; exec 7>"$root/run/qhhoj-deploy.lock"; flock 7
+set +e; out="$(QHHOJ_DEPLOY_LOCK_WAIT=1 deploy backend v2.1.0 2>&1)"; code=$?; set -e
+exec 7>&-
+[ "$code" = 75 ] || fail "deploy lock timeout must exit 75, got $code"
+grep -q "deferred: another deploy or a migration holds the lock" <<<"$out" || fail "lock timeout message"
+
+# I2: reset-failed before restart; the restored version is health-checked
+fresh; deploy backend v2.1.0 >/dev/null; : > "$calls"; deploy backend v2.2.0 >/dev/null
+reset_line="$(grep -n "systemctl reset-failed qhhoj-api qhhoj-bridge qhhoj-worker" "$calls" | head -1 | cut -d: -f1)"
+restart_line="$(grep -n "systemctl restart qhhoj.target" "$calls" | head -1 | cut -d: -f1)"
+[ -n "$reset_line" ] && [ "$reset_line" -lt "$restart_line" ] || fail "reset-failed must precede restart"
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs
+counting_curl='n=$(cat "$QHHOJ_DEPLOY_ROOT/n" 2>/dev/null || echo 0); echo $((n+1)) > "$QHHOJ_DEPLOY_ROOT/n"; [ "$n" -ge 2 ]'
+fresh; deploy backend v2.1.0 >/dev/null; stub curl "$counting_curl"; rm -f "$root/n"
+set +e; out="$(deploy backend v2.2.0 2>&1)"; code=$?; set -e
+[ "$code" = 1 ] || fail "failed deploy must exit 1, got $code"
+grep -q "previous version v2.1.0 restored and healthy" <<<"$out" || fail "restored-healthy line: $out"
+fresh; deploy backend v2.1.0 >/dev/null; : > "$calls"
+set +e; out="$(STUB_HEALTH=fail deploy backend v2.2.0 2>&1)"; code=$?; set -e
+[ "$code" = 1 ] || fail "unhealthy restore must exit 1, got $code"
+grep -q "previous version v2.1.0 restored but UNHEALTHY" <<<"$out" || fail "restored-unhealthy line: $out"
+[ "$(grep -c '^curl' "$calls")" = 4 ] || fail "restore must run a second health check"
+
+# I3: without an nginx conf for the v2 root, the frontend check is a file check only
+fresh_frontend; tarball v2.1.0
+rm -rf "$root/etc/nginx"; : > "$calls"
+out="$(STUB_HEALTH=fail deploy frontend v2.1.0 2>&1)" || fail "file check only must pass without nginx serving v2: $out"
+grep -q "nginx does not serve v2 yet: file check only" <<<"$out" || fail "file-check message"
+! grep -q '^curl' "$calls" || fail "file check must not use HTTP"
+mkdir -p "$root/etc/nginx/conf.d"; echo "root /var/www/qhhoj/current;" > "$root/etc/nginx/conf.d/qhhoj.conf"
+tarball v2.2.0; : > "$calls"
+set +e; STUB_HEALTH=fail deploy frontend v2.2.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] && grep -q '^curl' "$calls" || fail "with the nginx conf the HTTP check applies"
+
+# I5: only a contest ending within 24 h defers
+fresh; : > "$calls"
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs
+stub mongosh 'echo "$*" >> "$QHHOJ_DEPLOY_ROOT/mongosh.args"; true'
+deploy backend v2.1.0 >/dev/null
+grep -q 'endTime: { $gt: now, $lte: soon }' "$root/mongosh.args" && grep -q '24 \* 60 \* 60 \* 1000' "$root/mongosh.args" || fail "contest guard must bound endTime to 24 h"
+
+# FIFO planted in incoming must be refused without blocking
+fresh_frontend; mkfifo "$inc/frontend-dist-v2.1.0.tar.gz"; : > "$inc/frontend-dist-v2.1.0.tar.gz.sha256"
+set +e; timeout 10 env PATH="$bin:$PATH" QHHOJ_DEPLOY_ROOT="$root" bash "$here/qhhoj-deploy" frontend v2.1.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "FIFO in incoming must exit 1 (not hang), got $code"
 
 echo "qhhoj-deploy backend ok"

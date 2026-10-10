@@ -88,7 +88,7 @@ migrate run >/dev/null 2>&1 && fail "run after go-live must refuse"
 fresh; exec 8>"$root/run/qhhoj-migrate.lock"; flock 8
 migrate run >/dev/null 2>&1 && fail "second run while locked must refuse"
 exec 8>&-
-fresh; stub curl 'case "$*" in *http_code*) echo 404 ;; esac; true'; stub mongodump; stub nginx
+fresh; stub curl 'case "$*" in *http_code*) echo 404 ;; esac; true'; stub mongodump 'touch "${4#--archive=}"'; stub nginx
 echo nope | migrate go-live >/dev/null 2>&1 && fail "go-live without a good run must refuse"
 migrate run >/dev/null 2>&1
 echo yes | migrate go-live >/dev/null 2>&1 && fail "go-live needs the typed word"
@@ -110,6 +110,7 @@ grep -q "cookie_qhhoj_preview = \"$token\"" "$gate" || fail "staff cookie opens 
 grep -q 'remote_addr = "127.0.0.1"' "$gate" || fail "loopback exempt (health checks)"
 grep -q 'uri = "/maintenance.html"' "$gate" || fail "error page exempt (no redirect loop)"
 [ "$(stat -c %a "$gate")" = 600 ] || fail "gate (holds the token) is private"
+[ "$(grep -c 'include /etc/nginx/snippets/qhhoj-security-headers.conf;' "$gate")" = 2 ] || fail "both gate locations include the security headers"
 grep -q "auth_basic" "$gate" && fail "no browser password box"
 grep -q "nginx -t" "$calls" || fail "config checked before reload"
 migrate preview off >/dev/null || fail "preview off"
@@ -156,7 +157,7 @@ migrate run >/dev/null 2>&1 || fail "recompute retries while no worker is regist
 grep -q "systemctl stop qhhoj-worker" "$calls" || fail "worker stopped after retries"
 
 # I6: go-live resumes after a failed smoke test without a second finish
-fresh; stub mongodump "stat -c %a \"\$2\" > '$root/cfgmode'; cp \"\$2\" '$root/cfgcopy'"; stub nginx
+fresh; stub mongodump "stat -c %a \"\$2\" > '$root/cfgmode'; cp \"\$2\" '$root/cfgcopy'; touch \"\${4#--archive=}\""; stub nginx
 stub curl "case \"\$*\" in *problems*) [ -e '$root/smoke-ok' ] || exit 22 ;; *http_code*) echo 404 ;; esac"
 migrate run >/dev/null 2>&1 || fail "run before go-live"
 echo go-live | migrate go-live >/dev/null 2>&1 && fail "a failed smoke test must fail go-live"
@@ -171,6 +172,23 @@ grep -q "uri: 'mongodb://m'" "$root/cfgcopy" || fail "dump config holds the uri"
 grep -q -e "$MONGO" "$calls" && fail "mongo uri in argv"
 
 
+# a resumed go-live keeps the existing pre-start dump
+fresh; stub mongodump "touch \"\${4#--archive=}\""; stub nginx
+stub curl "case \"\$*\" in *problems*) [ -e '$root/smoke-ok' ] || exit 22 ;; *http_code*) echo 404 ;; esac"
+migrate run >/dev/null 2>&1 || fail "run before resumed go-live"
+echo go-live | migrate go-live >/dev/null 2>&1 && fail "failed smoke must fail go-live (dump test)"
+touch "$root/smoke-ok"; echo go-live | migrate go-live >/dev/null || fail "go-live resumes (dump test)"
+[ "$(grep -c '^mongodump' "$calls")" = 1 ] || fail "resumed go-live must not dump again"
+
+# a failed mongodump leaves no cutover archive, so a resumed go-live dumps again
+fresh; stub nginx; stub curl 'case "$*" in *http_code*) echo 404 ;; esac; true'
+stub mongodump "a=\"\${4#--archive=}\"; echo partial > \"\$a\"; [ -e '$root/dump-ok' ] || exit 1"
+migrate run >/dev/null 2>&1 || fail "run before failing dump"
+echo go-live | migrate go-live >/dev/null 2>&1 && fail "a failed mongodump must fail go-live"
+[ ! -e "$root/backup/qhhoj-cutover.gz" ] || fail "a failed mongodump must not leave the cutover archive"
+touch "$root/dump-ok"; echo go-live | migrate go-live >/dev/null || fail "go-live resumes after a failed dump"
+[ "$(grep -c '^mongodump' "$calls")" = 2 ] || fail "resumed go-live dumps again after a failed dump"
+[ -s "$root/backup/qhhoj-cutover.gz" ] && [ ! -e "$root/backup/qhhoj-cutover.gz.part" ] || fail "archive renamed into place"
 
 # M3: import-dump refuses after go-live
 fresh; touch "$root/srv/qhhoj-migrate/went-live"; printf 'x' | gzip > "$root/dump.sql.gz"

@@ -19,6 +19,7 @@ ENV_FILE="$ROOT/etc/qhhoj/env"
 AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
 MIGRATE_LOCK="$ROOT/run/qhhoj-migrate.lock"
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
+LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
 KEEP=5
 TAG_RE='^(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{12})$'
 EX_USAGE=64
@@ -36,13 +37,15 @@ record() { echo "$2" >> "$(history_file "$1")"; }
 drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
 
 migration_running() { [ -e "$MIGRATE_LOCK" ] && ! flock -n "$MIGRATE_LOCK" true; }
-running_contest() {
+running_contest() { # a running contest that ends within 24 h; long practice contests do not block deploys
+
   # The URL carries the DB password: pass it in the environment, never in argv (visible in ps).
   # shellcheck disable=SC2016 # the eval is JavaScript ($lte/$gt are Mongo operators), not shell
   QHHOJ_MONGO_URL="$(env_value MONGO_URL)" mongosh --nodb --quiet --eval '
     const db = connect(process.env.QHHOJ_MONGO_URL);
     const now = new Date();
-    const c = db.contests.findOne({ startTime: { $lte: now }, endTime: { $gt: now } }, { key: 1, endTime: 1 });
+    const soon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const c = db.contests.findOne({ startTime: { $lte: now }, endTime: { $gt: now, $lte: soon } }, { key: 1, endTime: 1 });
     if (c) print(c.key + " ends " + c.endTime.toISOString());'
 }
 
@@ -59,7 +62,9 @@ backend_healthy() {
 }
 
 switch_backend() {
-  podman tag "$IMAGE:$1" "$IMAGE:current" && systemctl restart qhhoj.target
+  podman tag "$IMAGE:$1" "$IMAGE:current" || return 1
+  systemctl reset-failed qhhoj-api qhhoj-bridge qhhoj-worker || true # a crash-looping image exhausts the start limit
+  systemctl restart qhhoj.target
 }
 
 prune_images() {
@@ -94,7 +99,6 @@ deploy_backend() { # <tag> [--force] [--token-stdin]
   FORCE=0 TOKEN_STDIN=0
   parse_backend_flags "${@:2}"
   valid_tag "$tag"
-  if migration_running; then defer "migration running"; fi
   if [ "$FORCE" = 0 ]; then
     local contest; contest="$(running_contest)"
     [ -z "$contest" ] || defer "contest $contest"
@@ -106,9 +110,10 @@ deploy_backend() { # <tag> [--force] [--token-stdin]
     record backend "$tag"; prune_images; echo "deployed backend $tag"; return
   fi
   echo "qhhoj-deploy: backend $tag failed; restoring ${previous:-nothing}" >&2
-  if [ -n "$previous" ] && ! switch_backend "$previous"; then
-    die "restoring $previous failed; live backend state unknown"
-  fi
+  [ -n "$previous" ] || exit 1
+  switch_backend "$previous" || die "restoring $previous failed; live backend state unknown"
+  if backend_healthy; then echo "previous version $previous restored and healthy"
+  else echo "previous version $previous restored but UNHEALTHY"; fi
   exit 1
 }
 
@@ -124,7 +129,6 @@ target_present() { # <app> <version>: the image or release that a rollback would
 
 rollback() { # backend|frontend: history moves only after the target is confirmed present
   local app=$1 target
-  if [ "$app" = backend ] && migration_running; then defer "migration running"; fi
   target="$(previous_entry "$app")"
   [ -n "$target" ] || die "no previous $app version to roll back to"
   target_present "$app" "$target" || die "$app $target is no longer present; history unchanged"
@@ -153,7 +157,12 @@ point_frontend() { # <version>
 }
 
 frontend_healthy() { # <version>: nginx serves that release's index.html (loopback is exempt from the preview gate)
-  local host got; host="$(env_value SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
+  local host got
+  if ! grep -rqsF /var/www/qhhoj/current "$ROOT/etc/nginx"; then
+    echo "nginx does not serve v2 yet: file check only"
+    cmp -s "$WWW/current/index.html" "$WWW/releases/$1/index.html"; return
+  fi
+  host="$(env_value SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
   got="$(mktemp)"
   if curl -fsS -k --resolve "$host:443:127.0.0.1" -o "$got" "https://$host/" \
     && cmp -s "$got" "$WWW/releases/$1/index.html"; then
@@ -165,6 +174,7 @@ frontend_healthy() { # <version>: nginx serves that release's index.html (loopba
 stage_incoming() { # <name>: root-owned private copies of the tarball and its checksum (symlinks copied as links, then refused)
   local f
   for f in "$1" "$1.sha256"; do
+    [ -f "$INCOMING/$f" ] && [ ! -L "$INCOMING/$f" ] || die "$INCOMING/$f is missing or not a regular file" # before cp: a FIFO would block it
     cp --no-dereference "$INCOMING/$f" "$STAGE/$f" || die "missing $INCOMING/$f"
     [ -f "$STAGE/$f" ] && [ ! -L "$STAGE/$f" ] || die "$INCOMING/$f is not a regular file"
     chmod 600 "$STAGE/$f"
@@ -223,8 +233,11 @@ deploy_frontend() { # <version>
 
 main() {
   mkdir -p "$STATE" "$WWW/releases" "$ROOT/run"
+  case "${1:-}:${2:-}" in backend:* | rollback:backend)
+    if migration_running; then defer "migration running"; fi ;;
+  esac
   exec 9>"$ROOT/run/qhhoj-deploy.lock"
-  flock -w 900 9 || die "another deploy holds the lock"
+  flock -w "$LOCK_WAIT" 9 || defer "another deploy or a migration holds the lock"
   case "${1:-}" in
     backend) deploy_backend "${2:-}" "${@:3}" ;;
     frontend) deploy_frontend "${2:-}" ;;
