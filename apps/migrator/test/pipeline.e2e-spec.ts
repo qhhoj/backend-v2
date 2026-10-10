@@ -32,7 +32,6 @@ const COLLECTIONS = [
   'tickets',
   'flatpages',
   'miscConfig',
-  'navigationBar',
 ];
 
 describe('full migration pipeline', () => {

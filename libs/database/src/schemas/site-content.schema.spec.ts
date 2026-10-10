@@ -4,7 +4,6 @@ import { startMongo } from '../testing';
 import { newId } from '../uuid';
 import { FlatpageSchema } from './flatpage.schema';
 import { MiscConfigSchema } from './misc-config.schema';
-import { NavigationItemSchema } from './navigation-item.schema';
 import { TicketSchema } from './ticket.schema';
 import { UserActivitySchema } from './user-activity.schema';
 import { UserSessionSchema } from './user-session.schema';
@@ -12,10 +11,6 @@ import { UserSessionSchema } from './user-session.schema';
 describe('site content and activity schemas', () => {
   let replSet: MongoMemoryReplSet;
   const Flatpages = mongoose.model('FlatpageSchemaSpec', FlatpageSchema);
-  const Navigation = mongoose.model(
-    'NavigationSchemaSpec',
-    NavigationItemSchema,
-  );
   const Misc = mongoose.model('MiscConfigSchemaSpec', MiscConfigSchema);
   const Tickets = mongoose.model('TicketSchemaSpec', TicketSchema);
   const Sessions = mongoose.model('UserSessionSchemaSpec', UserSessionSchema);
@@ -28,8 +23,8 @@ describe('site content and activity schemas', () => {
     replSet = await startMongo();
     await mongoose.connect(replSet.getUri());
     await Promise.all(
-      [Flatpages, Navigation, Misc, Tickets, Sessions, Activities].map(
-        (model) => model.syncIndexes(),
+      [Flatpages, Misc, Tickets, Sessions, Activities].map((model) =>
+        model.syncIndexes(),
       ),
     );
   });
@@ -38,26 +33,10 @@ describe('site content and activity schemas', () => {
     await replSet.stop();
   });
 
-  it('keeps flatpage urls, navigation keys and misc keys unique', async () => {
+  it('keeps flatpage urls and misc keys unique', async () => {
     await Flatpages.create({ url: '/about', title: 'About' });
     await expect(
       Flatpages.create({ url: '/about', title: 'Again' }),
-    ).rejects.toThrow(/duplicate key/);
-    await Navigation.create({
-      key: 'home',
-      label: 'Home',
-      path: '/',
-      regex: '^/$',
-      order: 1,
-    });
-    await expect(
-      Navigation.create({
-        key: 'home',
-        label: 'H',
-        path: '/',
-        regex: '^/$',
-        order: 2,
-      }),
     ).rejects.toThrow(/duplicate key/);
     await Misc.create({ key: 'site_name', value: 'QH' });
     await expect(Misc.create({ key: 'site_name', value: 'x' })).rejects.toThrow(
@@ -65,16 +44,7 @@ describe('site content and activity schemas', () => {
     );
   });
 
-  it('refuses a navigation label over 20 characters and a ticket title over 100', async () => {
-    await expect(
-      Navigation.create({
-        key: 'k',
-        label: 'x'.repeat(21),
-        path: '/',
-        regex: '.',
-        order: 1,
-      }),
-    ).rejects.toThrow(/label/);
+  it('refuses a ticket title over 100 characters', async () => {
     await expect(
       Tickets.create({
         title: 'x'.repeat(101),

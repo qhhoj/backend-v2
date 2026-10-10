@@ -46,6 +46,7 @@ export const SKIPPED_TABLES: readonly { table: string; reason: string }[] = [
   { table: 'judge_externalproblem', reason: 'no v2 feature' },
   { table: 'judge_externalsubmission', reason: 'no v2 feature' },
   { table: 'judge_url', reason: 'waits for v2 shortLinks (B8)' },
+  { table: 'judge_navigationbar', reason: 'v2 header is fixed' },
   { table: 'django_redirect', reason: 'framework bookkeeping' },
 ];
 

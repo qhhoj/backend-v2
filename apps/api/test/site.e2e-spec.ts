@@ -99,31 +99,8 @@ describe('site content', () => {
     });
   });
 
-  describe('navigation bar and misc config', () => {
-    it('serves ordered navigation items and the key/value config, never in a shared cache', async () => {
-      const parent = await api.navigationItems.create({
-        key: 'problems',
-        label: 'Problems',
-        path: '/problems',
-        regex: '^/problems',
-        order: 2,
-      });
-      await api.navigationItems.create({
-        key: 'home',
-        label: 'Home',
-        path: '/',
-        regex: '^/$',
-        order: 1,
-      });
-      await api.navigationItems.create({
-        key: 'archive',
-        label: 'Archive',
-        path: '/archive',
-        regex: '^/archive',
-        order: 1,
-        parentId: parent._id,
-        hidden: true,
-      });
+  describe('misc config', () => {
+    it('serves the key/value config, never in a shared cache', async () => {
       await api.miscConfigs.create([
         { key: 'site_name', value: 'QHH OJ' },
         { key: 'footer', value: '' },
@@ -133,21 +110,6 @@ describe('site content', () => {
       expect(response.headers['cache-control']).toMatch(/max-age=60/);
       expect(response.headers['cache-control']).not.toMatch(/public/);
       const site = dataOf<SiteResponse>(response);
-      expect(site.navigation.map((item) => item.key)).toEqual([
-        'archive',
-        'home',
-        'problems',
-      ]);
-      expect(site.navigation[0]).toMatchObject({
-        parentId: parent._id,
-        hidden: true,
-        regex: '^/archive',
-      });
-      expect(site.navigation[1]).toMatchObject({
-        parentId: null,
-        hidden: false,
-        path: '/',
-      });
       expect(site.config).toEqual({ site_name: 'QHH OJ', footer: '' });
     });
 
@@ -169,7 +131,6 @@ describe('site content', () => {
     });
 
     it('follows changes after a resync and reads empty once the rows are gone', async () => {
-      await api.navigationItems.updateOne({ key: 'home' }, { label: 'Start' });
       await api.miscConfigs.updateOne(
         { key: 'site_name' },
         { value: 'Renamed' },
@@ -178,11 +139,7 @@ describe('site content', () => {
       const site = dataOf<SiteResponse>(
         await api.http().get('/api/internal/site').expect(200),
       );
-      expect(site.navigation.find((item) => item.key === 'home')!.label).toBe(
-        'Start',
-      );
       expect(site.config.site_name).toBe('Renamed');
-      await api.navigationItems.deleteMany({});
       await api.miscConfigs.deleteMany({});
       await api.resyncCatalog();
       expect(
@@ -190,7 +147,6 @@ describe('site content', () => {
           await api.http().get('/api/internal/site').expect(200),
         ),
       ).toEqual({
-        navigation: [],
         config: {},
         officialMode: false,
         officialModeEndsAt: null,

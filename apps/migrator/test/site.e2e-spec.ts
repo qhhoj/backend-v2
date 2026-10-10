@@ -2,20 +2,13 @@ import {
   Flatpage,
   GeneralIssue,
   MiscConfig,
-  NavigationItem,
   Ticket,
   uuidStr,
 } from '@libs/database';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest } from './setup';
 
-const JOBS = [
-  'general-issues',
-  'tickets',
-  'flatpages',
-  'misc-config',
-  'navigation',
-];
+const JOBS = ['general-issues', 'tickets', 'flatpages', 'misc-config'];
 
 describe('site jobs', () => {
   let harness: Awaited<ReturnType<typeof setupMigratorTest>>;
@@ -108,34 +101,6 @@ describe('site jobs', () => {
     expect(await docOf('miscConfig', 'judge_miscconfig', 9001)).toBeNull();
     expect(reports['misc-config']).toContain(
       'judge_miscconfig key "home_page_top" holds a Django template',
-    );
-  });
-
-  it('keeps the navigation tree and makes every regex compile', async () => {
-    const child = (await docOf<NavigationItem>(
-      'navigationBar',
-      'judge_navigationbar',
-      9002,
-    ))!;
-    expect(child).toMatchObject({
-      key: 'subs',
-      order: 2,
-      hidden: true,
-      regex: '^/submission',
-    });
-    expect(uuidStr(child.parentId)).toBe(await id('judge_navigationbar', 9001));
-    expect(
-      (await docOf<NavigationItem>(
-        'navigationBar',
-        'judge_navigationbar',
-        9003,
-      ))!.regex,
-    ).toBe('');
-    expect(reports.navigation).toEqual(
-      expect.arrayContaining([
-        'judge_navigationbar:9002 regex converted',
-        'judge_navigationbar:9003 regex dropped',
-      ]),
     );
   });
 

@@ -15,7 +15,6 @@ import {
   Flatpage,
   GeneralIssue,
   MiscConfig,
-  NavigationItem,
   Notification,
   Ticket,
   TicketCannedReply,
@@ -67,7 +66,6 @@ import { ProblemGroupsQuerier } from '../src/modules/problems/catalog/problem-gr
 import { ProblemTypesQuerier } from '../src/modules/problems/catalog/problem-types.querier';
 import { TagGroupsQuerier } from '../src/modules/tags/tag-groups.querier';
 import { TagsQuerier } from '../src/modules/tags/tags.querier';
-import { NavigationQuerier } from '../src/modules/site/public/navigation.querier';
 import { ContestTagsQuerier } from '../src/modules/contests/tags/contest-tags.querier';
 import { MiscConfigQuerier } from '../src/modules/site/public/misc-config.querier';
 import { setupApiDocs } from '../src/api-docs';
@@ -228,9 +226,6 @@ export async function setupApiTest({
       getModelToken(GeneralIssue.name),
     ),
     flatpages: readyApp.get<Model<Flatpage>>(getModelToken(Flatpage.name)),
-    navigationItems: readyApp.get<Model<NavigationItem>>(
-      getModelToken(NavigationItem.name),
-    ),
     miscConfigs: readyApp.get<Model<MiscConfig>>(
       getModelToken(MiscConfig.name),
     ),
@@ -255,7 +250,6 @@ export async function setupApiTest({
           TagGroupsQuerier,
           TagsQuerier,
           ContestTagsQuerier,
-          NavigationQuerier,
           MiscConfigQuerier,
         ].map((querier) => readyApp.get(querier).resync()),
       );
