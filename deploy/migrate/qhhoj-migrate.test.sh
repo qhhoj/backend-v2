@@ -195,4 +195,15 @@ set +e; migrate snapshot >/dev/null 2>&1; code=$?; set -e
 ls "$root/srv/qhhoj-migrate/incoming"/legacy-*.sql.gz >/dev/null 2>&1 && fail "no .sql.gz after a failed dump"
 ls "$root/srv/qhhoj-migrate/incoming"/*.part >/dev/null 2>&1 && fail "failed dump removes its .part"
 grep -q "rsync" "$calls" && fail "no file copy after a failed dump"
+# S1: the legacy dump and its directories are private, whatever the caller's umask
+fresh; stub mysqldump 'echo SQL'; stub rsync; umask 022
+migrate snapshot >/dev/null || fail "snapshot under umask 022"
+[ "$(stat -c %a "$root/srv/qhhoj-migrate")" = 700 ] || fail "work dir is mode 700"
+[ "$(stat -c %a "$root/srv/qhhoj-migrate/incoming")" = 700 ] || fail "incoming is mode 700"
+[ "$(stat -c %a "$root/srv/qhhoj-migrate/incoming"/legacy-*.sql.gz)" = 600 ] || fail "dump is mode 600"
+# snapshot refuses without /root/migrate.env and dumps nothing
+fresh; stub mysqldump 'echo SQL'; stub rsync; rm -f "$root/root/migrate.env"
+set +e; migrate snapshot >/dev/null 2>&1; code=$?; set -e
+[ "$code" != 0 ] || fail "snapshot without migrate.env must fail"
+grep -q "mysqldump" "$calls" && fail "no dump without migrate.env"
 echo "qhhoj-migrate run ok"

@@ -323,6 +323,8 @@ copy_legacy_files() { # read-only toward the old site: rsync only reads its sour
 
 cmd_snapshot() {
   local stamp; stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  [ -f "$MIGRATE_ENV" ] || die "missing $MIGRATE_ENV; snapshot needs the legacy settings"
+  umask 077 # the dump and copies are created private (mode 600 / 700)
   take_lock
   install -d "$INCOMING/media" "$INCOMING/problem-data"
   dump_legacy "$stamp"
@@ -331,7 +333,8 @@ cmd_snapshot() {
 }
 
 main() {
-  mkdir -p "$ROOT/run" "$WORK" "$LOGS"
+  mkdir -p "$ROOT/run" "$WORK" "$INCOMING" "$LOGS"
+  chmod 700 "$WORK" "$INCOMING" # the dump is private even when the directories pre-date this
   install -d -m 700 "$ROOT/backup"
   case "${1:-}" in
     import-dump) cmd_import_dump "${2:-}" ;;
