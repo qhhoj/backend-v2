@@ -190,6 +190,14 @@ touch "$root/dump-ok"; echo go-live | migrate go-live >/dev/null || fail "go-liv
 [ "$(grep -c '^mongodump' "$calls")" = 2 ] || fail "resumed go-live dumps again after a failed dump"
 [ -s "$root/backup/qhhoj-cutover.gz" ] && [ ! -e "$root/backup/qhhoj-cutover.gz.part" ] || fail "archive renamed into place"
 
+# a stopped legacy container is started by run (its datadir survives a reboot or a stopped job)
+fresh; stub podman 'case "$*" in *inspect*) echo false ;; esac; true'
+migrate run >/dev/null || fail "run starts a stopped legacy container"
+grep -q "^podman start qhhoj-legacy" "$calls" || fail "podman start qhhoj-legacy called"
+fresh; stub podman 'case "$*" in *inspect*) exit 125 ;; esac; true'
+migrate run >/dev/null 2>&1 && fail "run without a legacy container must refuse"
+grep -q "backend-v2:current" "$calls" && fail "no migrator step without a legacy container"
+
 # M3: import-dump refuses after go-live
 fresh; touch "$root/srv/qhhoj-migrate/went-live"; printf 'x' | gzip > "$root/dump.sql.gz"
 migrate import-dump "$root/dump.sql.gz" >/dev/null 2>&1 && fail "import-dump after go-live must refuse"

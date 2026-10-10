@@ -51,11 +51,20 @@ check_env_files() {
   fi
 }
 
+ensure_legacy_running() { # a stopped container (host reboot, or its starting job was stopped) keeps its data: start it
+  local state; state="$(podman container inspect -f '{{.State.Running}}' "$LEGACY" 2>/dev/null)" \
+    || die "no $LEGACY container: run import-dump first"
+  [ "$state" = true ] && return 0
+  echo "starting the stopped $LEGACY container"
+  podman start "$LEGACY" >/dev/null 9>&- || die "$LEGACY does not start"
+  wait_for_legacy
+}
+
 preflight() {
   [ ! -e "$WORK/went-live" ] || die "the site went live; run would re-arm the migration marker and wipe ratings"
   check_env_files
   [ -f "$WORK/legacy.env" ] || die "no legacy database: run import-dump first"
-  [ "$(podman container inspect -f '{{.State.Running}}' "$LEGACY" 2>/dev/null)" = true ] || die "$LEGACY is not running"
+  ensure_legacy_running
   local free; free="$(df --output=avail -B1 "$DATA" | tail -1)"
   [ "$free" -ge $((20 * 1024 * 1024 * 1024)) ] || die "less than 20 GiB free under $DATA"
 }
