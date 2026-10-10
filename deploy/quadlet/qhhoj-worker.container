@@ -1,0 +1,36 @@
+# Install to /etc/containers/systemd/ (rootful podman); the quadlet generator turns it into qhhoj-worker.service.
+# The image tag :current is moved only by qhhoj-deploy.
+[Unit]
+Description=QHHOJ worker (PDF, Polygon import, similarity, exports)
+After=network-online.target mongod.service redis-server.service
+Wants=network-online.target
+PartOf=qhhoj.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Container]
+ContainerName=qhhoj-worker
+Image=ghcr.io/qhhoj/backend-v2:current
+Pull=never
+Network=host
+User=991
+Group=991
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=all
+EnvironmentFile=/etc/qhhoj/env
+Environment=APP=worker NODE_ENV=production
+Volume=/srv/qhhoj:/srv/qhhoj
+# Chromium needs more shared memory than the podman default of 64m
+PodmanArgs=--shm-size=1g
+LogDriver=journald
+
+[Service]
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+MemoryHigh=6G
+MemoryMax=7G
+
+[Install]
+WantedBy=qhhoj.target

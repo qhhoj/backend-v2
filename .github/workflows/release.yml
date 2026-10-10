@@ -13,6 +13,7 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs: { tag: '${{ steps.created.outputs.tag }}' }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -29,3 +30,21 @@ jobs:
           createGithubReleases: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: created
+        name: Did this run create the version tag?
+        run: |
+          git fetch --tags --force
+          tag="v$(node -p "require('./package.json').version")"
+          if [ "$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" ]; then
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+  deploy:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    uses: ./.github/workflows/deploy.yml
+    with: { ref: '${{ needs.release.outputs.tag }}' }
+    secrets: inherit
+    permissions:
+      contents: read
+      actions: read
+      packages: write

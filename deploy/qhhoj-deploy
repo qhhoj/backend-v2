@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# qhhoj-deploy: the one root command the CD `deploy` user may run (sudoers). Installed to /usr/local/sbin.
+#   backend <tag> [--force] [--token-stdin]
+#                             move the local :current image tag to <tag>, restart qhhoj.target, health-check, roll back on failure;
+#                             --token-stdin logs in to ghcr.io with one line of stdin (per-deploy authfile, removed on exit)
+#   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, flip /var/www/qhhoj/current, check, roll back on failure
+#   rollback backend|frontend go back to the previous history entry
+#   status                    live versions and recent history
+# Exit: 0 ok, 1 failed (previous version live), 64 usage, 75 deferred (migration or contest running; retry later).
+set -euo pipefail
+
+ROOT="${QHHOJ_DEPLOY_ROOT:-}"
+FORCE=0 TOKEN_STDIN=0 TMP=""
+IMAGE=ghcr.io/qhhoj/backend-v2
+STATE="$ROOT/var/lib/qhhoj-deploy"
+INCOMING="$STATE/incoming"
+WWW="$ROOT/var/www/qhhoj"
+ENV_FILE="$ROOT/etc/qhhoj/env"
+AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
+MIGRATE_LOCK="$ROOT/run/qhhoj-migrate.lock"
+HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
+KEEP=5
+TAG_RE='^(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{12})$'
+EX_USAGE=64
+EX_DEFERRED=75
+
+die() { echo "qhhoj-deploy: $*" >&2; exit 1; }
+usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "$EX_USAGE"; }
+defer() { echo "deferred: $*"; exit "$EX_DEFERRED"; }
+valid_tag() { [[ $1 =~ $TAG_RE ]] || { echo "qhhoj-deploy: bad version '$1'" >&2; exit "$EX_USAGE"; }; }
+env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -1; }
+
+history_file() { echo "$STATE/$1.history"; }
+live() { tail -n 1 "$(history_file "$1")" 2>/dev/null || true; }
+record() { echo "$2" >> "$(history_file "$1")"; }
+drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
+
+migration_running() { [ -e "$MIGRATE_LOCK" ] && ! flock -n "$MIGRATE_LOCK" true; }
+running_contest() {
+  # The URL carries the DB password: pass it in the environment, never in argv (visible in ps).
+  # shellcheck disable=SC2016 # the eval is JavaScript ($lte/$gt are Mongo operators), not shell
+  QHHOJ_MONGO_URL="$(env_value MONGO_URL)" mongosh --nodb --quiet --eval '
+    const db = connect(process.env.QHHOJ_MONGO_URL);
+    const now = new Date();
+    const c = db.contests.findOne({ startTime: { $lte: now }, endTime: { $gt: now } }, { key: 1, endTime: 1 });
+    if (c) print(c.key + " ends " + c.endTime.toISOString());'
+}
+
+backend_healthy() {
+  local port; port="$(env_value PORT)"
+  for _ in $(seq "$HEALTH_TRIES"); do
+    if curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site" \
+      && systemctl is-active --quiet qhhoj-api qhhoj-bridge qhhoj-worker; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+switch_backend() {
+  podman tag "$IMAGE:$1" "$IMAGE:current" && systemctl restart qhhoj.target
+}
+
+prune_images() {
+  local keep; keep="$(tail -n "$KEEP" "$(history_file backend)")"
+  podman image ls --format '{{.Tag}}' "$IMAGE" | while read -r tag; do
+    [[ $tag =~ $TAG_RE ]] || continue
+    grep -qxF "$tag" <<<"$keep" || podman rmi "$IMAGE:$tag" >/dev/null 2>&1 || true
+  done
+}
+
+parse_backend_flags() { # [--force] [--token-stdin] in any order; anything else is a usage error
+  local flag
+  for flag in "$@"; do
+    case "$flag" in
+      --force) FORCE=1 ;;
+      --token-stdin) TOKEN_STDIN=1 ;;
+      *) usage ;;
+    esac
+  done
+}
+
+login_registry() { # --token-stdin: the registry token arrives on stdin and is only piped to podman login
+  local token
+  TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+  IFS= read -r token || true
+  [ -n "$token" ] || die "--token-stdin: no registry token on stdin"
+  printf '%s\n' "$token" | podman login --authfile "$TMP/auth.json" --username qhhoj-deploy --password-stdin ghcr.io >/dev/null
+}
+
+deploy_backend() { # <tag> [--force] [--token-stdin]
+  local tag=$1 previous authfile="$AUTHFILE"
+  FORCE=0 TOKEN_STDIN=0
+  parse_backend_flags "${@:2}"
+  valid_tag "$tag"
+  if migration_running; then defer "migration running"; fi
+  if [ "$FORCE" = 0 ]; then
+    local contest; contest="$(running_contest)"
+    [ -z "$contest" ] || defer "contest $contest"
+  fi
+  if [ "$TOKEN_STDIN" = 1 ]; then login_registry; authfile="$TMP/auth.json"; fi
+  podman pull --authfile "$authfile" "$IMAGE:$tag"
+  previous="$(live backend)"
+  if switch_backend "$tag" && backend_healthy; then
+    record backend "$tag"; prune_images; echo "deployed backend $tag"; return
+  fi
+  echo "qhhoj-deploy: backend $tag failed; restoring ${previous:-nothing}" >&2
+  if [ -n "$previous" ] && ! switch_backend "$previous"; then
+    die "restoring $previous failed; live backend state unknown"
+  fi
+  exit 1
+}
+
+previous_entry() { # <app>: the history entry before the live one (empty when there is none)
+  local file; file="$(history_file "$1")"
+  [ -f "$file" ] && sed -n '$!p' "$file" | tail -n 1
+  return 0
+}
+
+target_present() { # <app> <version>: the image or release that a rollback would switch to still exists
+  if [ "$1" = backend ]; then podman image exists "$IMAGE:$2"; else [ -d "$WWW/releases/$2" ]; fi
+}
+
+rollback() { # backend|frontend: history moves only after the target is confirmed present
+  local app=$1 target
+  if [ "$app" = backend ] && migration_running; then defer "migration running"; fi
+  target="$(previous_entry "$app")"
+  [ -n "$target" ] || die "no previous $app version to roll back to"
+  target_present "$app" "$target" || die "$app $target is no longer present; history unchanged"
+  if [ "$app" = backend ]; then
+    switch_backend "$target" || die "switching backend to $target failed"
+    drop_last backend
+    backend_healthy || die "backend $target unhealthy after rollback"
+  else
+    point_frontend "$target"; drop_last frontend
+    frontend_healthy "$target" || die "frontend $target unhealthy after rollback"
+  fi
+  echo "rolled back $app to $target"
+}
+
+status() {
+  echo "backend: $(live backend)"
+  echo "frontend: $(live frontend)"
+  for app in backend frontend; do
+    echo "--- $app history"; tail -n 10 "$(history_file "$app")" 2>/dev/null || true
+  done
+}
+
+point_frontend() { # <version>
+  ln -sfn "releases/$1" "$WWW/current.tmp"
+  mv -T "$WWW/current.tmp" "$WWW/current"
+}
+
+frontend_healthy() { # <version>: nginx serves that release's index.html (loopback is exempt from the preview gate)
+  local host got; host="$(env_value SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
+  got="$(mktemp)"
+  if curl -fsS -k --resolve "$host:443:127.0.0.1" -o "$got" "https://$host/" \
+    && cmp -s "$got" "$WWW/releases/$1/index.html"; then
+    rm -f "$got"; return 0
+  fi
+  rm -f "$got"; return 1
+}
+
+stage_incoming() { # <name>: root-owned private copies of the tarball and its checksum (symlinks copied as links, then refused)
+  local f
+  for f in "$1" "$1.sha256"; do
+    cp --no-dereference "$INCOMING/$f" "$STAGE/$f" || die "missing $INCOMING/$f"
+    [ -f "$STAGE/$f" ] && [ ! -L "$STAGE/$f" ] || die "$INCOMING/$f is not a regular file"
+    chmod 600 "$STAGE/$f"
+  done
+}
+
+verify_checksum() { # <dir> <name>: sha256 of the tarball equals the hash in <name>.sha256 (its file-name field is ignored)
+  local want got
+  want="$(cut -d' ' -f1 "$1/$2.sha256")"
+  got="$(sha256sum "$1/$2" | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$got" = "$want" ]
+}
+
+archive_safe() { # <tarball>: only regular files and directories, no absolute or '..' member names
+  local verbose names
+  verbose="$(tar -tvzf "$1")" && names="$(tar -tzf "$1")" || return 1
+  ! grep -qvE '^[-d]' <<<"$verbose" && ! grep -qE '(^/|(^|/)\.\.(/|$))' <<<"$names"
+}
+
+unpack_frontend() { # <version>: verified private copy of the incoming tarball -> releases/<version>
+  local name="frontend-dist-$1.tar.gz" dir="$WWW/releases/$1"
+  STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
+  stage_incoming "$name"
+  verify_checksum "$STAGE" "$name" || die "checksum mismatch for $name"
+  archive_safe "$STAGE/$name" || die "$name has a member that is not a file or directory, or an unsafe path"
+  rm -rf "$dir.tmp"; mkdir -p "$dir.tmp"
+  tar -xzf "$STAGE/$name" -C "$dir.tmp" --no-same-owner --no-same-permissions || { rm -rf "$dir.tmp"; die "cannot unpack $name"; }
+  [ -f "$dir.tmp/index.html" ] || { rm -rf "$dir.tmp"; die "$name has no index.html"; }
+  chmod -R a+rX "$dir.tmp"
+  rm -rf "$dir"; mv "$dir.tmp" "$dir"
+}
+
+prune_releases() {
+  local keep; keep="$(tail -n "$KEEP" "$(history_file frontend)")"
+  for dir in "$WWW"/releases/*; do
+    [ -d "$dir" ] || continue
+    grep -qxF "$(basename "$dir")" <<<"$keep" || rm -rf "$dir"
+  done
+}
+
+deploy_frontend() { # <version>
+  local version=$1 previous
+  valid_tag "$version"
+  unpack_frontend "$version"
+  previous="$(live frontend)"
+  point_frontend "$version"
+  if frontend_healthy "$version"; then
+    record frontend "$version"; prune_releases
+    rm -f "$INCOMING/frontend-dist-$version.tar.gz" "$INCOMING/frontend-dist-$version.tar.gz.sha256"
+    echo "deployed frontend $version"; return
+  fi
+  echo "qhhoj-deploy: frontend $version not served; restoring ${previous:-nothing}" >&2
+  if [ -n "$previous" ]; then point_frontend "$previous"; fi
+  exit 1
+}
+
+main() {
+  mkdir -p "$STATE" "$WWW/releases" "$ROOT/run"
+  exec 9>"$ROOT/run/qhhoj-deploy.lock"
+  flock -w 900 9 || die "another deploy holds the lock"
+  case "${1:-}" in
+    backend) deploy_backend "${2:-}" "${@:3}" ;;
+    frontend) deploy_frontend "${2:-}" ;;
+    rollback) case "${2:-}" in backend | frontend) rollback "$2" ;; *) usage ;; esac ;;
+    status) status ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"
