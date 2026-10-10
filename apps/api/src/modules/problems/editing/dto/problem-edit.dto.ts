@@ -105,7 +105,7 @@ export class CreateProblemDto {
   @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
   @IsOptional() @IsString() @MaxLength(150) ogImage?: string;
-  @IsOptional() @IsTimestamp() date?: string;
+  @IsOptional() @IsTimestamp() date?: string | null;
 }
 
 export class UpdateProblemDto extends PartialType(CreateProblemDto) {}
