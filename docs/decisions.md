@@ -528,4 +528,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Migration: freeze-and-iterate on one frozen dump (up to a week down) instead of a short window; go-live is the single irreversible step.
 - Legacy blog (7 posts, 6 comments, 45 votes) is not migrated: unused; comments on it are skipped and reported.
 - Rating coverage at migration: contests qhh_lafddatj02 and qhh_lafddatj03 were marked rated on the old site but never rated; v2's replay rates them (22 rating rows), accepted by the product owner (`run --accept-rating-coverage`).
-- Quota promotion: every organization imported from the old site is `quotaUnlimited` (limits reported, never applied, usage still metered); staff end it per organization; v2-created organizations stay limited.
+- Quota promotion: every organization imported from the old site is `quotaUnlimited` (limits reported, never applied, usage still metered); staff end it per organization; v2-created organizations stay limited. A migrator re-run (upsert) sets it back to true, so end promotions only after go-live.
