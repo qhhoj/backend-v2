@@ -610,7 +610,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
 The app follows Semantic Versioning (`package.json` `version`, starting at 2.0.0): major = breaking API, protocol or DB migration; minor = feature; patch = fix.
 
-- Every PR that changes behaviour adds a changeset: `npm run changeset` (pick the bump, write one line for the changelog) and commit the `.changeset/*.md` file. CI runs `npx changeset status --since=origin/main` on pull requests.
+- Every PR adds a changeset: `npm run changeset` (pick the bump, write one line for the changelog) and commit the `.changeset/*.md` file; a pure CI/docs PR commits an empty one (`npx changeset --empty`). CI runs `npx changeset status --since=origin/main` on pull requests.
 - Releases are automated (`.github/workflows/release.yml`): every push to `main` opens or updates the "chore: version packages" PR, which bumps `package.json` and `package-lock.json`, writes `CHANGELOG.md` and consumes the changesets. Review and merge it; the next run tags `v<version>` (`npm run release:tag`, idempotent) and creates a GitHub Release from the changelog section. Nothing is published to npm.
 - One-time repo setting: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests". The workflow uses only the default `GITHUB_TOKEN`.
 - First release: the pending changesets were folded into the 2.0.0 entry, so the first Version PR is for the first change after 2.0.0.
