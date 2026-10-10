@@ -27,14 +27,20 @@ gh_answers "completed cancelled"; wait_ci >/dev/null 2>&1 && fail "cancelled mus
 
 ssh_codes() { printf '%s\n' "$@" > "$bin/codes"; : > "$bin/ssh-calls"; cat > "$bin/ssh" <<EOT
 #!/usr/bin/env bash
-echo "\$*" >> "$bin/ssh-calls"; code=\$(head -1 "$bin/codes"); sed -i 1d "$bin/codes"; exit "\$code"
+echo "\$*" >> "$bin/ssh-calls"; head -n 1 >> "$bin/ssh-stdin"; code=\$(head -1 "$bin/codes"); sed -i 1d "$bin/codes"; exit "\$code"
 EOT
 chmod +x "$bin/ssh"; }
-remote() { PATH="$bin:$PATH" DEPLOY_HOST=h RETRY_INTERVAL=0 RETRY_MAX=3 bash "$here/remote-deploy.sh" "$@"; }
+remote() { PATH="$bin:$PATH" DEPLOY_HOST=h RETRY_INTERVAL=0 RETRY_MAX=3 bash "$here/remote-deploy.sh" "$@" </dev/null; }
 ssh_codes 75 75 0; remote backend v2.1.0 >/dev/null || fail "retries deferred then succeeds"
 [ "$(wc -l < "$bin/ssh-calls")" = 3 ] || fail "three attempts"
 grep -q "deploy@h sudo /usr/local/sbin/qhhoj-deploy backend v2.1.0" "$bin/ssh-calls" || fail "ssh command"
 ssh_codes 75 75 75; remote backend v2.1.0 >/dev/null 2>&1 && fail "gives up after RETRY_MAX"
 ssh_codes 1; set +e; remote backend v2.1.0 >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "other exits pass through"
+: > "$bin/ssh-stdin"; ssh_codes 75 75 0
+REGISTRY_TOKEN=tok-123 remote backend v2.1.0 >/dev/null || fail "token deploy retries"
+[ "$(wc -l < "$bin/ssh-stdin")" = 3 ] || fail "token on ssh stdin on every attempt"
+[ "$(sort -u "$bin/ssh-stdin")" = tok-123 ] || fail "ssh stdin carries only the token"
+grep -q "deploy@h sudo /usr/local/sbin/qhhoj-deploy backend v2.1.0 --token-stdin" "$bin/ssh-calls" || fail "--token-stdin appended"
+! grep -q tok-123 "$bin/ssh-calls" || fail "token must not appear in ssh argv"
 echo "ci scripts ok"

@@ -12,7 +12,7 @@ fresh() {
   printf 'MONGO_URL=mongodb://x\nPORT=3000\nSITE_URL=https://oj.test\n' > "$root/etc/qhhoj/env"
   : > "$calls"
   # shellcheck disable=SC2016 # stub bodies are expanded when the stub runs
-  stub podman '[ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; true'
+  stub podman '[ "${1:-}" = login ] && { cat > "$QHHOJ_DEPLOY_ROOT/login.stdin"; touch "$3"; }; [ "${1:-}" = image ] && [ "${2:-}" = exists ] && [ -n "${STUB_IMAGE_MISSING:-}" ] && exit 1; true'
   # shellcheck disable=SC2016
   stub systemctl '[ "$1" = restart ] && [ -e "$QHHOJ_DEPLOY_ROOT/restart_fail" ] && { rm -f "$QHHOJ_DEPLOY_ROOT/restart_fail"; exit 1; }; true'
   stub sleep
@@ -167,5 +167,23 @@ set +e; deploy rollback frontend >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "rollback to a pruned release must exit 1, got $code"
 [ "$(fhist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "pruned-release rollback changed history"
 [ "$(readlink "$www/current")" = releases/v2.2.0 ] || fail "pruned-release rollback moved current"
+
+
+# --- task 13: registry token per deploy ---
+fresh; deploy backend v2.1.0 >/dev/null </dev/null || fail "default authfile deploy"
+grep -q "podman pull --authfile $root/etc/qhhoj/ghcr-auth.json" "$calls" || fail "default pull uses the host authfile"
+fresh; printf 'tok-secret\n' | deploy backend v2.1.0 --token-stdin >/dev/null || fail "token-stdin deploy"
+[ "$(cat "$root/login.stdin")" = tok-secret ] || fail "token must reach podman login on stdin"
+grep -q "podman login --authfile .* --username qhhoj-deploy --password-stdin ghcr.io" "$calls" || fail "podman login arguments"
+! grep -q tok-secret "$calls" || fail "token must not appear in any command line"
+auth="$(sed -n 's/^podman pull --authfile \([^ ]*\) .*/\1/p' "$calls")"
+[ -n "$auth" ] && [ "$auth" != "$root/etc/qhhoj/ghcr-auth.json" ] || fail "pull must use the per-deploy authfile"
+[ ! -e "$(dirname "$auth")" ] || fail "per-deploy temp dir must be removed"
+fresh; printf 'tok\n' | deploy backend v2.2.0 --token-stdin --force >/dev/null || fail "flags in any order"
+set +e; deploy backend v2.1.0 --bogus >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 64 ] || fail "unknown flag must exit 64, got $code"
+fresh; set +e; printf '\n' | deploy backend v2.1.0 --token-stdin >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "empty token must exit 1, got $code"
+! grep -q "podman pull" "$calls" || fail "empty token must fail before pulling"
 
 echo "qhhoj-deploy backend ok"

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # qhhoj-deploy: the one root command the CD `deploy` user may run (sudoers). Installed to /usr/local/sbin.
-#   backend <tag> [--force]   move the local :current image tag to <tag>, restart qhhoj.target, health-check, roll back on failure
+#   backend <tag> [--force] [--token-stdin]
+#                             move the local :current image tag to <tag>, restart qhhoj.target, health-check, roll back on failure;
+#                             --token-stdin logs in to ghcr.io with one line of stdin (per-deploy authfile, removed on exit)
 #   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, flip /var/www/qhhoj/current, check, roll back on failure
 #   rollback backend|frontend go back to the previous history entry
 #   status                    live versions and recent history
@@ -8,6 +10,7 @@
 set -euo pipefail
 
 ROOT="${QHHOJ_DEPLOY_ROOT:-}"
+FORCE=0 TOKEN_STDIN=0 TMP=""
 IMAGE=ghcr.io/qhhoj/backend-v2
 STATE="$ROOT/var/lib/qhhoj-deploy"
 INCOMING="$STATE/incoming"
@@ -67,16 +70,37 @@ prune_images() {
   done
 }
 
-deploy_backend() { # <tag> [--force]
-  local tag=$1 force=${2:-} previous
+parse_backend_flags() { # [--force] [--token-stdin] in any order; anything else is a usage error
+  local flag
+  for flag in "$@"; do
+    case "$flag" in
+      --force) FORCE=1 ;;
+      --token-stdin) TOKEN_STDIN=1 ;;
+      *) usage ;;
+    esac
+  done
+}
+
+login_registry() { # --token-stdin: the registry token arrives on stdin and is only piped to podman login
+  local token
+  TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+  IFS= read -r token || true
+  [ -n "$token" ] || die "--token-stdin: no registry token on stdin"
+  printf '%s\n' "$token" | podman login --authfile "$TMP/auth.json" --username qhhoj-deploy --password-stdin ghcr.io >/dev/null
+}
+
+deploy_backend() { # <tag> [--force] [--token-stdin]
+  local tag=$1 previous authfile="$AUTHFILE"
+  FORCE=0 TOKEN_STDIN=0
+  parse_backend_flags "${@:2}"
   valid_tag "$tag"
-  [ -z "$force" ] || [ "$force" = --force ] || usage
   if migration_running; then defer "migration running"; fi
-  if [ -z "$force" ]; then
+  if [ "$FORCE" = 0 ]; then
     local contest; contest="$(running_contest)"
     [ -z "$contest" ] || defer "contest $contest"
   fi
-  podman pull --authfile "$AUTHFILE" "$IMAGE:$tag"
+  if [ "$TOKEN_STDIN" = 1 ]; then login_registry; authfile="$TMP/auth.json"; fi
+  podman pull --authfile "$authfile" "$IMAGE:$tag"
   previous="$(live backend)"
   if switch_backend "$tag" && backend_healthy; then
     record backend "$tag"; prune_images; echo "deployed backend $tag"; return
@@ -202,7 +226,7 @@ main() {
   exec 9>"$ROOT/run/qhhoj-deploy.lock"
   flock -w 900 9 || die "another deploy holds the lock"
   case "${1:-}" in
-    backend) deploy_backend "${2:-}" "${3:-}" ;;
+    backend) deploy_backend "${2:-}" "${@:3}" ;;
     frontend) deploy_frontend "${2:-}" ;;
     rollback) case "${2:-}" in backend | frontend) rollback "$2" ;; *) usage ;; esac ;;
     status) status ;;
