@@ -83,7 +83,7 @@ export class CommentReportsService {
     }
   }
 
-  /** Comments with open reports, newest report first; comments on pages the moderator cannot read are left out of the page (still counted in `total`). */
+  /** Comments with open reports, newest report first; comments the moderator cannot read (page access, their running contest) are left out of the page (still counted in `total`). */
   async queue(
     principal: Principal,
     page: number,
@@ -110,7 +110,12 @@ export class CommentReportsService {
       items.flatMap((row) => {
         const comment = commentOf.get(row.commentId);
         const pageInfo = comment && readable.get(pageRef(pageOf(comment)));
-        if (!comment || !pageInfo) return [];
+        if (
+          !comment ||
+          !pageInfo ||
+          this.comments.hidesThread(principal, pageInfo)
+        )
+          return [];
         const open = reports.filter(
           (report) => uuidStr(report.comment) === row.commentId,
         );
