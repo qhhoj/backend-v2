@@ -70,6 +70,7 @@ import { TagsQuerier } from '../src/modules/tags/tags.querier';
 import { NavigationQuerier } from '../src/modules/site/public/navigation.querier';
 import { ContestTagsQuerier } from '../src/modules/contests/tags/contest-tags.querier';
 import { MiscConfigQuerier } from '../src/modules/site/public/misc-config.querier';
+import { setupApiDocs } from '../src/api-docs';
 import { setupOpenApi } from '../src/openapi';
 
 export { TEST_ENV };
@@ -113,7 +114,10 @@ export async function setupApiTest({
     app = await createTestApp(
       { imports: [AppModule], controllers },
       {
-        beforeInit: setupOpenApi,
+        beforeInit: (app) => {
+          setupOpenApi(app);
+          setupApiDocs(app);
+        },
         overrides: [{ provide: MAILER, useValue: mailer }, ...overrides],
       },
     );

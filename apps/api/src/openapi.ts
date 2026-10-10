@@ -21,12 +21,12 @@ export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
   return errorResponses(envelopeResponses(generated));
 }
 
+export const OPENAPI_PATH = '/api/internal/openapi.json';
+
 export function setupOpenApi(app: NestFastifyApplication): void {
   const document = buildOpenApiDocument(app);
   app
     .getHttpAdapter()
     .getInstance()
-    .get('/api/internal/openapi.json', (_request, reply) =>
-      reply.send(document),
-    );
+    .get(OPENAPI_PATH, (_request, reply) => reply.send(document));
 }
