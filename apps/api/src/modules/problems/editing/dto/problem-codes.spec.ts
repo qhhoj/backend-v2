@@ -16,14 +16,14 @@ describe('problem code validation', () => {
   it.each([CreateProblemDto, CloneProblemDto])(
     'refuses the codes that static routes own on %p',
     async (type) => {
-      for (const code of ['deleted', 'meta', 'imports'])
+      for (const code of ['deleted', 'meta', 'imports', 'random'])
         expect(await codeErrors(type, code)).toContain('isNotIn');
     },
   );
 
   it('refuses the same codes on a rename (UpdateProblemDto) and on a Polygon import', async () => {
     for (const type of [UpdateProblemDto, PolygonImportQueryDto])
-      for (const code of ['deleted', 'meta', 'imports'])
+      for (const code of ['deleted', 'meta', 'imports', 'random'])
         expect(await codeErrors(type, code)).toContain('isNotIn');
   });
 

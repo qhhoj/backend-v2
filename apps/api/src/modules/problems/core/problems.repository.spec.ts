@@ -116,4 +116,13 @@ describe('ProblemsRepository', () => {
     });
     expect(await repository.findByCodeWithData('missing')).toBeNull();
   });
+
+  it('picks a random code, retrying once when the set shrank between count and skip', async () => {
+    jest.spyOn(repository, 'count').mockResolvedValueOnce(1000);
+    jest.spyOn(Math, 'random').mockReturnValueOnce(0.99);
+    const code = await repository.randomCode({ isPublic: true });
+    jest.restoreAllMocks();
+    expect(['banana', 'apple', 'cherry']).toContain(code);
+    expect(await repository.randomCode({ code: 'nothing' })).toBeNull();
+  });
 });

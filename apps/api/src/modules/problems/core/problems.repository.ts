@@ -41,6 +41,8 @@ const LIVE = { deletedAt: null } as const;
 /** A problem in its grace period, or a tombstone. A range (not `$ne: null`) so the sparse `{deletedAt: 1}` index serves it. */
 const DELETED = { deletedAt: { $gt: new Date(0) } } as const;
 
+const RANDOM_ATTEMPTS = 2;
+
 @Injectable()
 export class ProblemsRepository {
   constructor(
@@ -133,19 +135,22 @@ export class ProblemsRepository {
       .exec();
   }
 
-  /** Code of one uniformly random live problem matching `filter`: count, then a random offset (a `$sample` aggregate would skip the UUID casting `find` does on the filter). */
+  /** Code of one uniformly random live problem matching `filter`: count, then a random offset (a `$sample` aggregate would skip the UUID casting `find` does on the filter). The set may shrink between the two queries, so a miss on a non-empty set is retried once. */
   async randomCode(filter: FilterQuery<Problem>): Promise<string | null> {
-    const total = await this.count(filter);
-    if (!total) return null;
-    const [picked] = await this.problems
-      .find({ ...filter, ...LIVE }, { code: 1 })
-      .collation(CI)
-      .sort({ _id: 1 })
-      .skip(Math.floor(Math.random() * total))
-      .limit(1)
-      .lean()
-      .exec();
-    return picked?.code ?? null;
+    for (let attempt = 0; attempt < RANDOM_ATTEMPTS; attempt++) {
+      const total = await this.count(filter);
+      if (!total) return null;
+      const [picked] = await this.problems
+        .find({ ...filter, ...LIVE }, { code: 1 })
+        .collation(CI)
+        .sort({ _id: 1 })
+        .skip(Math.floor(Math.random() * total))
+        .limit(1)
+        .lean()
+        .exec();
+      if (picked) return picked.code;
+    }
+    return null;
   }
 
   count(filter: FilterQuery<Problem>): Promise<number> {
