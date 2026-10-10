@@ -1,5 +1,25 @@
 # qhhoj-backend
 
+## 2.1.0
+
+### Minor Changes
+
+- 368727a: Continuous deployment: a release tag builds the image, pushes it to GHCR and deploys it through `qhhoj-deploy` after CI passes; the `deploy` workflow also rebuilds and deploys any ref by hand. A running contest defers the restart unless forced.
+- 66061ba: Container image (`Containerfile`): api, bridge, worker and migrator in one image selected by `APP`, with Chromium, pandoc 3.1.3 and prlimit; runs as uid 987.
+- 2c32656: `GET /api/internal/problems/random`: the code of one random visible problem matching the list filters (404 `no_problem` when none). `random` is now a reserved problem code.
+- 67fb537: Unlimited quota promotion: organizations imported from the old site get `quotaUnlimited`, which lifts the credit and storage limits (usage is still metered); usage responses carry `unlimited` and staff can end it through `PATCH /organizations/:slug/quota`.
+
+### Patch Changes
+
+- 9fc1b63: Deploys defer (exit 75) while a migration or another deploy holds the lock, and only for contests ending within 24 h; a failed deploy resets systemd start limits, health-checks the restored version, and the frontend check is file-only until nginx serves v2. A resumed go-live keeps its pre-start dump, and the maintenance and preview pages keep the security headers.
+- f7a02ad: Runbook: container install, CD, and the freeze-and-iterate migration week (qhhoj-migrate).
+- 8e8b403: install-host.sh sets up a host for the container deploy (users, directories, units, sudoers, maintenance page); service uid/gid is 987.
+- ee5f8e7: Migration tooling: `qhhoj-migrate snapshot` takes a frozen, read-only copy of the old site's database and files into the migration work dir.
+- 3473f9a: Migrator no longer imports the legacy blog; comments, comment votes and locks on blog pages are skipped and reported.
+- 14093f9: Statement rendering matches the old site: quotes, `...` and `--` stay as written; `##Title` without a space is a heading; a code fence right after an HTML line (`<details>`) renders as code; `$…$`/`~…~` inside raw HTML blocks (tables, lines after an `<img>`) render as math; a formula holding a lone backtick run (`~\texttt{``}~`) renders. nginx serves legacy `/martor/` image URLs from `/media/martor/`.
+- 5f04366: Math in raw HTML blocks is never looked for inside a quoted attribute value (`<img alt=">$x$">`). A line starting with `#word` (`#include …`) outside a code fence is a heading, as on the old site.
+- ab608eb: The base statement language is Vietnamese: `?lang=vi` (now the default) returns the base statement with `translated: true`; `?lang=en` without an English translation returns the Vietnamese base with `translated: false`. PDF cache keys of base statements move from `<code>.en.pdf` to `<code>.vi.pdf` (re-rendered on demand). The migrator drops a legacy `vi` translation identical to the problem's own text.
+
 ## 2.0.0
 
 - Rewrite of the Django/MariaDB site as NestJS 11 on Fastify with Mongoose 8 on a MongoDB 8 replica set (UUIDv7 `_id`s), Redis and BullMQ; big-bang cutover, no dual writes.
