@@ -8,6 +8,7 @@ export type StaffUserRow = Pick<
   User,
   | '_id'
   | 'username'
+  | 'rating'
   | 'usernameDisplayOverride'
   | 'displayRank'
   | 'isActive'
@@ -21,6 +22,7 @@ export type StaffUserRow = Pick<
 /** Only the fields `StaffUserResponse` shows, so no secret is ever loaded. */
 const PROJECTION = {
   username: 1,
+  rating: 1,
   usernameDisplayOverride: 1,
   displayRank: 1,
   isActive: 1,

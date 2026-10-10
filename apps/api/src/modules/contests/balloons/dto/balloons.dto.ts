@@ -43,6 +43,7 @@ export class BalloonItemParamDto extends ContestKeyParamDto {
 export class BalloonTeamResponse {
   userId!: string;
   username!: string;
+  rating!: number | null;
 }
 
 export class BalloonResponse {

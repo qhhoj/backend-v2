@@ -331,7 +331,10 @@ describe('comment votes and moderation', () => {
         ).expect(200),
       ),
     ).toEqual([
-      { voter: { id: voter._id, username: voter.username }, score: 1 },
+      {
+        voter: { id: voter._id, username: voter.username, rating: null },
+        score: 1,
+      },
     ]);
   });
 });

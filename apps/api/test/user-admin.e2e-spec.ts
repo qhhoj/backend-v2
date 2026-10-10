@@ -17,6 +17,7 @@ const STAFF_KEYS = [
   'isStaff',
   'isSuperuser',
   'lastAccess',
+  'rating',
   'username',
 ].sort();
 
