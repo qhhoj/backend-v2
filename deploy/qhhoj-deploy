@@ -10,6 +10,8 @@ set -euo pipefail
 ROOT="${QHHOJ_DEPLOY_ROOT:-}"
 IMAGE=ghcr.io/qhhoj/backend-v2
 STATE="$ROOT/var/lib/qhhoj-deploy"
+INCOMING="$STATE/incoming"
+WWW="$ROOT/var/www/qhhoj"
 ENV_FILE="$ROOT/etc/qhhoj/env"
 AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
 MIGRATE_LOCK="$ROOT/run/qhhoj-migrate.lock"
@@ -106,12 +108,58 @@ status() {
   done
 }
 
-deploy_frontend() { die "frontend deploy not available"; }
-point_frontend() { die "frontend deploy not available"; }
-frontend_healthy() { return 1; }
+point_frontend() { # <version>
+  ln -sfn "releases/$1" "$WWW/current.tmp"
+  mv -T "$WWW/current.tmp" "$WWW/current"
+}
+
+frontend_healthy() { # <version>: nginx serves that release's index.html (loopback is exempt from the preview gate)
+  local host got; host="$(env_value SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
+  got="$(mktemp)"
+  if curl -fsS -k --resolve "$host:443:127.0.0.1" -o "$got" "https://$host/" \
+    && cmp -s "$got" "$WWW/releases/$1/index.html"; then
+    rm -f "$got"; return 0
+  fi
+  rm -f "$got"; return 1
+}
+
+unpack_frontend() { # <version>: verified tarball -> releases/<version>
+  local name="frontend-dist-$1.tar.gz" dir="$WWW/releases/$1"
+  [ -f "$INCOMING/$name" ] && [ -f "$INCOMING/$name.sha256" ] || die "missing $INCOMING/$name(.sha256)"
+  (cd "$INCOMING" && sha256sum -c --status "$name.sha256") || die "checksum mismatch for $name"
+  rm -rf "$dir.tmp"; mkdir -p "$dir.tmp"
+  tar -xzf "$INCOMING/$name" -C "$dir.tmp" --no-same-owner --no-same-permissions
+  [ -f "$dir.tmp/index.html" ] || { rm -rf "$dir.tmp"; die "$name has no index.html"; }
+  chmod -R a+rX "$dir.tmp"
+  rm -rf "$dir"; mv "$dir.tmp" "$dir"
+}
+
+prune_releases() {
+  local keep; keep="$(tail -n "$KEEP" "$(history_file frontend)")"
+  for dir in "$WWW"/releases/*; do
+    [ -d "$dir" ] || continue
+    grep -qxF "$(basename "$dir")" <<<"$keep" || rm -rf "$dir"
+  done
+}
+
+deploy_frontend() { # <version>
+  local version=$1 previous
+  valid_tag "$version"
+  unpack_frontend "$version"
+  previous="$(live frontend)"
+  point_frontend "$version"
+  if frontend_healthy "$version"; then
+    record frontend "$version"; prune_releases
+    rm -f "$INCOMING/frontend-dist-$version.tar.gz" "$INCOMING/frontend-dist-$version.tar.gz.sha256"
+    echo "deployed frontend $version"; return
+  fi
+  echo "qhhoj-deploy: frontend $version not served; restoring ${previous:-nothing}" >&2
+  if [ -n "$previous" ]; then point_frontend "$previous"; fi
+  exit 1
+}
 
 main() {
-  mkdir -p "$STATE" "$ROOT/run"
+  mkdir -p "$STATE" "$WWW/releases" "$ROOT/run"
   exec 9>"$ROOT/run/qhhoj-deploy.lock"
   flock -w 900 9 || die "another deploy holds the lock"
   case "${1:-}" in

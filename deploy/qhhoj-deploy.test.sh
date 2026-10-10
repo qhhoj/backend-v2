@@ -58,4 +58,38 @@ set +e; deploy rollback backend >/dev/null 2>&1; code=$?; set -e
 
 status_out="$(deploy status)"
 grep -q "backend: v2.1.0" <<<"$status_out" || fail "status"
+tarball() { # <version> [no-index]
+  local src; src="$(mktemp -d)"
+  [ "${2:-}" = no-index ] || echo "<html>$1</html>" > "$src/index.html"
+  mkdir -p "$src/assets"; echo "js $1" > "$src/assets/app.js"
+  tar -czf "$root/var/lib/qhhoj-deploy/incoming/frontend-dist-$1.tar.gz" -C "$src" .
+  (cd "$root/var/lib/qhhoj-deploy/incoming" && sha256sum "frontend-dist-$1.tar.gz" > "frontend-dist-$1.tar.gz.sha256")
+  rm -rf "$src"
+}
+www="$root/var/www/qhhoj"
+fresh
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs
+stub curl 'out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done; [ "${STUB_HEALTH:-ok}" = ok ] && cp "$QHHOJ_DEPLOY_ROOT/var/www/qhhoj/current/index.html" "$out"; [ "${STUB_HEALTH:-ok}" = ok ]'
+tarball v2.1.0; deploy frontend v2.1.0 >/dev/null || fail "frontend deploy"
+[ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "current -> v2.1.0"
+[ -f "$www/releases/v2.1.0/assets/app.js" ] || fail "unpacked"
+[ ! -e "$root/var/lib/qhhoj-deploy/incoming/frontend-dist-v2.1.0.tar.gz" ] || fail "incoming cleaned"
+
+tarball v2.2.0; echo garbage >> "$root/var/lib/qhhoj-deploy/incoming/frontend-dist-v2.2.0.tar.gz"
+set +e; deploy frontend v2.2.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] || fail "checksum mismatch must fail"
+[ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "checksum mismatch kept v2.1.0"
+
+tarball v2.3.0 no-index
+set +e; deploy frontend v2.3.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] && [ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "no index.html must fail and keep v2.1.0"
+
+tarball v2.4.0
+set +e; STUB_HEALTH=fail deploy frontend v2.4.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] && [ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "unhealthy frontend must flip back"
+
+tarball v2.5.0; deploy frontend v2.5.0 >/dev/null
+deploy rollback frontend >/dev/null || fail "frontend rollback"
+[ "$(readlink "$www/current")" = releases/v2.1.0 ] || fail "frontend rollback target"
+
 echo "qhhoj-deploy backend ok"
