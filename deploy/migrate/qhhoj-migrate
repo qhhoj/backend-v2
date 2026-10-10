@@ -147,6 +147,7 @@ cmd_import_dump() { # <file.sql.gz>
   [ -f "$dump" ] || die "no dump file: ${dump:-<none>}"
   take_lock
   podman rm -f "$LEGACY" >/dev/null 2>&1 || true
+  rm -f "$WORK/last-run-ok"
   rm -rf "$WORK/mariadb"; install -d -m 700 "$WORK/mariadb"
   password="$(openssl rand -hex 24)"
   podman run -d --name "$LEGACY" --network host -v "$WORK/mariadb:/var/lib/mysql" \
@@ -162,11 +163,77 @@ cmd_import_dump() { # <file.sql.gz>
     UNION ALL SELECT 'judge_submission', COUNT(*) FROM judge_submission UNION ALL SELECT 'judge_contest', COUNT(*) FROM judge_contest"
 }
 
+smoke() {
+  local port host; port="$(value "$SITE_ENV" PORT)"; host="$(value "$SITE_ENV" SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
+  for _ in $(seq 60); do curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site" && break; sleep 2; done
+  curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site" || die "api not answering"
+  curl -fsS -k -o /dev/null --resolve "$host:443:127.0.0.1" "https://$host/problems" || die "SPA route not served"
+  [ "$(curl -s -k -o /dev/null -w '%{http_code}' --resolve "$host:443:127.0.0.1" "https://$host/s/nonexistent")" = 404 ] \
+    || die "/s/ location missing"
+}
+
+cmd_go_live() {
+  local answer
+  take_lock
+  [ ! -e "$WORK/went-live" ] || die "already live"
+  [ -s "$WORK/last-run-ok" ] || die "no successful run since the last import or failure"
+  read -r -p "Type go-live to finish the migration and open the site: " answer || true
+  [ "$answer" = go-live ] || die "aborted"
+  LOGDIR="$(cat "$WORK/last-run-ok")"
+  step finish migrator finish
+  touch "$WORK/went-live" # from here on run must refuse, even if a later line fails
+  step mongodump mongodump --uri "$(value "$MIGRATE_ENV" MONGO_URL)" --gzip --archive="$ROOT/backup/qhhoj-cutover.gz"
+  systemctl start qhhoj.target
+  gate_off
+  smoke
+  echo "live. Switch DNS now."
+}
+
+GATE="$ROOT/etc/nginx/snippets/qhhoj-gate.conf"
+HTPASSWD="$ROOT/etc/nginx/qhhoj-preview.htpasswd"
+
+reload_nginx() { nginx -t && systemctl reload nginx; }
+
+gate_off() {
+  mkdir -p "$(dirname "$GATE")"
+  # shellcheck disable=SC2016 # backticks are literal text in the comment
+  printf '# Empty in production; `qhhoj-migrate preview on` writes basic auth here.\n' > "$GATE"
+  reload_nginx
+}
+
+gate_on() { # <user>
+  mkdir -p "$(dirname "$GATE")"
+  local password; password="$(openssl rand -base64 18)"
+  printf '%s:%s\n' "$1" "$(openssl passwd -apr1 "$password")" > "$HTPASSWD"
+  chmod 640 "$HTPASSWD"; chgrp www-data "$HTPASSWD" 2>/dev/null || true
+  cat > "$GATE" <<EOF
+# Written by qhhoj-migrate preview on; \`qhhoj-migrate preview off\` empties it.
+satisfy any;
+allow 127.0.0.1;
+allow ::1;
+deny all;
+auth_basic "QHHOJ preview";
+auth_basic_user_file /etc/nginx/qhhoj-preview.htpasswd;
+EOF
+  reload_nginx
+  echo "preview user $1, password (shown once): $password"
+}
+
+cmd_status() {
+  echo "went live: $([ -e "$WORK/went-live" ] && echo yes || echo no)"
+  echo "snapshot: $(cat "$WORK/dump.sha256" 2>/dev/null || echo none)"
+  if [ -s "$WORK/last-run-ok" ]; then cat "$(cat "$WORK/last-run-ok")/summary.txt"; else echo "no successful run"; fi
+}
+
 main() {
   mkdir -p "$ROOT/run" "$WORK" "$LOGS"
+  install -d -m 700 "$ROOT/backup"
   case "${1:-}" in
     import-dump) cmd_import_dump "${2:-}" ;;
     run) cmd_run ;;
+    go-live) cmd_go_live ;;
+    preview) case "${2:-}" in on) [ -n "${3:-}" ] || usage; gate_on "$3" ;; off) gate_off ;; *) usage ;; esac ;;
+    status) cmd_status ;;
     *) usage ;;
   esac
 }

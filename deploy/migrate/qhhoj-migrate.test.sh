@@ -67,4 +67,24 @@ migrate run >/dev/null 2>&1 && fail "run after go-live must refuse"
 fresh; exec 8>"$root/run/qhhoj-migrate.lock"; flock 8
 migrate run >/dev/null 2>&1 && fail "second run while locked must refuse"
 exec 8>&-
+fresh; stub curl 'case "$*" in *http_code*) echo 404 ;; esac; true'; stub mongodump; stub nginx
+echo nope | migrate go-live >/dev/null 2>&1 && fail "go-live without a good run must refuse"
+migrate run >/dev/null 2>&1
+echo yes | migrate go-live >/dev/null 2>&1 && fail "go-live needs the typed word"
+grep -q " finish" "$calls" && fail "no finish without the typed word"
+echo go-live | migrate go-live >/dev/null || fail "go-live"
+grep -q "backend-v2:current finish" "$calls" || fail "finish ran"
+grep -q "mongodump" "$calls" && grep -q "systemctl start qhhoj.target" "$calls" || fail "dump and start"
+[ -e "$root/srv/qhhoj-migrate/went-live" ] || fail "went-live written"
+[ "$(grep -n 'mongodump' "$calls" | cut -d: -f1)" -lt "$(grep -n 'start qhhoj.target' "$calls" | cut -d: -f1)" ] || fail "dump before start"
+
+fresh; stub nginx; mkdir -p "$root/etc/nginx/snippets"
+out="$(migrate preview on staff)" || fail "preview on"
+grep -q "auth_basic" "$root/etc/nginx/snippets/qhhoj-gate.conf" || fail "gate written"
+grep -q "allow 127.0.0.1" "$root/etc/nginx/snippets/qhhoj-gate.conf" || fail "loopback exempt"
+grep -q "^staff:" "$root/etc/nginx/qhhoj-preview.htpasswd" || fail "htpasswd"
+grep -q "password" <<<"$out" || fail "prints the password once"
+migrate preview off >/dev/null || fail "preview off"
+grep -q "auth_basic" "$root/etc/nginx/snippets/qhhoj-gate.conf" && fail "gate emptied"
+migrate status >/dev/null || fail "status"
 echo "qhhoj-migrate run ok"
