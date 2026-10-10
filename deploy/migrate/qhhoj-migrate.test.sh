@@ -17,7 +17,7 @@ fresh() {
   mkdir -p "$root/run" "$root/etc/qhhoj" "$root/root" "$root/srv/qhhoj" "$root/srv/qhhoj-migrate/incoming/media" \
     "$root/srv/qhhoj-migrate/incoming/problem-data" "$root/var/log/qhhoj-migrate"
   printf 'MONGO_URL=mongodb://m\nREDIS_URL=redis://r\nMEDIA_URL=/media\nENCRYPTION_KEY=%s\nPORT=3000\nSITE_URL=https://oj.test\n' "$SECRET" > "$root/etc/qhhoj/env"
-  printf 'MONGO_URL=mongodb://m\nREDIS_URL=redis://r\nMEDIA_URL=/media\nENCRYPTION_KEY=%s\nLEGACY_SECRET_KEY=s\nDAY_ONE_LANGUAGES=CPP17,PY3\n' "$SECRET" > "$root/root/migrate.env"
+  printf 'MONGO_URL=mongodb://m\nREDIS_URL=redis://r\nMEDIA_URL=/media\nENCRYPTION_KEY=%s\nLEGACY_SECRET_KEY=s\nDAY_ONE_LANGUAGES=CPP17,PY3\nGO_LIVE_SITE_URL=https://oj.test\n' "$SECRET" > "$root/root/migrate.env"
   chmod 600 "$root/etc/qhhoj/env" "$root/root/migrate.env"
   echo 'LEGACY_MYSQL_URL=mysql://root:pw@127.0.0.1:3307/legacy' > "$root/srv/qhhoj-migrate/legacy.env"
   : > "$calls"
@@ -197,6 +197,16 @@ grep -q "^podman start qhhoj-legacy" "$calls" || fail "podman start qhhoj-legacy
 fresh; stub podman 'case "$*" in *inspect*) exit 125 ;; esac; true'
 migrate run >/dev/null 2>&1 && fail "run without a legacy container must refuse"
 grep -q "backend-v2:current" "$calls" && fail "no migrator step without a legacy container"
+
+# go-live refuses while SITE_URL is not the final address (logins would fail on the live site)
+fresh; stub curl 'case "$*" in *http_code*) echo 404 ;; esac; true'; stub mongodump 'touch "${4#--archive=}"'; stub nginx
+migrate run >/dev/null 2>&1 || fail "run before the SITE_URL check"
+sed -i 's|^SITE_URL=.*|SITE_URL=https://v2.oj.test|' "$root/etc/qhhoj/env"
+out="$(echo go-live | migrate go-live 2>&1)" && fail "go-live with the demo SITE_URL must refuse"
+grep -q "SITE_URL" <<<"$out" || fail "names SITE_URL"
+grep -q "finish" "$calls" && fail "nothing irreversible before the SITE_URL check"
+sed -i '/^GO_LIVE_SITE_URL=/d' "$root/root/migrate.env"; sed -i 's|^SITE_URL=.*|SITE_URL=https://oj.test|' "$root/etc/qhhoj/env"
+echo go-live | migrate go-live >/dev/null 2>&1 && fail "go-live without GO_LIVE_SITE_URL must refuse"
 
 # M3: import-dump refuses after go-live
 fresh; touch "$root/srv/qhhoj-migrate/went-live"; printf 'x' | gzip > "$root/dump.sql.gz"

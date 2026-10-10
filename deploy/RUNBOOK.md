@@ -51,15 +51,16 @@ Freeze-and-iterate: the old site is frozen once (up to a week down), its dump is
 
 `/root/migrate.env` (mode 600; `qhhoj-migrate` reads it, delete it after the rollback period):
 
-| Variable                                                   | Needed by                                                                                      |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `MONGO_URL`                                                | every command                                                                                  |
-| `LEGACY_MYSQL_URL`                                         | audit, backfill, verify, check-integrity (not set by hand: `import-dump` writes `legacy.env`)  |
-| `LEGACY_SECRET_KEY`, `ENCRYPTION_KEY`                      | backfill and verify (users job: decrypts legacy 2FA secrets, re-seals them); required by `run` |
-| `MEDIA_URL` (default `/media`)                             | backfill and verify (problems, sources), check-files                                           |
-| `REDIS_URL`                                                | recompute (same Redis and Mongo as the worker)                                                 |
-| `DAY_ONE_LANGUAGES`                                        | `run`'s prune-languages keep list (below); required                                            |
-| `LEGACY_DB_NAME`, `LEGACY_MEDIA_DIR`, `LEGACY_PROBLEM_DIR` | `snapshot` (db), `run` (files); optional, defaults above                                       |
+| Variable                                                   | Needed by                                                                                                                                                                                                      |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MONGO_URL`                                                | every command                                                                                                                                                                                                  |
+| `LEGACY_MYSQL_URL`                                         | audit, backfill, verify, check-integrity (not set by hand: `import-dump` writes `legacy.env`)                                                                                                                  |
+| `LEGACY_SECRET_KEY`, `ENCRYPTION_KEY`                      | backfill and verify (users job: decrypts legacy 2FA secrets, re-seals them); required by `run`                                                                                                                 |
+| `MEDIA_URL` (default `/media`)                             | backfill and verify (problems, sources), check-files                                                                                                                                                           |
+| `REDIS_URL`                                                | recompute (same Redis and Mongo as the worker)                                                                                                                                                                 |
+| `DAY_ONE_LANGUAGES`                                        | `run`'s prune-languages keep list (below); required                                                                                                                                                            |
+| `LEGACY_DB_NAME`, `LEGACY_MEDIA_DIR`, `LEGACY_PROBLEM_DIR` | `snapshot` (db), `run` (files); optional, defaults above                                                                                                                                                       |
+| `GO_LIVE_SITE_URL`                                         | `go-live`: the site's final address (`https://qhhoj.com`); `go-live` refuses while `SITE_URL` in `/etc/qhhoj/env` differs (the demo uses `https://v2.qhhoj.com`, and logins are refused from any other origin) |
 
 `MONGO_URL`, `REDIS_URL`, `MEDIA_URL` and `ENCRYPTION_KEY` must equal the values in `/etc/qhhoj/env` (`run` refuses otherwise). A different `ENCRYPTION_KEY` seals every migrated TOTP secret and scratch code under a key the api does not hold, and `verify` cannot see it: every 2FA user would be locked out. The file roots are fixed by the command (`/srv/qhhoj/media`, `/srv/qhhoj/problem-data`).
 

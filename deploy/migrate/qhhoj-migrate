@@ -255,11 +255,19 @@ dump_mongo() { # the URI goes through a mode-600 config file, never argv; remove
   mv "$archive.part" "$archive"
 }
 
+check_site_url() { # logins are refused from any origin but SITE_URL: it must be the final address before going live
+  local want have
+  want="$(value "$MIGRATE_ENV" GO_LIVE_SITE_URL)"; have="$(value "$SITE_ENV" SITE_URL)"
+  [ -n "$want" ] || die "set GO_LIVE_SITE_URL (the site's final address, e.g. https://qhhoj.com) in $MIGRATE_ENV"
+  [ "$have" = "$want" ] || die "SITE_URL in $SITE_ENV is $have, not $want: set it (and restart nothing yet), then go-live again"
+}
+
 cmd_go_live() {
   local answer
   take_lock
   take_deploy_lock
   [ -s "$WORK/last-run-ok" ] || die "no successful run since the last import or failure"
+  check_site_url
   read -r -p "Type go-live to finish the migration and open the site: " answer || true
   [ "$answer" = go-live ] || die "aborted"
   LOGDIR="$(cat "$WORK/last-run-ok")"
