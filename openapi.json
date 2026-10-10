@@ -6844,6 +6844,17 @@
         ],
         "type": "object"
       },
+      "RandomProblemResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
       "RankResponse": {
         "properties": {
           "page": {
@@ -22195,6 +22206,28 @@
         "parameters": [
           {
             "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "default": "public",
+              "enum": [
+                "all",
+                "private",
+                "public"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StatementLanguage"
+            }
+          },
+          {
+            "in": "query",
             "name": "page",
             "required": false,
             "schema": {
@@ -22217,32 +22250,10 @@
           },
           {
             "in": "query",
-            "name": "visibility",
-            "required": false,
-            "schema": {
-              "default": "public",
-              "enum": [
-                "all",
-                "private",
-                "public"
-              ],
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ProblemSort"
-            }
-          },
-          {
-            "in": "query",
-            "name": "lang",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/StatementLanguage"
             }
           },
           {
@@ -22779,6 +22790,152 @@
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/ProblemMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Problems"
+        ]
+      }
+    },
+    "/api/internal/problems/random": {
+      "get": {
+        "operationId": "ProblemsController_random",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "default": "public",
+              "enum": [
+                "all",
+                "private",
+                "public"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StatementLanguage"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^[^\\0]*$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Case-insensitive substring of the code or any title; at most 100 characters.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^[^\\0]*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "groupId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "typeIds",
+            "required": false,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pointsMin",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pointsMax",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasEditorial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "`false`: only problems the viewer has not solved; `true`: only solved ones (an AC with every case point). Anonymous viewers have solved nothing.",
+            "in": "query",
+            "name": "solved",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RandomProblemResponse"
                     }
                   },
                   "required": [
