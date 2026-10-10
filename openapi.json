@@ -15700,6 +15700,7 @@
         "operationId": "CommentsController_detail",
         "parameters": [
           {
+            "description": "Id of the comment.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -15757,6 +15758,7 @@
         "operationId": "CommentPostingController_edit",
         "parameters": [
           {
+            "description": "Id of the comment.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -15826,6 +15828,7 @@
         "operationId": "CommentModerationController_setHidden",
         "parameters": [
           {
+            "description": "Id of the comment.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -15895,6 +15898,7 @@
         "operationId": "CommentPostingController_revisions",
         "parameters": [
           {
+            "description": "Id of the comment.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -15957,6 +15961,7 @@
         "operationId": "CommentVotesController_vote",
         "parameters": [
           {
+            "description": "Id of the comment.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -16026,6 +16031,7 @@
         "operationId": "CommentModerationController_votes",
         "parameters": [
           {
+            "description": "Id of the comment.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -16229,6 +16235,7 @@
         "operationId": "ContestTagsController_remove",
         "parameters": [
           {
+            "description": "Slug of the contest tag.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -16271,6 +16278,7 @@
         "operationId": "ContestTagsController_update",
         "parameters": [
           {
+            "description": "Slug of the contest tag.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -16595,6 +16603,7 @@
         "operationId": "ContestsController_detail",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -16652,6 +16661,7 @@
         "operationId": "ContestEditingController_update",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -16721,6 +16731,7 @@
         "operationId": "ContestEditingController_actions",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -16780,6 +16791,7 @@
         "operationId": "ContestAnnouncementsController_list",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -16869,6 +16881,7 @@
         "operationId": "ContestAnnouncementsController_create",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -16938,6 +16951,7 @@
         "operationId": "ContestAnnouncementsController_remove",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -16946,6 +16960,7 @@
             }
           },
           {
+            "description": "Id of the announcement.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -16991,6 +17006,7 @@
         "operationId": "ContestAnnouncementsController_resend",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -16999,6 +17015,7 @@
             }
           },
           {
+            "description": "Id of the announcement.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -17044,6 +17061,7 @@
         "operationId": "BalloonsController_list",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17144,6 +17162,7 @@
         "operationId": "BalloonsController_deliver",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17208,6 +17227,7 @@
         "operationId": "BalloonsController_undeliver",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17272,6 +17292,7 @@
         "operationId": "ContestEditingController_clone",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17341,6 +17362,7 @@
         "operationId": "ContestDataController_status",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17398,6 +17420,7 @@
         "operationId": "ContestDataController_prepare",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17467,6 +17490,7 @@
         "operationId": "ContestDataController_download",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17520,6 +17544,7 @@
         "operationId": "ContestExportController_status",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17577,6 +17602,7 @@
         "operationId": "ContestExportController_request",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17636,6 +17662,7 @@
         "operationId": "ContestExportController_download",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17689,6 +17716,7 @@
         "operationId": "FeedController_snapshot",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17742,6 +17770,7 @@
         "operationId": "FeedKeysController_revoke",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17784,6 +17813,7 @@
         "operationId": "FeedKeysController_status",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17841,6 +17871,7 @@
         "operationId": "FeedKeysController_mint",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17910,6 +17941,7 @@
         "operationId": "FeedKeysController_release",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17954,6 +17986,7 @@
         "operationId": "GhostsController_remove",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -17996,6 +18029,7 @@
         "operationId": "GhostsController_list",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18053,6 +18087,7 @@
         "operationId": "GhostsController_importCsv",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18122,6 +18157,7 @@
         "operationId": "GhostsController_csv",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18175,6 +18211,7 @@
         "operationId": "ContestParticipationController_join",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18244,6 +18281,7 @@
         "operationId": "ContestEditingController_judgeFinal",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18303,6 +18341,7 @@
         "operationId": "ContestParticipationController_leave",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18347,6 +18386,7 @@
         "operationId": "OfficialRankingController_remove",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18389,6 +18429,7 @@
         "operationId": "OfficialRankingController_show",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18446,6 +18487,7 @@
         "operationId": "OfficialRankingController_set",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18515,6 +18557,7 @@
         "operationId": "ContestParticipationController_participations",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18616,6 +18659,7 @@
         "operationId": "ContestParticipationController_disqualify",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18624,6 +18668,7 @@
             }
           },
           {
+            "description": "Id of the participation.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -18693,6 +18738,7 @@
         "operationId": "ContestPublishController_publish",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18762,6 +18808,7 @@
         "operationId": "ContestRankingController_ranking",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18841,6 +18888,7 @@
         "operationId": "RankingLinksController_show",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18898,6 +18946,7 @@
         "operationId": "RankingLinksController_update",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -18965,6 +19014,7 @@
         "operationId": "RankingLinksController_create",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19024,6 +19074,7 @@
         "operationId": "RankingLinksController_regenerate",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19083,6 +19134,7 @@
         "operationId": "ContestRatingController_rate",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19142,6 +19194,7 @@
         "operationId": "ContestParticipationController_register",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19211,6 +19264,7 @@
         "operationId": "ReplayController_replay",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19292,6 +19346,7 @@
         "operationId": "ReplayController_rebuild",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19351,6 +19406,7 @@
         "operationId": "ContestEditingController_rescore",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19410,6 +19466,7 @@
         "operationId": "ContestStatsController_get",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19469,6 +19526,7 @@
         "operationId": "ContestSubmissionsController_list",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19693,6 +19751,7 @@
         "operationId": "ContestStreamsController_contest",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19751,6 +19810,7 @@
         "operationId": "FeedStreamController_feed",
         "parameters": [
           {
+            "description": "Key of the contest.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -19959,6 +20019,7 @@
         "operationId": "TicketStreamsController_ticket",
         "parameters": [
           {
+            "description": "Id of the ticket.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -21110,6 +21171,7 @@
         "operationId": "OrganizationsController_detail",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21167,6 +21229,7 @@
         "operationId": "OrganizationEditingController_update",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21236,6 +21299,7 @@
         "operationId": "MembershipController_join",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21280,6 +21344,7 @@
         "operationId": "MembershipController_kick",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21334,6 +21399,7 @@
         "operationId": "MembershipController_leave",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21378,6 +21444,7 @@
         "operationId": "OrganizationsController_members",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21485,6 +21552,7 @@
         "operationId": "OrganizationPostsController_list",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21564,6 +21632,7 @@
         "operationId": "ProblemTagsController_list",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21653,6 +21722,7 @@
         "operationId": "ProblemTagsController_create",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21722,6 +21792,7 @@
         "operationId": "ProblemTagsController_remove",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21730,6 +21801,7 @@
             }
           },
           {
+            "description": "Slug of the problem tag.",
             "in": "path",
             "name": "tagSlug",
             "required": true,
@@ -21772,6 +21844,7 @@
         "operationId": "ProblemTagsController_update",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21780,6 +21853,7 @@
             }
           },
           {
+            "description": "Slug of the problem tag.",
             "in": "path",
             "name": "tagSlug",
             "required": true,
@@ -21849,6 +21923,7 @@
         "operationId": "OrganizationProblemsController_list",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -21969,6 +22044,7 @@
         "operationId": "OrganizationProblemBulkController_run",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22038,6 +22114,7 @@
         "operationId": "OrganizationProblemsController_unarchive",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22046,6 +22123,7 @@
             }
           },
           {
+            "description": "Code of the problem.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -22088,6 +22166,7 @@
         "operationId": "OrganizationProblemsController_archive",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22096,6 +22175,7 @@
             }
           },
           {
+            "description": "Code of the problem.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -22140,6 +22220,7 @@
         "operationId": "OrganizationProblemsController_setTags",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22148,6 +22229,7 @@
             }
           },
           {
+            "description": "Code of the problem.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -22217,6 +22299,7 @@
         "operationId": "OrganizationUsageController_updateQuota",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22286,6 +22369,7 @@
         "operationId": "OrganizationRequestsController_list",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22372,6 +22456,7 @@
         "operationId": "OrganizationRequestsController_create",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22441,6 +22526,7 @@
         "operationId": "OrganizationRequestsController_detail",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22509,6 +22595,7 @@
         "operationId": "OrganizationRequestsController_decide",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22587,6 +22674,7 @@
         "operationId": "OrganizationUsageController_one",
         "parameters": [
           {
+            "description": "Slug of the organization.",
             "in": "path",
             "name": "slug",
             "required": true,
@@ -22843,6 +22931,7 @@
         "operationId": "BlogEditingController_delete",
         "parameters": [
           {
+            "description": "Id of the blog post.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -22885,6 +22974,7 @@
         "operationId": "BlogPostsController_detail",
         "parameters": [
           {
+            "description": "Id of the blog post.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -22942,6 +23032,7 @@
         "operationId": "BlogEditingController_edit",
         "parameters": [
           {
+            "description": "Id of the blog post.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -23011,6 +23102,7 @@
         "operationId": "BlogVotesController_vote",
         "parameters": [
           {
+            "description": "Id of the blog post.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -25573,6 +25665,7 @@
         "operationId": "TicketsController_problemList",
         "parameters": [
           {
+            "description": "Code of the problem.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -25650,6 +25743,7 @@
         "operationId": "TicketCreationController_forProblem",
         "parameters": [
           {
+            "description": "Code of the problem.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -27628,6 +27722,7 @@
         "operationId": "CannedRepliesController_remove",
         "parameters": [
           {
+            "description": "Id of the canned reply.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -27670,6 +27765,7 @@
         "operationId": "CannedRepliesController_update",
         "parameters": [
           {
+            "description": "Id of the canned reply.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -27964,6 +28060,7 @@
         "operationId": "TicketsController_detail",
         "parameters": [
           {
+            "description": "Id of the ticket.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -28021,6 +28118,7 @@
         "operationId": "TicketUpdatesController_update",
         "parameters": [
           {
+            "description": "Id of the ticket.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -28090,6 +28188,7 @@
         "operationId": "TicketMessagesController_post",
         "parameters": [
           {
+            "description": "Id of the ticket.",
             "in": "path",
             "name": "id",
             "required": true,

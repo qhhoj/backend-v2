@@ -40,7 +40,9 @@ export class UpdateProblemTagDto extends PartialType(
 
 /** Unvalidated shape: an unknown slug is a 404, never a 400. */
 export class ProblemTagParamsDto {
+  /** Slug of the organization. */
   @IsString() slug!: string;
+  /** Slug of the problem tag. */
   @IsString() tagSlug!: string;
 }
 

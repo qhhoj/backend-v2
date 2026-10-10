@@ -41,6 +41,8 @@ export class AnnouncementListQueryDto {
 
 /** The key stays unvalidated like `ContestKeyParamDto`; a malformed id is a 400. */
 export class AnnouncementIdParamDto {
+  /** Key of the contest. */
   @IsString() key!: string;
+  /** Id of the announcement. */
   @IsUUID('7') id!: string;
 }

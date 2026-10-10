@@ -47,6 +47,8 @@ export class DisqualifyDto {
 
 /** Unvalidated shape: a malformed id is a 404. */
 export class ParticipationParamsDto {
+  /** Key of the contest. */
   @IsString() key!: string;
+  /** Id of the participation. */
   @IsString() id!: string;
 }

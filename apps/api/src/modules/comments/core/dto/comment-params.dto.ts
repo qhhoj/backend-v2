@@ -31,5 +31,6 @@ export class CommentPageQueryDto {
 
 /** Unvalidated: a malformed id is a 404. */
 export class CommentIdParamDto {
+  /** Id of the comment. */
   @IsString() id!: string;
 }

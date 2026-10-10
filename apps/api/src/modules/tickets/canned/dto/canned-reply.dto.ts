@@ -52,5 +52,6 @@ export class CannedReplyPageQueryDto {
 
 /** Unvalidated: a malformed id is a 404. */
 export class CannedReplyIdParamDto {
+  /** Id of the canned reply. */
   @IsString() id!: string;
 }

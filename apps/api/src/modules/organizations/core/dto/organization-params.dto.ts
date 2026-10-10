@@ -15,6 +15,7 @@ import type { MemberSort } from '../organization-members.repository';
 
 /** Unvalidated shape: a malformed slug is a 404 (no organization matches), never a 400. */
 export class OrganizationSlugParamDto {
+  /** Slug of the organization. */
   @IsString() slug!: string;
 }
 

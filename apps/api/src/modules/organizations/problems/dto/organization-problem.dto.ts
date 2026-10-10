@@ -71,6 +71,8 @@ export class SetProblemTagsDto {
 
 /** Unvalidated shape: an unknown slug or code is a 404. */
 export class OrganizationProblemParamsDto {
+  /** Slug of the organization. */
   @IsString() slug!: string;
+  /** Code of the problem. */
   @IsString() code!: string;
 }

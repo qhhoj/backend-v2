@@ -81,6 +81,7 @@ export class UpdateContestTagDto extends PartialType(
 
 /** Unvalidated shape: an unknown or malformed slug is a 404, never a 400. */
 export class ContestTagSlugParamDto {
+  /** Slug of the contest tag. */
   @IsString()
   slug!: string;
 }

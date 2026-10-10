@@ -48,6 +48,7 @@ export class DecideOrganizationRequestDto {
 }
 
 export class OrganizationRequestParamsDto {
+  /** Slug of the organization. */
   @IsString() slug!: string;
   /** Unvalidated: a malformed id is a 404. */
   @IsString() id!: string;

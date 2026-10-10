@@ -1,4 +1,4 @@
-import { ApiTags } from '@nestjs/swagger';
+import { ApiParam, ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Param } from '@nestjs/common';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -21,6 +21,7 @@ export class ArchiveNoticeController {
    * problem page. Fails with 404 `not_found` when the viewer cannot see the
    * problem.
    */
+  @ApiParam({ name: 'code', description: 'Code of the problem.' })
   @Get(':code/archived-in')
   async archivedIn(
     @CurrentAuth() auth: AuthContext,
