@@ -16,7 +16,7 @@ export class CommentVotesController {
    * Vote on a comment
    *
    * @remarks
-   * Sets the caller's vote on a visible, non-hidden comment: `score` is 1, -1,
+   * Sets the caller's vote on a visible comment that is not hidden or deleted: `score` is 1, -1,
    * or 0 to withdraw. Returns the new total and the caller's vote. Authors
    * cannot vote on their own comment (403 `forbidden`); voters need enough
    * solved problems and an unmuted account. Limited to 60 votes per minute per

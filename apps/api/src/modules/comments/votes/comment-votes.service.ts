@@ -6,7 +6,7 @@ import type { VoteResponse } from '../../contributions/dto/vote.response';
 import { VotesService } from '../../contributions/votes.service';
 import { CommentsService } from '../core/comments.service';
 
-/** Legacy `vote_comment`, changeable and withdrawable; never hidden comments or unreadable pages (legacy checked neither page). */
+/** Legacy `vote_comment`, changeable and withdrawable; never hidden or deleted comments or unreadable pages (legacy checked neither page). */
 @Injectable()
 export class CommentVotesService {
   constructor(
@@ -22,6 +22,7 @@ export class CommentVotesService {
     this.comments.assertOpen(principal);
     const { comment } = await this.comments.visibleComment(principal, id, {
       allowHidden: false,
+      allowDeleted: false,
     });
     return this.votes.cast(
       principal,

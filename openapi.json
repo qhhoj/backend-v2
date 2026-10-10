@@ -782,8 +782,12 @@
             "description": "The comment rendered to HTML.",
             "type": "string"
           },
+          "canDelete": {
+            "description": "The caller may delete the comment: its author or a moderator, while not deleted.",
+            "type": "boolean"
+          },
           "canEdit": {
-            "description": "The caller may edit the comment.",
+            "description": "The caller may edit the comment (never once deleted).",
             "type": "boolean"
           },
           "collapsed": {
@@ -795,17 +799,36 @@
             "format": "date-time",
             "type": "string"
           },
+          "deleted": {
+            "description": "Deleted by its author or a moderator: `bodyHtml` is empty and `body` null; the row stays as a placeholder for its replies.",
+            "type": "boolean"
+          },
           "depth": {
             "description": "Nesting level; 0 for top-level comments.",
             "type": "number"
           },
           "hidden": {
-            "description": "Whether the comment is hidden; only moderators can read hidden comments.",
+            "description": "Hidden by a moderator; hidden comments reach moderators only.",
             "type": "boolean"
+          },
+          "hiddenBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The moderator who hid it; null while visible or when unknown (hidden on the old site).",
+            "nullable": true,
+            "type": "object"
           },
           "id": {
             "description": "Id of the comment.",
             "type": "string"
+          },
+          "number": {
+            "description": "Stable 1-based position on its page in posting order; null until numbered.",
+            "nullable": true,
+            "type": "number"
           },
           "page": {
             "allOf": [
@@ -855,8 +878,33 @@
           "collapsed",
           "revisions",
           "canEdit",
+          "canDelete",
+          "hidden",
+          "hiddenBy",
+          "deleted",
+          "number",
+          "page"
+        ],
+        "type": "object"
+      },
+      "CommentLocationResponse": {
+        "properties": {
+          "page": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentPageLinkResponse"
+              }
+            ],
+            "description": "The page the comment belongs to."
+          },
+          "pageNumber": {
+            "description": "The 1-based listing page (`?page=`) that holds the comment's thread, for this viewer.",
+            "type": "number"
+          }
+        },
+        "required": [
           "page",
-          "hidden"
+          "pageNumber"
         ],
         "type": "object"
       },
@@ -889,11 +937,11 @@
       "CommentPageResponse": {
         "properties": {
           "canComment": {
-            "description": "Signed in, past the interaction gate, and not locked.",
+            "description": "Signed in, past the interaction gate, and not locked: `postBlock` is null.",
             "type": "boolean"
           },
           "comments": {
-            "description": "Roots newest first, each followed by its visible replies in tree order.",
+            "description": "Roots newest first, each followed by its replies in tree order: hidden ones only for moderators, deleted ones as placeholders.",
             "items": {
               "$ref": "#/components/schemas/CommentResponse"
             },
@@ -911,6 +959,10 @@
             ],
             "description": "The page the comments belong to."
           },
+          "pageLocked": {
+            "description": "The page's own lock flag, whoever views it: what moderators toggle with `PUT`/`DELETE .../lock`.",
+            "type": "boolean"
+          },
           "pagination": {
             "allOf": [
               {
@@ -918,12 +970,24 @@
               }
             ],
             "description": "Paging of the top-level threads."
+          },
+          "postBlock": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentPostBlockResponse"
+              }
+            ],
+            "description": "Why the viewer cannot comment, by the same rule posting enforces; null when they can.",
+            "nullable": true,
+            "type": "object"
           }
         },
         "required": [
           "page",
           "locked",
+          "pageLocked",
           "canComment",
+          "postBlock",
           "comments",
           "pagination"
         ],
@@ -962,6 +1026,158 @@
         ],
         "type": "object"
       },
+      "CommentPostBlockReason": {
+        "description": "Why the viewer cannot comment: signed out, a problem of their running contest, a locked page, a muted account, or too few solved problems.",
+        "enum": [
+          "contest",
+          "locked",
+          "muted",
+          "needs_solved",
+          "signed_out"
+        ],
+        "type": "string"
+      },
+      "CommentPostBlockResponse": {
+        "properties": {
+          "reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentPostBlockReason"
+              }
+            ],
+            "description": "Why the viewer cannot comment: signed out, a problem of their running contest, a locked page, a muted account, or too few solved problems."
+          },
+          "required": {
+            "description": "Problems needed to comment; only for `needs_solved`.",
+            "nullable": true,
+            "type": "number"
+          },
+          "solved": {
+            "description": "Problems the viewer solved; only for `needs_solved`.",
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "reason",
+          "solved",
+          "required"
+        ],
+        "type": "object"
+      },
+      "CommentPreviewResponse": {
+        "properties": {
+          "bodyHtml": {
+            "description": "The body rendered exactly as posting would store it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bodyHtml"
+        ],
+        "type": "object"
+      },
+      "CommentReportEntryResponse": {
+        "properties": {
+          "createdAt": {
+            "description": "When it was reported, ISO 8601.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "note": {
+            "description": "The reporter's note; may be empty.",
+            "type": "string"
+          },
+          "reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentReportReason"
+              }
+            ],
+            "description": "Why it was reported."
+          },
+          "reporter": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "Who reported; null when the account is gone.",
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "reason",
+          "reporter",
+          "note",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "CommentReportOutcome": {
+        "description": "`resolved` when the reports led to action, `dismissed` when they did not.",
+        "enum": [
+          "dismissed",
+          "resolved"
+        ],
+        "type": "string"
+      },
+      "CommentReportQueueItemResponse": {
+        "properties": {
+          "comment": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReportedCommentResponse"
+              }
+            ],
+            "description": "The reported comment."
+          },
+          "lastReportedAt": {
+            "description": "When the newest open report came in, ISO 8601.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "page": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentPageLinkResponse"
+              }
+            ],
+            "description": "The page it belongs to."
+          },
+          "reporterCount": {
+            "description": "Users with an open report on it.",
+            "type": "number"
+          },
+          "reports": {
+            "description": "Its open reports, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/CommentReportEntryResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "comment",
+          "page",
+          "reporterCount",
+          "reports",
+          "lastReportedAt"
+        ],
+        "type": "object"
+      },
+      "CommentReportReason": {
+        "description": "Why the comment is reported.",
+        "enum": [
+          "abuse",
+          "offTopic",
+          "other",
+          "spam",
+          "spoiler"
+        ],
+        "type": "string"
+      },
       "CommentResponse": {
         "properties": {
           "author": {
@@ -983,8 +1199,12 @@
             "description": "The comment rendered to HTML.",
             "type": "string"
           },
+          "canDelete": {
+            "description": "The caller may delete the comment: its author or a moderator, while not deleted.",
+            "type": "boolean"
+          },
           "canEdit": {
-            "description": "The caller may edit the comment.",
+            "description": "The caller may edit the comment (never once deleted).",
             "type": "boolean"
           },
           "collapsed": {
@@ -996,13 +1216,36 @@
             "format": "date-time",
             "type": "string"
           },
+          "deleted": {
+            "description": "Deleted by its author or a moderator: `bodyHtml` is empty and `body` null; the row stays as a placeholder for its replies.",
+            "type": "boolean"
+          },
           "depth": {
             "description": "Nesting level; 0 for top-level comments.",
             "type": "number"
           },
+          "hidden": {
+            "description": "Hidden by a moderator; hidden comments reach moderators only.",
+            "type": "boolean"
+          },
+          "hiddenBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The moderator who hid it; null while visible or when unknown (hidden on the old site).",
+            "nullable": true,
+            "type": "object"
+          },
           "id": {
             "description": "Id of the comment.",
             "type": "string"
+          },
+          "number": {
+            "description": "Stable 1-based position on its page in posting order; null until numbered.",
+            "nullable": true,
+            "type": "number"
           },
           "parentId": {
             "description": "Id of the comment replied to; null for a top-level comment.",
@@ -1043,7 +1286,12 @@
           "score",
           "collapsed",
           "revisions",
-          "canEdit"
+          "canEdit",
+          "canDelete",
+          "hidden",
+          "hiddenBy",
+          "deleted",
+          "number"
         ],
         "type": "object"
       },
@@ -8281,8 +8529,12 @@
             "description": "The comment rendered to HTML.",
             "type": "string"
           },
+          "canDelete": {
+            "description": "The caller may delete the comment: its author or a moderator, while not deleted.",
+            "type": "boolean"
+          },
           "canEdit": {
-            "description": "The caller may edit the comment.",
+            "description": "The caller may edit the comment (never once deleted).",
             "type": "boolean"
           },
           "collapsed": {
@@ -8294,13 +8546,36 @@
             "format": "date-time",
             "type": "string"
           },
+          "deleted": {
+            "description": "Deleted by its author or a moderator: `bodyHtml` is empty and `body` null; the row stays as a placeholder for its replies.",
+            "type": "boolean"
+          },
           "depth": {
             "description": "Nesting level; 0 for top-level comments.",
             "type": "number"
           },
+          "hidden": {
+            "description": "Hidden by a moderator; hidden comments reach moderators only.",
+            "type": "boolean"
+          },
+          "hiddenBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The moderator who hid it; null while visible or when unknown (hidden on the old site).",
+            "nullable": true,
+            "type": "object"
+          },
           "id": {
             "description": "Id of the comment.",
             "type": "string"
+          },
+          "number": {
+            "description": "Stable 1-based position on its page in posting order; null until numbered.",
+            "nullable": true,
+            "type": "number"
           },
           "page": {
             "allOf": [
@@ -8350,7 +8625,12 @@
           "score",
           "collapsed",
           "revisions",
-          "canEdit"
+          "canEdit",
+          "canDelete",
+          "hidden",
+          "hiddenBy",
+          "deleted",
+          "number"
         ],
         "type": "object"
       },
@@ -8639,6 +8919,65 @@
           "username",
           "rating",
           "organization"
+        ],
+        "type": "object"
+      },
+      "ReportCommentDto": {
+        "properties": {
+          "note": {
+            "description": "Optional details for the moderators.",
+            "maxLength": 500,
+            "type": "string"
+          },
+          "reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentReportReason"
+              }
+            ],
+            "description": "Why the comment is reported."
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ReportedCommentResponse": {
+        "properties": {
+          "author": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "Null when the author's account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "deleted": {
+            "description": "Deleted by its author or a moderator.",
+            "type": "boolean"
+          },
+          "excerpt": {
+            "description": "The first 200 characters of its Markdown; empty once deleted.",
+            "type": "string"
+          },
+          "hidden": {
+            "description": "Hidden by a moderator.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Id of the comment.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "excerpt",
+          "author",
+          "hidden",
+          "deleted"
         ],
         "type": "object"
       },
@@ -8936,6 +9275,22 @@
           "changedFields",
           "actor",
           "createdAt"
+        ],
+        "type": "object"
+      },
+      "SettleCommentReportsDto": {
+        "properties": {
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentReportOutcome"
+              }
+            ],
+            "description": "`resolved` when the reports led to action, `dismissed` when they did not."
+          }
+        },
+        "required": [
+          "outcome"
         ],
         "type": "object"
       },
@@ -16464,7 +16819,7 @@
     },
     "/api/internal/comments/pages/{type}/{key}": {
       "get": {
-        "description": "Public. Returns one page of threads (20 top-level comments with all their\nreplies) of a commentable page, addressed by `type` (problem, editorial,\ncontest, blog or tagProblem) and its natural `key` (problem code, contest\nkey, post id). Also reports whether the page is locked and whether the\nviewer can comment. Hidden comments are not returned. Fails with 404\n`not_found` when the page is unknown or unreadable, and 403 `forbidden`\nwhile an official contest closes comments. Contest problem threads are\nempty for contestants who are in the contest.",
+        "description": "Public. Returns one page of threads (20 top-level comments with all their\nreplies) of a commentable page, addressed by `type` (problem, editorial,\ncontest, blog or tagProblem) and its natural `key` (problem code, contest\nkey, post id). Also reports the page's lock (`pageLocked`), whether it is\nlocked for the viewer (`locked`), and whether the viewer can comment\n(`canComment`) or why not (`postBlock`: `signed_out`, `contest`,\n`locked`, `muted`, or `needs_solved` with `solved` and `required`).\nHidden comments are returned only to holders of `judge.change_comment`,\nflagged `hidden` with the moderator in `hiddenBy`; deleted comments stay\nas placeholders (`deleted`, empty `bodyHtml`). Fails with 404\n`not_found` when the page is unknown or unreadable, and 403 `forbidden`\nwhile an official contest closes comments. Contest problem threads are\nempty for contestants who are in the contest.",
         "operationId": "CommentsController_page",
         "parameters": [
           {
@@ -16726,7 +17081,196 @@
         ]
       }
     },
+    "/api/internal/comments/preview": {
+      "post": {
+        "description": "Renders a comment body to HTML exactly as posting would (safe-mode\nMarkdown, same length rule: 400 `validation_failed` when blank or over\n8192 characters) without saving anything. Needs enough solved problems\nand an unmuted account (403 `forbidden`). Limited to 30 previews per\nminute per user (429 `rate_limited`).",
+        "operationId": "CommentPostingController_preview",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentBodyDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CommentPreviewResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Preview a comment",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/internal/comments/reports": {
+      "get": {
+        "description": "Requires `judge.change_comment`. Returns the comments with open reports,\nthe most recently reported first, 20 per page: an excerpt, the page link,\nhow many users reported it, and each open report with its reason and\nnote. Comments on pages the moderator cannot read are left out of the\npage.",
+        "operationId": "CommentReportsController_queue",
+        "parameters": [
+          {
+            "description": "1-based page number of threads.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/CommentReportQueueItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List reported comments",
+        "tags": [
+          "Comments"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/comments/{id}": {
+      "delete": {
+        "description": "Allowed for its author and for holders of `judge.change_comment` (403\n`forbidden` otherwise). The comment stays in its thread as a placeholder\n(`deleted: true`, empty `bodyHtml`) so replies keep their context; it can\nno longer be edited, voted on, replied to or reported, and its score\nleaves the author's contribution. Its edit history becomes\nmoderator-only. Fails with 404 `not_found` when the comment is unknown,\nunreadable or already deleted. Returns the placeholder.",
+        "operationId": "CommentPostingController_remove",
+        "parameters": [
+          {
+            "description": "Id of the comment.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CommentResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a comment",
+        "tags": [
+          "Comments"
+        ]
+      },
       "get": {
         "description": "Public. Returns one comment with the link to its page. Hidden comments are\nonly returned to holders of `judge.change_comment`. Fails with 404\n`not_found` for malformed, unknown, hidden or unreadable comments.",
         "operationId": "CommentsController_detail",
@@ -16856,7 +17400,7 @@
     },
     "/api/internal/comments/{id}/hidden": {
       "post": {
-        "description": "Requires `judge.change_comment`. Hides the comment together with its\nreplies, or restores what that comment had hidden, and recomputes the\nauthors' contribution points. A comment under a hidden parent cannot be\nunhidden alone (409 `conflict`). Returns the comment.",
+        "description": "Requires `judge.change_comment`. Hides the comment together with its\nreplies, or restores what that comment had hidden, and recomputes the\nauthors' contribution points; each hide and unhide is recorded with the\nmoderator (shown to moderators as `hiddenBy`). A comment under a hidden\nparent cannot be unhidden alone (409 `conflict`). Returns the comment.",
         "operationId": "CommentModerationController_setHidden",
         "parameters": [
           {
@@ -16924,9 +17468,179 @@
         ]
       }
     },
+    "/api/internal/comments/{id}/location": {
+      "get": {
+        "description": "Public. Returns the page a comment belongs to and the listing page number\n(`?page=` of the page listing) holding its thread for this viewer, so a\n`#comment-<id>` link can open the right page. Fails with 404 `not_found`\nlike getting the comment.",
+        "operationId": "CommentsController_locate",
+        "parameters": [
+          {
+            "description": "Id of the comment.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CommentLocationResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Locate a comment",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/internal/comments/{id}/reports": {
+      "post": {
+        "description": "Flags a visible comment of someone else for the moderators with a\n`reason` (spam, abuse, spoiler, offTopic, other) and an optional `note`\n(up to 500 characters). Each user reports a comment once (409\n`conflict`); reporting one's own comment is 403 `forbidden`, a hidden or\ndeleted one 404 `not_found`. Limited to 10 reports per hour per user (429\n`rate_limited`). Returns 204.",
+        "operationId": "CommentReportsController_report",
+        "parameters": [
+          {
+            "description": "Id of the comment.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportCommentDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Report a comment",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/internal/comments/{id}/reports/settle": {
+      "post": {
+        "description": "Requires `judge.change_comment`. Marks every open report of the comment\n`resolved` (acted on) or `dismissed`; hiding or deleting the comment is a\nseparate call. Fails with 404 `not_found` when the comment is unreadable\nor has no open reports. Returns 204.",
+        "operationId": "CommentReportsController_settle",
+        "parameters": [
+          {
+            "description": "Id of the comment.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettleCommentReportsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Settle the reports of a comment",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
     "/api/internal/comments/{id}/revisions": {
       "get": {
-        "description": "Public. Returns every edit of a comment with the time, the editor, and the\ntext before and after. Hidden comments are only available to holders of\n`judge.change_comment`.",
+        "description": "Public. Returns every edit of a comment with the time, the editor, and the\ntext before and after. Hidden and deleted comments are only available to\nholders of `judge.change_comment`.",
         "operationId": "CommentPostingController_revisions",
         "parameters": [
           {
@@ -16989,7 +17703,7 @@
     },
     "/api/internal/comments/{id}/vote": {
       "put": {
-        "description": "Sets the caller's vote on a visible, non-hidden comment: `score` is 1, -1,\nor 0 to withdraw. Returns the new total and the caller's vote. Authors\ncannot vote on their own comment (403 `forbidden`); voters need enough\nsolved problems and an unmuted account. Limited to 60 votes per minute per\nuser.",
+        "description": "Sets the caller's vote on a visible comment that is not hidden or deleted: `score` is 1, -1,\nor 0 to withdraw. Returns the new total and the caller's vote. Authors\ncannot vote on their own comment (403 `forbidden`); voters need enough\nsolved problems and an unmuted account. Limited to 60 votes per minute per\nuser.",
         "operationId": "CommentVotesController_vote",
         "parameters": [
           {

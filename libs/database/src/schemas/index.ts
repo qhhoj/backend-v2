@@ -3,6 +3,11 @@ import { ActivationKey, ActivationKeySchema } from './activation-key.schema';
 import { BlogPost, BlogPostSchema } from './blog-post.schema';
 import { BlogVote, BlogVoteSchema } from './blog-vote.schema';
 import { CommentLock, CommentLockSchema } from './comment-lock.schema';
+import {
+  CommentPageCounter,
+  CommentPageCounterSchema,
+} from './comment-page-counter.schema';
+import { CommentReport, CommentReportSchema } from './comment-report.schema';
 import { CommentVote, CommentVoteSchema } from './comment-vote.schema';
 import { Comment, CommentSchema } from './comment.schema';
 import { Contest, ContestSchema } from './contest.schema';
@@ -108,6 +113,8 @@ export * from './activation-key.schema';
 export * from './blog-post.schema';
 export * from './blog-vote.schema';
 export * from './comment-lock.schema';
+export * from './comment-page-counter.schema';
+export * from './comment-report.schema';
 export * from './comment-vote.schema';
 export * from './comment.schema';
 export * from './contest-announcement.schema';
@@ -184,6 +191,8 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: BlogPost.name, schema: BlogPostSchema },
   { name: BlogVote.name, schema: BlogVoteSchema },
   { name: CommentLock.name, schema: CommentLockSchema },
+  { name: CommentPageCounter.name, schema: CommentPageCounterSchema },
+  { name: CommentReport.name, schema: CommentReportSchema },
   { name: CommentVote.name, schema: CommentVoteSchema },
   { name: Comment.name, schema: CommentSchema },
   { name: Contest.name, schema: ContestSchema },

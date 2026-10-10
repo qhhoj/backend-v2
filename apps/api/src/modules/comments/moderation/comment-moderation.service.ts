@@ -7,6 +7,7 @@ import { uuidStr } from '@libs/database';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import { VotesRepository } from '../../contributions/votes.repository';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
+import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { CommentLocksRepository } from '../core/comment-locks.repository';
 import { CommentPagesService } from '../core/comment-pages.service';
 import { CommentsRepository } from '../core/comments.repository';
@@ -25,9 +26,10 @@ export class CommentModerationService {
     private readonly votes: VotesRepository,
     private readonly users: UsersRepository,
     private readonly contributions: ContributionPointsService,
+    private readonly revisions: RevisionsRepository,
   ) {}
 
-  /** Legacy `comment_hide` (and the admin `unhide_comment`), on the subtree (unhide restores only what that comment hid); the authors' points are recomputed. A comment under a hidden parent cannot be unhidden alone. */
+  /** Legacy `comment_hide` (and the admin `unhide_comment`), on the subtree (unhide restores only what that comment hid); the authors' points are recomputed and a `hide`/`unhide` revision records the moderator. A comment under a hidden parent cannot be unhidden alone. */
   async setHidden(
     principal: Principal,
     id: string,
@@ -44,8 +46,20 @@ export class CommentModerationService {
     )
       throw new AppError('conflict', 409, 'Unhide its parent first');
     const authors = await (isHidden
-      ? this.repository.hideSubtree(comment.path, uuidStr(comment._id))
+      ? this.repository.hideSubtree(
+          comment.path,
+          uuidStr(comment._id),
+          principal.userId,
+        )
       : this.repository.unhideSubtree(comment.path, uuidStr(comment._id)));
+    await this.revisions.append({
+      entity: 'comment',
+      entityId: id,
+      action: isHidden ? 'hide' : 'unhide',
+      userId: principal.userId,
+      changes: { hidden: { before: comment.hidden, after: isHidden } },
+      comment: '',
+    });
     await this.contributions.refresh(authors);
     return this.comments.detail(principal, id);
   }

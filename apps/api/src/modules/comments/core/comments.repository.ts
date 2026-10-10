@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { unique } from '@libs/common';
+import { isDuplicateKey, unique } from '@libs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type {
   ClientSession,
@@ -7,17 +7,34 @@ import type {
   HydratedDocument,
   Model,
 } from 'mongoose';
-import { subtreeFilter } from '@libs/community';
+import { COMMENT_DELETED_BODY, subtreeFilter } from '@libs/community';
 import type { CommentPage, CommentPageType } from '@libs/community';
-import { Comment, isUuid, toUuid, uuidStr } from '@libs/database';
+import {
+  Comment,
+  CommentPageCounter,
+  isUuid,
+  toUuid,
+  uuidStr,
+} from '@libs/database';
 
 export type CommentDocument = HydratedDocument<Comment>;
+
+/** Visible rows only, or (for moderators) hidden ones too; `$in` keeps `hidden` an index key so the same indexes serve both. */
+const hiddenFilter = (includeHidden: boolean) =>
+  includeHidden ? { hidden: { $in: [false, true] } } : { hidden: false };
+
+const pageFilter = (page: CommentPage) => ({
+  'page.type': page.type,
+  'page.id': page.id,
+});
 
 @Injectable()
 export class CommentsRepository {
   constructor(
     @InjectConnection() private readonly connection: Connection,
     @InjectModel(Comment.name) private readonly comments: Model<Comment>,
+    @InjectModel(CommentPageCounter.name)
+    private readonly counters: Model<CommentPageCounter>,
   ) {}
 
   findById(id: string): Promise<CommentDocument | null> {
@@ -26,11 +43,19 @@ export class CommentsRepository {
       : Promise.resolve(null);
   }
 
+  findByIds(ids: readonly string[]): Promise<Comment[]> {
+    if (!ids.length) return Promise.resolve([]);
+    return this.comments
+      .find({ _id: { $in: ids } })
+      .lean<Comment[]>()
+      .exec();
+  }
+
   create(fields: Partial<Comment>): Promise<CommentDocument> {
     return this.comments.create(fields);
   }
 
-  /** Newest visible comments (optionally one author's), older than `before`, through `{hidden, _id}` or `{author, hidden, _id}`. */
+  /** Newest visible, undeleted comments (optionally one author's), older than `before`, through `{hidden, _id}` or `{author, hidden, _id}`. */
   newestVisible(
     { authorId, before }: { authorId?: string; before?: string | null },
     limit: number,
@@ -38,6 +63,7 @@ export class CommentsRepository {
     return this.comments
       .find({
         hidden: false,
+        deletedAt: null,
         ...(authorId ? { author: authorId } : {}),
         ...(before ? { _id: { $lt: before } } : {}),
       })
@@ -47,16 +73,16 @@ export class CommentsRepository {
       .exec();
   }
 
-  /** One page of visible roots, newest first, through `{page.type, page.id, hidden, parentId, _id}`. */
+  /** One page of roots (deleted ones included, as placeholders), newest first, through `{page.type, page.id, hidden, parentId, _id}`. */
   async threads(
     page: CommentPage,
     pageNumber: number,
     pageSize: number,
+    includeHidden: boolean,
   ): Promise<{ roots: Comment[]; total: number }> {
     const filter = {
-      'page.type': page.type,
-      'page.id': page.id,
-      hidden: false,
+      ...pageFilter(page),
+      ...hiddenFilter(includeHidden),
       parentId: null,
     };
     const [roots, total] = await Promise.all([
@@ -72,11 +98,30 @@ export class CommentsRepository {
     return { roots, total };
   }
 
-  /** Visible replies of the threads, in tree order, through `{threadId, hidden, path}`. The index is hinted (the planner otherwise sorts in memory over `{hidden, _id}`), and the roots are read along because a `parentId` filter would not use it. */
-  async replies(threadIds: readonly string[]): Promise<Comment[]> {
+  /** Roots of the page listed before `rootId` (newer ones) under the same filter as `threads`: its page is this count / page size + 1. */
+  rootsNewerThan(
+    page: CommentPage,
+    rootId: string,
+    includeHidden: boolean,
+  ): Promise<number> {
+    return this.comments
+      .countDocuments({
+        ...pageFilter(page),
+        ...hiddenFilter(includeHidden),
+        parentId: null,
+        _id: { $gt: rootId },
+      })
+      .exec();
+  }
+
+  /** Replies of the threads, in tree order, through `{threadId, hidden, path}`. The index is hinted (the planner otherwise sorts in memory over `{hidden, _id}`), and the roots are read along because a `parentId` filter would not use it. */
+  async replies(
+    threadIds: readonly string[],
+    includeHidden: boolean,
+  ): Promise<Comment[]> {
     if (!threadIds.length) return [];
     const thread = await this.comments
-      .find({ threadId: { $in: threadIds }, hidden: false })
+      .find({ threadId: { $in: threadIds }, ...hiddenFilter(includeHidden) })
       .sort({ path: 1 })
       .hint({ threadId: 1, hidden: 1, path: 1 })
       .lean<Comment[]>()
@@ -84,7 +129,7 @@ export class CommentsRepository {
     return thread.filter((comment) => comment.parentId !== null);
   }
 
-  /** Visible comments per page id of one type. */
+  /** Visible, undeleted comments per page id of one type. */
   async countVisible(
     type: CommentPageType,
     ids: readonly string[],
@@ -97,6 +142,7 @@ export class CommentsRepository {
             'page.type': type,
             'page.id': { $in: ids.map(toUuid) },
             hidden: false,
+            deletedAt: null,
           },
         },
         { $group: { _id: '$page.id', count: { $sum: 1 } } },
@@ -122,12 +168,16 @@ export class CommentsRepository {
     return modifiedCount === 1;
   }
 
-  /** Hides the comment at `path` and the visible descendants (through `{path}`), recording `hiddenBy` on each; returns the subtree's distinct authors. Rows already hidden keep their own `hiddenBy`, so the hide of an ancestor never takes them over. */
-  async hideSubtree(path: string, hiddenBy: string): Promise<string[]> {
+  /** Hides the comment at `path` and the visible descendants (through `{path}`), recording `hiddenBy` (and the moderator, `hiddenByUser`) on each; returns the subtree's distinct authors. Rows already hidden keep their own `hiddenBy`, so the hide of an ancestor never takes them over. */
+  async hideSubtree(
+    path: string,
+    hiddenBy: string,
+    hiddenByUser: string | null,
+  ): Promise<string[]> {
     await this.comments
       .updateMany(
         { ...subtreeFilter(path), hidden: false },
-        { $set: { hidden: true, hiddenBy } },
+        { $set: { hidden: true, hiddenBy, hiddenByUser } },
       )
       .exec();
     return this.subtreeAuthors(path);
@@ -138,7 +188,7 @@ export class CommentsRepository {
     await this.comments
       .updateMany(
         { $and: [subtreeFilter(path), { hiddenBy }] },
-        { $set: { hidden: false, hiddenBy: null } },
+        { $set: { hidden: false, hiddenBy: null, hiddenByUser: null } },
       )
       .exec();
     return this.subtreeAuthors(path);
@@ -151,6 +201,49 @@ export class CommentsRepository {
     return unique(authors.map(uuidStr));
   }
 
+  /** Soft delete; false when the row was already deleted (a concurrent delete). */
+  async softDelete(id: string, deletedBy: string, now: Date): Promise<boolean> {
+    const { modifiedCount } = await this.comments
+      .updateOne(
+        { _id: id, deletedAt: null },
+        {
+          $set: {
+            body: COMMENT_DELETED_BODY,
+            bodyHtml: '',
+            deletedAt: now,
+            deletedBy,
+          },
+        },
+      )
+      .exec();
+    return modifiedCount === 1;
+  }
+
+  /** The page's next `number`. A page without a counter is seeded with its comment count first (rows posted before numbering, numbered 1..count by the backfill); racing seeds collide on the unique page key and the loser just increments. */
+  async nextNumber(page: CommentPage): Promise<number> {
+    const bumped = await this.bumpCounter(page);
+    if (bumped !== null) return bumped;
+    const seq = await this.comments.countDocuments(pageFilter(page)).exec();
+    try {
+      await this.counters.create({ page, seq });
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+    }
+    return (await this.bumpCounter(page))!;
+  }
+
+  private async bumpCounter(page: CommentPage): Promise<number | null> {
+    const counter = await this.counters
+      .findOneAndUpdate(
+        pageFilter(page),
+        { $inc: { seq: 1 } },
+        { new: true, projection: { seq: 1 } },
+      )
+      .lean<{ seq: number }>()
+      .exec();
+    return counter ? counter.seq : null;
+  }
+
   /** Writes that must commit together (an edit and its revision row). */
   inTransaction(
     work: (session: ClientSession) => Promise<void>,
@@ -158,12 +251,18 @@ export class CommentsRepository {
     return this.connection.transaction(work).then(() => undefined);
   }
 
-  /** The id of the comment whose hide hid `id`; null when `id` is visible. */
-  async hiddenBy(id: string): Promise<string | null> {
+  /** The hide that hid `id`: the comment it was hidden with and the moderator; null when `id` is visible. */
+  async hiddenBy(
+    id: string,
+  ): Promise<{ commentId: string; userId: string | null } | null> {
     const row = await this.comments
-      .findOne({ _id: id, hidden: true }, { hiddenBy: 1 })
-      .lean<{ hiddenBy: string | null }>()
+      .findOne({ _id: id, hidden: true }, { hiddenBy: 1, hiddenByUser: 1 })
+      .lean<{ hiddenBy: unknown; hiddenByUser?: unknown }>()
       .exec();
-    return row ? (row.hiddenBy ?? id) : null;
+    if (!row) return null;
+    return {
+      commentId: row.hiddenBy ? uuidStr(row.hiddenBy) : id,
+      userId: row.hiddenByUser ? uuidStr(row.hiddenByUser) : null,
+    };
   }
 }

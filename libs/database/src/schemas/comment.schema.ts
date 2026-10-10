@@ -41,6 +41,14 @@ export class Comment {
   @Prop({ default: false }) hidden!: boolean;
   /** The comment whose hide hid this one (itself for a direct hide, an ancestor for a subtree hide); null while visible. Unhiding a comment clears only the rows it hid. Legacy hidden comments migrate with `hiddenBy` = their own id. */
   @Prop({ type: UUID, default: null }) hiddenBy!: string | null;
+  /** The moderator whose hide hid this row; null while visible and for hides migrated from the old site. */
+  @Prop({ type: UUID, default: null }) hiddenByUser!: string | null;
+  /** Soft delete: `body` becomes `COMMENT_DELETED_BODY` and `bodyHtml` empty, the row stays so replies keep their context. Null (or missing on older rows) while live. */
+  @Prop({ type: Date, default: null }) deletedAt!: Date | null;
+  /** Who deleted it: the author or a moderator. */
+  @Prop({ type: UUID, default: null }) deletedBy!: string | null;
+  /** 1-based position on its page in posting order, from `commentPageCounters`; null until the `comment-numbers` backfill numbered a row posted before numbering existed. */
+  @Prop({ type: Number, default: null }) number!: number | null;
   /** Edits so far; the compare-and-set token of an edit. */
   @Prop({ default: 0, min: 0 }) revisions!: number;
   createdAt!: Date;

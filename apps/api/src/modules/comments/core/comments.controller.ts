@@ -10,6 +10,7 @@ import {
 } from './dto/comment-params.dto';
 import type {
   CommentDetailResponse,
+  CommentLocationResponse,
   CommentPageResponse,
 } from './dto/comment.response';
 
@@ -26,8 +27,13 @@ export class CommentsController {
    * Public. Returns one page of threads (20 top-level comments with all their
    * replies) of a commentable page, addressed by `type` (problem, editorial,
    * contest, blog or tagProblem) and its natural `key` (problem code, contest
-   * key, post id). Also reports whether the page is locked and whether the
-   * viewer can comment. Hidden comments are not returned. Fails with 404
+   * key, post id). Also reports the page's lock (`pageLocked`), whether it is
+   * locked for the viewer (`locked`), and whether the viewer can comment
+   * (`canComment`) or why not (`postBlock`: `signed_out`, `contest`,
+   * `locked`, `muted`, or `needs_solved` with `solved` and `required`).
+   * Hidden comments are returned only to holders of `judge.change_comment`,
+   * flagged `hidden` with the moderator in `hiddenBy`; deleted comments stay
+   * as placeholders (`deleted`, empty `bodyHtml`). Fails with 404
    * `not_found` when the page is unknown or unreadable, and 403 `forbidden`
    * while an official contest closes comments. Contest problem threads are
    * empty for contestants who are in the contest.
@@ -39,6 +45,23 @@ export class CommentsController {
     @Query() { page }: CommentPageQueryDto,
   ): Promise<CommentPageResponse> {
     return this.comments.page(optionalPrincipal(auth), type, key, page);
+  }
+
+  /**
+   * Locate a comment
+   *
+   * @remarks
+   * Public. Returns the page a comment belongs to and the listing page number
+   * (`?page=` of the page listing) holding its thread for this viewer, so a
+   * `#comment-<id>` link can open the right page. Fails with 404 `not_found`
+   * like getting the comment.
+   */
+  @Get(':id/location')
+  locate(
+    @CurrentAuth() auth: AuthContext | undefined,
+    @Param() { id }: CommentIdParamDto,
+  ): Promise<CommentLocationResponse> {
+    return this.comments.locate(optionalPrincipal(auth), id);
   }
 
   /**
