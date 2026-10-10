@@ -16,7 +16,7 @@ fresh() {
 install_host() { PATH="$bin:$PATH" QHHOJ_INSTALL_ROOT="$root" bash "$here/install-host.sh"; }
 
 fresh; install_host >/dev/null || fail "install"
-for f in usr/local/sbin/qhhoj-deploy usr/local/sbin/qhhoj-migrate etc/containers/systemd/qhhoj-api.container \
+for f in usr/local/sbin/qhhoj-deploy etc/containers/systemd/qhhoj-api.container \
   etc/containers/systemd/qhhoj-worker.container etc/containers/systemd/qhhoj-bridge.container \
   etc/systemd/system/qhhoj.target etc/sudoers.d/qhhoj-deploy etc/nginx/snippets/qhhoj-gate.conf var/www/qhhoj-maintenance/maintenance.html; do
   [ -f "$root/$f" ] || fail "missing $f"
@@ -27,7 +27,7 @@ done
 for d in media problem-data pdf-cache contest-data user-data; do [ -d "$root/srv/qhhoj/$d" ] || fail "missing $d"; done
 grep -q "useradd .*--home-dir /home/deploy" "$calls" || fail "deploy home outside the root-owned state dir"
 grep -q "chown root:root $root/var/lib/qhhoj-deploy\$" "$calls" || fail "state dir root-owned"
-[ -d "$root/var/lib/qhhoj-deploy/incoming" ] && [ -d "$root/srv/qhhoj-migrate/incoming" ] || fail "incoming dirs"
+[ -d "$root/var/lib/qhhoj-deploy/incoming" ] || fail "incoming dirs"
 grep -q "groupadd -g 987 qhhoj" "$calls" && grep -q "useradd -u 987" "$calls" || fail "qhhoj 987"
 grep -q "systemctl daemon-reload" "$calls" && grep -q "systemctl enable qhhoj.target" "$calls" || fail "systemd"
 grep -q "systemctl start" "$calls" && fail "must not start services"

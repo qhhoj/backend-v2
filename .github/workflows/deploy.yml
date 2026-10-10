@@ -1,7 +1,7 @@
 # Builds the backend image, pushes it to GHCR and deploys it with qhhoj-deploy on the production host.
 # Called by release.yml when that run created the version tag (a tag pushed with GITHUB_TOKEN starts no
 # workflow itself) and run by hand (Actions → deploy → Run workflow) for any ref. A running contest defers
-# the restart (retried for 6 h) unless `force`; a running migration always defers.
+# the restart (retried for 6 h) unless `force`.
 name: deploy
 on:
   workflow_call:

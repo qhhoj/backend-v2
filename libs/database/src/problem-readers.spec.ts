@@ -42,10 +42,6 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the event feed names every contest problem, including ones deleted since the contest',
   ],
-  'apps/migrator/src/file-check.service.ts': [
-    'S',
-    'the post-migration file check verifies the files of every problem row, deleted or not',
-  ],
   'apps/worker/src/jobs/contest-export/contest-export.repository.ts': [
     'F+S',
     'the export names every contest problem, including ones deleted since the contest (S); the sources of any deleted problem are left out (F)',
@@ -102,14 +98,6 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
   'apps/worker/src/jobs/user-data/user-data.repository.ts': [
     'S',
     "a user's data export still lists their submissions with the problem code",
-  ],
-  'apps/worker/src/jobs/migration-recompute/migration-recompute.service.ts': [
-    'S',
-    'the one-off post-migration recompute walks every problem row, deleted ones included, by collection name',
-  ],
-  'apps/migrator/src/integrity-check.service.ts': [
-    'S',
-    'the post-migration integrity check resolves references against every problem row, deleted or not',
   ],
 };
 

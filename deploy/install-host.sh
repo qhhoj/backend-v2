@@ -24,7 +24,7 @@ ensure_dirs() {
   install -d -m 2750 "$ROOT/srv/qhhoj"
   for dir in media problem-data pdf-cache contest-data user-data; do install -d -m 2750 "$ROOT/srv/qhhoj/$dir"; done
   chown -R "$ID:$ID" "$ROOT/srv/qhhoj"
-  install -d -m 700 "$ROOT/srv/qhhoj-migrate" "$ROOT/srv/qhhoj-migrate/incoming" "$ROOT/var/log/qhhoj-migrate" "$ROOT/backup"
+  install -d -m 700 "$ROOT/backup"
   # qhhoj-deploy (root) keeps its history here: root-owned; only incoming/ is writable by the deploy user
   install -d -m 755 "$ROOT/var/lib/qhhoj-deploy"
   chown root:root "$ROOT/var/lib/qhhoj-deploy"
@@ -38,7 +38,6 @@ ensure_dirs() {
 install_files() {
   install -d "$ROOT/usr/local/sbin" "$ROOT/etc/containers/systemd" "$ROOT/etc/systemd/system" "$ROOT/etc/sudoers.d" "$ROOT/etc/nginx/snippets"
   install -m 755 "$here/qhhoj-deploy" "$ROOT/usr/local/sbin/qhhoj-deploy"
-  install -m 755 "$here/migrate/qhhoj-migrate" "$ROOT/usr/local/sbin/qhhoj-migrate"
   install -m 644 "$here"/quadlet/*.container "$ROOT/etc/containers/systemd/"
   install -m 644 "$here/quadlet/qhhoj.target" "$ROOT/etc/systemd/system/qhhoj.target"
   visudo -cf "$here/sudoers.qhhoj-deploy" >/dev/null || die "sudoers file does not parse"

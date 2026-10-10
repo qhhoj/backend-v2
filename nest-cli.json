@@ -83,15 +83,6 @@
         "tsConfigPath": "apps/worker/tsconfig.app.json"
       }
     },
-    "migrator": {
-      "type": "application",
-      "root": "apps/migrator",
-      "entryFile": "main",
-      "sourceRoot": "apps/migrator/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/migrator/tsconfig.app.json"
-      }
-    },
     "judging": {
       "type": "library",
       "root": "libs/judging",

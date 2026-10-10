@@ -1,11 +1,11 @@
-# Backend image: api, bridge, worker and migrator; APP picks one (deploy/container/entrypoint.sh).
+# Backend image: api, bridge and worker; APP picks one (deploy/container/entrypoint.sh).
 # Build stage has python3/make/g++ (native modules); runtime is bookworm-slim, same glibc.
 FROM node:22-bookworm AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build && npx nest build bridge && npx nest build worker && npx nest build migrator \
+RUN npm run build && npx nest build bridge && npx nest build worker \
  && npm prune --omit=dev
 
 FROM node:22-bookworm-slim

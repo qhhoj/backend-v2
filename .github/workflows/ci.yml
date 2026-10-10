@@ -34,7 +34,7 @@ jobs:
       - run: npm run typecheck
       # The vendored judge-v2 proto matches proto.lock.json and the committed TypeScript is current.
       - run: npm run judge-proto:check
-      - run: npm run build && npx nest build migrator && npx nest build worker && npx nest build bridge
+      - run: npm run build && npx nest build worker && npx nest build bridge
   test:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -44,13 +44,6 @@ jobs:
       fail-fast: false
       matrix: { shard: [1, 2, 3] }
     services:
-      mariadb:
-        image: mariadb:11
-        env: { MARIADB_ROOT_PASSWORD: root }
-        ports: ["3306:3306"]
-        options: >-
-          --health-cmd "healthcheck.sh --connect --innodb_initialized"
-          --health-interval 5s --health-retries 10 --health-start-period 30s
       redis:
         image: redis:7
         ports: ["6379:6379"]
@@ -58,7 +51,6 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-retries 10
     env:
-      TEST_MYSQL_URL: mysql://root:root@127.0.0.1:3306
       TEST_REDIS_URL: redis://127.0.0.1:6379/15
     steps:
       - uses: actions/checkout@v4
@@ -133,7 +125,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: sudo apt-get install -y shellcheck
-      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/migrate/qhhoj-migrate deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh
+      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh
       - name: Run script tests
         run: |
           shopt -s nullglob

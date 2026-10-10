@@ -7,11 +7,10 @@ Backend of the QHHOJ online judge: NestJS 11 (Fastify) + Mongoose 8 on MongoDB, 
 - Node 22
 - MongoDB 8 as a **replica set** (transactions, change streams)
 - Redis >= 7
-- Optional: MariaDB 11 (legacy source for the migrator and its tests only)
 - Worker only: official static `pandoc` >= 3 (the Debian/Ubuntu build cannot start threads under the 768 MiB `prlimit` cap), util-linux `prlimit`, Chromium (`npx playwright install --with-deps chromium`)
 - Build (`npm ci`, worker image and CI): `python3`, `make`, `g++` for the tree-sitter grammars of the similarity engine; the worker runs one similarity job at a time
 
-`docker compose up -d mongo redis mailpit` starts the local services (`mariadb` too if you need it).
+`docker compose up -d mongo redis mailpit` starts the local services.
 
 ## Setup
 
@@ -52,7 +51,6 @@ Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
 | api (`:3000`)                          | `npm run start:dev`       | `npm run build && npm run start:prod`                |
 | worker                                 | `npm run start:worker`    | `npx nest build worker && npm run start:prod:worker` |
 | bridge (`:9999`, exactly one instance) | `npm run start:bridge`    | `npx nest build bridge && npm run start:prod:bridge` |
-| migrator (CLI)                         | `npx nest build migrator` | `node dist/apps/migrator/main <command>`             |
 
 API reference: `GET /api/docs` ([Scalar](https://scalar.com), https://qhhoj.com/api/docs and https://api-v2.qhhoj.com/api/docs) renders the live OpenAPI document, so it cannot drift from the code; the bundle is served by the api itself (no third-party script or font).
 
@@ -70,7 +68,7 @@ npm run typecheck
 
 - Always `--runInBand`: suites share one Redis db.
 - `TEST_REDIS_URL` picks the db (default `redis://127.0.0.1:6379/15`); use another db to run two checkouts side by side, e.g. `TEST_REDIS_URL=redis://127.0.0.1:6379/14 npm test`. Each jest worker uses the next db up (db + `JEST_WORKER_ID - 1`), so the base db plus `--maxWorkers` must fit the server (16 dbs by default).
-- MongoDB is in-memory (`mongodb-memory-server`); the migrator e2e also needs MariaDB (`TEST_MYSQL_URL`) and fails without it.
+- MongoDB is in-memory (`mongodb-memory-server`).
 
 ## Architecture
 
@@ -78,7 +76,6 @@ npm run typecheck
 apps/api       HTTP: /api/internal (SPA), SSE streams
 apps/bridge    judge TCP server, dispatch queue, grading
 apps/worker    BullMQ jobs
-apps/migrator  MariaDB -> MongoDB migration CLI
 libs/          common, database, auth, render, problems, judging, contests, community
 ```
 
@@ -142,31 +139,9 @@ Inside a current contest, step 1 also adds a contest submission to the viewer's 
 | `init.yml`, zip handling, data files                                        | `libs/problems/src`, routes in `modules/problems/data`                                                                                                                                                       |
 | A Mongo schema                                                              | `libs/database/src/schemas/` (register in `SCHEMAS`)                                                                                                                                                         |
 | A background job                                                            | `apps/worker/src/jobs/<job>/` and its queue contract in `libs/<lib>/src/queues.ts`                                                                                                                           |
-| A legacy import                                                             | `apps/migrator/src/mappers/`                                                                                                                                                                                 |
 | Env variables                                                               | `libs/common/src/env/`, `.env.example`                                                                                                                                                                       |
 | A runtime setting (admin-editable)                                          | one entry in `libs/settings/src/registry.ts`; admin API in `modules/settings/`                                                                                                                               |
 | OpenAPI schemas                                                             | `dto/*.response.ts`; `libs/common/src/openapi/`                                                                                                                                                              |
-
-## Migrator
-
-`npx nest build migrator`, then `node dist/apps/migrator/main <command>`:
-
-`audit | backfill [jobs...] [--fresh] | verify [jobs...] | grant-permissions | recompute | check-files | check-integrity | finish`
-
-`grant-permissions` gives the permission codenames that exist only in v2 to the migrated groups and users holding their anchor permission (idempotent, safe to repeat; list in `apps/migrator/src/permission-grants.ts`). Run it after the final `backfill --fresh`; staff see the change once the groups resync (at most 10 minutes).
-
-| Variable                              | Needed by                                |
-| ------------------------------------- | ---------------------------------------- |
-| `MONGO_URL`                           | every command                            |
-| `LEGACY_MYSQL_URL`                    | audit, backfill, verify, check-integrity |
-| `LEGACY_SECRET_KEY`, `ENCRYPTION_KEY` | backfill (users)                         |
-| `MEDIA_URL` (default `/media`)        | backfill (problems, sources)             |
-| `REDIS_URL`                           | recompute                                |
-| `PROBLEM_DATA_ROOT`, `MEDIA_ROOT`     | check-files                              |
-
-Jobs (`backfill`/`verify` names are in `apps/migrator/src/mappers/`): groups, users, organizations, organizationRequests, problemTypes, problemGroups, licenses, tagGroups, tags, tagProblems, languages, problems, contests, contestAnnouncements, contestPublicRankingLinks, contestOfficialRankings, contestParticipations, contestSubmissions, submissions, submissionSources, comments, commentVotes, commentLocks, blogPosts, blogVotes, generalIssues, tickets, flatpages, miscConfig (collections written). Ratings come from the worker's re-rating, judges register fresh.
-
-Order of a real run: `audit`, `backfill`, `verify`, `recompute`, `check-files`, `check-integrity`, `finish`. The full runbook, with the manual checks, is in [deploy/RUNBOOK.md](deploy/RUNBOOK.md#migration-run).
 
 ## More
 

@@ -18,7 +18,6 @@ import { SimilarityModule } from './jobs/similarity/similarity.module';
 import { ContestReplayModule } from './jobs/contest-replay/contest-replay.module';
 import { ContestRescoreModule } from './jobs/contest-rescore/contest-rescore.module';
 import { EffectsSweepModule } from './jobs/effects-sweep/effects-sweep.module';
-import { MigrationRecomputeModule } from './jobs/migration-recompute/migration-recompute.module';
 import { OrganizationPointsModule } from './jobs/organization-points/organization-points.module';
 import { ProblemPackageModule } from './jobs/problem-package/problem-package.module';
 import { ProblemPurgeModule } from './jobs/problem-purge/problem-purge.module';
@@ -70,7 +69,6 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     ContributionPointsModule,
     UserDataModule,
     DiscordWebhookModule,
-    MigrationRecomputeModule,
     NotificationFanoutModule,
     NotificationTrimModule,
     OrganizationUsageAuditModule,
