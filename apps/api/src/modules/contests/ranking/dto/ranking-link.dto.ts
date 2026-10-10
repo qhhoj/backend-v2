@@ -7,7 +7,15 @@ import { IsIn, IsInt, IsString, Max, Min, ValidateIf } from 'class-validator';
 import { IsTimestamp } from '../../../problems/core/dto/timestamp';
 
 export class UpdateRankingLinkDto {
+  /**
+   * public lets anyone with the token read the ranking; private disables the
+   * link.
+   */
   @IsIn(RANKING_LINK_STATUSES) status!: ContestPublicRankingLink['status'];
+  /**
+   * U never expires, M minutes after regeneration, D days after regeneration,
+   * A at a fixed time.
+   */
   @IsIn(RANKING_LINK_EXPIRY_MODES)
   expiryMode!: ContestPublicRankingLink['expiryMode'];
   /** Minutes (M) or days (D). */
@@ -19,6 +27,7 @@ export class UpdateRankingLinkDto {
   @Min(1)
   @Max(1_000_000)
   expiryAmount?: number;
+  /** Expiry, ISO 8601; required when expiryMode is A. */
   @ValidateIf((dto: UpdateRankingLinkDto) => dto.expiryMode === 'A')
   @IsTimestamp()
   expiresAt?: string;

@@ -20,6 +20,7 @@ export class JoinBodyDto extends AccessCodeDto {
 }
 
 export class ParticipationListQueryDto {
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -27,6 +28,7 @@ export class ParticipationListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Participations per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -39,11 +41,14 @@ export class ParticipationListQueryDto {
 }
 
 export class DisqualifyDto {
+  /** True to disqualify the participation, false to reinstate it. */
   @IsBoolean() disqualified!: boolean;
 }
 
 /** Unvalidated shape: a malformed id is a 404. */
 export class ParticipationParamsDto {
+  /** Key of the contest. */
   @IsString() key!: string;
+  /** Id of the participation. */
   @IsString() id!: string;
 }

@@ -28,12 +28,14 @@ export class PrepareDataDto {
 }
 
 export class ContestDataStatusResponse {
+  /** Whether the zip is not prepared, being prepared or ready. */
   @ApiProperty({ enum: DATA_EXPORT_STATES })
   state!: DataExportState;
   /** When the last prepare was requested. */
   preparedAt!: string | null;
   /** When the zip on disk was written. */
   readyAt!: string | null;
+  /** Zip size in bytes; null when none exists. */
   size!: number | null;
   /** Null when a prepare is allowed now. */
   nextPrepareAt!: string | null;

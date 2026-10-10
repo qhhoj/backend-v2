@@ -17,18 +17,26 @@ export class RankingProblemResponse {
   points!: number;
   /** The live participation credited with the first solve. */
   firstSolve!: string | null;
+  /** Participants whose cell is worth the full points. */
   acceptedCount!: number;
 }
 
 export class RankingRowResponse {
   /** Null on a board that shows only the viewer's row. */
   rank!: number | null;
+  /** Id of the participation. */
   participationId!: string;
+  /** The participant. */
   user!: RankingUserResponse;
+  /** 0 live, -1 spectate, n at least 1 virtual. */
   virtual!: number;
+  /** Whether the participation was disqualified. */
   isDisqualified!: boolean;
+  /** Total score. */
   score!: number;
+  /** Cumulative time (penalty) in seconds. */
   cumtime!: number;
+  /** Tiebreak value used when scores and times are equal. */
   tiebreaker!: number;
   /** Per problem id, the format's cell; the frozen cells while frozen. */
   @ApiProblemCells()
@@ -36,7 +44,10 @@ export class RankingRowResponse {
 }
 
 export class RankingResponse {
+  /** Whether the standings shown are the frozen ones. */
   frozen!: boolean;
+  /** The contest's problem columns in order. */
   problems!: RankingProblemResponse[];
+  /** Participants, best first. */
   rows!: RankingRowResponse[];
 }

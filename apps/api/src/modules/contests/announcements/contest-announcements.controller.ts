@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -21,10 +22,18 @@ import {
 import { AnnouncementResponse } from './dto/announcement.response';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 
+@ApiTags('Contests')
 @Controller('api/internal/contests/:key/announcements')
 export class ContestAnnouncementsController {
   constructor(private readonly announcements: ContestAnnouncementsService) {}
 
+  /**
+   * List the announcements of a contest
+   *
+   * @remarks
+   * Returns the contest's announcements, rendered, one page at a time. Public
+   * for any contest the viewer may see.
+   */
   @Public()
   @ApiPaginatedResponse(AnnouncementResponse)
   @Get()
@@ -36,6 +45,16 @@ export class ContestAnnouncementsController {
     return this.announcements.list(optionalPrincipal(auth), key, query);
   }
 
+  /**
+   * Post a contest announcement
+   *
+   * @remarks
+   * Contest editors only. Stores the announcement (Markdown, rendered to HTML)
+   * and, when the contest pushes announcements, delivers it live on the
+   * contest event stream and to users' notification inboxes. Pushes are
+   * limited per contest per hour (429 `rate_limited`). Fails with 400
+   * `validation_failed` when the text cannot be rendered.
+   */
   @Post()
   create(
     @Param() { key }: ContestKeyParamDto,
@@ -45,6 +64,15 @@ export class ContestAnnouncementsController {
     return this.announcements.create(auth.principal, key, dto);
   }
 
+  /**
+   * Resend a contest announcement
+   *
+   * @remarks
+   * Contest editors only. Pushes an existing announcement again to the open
+   * contest streams; inboxes keep one entry per announcement, so only users
+   * the first delivery missed are notified. Returns 204, or 404 `not_found`
+   * for an unknown announcement.
+   */
   @Post(':id/resend')
   @HttpCode(204)
   resend(
@@ -54,6 +82,13 @@ export class ContestAnnouncementsController {
     return this.announcements.resend(auth.principal, key, id);
   }
 
+  /**
+   * Delete a contest announcement
+   *
+   * @remarks
+   * Contest editors only. Deletes the announcement and returns 204, or 404
+   * `not_found` when it does not exist in this contest.
+   */
   @Delete(':id')
   @HttpCode(204)
   remove(

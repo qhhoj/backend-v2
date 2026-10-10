@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Query } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -8,10 +9,19 @@ import { BlogModerationService } from './blog-moderation.service';
 import { PostListItemResponse } from '../core/dto/post.response';
 
 @RequirePermission('judge.edit_all_post')
+@ApiTags('Blog')
 @Controller('api/internal/admin/posts')
 export class BlogModerationController {
   constructor(private readonly moderation: BlogModerationService) {}
 
+  /**
+   * List posts awaiting moderation
+   *
+   * @remarks
+   * Requires `judge.edit_all_post`. Returns posts by `state`: `hidden` (every
+   * draft, personal or organization) or `scheduled` (visible posts whose
+   * publish time is still ahead), newest first. Paged with `page`.
+   */
   @ApiPaginatedResponse(PostListItemResponse)
   @Get()
   list(

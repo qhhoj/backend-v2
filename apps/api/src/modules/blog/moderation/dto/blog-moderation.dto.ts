@@ -9,6 +9,7 @@ export type ModerationState = (typeof MODERATION_STATES)[number];
 export class PostModerationQueryDto {
   @IsIn(MODERATION_STATES) state!: ModerationState;
 
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

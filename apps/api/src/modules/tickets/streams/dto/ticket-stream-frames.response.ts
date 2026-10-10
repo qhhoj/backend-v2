@@ -4,6 +4,7 @@ import type { TicketEventType } from '@libs/community';
 
 /** The payload of every ticket event: ids only, the page reads the content. */
 export class TicketEventResponse {
+  /** Id of the ticket the event is about. */
   @ApiProperty({ type: String })
   ticketId!: string;
 
@@ -18,8 +19,10 @@ export class TicketEventResponse {
 
 /** `new-ticket`, `ticket-message` and `ticket-status` on the feed and on one ticket's stream. */
 export class TicketEventFrame {
+  /** Event name: new-ticket, ticket-message or ticket-status. */
   @ApiProperty({ enum: [...TICKET_EVENT_TYPES] })
   event!: TicketEventType;
 
+  /** Ids describing the event. */
   data!: TicketEventResponse;
 }

@@ -12,6 +12,7 @@ export type EditorialOutcome = (typeof EDITORIAL_OUTCOMES)[number];
 
 /** The three enum properties are union aliases: the plugin drops them without the explicit decorators (R3). */
 export class PublishedProblemResponse {
+  /** Id of the problem. */
   problemId!: string;
   /** Null when the problem document is gone. */
   code!: string | null;
@@ -34,6 +35,8 @@ export class PublishedProblemResponse {
 }
 
 export class PublishProblemsResponse {
+  /** True when nothing was changed. */
   dryRun!: boolean;
+  /** One entry per contest problem. */
   items!: PublishedProblemResponse[];
 }

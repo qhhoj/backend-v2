@@ -8,11 +8,13 @@ export const BALLOON_STATES = ['pending', 'delivered', 'all'] as const;
 export type BalloonState = (typeof BALLOON_STATES)[number];
 
 export class BalloonQueryDto {
+  /** Which balloons to list; pending by default. */
   @ApiPropertyOptional({ enum: BALLOON_STATES, enumName: 'BalloonState' })
   @IsOptional()
   @IsIn(BALLOON_STATES)
   state: BalloonState = 'pending';
 
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -21,6 +23,7 @@ export class BalloonQueryDto {
   @Max(10000)
   page: number = 1;
 
+  /** Balloons per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -31,7 +34,9 @@ export class BalloonQueryDto {
 }
 
 export class BalloonItemParamDto extends ContestKeyParamDto {
+  /** Id of the team's participation. */
   @IsUUID('7') participation!: string;
+  /** Id of the solved problem. */
   @IsUUID('7') problem!: string;
 }
 
@@ -44,11 +49,13 @@ export class BalloonResponse {
   participationId!: string;
   problemId!: string;
   problemCode!: string;
+  /** The problem's label in the contest, such as A or B. */
   problemLabel!: string;
   team!: BalloonTeamResponse;
   /** Seconds from the team's start; null when the format keeps no solve time, and for a reader who cannot edit while the contest is frozen. */
   @ApiProperty({ type: Number, nullable: true })
   solvedAt!: number | null;
+  /** True when this team was the first to solve the problem. */
   isFirst!: boolean;
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   deliveredAt!: string | null;
