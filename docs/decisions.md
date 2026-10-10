@@ -527,3 +527,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - CD: release tag → CI-gated build → SSH as deploy → sudo qhhoj-deploy; contest running defers (exit 75), migration lock always defers.
 - Migration: freeze-and-iterate on one frozen dump (up to a week down) instead of a short window; go-live is the single irreversible step.
 - Legacy blog (7 posts, 6 comments, 45 votes) is not migrated: unused; comments on it are skipped and reported.
+- Rating coverage at migration: contests qhh_lafddatj02 and qhh_lafddatj03 were marked rated on the old site but never rated; v2's replay rates them (22 rating rows), accepted by the product owner (`run --accept-rating-coverage`).
