@@ -7,7 +7,7 @@
   "engines": {
     "node": ">=22 <23"
   },
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",

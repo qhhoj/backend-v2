@@ -1,0 +1,8 @@
+QHHOJ backend-v2
+Copyright (C) 2026 QHHOJ contributors. Licensed under the GNU Affero General Public License v3.0 only (see LICENSE).
+
+Parts derive from DMOJ (https://github.com/DMOJ/online-judge, GNU AGPL v3), the code base of the
+previous QHHOJ site:
+- libs/contests/src/rating/elo-mmr.ts: port of judge/ratings.py (Elo-MMR rating).
+- apps/worker/src/jobs/polygon-import/pandoc.service.ts: the Polygon statement pandoc filter.
+- apps/worker/src/jobs/pdf-render/pdf-template.ts: port of templates/problem/raw.html.
