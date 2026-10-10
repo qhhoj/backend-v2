@@ -1,9 +1,49 @@
 name: ci
 on: { push: { branches: [main] }, pull_request: {} }
 jobs:
-  test:
+  # Pushes that touch only docs, changesets or deploy scripts skip the heavy jobs below; a skipped job counts as a
+  # pass, so the run (and the deploy gate waiting on it) stays green. deploy-scripts always runs.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs: { code: '${{ steps.diff.outputs.code }}' }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0 }
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_LIGHT_PATHS: '^(.*[.]md|docs/.*|[.]changeset/.*|deploy/.*)$'
+          CI_HEAVY_PATHS: '^deploy/container/'
+        run: bash deploy/ci/code-changed.sh "$BASE" >> "$GITHUB_OUTPUT"
+  checks:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pyyaml==6.0.3
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      # The vendored judge-v2 proto matches proto.lock.json and the committed TypeScript is current.
+      - run: npm run judge-proto:check
+      # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config.
+      - run: npm run test:openapi -- --forceExit
+      - run: npm run build && npx nest build migrator && npx nest build worker && npx nest build bridge
+  test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2, 3] }
     services:
       mariadb:
         image: mariadb:11
@@ -48,16 +88,11 @@ jobs:
           tar -xzf "$RUNNER_TEMP/pandoc.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/pandoc-3.1.3/bin" >> "$GITHUB_PATH"
       - run: pandoc --version
-      - run: npm run lint
-      - run: npm run typecheck
-      # The vendored judge-v2 proto matches proto.lock.json and the committed TypeScript is current.
-      - run: npm run judge-proto:check
       # --forceExit: one leaked handle must not hang the job until the timeout.
-      - run: npm test -- --forceExit
-      # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config.
-      - run: npm run test:openapi -- --forceExit
-      - run: npm run build && npx nest build migrator && npx nest build worker && npx nest build bridge
+      - run: npm test -- --shard=${{ matrix.shard }}/3 --forceExit
   openapi:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -77,6 +112,8 @@ jobs:
             exit 1
           fi
   image:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:

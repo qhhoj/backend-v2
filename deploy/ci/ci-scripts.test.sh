@@ -43,4 +43,16 @@ REGISTRY_TOKEN=tok-123 remote backend v2.1.0 >/dev/null || fail "token deploy re
 [ "$(sort -u "$bin/ssh-stdin")" = tok-123 ] || fail "ssh stdin carries only the token"
 grep -q "deploy@h sudo /usr/local/sbin/qhhoj-deploy backend v2.1.0 --token-stdin" "$bin/ssh-calls" || fail "--token-stdin appended"
 ! grep -q tok-123 "$bin/ssh-calls" || fail "token must not appear in ssh argv"
+# code-changed.sh: light-only pushes (docs, changesets, deploy scripts) skip the heavy CI jobs
+cc() { (cd "$repo" && CI_LIGHT_PATHS='^(.*[.]md|docs/.*|[.]changeset/.*|deploy/.*)$' CI_HEAVY_PATHS='^deploy/container/' bash "$here/code-changed.sh" "$1"); }
+commit() { mkdir -p "$repo/$(dirname "$1")"; echo "$RANDOM" >> "$repo/$1"; git -C "$repo" add -A; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -q -m "$1"; }
+base="$(git -C "$repo" rev-parse HEAD)"; commit docs/guide.md; commit deploy/RUNBOOK.md; commit .changeset/x.md
+[ "$(cc "$base")" = code=false ] || fail "docs, changeset and deploy-only push is light"
+base="$(git -C "$repo" rev-parse HEAD)"; commit deploy/container/smoke.sh
+[ "$(cc "$base")" = code=true ] || fail "deploy/container is heavy (the image)"
+base="$(git -C "$repo" rev-parse HEAD)"; commit README.md; commit apps/api/main.ts
+[ "$(cc "$base")" = code=true ] || fail "any code file makes the push heavy"
+[ "$(cc 0000000000000000000000000000000000000000)" = code=true ] || fail "no base (new branch) runs everything"
+[ "$(cc "")" = code=true ] || fail "empty base runs everything"
+[ "$(cc deadbeefdeadbeefdeadbeefdeadbeefdeadbeef)" = code=true ] || fail "unknown base runs everything"
 echo "ci scripts ok"
