@@ -76,13 +76,25 @@ jobs:
             echo "openapi.json is stale: run npm run openapi:emit and commit it"
             exit 1
           fi
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Mongo (rs0) and Redis
+        run: |
+          docker run -d --name mongo --network host mongo:8 --replSet rs0 --bind_ip 127.0.0.1
+          docker run -d --name redis --network host redis:7
+          for _ in $(seq 30); do docker exec mongo mongosh --quiet --eval 'rs.initiate().ok || rs.status().ok' && break; sleep 2; done
+      - run: docker build -f Containerfile -t qhhoj-backend:ci .
+      - run: bash deploy/container/smoke.sh qhhoj-backend:ci
   deploy-scripts:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: sudo apt-get install -y shellcheck
-      - run: shellcheck -S warning deploy/ci/*.sh deploy/judge/*.sh
+      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh
       - name: Run script tests
         run: |
           shopt -s nullglob
