@@ -20,10 +20,11 @@ function setup() {
     ),
   );
   const resetStrandedRuns = jest.fn(record('resetStrandedRuns', []));
+  const unpinAbsent = jest.fn(record('unpinAbsent', [] as string[]));
   const heldIds = jest.fn((): string[] => []);
   const services = {
     judges: { setAllOffline: record('setAllOffline', undefined) },
-    submissions: { loadQueued, inFlightRuns, resetStrandedRuns },
+    submissions: { loadQueued, inFlightRuns, resetStrandedRuns, unpinAbsent },
     runs: { announceRequeued: jest.fn() },
     dispatch: {
       enqueue: record('enqueue', undefined),
@@ -45,7 +46,7 @@ function setup() {
     },
   };
   const bridge = new BridgeService(
-    { resyncMs: RESYNC_MS } as never,
+    { resyncMs: RESYNC_MS, pinFallbackMs: 300_000 } as never,
     services.dispatch as never,
     services.commands as never,
     services.server as never,
@@ -53,10 +54,23 @@ function setup() {
     services.submissions as never,
     services.runs as never,
   );
-  return { bridge, calls, services };
+  return { bridge, calls, services, unpinAbsent };
 }
 
 describe('BridgeService', () => {
+  it('re-enqueues rows whose pinned judge stayed away, so the dropped pin takes effect', async () => {
+    jest.useFakeTimers();
+    const { bridge, services, unpinAbsent } = setup();
+    unpinAbsent.mockResolvedValueOnce(['pinned-1']);
+    await bridge.onApplicationBootstrap();
+    services.submissions.loadQueued.mockClear();
+    await jest.advanceTimersByTimeAsync(RESYNC_MS);
+    expect(unpinAbsent).toHaveBeenCalledWith([], expect.any(Date));
+    expect(services.submissions.loadQueued).toHaveBeenCalledWith(['pinned-1']);
+    await bridge.onModuleDestroy();
+    jest.useRealTimers();
+  });
+
   let logged: jest.SpyInstance;
   beforeEach(() => {
     jest.useFakeTimers();

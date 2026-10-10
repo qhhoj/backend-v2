@@ -29,4 +29,14 @@ export class UserModerationController {
   ): Promise<void> {
     return this.moderation.unban(auth.principal, username);
   }
+
+  @Post(':username/reset-two-factor')
+  @HttpCode(204)
+  @RequirePermission('judge.ban_user')
+  resetTwoFactor(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { username }: UsernameParamDto,
+  ): Promise<void> {
+    return this.moderation.resetTwoFactor(auth.principal, username);
+  }
 }

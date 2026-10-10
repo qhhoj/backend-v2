@@ -88,4 +88,60 @@ describe('ban and unban', () => {
       .send({ reason: 'x' })
       .expect(403);
   });
+
+  it('resets two-factor for staff only, never a superuser, signs the user out and leaves an audit row', async () => {
+    const staff = await loginAs(
+      api,
+      (
+        await createUserWith(api, 'recovery', {
+          permissions: ['judge.ban_user'],
+        })
+      )._id,
+    );
+    const locked = await createUserWith(api, 'locked', {
+      isTotpEnabled: true,
+      totpKey: 'secret',
+      scratchCodes: 'codes',
+      isWebauthnEnabled: true,
+      webauthnCredentials: [
+        {
+          _id: '01900000-0000-7000-8000-0000000000bb',
+          name: 'key',
+          credId: 'AA',
+          publicKey: 'AA',
+          counter: 0,
+        },
+      ],
+    });
+    const lockedSession = await loginAs(api, locked._id);
+    const reset = (name: string, session = staff) =>
+      authed(
+        api.http().post(`/api/internal/users/${name}/reset-two-factor`),
+        session,
+      );
+    await reset(
+      'locked',
+      await loginAs(api, (await createUserWith(api, 'plain2'))._id),
+    ).expect(403);
+    await reset('locked').expect(204);
+    expect(await api.users.findById(locked._id).lean()).toMatchObject({
+      isTotpEnabled: false,
+      totpKey: null,
+      scratchCodes: null,
+      isWebauthnEnabled: false,
+      webauthnCredentials: [],
+    });
+    await authed(api.http().get('/api/internal/profile'), lockedSession).expect(
+      401,
+    );
+    expect(
+      await api.revisions.countDocuments({
+        entity: 'user',
+        entityId: locked._id,
+        action: 'reset_two_factor',
+      }),
+    ).toBe(1);
+    await createUserWith(api, 'boss', { isSuperuser: true });
+    await reset('boss').expect(403);
+  });
 });

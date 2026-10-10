@@ -263,6 +263,19 @@ describe('password reset', () => {
     }
   });
 
+  it('answers 503 mail_unavailable, spending no budget, while mail is not configured', async () => {
+    Object.assign(api.mailer, { isConfigured: () => false });
+    try {
+      for (let attempt = 0; attempt < 5; attempt++)
+        await requestReset('nomail@example.com')
+          .expect(503)
+          .expect(errorCode('mail_unavailable'));
+    } finally {
+      delete (api.mailer as { isConfigured?: unknown }).isConfigured;
+    }
+    await requestReset('nomail@example.com').expect(204);
+  });
+
   it('limits to 3 requests per email per hour', async () => {
     for (let attempt = 0; attempt < 3; attempt++)
       await requestReset('limited@example.com').expect(204);

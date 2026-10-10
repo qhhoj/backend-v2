@@ -137,7 +137,7 @@ export class ContestParticipationService {
     if (contestPhase(contest, now) === 'ended') throw refusal('contest_ended');
   }
 
-  /** Legacy `join_contest`: a virtual run after the end, else the live (or, for editors and testers, spectating) participation; it becomes the current one. */
+  /** Legacy `join_contest`: a virtual run after the end (editors and testers spectate instead, ended or not), else the live participation; it becomes the current one. */
   async join(
     principal: Principal,
     key: string,
@@ -151,7 +151,7 @@ export class ContestParticipationService {
       throw refusal('contest_not_started');
     this.assertNotBanned(principal, contest);
     const participation =
-      phase === 'ended'
+      phase === 'ended' && !isSpectatorOnly
         ? await this.joinVirtual(principal, contest, credentials, now)
         : await this.joinRunning(
             principal,

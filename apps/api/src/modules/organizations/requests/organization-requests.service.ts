@@ -195,7 +195,7 @@ export class OrganizationRequestsService {
     return this.respond((await this.requests.findById(id))!, organization.slug);
   }
 
-  /** Checks membership and `slots` (re-read, so a concurrent edit counts) against the live count. A member whose request is still pending is a retry of a half-done approval: only the decision is recorded. */
+  /** Checks `slots` (re-read, so a concurrent edit counts) against the live count, then decides the request (compare-and-set) BEFORE adding the member, so a concurrent rejection can never leave a member behind. If adding fails the request is reopened. */
   private async approve(
     principal: Principal,
     slug: string,
@@ -205,24 +205,35 @@ export class OrganizationRequestsService {
     const id = uuidStr(request._id);
     const userId = uuidStr(request.user);
     const organization = await this.organizationsService.bySlug(slug);
-    // A decided request never adds a member.
-    if ((await this.requests.findById(id))?.state !== 'P')
-      throw alreadyDecided();
-    if (!(await this.members.isMember(userId, organization._id))) {
-      if (
-        organization.slots !== null &&
-        (await this.members.countMembers(organization._id)) >=
-          organization.slots
-      )
-        throw conflict(
-          'The organization is full',
-          'organization',
-          'organization_full',
-        );
-      await this.members.addMembers([userId], organization._id);
+    const alreadyMember = await this.members.isMember(userId, organization._id);
+    if (
+      !alreadyMember &&
+      (await this.members.isFull(organization._id, organization.slots))
+    ) {
+      if ((await this.requests.findById(id))?.state !== 'P')
+        throw alreadyDecided();
+      throw conflict(
+        'The organization is full',
+        'organization',
+        'organization_full',
+      );
     }
     await this.finish(id, 'A', principal.userId, now);
+    if (!alreadyMember) await this.addApproved(id, userId, organization._id);
     await this.points.refresh([organization._id]);
+  }
+
+  private async addApproved(
+    requestId: string,
+    userId: string,
+    organizationId: string,
+  ): Promise<void> {
+    try {
+      await this.members.addMembers([userId], organizationId);
+    } catch (error) {
+      await this.requests.reopen(requestId);
+      throw error;
+    }
   }
 
   private async finish(

@@ -3,8 +3,11 @@ import { uuidStr } from '@libs/database';
 import { AppearanceResponse } from '../../../users/profile/dto/profile.response';
 import { Principal, SessionData, UserDocument } from '@libs/auth';
 
-export const SECOND_FACTOR_METHODS = ['totp', 'webauthn'] as const;
-export type SecondFactorMethod = (typeof SECOND_FACTOR_METHODS)[number];
+import {
+  SECOND_FACTOR_METHODS,
+  secondFactorMethods,
+} from '../../two-factor/second-factor-methods';
+import type { SecondFactorMethod } from '../../two-factor/second-factor-methods';
 
 /** All a password-only session may learn: enough to draw the second-factor page. */
 export class TwoFactorPendingResponse {
@@ -64,12 +67,7 @@ export class SessionResponse {
       twoFactor: twoFactorRequired
         ? {
             username: user.username,
-            methods: [
-              user.isTotpEnabled && 'totp',
-              user.isWebauthnEnabled && 'webauthn',
-            ].filter(
-              (method): method is SecondFactorMethod => method !== false,
-            ),
+            methods: secondFactorMethods(user),
           }
         : null,
       passwordChangeRequired: session?.passwordPwned ?? false,

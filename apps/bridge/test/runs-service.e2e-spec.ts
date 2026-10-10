@@ -230,4 +230,24 @@ describe('RunsService (events and graded jobs of a run)', () => {
       ['queued', 'QU'],
     ]);
   });
+
+  it('drops the pin of old queued rows whose judge is not connected, and only those', async () => {
+    const problem = await seedProblem(bridge, catalog, {
+      code: `rs${(codes += 1)}`,
+    });
+    const make = (fields: object) =>
+      seedSubmission(bridge, catalog, { problem: problem._id, ...fields });
+    const longAgo = new Date(Date.now() - 3_600_000);
+    const absent = await make({ pinnedJudge: 'gone', date: longAgo });
+    const recent = await make({ pinnedJudge: 'gone', date: new Date() });
+    const present = await make({ pinnedJudge: 'here', date: longAgo });
+    const unpinned = await repository.unpinAbsent(
+      ['here'],
+      new Date(Date.now() - 60_000),
+    );
+    expect(unpinned).toEqual([absent._id]);
+    expect((await stored(absent._id)).pinnedJudge).toBeNull();
+    expect((await stored(recent._id)).pinnedJudge).toBe('gone');
+    expect((await stored(present._id)).pinnedJudge).toBe('here');
+  });
 });

@@ -34,6 +34,9 @@ export const FAST_TIMINGS: BridgeTimings = {
   resyncMs: 60_000,
   acceptMs: 5000,
   resumeGraceMs: 300,
+  runMarginMs: 600_000,
+  runCaseBudget: 100,
+  pinFallbackMs: 600_000,
 };
 
 export async function setupBridgeTest({

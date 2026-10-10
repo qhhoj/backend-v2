@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, conflictIssue } from '@libs/common';
 import {
   assertNotLockedByOfficialMode,
   MAX_OPEN_ORGANIZATIONS,
@@ -33,6 +33,12 @@ export class MembershipService {
     const organization = await this.organizationsService.bySlug(slug);
     if (!organization.isOpen)
       throw conflict('This organization is private; send a join request');
+    if (await this.members.isFull(organization._id, organization.slots))
+      throw conflictIssue(
+        'organization',
+        'organization_full',
+        'The organization is full',
+      );
     const current = (await this.users.findById(
       principal.userId,
     ))!.organizations.map(uuidStr);

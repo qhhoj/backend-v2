@@ -171,6 +171,24 @@ describe('contest participation', () => {
         ).toBe(-1);
     });
 
+    it('lets editors and testers join an ended contest as spectators, never as virtual contestants', async () => {
+      const ended = await createContest(api, {
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+        authors: [users.author._id],
+        testers: [users.tester._id],
+      });
+      for (const who of ['author', 'tester'])
+        expect(
+          dataOf<ParticipationSummaryResponse>(
+            await post(who, ended.key, 'join').expect(201),
+          ).virtual,
+        ).toBe(-1);
+      expect(await api.contests.findById(ended._id).lean()).toMatchObject({
+        virtualCount: 0,
+      });
+    });
+
     it('numbers sequential virtual joins 1, 2 and counts them apart from live users', async () => {
       const ended = await createContest(api, {
         startTime: hoursFromNow(-5),

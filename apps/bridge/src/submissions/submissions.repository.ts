@@ -226,6 +226,25 @@ export class SubmissionsRepository {
     });
   }
 
+  /** Resync: queued rows pinned to a judge that is not connected and were submitted before `olderThan` fall back to any judge (the judge may be blocked, deleted or offline for good). Returns their ids. */
+  async unpinAbsent(connected: string[], olderThan: Date): Promise<string[]> {
+    const filter = {
+      status: 'QU',
+      pinnedJudge: { $ne: null, $nin: connected },
+      date: { $lt: olderThan },
+    };
+    const rows = await this.submissions.find(filter, { _id: 1 }).lean();
+    const ids = rows.map((row) => uuidStr(row._id));
+    if (!ids.length) return [];
+    await this.submissions
+      .updateMany(
+        { ...filter, _id: { $in: ids } },
+        { $set: { pinnedJudge: null } },
+      )
+      .exec();
+    return ids;
+  }
+
   /** Contest meta of the given submissions that are contest submissions; read in three batched queries. */
   private async contestMetaOf(
     submissionIds: string[],

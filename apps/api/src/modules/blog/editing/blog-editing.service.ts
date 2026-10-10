@@ -82,6 +82,7 @@ export class BlogEditingService {
         : await this.organizations.bySlug(dto.organization);
     this.assertCanWrite(principal, writer, organization);
     this.assertFlags(principal, dto, { globalPost: false, sticky: false });
+    this.assertStaffFields(principal, dto, { summary: '', ogImage: '' });
     await this.reserveWrite(principal);
     const post = await this.posts.create(
       this.newPostFields(principal, dto, { organization, now }),
@@ -166,6 +167,7 @@ export class BlogEditingService {
     if ((await this.users.signedIn(principal)).mute)
       throw forbidden('Muted users cannot edit posts');
     this.assertFlags(principal, dto, post);
+    this.assertStaffFields(principal, dto, post);
     if (!moderation) await this.reserveWrite(principal);
     const { authorIds, content, summary, publishOn, ...fields } = dto;
     const changes: Partial<BlogPost> = { ...fields };
@@ -245,6 +247,23 @@ export class BlogEditingService {
         principal,
         'judge.pin_post',
         'Pinning a post needs pin_post',
+      );
+  }
+
+  /** `summary` and `ogImage` are staff fields: changing them needs `edit_all_post`. */
+  private assertStaffFields(
+    principal: Principal,
+    dto: Pick<UpdatePostDto, 'summary' | 'ogImage'>,
+    current: Pick<BlogPost, 'summary' | 'ogImage'>,
+  ): void {
+    const changed =
+      (dto.summary !== undefined && dto.summary !== current.summary) ||
+      (dto.ogImage !== undefined && dto.ogImage !== current.ogImage);
+    if (changed)
+      this.require(
+        principal,
+        'judge.edit_all_post',
+        'Only edit_all_post changes the summary and image',
       );
   }
 

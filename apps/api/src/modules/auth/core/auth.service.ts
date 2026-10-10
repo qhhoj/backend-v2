@@ -19,6 +19,7 @@ import {
   RateLimitService,
   ValidationFailedError,
 } from '@libs/common';
+import { secondFactorMethods } from '../two-factor/second-factor-methods';
 import { BannedError } from './banned.error';
 import type { Env } from '@libs/common';
 import { FAILURE_LIMIT, FAILURE_WINDOW_SECONDS } from './rate-limits';
@@ -98,7 +99,7 @@ export class AuthService {
       previousSessionId,
     }: { isPasswordPwned: boolean; previousSessionId: string | null },
   ) {
-    const twoFaPassed = !(user.isTotpEnabled || user.isWebauthnEnabled);
+    const twoFaPassed = secondFactorMethods(user).length === 0;
     if (twoFaPassed)
       await this.users.update(user._id, { lastLogin: new Date() });
     return this.openSession(

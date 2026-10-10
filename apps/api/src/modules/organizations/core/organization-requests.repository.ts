@@ -100,4 +100,14 @@ export class OrganizationRequestsRepository {
       .exec();
     return matchedCount === 1;
   }
+
+  /** Undo a compare-and-set approval whose member could not be added. */
+  async reopen(id: string): Promise<void> {
+    await this.requests
+      .updateOne(
+        { _id: id, state: 'A' },
+        { $set: { state: 'P' }, $unset: { decidedBy: 1, decidedAt: 1 } },
+      )
+      .exec();
+  }
 }
