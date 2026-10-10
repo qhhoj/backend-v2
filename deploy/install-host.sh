@@ -16,7 +16,7 @@ ensure_users() {
     groupadd -g "$ID" qhhoj
     useradd -u "$ID" -g "$ID" --system --home-dir /var/lib/qhhoj --create-home --shell /usr/sbin/nologin qhhoj
   fi
-  id deploy >/dev/null 2>&1 || useradd --system --home-dir /var/lib/qhhoj-deploy --create-home --shell /bin/bash deploy
+  id deploy >/dev/null 2>&1 || useradd --system --home-dir /home/deploy --create-home --shell /bin/bash deploy
   usermod -aG qhhoj www-data 2>/dev/null || usermod -aG qhhoj nginx 2>/dev/null || true
 }
 
@@ -25,6 +25,9 @@ ensure_dirs() {
   for dir in media problem-data pdf-cache contest-data user-data; do install -d -m 2750 "$ROOT/srv/qhhoj/$dir"; done
   chown -R "$ID:$ID" "$ROOT/srv/qhhoj"
   install -d -m 700 "$ROOT/srv/qhhoj-migrate" "$ROOT/srv/qhhoj-migrate/incoming" "$ROOT/var/log/qhhoj-migrate" "$ROOT/backup"
+  # qhhoj-deploy (root) keeps its history here: root-owned; only incoming/ is writable by the deploy user
+  install -d -m 755 "$ROOT/var/lib/qhhoj-deploy"
+  chown root:root "$ROOT/var/lib/qhhoj-deploy"
   install -d -m 750 "$ROOT/var/lib/qhhoj-deploy/incoming"
   chown deploy:deploy "$ROOT/var/lib/qhhoj-deploy/incoming"
   install -d -m 755 "$ROOT/var/www/qhhoj/releases"
