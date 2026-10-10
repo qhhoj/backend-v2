@@ -3,7 +3,7 @@
 #   backend <tag> [--force] [--token-stdin]
 #                             move the local :current image tag to <tag>, restart qhhoj.target, health-check, roll back on failure;
 #                             --token-stdin logs in to ghcr.io with one line of stdin (per-deploy authfile, removed on exit)
-#   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, flip /var/www/qhhoj/current, check, roll back on failure
+#   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, carry kept releases' recent assets/ over, flip /var/www/qhhoj/current, check, roll back on failure
 #   rollback backend|frontend go back to the previous history entry
 #   status                    live versions and recent history
 # Exit: 0 ok, 1 failed (previous version live), 64 usage, 75 deferred (migration or contest running; retry later).
@@ -21,6 +21,7 @@ MIGRATE_LOCK="$ROOT/run/qhhoj-migrate.lock"
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
 LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
 KEEP=5
+ASSET_MAX_AGE_DAYS=14 # older assets of previous releases are not carried into a new release
 TAG_RE='^(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{12})$'
 EX_USAGE=64
 EX_DEFERRED=75
@@ -207,6 +208,19 @@ unpack_frontend() { # <version>: verified private copy of the incoming tarball -
   rm -rf "$dir"; mv "$dir.tmp" "$dir"
 }
 
+carry_old_assets() { # <version>: tabs on a previous build still request its hashed chunks; keep them servable
+  local version=$1 target="$WWW/releases/$1/assets" old
+  mkdir -p "$target"
+  for old in $(tail -n "$KEEP" "$(history_file frontend)" 2>/dev/null || true); do
+    [ "$old" != "$version" ] && [ -d "$WWW/releases/$old/assets" ] || continue
+    # Hashed names never collide, so no overwrite. Files keep their build mtime: the age filter drops
+    # chunks older than ASSET_MAX_AGE_DAYS, and they never reach the next release either.
+    (cd "$WWW/releases/$old/assets" && find . -type f -mtime "-$ASSET_MAX_AGE_DAYS" -print0 \
+      | xargs -0 -r cp -a --update=none --parents -t "$target") || echo "qhhoj-deploy: could not carry assets of $old" >&2
+  done
+  chmod -R a+rX "$target"
+}
+
 prune_releases() {
   local keep; keep="$(tail -n "$KEEP" "$(history_file frontend)")"
   for dir in "$WWW"/releases/*; do
@@ -220,6 +234,7 @@ deploy_frontend() { # <version>
   valid_tag "$version"
   unpack_frontend "$version"
   previous="$(live frontend)"
+  carry_old_assets "$version"
   point_frontend "$version"
   if frontend_healthy "$version"; then
     record frontend "$version"; prune_releases

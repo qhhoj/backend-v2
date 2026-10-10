@@ -68,6 +68,7 @@ tarball() { # <version> [no-index]
   local src; src="$(mktemp -d)"
   [ "${2:-}" = no-index ] || echo "<html>$1</html>" > "$src/index.html"
   mkdir -p "$src/assets"; echo "js $1" > "$src/assets/app.js"
+  local name; for name in ${ASSETS:-}; do echo "chunk $name" > "$src/assets/$name"; done # extra hashed chunks
   tar -czf "$root/var/lib/qhhoj-deploy/incoming/frontend-dist-$1.tar.gz" -C "$src" .
   (cd "$root/var/lib/qhhoj-deploy/incoming" && sha256sum "frontend-dist-$1.tar.gz" > "frontend-dist-$1.tar.gz.sha256")
   rm -rf "$src"
@@ -239,5 +240,38 @@ grep -q 'endTime: { $gt: now, $lte: soon }' "$root/mongosh.args" && grep -q '24 
 fresh_frontend; mkfifo "$inc/frontend-dist-v2.1.0.tar.gz"; : > "$inc/frontend-dist-v2.1.0.tar.gz.sha256"
 set +e; timeout 10 env PATH="$bin:$PATH" QHHOJ_DEPLOY_ROOT="$root" bash "$here/qhhoj-deploy" frontend v2.1.0 >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "FIFO in incoming must exit 1 (not hang), got $code"
+
+# a new release keeps the recent hashed chunks of the kept releases (open tabs still request them)
+fresh_frontend
+ASSETS="Page-old1.js" tarball v2.1.0; deploy frontend v2.1.0 >/dev/null
+ASSETS="Page-new2.js" tarball v2.2.0; deploy frontend v2.2.0 >/dev/null
+for chunk in Page-old1.js Page-new2.js app.js; do [ -f "$www/releases/v2.2.0/assets/$chunk" ] || fail "v2.2.0 must serve $chunk"; done
+ASSETS="Page-new3.js" tarball v2.3.0; deploy frontend v2.3.0 >/dev/null
+for chunk in Page-old1.js Page-new2.js Page-new3.js; do [ -f "$www/releases/v2.3.0/assets/$chunk" ] || fail "v2.3.0 must keep $chunk"; done
+[ ! -e "$www/releases/v2.1.0/assets/Page-new2.js" ] || fail "old releases are not modified"
+# same name, different content: the new release's own file wins
+ASSETS="app.js" tarball v2.4.0
+deploy frontend v2.4.0 >/dev/null
+[ "$(cat "$www/releases/v2.4.0/assets/app.js")" = "chunk app.js" ] || fail "carried files must not overwrite the new release's"
+
+# chunks older than 14 days are not carried, and do not reach later releases either
+fresh_frontend
+ASSETS="Page-stale.js Page-recent.js" tarball v2.1.0; deploy frontend v2.1.0 >/dev/null
+touch -d '20 days ago' "$www/releases/v2.1.0/assets/Page-stale.js"
+touch -d '5 days ago' "$www/releases/v2.1.0/assets/Page-recent.js"
+tarball v2.2.0; deploy frontend v2.2.0 >/dev/null
+[ ! -e "$www/releases/v2.2.0/assets/Page-stale.js" ] || fail "stale chunk must not be carried"
+[ -f "$www/releases/v2.2.0/assets/Page-recent.js" ] || fail "recent chunk must be carried"
+[ "$(stat -c %Y "$www/releases/v2.2.0/assets/Page-recent.js")" -lt "$(date -d '4 days ago' +%s)" ] || fail "carried chunk keeps its build time"
+
+# an unhealthy new release flips back; rollback still lands on the previous release with its own assets
+fresh_frontend
+ASSETS="Page-a.js" tarball v2.1.0; deploy frontend v2.1.0 >/dev/null
+ASSETS="Page-b.js" tarball v2.2.0; deploy frontend v2.2.0 >/dev/null
+ASSETS="Page-c.js" tarball v2.3.0
+set +e; STUB_HEALTH=fail deploy frontend v2.3.0 >/dev/null 2>&1; code=$?; set -e
+[ "$code" = 1 ] && [ "$(readlink "$www/current")" = releases/v2.2.0 ] || fail "unhealthy release must flip back"
+deploy rollback frontend >/dev/null || fail "rollback after carrying assets"
+[ "$(readlink "$www/current")" = releases/v2.1.0 ] && [ -f "$www/releases/v2.1.0/assets/Page-a.js" ] || fail "rollback target serves its assets"
 
 echo "qhhoj-deploy backend ok"
