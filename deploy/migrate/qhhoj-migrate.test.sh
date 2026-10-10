@@ -110,6 +110,7 @@ grep -q "cookie_qhhoj_preview = \"$token\"" "$gate" || fail "staff cookie opens 
 grep -q 'remote_addr = "127.0.0.1"' "$gate" || fail "loopback exempt (health checks)"
 grep -q 'uri = "/maintenance.html"' "$gate" || fail "error page exempt (no redirect loop)"
 [ "$(stat -c %a "$gate")" = 600 ] || fail "gate (holds the token) is private"
+[ "$(grep -c 'include /etc/nginx/snippets/qhhoj-security-headers.conf;' "$gate")" = 2 ] || fail "both gate locations include the security headers"
 grep -q "auth_basic" "$gate" && fail "no browser password box"
 grep -q "nginx -t" "$calls" || fail "config checked before reload"
 migrate preview off >/dev/null || fail "preview off"
@@ -171,6 +172,13 @@ grep -q "uri: 'mongodb://m'" "$root/cfgcopy" || fail "dump config holds the uri"
 grep -q -e "$MONGO" "$calls" && fail "mongo uri in argv"
 
 
+# a resumed go-live keeps the existing pre-start dump
+fresh; stub mongodump "touch \"\${4#--archive=}\""; stub nginx
+stub curl "case \"\$*\" in *problems*) [ -e '$root/smoke-ok' ] || exit 22 ;; *http_code*) echo 404 ;; esac"
+migrate run >/dev/null 2>&1 || fail "run before resumed go-live"
+echo go-live | migrate go-live >/dev/null 2>&1 && fail "failed smoke must fail go-live (dump test)"
+touch "$root/smoke-ok"; echo go-live | migrate go-live >/dev/null || fail "go-live resumes (dump test)"
+[ "$(grep -c '^mongodump' "$calls")" = 1 ] || fail "resumed go-live must not dump again"
 
 # M3: import-dump refuses after go-live
 fresh; touch "$root/srv/qhhoj-migrate/went-live"; printf 'x' | gzip > "$root/dump.sql.gz"

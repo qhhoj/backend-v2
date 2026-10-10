@@ -255,7 +255,8 @@ cmd_go_live() {
     step finish migrator finish
     touch "$WORK/went-live" # from here on run must refuse, even if a later line fails
   fi
-  step mongodump dump_mongo
+  # a resumed go-live must not overwrite the pre-start dump with one of the live database
+  [ -e "$ROOT/backup/qhhoj-cutover.gz" ] || step mongodump dump_mongo
   systemctl start qhhoj.target
   gate_off
   smoke
@@ -285,11 +286,13 @@ if (\$qhhoj_open = 0) { return 503; }
 error_page 503 /maintenance.html;
 location = /maintenance.html {
     root /var/www/qhhoj-maintenance;
+    include /etc/nginx/snippets/qhhoj-security-headers.conf;
     add_header Retry-After 3600 always;
     add_header Cache-Control "no-store" always;
 }
 location = /__preview {
     if (\$arg_key != "$1") { return 404; }
+    include /etc/nginx/snippets/qhhoj-security-headers.conf;
     add_header Set-Cookie "qhhoj_preview=$1; Path=/; Max-Age=1209600; Secure; HttpOnly; SameSite=Lax" always;
     add_header Cache-Control "no-store" always;
     return 302 /;

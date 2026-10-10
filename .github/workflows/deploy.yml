@@ -7,6 +7,7 @@ on:
   workflow_call:
     inputs:
       ref: { type: string, required: true }
+      force: { type: boolean, default: false }
   workflow_dispatch:
     inputs:
       ref: { description: 'Tag, branch or SHA (empty: latest v* tag)', type: string, default: '' }
@@ -40,8 +41,10 @@ jobs:
         env:
           TAG: ${{ steps.ref.outputs.tag }}
           SHA: ${{ steps.ref.outputs.sha }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           docker buildx create --use
           docker buildx build -f Containerfile --push \
             --cache-from "type=registry,ref=$IMAGE:buildcache" \

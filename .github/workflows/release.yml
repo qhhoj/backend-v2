@@ -3,14 +3,14 @@
 # (no npm publish; the app is private). Third-party actions are pinned by commit SHA; bump them deliberately.
 name: release
 on: { push: { branches: [main] } }
-concurrency:
-  group: release
-  cancel-in-progress: false
 permissions:
   contents: write
   pull-requests: write
 jobs:
   release:
+    concurrency:
+      group: release
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs: { tag: '${{ steps.created.outputs.tag }}' }
