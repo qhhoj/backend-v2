@@ -114,6 +114,18 @@ describe('leaderboards', () => {
     await api.http().get('/api/internal/users?sort=password').expect(400);
   });
 
+  it('sorts by contribution points like the other boards, ties sharing a rank', async () => {
+    const rows = await board('/api/internal/users?sort=contributionPoints');
+    expect(rows.map((row) => [row.username, row.rank])).toEqual([
+      ['ana', 1],
+      ['bao', 1],
+      ['chi', 3],
+      ['dung', 3],
+      ['em', 5],
+      ['gia', 6],
+    ]);
+  });
+
   it('ranks contributors', async () => {
     expect(
       (await board('/api/internal/contributors')).map((row) => [

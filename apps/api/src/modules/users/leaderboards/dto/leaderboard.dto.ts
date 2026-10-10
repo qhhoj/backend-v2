@@ -11,6 +11,7 @@ export const USER_SORTS = [
   'performancePoints',
   'points',
   'problemCount',
+  'contributionPoints',
 ] as const;
 export type UserSort = (typeof USER_SORTS)[number];
 

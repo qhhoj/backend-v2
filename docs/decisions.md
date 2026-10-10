@@ -312,6 +312,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - A failed org-points enqueue is logged and lost until the next membership or PP change — a Redis outage must not fail the write, like `submission-graded` but without a sweep.
 - Hinted organization member and submission reads need their indexes built before serving — `.hint()` throws on a missing index, so deploy runs `autoIndex` or `syncIndexes` first; leaderboards rely on the index the planner picks, with no `.hint()`.
 - Leaderboard ranks follow the sorted field and continue across pages — legacy keyed every board on PP and restarted at the page offset.
+- `GET /users?sort=contributionPoints` reuses the existing `{isUnlisted, isActive, contributionPoints, _id}` leaderboard index and the rank rules of the other sorts; `/contributors` stays as the same board.
 - PP breakdown is its own paged route (the spec had one `/solved`) — it is cached per user for 600 s, so a problem that just turned private can show up to 600 s.
 - The heatmap uses the viewer's zone like legacy; the spec's "user's timezone" reads as the viewer — and buckets days with Mongo's time-zone support, where legacy used `utcoffset().seconds`, wrong for negative offsets.
 - Muted users may edit profile settings except `about` — muting silences public text, not account settings.
