@@ -24,47 +24,60 @@ const LANGUAGE_PAIR = /^[a-z]+=(en|vi)$/;
 
 /** Options travel in the query string: the multipart body carries only the package. */
 export class PolygonImportQueryDto {
+  /** Code of the problem to create or update. */
   @IsProblemCode()
   code!: string;
+  /** `create` (default) makes a new problem; `update` replaces the data and statement of an existing one. */
   @ApiPropertyOptional()
   @IsOptional()
   @IsIn(IMPORT_MODES)
   mode: ImportMode = 'create';
+  /** Author user ids; repeat the parameter. */
   @IsOptional()
   @Transform(toArray)
   @IsUUID('7', { each: true })
   authors?: string[];
+  /** Curator user ids; repeat the parameter. On create the caller is added. */
   @IsOptional()
   @Transform(toArray)
   @IsUUID('7', { each: true })
   curators?: string[];
+  /** Problem group id. */
   @IsOptional() @IsUUID('7') groupId?: string;
+  /** Problem type ids; repeat the parameter. */
   @IsOptional()
   @Transform(toArray)
   @IsUUID('7', { each: true })
   typeIds?: string[];
+  /** Points the problem is worth, 800 to 3500. */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(PROBLEM_LIMITS.points.min)
   @Max(PROBLEM_LIMITS.points.max)
   points?: number;
+  /** Polygon language of the statement stored as the base statement. */
   @IsOptional() @IsString() @MaxLength(30) mainStatementLanguage?: string;
+  /** Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter. */
   @IsOptional()
   @Transform(toArray)
   @Matches(LANGUAGE_PAIR, { each: true })
   statementLanguages?: string[];
+  /** Polygon language of the tutorial imported as the editorial. */
   @IsOptional() @IsString() @MaxLength(30) tutorialLanguage?: string;
+  /** Skip batches worth zero points. */
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(toBoolean)
   @IsBoolean()
   ignoreZeroPointBatches: boolean = false;
+  /** Skip cases worth zero points. */
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(toBoolean)
   @IsBoolean()
   ignoreZeroPointCases: boolean = false;
+  /** Append the package's main solution to the editorial. */
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(toBoolean)
@@ -73,5 +86,6 @@ export class PolygonImportQueryDto {
 }
 
 export class ImportJobParamDto {
+  /** Job id from the start response. */
   @IsUUID('7') jobId!: string;
 }

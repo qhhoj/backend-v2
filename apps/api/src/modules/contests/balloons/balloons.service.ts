@@ -290,7 +290,11 @@ export class BalloonsService {
           ordered.indexOf(item.problemId),
           contest.labelStyle,
         ),
-        team: { userId, username: people.get(userId)?.username ?? '' },
+        team: {
+          userId,
+          username: people.get(userId)?.username ?? '',
+          rating: people.get(userId)?.rating ?? null,
+        },
         solvedAt: isHidingTimes ? null : item.solvedAt,
         isFirst: item.isFirst,
         deliveredAt: delivery?.deliveredAt.toISOString() ?? null,

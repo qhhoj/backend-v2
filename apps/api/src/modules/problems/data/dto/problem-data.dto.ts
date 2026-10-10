@@ -54,19 +54,25 @@ const FileName = () =>
   applyDecorators(IsString(), MaxLength(100), Matches(NO_NUL));
 
 export class TestCaseDto {
+  /** `C` normal case, `S` start of a batch, `E` end of a batch. */
   @IsIn(CASE_TYPES) type!: CaseType;
+  /** Input file name inside the archive. */
   @ApiPropertyOptional()
   @FileName()
   input: string = '';
+  /** Output file name inside the archive. */
   @ApiPropertyOptional()
   @FileName()
   output: string = '';
+  /** Points of the case or batch; null when unscored. */
   @ApiPropertyOptional()
   @NullableCount()
   points: number | null = null;
+  /** Whether this case belongs to the pretests. */
   @ApiPropertyOptional()
   @IsBoolean()
   isPretest: boolean = false;
+  /** Arguments passed to the uploaded generator, one per line, up to 1000 characters. */
   @ApiPropertyOptional()
   @IsString()
   @MaxLength(1000)
@@ -75,12 +81,15 @@ export class TestCaseDto {
   @ApiPropertyOptional()
   @IsIn(CASE_CHECKERS)
   checker: CaseChecker = '';
+  /** Arguments of the case checker; null for none. */
   @ApiPropertyOptional()
   @JsonArgs()
   checkerArgs: JsonObject | null = null;
+  /** Leading output bytes kept for display (`output_prefix_length`); null for the default. */
   @ApiPropertyOptional()
   @NullableCount()
   outputPrefix: number | null = null;
+  /** Largest output accepted, in bytes (`output_limit_length`); null for the default. */
   @ApiPropertyOptional()
   @NullableCount()
   outputLimit: number | null = null;
@@ -88,26 +97,35 @@ export class TestCaseDto {
 
 /** The whole configuration at once (legacy form + formset); file names are set by the upload routes and kept as they are. */
 export class PutProblemDataDto {
+  /** Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical` or `linecount`. */
   @IsIn(CHECKERS) checker!: Checker;
+  /** Arguments of the checker; null for none. */
   @ApiPropertyOptional()
   @JsonArgs()
   checkerArgs: JsonObject | null = null;
+  /** Grader: `standard`, `interactive`, `signature` or `output_only`. */
   @IsIn(GRADERS) grader!: Grader;
+  /** Arguments of the grader; null for none. */
   @ApiPropertyOptional()
   @JsonArgs()
   graderArgs: JsonObject | null = null;
+  /** Leading output bytes kept for display (`output_prefix_length`); null for the default. */
   @ApiPropertyOptional()
   @NullableCount()
   outputPrefix: number | null = null;
+  /** Largest output accepted, in bytes (`output_limit_length`); null for the default. */
   @ApiPropertyOptional()
   @NullableCount()
   outputLimit: number | null = null;
+  /** Judge `unicode` flag: output is read as Unicode text. */
   @ApiPropertyOptional()
   @IsBoolean()
   unicode: boolean = false;
+  /** Judge `nobigmath` flag: turns off big-number arithmetic in the checker. */
   @ApiPropertyOptional()
   @IsBoolean()
   nobigmath: boolean = false;
+  /** Every test case, in judging order. */
   @IsArray()
   @ArrayMaxSize(MAX_TESTCASES_MASS)
   @ValidateNested({ each: true })
@@ -124,15 +142,21 @@ export const SOURCE_FILE_KINDS = [
 export type SourceFileKind = (typeof SOURCE_FILE_KINDS)[number];
 
 export class DataSourceKindParamDto {
+  /** Problem code. */
   @IsString() code!: string;
+  /** Which source file: `generator`, `customChecker`, `customGrader` or `customHeader`. */
   @IsIn(SOURCE_FILE_KINDS) kind!: SourceFileKind;
 }
 export class DataFileKindParamDto {
+  /** Problem code. */
   @IsString() code!: string;
+  /** Which data file: `archive`, `generator`, `customChecker`, `customGrader` or `customHeader`. */
   @IsIn(DATA_FILE_KINDS) kind!: DataFileKind;
 }
 /** Unvalidated beyond length (100 = Fastify's maxParamLength, so a longer name is a 414 before this runs): an unsafe name is a 404, never a 400 (see `ProblemDataService.download`). */
 export class DataFileNameParamDto {
+  /** Problem code. */
   @IsString() code!: string;
+  /** File name as stored in the problem data directory. */
   @IsString() @MaxLength(100) name!: string;
 }

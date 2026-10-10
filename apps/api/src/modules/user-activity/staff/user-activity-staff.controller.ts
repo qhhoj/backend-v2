@@ -7,7 +7,7 @@ import {
   Query,
   Res,
 } from '@nestjs/common';
-import { ApiResponse } from '@nestjs/swagger';
+import { ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { Readable } from 'node:stream';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
@@ -32,6 +32,7 @@ import {
 } from './dto/activity.response';
 
 @RequirePermission('judge.can_see_user_activity')
+@ApiTags('Admin: users')
 @Controller('api/internal/admin/user-activity')
 export class UserActivityStaffController {
   constructor(
@@ -41,6 +42,12 @@ export class UserActivityStaffController {
     private readonly live: ActivityLiveService,
   ) {}
 
+  /**
+   * Search the user activity log
+   *
+   * @remarks
+   * Requires `judge.can_see_user_activity`. Returns request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. `user` is a username fragment or `anonymous`, `ip` an address prefix and `path` a path fragment; a `user` fragment that matches nobody gives an empty page.
+   */
   @ApiHasMoreResponse(ActivityLogResponse)
   @Get('logs')
   list(
@@ -49,7 +56,12 @@ export class UserActivityStaffController {
     return this.logs.list(query);
   }
 
-  /** CSV attachment, streamed from a cursor: at most 100000 rows, every cell spreadsheet-safe. The filename is fixed, never built from the query. */
+  /**
+   * Export the user activity log as CSV
+   *
+   * @remarks
+   * Requires `judge.can_see_user_activity`. Same filters as the log search, streamed as a `text/csv` attachment named `user-activity.csv` (newest first, at most 100000 rows, cells made spreadsheet-safe).
+   */
   @RawResponse()
   @ApiResponse({
     status: 200,
@@ -69,6 +81,12 @@ export class UserActivityStaffController {
     return Readable.from(this.exports.lines(query));
   }
 
+  /**
+   * List the activity log of one user
+   *
+   * @remarks
+   * Requires `judge.can_see_user_activity`. Returns the user's request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. 404 `not_found` for an unknown user.
+   */
   @ApiHasMoreResponse(ActivityLogResponse)
   @Get('users/:username/logs')
   userLogs(
@@ -78,6 +96,12 @@ export class UserActivityStaffController {
     return this.logs.listForUser(username, query);
   }
 
+  /**
+   * Summarize one user's activity
+   *
+   * @remarks
+   * Requires `judge.can_see_user_activity`. Returns the number of requests over the last `days` (1-90, default 90), requests per UTC day, the 20 most used IP addresses, the 30 most requested paths and the 50 most recent sessions. 404 `not_found` for an unknown user.
+   */
   @Get('users/:username/summary')
   summary(
     @Param() { username }: UsernameParamDto,
@@ -86,7 +110,12 @@ export class UserActivityStaffController {
     return this.summaries.summary(username, days);
   }
 
-  /** Deletes the user's rows and sessions. */
+  /**
+   * Delete a user's activity data
+   *
+   * @remarks
+   * Requires `judge.can_see_user_activity`. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log with the acting staff member. 404 `not_found` for an unknown user. Returns 204.
+   */
   @Delete('users/:username')
   @HttpCode(204)
   deleteUser(
@@ -96,12 +125,24 @@ export class UserActivityStaffController {
     return this.logs.deleteForUser(auth.user.username, username);
   }
 
+  /**
+   * Delete anonymous activity data
+   *
+   * @remarks
+   * Requires `judge.can_see_user_activity`. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log with the acting staff member. Returns 204.
+   */
   @Delete('anonymous')
   @HttpCode(204)
   deleteAnonymous(@CurrentAuth() auth: AuthContext): Promise<void> {
     return this.logs.deleteAnonymous(auth.user.username);
   }
 
+  /**
+   * List who is on the site now
+   *
+   * @remarks
+   * Requires `judge.can_see_user_activity`. Returns counts of signed-in users, anonymous visitors and bots seen in the last 30 minutes, plus a page of 50 signed-in users, most recently seen first (`hasMore` tells whether a later page exists).
+   */
   @Get('live')
   liveVisitors(
     @Query() { page }: ActivityPageQueryDto,

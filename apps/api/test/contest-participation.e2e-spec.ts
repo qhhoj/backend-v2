@@ -525,6 +525,7 @@ describe('contest participation', () => {
       };
       await joinParticipation(api, contest._id, users.alice._id, results);
       await joinParticipation(api, contest._id, users.bob._id, results);
+      await api.users.updateOne({ _id: users.bob._id }, { rating: 1850 });
       const list = async (who: string, query = '') =>
         dataOf<ParticipationResponse[]>(
           await authed(
@@ -546,6 +547,11 @@ describe('contest participation', () => {
         'bob',
       ]);
       expect(all[0].score).toBe(300);
+      expect(
+        Object.fromEntries(
+          all.map((row) => [row.user.username, row.user.rating]),
+        ),
+      ).toEqual({ alice: null, bob: 1850 });
       expect(
         (await list('author', '?user=bob')).map((row) => row.user.username),
       ).toEqual(['bob']);

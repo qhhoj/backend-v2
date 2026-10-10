@@ -19,5 +19,6 @@ const IsSourceLength = () => (target: object, propertyName: string) =>
   });
 
 export class SubmitDto extends SubmitFileDto {
+  /** Source code, 1 to 65536 characters. */
   @IsString() @IsSourceLength() source!: string;
 }

@@ -5,6 +5,7 @@ import {
   oauthClientType,
   oneOfType,
   optionalDatetimeType,
+  optionalTextType,
   optionalUrlType,
   smtpUrlType,
   timeZoneType,
@@ -149,6 +150,26 @@ export const SETTINGS = {
   'auth.google': socialLogin('Google'),
   'auth.github': socialLogin('GitHub'),
   'auth.facebook': socialLogin('Facebook'),
+  'polygon.apiKey': define({
+    type: optionalTextType(100),
+    default: '',
+    description:
+      'API key of the Polygon account QHHOJ imports problems with (Polygon, Settings, API keys); empty: Polygon is not connected (zip import still works).',
+    secret: false,
+  }),
+  'polygon.apiSecret': define({
+    type: optionalTextType(100),
+    default: '',
+    description: 'API secret paired with polygon.apiKey.',
+    secret: true,
+  }),
+  'polygon.accountName': define({
+    type: optionalTextType(100),
+    default: '',
+    description:
+      'Polygon login of that account; setters add it as a READ co-author of their problem.',
+    secret: false,
+  }),
   'pdf.renderTimeoutMs': define({
     type: integerType(100, 600_000),
     default: 30_000,

@@ -153,7 +153,14 @@ describe('Polygon import routes', () => {
     });
     expect(existsSync(join(importsDirectory(), `${jobId}.zip`))).toBe(true);
     expect((await statusOf(jobId, creator).expect(200)).body).toEqual({
-      data: { id: jobId, state: 'waiting', result: null, error: null },
+      data: {
+        id: jobId,
+        state: 'waiting',
+        step: 'queued',
+        progress: null,
+        result: null,
+        error: null,
+      },
     });
   });
   it('adds the requester to the given curators once', async () => {
@@ -323,6 +330,7 @@ describe('Polygon import routes', () => {
       .body;
     expect((hiddenBody as { data: Status }).data).toMatchObject({
       state: 'failed',
+      step: 'failed',
       error: 'Import failed',
     });
     expect(JSON.stringify(hiddenBody)).not.toContain('/data/');

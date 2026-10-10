@@ -34,6 +34,7 @@ export class UserAdminQueryDto {
   @IsOptional()
   @IsIn(STAFF_USER_SORTS)
   sort?: StaffUserSort;
+  /** Page number, starting at 1 (up to 500). */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -41,6 +42,7 @@ export class UserAdminQueryDto {
   @Min(1)
   @Max(STAFF_USER_PAGE_MAX)
   page: number = 1;
+  /** Users per page, 1-100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

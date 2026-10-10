@@ -22,6 +22,12 @@ import { dataChanges, fieldDiff } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import type { ClientSession, Connection, Model } from 'mongoose';
 import { PolygonImportError } from './polygon-import.error';
+import {
+  importComment,
+  linkChanges,
+  linkSummary,
+  newLink,
+} from './polygon-link-fields';
 
 export interface ImportedProblem {
   name: string;
@@ -103,6 +109,30 @@ function statementFields(
 }
 type StatementFields = ReturnType<typeof statementFields>;
 
+/** The catalog fields the job names; an update keeps the rest. */
+const requestedCatalog = (job: PolygonImportJob) =>
+  definedOnly({
+    groupId: job.groupId,
+    typeIds: job.typeIds,
+    points: job.points,
+    authors: job.authors,
+    curators: job.curators,
+  });
+
+/** The editor's compare-and-set on `dataVersion`; a sync also needs the link it was queued for. */
+const unchangedSinceQueued = (
+  job: PolygonImportJob,
+  problemId: string,
+  target: ImportTarget,
+) => ({
+  _id: problemId,
+  code: job.code,
+  dataVersion: dataVersionIs(target?.dataVersion ?? 0),
+  ...(job.polygon?.purpose === 'sync' && {
+    'polygonLink.problemId': job.polygon.problemId,
+  }),
+});
+
 @Injectable()
 export class PolygonImportRepository {
   constructor(
@@ -129,6 +159,7 @@ export class PolygonImportRepository {
   async resolveTarget(job: PolygonImportJob): Promise<ImportTarget> {
     const existing = await this.problems.findOne({ code: job.code }).exec();
     this.checkTarget(job, existing);
+    this.checkLink(job, existing);
     if (
       existing &&
       job.expectedDataVersion !== undefined &&
@@ -190,6 +221,7 @@ export class PolygonImportRepository {
       .session(session)
       .exec();
     this.checkTarget(job, existing);
+    this.checkLink(job, existing);
     const before = existing?.toObject();
     const statement = statementFields(imported, before);
     const written =
@@ -230,22 +262,14 @@ export class PolygonImportRepository {
     },
     session: ClientSession,
   ): Promise<WrittenProblem> {
-    const catalog = definedOnly({
-      groupId: job.groupId,
-      typeIds: job.typeIds,
-      points: job.points,
-      authors: job.authors,
-      curators: job.curators,
-    });
-    const changes = definedOnly({ ...statement, ...catalog });
+    const changes = definedOnly({ ...statement, ...requestedCatalog(job) });
     const { matchedCount } = await this.problems
       .updateOne(
+        unchangedSinceQueued(job, problemId, target),
         {
-          _id: problemId,
-          code: job.code,
-          dataVersion: dataVersionIs(target?.dataVersion ?? 0),
+          $set: { ...changes, ...linkChanges(job, new Date()) },
+          $inc: { dataVersion: 1 },
         },
-        { $set: changes, $inc: { dataVersion: 1 } },
         { session },
       )
       .exec();
@@ -271,6 +295,7 @@ export class PolygonImportRepository {
       isFullMarkup: job.isFullMarkup,
       date: new Date(),
       dataVersion: 1,
+      polygonLink: job.polygon ? newLink(job, job.polygon, new Date()) : null,
       ...(await this.createCatalog(job, session)),
     };
     // `create` with a session takes an array.
@@ -303,8 +328,18 @@ export class PolygonImportRepository {
           changes: {
             ...fieldDiff(summaryOf(before ?? {}), summaryOf(written.after)),
             ...dataChanges(before?.data ?? emptyProblemData(), imported.data),
+            ...(job.polygon && {
+              polygonLink: {
+                before: linkSummary(before?.polygonLink),
+                after: {
+                  problemId: job.polygon.problemId,
+                  revision: job.polygon.revision,
+                  packageId: job.polygon.packageId,
+                },
+              },
+            }),
           },
-          comment: `Imported from a Polygon package (${job.mode})`,
+          comment: importComment(job),
         },
       ],
       { session },
@@ -338,6 +373,41 @@ export class PolygonImportRepository {
       authors: job.authors ?? [],
       curators: job.curators ?? [],
     };
+  }
+
+  /** A sync of a problem that was unlinked (or re-linked elsewhere) after it was queued is refused. */
+  private checkLink(
+    job: PolygonImportJob,
+    existing: { polygonLink?: { problemId: number } | null } | null,
+  ): void {
+    if (
+      job.polygon?.purpose === 'sync' &&
+      existing?.polygonLink?.problemId !== job.polygon.problemId
+    )
+      throw new PolygonImportError(
+        `the problem is no longer linked to Polygon problem ${job.polygon.problemId}`,
+      );
+  }
+
+  /** A failed sync is recorded on the link it was for; nothing happens when the link is gone or changed meanwhile. */
+  async recordSyncFailure(
+    job: PolygonImportJob,
+    reason: string,
+  ): Promise<void> {
+    if (job.polygon?.purpose !== 'sync') return;
+    await this.problems
+      .updateOne(
+        { code: job.code, 'polygonLink.problemId': job.polygon.problemId },
+        {
+          $set: {
+            'polygonLink.lastSyncAt': new Date(),
+            'polygonLink.lastSyncResult': 'failed',
+            'polygonLink.lastSyncError': reason,
+            'polygonLink.lastSyncPackageId': job.polygon.packageId,
+          },
+        },
+      )
+      .exec();
   }
 
   private checkTarget(

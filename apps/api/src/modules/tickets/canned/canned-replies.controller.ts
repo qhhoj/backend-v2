@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -23,11 +24,19 @@ import {
 import { CannedReplyResponse } from './dto/canned-reply.response';
 
 /** Staff answers to insert into a ticket reply; managed by `change_ticket` holders only. */
+@ApiTags('Tickets')
 @Controller('api/internal/ticket-canned-replies')
 @RequirePermission('judge.change_ticket')
 export class CannedRepliesController {
   constructor(private readonly replies: CannedRepliesService) {}
 
+  /**
+   * List canned ticket replies
+   *
+   * @remarks
+   * Requires `judge.change_ticket`. Returns the staff's stored reply templates
+   * in their order. Paged with `page`.
+   */
   @ApiPaginatedResponse(CannedReplyResponse)
   @Get()
   list(
@@ -36,6 +45,14 @@ export class CannedRepliesController {
     return this.replies.list(query);
   }
 
+  /**
+   * Create a canned reply
+   *
+   * @remarks
+   * Requires `judge.change_ticket`. Adds a reply template with a title, body
+   * and optional order (default last). Fails with 409 `conflict` when the
+   * maximum number of canned replies exists.
+   */
   @Post()
   create(
     @CurrentAuth() auth: AuthContext,
@@ -44,6 +61,13 @@ export class CannedRepliesController {
     return this.replies.create(auth.principal.userId, body);
   }
 
+  /**
+   * Update a canned reply
+   *
+   * @remarks
+   * Requires `judge.change_ticket`. Changes the fields sent; null is refused.
+   * Fails with 404 `not_found` for an unknown id.
+   */
   @Patch(':id')
   update(
     @Param() { id }: CannedReplyIdParamDto,
@@ -52,6 +76,13 @@ export class CannedRepliesController {
     return this.replies.update(id, body);
   }
 
+  /**
+   * Delete a canned reply
+   *
+   * @remarks
+   * Requires `judge.change_ticket`. Deletes the template and returns 204, or
+   * 404 `not_found` for an unknown id.
+   */
   @Delete(':id')
   @HttpCode(204)
   remove(@Param() { id }: CannedReplyIdParamDto): Promise<void> {

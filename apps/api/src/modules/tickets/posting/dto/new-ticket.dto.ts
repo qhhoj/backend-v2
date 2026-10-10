@@ -8,6 +8,7 @@ import {
 import { trim } from '../../../problems/core/dto/transforms';
 
 export class NewTicketMessageDto {
+  /** Message text in Markdown. */
   @Transform(trim)
   @IsString()
   @Length(1, TICKET_BODY_MAX_LENGTH)
@@ -15,6 +16,7 @@ export class NewTicketMessageDto {
 }
 
 export class NewTicketDto extends NewTicketMessageDto {
+  /** Ticket title. */
   @Transform(trim)
   @IsString()
   @Length(1, TICKET_TITLE_MAX_LENGTH)
@@ -23,6 +25,7 @@ export class NewTicketDto extends NewTicketMessageDto {
 
 /** `http(s)` only: the url becomes a link. */
 export class NewGeneralTicketDto extends NewTicketDto {
+  /** http or https URL of the page the issue is about. */
   @Transform(trim)
   @IsUrl({
     protocols: ['http', 'https'],

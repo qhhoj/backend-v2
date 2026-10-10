@@ -14,11 +14,14 @@ import {
 } from 'class-validator';
 
 export class CreateAnnouncementDto {
+  /** Announcement title. */
   @IsString() @Length(1, ANNOUNCEMENT_TITLE_MAX) title!: string;
+  /** Announcement body in Markdown; it is rendered to HTML when saved. */
   @IsString() @MaxLength(MAX_MARKDOWN_LENGTH) description!: string;
 }
 
 export class AnnouncementListQueryDto {
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -26,6 +29,7 @@ export class AnnouncementListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Announcements per page, 1 to 50. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -37,6 +41,8 @@ export class AnnouncementListQueryDto {
 
 /** The key stays unvalidated like `ContestKeyParamDto`; a malformed id is a 400. */
 export class AnnouncementIdParamDto {
+  /** Key of the contest. */
   @IsString() key!: string;
+  /** Id of the announcement. */
   @IsUUID('7') id!: string;
 }

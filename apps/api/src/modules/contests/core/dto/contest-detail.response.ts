@@ -32,13 +32,24 @@ export class ContestProblemViewerResultResponse {
 }
 
 export class ContestProblemResponse {
+  /** Id of the problem. */
   problemId!: string;
+  /** Problem code. */
   code!: string;
+  /** Problem name. */
   name!: string;
+  /**
+   * The problem's label in this contest, such as A or B, by the contest's
+   * label style.
+   */
   label!: string;
+  /** Points the problem is worth in this contest. */
   points!: number;
+  /** Whether partial scores are given. */
   partial!: boolean;
+  /** Whether the problem is judged on pretests during the contest. */
   isPretested!: boolean;
+  /** Most scored submissions per participant; null means unlimited. */
   maxSubmissions!: number | null;
   /** Seconds; null when the viewer cannot see the problem. */
   timeLimit!: number | null;
@@ -51,12 +62,20 @@ export class ContestProblemResponse {
 }
 
 export class ParticipationSummaryResponse {
+  /** Id of the participation. */
   id!: string;
   /** 0 live, -1 spectate, n ≥ 1 virtual. */
   virtual!: number;
+  /** True while registered but not yet started. */
   isRegistered!: boolean;
+  /** Whether an editor disqualified this participation. */
   isDisqualified!: boolean;
+  /** When this participation started, ISO 8601. */
   realStart!: Date;
+  /**
+   * When this participation ends: the contest end, or the personal time limit
+   * if earlier.
+   */
   endTime!: Date;
   /** When this participation accepted the contest rules; null when the contest had no rules then (or the row predates rules). */
   @ApiProperty({ type: Date, nullable: true }) rulesAcceptedAt!: Date | null;
@@ -82,10 +101,18 @@ export class ParticipationSummaryResponse {
 }
 
 export class ContestViewerResponse extends ContestListViewerResponse {
+  /** The viewer may edit the contest. */
   canEdit!: boolean;
+  /** The viewer is an author or curator of the contest. */
   isEditor!: boolean;
+  /** The viewer is a tester of the contest. */
   isTester!: boolean;
+  /**
+   * The viewer's current participation is in this contest and has started (or
+   * is a spectator).
+   */
   inContest!: boolean;
+  /** The viewer's live participation, or null if none. */
   liveParticipation!: ParticipationSummaryResponse | null;
   /** The balloon screen is on for this contest and the viewer may use it (editors, listed volunteers). */
   canViewBalloons!: boolean;
@@ -93,31 +120,55 @@ export class ContestViewerResponse extends ContestListViewerResponse {
 
 /** One contest problem's output-prefix override (null: the judge default). */
 export class ContestProblemOutputPrefixResponse {
+  /** Id of the problem. */
   problemId!: string;
+  /** Bytes of output shown for the problem; null uses the judge default. */
   outputPrefixOverride!: number | null;
 }
 
 /** Editors only. */
 export class ContestSettingsResponse {
+  /** Whether the contest is shown to users who may see it. */
   isVisible!: boolean;
+  /** Only the listed contestants may see it. */
   isPrivate!: boolean;
+  /** Only members of the listed organizations may see it. */
   isOrganizationPrivate!: boolean;
+  /** Organization ids tied to the contest. */
   organizations!: string[];
+  /** User ids allowed in a private contest. */
   privateContestants!: string[];
+  /** User ids with edit rights besides the authors. */
   curators!: string[];
+  /** User ids who can see the contest and spectate it before it starts. */
   testers!: string[];
+  /** User ids banned from joining. */
   bannedUsers!: string[];
+  /** Names of judges that may not judge this contest. */
   bannedJudges!: string[];
+  /** User ids who may see the scoreboard whatever its visibility. */
   viewContestScoreboard!: string[];
+  /** Live submissions are not rejudged after this time; null for no lock. */
   lockedAfter!: Date | null;
+  /** Seconds the ranking is cached; 0 disables the cache. */
   scoreboardCacheTimeout!: number;
+  /** Rate every participant, not only those who solved a problem. */
   rateAll!: boolean;
+  /** User ids excluded from rating. */
   rateExclude!: string[];
+  /** Rating floor applied when rating the contest; null for none. */
   ratingFloor!: number | null;
+  /** Rating ceiling applied when rating the contest; null for none. */
   ratingCeiling!: number | null;
+  /** Announcements are pushed live and to notification inboxes. */
   pushAnnouncements!: boolean;
+  /** On-site balloon deliveries are tracked. */
   balloons!: boolean;
+  /** User ids of balloon volunteers. */
   balloonStaff!: string[];
+  /**
+   * Publish the problems and editorials automatically when the contest ends.
+   */
   publishAfterEnd!: boolean;
   /** The editor whose rights the automatic publish re-checks at the end. */
   publishAfterEndBy!: string | null;
@@ -230,26 +281,45 @@ function labelledProblems(
 }
 
 export class ContestDetailResponse extends ContestSummaryResponse {
+  /** Markdown source of the description. */
   description!: string;
+  /** The description rendered to HTML. */
   descriptionHtml!: string;
+  /** Markdown rules each participation must accept; empty for none. */
   rules!: string;
+  /** The rules rendered to HTML. */
   rulesHtml!: string;
+  /** Increases whenever the rules text changes. */
   rulesRevision!: number;
+  /** The contest's authors. */
   authors!: UserSummaryResponse[];
+  /**
+   * Minutes before the end during which the ranking is frozen for non-editors;
+   * 0 for no freeze.
+   */
   frozenLastMinutes!: number;
   @ApiProperty({
     enum: SCOREBOARD_VISIBILITIES,
     enumName: 'ScoreboardVisibility',
   })
   scoreboardVisibility!: ScoreboardVisibility;
+  /**
+   * Whether contestants see everyone's submissions while the contest runs.
+   */
   showSubmissionList!: boolean;
+  /** Decimal places shown in scores. */
   pointsPrecision!: number;
+  /** Submissions are judged on pretests only until the contest ends. */
   runPretestsOnly!: boolean;
+  /** Hide problem tags from contestants. */
   hideProblemTags!: boolean;
+  /** Hide problem authors from contestants. */
   hideProblemAuthors!: boolean;
+  /** Show problem points and counts in a compact form. */
   showShortDisplay!: boolean;
   @ApiProperty({ enum: LABEL_STYLES, enumName: 'ContestLabelStyle' })
   labelStyle!: LabelStyle;
+  /** Format-specific options, validated by the contest format. */
   @ApiProperty({
     type: 'object',
     additionalProperties: { oneOf: [{ type: 'number' }, { type: 'boolean' }] },
@@ -257,7 +327,9 @@ export class ContestDetailResponse extends ContestSummaryResponse {
   formatConfig!: Record<string, unknown>;
   /** Null until the viewer may see them (in the contest, ended, editor or tester). */
   problems!: ContestProblemResponse[] | null;
+  /** The viewer's own permissions and participation state. */
   viewer!: ContestViewerResponse;
+  /** Editor-only settings; null for other viewers. */
   settings!: ContestSettingsResponse | null;
 
   static fromDetail(

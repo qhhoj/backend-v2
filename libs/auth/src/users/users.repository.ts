@@ -38,7 +38,9 @@ export class UsersRepository {
 
   findByIds(ids: string[]): Promise<UserDocument[]> {
     return ids.length
-      ? this.users.find({ _id: { $in: ids } }, { username: 1 }).exec()
+      ? this.users
+          .find({ _id: { $in: ids } }, { username: 1, rating: 1 })
+          .exec()
       : Promise.resolve([]);
   }
 

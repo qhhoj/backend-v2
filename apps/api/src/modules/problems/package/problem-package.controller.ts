@@ -5,6 +5,7 @@ import {
   ApiExtraModels,
   ApiResponse,
   getSchemaPath,
+  ApiTags,
 } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { CurrentAuth } from '@libs/auth';
@@ -27,11 +28,24 @@ const enveloped = (model: Type) => ({
   properties: { data: { $ref: getSchemaPath(model) } },
 });
 
+@ApiTags('Problem editing')
 @Controller('api/internal/problems')
 export class ProblemPackageController {
   constructor(private readonly packages: ProblemPackageService) {}
 
-  /** 200 `{data: {status: 'ready', key}}` when the current package is cached, 202 `{data: {status: 'building', key}}` when a build is queued or running. Plain `@Res()` because the status depends on the answer. */
+  /**
+   * Request a downloadable package of a problem
+   *
+   * @remarks
+   * Needs edit rights on the problem. Asks for a zip of the problem as it is now
+   * (statement and test data). 200 `{ data: { status: 'ready', key } }` means
+   * the package is cached and `GET` on the same path returns it; 202
+   * `{ data: { status: 'building', key } }` means a build is queued or running,
+   * so poll `GET`. Every request counts against 3 per problem and 10 in total
+   * per user per hour (429 `rate_limited`). Responds 409 `package_too_large`
+   * when the package is over the size limit.
+   */
+  // Plain `@Res()` because the status (200 or 202) depends on the answer.
   @ApiExtension('x-enveloped', true)
   @ApiExtraModels(PackageStatusResponse)
   @ApiResponse({
@@ -57,7 +71,17 @@ export class ProblemPackageController {
       .send({ data: status });
   }
 
-  /** 200 the zip (attachment), 202 while building, 404 `package_not_built`, 409 `package_too_large`, 503 `package_unavailable`. */
+  /**
+   * Download the package of a problem
+   *
+   * @remarks
+   * Needs edit rights on the problem. 200 returns the cached zip as an
+   * attachment named `<code>.zip`; 202 `{ data: { status: 'building' } }` with
+   * `Retry-After` means the build is still running. Other outcomes: 404
+   * `package_not_built` when no package was requested for the current data, 409
+   * `package_too_large`, 503 `package_unavailable` with `Retry-After` when the
+   * build failed. Polling is free of rate limits.
+   */
   @ApiExtension('x-enveloped', true)
   @ApiExtraModels(PackageBuildingResponse)
   @ApiFileResponse('application/zip')

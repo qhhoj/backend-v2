@@ -5,11 +5,17 @@ import { ProblemRefResponse } from './problem-ref.response';
 import { UserSummaryResponse } from './user-summary.response';
 
 export class EditorialResponse {
+  /** The problem the editorial belongs to. */
   problem!: ProblemRefResponse;
+  /** Whether the editorial is marked public. */
   isPublic!: boolean;
+  /** When it becomes readable by everyone (ISO 8601). */
   publishOn!: string;
+  /** Authors of the editorial. */
   authors!: UserSummaryResponse[];
+  /** Rendered, sanitized HTML. */
   contentHtml!: string;
+  /** Whether the viewer can edit the problem. */
   canEdit!: boolean;
 
   static from(

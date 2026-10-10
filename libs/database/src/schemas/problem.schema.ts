@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
 import { ProblemData, ProblemDataSchema } from './problem-data.schema';
+import { PolygonLink, PolygonLinkSchema } from './polygon-link.schema';
 
 const UUID = MongooseSchema.Types.UUID;
 
@@ -130,6 +131,9 @@ export class Problem {
   @Prop({ default: 0 }) dataVersion!: number;
   /** Bytes in the problem's data directory. Recompute-and-set after every data write and by the `problem-databytes` job; the storage meter sums it. */
   @Prop({ default: 0, min: 0 }) dataBytes!: number;
+  /** Set by an import from Polygon; a sync re-applies statement, tests, checker and limits from the linked problem. */
+  @Prop({ type: PolygonLinkSchema, default: null })
+  polygonLink!: PolygonLink | null;
   /** Written by Mongoose `timestamps`; read by the organization problem list. */
   updatedAt!: Date;
   /** Soft delete: set while the problem is in its grace period, and afterwards on the tombstone. Absent while the problem is live (restore `$unset`s it), so `{deletedAt: null}` reads "live". */
@@ -151,6 +155,11 @@ ProblemSchema.index({ testers: 1 });
 ProblemSchema.index({ suggester: 1 });
 // The deleted list and the purge scan read it by range; live problems are not indexed.
 ProblemSchema.index({ deletedAt: 1 }, { sparse: true });
+// Linked problems only: the Polygon list marks linked problems and auto-sync scans them.
+ProblemSchema.index(
+  { 'polygonLink.problemId': 1 },
+  { partialFilterExpression: { 'polygonLink.problemId': { $exists: true } } },
+);
 // `translations[].language` holds en|vi; a text index reads a field named `language` as the per-document
 // text language and rejects `vi`, so the override points at an unused field. No stemming: statements are Vietnamese.
 ProblemSchema.index(

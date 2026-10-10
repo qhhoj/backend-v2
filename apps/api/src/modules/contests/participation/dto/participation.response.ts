@@ -6,10 +6,15 @@ import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.res
 import { ParticipationSummaryResponse } from '../../core/dto/contest-detail.response';
 
 export class ParticipationResponse extends ParticipationSummaryResponse {
+  /** The participant. */
   user!: UserSummaryResponse;
+  /** Total score; frozen values for non-editors during a freeze. */
   score!: number;
+  /** Cumulative time (penalty) in seconds. */
   cumtime!: number;
+  /** Tiebreak value used when scores and times are equal. */
   tiebreaker!: number;
+  /** The format's per-problem cells, keyed by problem id. */
   @ApiProblemCells()
   cells!: Record<string, ProblemCell>;
 
@@ -33,9 +38,13 @@ export class ParticipationResponse extends ParticipationSummaryResponse {
 }
 
 export class CurrentContestResponse {
+  /** Key of the contest. */
   key!: string;
+  /** Name of the contest. */
   name!: string;
+  /** When the contest starts, ISO 8601. */
   startTime!: Date;
+  /** When the contest ends, ISO 8601. */
   endTime!: Date;
 }
 

@@ -3,6 +3,7 @@ import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SettingRevisionsQueryDto {
+  /** Page number, starting at 1. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -11,6 +12,7 @@ export class SettingRevisionsQueryDto {
   @Max(10000)
   page: number = 1;
 
+  /** Revisions per page, 1-100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

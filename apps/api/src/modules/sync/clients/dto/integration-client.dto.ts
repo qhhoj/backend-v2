@@ -18,6 +18,7 @@ import {
 import { IsTimestamp } from '../../../problems/core/dto/timestamp';
 
 export class CreateIntegrationClientDto {
+  /** Label to recognise the client, 1-60 characters. */
   @IsString() @Length(1, 60) name!: string;
   // `IntegrationScope` is an alias of a union, so the plugin would drop it: spelled out (SDK R3).
   /** What the client may do: read and/or write the contests it owns. */
@@ -45,6 +46,7 @@ export class CreateIntegrationClientDto {
 }
 
 export class IntegrationClientListQueryDto {
+  /** Page number, starting at 1. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -52,6 +54,7 @@ export class IntegrationClientListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Clients per page, 1-100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -63,5 +66,6 @@ export class IntegrationClientListQueryDto {
 
 /** Unvalidated shape: an unknown id is a 404. */
 export class IntegrationClientParamDto {
+  /** Id of the integration client; an unknown id gives 404. */
   @IsString() id!: string;
 }

@@ -11,7 +11,9 @@ const ACTION_STATE = {
 
 /** What the automatic publish after the end did, recorded once by the worker. */
 export class ContestAutoPublishResponse {
+  /** When the automatic publish ran, ISO 8601. */
   at!: Date;
+  /** Outcome of the automatic publish. */
   @ApiProperty({
     enum: AUTO_PUBLISH_STATUSES,
     enumName: 'ContestAutoPublishStatus',
@@ -19,7 +21,9 @@ export class ContestAutoPublishResponse {
   status!: ContestAutoPublishOutcome['status'];
   /** Empty on success; `no_permission`, `actor_unavailable` or `cannot_edit_contest` on a failure. */
   reason!: string;
+  /** Problems made public. */
   published!: number;
+  /** Problems left as they were. */
   skipped!: number;
 }
 

@@ -11,9 +11,12 @@ import type {
 } from '@libs/database';
 
 export class NotificationResponse {
+  /** Notification id. */
   id!: string;
+  /** What happened, for example a ticket message. */
   @ApiProperty({ enum: NOTIFICATION_KINDS, enumName: 'NotificationKind' })
   kind!: NotificationKind;
+  /** Headline text. */
   title!: string;
   /** Plain text. */
   body!: string;
@@ -26,8 +29,11 @@ export class NotificationResponse {
   priority!: NotificationPriority;
   /** Events merged into this row. */
   count!: number;
+  /** True until the notification is marked read. */
   unread!: boolean;
+  /** When it was marked read; null while unread. */
   @ApiProperty({ type: Date, nullable: true }) readAt!: Date | null;
+  /** When the first event arrived. */
   createdAt!: Date;
   /** The list is ordered by this. */
   lastActivityAt!: Date;
@@ -50,5 +56,6 @@ export class NotificationResponse {
 }
 
 export class UnreadCountResponse {
+  /** Number of unread notifications. */
   count!: number;
 }

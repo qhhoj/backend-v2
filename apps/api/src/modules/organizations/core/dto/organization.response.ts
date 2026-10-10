@@ -4,12 +4,18 @@ import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.res
 
 export class OrganizationListItemResponse {
   id!: string;
+  /** Unique identifier used in URLs. */
   slug!: string;
   name!: string;
+  /** Short name shown beside members, at most 20 characters. */
   shortName!: string;
+  /** Anyone may join; otherwise members need an approved request. */
   isOpen!: boolean;
+  /** Hidden from lists for everyone but members, admins and staff. */
   isUnlisted!: boolean;
+  /** Number of members. */
   memberCount!: number;
+  /** Combined performance points of the members. */
   performancePoints!: number;
 
   static from(organization: Organization): OrganizationListItemResponse {
@@ -45,19 +51,26 @@ export class OrganizationSummaryResponse {
 }
 
 export class OrganizationViewerResponse {
+  /** The viewer belongs to the organization. */
   isMember!: boolean;
+  /** The viewer is an admin or holds judge.edit_all_organization. */
   canAdminister!: boolean;
   /** The viewer's pending join request (Task 6), else null. */
   pendingRequestId!: string | null;
 }
 
 export class OrganizationDetailResponse extends OrganizationListItemResponse {
+  /** The about text rendered to HTML. */
   aboutHtml!: string;
   /** Markdown source, for the edit form: administrators only. */
   about!: string | null;
+  /** Most members the organization may have; null for no limit. */
   slots!: number | null;
+  /** URL or site path of a custom logo; empty for the default. */
   logoOverrideImage!: string;
+  /** When the organization was created, ISO 8601. */
   createdAt!: Date;
+  /** Administrators in their stored order. */
   admins!: UserSummaryResponse[];
   /** Null for anonymous viewers. */
   viewer!: OrganizationViewerResponse | null;

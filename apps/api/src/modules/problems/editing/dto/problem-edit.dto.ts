@@ -32,11 +32,14 @@ import { IsStatementText } from '../../core/dto/statement-text';
 import { IsTimestamp } from '../../core/dto/timestamp';
 
 export class LanguageLimitDto {
+  /** Language id. */
   @IsUUID('7') languageId!: string;
+  /** Time limit in seconds for this language. */
   @IsNumber()
   @Min(PROBLEM_LIMITS.timeLimit.min)
   @Max(PROBLEM_LIMITS.timeLimit.max)
   timeLimit!: number;
+  /** Memory limit in KiB for this language. */
   @IsInt()
   @Min(PROBLEM_LIMITS.memoryLimit.min)
   @Max(PROBLEM_LIMITS.memoryLimit.max)
@@ -48,63 +51,88 @@ export class LanguageLimitDto {
  * Defaults come from the schema, or from `ProblemEditingService.create`.
  */
 export class CreateProblemDto {
+  /** Unique code: lowercase letters, digits and underscores, 1 to 32 characters; a few words used by routes are reserved. */
   @IsProblemCode()
   code!: string;
+  /** Base-language title, 1 to 100 characters. */
   @IsStatementText() @Length(1, 100) name!: string;
+  /** Origin or credit line, up to 200 characters. */
   @IsOptional() @IsString() @MaxLength(200) source?: string;
+  /** Short summary for previews, up to 1000 characters. Needs `judge.edit_all_problem`. */
   @IsOptional() @IsString() @MaxLength(1000) summary?: string;
+  /** Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set. */
   @IsOptional()
   @IsStatementText()
   @MaxLength(MAX_MARKDOWN_LENGTH)
   description?: string;
+  /** Time limit in seconds, 0.01 to 60; above 5 needs `judge.high_problem_timelimit`. */
   @IsNumber()
   @Min(PROBLEM_LIMITS.timeLimit.min)
   @Max(PROBLEM_LIMITS.timeLimit.max)
   timeLimit!: number;
+  /** Memory limit in KiB, up to 1048576. */
   @IsInt()
   @Min(PROBLEM_LIMITS.memoryLimit.min)
   @Max(PROBLEM_LIMITS.memoryLimit.max)
   memoryLimit!: number;
+  /** Points the problem is worth, 800 to 3500. */
   @IsInt()
   @Min(PROBLEM_LIMITS.points.min)
   @Max(PROBLEM_LIMITS.points.max)
   points!: number;
+  /** Whether partial scores are given. */
   @IsOptional() @IsBoolean() partial?: boolean;
+  /** Problem type ids, at least one (ids from `GET /problems/meta`). */
   @ArrayMinSize(1) @IsUUID('7', { each: true }) typeIds!: string[];
+  /** Problem group id. */
   @IsUUID('7') groupId!: string;
+  /** License id; null for none. Needs `judge.edit_all_problem`. */
   @IsOptional() @IsUUID('7') licenseId?: string | null;
+  /** Who may read submitted sources: `F` follow the site setting, `A` everyone who sees the problem, `S` users who solved it, `O` only the owner, testers and editors. */
   @ApiSubmissionSourceVisibility(false)
   @IsOptional()
   @IsIn(SUBMISSION_SOURCE_VISIBILITIES)
   submissionSourceVisibility?: string;
+  /** When program output of test cases is shown to non-editors: `O` never, `C` outside contests, `A` always. */
   @ApiTestcaseVisibility(false)
   @IsOptional()
   @IsIn(TESTCASE_VISIBILITIES)
   testcaseVisibility?: string;
+  /** How much of the test case results is shown: `A` every case, `B` batch summaries, `S` totals only. Needs `judge.edit_all_problem`. */
   @ApiTestcaseResultVisibility(false)
   @IsOptional()
   @IsIn(TESTCASE_RESULT_VISIBILITIES)
   testcaseResultVisibility?: string;
+  /** Whether checker feedback is shown to submitters. Needs `judge.edit_all_problem`. */
   @IsOptional() @IsBoolean() allowViewFeedback?: boolean;
+  /** Users who can see the problem while it is private. */
   @IsOptional() @IsUUID('7', { each: true }) testers?: string[];
+  /** Per-language limits overriding the defaults; each language at most once. */
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => LanguageLimitDto)
   languageLimits?: LanguageLimitDto[];
-  /** judge.change_public_visibility */
+  /** Whether the problem is public. Changing it needs `judge.change_public_visibility`. */
   @IsOptional() @IsBoolean() isPublic?: boolean;
-  /** judge.change_manually_managed */
+  /** Whether test data is managed outside the site, turning the data editor off. Changing it needs `judge.change_manually_managed`. */
   @IsOptional() @IsBoolean() isManuallyManaged?: boolean;
-  /** judge.problem_full_markup */
+  /** Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. */
   @IsOptional() @IsBoolean() isFullMarkup?: boolean;
-  /** The rest need judge.edit_all_problem (Django-admin-only in legacy). */
+  /** Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem`. */
   @IsOptional() @IsUUID('7', { each: true }) authors?: string[];
+  /** Curator user ids; curators can edit the problem. */
   @IsOptional() @IsUUID('7', { each: true }) curators?: string[];
+  /** User ids that may not submit to the problem. */
   @IsOptional() @IsUUID('7', { each: true }) bannedUsers?: string[];
+  /** Ids of languages solutions may use; defaults to the languages flagged for new problems. */
   @IsOptional() @IsUUID('7', { each: true }) allowedLanguages?: string[];
+  /** Ids of the organizations the problem is private to (with `isOrganizationPrivate`). */
   @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
+  /** Whether only members of `organizations` can see the problem. */
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
+  /** Image URL used for link previews, up to 150 characters. */
   @IsOptional() @IsString() @MaxLength(150) ogImage?: string;
+  /** Publication date (ISO 8601 with offset); null clears it. */
   @IsOptional() @IsTimestamp() date?: string | null;
 }
 

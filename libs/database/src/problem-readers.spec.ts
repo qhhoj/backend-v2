@@ -18,6 +18,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'F+S',
     'every finder filters; the explicit *IncludingDeleted and *Deleted* methods are the only deliberate exceptions',
   ],
+  'apps/api/src/modules/problems/polygon/polygon-links.repository.ts': [
+    'S',
+    'a deleted problem keeps its Polygon link (it comes back on restore), so the list marks it linked and a second link is refused; the link writes run after an editable-problem check',
+  ],
   'apps/api/src/modules/users/pages/user-pages.repository.ts': [
     'F',
     'solved lists and PP breakdowns count live public problems only',
@@ -67,6 +71,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the code-collision check must see deleted and tombstoned codes',
   ],
+  'apps/worker/src/jobs/polygon-autosync/polygon-autosync.repository.ts': [
+    'F',
+    'only live problems are synced automatically',
+  ],
   'apps/worker/src/jobs/problem-databytes/problem-databytes.repository.ts': [
     'S',
     "recomputes every problem's dataBytes from disk, deleted and purged ones included",
@@ -105,8 +113,8 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
   ],
 };
 
-/** Calls that take `'problems'` first but name a field or a feed type, not the collection. */
-const NOT_COLLECTION_CALLS = ['invalidField', 'simple'];
+/** Calls that take `'problems'` first but name a field, a feed type or a route, not the collection. */
+const NOT_COLLECTION_CALLS = ['invalidField', 'simple', 'Get'];
 
 const READ_PATTERNS = [
   /InjectModel\(\s*Problem\.name\s*\)/,

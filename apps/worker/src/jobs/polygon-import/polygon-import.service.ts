@@ -13,14 +13,19 @@ import {
   PDF_QUEUE,
   PdfCacheService,
   pdfJobId,
+  POLYGON_PACKAGE_MAX_BYTES,
+  PolygonApiError,
+  PolygonClient,
   ProblemDataError,
   ProblemDataFilesService,
   SOURCE_MAX_BYTES,
 } from '@libs/problems';
 import type {
+  ImportProgress,
   PdfRenderJob,
   PolygonImportJob,
   PolygonImportResult,
+  PolygonSource,
 } from '@libs/problems';
 import type { Readable } from 'node:stream';
 import { PandocService } from './pandoc.service';
@@ -47,13 +52,37 @@ import {
   withMainSolution,
 } from './polygon-statements';
 import { planTests } from './polygon-tests';
-import type { PlannedTest } from './polygon-tests';
+import type { PlannedTest, TestPlan } from './polygon-tests';
+import type { XmlElement } from './polygon-xml';
 
 /** A data file written beside the final one and renamed into place only after the transaction matched. */
 interface StagedFile {
   name: string;
   stagedPath: string;
 }
+
+/** Reports a step to the job's progress (best effort: a failed report never fails the import). */
+export type ReportProgress = (progress: ImportProgress) => Promise<void>;
+const noProgress: ReportProgress = () => Promise.resolve();
+
+interface ReadPackage {
+  tests: PlannedTest[];
+  assets: PolygonAssets;
+  yaml: string | null;
+  imported: ImportedProblem;
+}
+
+const dataOf = (assets: PolygonAssets, plan: TestPlan): ProblemData => ({
+  ...emptyProblemData(),
+  archive: TESTS_ARCHIVE,
+  checker: assets.checker,
+  checkerArgs: assets.checkerArgs,
+  customChecker: assets.checkerSource ? CHECKER_FILE : null,
+  grader: assets.grader,
+  customGrader: assets.interactorSource ? INTERACTOR_FILE : null,
+  graderArgs: plan.graderArgs,
+  cases: plan.cases,
+});
 
 @Injectable()
 export class PolygonImportService {
@@ -65,24 +94,48 @@ export class PolygonImportService {
     private readonly dataFiles: ProblemDataFilesService,
     private readonly pdfCache: PdfCacheService,
     private readonly repository: PolygonImportRepository,
+    private readonly polygon: PolygonClient,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
     @InjectQueue(PROBLEM_RESCORE_QUEUE)
     private readonly rescoreQueue: Queue<ProblemRescoreJob>,
   ) {}
 
-  /** Pre-checks that cost nothing come first; the uploaded package is removed however the job ends. */
+  /** Pre-checks that cost nothing come first; the package (uploaded, or downloaded here from Polygon) is removed however the job ends. */
   async import(
     jobId: string,
     job: PolygonImportJob,
+    report: ReportProgress = noProgress,
   ): Promise<PolygonImportResult> {
     const packagePath = this.dataFiles.importPackagePathOf(jobId);
     try {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
       await this.repository.assertFullMarkupWriter(job);
-      return await this.importPackage(packagePath, job, target);
+      if (job.polygon) await this.download(jobId, job.polygon, report);
+      return await this.importPackage(packagePath, job, target, report);
     } finally {
       await rm(packagePath, { force: true });
+    }
+  }
+
+  /** A Polygon failure (refused credentials, package not built for Linux, too large) is shown to the requester. */
+  private async download(
+    jobId: string,
+    source: PolygonSource,
+    report: ReportProgress,
+  ): Promise<void> {
+    const destination = await this.dataFiles.importPackagePath(jobId);
+    await report({ step: 'downloading', done: 0, total: null });
+    try {
+      await this.polygon.downloadPackage(source, destination, {
+        maxBytes: POLYGON_PACKAGE_MAX_BYTES,
+        onProgress: (done, total) =>
+          void report({ step: 'downloading', done, total }),
+      });
+    } catch (error) {
+      if (error instanceof PolygonApiError)
+        throw new PolygonImportError(`Polygon: ${error.message}`);
+      throw error;
     }
   }
 
@@ -94,65 +147,25 @@ export class PolygonImportService {
     packagePath: string,
     job: PolygonImportJob,
     target: ImportTarget,
+    report: ReportProgress,
   ): Promise<PolygonImportResult> {
     const pkg = await PolygonPackage.open(packagePath);
     const savedImages: string[] = [];
     const staged: StagedFile[] = [];
     let committed = false;
     try {
-      const root = await pkg.problemXml();
-      const assets = parseAssets(root);
-      const plan = planTests(root, job);
-      if (
-        !plan.tests.every(
-          (test) => pkg.has(test.inputPath) && pkg.has(test.answerPath),
-        )
-      )
-        throw new PolygonImportError('not full package');
-      const statements = await parseStatements(root, {
-        pkg,
-        job,
-        texToMarkdown: (tex) => this.pandoc.texToMarkdown(tex),
-        saveImage: this.imageSaver(savedImages),
-      });
-      if (job.appendMainSolution) {
-        const solution = await mainSolution(root, pkg);
-        statements.tutorial = withMainSolution(
-          statements.tutorial,
-          solution.code,
-          solution.sourceType,
-        );
-      }
-      const data: ProblemData = {
-        ...emptyProblemData(),
-        archive: TESTS_ARCHIVE,
-        checker: assets.checker,
-        checkerArgs: assets.checkerArgs,
-        customChecker: assets.checkerSource ? CHECKER_FILE : null,
-        grader: assets.grader,
-        customGrader: assets.interactorSource ? INTERACTOR_FILE : null,
-        graderArgs: plan.graderArgs,
-        cases: plan.cases,
-      };
-      const compiled = this.compile(data, plan.tests);
-      const { tutorial, ...statement } = statements;
-      const imported: ImportedProblem = {
-        ...statement,
-        solution: this.renderTutorial(tutorial),
-        timeLimit: plan.timeLimit,
-        memoryLimit: plan.memoryLimit,
-        partial: plan.partial,
-        data: { ...data, cases: compiled.cases },
-      };
+      await report({ step: 'statements', done: null, total: null });
+      const read = await this.readPackage(pkg, job, savedImages);
+      await report({ step: 'tests', done: null, total: null });
       staged.push(
-        ...(await this.stageFiles(job.code, pkg, plan.tests, assets)),
+        ...(await this.stageFiles(job.code, pkg, read.tests, read.assets)),
       );
-      const applied = await this.repository.apply(job, imported, target);
+      const applied = await this.repository.apply(job, read.imported, target);
       committed = true;
       // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
       if (job.mode === 'update')
         await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);
-      await this.finish(job.code, applied, staged, compiled.yaml);
+      await this.finish(job.code, applied, staged, read.yaml);
       return { problemId: applied.problemId, code: job.code };
     } catch (error) {
       if (!committed) await this.undo(job, savedImages, staged);
@@ -160,6 +173,67 @@ export class PolygonImportService {
     } finally {
       await pkg.close();
     }
+  }
+
+  /** Everything that can fail before a file is staged: problem.xml, the test plan, statements (images are saved as found) and init.yml. */
+  private async readPackage(
+    pkg: PolygonPackage,
+    job: PolygonImportJob,
+    savedImages: string[],
+  ): Promise<ReadPackage> {
+    const root = await pkg.problemXml();
+    const assets = parseAssets(root);
+    const plan = planTests(root, job);
+    if (
+      !plan.tests.every(
+        (test) => pkg.has(test.inputPath) && pkg.has(test.answerPath),
+      )
+    )
+      throw new PolygonImportError('not full package');
+    const { tutorial, ...statement } = await this.readStatements(
+      root,
+      pkg,
+      job,
+      savedImages,
+    );
+    const data = dataOf(assets, plan);
+    const compiled = this.compile(data, plan.tests);
+    return {
+      tests: plan.tests,
+      assets,
+      yaml: compiled.yaml,
+      imported: {
+        ...statement,
+        solution: this.renderTutorial(tutorial),
+        timeLimit: plan.timeLimit,
+        memoryLimit: plan.memoryLimit,
+        partial: plan.partial,
+        data: { ...data, cases: compiled.cases },
+      },
+    };
+  }
+
+  private async readStatements(
+    root: XmlElement,
+    pkg: PolygonPackage,
+    job: PolygonImportJob,
+    savedImages: string[],
+  ) {
+    const statements = await parseStatements(root, {
+      pkg,
+      job,
+      texToMarkdown: (tex) => this.pandoc.texToMarkdown(tex),
+      saveImage: this.imageSaver(savedImages),
+    });
+    if (job.appendMainSolution) {
+      const solution = await mainSolution(root, pkg);
+      statements.tutorial = withMainSolution(
+        statements.tutorial,
+        solution.code,
+        solution.sourceType,
+      );
+    }
+    return statements;
   }
 
   /** Everything after the commit: a failure here leaves the problem imported, so it is logged with its cause and reported to the requester as an import that needs attention, never as "Import failed". The data steps run under the judge's writing marker, ending with the stamp. */

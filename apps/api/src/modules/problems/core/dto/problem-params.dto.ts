@@ -4,6 +4,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class StatementLangQueryDto {
+  /** Statement language; falls back to the base statement when no translation exists. */
   @ApiPropertyOptional({
     enum: STATEMENT_LANGUAGES,
     enumName: 'StatementLanguage',
@@ -15,5 +16,6 @@ export class StatementLangQueryDto {
 
 /** Unvalidated shape: a malformed code is a 404 (see `ProblemsService.visibleProblem`), never a 400. */
 export class ProblemCodeParamDto {
+  /** Problem code: lowercase letters, digits and underscores, 1 to 32 characters. */
   @IsString() code!: string;
 }

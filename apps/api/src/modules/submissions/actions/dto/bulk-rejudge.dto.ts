@@ -17,12 +17,15 @@ export class BulkRejudgeDto {
   @Matches(PROBLEM_CODE_PATTERN) problem!: string;
   /** Inclusive id range (UUIDv7 ids sort by submission time). */
   @IsOptional() @IsUUID('7') idFrom?: string;
+  /** Highest submission id to rejudge. */
   @IsOptional() @IsUUID('7') idTo?: string;
+  /** Only submissions in these language ids. */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID('7', { each: true })
   languages?: string[];
+  /** Only submissions with these verdicts. */
   @ApiPropertyOptional({
     enum: SUBMISSION_RESULTS,
     enumName: 'SubmissionResult',
@@ -40,7 +43,9 @@ export class BulkRejudgeDto {
 }
 
 export class BulkRejudgeResponse {
+  /** Submissions matched (dry run) or reset for rejudging. */
   count!: number;
+  /** Whether nothing was changed. */
   dryRun!: boolean;
   /** The caller may run this rejudge: within `BULK_REJUDGE_LIMIT` or holds `judge.rejudge_submission_lot`. */
   allowed!: boolean;

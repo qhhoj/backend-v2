@@ -18,6 +18,7 @@ import {
 import { toBoolean } from '../../../problems/core/dto/transforms';
 
 export class ContestListQueryDto {
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -25,6 +26,7 @@ export class ContestListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Contests per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -32,12 +34,16 @@ export class ContestListQueryDto {
   @Min(1)
   @Max(100)
   pageSize: number = 50;
+  /** Only contests currently upcoming, running or ended. */
   @ApiPropertyOptional({ enum: CONTEST_PHASES, enumName: 'ContestPhase' })
   @IsOptional()
   @IsIn(CONTEST_PHASES)
   phase?: ContestPhase;
+  /** Only contests carrying this tag slug. */
   @IsOptional() @Matches(CONTEST_TAG_PATTERN) tag?: string;
+  /** Only contests of this organization id. */
   @IsOptional() @IsUUID('7') organization?: string;
+  /** Only rated (true) or unrated (false) contests. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() rated?: boolean;
   /** Key or name substring, case-insensitive; at most 100 characters. ANDed with `search`, which stays. */
   @IsOptional()

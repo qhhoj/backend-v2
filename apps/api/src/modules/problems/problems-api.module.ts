@@ -5,6 +5,7 @@ import { RateLimitService } from '@libs/common';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import {
   PACKAGE_QUEUE,
+  PolygonApiModule,
   PDF_QUEUE,
   POLYGON_QUEUE,
   PROBLEM_PURGE_QUEUE,
@@ -36,6 +37,13 @@ import { ProblemLifecycleController } from './lifecycle/problem-lifecycle.contro
 import { ProblemLifecycleService } from './lifecycle/problem-lifecycle.service';
 import { ProblemPackageController } from './package/problem-package.controller';
 import { ProblemPackageService } from './package/problem-package.service';
+import { PolygonCatalogService } from './polygon/polygon-catalog.service';
+import { PolygonConnectionController } from './polygon/polygon-connection.controller';
+import { PolygonController } from './polygon/polygon.controller';
+import { PolygonLinkImportService } from './polygon/polygon-link-import.service';
+import { PolygonLinkService } from './polygon/polygon-link.service';
+import { PolygonLinksRepository } from './polygon/polygon-links.repository';
+import { ProblemPolygonLinkController } from './polygon/problem-polygon-link.controller';
 import { ProblemPdfController } from './pdf/problem-pdf.controller';
 import { ProblemPdfService } from './pdf/problem-pdf.service';
 import { ProblemStorageQuota } from './quota/problem-storage-quota.service';
@@ -67,6 +75,7 @@ const repositories = [
     DiscordModule,
     OrganizationQuotaModule,
     AuthModule,
+    PolygonApiModule,
     forwardRef(() => ContributionsModule),
     BullModule.registerQueue(
       { name: PDF_QUEUE },
@@ -87,6 +96,9 @@ const repositories = [
     ProblemPdfController,
     ProblemLifecycleController,
     ProblemPackageController,
+    PolygonController,
+    PolygonConnectionController,
+    ProblemPolygonLinkController,
   ],
   providers: [
     ...queriers,
@@ -104,6 +116,10 @@ const repositories = [
     ProblemStorageQuota,
     ProblemDataLifecycleService,
     ProblemImportsService,
+    PolygonCatalogService,
+    PolygonLinkImportService,
+    PolygonLinkService,
+    PolygonLinksRepository,
     ProblemPdfService,
     ProblemLifecycleService,
     ProblemPackageService,

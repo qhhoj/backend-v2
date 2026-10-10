@@ -140,7 +140,7 @@ export class TicketResponsesService {
 
   /** A deleted user keeps their text. */
   private person(people: People, id: string): UserSummaryResponse {
-    return people.get(id) ?? { id, username: 'deleted' };
+    return people.get(id) ?? { id, username: 'deleted', rating: null };
   }
 
   private async people(tickets: TicketDocument[]): Promise<People> {

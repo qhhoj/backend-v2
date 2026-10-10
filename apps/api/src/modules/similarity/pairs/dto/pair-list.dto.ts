@@ -15,6 +15,7 @@ const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
 
 export class SimilarityPairListDto {
+  /** Only pairs on this problem id. */
   @IsOptional() @IsUUID() problemId?: string;
   /** Engine family (`cpp`, `python`, ...). */
   @IsOptional() @IsString() language?: string;
@@ -25,6 +26,7 @@ export class SimilarityPairListDto {
   @Min(0)
   @Max(1)
   minSimilarity?: number;
+  /** Page number, from 1. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -32,6 +34,7 @@ export class SimilarityPairListDto {
   @Min(1)
   @Max(MAX_PAGE)
   page: number = 1;
+  /** Items per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
