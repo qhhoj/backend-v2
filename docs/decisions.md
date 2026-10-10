@@ -523,3 +523,6 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Polygon imports: no credits and no storage warning. The update check compares the zip size, a lower bound of the extracted data; the worker has no quota service, so the warning comes with the next API upload.
 - Post-charge warning reads (credits and storage) are caught and logged inside `QuotaService`; they never fail finished work.
 - A charged contest edit saves only while `isOrganizationPrivate` still has the value that was read, so concurrent scoping edits charge once (the loser gets a 409 and a refund).
+- Deploy: one GHCR image run by rootful podman quadlets (host network, uid 987); nginx, Mongo, Redis native — pins the worker toolchain, rollback by re-tagging.
+- CD: release tag → CI-gated build → SSH as deploy → sudo qhhoj-deploy; contest running defers (exit 75), migration lock always defers.
+- Migration: freeze-and-iterate on one frozen dump (up to a week down) instead of a short window; go-live is the single irreversible step.
