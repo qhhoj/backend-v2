@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export const USAGE_SORTS = ['name', 'credits'] as const;
 export type UsageSort = (typeof USAGE_SORTS)[number];
@@ -43,4 +43,9 @@ export class UpdateQuotaDto {
   @Min(0)
   @Max(1_099_511_627_776)
   quotaStorageBytes?: number | null;
+  /** The unlimited promotion: true applies no limit, false ends it. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  quotaUnlimited?: boolean;
 }

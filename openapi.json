@@ -5221,12 +5221,17 @@
           },
           "storage": {
             "$ref": "#/components/schemas/QuotaMeterResponse"
+          },
+          "unlimited": {
+            "description": "Promotion: the limits below are reported but not applied, and the meters are never near or over.",
+            "type": "boolean"
           }
         },
         "required": [
           "organization",
           "month",
           "enforcing",
+          "unlimited",
           "credits",
           "storage",
           "quota",
@@ -10819,6 +10824,10 @@
             "minimum": 0,
             "nullable": true,
             "type": "number"
+          },
+          "quotaUnlimited": {
+            "description": "The unlimited promotion: true applies no limit, false ends it.",
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -10941,6 +10950,10 @@
           },
           "storageUsed": {
             "type": "number"
+          },
+          "unlimited": {
+            "description": "Limits are reported but not applied.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -10950,7 +10963,8 @@
           "creditsUsed",
           "creditsLimit",
           "storageUsed",
-          "storageLimit"
+          "storageLimit",
+          "unlimited"
         ],
         "type": "object"
       },

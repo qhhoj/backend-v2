@@ -11,11 +11,13 @@ export interface OverviewRow {
   creditsUsed: number;
   quotaMonthlyCredits: number | null;
   quotaStorageBytes: number | null;
+  quotaUnlimited: boolean;
 }
 
 export interface QuotaChanges {
   quotaMonthlyCredits?: number | null;
   quotaStorageBytes?: number | null;
+  quotaUnlimited?: boolean;
 }
 
 const RECENT_ENTRIES = 20;
@@ -63,6 +65,7 @@ function overviewPipeline(
         creditsUsed: 1,
         quotaMonthlyCredits: 1,
         quotaStorageBytes: 1,
+        quotaUnlimited: 1,
       },
     },
   ];

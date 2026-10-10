@@ -39,7 +39,11 @@ export class OrganizationUsageController {
     @CurrentAuth() auth: AuthContext,
     @Param() { slug }: OrganizationSlugParamDto,
     @Body(
-      new RefuseNullFieldsPipe(['quotaMonthlyCredits', 'quotaStorageBytes']),
+      new RefuseNullFieldsPipe([
+        'quotaMonthlyCredits',
+        'quotaStorageBytes',
+        'quotaUnlimited',
+      ]),
     )
     body: UpdateQuotaDto,
   ): Promise<OrganizationUsageResponse> {

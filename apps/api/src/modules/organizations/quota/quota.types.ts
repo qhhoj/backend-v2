@@ -21,6 +21,7 @@ export interface QuotaMeter {
 export interface QuotaSnapshot {
   month: string;
   enforcing: boolean;
+  unlimited: boolean;
   credits: QuotaMeter;
   storage: QuotaMeter;
 }

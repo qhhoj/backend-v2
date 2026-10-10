@@ -219,6 +219,63 @@ describe('organization usage', () => {
     await patch({ quotaMonthlyCredits: -1 }, session).expect(400);
   });
 
+  it('lets staff end and restore the unlimited promotion; the meters are never near or over while it lasts', async () => {
+    const organization = await createOrganization(api, {
+      quotaUnlimited: true,
+      quotaMonthlyCredits: 10,
+    });
+    await usage.create({
+      organization: organization._id,
+      month,
+      creditsUsed: 50,
+    });
+    const session = await staff();
+    const path = `/api/internal/organizations/${organization.slug}/quota`;
+    const show = async () =>
+      dataOf<Usage & { unlimited: boolean }>(
+        await get(
+          `/api/internal/organizations/${organization.slug}/usage`,
+          session,
+        ).expect(200),
+      );
+    expect(await show()).toMatchObject({
+      unlimited: true,
+      credits: { limit: 10, used: 50, isOver: false, isNearLimit: false },
+    });
+    const ended = await authed(api.http().patch(path), session)
+      .send({ quotaUnlimited: false })
+      .expect(200);
+    expect(dataOf<Usage>(ended)).toMatchObject({
+      unlimited: false,
+      credits: { isOver: true },
+    });
+    const rows = dataOf<Array<{ slug: string; unlimited: boolean }>>(
+      await get(
+        '/api/internal/organizations/usage?pageSize=100',
+        session,
+      ).expect(200),
+    );
+    expect(rows.find((row) => row.slug === organization.slug)?.unlimited).toBe(
+      false,
+    );
+    await authed(api.http().patch(path), session)
+      .send({ quotaUnlimited: 'yes' })
+      .expect(400);
+  });
+
+  it('keeps the unlimited toggle away from organization admins', async () => {
+    const world = await seedOrganizationWorld(api);
+    await authed(
+      api
+        .http()
+        .patch(`/api/internal/organizations/${world.organization.slug}/quota`),
+      world.admin.session,
+    )
+      .send({ quotaUnlimited: true })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+  });
+
   it('lists every organization for staff, heaviest spender first when asked', async () => {
     const quiet = await createOrganization(api, { name: 'AAA quiet' });
     const busy = await createOrganization(api, { name: 'ZZZ busy' });

@@ -39,6 +39,8 @@ export class OrganizationUsageResponse {
   /** `YYYY-MM` in the site time zone. */
   month!: string;
   enforcing!: boolean;
+  /** Promotion: the limits below are reported but not applied, and the meters are never near or over. */
+  unlimited!: boolean;
   credits!: QuotaMeterResponse;
   storage!: QuotaMeterResponse;
   quota!: UsageQuotaResponse;
@@ -53,4 +55,6 @@ export class UsageOverviewRowResponse {
   creditsLimit!: number;
   storageUsed!: number;
   storageLimit!: number;
+  /** Limits are reported but not applied. */
+  unlimited!: boolean;
 }

@@ -35,6 +35,8 @@ export class Organization {
     number | null;
   @Prop({ type: Number, default: null, min: 0 }) quotaMonthlyCredits!:
     number | null;
+  /** Promotion: the limits are reported but never applied (usage is still metered). Set for every organization imported from the old site. */
+  @Prop({ type: Boolean, default: false }) quotaUnlimited!: boolean;
   createdAt!: Date;
 }
 

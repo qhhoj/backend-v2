@@ -21,6 +21,7 @@ import type { QuotaChanges } from './organization-usage.repository';
 const quotaOf = (organization: OrganizationDocument) => ({
   quotaMonthlyCredits: organization.quotaMonthlyCredits ?? null,
   quotaStorageBytes: organization.quotaStorageBytes ?? null,
+  quotaUnlimited: organization.quotaUnlimited ?? false,
 });
 
 /** Only the caps the request named; `null` is a value (clear), absent is not. */
@@ -30,6 +31,9 @@ const changesOf = (dto: UpdateQuotaDto): QuotaChanges => ({
   }),
   ...(dto.quotaStorageBytes !== undefined && {
     quotaStorageBytes: dto.quotaStorageBytes,
+  }),
+  ...(dto.quotaUnlimited !== undefined && {
+    quotaUnlimited: dto.quotaUnlimited,
   }),
 });
 
@@ -93,6 +97,7 @@ export class OrganizationUsageService {
           creditsLimit: limits.credits,
           storageUsed: bytes.get(row.id) ?? 0,
           storageLimit: limits.storageBytes,
+          unlimited: limits.unlimited,
         };
       }),
       { page: query.page, pageSize: query.pageSize, total },
@@ -112,6 +117,7 @@ export class OrganizationUsageService {
       organization: { slug: organization.slug, name: organization.name },
       month: snapshot.month,
       enforcing: snapshot.enforcing,
+      unlimited: snapshot.unlimited,
       credits: snapshot.credits,
       storage: snapshot.storage,
       quota: {

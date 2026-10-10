@@ -104,6 +104,33 @@ describe('organization quota', () => {
     expect(await usedBy(organization._id)).toBe(100);
   });
 
+  it('lets an unlimited organization spend far above the default cap, still metering it, while a normal one is refused', async () => {
+    const unlimited = await createOrganization(api, { quotaUnlimited: true });
+    const normal = await createOrganization(api);
+    await api.setSetting('quota.cost.problem', 1000);
+    await quota.charged(unlimited._id, request(), () => Promise.resolve(1));
+    expect(await usedBy(unlimited._id)).toBe(1000);
+    await expect(
+      quota.charged(normal._id, request(), () => Promise.resolve(1)),
+    ).rejects.toMatchObject({ code: 'quota_exceeded' });
+    await api.setSetting('quota.cost.problem', 10);
+  });
+
+  it('never refuses storage for an unlimited organization, but does for a normal one', async () => {
+    const bytes = { usedBytes: 10, addedBytes: 1 };
+    const unlimited = await createOrganization(api, {
+      quotaUnlimited: true,
+      quotaStorageBytes: 10,
+    });
+    const normal = await createOrganization(api, { quotaStorageBytes: 10 });
+    await expect(
+      quota.assertStorage(unlimited._id, bytes),
+    ).resolves.toBeUndefined();
+    await expect(quota.assertStorage(normal._id, bytes)).rejects.toMatchObject({
+      code: 'quota_exceeded',
+    });
+  });
+
   it('refunds the spend and rethrows when the work fails', async () => {
     const organization = await limited(100);
     await expect(

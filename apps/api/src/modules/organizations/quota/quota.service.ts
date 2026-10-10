@@ -23,6 +23,13 @@ interface UsageKey {
   month: string;
 }
 
+/** `unlimited`: the limits are reported but never applied. */
+interface EffectiveLimits {
+  credits: number;
+  storageBytes: number;
+  unlimited: boolean;
+}
+
 type PricedCharge = ChargeRequest & { amount: number };
 
 /** Monthly credits (atomic, refundable) and the storage meter of an organization. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
@@ -68,9 +75,11 @@ export class QuotaService implements OnApplicationBootstrap {
     row: {
       quotaMonthlyCredits?: number | null;
       quotaStorageBytes?: number | null;
+      quotaUnlimited?: boolean;
     } | null,
-  ): { credits: number; storageBytes: number } {
+  ): EffectiveLimits {
     return {
+      unlimited: row?.quotaUnlimited ?? false,
       credits:
         row?.quotaMonthlyCredits ??
         this.settings.get('quota.defaultMonthlyCredits'),
@@ -80,13 +89,12 @@ export class QuotaService implements OnApplicationBootstrap {
     };
   }
 
-  async limitsOf(
-    organizationId: string,
-  ): Promise<{ credits: number; storageBytes: number }> {
+  async limitsOf(organizationId: string): Promise<EffectiveLimits> {
     const row = await this.organizations
       .findById(organizationId, {
         quotaMonthlyCredits: 1,
         quotaStorageBytes: 1,
+        quotaUnlimited: 1,
       })
       .lean()
       .exec();
@@ -130,7 +138,8 @@ export class QuotaService implements OnApplicationBootstrap {
   /** The once-a-month 80% credit warning; it sits outside the refund `try`, so a failure here can never refund finished work, and it is caught so it never fails the request whose work is done. */
   private async warnIfCreditsNear(key: UsageKey): Promise<void> {
     try {
-      const { credits } = await this.limitsOf(key.organizationId);
+      const { credits, unlimited } = await this.limitsOf(key.organizationId);
+      if (unlimited) return;
       const used = await this.creditsUsed(key);
       if (meterOf(used, credits).isNearLimit)
         await this.warnings.warnOnce(key, 'credits');
@@ -150,8 +159,8 @@ export class QuotaService implements OnApplicationBootstrap {
     try {
       const used =
         typeof usedBytes === 'number' ? usedBytes : await usedBytes();
-      const { storageBytes } = await this.limitsOf(organizationId);
-      if (!meterOf(used, storageBytes).isNearLimit) return;
+      const { storageBytes, unlimited } = await this.limitsOf(organizationId);
+      if (unlimited || !meterOf(used, storageBytes).isNearLimit) return;
       const key = { organizationId, month: this.monthKeyOf(now) };
       await this.ensureUsageRow(key);
       await this.warnings.warnOnce(key, 'storage');
@@ -164,8 +173,10 @@ export class QuotaService implements OnApplicationBootstrap {
 
   /** The atomic spend. (1) In enforce mode a price above the limit is refused up front. (2) An upsert with `$setOnInsert` only creates the month's row, so it can never hit a duplicate key on an over-limit month. (3) A guarded `$inc` without upsert applies the limit, including on the month's first spend; a miss is `quota_exceeded`. */
   private async spend(key: UsageKey, charge: PricedCharge): Promise<void> {
-    const { credits: limit } = await this.limitsOf(key.organizationId);
-    const enforcing = await this.isEnforcing();
+    const { credits: limit, unlimited } = await this.limitsOf(
+      key.organizationId,
+    );
+    const enforcing = !unlimited && (await this.isEnforcing());
     if (enforcing && charge.amount > limit)
       throw await this.refusalFor(key, limit, charge.amount);
     await this.ensureUsageRow(key);
@@ -175,7 +186,7 @@ export class QuotaService implements OnApplicationBootstrap {
       enforcing ? limit : null,
     );
     if (used === null) throw await this.refusalFor(key, limit, charge.amount);
-    if (used > limit)
+    if (!unlimited && used > limit)
       this.logger.warn(
         `Organization ${key.organizationId} is over its credit limit in ${key.month}: ${used}/${limit}`,
       );
@@ -304,8 +315,9 @@ export class QuotaService implements OnApplicationBootstrap {
   ): Promise<void> {
     const { usedBytes, addedBytes } = bytes;
     if (addedBytes <= 0) return;
-    const { storageBytes: limit } = await this.limitsOf(organizationId);
-    if (usedBytes + addedBytes <= limit) return;
+    const { storageBytes: limit, unlimited } =
+      await this.limitsOf(organizationId);
+    if (unlimited || usedBytes + addedBytes <= limit) return;
     if (await this.isEnforcing())
       throw quotaExceeded({
         meter: 'storage',
@@ -332,8 +344,9 @@ export class QuotaService implements OnApplicationBootstrap {
     return {
       month,
       enforcing,
-      credits: meterOf(creditsUsed, limits.credits),
-      storage: meterOf(usedBytes, limits.storageBytes),
+      unlimited: limits.unlimited,
+      credits: meterOf(creditsUsed, limits.credits, limits.unlimited),
+      storage: meterOf(usedBytes, limits.storageBytes, limits.unlimited),
     };
   }
 }

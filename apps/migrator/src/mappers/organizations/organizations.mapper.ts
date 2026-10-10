@@ -64,6 +64,8 @@ export class OrganizationsMapper implements Mapper<Row> {
       // The legacy site had no quota: null falls back to the `quota.default*` settings.
       quotaStorageBytes: null,
       quotaMonthlyCredits: null,
+      // Promotion for organizations that pre-date v2: no limit is applied until staff end it.
+      quotaUnlimited: true,
       createdAt: ctx.date(row.creation_date),
       updatedAt: ctx.date(row.creation_date),
     };
