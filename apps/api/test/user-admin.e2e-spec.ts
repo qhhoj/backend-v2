@@ -49,7 +49,7 @@ describe('staff user list', () => {
     );
     await createUserWith(api, 'alice1', {});
     await createUserWith(api, 'alice2', {});
-    await createUserWith(api, 'bob', {});
+    await createUserWith(api, 'bob', { rating: 1777 });
     await createUserWith(api, 'mallory', {
       banReason: 'spam',
       displayRank: 'banned',
@@ -90,6 +90,14 @@ describe('staff user list', () => {
     expect(await names('?search=mal&banned=true')).toEqual(['mallory']);
     expect(await names('?search=mal&banned=false')).toEqual([]);
     expect(await names('?search=ali&banned=true')).toEqual([]);
+  });
+
+  it('carries the rating, null when unrated', async () => {
+    const { items } = await list('?search=bob');
+    expect(items.map((item) => [item.username, item.rating])).toEqual([
+      ['bob', 1777],
+    ]);
+    expect((await list('?search=alice1')).items[0].rating).toBeNull();
   });
 
   it('returns newest accounts first with the total', async () => {
