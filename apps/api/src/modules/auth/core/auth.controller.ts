@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -29,6 +30,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegenerateTokenResponse } from './dto/token.response';
 import { SessionResponse } from './dto/session.response';
 
+@ApiTags('Auth')
 @Controller('api/internal/auth')
 export class AuthController {
   constructor(
@@ -37,6 +39,14 @@ export class AuthController {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
+  /**
+   * Sign in with a username and password
+   *
+   * @remarks
+   * Public. Verifies the credentials and opens a browser session: the `qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.
+   * When the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.
+   * Failed attempts are limited per IP and per account (10 in 15 minutes, then 429 `rate_limited`). Errors: 401 `invalid_credentials`, 403 `banned` (carries the ban reason), 403 `account_not_activated`.
+   */
   @Public()
   @Post('login')
   @HttpCode(200)
@@ -55,6 +65,13 @@ export class AuthController {
     return SessionResponse.from(user, principal, session);
   }
 
+  /**
+   * Get the current session and user
+   *
+   * @remarks
+   * Signed-in callers only (cookie session or API token); also served while a second factor or a password change is still pending. Returns the same shape as login: the user with their permission codenames, the CSRF token of the session, and the pending second-factor methods when `twoFactorRequired` is true.
+   * An API token has no session, so `csrfToken` is null for it.
+   */
   @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Get('me')
@@ -62,6 +79,12 @@ export class AuthController {
     return SessionResponse.from(auth.user, auth.principal, auth.session);
   }
 
+  /**
+   * Sign out of the current session
+   *
+   * @remarks
+   * Signed-in callers only. Destroys the current session on the server and clears the `qhhoj_session` cookie. Other sessions of the user stay valid. Returns 204.
+   */
   @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Post('logout')
@@ -74,6 +97,12 @@ export class AuthController {
     clearSessionCookie(reply);
   }
 
+  /**
+   * Sign out of every session
+   *
+   * @remarks
+   * Browser session only (API tokens get 403) and not while impersonating. Destroys all sessions of the user, including the current one, and clears the cookie. Returns 204.
+   */
   @SessionOnly()
   @NoImpersonation()
   @Post('logout-all')
@@ -86,6 +115,13 @@ export class AuthController {
     clearSessionCookie(reply);
   }
 
+  /**
+   * Change the account password
+   *
+   * @remarks
+   * Browser session only, not while impersonating; reachable while the password is flagged as breached. Requires the current password; wrong attempts share the 10 in 15 minutes budget with other password confirmations (400 `invalid_credentials`, then 429 `rate_limited`).
+   * The new password must pass the password policy, differ from the current one and not appear in a known breach, otherwise 400 `validation_failed` with per-field issues on `newPassword`. All other sessions are signed out; the API token stays valid. A concurrent change gives 409 `conflict`. Returns 204.
+   */
   @SessionOnly()
   @NoImpersonation()
   @AllowPwnedPassword()
@@ -102,6 +138,12 @@ export class AuthController {
     );
   }
 
+  /**
+   * Create a new API token
+   *
+   * @remarks
+   * Browser session only, not while impersonating. Issues a new personal API token for `Authorization: Bearer`, replacing the previous one, which stops working at once. The token is shown only in this response.
+   */
   @SessionOnly()
   @NoImpersonation()
   @Post('token/regenerate')

@@ -14,15 +14,18 @@ import { IsStoredUuid } from '../../../users/core/dto/is-stored-uuid';
 
 /** Unvalidated: a malformed id is a 404. */
 export class SiteIdParamDto {
+  /** Id of the entry; an unknown or malformed id gives 404. */
   @IsString() id!: string;
 }
 
 /** A malformed id is a 400 here: a history read is by id only, so the id must be a real one. */
 export class FlatpageIdParamDto {
+  /** Page id, also of a deleted page. */
   @IsStoredUuid() id!: string;
 }
 
 export class ConfigKeyParamDto {
+  /** Config key, 1-64 characters without control characters. */
   // eslint-disable-next-line no-control-regex
   @Matches(/^[^\u0000-\u001f\u007f]*$/, { message: 'No control characters.' })
   @Length(1, MISC_CONFIG_KEY_MAX)
@@ -30,6 +33,7 @@ export class ConfigKeyParamDto {
 }
 
 export class PageListQueryDto {
+  /** Page number, starting at 1. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

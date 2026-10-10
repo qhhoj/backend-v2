@@ -10,6 +10,7 @@ export class UserDataStatusResponse {
   readyAt!: string | null;
   /** When the zip stops being downloadable. */
   expiresAt!: string | null;
+  /** Size of the zip in bytes; null when there is none. */
   size!: number | null;
   /** Null when a prepare is allowed now. */
   nextPrepareAt!: string | null;

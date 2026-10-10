@@ -4,9 +4,11 @@
       "ActivityCountResponse": {
         "properties": {
           "count": {
+            "description": "Number of requests.",
             "type": "number"
           },
           "value": {
+            "description": "The IP address or path counted.",
             "type": "string"
           }
         },
@@ -19,6 +21,7 @@
       "ActivityDayResponse": {
         "properties": {
           "count": {
+            "description": "Number of requests that day.",
             "type": "number"
           },
           "day": {
@@ -35,28 +38,36 @@
       "ActivityLogResponse": {
         "properties": {
           "at": {
+            "description": "When the request was made.",
             "format": "date-time",
             "type": "string"
           },
           "id": {
+            "description": "Log row id.",
             "type": "string"
           },
           "ip": {
+            "description": "Client IP address.",
             "type": "string"
           },
           "method": {
+            "description": "HTTP method.",
             "type": "string"
           },
           "path": {
+            "description": "Request path.",
             "type": "string"
           },
           "referer": {
+            "description": "Referer header.",
             "type": "string"
           },
           "statusCode": {
+            "description": "HTTP status code of the response.",
             "type": "number"
           },
           "userAgent": {
+            "description": "User-Agent header.",
             "type": "string"
           },
           "username": {
@@ -92,6 +103,7 @@
             "type": "string"
           },
           "timezone": {
+            "description": "The time zone used for the days, as requested.",
             "type": "string"
           }
         },
@@ -105,29 +117,37 @@
       "ActivitySessionResponse": {
         "properties": {
           "browser": {
+            "description": "Browser parsed from the user agent.",
             "type": "string"
           },
           "createdAt": {
+            "description": "When the session started.",
             "format": "date-time",
             "type": "string"
           },
           "deviceType": {
+            "description": "Device class parsed from the user agent.",
             "type": "string"
           },
           "id": {
+            "description": "Session id.",
             "type": "string"
           },
           "ip": {
+            "description": "IP address the session started from.",
             "type": "string"
           },
           "lastActivityAt": {
+            "description": "When the session was last used.",
             "format": "date-time",
             "type": "string"
           },
           "os": {
+            "description": "Operating system parsed from the user agent.",
             "type": "string"
           },
           "userAgent": {
+            "description": "User-Agent header.",
             "type": "string"
           }
         },
@@ -146,6 +166,7 @@
       "ActivitySummaryResponse": {
         "properties": {
           "daily": {
+            "description": "Requests per UTC day.",
             "items": {
               "$ref": "#/components/schemas/ActivityDayResponse"
             },
@@ -159,21 +180,25 @@
             "type": "array"
           },
           "topIps": {
+            "description": "The 20 most used IP addresses.",
             "items": {
               "$ref": "#/components/schemas/ActivityCountResponse"
             },
             "type": "array"
           },
           "topPaths": {
+            "description": "The 30 most requested paths.",
             "items": {
               "$ref": "#/components/schemas/ActivityCountResponse"
             },
             "type": "array"
           },
           "total": {
+            "description": "Total requests in the period.",
             "type": "number"
           },
           "username": {
+            "description": "Username the summary is for.",
             "type": "string"
           }
         },
@@ -220,6 +245,7 @@
       "AppearanceDto": {
         "properties": {
           "accent": {
+            "description": "Accent colour preset.",
             "enum": [
               "clay",
               "gold",
@@ -232,11 +258,13 @@
             "type": "string"
           },
           "glass": {
+            "description": "Glass effect strength, 0-100.",
             "maximum": 100,
             "minimum": 0,
             "type": "integer"
           },
           "glow": {
+            "description": "Glow effect strength, 0-100.",
             "maximum": 100,
             "minimum": 0,
             "type": "integer"
@@ -252,14 +280,17 @@
       "AppearanceResponse": {
         "properties": {
           "accent": {
+            "description": "Accent colour preset.",
             "type": "string"
           },
           "glass": {
+            "description": "Glass effect strength, 0-100.",
             "maximum": 100,
             "minimum": 0,
             "type": "integer"
           },
           "glow": {
+            "description": "Glow effect strength, 0-100.",
             "maximum": 100,
             "minimum": 0,
             "type": "integer"
@@ -428,6 +459,7 @@
       "BanDto": {
         "properties": {
           "reason": {
+            "description": "Why the user is banned; shown to the user at sign-in and to staff. Must not be blank.",
             "maxLength": 4096,
             "minLength": 1,
             "pattern": "\\S",
@@ -652,11 +684,13 @@
       "ChangePasswordDto": {
         "properties": {
           "currentPassword": {
+            "description": "The account password, re-entered to confirm the change.",
             "maxLength": 4096,
             "minLength": 1,
             "type": "string"
           },
           "newPassword": {
+            "description": "The new password; it must pass the password policy.",
             "maxLength": 4096,
             "minLength": 1,
             "type": "string"
@@ -696,6 +730,7 @@
       "CodeDto": {
         "properties": {
           "code": {
+            "description": "A 6-digit authenticator code, or a scratch code where the endpoint allows it.",
             "maxLength": 16,
             "minLength": 6,
             "type": "string"
@@ -2675,9 +2710,11 @@
             "type": "string"
           },
           "registrationRequired": {
+            "description": "Only signed-in users may read the page; default false.",
             "type": "boolean"
           },
           "title": {
+            "description": "Page title.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -2719,6 +2756,7 @@
             "type": "string"
           },
           "name": {
+            "description": "Label to recognise the client, 1-60 characters.",
             "maxLength": 60,
             "minLength": 1,
             "type": "string"
@@ -3185,15 +3223,15 @@
       "CreateShortLinkDto": {
         "properties": {
           "code": {
-            "description": "Staff only.",
+            "description": "Custom short code. Staff only (`judge.manage_short_link`).",
             "type": "string"
           },
           "expiresAt": {
-            "description": "Staff only.",
+            "description": "When the link stops working, ISO 8601, in the future. Staff only (`judge.manage_short_link`).",
             "type": "string"
           },
           "path": {
-            "description": "Checked against the same-site allow-list by the service (a 400 `path` issue), not by a pattern here.",
+            "description": "Site path to shorten, for example `/problems/aplusb`; only problems, contests, posts, users and organizations are accepted (otherwise 400).",
             "maxLength": 200,
             "type": "string"
           }
@@ -3235,12 +3273,14 @@
             "description": "The user whose permissions bound the client."
           },
           "allowedCidrs": {
+            "description": "CIDR blocks the client may call from.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "createdAt": {
+            "description": "When the client was created.",
             "format": "date-time",
             "type": "string"
           },
@@ -3251,6 +3291,7 @@
             "type": "string"
           },
           "id": {
+            "description": "Client id.",
             "type": "string"
           },
           "key": {
@@ -3262,19 +3303,23 @@
             "type": "string"
           },
           "lastUsedAt": {
+            "description": "When the key was last used; null if never.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "name": {
+            "description": "Label of the client.",
             "type": "string"
           },
           "revokedAt": {
+            "description": "When the client was revoked; null while active.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "scopes": {
+            "description": "What the client may do.",
             "items": {
               "$ref": "#/components/schemas/IntegrationScope"
             },
@@ -3420,6 +3465,7 @@
       "CurrentPasswordDto": {
         "properties": {
           "currentPassword": {
+            "description": "The account password, re-entered to confirm the change.",
             "maxLength": 4096,
             "minLength": 1,
             "type": "string"
@@ -3757,19 +3803,24 @@
       "FlatpageAdminListItemResponse": {
         "properties": {
           "id": {
+            "description": "Page id.",
             "type": "string"
           },
           "registrationRequired": {
+            "description": "Only signed-in users may read the page.",
             "type": "boolean"
           },
           "title": {
+            "description": "Page title.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "When the page was last edited.",
             "format": "date-time",
             "type": "string"
           },
           "url": {
+            "description": "Canonical URL: leading slash, no trailing slash.",
             "type": "string"
           }
         },
@@ -3793,23 +3844,29 @@
             "type": "string"
           },
           "createdAt": {
+            "description": "When the page was created.",
             "format": "date-time",
             "type": "string"
           },
           "id": {
+            "description": "Page id.",
             "type": "string"
           },
           "registrationRequired": {
+            "description": "Only signed-in users may read the page.",
             "type": "boolean"
           },
           "title": {
+            "description": "Page title.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "When the page was last edited.",
             "format": "date-time",
             "type": "string"
           },
           "url": {
+            "description": "Canonical URL: leading slash, no trailing slash.",
             "type": "string"
           }
         },
@@ -3828,10 +3885,12 @@
       "FlatpageDeletedResponse": {
         "properties": {
           "deletedAt": {
+            "description": "When the page was deleted.",
             "format": "date-time",
             "type": "string"
           },
           "id": {
+            "description": "Id of the deleted page.",
             "type": "string"
           },
           "url": {
@@ -3849,6 +3908,7 @@
       "FlatpagePreviewDto": {
         "properties": {
           "content": {
+            "description": "Markdown to render.",
             "maxLength": 200000,
             "type": "string"
           }
@@ -3869,6 +3929,7 @@
             "type": "boolean"
           },
           "title": {
+            "description": "Page title.",
             "type": "string"
           },
           "url": {
@@ -3887,6 +3948,7 @@
       "FlatpageRevisionResponse": {
         "properties": {
           "action": {
+            "description": "What happened to the page.",
             "enum": [
               "create",
               "delete",
@@ -3895,6 +3957,7 @@
             "type": "string"
           },
           "at": {
+            "description": "When the change was made.",
             "format": "date-time",
             "type": "string"
           },
@@ -3916,6 +3979,7 @@
             "type": "object"
           },
           "id": {
+            "description": "Revision id.",
             "type": "string"
           }
         },
@@ -4089,15 +4153,19 @@
             "type": "number"
           },
           "languages": {
+            "description": "Programming languages available.",
             "type": "number"
           },
           "problems": {
+            "description": "Problems in the archive.",
             "type": "number"
           },
           "submissions": {
+            "description": "Submissions made (an estimate).",
             "type": "number"
           },
           "users": {
+            "description": "Accounts on the site (an estimate).",
             "type": "number"
           }
         },
@@ -4113,16 +4181,20 @@
       "HomeProblemResponse": {
         "properties": {
           "code": {
+            "description": "Problem code.",
             "type": "string"
           },
           "date": {
+            "description": "When the problem was added.",
             "format": "date-time",
             "type": "string"
           },
           "name": {
+            "description": "Problem name.",
             "type": "string"
           },
           "points": {
+            "description": "Points the problem is worth.",
             "type": "number"
           }
         },
@@ -4137,27 +4209,36 @@
       "HomeResponse": {
         "properties": {
           "counts": {
-            "$ref": "#/components/schemas/HomeCountsResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomeCountsResponse"
+              }
+            ],
+            "description": "Site-wide totals."
           },
           "newProblems": {
+            "description": "The 7 newest problems.",
             "items": {
               "$ref": "#/components/schemas/HomeProblemResponse"
             },
             "type": "array"
           },
           "recentComments": {
+            "description": "Newest comments the viewer may read.",
             "items": {
               "$ref": "#/components/schemas/RecentCommentResponse"
             },
             "type": "array"
           },
           "topContributors": {
+            "description": "Top 5 users by contribution points.",
             "items": {
               "$ref": "#/components/schemas/HomeUserResponse"
             },
             "type": "array"
           },
           "topPerformers": {
+            "description": "Top 5 users by performance points.",
             "items": {
               "$ref": "#/components/schemas/HomeUserResponse"
             },
@@ -4176,9 +4257,11 @@
       "HomeUserResponse": {
         "properties": {
           "contributionPoints": {
+            "description": "Contribution points.",
             "type": "number"
           },
           "displayRank": {
+            "description": "Rank title such as `user` or `admin`.",
             "type": "string"
           },
           "organization": {
@@ -4192,13 +4275,16 @@
             "type": "object"
           },
           "performancePoints": {
+            "description": "Performance points.",
             "type": "number"
           },
           "rating": {
+            "description": "Contest rating; null while unrated.",
             "nullable": true,
             "type": "number"
           },
           "username": {
+            "description": "Login name.",
             "type": "string"
           }
         },
@@ -4299,9 +4385,11 @@
       "IntegrationClientActingUserResponse": {
         "properties": {
           "id": {
+            "description": "User id.",
             "type": "string"
           },
           "username": {
+            "description": "Login name.",
             "type": "string"
           }
         },
@@ -4322,12 +4410,14 @@
             "description": "The user whose permissions bound the client."
           },
           "allowedCidrs": {
+            "description": "CIDR blocks the client may call from.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "createdAt": {
+            "description": "When the client was created.",
             "format": "date-time",
             "type": "string"
           },
@@ -4338,6 +4428,7 @@
             "type": "string"
           },
           "id": {
+            "description": "Client id.",
             "type": "string"
           },
           "keyPrefix": {
@@ -4345,19 +4436,23 @@
             "type": "string"
           },
           "lastUsedAt": {
+            "description": "When the key was last used; null if never.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "name": {
+            "description": "Label of the client.",
             "type": "string"
           },
           "revokedAt": {
+            "description": "When the client was revoked; null while active.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "scopes": {
+            "description": "What the client may do.",
             "items": {
               "$ref": "#/components/schemas/IntegrationScope"
             },
@@ -4379,6 +4474,7 @@
         "type": "object"
       },
       "IntegrationScope": {
+        "description": "What the client may do.",
         "enum": [
           "contests:read",
           "contests:write"
@@ -4739,15 +4835,19 @@
       "LeaderboardEntryResponse": {
         "properties": {
           "contributionPoints": {
+            "description": "Points earned from community contributions.",
             "type": "number"
           },
           "displayName": {
+            "description": "Name to show: the staff-set override, else the username.",
             "type": "string"
           },
           "displayRank": {
+            "description": "Rank title such as `user`, `admin` or `banned`.",
             "type": "string"
           },
           "id": {
+            "description": "User id.",
             "type": "string"
           },
           "organization": {
@@ -4761,22 +4861,28 @@
             "type": "object"
           },
           "performancePoints": {
+            "description": "Performance points (weighted best solves).",
             "type": "number"
           },
           "points": {
+            "description": "Total points earned from solved problems.",
             "type": "number"
           },
           "problemCount": {
+            "description": "Number of fully solved problems.",
             "type": "number"
           },
           "rank": {
+            "description": "Position on the board; users with equal values share a rank.",
             "type": "number"
           },
           "rating": {
+            "description": "Contest rating; null while unrated.",
             "nullable": true,
             "type": "number"
           },
           "username": {
+            "description": "Login name.",
             "type": "string"
           }
         },
@@ -4835,12 +4941,15 @@
       "LiveActivityResponse": {
         "properties": {
           "anonymousVisitors": {
+            "description": "Signed-out visitors seen in the window.",
             "type": "number"
           },
           "authenticatedUsers": {
+            "description": "Signed-in users seen in the window.",
             "type": "number"
           },
           "bots": {
+            "description": "Bot requests seen in the window.",
             "type": "number"
           },
           "hasMore": {
@@ -4855,6 +4964,7 @@
             "type": "array"
           },
           "windowMinutes": {
+            "description": "Length of the \"now\" window in minutes.",
             "type": "number"
           }
         },
@@ -4871,11 +4981,17 @@
       "LiveUserResponse": {
         "properties": {
           "lastSeenAt": {
+            "description": "When the user was last seen.",
             "format": "date-time",
             "type": "string"
           },
           "user": {
-            "$ref": "#/components/schemas/UserSummaryResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The signed-in user."
           }
         },
         "required": [
@@ -4887,11 +5003,13 @@
       "LoginDto": {
         "properties": {
           "password": {
+            "description": "Account password.",
             "maxLength": 4096,
             "minLength": 1,
             "type": "string"
           },
           "username": {
+            "description": "Account username.",
             "maxLength": 150,
             "minLength": 1,
             "type": "string"
@@ -5007,9 +5125,11 @@
       "MiscConfigResponse": {
         "properties": {
           "key": {
+            "description": "Config key.",
             "type": "string"
           },
           "value": {
+            "description": "Stored text value.",
             "type": "string"
           }
         },
@@ -5105,6 +5225,7 @@
       "NotificationEventResponse": {
         "properties": {
           "id": {
+            "description": "Id of the notification row that was created or merged.",
             "type": "string"
           }
         },
@@ -5132,6 +5253,7 @@
         "type": "object"
       },
       "NotificationKind": {
+        "description": "What happened, for example a ticket message.",
         "enum": [
           "contest-announcement",
           "organization-request-decided",
@@ -5160,10 +5282,12 @@
             "type": "number"
           },
           "createdAt": {
+            "description": "When the first event arrived.",
             "format": "date-time",
             "type": "string"
           },
           "id": {
+            "description": "Notification id.",
             "type": "string"
           },
           "kind": {
@@ -5171,7 +5295,8 @@
               {
                 "$ref": "#/components/schemas/NotificationKind"
               }
-            ]
+            ],
+            "description": "What happened, for example a ticket message."
           },
           "lastActivityAt": {
             "description": "The list is ordered by this.",
@@ -5190,14 +5315,17 @@
             ]
           },
           "readAt": {
+            "description": "When it was marked read; null while unread.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "title": {
+            "description": "Headline text.",
             "type": "string"
           },
           "unread": {
+            "description": "True until the notification is marked read.",
             "type": "boolean"
           }
         },
@@ -5885,11 +6013,13 @@
       "PasswordResetConfirmDto": {
         "properties": {
           "newPassword": {
+            "description": "The new password; it must pass the password policy.",
             "maxLength": 4096,
             "minLength": 1,
             "type": "string"
           },
           "token": {
+            "description": "The token from the reset link.",
             "maxLength": 512,
             "minLength": 1,
             "type": "string"
@@ -5904,6 +6034,7 @@
       "PasswordResetRequestDto": {
         "properties": {
           "email": {
+            "description": "Email address of the account.",
             "maxLength": 254,
             "type": "string"
           }
@@ -6125,19 +6256,32 @@
       "PpEntryResponse": {
         "properties": {
           "points": {
+            "description": "Raw points of the submission.",
             "type": "number"
           },
           "problem": {
-            "$ref": "#/components/schemas/ProblemRefResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProblemRefResponse"
+              }
+            ],
+            "description": "The problem the submission solved."
           },
           "rank": {
+            "description": "1-based position among the user's best submissions.",
             "type": "number"
           },
           "scaledPoints": {
+            "description": "Points after applying the weight.",
             "type": "number"
           },
           "submission": {
-            "$ref": "#/components/schemas/PpSubmissionResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PpSubmissionResponse"
+              }
+            ],
+            "description": "The counted submission."
           },
           "weight": {
             "description": "Percent of the points counted, 100 for the best problem.",
@@ -6157,21 +6301,27 @@
       "PpSubmissionResponse": {
         "properties": {
           "casePoints": {
+            "description": "Points scored on the test cases.",
             "type": "number"
           },
           "caseTotal": {
+            "description": "Total points of the test cases.",
             "type": "number"
           },
           "date": {
+            "description": "When the submission was made, ISO 8601.",
             "type": "string"
           },
           "id": {
+            "description": "Submission id.",
             "type": "string"
           },
           "language": {
+            "description": "Short name of the programming language.",
             "type": "string"
           },
           "result": {
+            "description": "Verdict code such as `AC`; null if none.",
             "nullable": true,
             "type": "string"
           }
@@ -6999,21 +7149,27 @@
       "ProfileOrganizationResponse": {
         "properties": {
           "id": {
+            "description": "Organization id.",
             "type": "string"
           },
           "isAdmin": {
+            "description": "Whether the caller administers the organization.",
             "type": "boolean"
           },
           "isOpen": {
+            "description": "Whether anyone may join without an invitation.",
             "type": "boolean"
           },
           "name": {
+            "description": "Full name.",
             "type": "string"
           },
           "shortName": {
+            "description": "Short name shown next to usernames.",
             "type": "string"
           },
           "slug": {
+            "description": "URL slug of the organization.",
             "type": "string"
           }
         },
@@ -7030,12 +7186,15 @@
       "ProfileResponse": {
         "properties": {
           "about": {
+            "description": "About-me text in Markdown.",
             "type": "string"
           },
           "aboutHtml": {
+            "description": "Rendered, sanitised HTML of `about`.",
             "type": "string"
           },
           "aceTheme": {
+            "description": "Code editor theme.",
             "type": "string"
           },
           "appearance": {
@@ -7044,42 +7203,52 @@
                 "$ref": "#/components/schemas/AppearanceResponse"
               }
             ],
+            "description": "Custom accent and glass settings; null for the site look.",
             "nullable": true,
             "type": "object"
           },
           "badges": {
+            "description": "Ids of the badges the user owns.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "displayBadgeId": {
+            "description": "Id of the displayed badge; null for none.",
             "nullable": true,
             "type": "string"
           },
           "firstName": {
+            "description": "Display first name.",
             "type": "string"
           },
           "languageId": {
+            "description": "Default programming language id; null when none.",
             "nullable": true,
             "type": "string"
           },
           "mathEngine": {
+            "description": "How math is rendered.",
             "type": "string"
           },
           "organizations": {
+            "description": "Organizations the user belongs to, in display order.",
             "items": {
               "$ref": "#/components/schemas/ProfileOrganizationResponse"
             },
             "type": "array"
           },
           "siteTheme": {
+            "description": "Site theme id.",
             "type": "string"
           },
           "timezone": {
+            "description": "IANA time zone name used to show dates.",
             "type": "string"
           },
           "userScript": {
+            "description": "Custom JavaScript run on the site for this user.",
             "type": "string"
           }
         },
@@ -7446,12 +7615,15 @@
       "RankResponse": {
         "properties": {
           "page": {
+            "description": "Leaderboard page that contains the user.",
             "type": "number"
           },
           "pageSize": {
+            "description": "Entries per leaderboard page.",
             "type": "number"
           },
           "rank": {
+            "description": "1-based position of the user.",
             "type": "number"
           }
         },
@@ -7688,6 +7860,7 @@
             "type": "string"
           },
           "endTime": {
+            "description": "When the contest ended.",
             "format": "date-time",
             "type": "string"
           },
@@ -7718,12 +7891,15 @@
       "RatingSummaryResponse": {
         "properties": {
           "contests": {
+            "description": "Number of rated contests counted.",
             "type": "number"
           },
           "max": {
+            "description": "Highest rating over the readable contests.",
             "type": "number"
           },
           "min": {
+            "description": "Lowest rating over the readable contests.",
             "type": "number"
           }
         },
@@ -7831,6 +8007,7 @@
       "RegenerateTokenResponse": {
         "properties": {
           "token": {
+            "description": "The new API token; shown only once.",
             "type": "string"
           }
         },
@@ -7842,6 +8019,7 @@
       "RegisterDto": {
         "properties": {
           "email": {
+            "description": "Email address for the activation link and password resets, up to 254 characters.",
             "maxLength": 254,
             "type": "string"
           },
@@ -7856,11 +8034,13 @@
             "type": "string"
           },
           "password": {
+            "description": "Account password; must pass the password policy and not appear in a known breach.",
             "maxLength": 4096,
             "minLength": 1,
             "type": "string"
           },
           "username": {
+            "description": "Desired login name: letters, digits and underscores, up to 30 characters.",
             "maxLength": 30,
             "pattern": "^\\w+$",
             "type": "string"
@@ -8115,6 +8295,7 @@
       "ResendActivationDto": {
         "properties": {
           "email": {
+            "description": "Email address for the activation link and password resets, up to 254 characters.",
             "maxLength": 254,
             "type": "string"
           }
@@ -8171,6 +8352,7 @@
       "ScratchCodesRemainingResponse": {
         "properties": {
           "remaining": {
+            "description": "Number of unused scratch codes.",
             "type": "number"
           }
         },
@@ -8182,6 +8364,7 @@
       "ScratchCodesResponse": {
         "properties": {
           "scratchCodes": {
+            "description": "One-time backup codes; shown only once.",
             "items": {
               "type": "string"
             },
@@ -8196,14 +8379,17 @@
       "SessionResponse": {
         "properties": {
           "csrfToken": {
+            "description": "Token to send as `X-CSRF-Token` on non-GET requests; null for API tokens.",
             "nullable": true,
             "type": "string"
           },
           "impersonatorId": {
+            "description": "Id of the superuser acting as this user; null when not impersonating.",
             "nullable": true,
             "type": "string"
           },
           "passwordChangeRequired": {
+            "description": "True when the password appears in a known breach and must be changed.",
             "type": "boolean"
           },
           "twoFactor": {
@@ -8212,10 +8398,12 @@
                 "$ref": "#/components/schemas/TwoFactorPendingResponse"
               }
             ],
+            "description": "What the second-factor page needs; null unless `twoFactorRequired` is true.",
             "nullable": true,
             "type": "object"
           },
           "twoFactorRequired": {
+            "description": "True while the session has not passed its second factor.",
             "type": "boolean"
           },
           "user": {
@@ -8224,6 +8412,7 @@
                 "$ref": "#/components/schemas/UserResponse"
               }
             ],
+            "description": "The signed-in user; null while a second factor is still pending.",
             "nullable": true,
             "type": "object"
           }
@@ -8273,6 +8462,7 @@
         "type": "object"
       },
       "SettingKey": {
+        "description": "Setting key.",
         "enum": [
           "auth.facebook",
           "auth.github",
@@ -8307,6 +8497,7 @@
             "nullable": true
           },
           "description": {
+            "description": "What the setting controls.",
             "type": "string"
           },
           "hasSecret": {
@@ -8322,14 +8513,17 @@
               {
                 "$ref": "#/components/schemas/SettingKey"
               }
-            ]
+            ],
+            "description": "Setting key."
           },
           "updatedAt": {
+            "description": "When the value was last changed; null if never.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "updatedBy": {
+            "description": "Id of the user who last changed it; null if never changed.",
             "nullable": true,
             "type": "string"
           },
@@ -8353,6 +8547,7 @@
       "SettingRevisionResponse": {
         "properties": {
           "actor": {
+            "description": "Id of the user who made the change; null if unknown.",
             "nullable": true,
             "type": "string"
           },
@@ -8365,16 +8560,19 @@
             "nullable": true
           },
           "changedFields": {
+            "description": "Names of the fields that changed.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "createdAt": {
+            "description": "When the change was made.",
             "format": "date-time",
             "type": "string"
           },
           "id": {
+            "description": "Revision id.",
             "type": "string"
           }
         },
@@ -8391,18 +8589,22 @@
       "ShortLinkResponse": {
         "properties": {
           "code": {
+            "description": "The code in `/s/<code>`.",
             "type": "string"
           },
           "createdAt": {
+            "description": "When the link was created.",
             "format": "date-time",
             "type": "string"
           },
           "expiresAt": {
+            "description": "When the link stops working; null if it never expires.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "hits": {
+            "description": "Number of counted visits.",
             "type": "number"
           },
           "isAuto": {
@@ -8410,11 +8612,13 @@
             "type": "boolean"
           },
           "lastHitAt": {
+            "description": "When the link was last visited; null if never.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "path": {
+            "description": "Site path the link redirects to.",
             "type": "string"
           }
         },
@@ -8925,16 +9129,19 @@
             "type": "string"
           },
           "password": {
+            "description": "Account password; must pass the password policy and not appear in a known breach.",
             "maxLength": 4096,
             "minLength": 1,
             "type": "string"
           },
           "token": {
+            "description": "The pending sign-up token from the callback redirect.",
             "maxLength": 512,
             "minLength": 1,
             "type": "string"
           },
           "username": {
+            "description": "Desired login name: letters, digits and underscores, up to 30 characters.",
             "maxLength": 30,
             "pattern": "^\\w+$",
             "type": "string"
@@ -8950,6 +9157,7 @@
       "SocialProvidersResponse": {
         "properties": {
           "providers": {
+            "description": "Slugs of the enabled providers.",
             "items": {
               "enum": [
                 "facebook",
@@ -8969,12 +9177,15 @@
       "SolvedGroupResponse": {
         "properties": {
           "name": {
+            "description": "Problem group name.",
             "type": "string"
           },
           "points": {
+            "description": "Sum of the points earned in the group.",
             "type": "number"
           },
           "problems": {
+            "description": "Solved problems of the group, sorted by code.",
             "items": {
               "$ref": "#/components/schemas/SolvedProblemResponse"
             },
@@ -8991,15 +9202,19 @@
       "SolvedProblemResponse": {
         "properties": {
           "code": {
+            "description": "Problem code.",
             "type": "string"
           },
           "name": {
+            "description": "Problem name.",
             "type": "string"
           },
           "points": {
+            "description": "Points the user earned.",
             "type": "number"
           },
           "total": {
+            "description": "Full points the problem is worth.",
             "type": "number"
           }
         },
@@ -9014,6 +9229,7 @@
       "SolvedResponse": {
         "properties": {
           "groups": {
+            "description": "Groups sorted by name.",
             "items": {
               "$ref": "#/components/schemas/SolvedGroupResponse"
             },
@@ -9033,33 +9249,42 @@
             "type": "string"
           },
           "dateJoined": {
+            "description": "When the account was created.",
             "format": "date-time",
             "type": "string"
           },
           "displayName": {
+            "description": "Name to show: the staff-set override, else the username.",
             "type": "string"
           },
           "displayRank": {
+            "description": "Rank title such as `user`, `admin` or `banned`.",
             "type": "string"
           },
           "id": {
+            "description": "User id.",
             "type": "string"
           },
           "isActive": {
+            "description": "False for banned or never-activated accounts.",
             "type": "boolean"
           },
           "isStaff": {
+            "description": "Whether the user is staff.",
             "type": "boolean"
           },
           "isSuperuser": {
+            "description": "Whether the user is a superuser.",
             "type": "boolean"
           },
           "lastAccess": {
+            "description": "Last time the user was seen; null if never.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "username": {
+            "description": "Login name.",
             "type": "string"
           }
         },
@@ -9898,10 +10123,12 @@
       "SyncContestDto": {
         "properties": {
           "description": {
+            "description": "Contest description in Markdown.",
             "maxLength": 200000,
             "type": "string"
           },
           "endTime": {
+            "description": "End time, ISO 8601.",
             "type": "string"
           },
           "formatConfig": {
@@ -9917,10 +10144,12 @@
             ]
           },
           "frozenLastMinutes": {
+            "description": "Minutes before the end during which the scoreboard is frozen.",
             "minimum": 0,
             "type": "number"
           },
           "name": {
+            "description": "Contest name, 1-100 characters.",
             "maxLength": 100,
             "minLength": 1,
             "type": "string"
@@ -9933,6 +10162,7 @@
             "type": "array"
           },
           "startTime": {
+            "description": "Start time, ISO 8601.",
             "type": "string"
           },
           "timeLimit": {
@@ -9952,6 +10182,7 @@
       "SyncContestResponse": {
         "properties": {
           "endTime": {
+            "description": "End time.",
             "format": "date-time",
             "type": "string"
           },
@@ -9960,9 +10191,11 @@
             "type": "boolean"
           },
           "key": {
+            "description": "Contest key.",
             "type": "string"
           },
           "name": {
+            "description": "Contest name.",
             "type": "string"
           },
           "participantCount": {
@@ -9970,6 +10203,7 @@
             "type": "number"
           },
           "startTime": {
+            "description": "Start time.",
             "format": "date-time",
             "type": "string"
           }
@@ -10026,6 +10260,7 @@
       "SyncProblemDto": {
         "properties": {
           "code": {
+            "description": "Code of an existing problem the acting user can see.",
             "type": "string"
           },
           "partial": {
@@ -10033,6 +10268,7 @@
             "type": "boolean"
           },
           "points": {
+            "description": "Points the problem is worth in this contest.",
             "maximum": 3500,
             "minimum": 0,
             "type": "number"
@@ -10068,6 +10304,7 @@
             "type": "boolean"
           },
           "endTime": {
+            "description": "End time.",
             "format": "date-time",
             "type": "string"
           },
@@ -10076,9 +10313,11 @@
             "type": "boolean"
           },
           "key": {
+            "description": "Contest key.",
             "type": "string"
           },
           "name": {
+            "description": "Contest name.",
             "type": "string"
           },
           "participantCount": {
@@ -10086,6 +10325,7 @@
             "type": "number"
           },
           "startTime": {
+            "description": "Start time.",
             "format": "date-time",
             "type": "string"
           }
@@ -10908,6 +11148,7 @@
       "TokenDto": {
         "properties": {
           "token": {
+            "description": "The key from the activation link.",
             "maxLength": 512,
             "minLength": 1,
             "type": "string"
@@ -10921,9 +11162,11 @@
       "TotpEnrollmentResponse": {
         "properties": {
           "otpauthUrl": {
+            "description": "`otpauth://` URL to render as a QR code.",
             "type": "string"
           },
           "secret": {
+            "description": "The base32 TOTP secret for manual entry.",
             "type": "string"
           }
         },
@@ -10936,6 +11179,7 @@
       "TwoFactorPendingResponse": {
         "properties": {
           "methods": {
+            "description": "Second factors the account can use to continue.",
             "items": {
               "enum": [
                 "totp",
@@ -10946,6 +11190,7 @@
             "type": "array"
           },
           "username": {
+            "description": "Username of the account being signed in.",
             "type": "string"
           }
         },
@@ -10958,6 +11203,7 @@
       "UnreadCountResponse": {
         "properties": {
           "count": {
+            "description": "Number of unread notifications.",
             "type": "number"
           }
         },
@@ -11297,9 +11543,11 @@
             "type": "string"
           },
           "registrationRequired": {
+            "description": "Only signed-in users may read the page; default false.",
             "type": "boolean"
           },
           "title": {
+            "description": "Page title.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -11713,10 +11961,12 @@
       "UpdateProfileDto": {
         "properties": {
           "about": {
+            "description": "About-me text in Markdown, rendered and sanitised on save.",
             "maxLength": 65536,
             "type": "string"
           },
           "aceTheme": {
+            "description": "Code editor theme.",
             "enum": [
               "ambiance",
               "auto",
@@ -11765,19 +12015,23 @@
             "type": "object"
           },
           "displayBadgeId": {
+            "description": "Id of one of the user's badges to display; `null` shows none.",
             "format": "uuid",
             "nullable": true,
             "type": "string"
           },
           "firstName": {
+            "description": "Display first name, up to 30 characters.",
             "maxLength": 30,
             "type": "string"
           },
           "languageId": {
+            "description": "Id of the default programming language.",
             "format": "uuid",
             "type": "string"
           },
           "mathEngine": {
+            "description": "How math is rendered.",
             "enum": [
               "auto",
               "jax",
@@ -11798,12 +12052,15 @@
             "uniqueItems": true
           },
           "siteTheme": {
+            "description": "Site theme id; unknown ids fall back to the operating system scheme.",
             "type": "string"
           },
           "timezone": {
+            "description": "IANA time zone name used to show dates, for example `Asia/Ho_Chi_Minh`.",
             "type": "string"
           },
           "userScript": {
+            "description": "Custom JavaScript run on the site for this user, up to 65536 characters.",
             "maxLength": 65536,
             "type": "string"
           }
@@ -12028,6 +12285,7 @@
             "type": "string"
           },
           "size": {
+            "description": "Size of the zip in bytes; null when there is none.",
             "nullable": true,
             "type": "number"
           },
@@ -12054,37 +12312,47 @@
       "UserPageResponse": {
         "properties": {
           "aboutHtml": {
+            "description": "Rendered, sanitised about-me HTML.",
             "type": "string"
           },
           "contributionPoints": {
+            "description": "Points earned from community contributions.",
             "type": "number"
           },
           "dateJoined": {
+            "description": "When the account was created.",
             "format": "date-time",
             "type": "string"
           },
           "displayName": {
+            "description": "Name to show: the staff-set override, else the username.",
             "type": "string"
           },
           "displayRank": {
+            "description": "Rank title such as `user`, `admin` or `banned`.",
             "type": "string"
           },
           "id": {
+            "description": "User id.",
             "type": "string"
           },
           "organizations": {
+            "description": "Listed organizations the user belongs to.",
             "items": {
               "$ref": "#/components/schemas/OrganizationSummaryResponse"
             },
             "type": "array"
           },
           "performancePoints": {
+            "description": "Performance points (weighted best solves).",
             "type": "number"
           },
           "points": {
+            "description": "Total points earned from solved problems.",
             "type": "number"
           },
           "problemCount": {
+            "description": "Number of fully solved problems.",
             "type": "number"
           },
           "rank": {
@@ -12092,6 +12360,7 @@
             "type": "number"
           },
           "rating": {
+            "description": "Contest rating; null while unrated.",
             "nullable": true,
             "type": "number"
           },
@@ -12106,6 +12375,7 @@
                 "$ref": "#/components/schemas/RatingSummaryResponse"
               }
             ],
+            "description": "Min, max and count of ratings the viewer may read; null when none.",
             "nullable": true,
             "type": "object"
           },
@@ -12115,10 +12385,12 @@
                 "$ref": "#/components/schemas/UserPageStaffResponse"
               }
             ],
+            "description": "Moderation details; null unless the viewer holds `judge.ban_user`.",
             "nullable": true,
             "type": "object"
           },
           "username": {
+            "description": "Login name.",
             "type": "string"
           }
         },
@@ -12145,6 +12417,7 @@
       "UserPageStaffResponse": {
         "properties": {
           "banReason": {
+            "description": "Reason given when the user was banned; null if not banned.",
             "nullable": true,
             "type": "string"
           },
@@ -12153,6 +12426,7 @@
             "type": "boolean"
           },
           "isSuperuser": {
+            "description": "Whether the user is a superuser.",
             "type": "boolean"
           }
         },
@@ -12171,41 +12445,52 @@
                 "$ref": "#/components/schemas/AppearanceResponse"
               }
             ],
+            "description": "Custom accent and glass settings; null for the site default.",
             "nullable": true,
             "type": "object"
           },
           "email": {
+            "description": "Account email address.",
             "type": "string"
           },
           "id": {
+            "description": "Stable user id.",
             "type": "string"
           },
           "isStaff": {
+            "description": "Whether the user is staff.",
             "type": "boolean"
           },
           "isSuperuser": {
+            "description": "Whether the user is a superuser, who holds every permission.",
             "type": "boolean"
           },
           "isTotpEnabled": {
+            "description": "Whether an authenticator app (TOTP) is set up.",
             "type": "boolean"
           },
           "isWebauthnEnabled": {
+            "description": "Whether at least one security key is registered.",
             "type": "boolean"
           },
           "languageId": {
+            "description": "Default programming language id; null when none is chosen.",
             "nullable": true,
             "type": "string"
           },
           "permissions": {
+            "description": "Permission codenames the user holds (directly or through groups), sorted.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "siteTheme": {
+            "description": "Theme id chosen in the profile.",
             "type": "string"
           },
           "username": {
+            "description": "Unique login name.",
             "type": "string"
           }
         },
@@ -12244,6 +12529,7 @@
       "UsernameAvailableResponse": {
         "properties": {
           "available": {
+            "description": "True when the username can be registered now.",
             "type": "boolean"
           }
         },
@@ -12298,9 +12584,11 @@
       "WebauthnCredentialResponse": {
         "properties": {
           "id": {
+            "description": "Id of the key, used to remove it.",
             "type": "string"
           },
           "name": {
+            "description": "Display name chosen at registration.",
             "type": "string"
           }
         },
@@ -12314,6 +12602,7 @@
         "properties": {
           "response": {
             "additionalProperties": true,
+            "description": "The assertion response object from `navigator.credentials.get`, serialized as JSON.",
             "type": "object"
           }
         },
@@ -12325,12 +12614,14 @@
       "WebauthnRegisterDto": {
         "properties": {
           "name": {
+            "description": "Display name for the key, 1-100 characters.",
             "maxLength": 100,
             "minLength": 1,
             "type": "string"
           },
           "response": {
             "additionalProperties": true,
+            "description": "The registration response object from `navigator.credentials.create`, serialized as JSON.",
             "type": "object"
           }
         },
@@ -12709,6 +13000,7 @@
     },
     "/api/internal/admin/settings": {
       "get": {
+        "description": "Requires `judge.change_settings`. Returns every registered setting with its description, current value, default and whether it differs from the default. Secret parts (keys, passwords) are never returned; they read `{set: boolean}`.",
         "operationId": "SettingsController_list",
         "parameters": [],
         "responses": {
@@ -12753,16 +13045,19 @@
             }
           }
         },
+        "summary": "List site settings",
         "tags": [
-          "Settings"
+          "Admin: site & settings"
         ]
       }
     },
     "/api/internal/admin/settings/{key}": {
       "patch": {
+        "description": "Requires `judge.change_settings`. Sets the value of one setting and records a revision with the acting user. Object-valued settings are merged into the stored value. `null` is refused. Errors: 400 `validation_failed` on `value` when it does not fit the setting, 404 `not_found` for an unknown key.",
         "operationId": "SettingsController_update",
         "parameters": [
           {
+            "description": "Setting key, for example `auth.google`.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -12821,16 +13116,19 @@
             }
           }
         },
+        "summary": "Change a site setting",
         "tags": [
-          "Settings"
+          "Admin: site & settings"
         ]
       }
     },
     "/api/internal/admin/settings/{key}/revisions": {
       "get": {
+        "description": "Requires `judge.change_settings`. Returns the change history of one setting, newest first, with the values before and after, the changed fields and the acting user. Paged, default 20 per page (max 100). 404 `not_found` for an unknown key.",
         "operationId": "SettingsController_revisions",
         "parameters": [
           {
+            "description": "Setting key, for example `auth.google`.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -12840,6 +13138,7 @@
             }
           },
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -12851,6 +13150,7 @@
             }
           },
           {
+            "description": "Revisions per page, 1-100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -12908,17 +13208,20 @@
             }
           }
         },
+        "summary": "List the revisions of a setting",
         "tags": [
-          "Settings"
+          "Admin: site & settings"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/admin/settings/{key}/revisions/{revisionId}/restore": {
       "post": {
+        "description": "Requires `judge.change_settings`. Writes the value the setting had before the given revision, as a new revision. Secret values are not stored in revisions, so they are never restored. Errors: 404 `not_found` for an unknown setting or revision, 409 `secret_unrestorable` when the revision has nothing restorable because the value is secret.",
         "operationId": "SettingsController_restore",
         "parameters": [
           {
+            "description": "Setting key, for example `auth.google`.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -12928,6 +13231,7 @@
             }
           },
           {
+            "description": "Id of the revision, from the revision list.",
             "in": "path",
             "name": "revisionId",
             "required": true,
@@ -12976,16 +13280,19 @@
             }
           }
         },
+        "summary": "Restore a setting to an earlier revision",
         "tags": [
-          "Settings"
+          "Admin: site & settings"
         ]
       }
     },
     "/api/internal/admin/site/config/{key}": {
       "delete": {
+        "description": "Requires `judge.change_miscconfig`. Removes the key. 404 `not_found` if it does not exist. Returns 204.",
         "operationId": "MiscConfigAdminController_delete",
         "parameters": [
           {
+            "description": "Config key, 1-64 characters without control characters.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -13021,14 +13328,17 @@
             }
           }
         },
+        "summary": "Delete a public config value",
         "tags": [
-          "MiscConfigAdmin"
+          "Admin: site & settings"
         ]
       },
       "put": {
+        "description": "Requires `judge.change_miscconfig`. Creates or replaces a free-form key/value text served to everyone by `GET /site`, so it must never hold a secret. The empty string is a valid value.",
         "operationId": "MiscConfigAdminController_put",
         "parameters": [
           {
+            "description": "Config key, 1-64 characters without control characters.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -13089,16 +13399,19 @@
             }
           }
         },
+        "summary": "Set a public config value",
         "tags": [
-          "MiscConfigAdmin"
+          "Admin: site & settings"
         ]
       }
     },
     "/api/internal/admin/site/pages": {
       "get": {
+        "description": "Requires `flatpages.change_flatpage`. Returns a page of 50 pages with their URL, title and last update.",
         "operationId": "FlatpagesAdminController_list",
         "parameters": [
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -13156,12 +13469,14 @@
             }
           }
         },
+        "summary": "List site pages",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ],
         "x-enveloped": true
       },
       "post": {
+        "description": "Requires `flatpages.add_flatpage`. Stores a page and renders its Markdown to sanitised HTML. The URL is canonicalised (`about/` becomes `/about`). Records a revision. Errors: 400 `invalid_url`, 409 `conflict` when the URL is taken.",
         "operationId": "FlatpagesAdminController_create",
         "parameters": [],
         "requestBody": {
@@ -13213,16 +13528,19 @@
             }
           }
         },
+        "summary": "Create a site page",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ]
       }
     },
     "/api/internal/admin/site/pages/deleted": {
       "get": {
+        "description": "Requires `flatpages.change_flatpage`. Returns deleted pages, newest deletion first, 20 per page, with the id that keeps their history readable at `pages/{id}/revisions`.",
         "operationId": "FlatpagesAdminController_deleted",
         "parameters": [
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -13280,15 +13598,16 @@
             }
           }
         },
-        "summary": "Declared before `:id`, which would take `deleted` for an id.",
+        "summary": "List deleted site pages",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/admin/site/pages/render-preview": {
       "post": {
+        "description": "Requires `flatpages.change_flatpage`. Renders and sanitises the Markdown exactly as saving would and returns the HTML. Limited to 60 previews per user per minute (429 `rate_limited`).",
         "operationId": "FlatpagesAdminController_preview",
         "parameters": [],
         "requestBody": {
@@ -13340,16 +13659,19 @@
             }
           }
         },
+        "summary": "Preview page Markdown",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ]
       }
     },
     "/api/internal/admin/site/pages/{id}": {
       "delete": {
+        "description": "Requires `flatpages.delete_flatpage`. Removes the page; its history stays readable and the deletion is recorded. 404 `not_found`. Returns 204.",
         "operationId": "FlatpagesAdminController_delete",
         "parameters": [
           {
+            "description": "Id of the entry; an unknown or malformed id gives 404.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -13382,14 +13704,17 @@
             }
           }
         },
+        "summary": "Delete a site page",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ]
       },
       "get": {
+        "description": "Requires `flatpages.change_flatpage`. Returns the page with its Markdown source and the rendered HTML. 404 `not_found`.",
         "operationId": "FlatpagesAdminController_one",
         "parameters": [
           {
+            "description": "Id of the entry; an unknown or malformed id gives 404.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -13437,14 +13762,17 @@
             }
           }
         },
+        "summary": "Get a site page for editing",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ]
       },
       "patch": {
+        "description": "Requires `flatpages.change_flatpage`. Partial update; null values are refused. Last write wins. Records a revision when something changed. Errors: 404 `not_found`, 400 `invalid_url`, 409 `conflict` when the new URL is taken.",
         "operationId": "FlatpagesAdminController_update",
         "parameters": [
           {
+            "description": "Id of the entry; an unknown or malformed id gives 404.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -13502,16 +13830,19 @@
             }
           }
         },
+        "summary": "Edit a site page",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ]
       }
     },
     "/api/internal/admin/site/pages/{id}/revisions": {
       "get": {
+        "description": "Requires `flatpages.change_flatpage`. Returns the change history (creation, edits, deletion) of a page by id, newest first, 20 per page, with the editor and the before/after of each changed field. Still readable after the page is deleted; 400 `validation_failed` for a malformed id.",
         "operationId": "FlatpagesAdminController_revisions",
         "parameters": [
           {
+            "description": "Page id, also of a deleted page.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -13520,6 +13851,7 @@
             }
           },
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -13577,14 +13909,16 @@
             }
           }
         },
+        "summary": "Show the history of a site page",
         "tags": [
-          "FlatpagesAdmin"
+          "Admin: site & settings"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/admin/user-activity/anonymous": {
       "delete": {
+        "description": "Requires `judge.can_see_user_activity`. Deletes all activity log rows and sessions of signed-out visitors; the deletion is written to the server log with the acting staff member. Returns 204.",
         "operationId": "UserActivityStaffController_deleteAnonymous",
         "parameters": [],
         "responses": {
@@ -13611,16 +13945,19 @@
             }
           }
         },
+        "summary": "Delete anonymous activity data",
         "tags": [
-          "UserActivityStaff"
+          "Admin: users"
         ]
       }
     },
     "/api/internal/admin/user-activity/live": {
       "get": {
+        "description": "Requires `judge.can_see_user_activity`. Returns counts of signed-in users, anonymous visitors and bots seen in the last 30 minutes, plus a page of 50 signed-in users, most recently seen first (`hasMore` tells whether a later page exists).",
         "operationId": "UserActivityStaffController_liveVisitors",
         "parameters": [
           {
+            "description": "Page number, 1-200.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -13671,16 +14008,19 @@
             }
           }
         },
+        "summary": "List who is on the site now",
         "tags": [
-          "UserActivityStaff"
+          "Admin: users"
         ]
       }
     },
     "/api/internal/admin/user-activity/logs": {
       "get": {
+        "description": "Requires `judge.can_see_user_activity`. Returns request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. `user` is a username fragment or `anonymous`, `ip` an address prefix and `path` a path fragment; a `user` fragment that matches nobody gives an empty page.",
         "operationId": "UserActivityStaffController_list",
         "parameters": [
           {
+            "description": "How many days back to look, 1-90; default 7.",
             "in": "query",
             "name": "days",
             "required": false,
@@ -13692,6 +14032,7 @@
             }
           },
           {
+            "description": "Page number, 1-200.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -13703,6 +14044,7 @@
             }
           },
           {
+            "description": "A username fragment, or `anonymous` for signed-out visitors.",
             "in": "query",
             "name": "user",
             "required": false,
@@ -13712,6 +14054,7 @@
             }
           },
           {
+            "description": "IP address prefix.",
             "in": "query",
             "name": "ip",
             "required": false,
@@ -13721,6 +14064,7 @@
             }
           },
           {
+            "description": "Fragment of the request path, case-insensitive.",
             "in": "query",
             "name": "path",
             "required": false,
@@ -13776,17 +14120,20 @@
             }
           }
         },
+        "summary": "Search the user activity log",
         "tags": [
-          "UserActivityStaff"
+          "Admin: users"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/admin/user-activity/logs/export": {
       "get": {
+        "description": "Requires `judge.can_see_user_activity`. Same filters as the log search, streamed as a `text/csv` attachment named `user-activity.csv` (newest first, at most 100000 rows, cells made spreadsheet-safe).",
         "operationId": "UserActivityStaffController_export",
         "parameters": [
           {
+            "description": "How many days back to look, 1-90; default 7.",
             "in": "query",
             "name": "days",
             "required": false,
@@ -13798,6 +14145,7 @@
             }
           },
           {
+            "description": "A username fragment, or `anonymous` for signed-out visitors.",
             "in": "query",
             "name": "user",
             "required": false,
@@ -13807,6 +14155,7 @@
             }
           },
           {
+            "description": "IP address prefix.",
             "in": "query",
             "name": "ip",
             "required": false,
@@ -13816,6 +14165,7 @@
             }
           },
           {
+            "description": "Fragment of the request path, case-insensitive.",
             "in": "query",
             "name": "path",
             "required": false,
@@ -13856,18 +14206,20 @@
             }
           }
         },
-        "summary": "CSV attachment, streamed from a cursor: at most 100000 rows, every cell spreadsheet-safe. The filename is fixed, never built from the query.",
+        "summary": "Export the user activity log as CSV",
         "tags": [
-          "UserActivityStaff"
+          "Admin: users"
         ],
         "x-raw": true
       }
     },
     "/api/internal/admin/user-activity/users/{username}": {
       "delete": {
+        "description": "Requires `judge.can_see_user_activity`. Deletes the user's activity log rows and their stored sessions; the deletion is written to the server log with the acting staff member. 404 `not_found` for an unknown user. Returns 204.",
         "operationId": "UserActivityStaffController_deleteUser",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -13900,17 +14252,19 @@
             }
           }
         },
-        "summary": "Deletes the user's rows and sessions.",
+        "summary": "Delete a user's activity data",
         "tags": [
-          "UserActivityStaff"
+          "Admin: users"
         ]
       }
     },
     "/api/internal/admin/user-activity/users/{username}/logs": {
       "get": {
+        "description": "Requires `judge.can_see_user_activity`. Returns the user's request log rows of the last `days` (1-90, default 7), newest first, 50 per page with `hasMore` paging. 404 `not_found` for an unknown user.",
         "operationId": "UserActivityStaffController_userLogs",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -13919,6 +14273,7 @@
             }
           },
           {
+            "description": "How many days back to look, 1-90; default 7.",
             "in": "query",
             "name": "days",
             "required": false,
@@ -13930,6 +14285,7 @@
             }
           },
           {
+            "description": "Page number, 1-200.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -13941,6 +14297,7 @@
             }
           },
           {
+            "description": "A username fragment, or `anonymous` for signed-out visitors.",
             "in": "query",
             "name": "user",
             "required": false,
@@ -13950,6 +14307,7 @@
             }
           },
           {
+            "description": "IP address prefix.",
             "in": "query",
             "name": "ip",
             "required": false,
@@ -13959,6 +14317,7 @@
             }
           },
           {
+            "description": "Fragment of the request path, case-insensitive.",
             "in": "query",
             "name": "path",
             "required": false,
@@ -14014,17 +14373,20 @@
             }
           }
         },
+        "summary": "List the activity log of one user",
         "tags": [
-          "UserActivityStaff"
+          "Admin: users"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/admin/user-activity/users/{username}/summary": {
       "get": {
+        "description": "Requires `judge.can_see_user_activity`. Returns the number of requests over the last `days` (1-90, default 90), requests per UTC day, the 20 most used IP addresses, the 30 most requested paths and the 50 most recent sessions. 404 `not_found` for an unknown user.",
         "operationId": "UserActivityStaffController_summary",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -14033,6 +14395,7 @@
             }
           },
           {
+            "description": "How many days back to look, 1-90; default 90.",
             "in": "query",
             "name": "days",
             "required": false,
@@ -14083,13 +14446,15 @@
             }
           }
         },
+        "summary": "Summarize one user's activity",
         "tags": [
-          "UserActivityStaff"
+          "Admin: users"
         ]
       }
     },
     "/api/internal/admin/users": {
       "get": {
+        "description": "Requires `judge.ban_user`. Returns a page of users with moderation details (never email addresses or credentials). Filter by `search` (username prefix) and `banned`; sort by last access. Without a sort, a search is ordered by username and the rest by newest account.",
         "operationId": "UserAdminController_list",
         "parameters": [
           {
@@ -14102,6 +14467,7 @@
             }
           },
           {
+            "description": "Page number, starting at 1 (up to 500).",
             "in": "query",
             "name": "page",
             "required": false,
@@ -14113,6 +14479,7 @@
             }
           },
           {
+            "description": "Users per page, 1-100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -14190,14 +14557,16 @@
             }
           }
         },
+        "summary": "List users for staff",
         "tags": [
-          "UserAdmin"
+          "Admin: users"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/auth/2fa/totp/confirm": {
       "post": {
+        "description": "Browser session only, not while impersonating. Checks a code from the app against the pending secret, enables TOTP and returns the one-time scratch (backup) codes, shown only now. Errors: 400 `invalid_code` for a wrong code or when there is no pending setup.",
         "operationId": "TotpController_confirm",
         "parameters": [],
         "requestBody": {
@@ -14249,13 +14618,15 @@
             }
           }
         },
+        "summary": "Finish authenticator app setup",
         "tags": [
-          "Totp"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/totp/disable": {
       "post": {
+        "description": "Browser session only, not while impersonating. Needs a valid TOTP or scratch code; removes the secret and the scratch codes. Errors: 400 `totp_not_enabled`, 400 `invalid_code`, 429 `rate_limited`. Returns 204.",
         "operationId": "TotpController_disable",
         "parameters": [],
         "requestBody": {
@@ -14292,13 +14663,15 @@
             }
           }
         },
+        "summary": "Turn off authenticator app sign-in",
         "tags": [
-          "Totp"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/totp/enroll": {
       "post": {
+        "description": "Browser session only, not while impersonating. Requires the current password. Generates a TOTP secret, keeps it pending on the session and returns it with an `otpauth://` URL for a QR code; setup finishes with `POST /auth/2fa/totp/confirm`. Errors: 400 `invalid_credentials` (wrong password), 400 `invalid_code` when TOTP is already enabled.",
         "operationId": "TotpController_enroll",
         "parameters": [],
         "requestBody": {
@@ -14350,13 +14723,15 @@
             }
           }
         },
+        "summary": "Start authenticator app setup",
         "tags": [
-          "Totp"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/totp/scratch-codes": {
       "get": {
+        "description": "Browser session only, not while impersonating. Returns how many scratch codes are left; 400 `totp_not_enabled` when TOTP is off.",
         "operationId": "TotpController_remainingScratchCodes",
         "parameters": [],
         "responses": {
@@ -14398,11 +14773,13 @@
             }
           }
         },
+        "summary": "Count unused scratch codes",
         "tags": [
-          "Totp"
+          "Auth"
         ]
       },
       "post": {
+        "description": "Browser session only, not while impersonating. Needs a valid TOTP or scratch code, then replaces all scratch codes with a new set, returned once. Errors: 400 `totp_not_enabled`, 400 `invalid_code`, 429 `rate_limited`.",
         "operationId": "TotpController_regenerateScratchCodes",
         "parameters": [],
         "requestBody": {
@@ -14454,13 +14831,15 @@
             }
           }
         },
+        "summary": "Replace the scratch codes",
         "tags": [
-          "Totp"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/totp/verify": {
       "post": {
+        "description": "Browser session. Accepts a 6-digit app code or an unused scratch code and marks the session as fully signed in. A scratch code works once and a TOTP step cannot be replayed. Does nothing when the session already passed. Attempts share a per-account budget (10 in 15 minutes and 50 a day, 429 `rate_limited`); 400 `invalid_code` for a wrong code. Returns 204.",
         "operationId": "TotpController_verify",
         "parameters": [],
         "requestBody": {
@@ -14497,13 +14876,15 @@
             }
           }
         },
+        "summary": "Pass the second factor with a TOTP or scratch code",
         "tags": [
-          "Totp"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/webauthn/credentials": {
       "get": {
+        "description": "Browser session only, not while impersonating. Returns the user's WebAuthn security keys, oldest first. Only the display name and id are returned.",
         "operationId": "WebauthnController_list",
         "parameters": [],
         "responses": {
@@ -14548,16 +14929,19 @@
             }
           }
         },
+        "summary": "List registered security keys",
         "tags": [
-          "Webauthn"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/webauthn/credentials/{credentialId}": {
       "delete": {
+        "description": "Browser session only, not while impersonating. Requires the current password in the body (400 `invalid_credentials`, 429 `rate_limited`). Errors: 404 `not_found` for an unknown key. Returns 204.",
         "operationId": "WebauthnController_remove",
         "parameters": [
           {
+            "description": "Id of the security key from the list.",
             "in": "path",
             "name": "credentialId",
             "required": true,
@@ -14600,13 +14984,15 @@
             }
           }
         },
+        "summary": "Remove a security key",
         "tags": [
-          "Webauthn"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/webauthn/login/options": {
       "post": {
+        "description": "Browser session, usable before the second factor is passed. Returns WebAuthn request options for `navigator.credentials.get` and stores the challenge on the session. Returns null (nothing stored) when the session already passed its second factor. Errors: 400 `webauthn_not_enabled` when the user has no key.",
         "operationId": "WebauthnController_loginOptions",
         "parameters": [],
         "responses": {
@@ -14650,13 +15036,15 @@
             }
           }
         },
+        "summary": "Get options to sign in with a security key",
         "tags": [
-          "Webauthn"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/webauthn/login/verify": {
       "post": {
+        "description": "Browser session, usable before the second factor is passed. Verifies the assertion against the pending challenge and the key's sign counter, then marks the session as fully signed in. Does nothing when already passed. Shares the per-account attempt budget (429 `rate_limited`); 400 `webauthn_failed` for a missing challenge, unknown credential or failed verification. Returns 204.",
         "operationId": "WebauthnController_login",
         "parameters": [],
         "requestBody": {
@@ -14693,13 +15081,15 @@
             }
           }
         },
+        "summary": "Pass the second factor with a security key",
         "tags": [
-          "Webauthn"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/webauthn/register/options": {
       "post": {
+        "description": "Browser session only, not while impersonating. Requires the current password (400 `invalid_credentials`, 429 `rate_limited`). Returns WebAuthn credential creation options for `navigator.credentials.create`; the challenge is stored on the session and used by the next `register/verify` call.",
         "operationId": "WebauthnController_registrationOptions",
         "parameters": [],
         "requestBody": {
@@ -14752,13 +15142,15 @@
             }
           }
         },
+        "summary": "Get options to register a security key",
         "tags": [
-          "Webauthn"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/2fa/webauthn/register/verify": {
       "post": {
+        "description": "Browser session only, not while impersonating. Verifies the browser's registration response against the pending challenge, stores the key under the given name and returns it. Errors: 400 `webauthn_failed` (no pending challenge, failed verification, or the authenticator is already registered).",
         "operationId": "WebauthnController_register",
         "parameters": [],
         "requestBody": {
@@ -14810,13 +15202,15 @@
             }
           }
         },
+        "summary": "Register a security key",
         "tags": [
-          "Webauthn"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/activate": {
       "post": {
+        "description": "Public. Consumes the single-use key from the activation mail and turns the account on. Errors: 400 `invalid_token` for an unknown, used or expired key. Returns 204.",
         "operationId": "RegistrationController_activate",
         "parameters": [],
         "requestBody": {
@@ -14853,13 +15247,15 @@
             }
           }
         },
+        "summary": "Activate an account",
         "tags": [
-          "Registration"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/activate/resend": {
       "post": {
+        "description": "Public. Sends a fresh activation link to every pending account registered with the email. Answers 204 whether or not the email matches, so it does not reveal which emails are registered. Limited per IP and per email (10 and 3 per hour, 429 `rate_limited`); 503 `mail_unavailable` when mail is not configured.",
         "operationId": "RegistrationController_resend",
         "parameters": [],
         "requestBody": {
@@ -14896,13 +15292,15 @@
             }
           }
         },
+        "summary": "Resend the activation mail",
         "tags": [
-          "Registration"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/impersonate/stop": {
       "post": {
+        "description": "Browser session only. Replaces the impersonation session with a fresh session of the superuser who started it. Errors: 400 `not_impersonating`, 401 `unauthorized` when that user is no longer an active superuser.",
         "operationId": "ImpersonationController_stop",
         "parameters": [],
         "responses": {
@@ -14944,16 +15342,19 @@
             }
           }
         },
+        "summary": "Stop impersonating",
         "tags": [
-          "Impersonation"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/impersonate/{userId}": {
       "post": {
+        "description": "Superusers only, browser session only. Replaces the current session with one acting as the target user, whose last-login time is not touched; the response has `impersonatorId` set. Security changes (password, tokens, two-factor) are refused while impersonating.\nErrors: 403 `forbidden` when already impersonating, not a superuser, or the target is a superuser; 404 `not_found` for an unknown or inactive user.",
         "operationId": "ImpersonationController_start",
         "parameters": [
           {
+            "description": "Id of the user to act as.",
             "in": "path",
             "name": "userId",
             "required": true,
@@ -15001,13 +15402,15 @@
             }
           }
         },
+        "summary": "Impersonate a user",
         "tags": [
-          "Impersonation"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/login": {
       "post": {
+        "description": "Public. Verifies the credentials and opens a browser session: the `qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.\nWhen the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.\nFailed attempts are limited per IP and per account (10 in 15 minutes, then 429 `rate_limited`). Errors: 401 `invalid_credentials`, 403 `banned` (carries the ban reason), 403 `account_not_activated`.",
         "operationId": "AuthController_login",
         "parameters": [],
         "requestBody": {
@@ -15059,6 +15462,7 @@
             }
           }
         },
+        "summary": "Sign in with a username and password",
         "tags": [
           "Auth"
         ]
@@ -15066,6 +15470,7 @@
     },
     "/api/internal/auth/logout": {
       "post": {
+        "description": "Signed-in callers only. Destroys the current session on the server and clears the `qhhoj_session` cookie. Other sessions of the user stay valid. Returns 204.",
         "operationId": "AuthController_logout",
         "parameters": [],
         "responses": {
@@ -15092,6 +15497,7 @@
             }
           }
         },
+        "summary": "Sign out of the current session",
         "tags": [
           "Auth"
         ]
@@ -15099,6 +15505,7 @@
     },
     "/api/internal/auth/logout-all": {
       "post": {
+        "description": "Browser session only (API tokens get 403) and not while impersonating. Destroys all sessions of the user, including the current one, and clears the cookie. Returns 204.",
         "operationId": "AuthController_logoutAll",
         "parameters": [],
         "responses": {
@@ -15125,6 +15532,7 @@
             }
           }
         },
+        "summary": "Sign out of every session",
         "tags": [
           "Auth"
         ]
@@ -15132,6 +15540,7 @@
     },
     "/api/internal/auth/me": {
       "get": {
+        "description": "Signed-in callers only (cookie session or API token); also served while a second factor or a password change is still pending. Returns the same shape as login: the user with their permission codenames, the CSRF token of the session, and the pending second-factor methods when `twoFactorRequired` is true.\nAn API token has no session, so `csrfToken` is null for it.",
         "operationId": "AuthController_me",
         "parameters": [],
         "responses": {
@@ -15173,6 +15582,7 @@
             }
           }
         },
+        "summary": "Get the current session and user",
         "tags": [
           "Auth"
         ]
@@ -15180,6 +15590,7 @@
     },
     "/api/internal/auth/password/change": {
       "post": {
+        "description": "Browser session only, not while impersonating; reachable while the password is flagged as breached. Requires the current password; wrong attempts share the 10 in 15 minutes budget with other password confirmations (400 `invalid_credentials`, then 429 `rate_limited`).\nThe new password must pass the password policy, differ from the current one and not appear in a known breach, otherwise 400 `validation_failed` with per-field issues on `newPassword`. All other sessions are signed out; the API token stays valid. A concurrent change gives 409 `conflict`. Returns 204.",
         "operationId": "AuthController_changePassword",
         "parameters": [],
         "requestBody": {
@@ -15216,6 +15627,7 @@
             }
           }
         },
+        "summary": "Change the account password",
         "tags": [
           "Auth"
         ]
@@ -15223,6 +15635,7 @@
     },
     "/api/internal/auth/password/reset": {
       "post": {
+        "description": "Public. Mails a reset link (valid 3 days) to every active account with the email, and also serves accounts without a usable password, for which the link sets the first one. Answers 204 whether or not the email matches. Limited per IP and per email (10 and 3 per hour, 429 `rate_limited`); 503 `mail_unavailable` when mail is not configured.",
         "operationId": "PasswordResetController_request",
         "parameters": [],
         "requestBody": {
@@ -15259,13 +15672,15 @@
             }
           }
         },
+        "summary": "Request a password reset mail",
         "tags": [
-          "PasswordReset"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/password/reset/confirm": {
       "post": {
+        "description": "Public. Takes the token from the reset mail and the new password. On success the password changes, the account's API token is revoked and all its sessions are signed out. Errors: 400 `invalid_token` for an unknown, expired or already used link, 400 `validation_failed` with issues on `newPassword` (password policy or breached password). Returns 204.",
         "operationId": "PasswordResetController_confirm",
         "parameters": [],
         "requestBody": {
@@ -15302,13 +15717,15 @@
             }
           }
         },
+        "summary": "Set a new password from a reset link",
         "tags": [
-          "PasswordReset"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/register": {
       "post": {
+        "description": "Public. Creates an inactive account and mails an activation link (valid 7 days); the account cannot sign in until it is activated. Optionally joins an open, listed organization and sets the default language.\nLimited to 5 attempts per IP per hour, every attempt counts. Errors: 400 `validation_failed` with per-field issues (`username_taken`, `email_taken`, `language_unknown`, `organization_unavailable`, password policy or breached password), 503 `mail_unavailable` when the activation mail cannot be sent (nothing is created then), 429 `rate_limited`. Returns 204.",
         "operationId": "RegistrationController_register",
         "parameters": [],
         "requestBody": {
@@ -15345,13 +15762,15 @@
             }
           }
         },
+        "summary": "Create an account",
         "tags": [
-          "Registration"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/social/complete": {
       "post": {
+        "description": "Public. Creates the account for a pending social sign-in using the `token` from the callback redirect (valid 10 minutes, single use, and only from the browser that ran the callback, which holds the `oauth_pending` cookie). The account is active at once and the response signs it in like login.\nErrors: 400 `invalid_token`, 400 `validation_failed` (taken username, password policy), 409 `conflict`, 429 `rate_limited` (shares the registration budget of 5 per IP per hour).",
         "operationId": "SocialController_complete",
         "parameters": [],
         "requestBody": {
@@ -15403,13 +15822,15 @@
             }
           }
         },
+        "summary": "Complete a social sign-up",
         "tags": [
-          "Social"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/social/providers": {
       "get": {
+        "description": "Public. Returns the slugs of the OAuth providers that are configured, for the login page buttons.",
         "operationId": "SocialController_providers",
         "parameters": [],
         "responses": {
@@ -15451,16 +15872,19 @@
             }
           }
         },
+        "summary": "List enabled social sign-in providers",
         "tags": [
-          "Social"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/social/{provider}/callback": {
       "get": {
+        "description": "Public. The provider redirects the browser here. Always answers with a 302 to the site: to `/` (or `/login/2fa` when a second factor is pending) after signing in, to `/register/social?token=...` when a new account must be completed with `POST /auth/social/complete`, or to `/login?error=<code>` with `oauth_state`, `oauth_failed`, `email_unverified`, `banned` or `account_not_activated`.\nA verified email that matches exactly one active account links the provider to it. The state is single use.",
         "operationId": "SocialController_callback",
         "parameters": [
           {
+            "description": "Provider slug the flow was started with.",
             "in": "path",
             "name": "provider",
             "required": true,
@@ -15493,16 +15917,19 @@
             }
           }
         },
+        "summary": "Finish a social sign-in",
         "tags": [
-          "Social"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/social/{provider}/start": {
       "get": {
+        "description": "Public. Redirects (302) the browser to the provider's authorization page and sets a short-lived `oauth_state` cookie that ties the flow to this browser. Limited to 30 starts per IP per 10 minutes (429 `rate_limited`); 404 `not_found` for an unknown provider.",
         "operationId": "SocialController_start",
         "parameters": [
           {
+            "description": "Provider slug, one of `GET /auth/social/providers`.",
             "in": "path",
             "name": "provider",
             "required": true,
@@ -15535,13 +15962,15 @@
             }
           }
         },
+        "summary": "Begin a social sign-in",
         "tags": [
-          "Social"
+          "Auth"
         ]
       }
     },
     "/api/internal/auth/token/regenerate": {
       "post": {
+        "description": "Browser session only, not while impersonating. Issues a new personal API token for `Authorization: Bearer`, replacing the previous one, which stops working at once. The token is shown only in this response.",
         "operationId": "AuthController_regenerateToken",
         "parameters": [],
         "responses": {
@@ -15583,6 +16012,7 @@
             }
           }
         },
+        "summary": "Create a new API token",
         "tags": [
           "Auth"
         ]
@@ -15590,9 +16020,11 @@
     },
     "/api/internal/auth/username-available": {
       "get": {
+        "description": "Public. Returns `available` for a username that could be registered now; unactivated signups older than 7 days do not block it. Limited to 30 checks per IP per 10 minutes (429 `rate_limited`).",
         "operationId": "RegistrationController_usernameAvailable",
         "parameters": [
           {
+            "description": "Desired login name: letters, digits and underscores, up to 30 characters.",
             "in": "query",
             "name": "username",
             "required": true,
@@ -15642,8 +16074,9 @@
             }
           }
         },
+        "summary": "Check whether a username is free",
         "tags": [
-          "Registration"
+          "Auth"
         ]
       }
     },
@@ -19889,9 +20322,11 @@
     },
     "/api/internal/contributors": {
       "get": {
+        "description": "Public. Pages of users ranked by contribution points, with the same entry shape as the user leaderboard.",
         "operationId": "LeaderboardsController_contributors",
         "parameters": [
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -19903,6 +20338,7 @@
             }
           },
           {
+            "description": "Entries per page, 1-100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -19960,8 +20396,9 @@
             }
           }
         },
+        "summary": "List top contributors",
         "tags": [
-          "Leaderboards"
+          "Users"
         ],
         "x-enveloped": true
       }
@@ -20298,6 +20735,7 @@
     },
     "/api/internal/events/user": {
       "get": {
+        "description": "Signed-in callers only. Server-sent events (`text/event-stream`). The server starts with `retry: 3000` (reconnect after 3 seconds), then sends a `: ping` comment every 15 seconds, a `notification` frame (`data` is `{\"id\": \"<notification id>\"}`) whenever a row of the caller's inbox is created or merged, and a `resync` frame after the server lost its subscription (reload the inbox then). There is no replay: fetch the inbox after connecting.\nAt most 12 streams per user, 16 per IP and 2000 user streams in total (429 `rate_limited`). The session is re-checked every minute; the stream ends when the session, the account or the API token is no longer valid.",
         "operationId": "UserStreamsController_open",
         "parameters": [],
         "responses": {
@@ -20338,17 +20776,19 @@
             }
           }
         },
-        "summary": "`notification` (`{ id }`: a row of the viewer's inbox was created or merged) and `resync` after a lost subscription.",
+        "summary": "Stream my notification events",
         "tags": [
-          "UserStreams"
+          "Live events"
         ]
       }
     },
     "/api/internal/feeds/{kind}/{format}": {
       "get": {
+        "description": "Public. Returns the 25 newest items of `kind` (`blog`, `comments` or `problems`) as `rss` (`application/rss+xml`) or `atom` (`application/atom+xml`). Feeds show only what a signed-out visitor may read and are cached for 5 minutes. The legacy `/feed/<kind>/<rss|atom>/` URLs map here.",
         "operationId": "FeedsController_feed",
         "parameters": [
           {
+            "description": "Which feed: `blog`, `comments` or `problems`.",
             "in": "path",
             "name": "kind",
             "required": true,
@@ -20362,6 +20802,7 @@
             }
           },
           {
+            "description": "Feed format: `rss` or `atom`.",
             "in": "path",
             "name": "format",
             "required": true,
@@ -20410,14 +20851,16 @@
             }
           }
         },
+        "summary": "Read an RSS or Atom feed",
         "tags": [
-          "Feeds"
+          "Home & site"
         ],
         "x-raw": true
       }
     },
     "/api/internal/home": {
       "get": {
+        "description": "Public. Returns the side widgets of the home page: the newest comments the viewer may read, the 7 newest problems, the top 5 users by performance points and by contribution points, and site-wide counts. The anonymous comment slice is cached for 60 seconds. Running and upcoming contests come from the contests list.",
         "operationId": "HomeController_get",
         "parameters": [],
         "responses": {
@@ -20459,16 +20902,19 @@
             }
           }
         },
+        "summary": "Get the home page widgets",
         "tags": [
-          "Home"
+          "Home & site"
         ]
       }
     },
     "/api/internal/integration-clients": {
       "get": {
+        "description": "Requires `judge.manage_integration`; browser session only and not while impersonating. Returns a page of integration clients, newest first, with key prefix, scopes, allowed networks, acting user, last use, revocation and expiry. Keys are never returned.",
         "operationId": "IntegrationClientsController_list",
         "parameters": [
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -20480,6 +20926,7 @@
             }
           },
           {
+            "description": "Clients per page, 1-100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -20537,12 +20984,14 @@
             }
           }
         },
+        "summary": "List integration clients",
         "tags": [
-          "IntegrationClients"
+          "Sync API (integrations)"
         ],
         "x-enveloped": true
       },
       "post": {
+        "description": "Requires `judge.manage_integration`; browser session only and not while impersonating. Creates a client and returns its key once, in `key`; only a hash is stored. The acting user must be an active non-superuser holding `judge.add_contest` and `judge.create_private_contest`. Limited to 10 clients per administrator per day.\nErrors: 400 `validation_failed` (unknown or unfit `actsAs`, malformed CIDR, expiry in the past), 429 `rate_limited`.",
         "operationId": "IntegrationClientsController_create",
         "parameters": [],
         "requestBody": {
@@ -20594,16 +21043,19 @@
             }
           }
         },
+        "summary": "Create an integration client",
         "tags": [
-          "IntegrationClients"
+          "Sync API (integrations)"
         ]
       }
     },
     "/api/internal/integration-clients/{id}": {
       "delete": {
+        "description": "Requires `judge.manage_integration`; browser session only and not while impersonating. The key stops working on its next request. Idempotent: revoking a revoked client does nothing. 404 `not_found`. Returns 204.",
         "operationId": "IntegrationClientsController_revoke",
         "parameters": [
           {
+            "description": "Id of the integration client; an unknown id gives 404.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -20636,8 +21088,9 @@
             }
           }
         },
+        "summary": "Revoke an integration client",
         "tags": [
-          "IntegrationClients"
+          "Sync API (integrations)"
         ]
       }
     },
@@ -20939,9 +21392,11 @@
     },
     "/api/internal/notifications": {
       "get": {
+        "description": "Signed-in callers only. Returns the caller's inbox, most recently active first, 20 per page. Filter by `state` (`all`, `unread`, `read`), `priority` and repeated `kind` parameters. Repeated events can be merged into one row whose `count` grows.",
         "operationId": "NotificationsController_list",
         "parameters": [
           {
+            "description": "Read state to show; default `all`.",
             "in": "query",
             "name": "state",
             "required": false,
@@ -20971,6 +21426,7 @@
             }
           },
           {
+            "description": "Page number, starting at 1; pages hold 20 rows.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -21028,6 +21484,7 @@
             }
           }
         },
+        "summary": "List my notifications",
         "tags": [
           "Notifications"
         ],
@@ -21036,6 +21493,7 @@
     },
     "/api/internal/notifications/read-all": {
       "post": {
+        "description": "Signed-in callers only. Marks the whole inbox read. Limited to 30 calls per user per minute (429 `rate_limited`). While a superuser impersonates, it does nothing. Returns 204.",
         "operationId": "NotificationsController_readAll",
         "parameters": [],
         "responses": {
@@ -21062,6 +21520,7 @@
             }
           }
         },
+        "summary": "Mark all notifications as read",
         "tags": [
           "Notifications"
         ]
@@ -21069,6 +21528,7 @@
     },
     "/api/internal/notifications/unread-count": {
       "get": {
+        "description": "Signed-in callers only. Returns the number of unread notifications. The client may reuse the answer for 15 seconds (`private, max-age=15`); the bell polls every 60 seconds and on window focus.",
         "operationId": "NotificationsController_unreadCount",
         "parameters": [],
         "responses": {
@@ -21110,7 +21570,7 @@
             }
           }
         },
-        "summary": "The bell polls this every 60 s and on window focus.",
+        "summary": "Count my unread notifications",
         "tags": [
           "Notifications"
         ]
@@ -21118,9 +21578,11 @@
     },
     "/api/internal/notifications/{id}/read": {
       "post": {
+        "description": "Signed-in callers only. Idempotent. 404 `not_found` for an unknown id or one that belongs to another user. While a superuser impersonates, it does nothing. Returns 204.",
         "operationId": "NotificationsController_read",
         "parameters": [
           {
+            "description": "Notification id; an unknown id gives 404.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -21153,6 +21615,7 @@
             }
           }
         },
+        "summary": "Mark a notification as read",
         "tags": [
           "Notifications"
         ]
@@ -22967,6 +23430,7 @@
     },
     "/api/internal/pages/{path}": {
       "get": {
+        "description": "Public. Returns a static page (for example `/about`) found by the path after `/pages/`, nested paths included; the path is normalised. Pages marked `registrationRequired` need a signed-in caller. Errors: 404 `not_found`, 401 `unauthorized`. Not shared-cacheable (`private, no-cache`) because the answer depends on the session.",
         "operationId": "FlatpagesController_page",
         "parameters": [
           {
@@ -23018,9 +23482,9 @@
             }
           }
         },
-        "summary": "The wildcard (`*`) is everything after `/pages/`, nested urls included. `private, no-cache`: the body depends on the session (`registrationRequired` pages), so a shared cache must never serve it and a private one must revalidate (an edit shows at once).",
+        "summary": "Read a site page by URL",
         "tags": [
-          "Flatpages"
+          "Home & site"
         ]
       }
     },
@@ -26233,6 +26697,7 @@
     },
     "/api/internal/profile": {
       "get": {
+        "description": "Signed-in callers only. Returns the editable profile of the caller: about text (source and rendered HTML), display name, time zone, default programming language, editor and site themes, appearance, math engine, user script, owned badges with the displayed one, and the organizations the caller belongs to in display order.",
         "operationId": "ProfileController_get",
         "parameters": [],
         "responses": {
@@ -26274,11 +26739,13 @@
             }
           }
         },
+        "summary": "Get my profile",
         "tags": [
-          "Profile"
+          "Account"
         ]
       },
       "patch": {
+        "description": "Signed-in callers only. Partial update: send only the fields to change and read the full profile back. `null` is accepted only for `displayBadgeId` (no badge) and `appearance` (the site look); `appearance` replaces the stored look as a whole.\n`organizations` may only reorder or shorten the current memberships (join from the organization page). Errors: 400 `unknown_language`, 400 `not_your_badge`, 400 `organizations_not_editable`; 403 `forbidden` when editing `about` or `firstName` during the official contest (superusers excepted) or when editing `about` while muted or before solving 5 problems (staff excepted); 409 `conflict` when leaving an organization the caller administers or when memberships changed meanwhile. The badge and organization order are also frozen in official contest mode.",
         "operationId": "ProfileController_update",
         "parameters": [],
         "requestBody": {
@@ -26330,13 +26797,15 @@
             }
           }
         },
+        "summary": "Update my profile",
         "tags": [
-          "Profile"
+          "Account"
         ]
       }
     },
     "/api/internal/profile/data": {
       "get": {
+        "description": "Signed-in callers only. Reports whether a zip of the caller's own data is being prepared, ready to download or absent, with its size, when it expires (7 days after it is written) and when a new export may be requested. 404 `not_found` when exports are switched off on this server or the account is muted.",
         "operationId": "UserDataController_status",
         "parameters": [],
         "responses": {
@@ -26378,11 +26847,13 @@
             }
           }
         },
+        "summary": "Get the state of my data export",
         "tags": [
-          "UserData"
+          "Account"
         ]
       },
       "post": {
+        "description": "Signed-in callers only, not while impersonating. Queues a background job that builds a zip of the caller's data and answers 202 `{queued: true}`. Allowed once a day while a fresh zip exists, and at most 3 times a day in total.\nErrors: 409 `conflict` while an export is already being prepared, 429 `rate_limited` when asking again within a day or past the daily cap, 404 `not_found` when exports are unavailable.",
         "operationId": "UserDataController_prepare",
         "parameters": [],
         "responses": {
@@ -26424,13 +26895,15 @@
             }
           }
         },
+        "summary": "Request an export of my data",
         "tags": [
-          "UserData"
+          "Account"
         ]
       }
     },
     "/api/internal/profile/data/download": {
       "get": {
+        "description": "Signed-in callers only, not while impersonating. Streams the prepared zip as an attachment (`application/zip`, `nosniff`). 404 `not_found` when no unexpired export exists.",
         "operationId": "UserDataController_download",
         "parameters": [],
         "responses": {
@@ -26465,9 +26938,9 @@
             }
           }
         },
-        "summary": "Always an attachment with `nosniff`; the username is not trusted to be ASCII.",
+        "summary": "Download my data export",
         "tags": [
-          "UserData"
+          "Account"
         ],
         "x-raw": true
       }
@@ -26534,10 +27007,11 @@
     },
     "/api/internal/short-links": {
       "get": {
+        "description": "Signed-in callers only. Returns the caller's own links, newest first. `scope=all` lists every link and needs `judge.manage_short_link` (403 `forbidden`). Includes hit counts and expiry.",
         "operationId": "ShortLinksController_list",
         "parameters": [
           {
-            "description": "`ShortLinkScope` is an alias of a union, so the plugin would drop it: spelled out (SDK R3).",
+            "description": "`own` lists the caller's links; `all` lists every link and needs `judge.manage_short_link`.",
             "in": "query",
             "name": "scope",
             "required": false,
@@ -26546,6 +27020,7 @@
             }
           },
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -26557,6 +27032,7 @@
             }
           },
           {
+            "description": "Links per page, 1-100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -26614,12 +27090,14 @@
             }
           }
         },
+        "summary": "List short links",
         "tags": [
-          "ShortLinks"
+          "Short links"
         ],
         "x-enveloped": true
       },
       "post": {
+        "description": "Signed-in callers only. Shortens a site path to `/s/<code>`; only problems, contests (and their announcements, submissions, stats and ranking tabs), blog posts, users and organizations are allowed, otherwise 400 `validation_failed` on `path`. Without `code` and `expiresAt` the link is automatic and idempotent: the same path always returns the same link, and users get 20 new links per day (429 `rate_limited`).\nChoosing a `code` or an `expiresAt` needs `judge.manage_short_link` (403 `forbidden` otherwise), and staff have no daily quota. A taken code gives 409 `conflict`; a reserved code or a past expiry gives 400.",
         "operationId": "ShortLinksController_create",
         "parameters": [],
         "requestBody": {
@@ -26671,16 +27149,19 @@
             }
           }
         },
+        "summary": "Create a short link",
         "tags": [
-          "ShortLinks"
+          "Short links"
         ]
       }
     },
     "/api/internal/short-links/{code}": {
       "delete": {
+        "description": "Requires `judge.manage_short_link`. Removes the link by code; the deletion is written to the server log. 404 `not_found`. Returns 204.",
         "operationId": "ShortLinksController_remove",
         "parameters": [
           {
+            "description": "Short code; matched case-insensitively, unknown gives 404.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -26713,8 +27194,9 @@
             }
           }
         },
+        "summary": "Delete a short link",
         "tags": [
-          "ShortLinks"
+          "Short links"
         ]
       }
     },
@@ -27092,6 +27574,7 @@
     },
     "/api/internal/site": {
       "get": {
+        "description": "Public. Returns what the web app needs on every load: the navigation bar entries (hidden ones included, flagged), the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.",
         "operationId": "SiteController_site",
         "parameters": [],
         "responses": {
@@ -27133,9 +27616,9 @@
             }
           }
         },
-        "summary": "What the SPA shell needs on every load. `private`: the auth guard may attach a refreshed session cookie to any request, so a shared cache must never store this response.",
+        "summary": "Get the site shell data",
         "tags": [
-          "Site"
+          "Home & site"
         ]
       }
     },
@@ -28673,9 +29156,11 @@
     },
     "/api/internal/users": {
       "get": {
+        "description": "Public. Pages of 100 listed, active users ranked by `sort` (`rating` by default, or `performancePoints`, `points`, `problemCount`). Ties share a rank. Each entry carries the user's first listed organization.",
         "operationId": "LeaderboardsController_users",
         "parameters": [
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -28687,6 +29172,7 @@
             }
           },
           {
+            "description": "Entries per page, 1-100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -28698,6 +29184,7 @@
             }
           },
           {
+            "description": "Ranking field; ties share a rank.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -28759,17 +29246,20 @@
             }
           }
         },
+        "summary": "List users on the leaderboard",
         "tags": [
-          "Leaderboards"
+          "Users"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/users/{username}": {
       "get": {
+        "description": "Public. Returns the public profile: points, performance points, solved count, contribution points, rating and ranks, a rating summary over the contests the viewer may read, listed organizations and the join date. Viewers holding `judge.ban_user` also get a `staff` block with the ban reason and activation state. 404 `not_found` for an unknown user.",
         "operationId": "UserPagesController_page",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -28817,16 +29307,19 @@
             }
           }
         },
+        "summary": "Get a user's profile page",
         "tags": [
-          "UserPages"
+          "Users"
         ]
       }
     },
     "/api/internal/users/{username}/activity": {
       "get": {
+        "description": "Public. Returns submission counts per day for the last 365 days in the `timezone` asked for, defaulting to the viewer's profile zone and then UTC. Days without submissions are absent. Cached for 10 minutes per user and zone.",
         "operationId": "UserPagesController_activity",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -28835,6 +29328,7 @@
             }
           },
           {
+            "description": "IANA time zone for the day boundaries; defaults to the viewer's profile zone, then UTC.",
             "in": "query",
             "name": "timezone",
             "required": false,
@@ -28882,16 +29376,19 @@
             }
           }
         },
+        "summary": "Get a user's submission heatmap",
         "tags": [
-          "UserPages"
+          "Users"
         ]
       }
     },
     "/api/internal/users/{username}/ban": {
       "post": {
+        "description": "Requires `judge.ban_user`. Deactivates the account, hides it from the leaderboards, sets its rank to `banned`, records the reason and signs the user out everywhere. Errors: 400 `validation_failed` for the reason reserved to automatic contest-cheating bans, 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`, 409 `conflict` when already banned. Returns 204.",
         "operationId": "UserModerationController_ban",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -28934,16 +29431,19 @@
             }
           }
         },
+        "summary": "Ban a user",
         "tags": [
-          "UserModeration"
+          "Admin: users"
         ]
       }
     },
     "/api/internal/users/{username}/blog": {
       "get": {
+        "description": "Public. Returns a page of the user's blog posts that the viewer may read (the author tab of their profile); 404 `not_found` for an unknown user.",
         "operationId": "UserPagesController_blog",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29010,17 +29510,20 @@
             }
           }
         },
+        "summary": "List a user's blog posts",
         "tags": [
-          "UserPages"
+          "Users"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/users/{username}/comments": {
       "get": {
+        "description": "Requires `judge.view_all_user_comment`. Returns comments written by the user on pages the viewer may read, newest first, with cursor paging: pass `nextBefore` from the previous page as `before`. Errors: 401 `unauthorized` when signed out, 403 `forbidden` without the permission, 404 `not_found` for an unknown user.",
         "operationId": "UserPagesController_comments",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29029,6 +29532,7 @@
             }
           },
           {
+            "description": "Id of the last comment of the previous page; returns older comments.",
             "in": "query",
             "name": "before",
             "required": false,
@@ -29084,17 +29588,20 @@
             }
           }
         },
+        "summary": "List a user's recent comments",
         "tags": [
-          "UserPages"
+          "Users"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/users/{username}/pp-breakdown": {
       "get": {
+        "description": "Public. Returns the user's best submissions in order, each with its weight (percent of its points that count, falling by a fixed factor per rank) and scaled points. Uses `hasMore` paging; at most 300 entries are weighted. Cached for 10 minutes.",
         "operationId": "UserPagesController_ppBreakdown",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29103,6 +29610,7 @@
             }
           },
           {
+            "description": "Page number, starting at 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -29114,6 +29622,7 @@
             }
           },
           {
+            "description": "Entries per page, 1-100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -29171,17 +29680,20 @@
             }
           }
         },
+        "summary": "Show how performance points are computed",
         "tags": [
-          "UserPages"
+          "Users"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/users/{username}/rank": {
       "get": {
+        "description": "Public. Returns the user's rank for the chosen `sort` field and the page (with its page size) of the leaderboard that holds them. 404 `not_found` for an unknown, unlisted, banned or never-activated user.",
         "operationId": "LeaderboardsController_rank",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29190,6 +29702,7 @@
             }
           },
           {
+            "description": "Leaderboard field to rank by.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -29245,16 +29758,19 @@
             }
           }
         },
+        "summary": "Find a user's leaderboard position",
         "tags": [
-          "Leaderboards"
+          "Users"
         ]
       }
     },
     "/api/internal/users/{username}/ratings": {
       "get": {
+        "description": "Public. Returns the user's rating history, oldest first. Contest name and key are null when the viewer cannot see that contest; rating, rank and performance are null while the viewer may not read its scoreboard (hidden or frozen).",
         "operationId": "UserPagesController_ratings",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29305,16 +29821,19 @@
             }
           }
         },
+        "summary": "List a user's contest ratings",
         "tags": [
-          "UserPages"
+          "Users"
         ]
       }
     },
     "/api/internal/users/{username}/reset-two-factor": {
       "post": {
+        "description": "Requires `judge.ban_user`. Removes the user's authenticator app and all security keys so a locked-out user can sign in again, signs them out everywhere and records a `user` revision for audit. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`. Returns 204.",
         "operationId": "UserModerationController_resetTwoFactor",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29347,16 +29866,19 @@
             }
           }
         },
+        "summary": "Reset a user's two-factor sign-in",
         "tags": [
-          "UserModeration"
+          "Admin: users"
         ]
       }
     },
     "/api/internal/users/{username}/solved": {
       "get": {
+        "description": "Public. Returns the user's solved problems grouped by problem group, with points earned and total points per problem. Problems solved only in contests whose submissions are still hidden from the public are left out.",
         "operationId": "UserPagesController_solved",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29404,16 +29926,19 @@
             }
           }
         },
+        "summary": "List problems a user has solved",
         "tags": [
-          "UserPages"
+          "Users"
         ]
       }
     },
     "/api/internal/users/{username}/unban": {
       "post": {
+        "description": "Requires `judge.ban_user`. Restores the account as an active, listed `user`, whatever rank it had before. Errors: 403 `forbidden` when targeting yourself or a superuser, 404 `not_found`, 409 `conflict` when the user is not banned. Returns 204.",
         "operationId": "UserModerationController_unban",
         "parameters": [
           {
+            "description": "Username of the account; an unknown name gives 404.",
             "in": "path",
             "name": "username",
             "required": true,
@@ -29446,16 +29971,19 @@
             }
           }
         },
+        "summary": "Unban a user",
         "tags": [
-          "UserModeration"
+          "Admin: users"
         ]
       }
     },
     "/api/sync/v1/contests/{key}": {
       "delete": {
+        "description": "Integration key only (`Authorization: Bearer qhi_...`); cookies and user API tokens are refused with 403. Needs the `contests:write` scope. Deletes a contest this client manages, only while it is unpublished, has not started and has no submissions. Errors: 404 `not_found`, 409 `contest_not_deletable`, 429 `rate_limited`. Returns 204.",
         "operationId": "SyncContestsController_remove",
         "parameters": [
           {
+            "description": "Contest key chosen by the client.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -29488,14 +30016,17 @@
             }
           }
         },
+        "summary": "Delete a synced contest",
         "tags": [
-          "SyncContests"
+          "Sync API (integrations)"
         ]
       },
       "get": {
+        "description": "Integration key only (`Authorization: Bearer qhi_...`); cookies and user API tokens are refused with 403. Needs the `contests:read` scope. Returns the name, times, visibility and participant count of a contest this client manages. 404 `not_found` for a missing contest and for one managed by someone else.",
         "operationId": "SyncContestsController_read",
         "parameters": [
           {
+            "description": "Contest key chosen by the client.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -29543,14 +30074,17 @@
             }
           }
         },
+        "summary": "Read a synced contest",
         "tags": [
-          "SyncContests"
+          "Sync API (integrations)"
         ]
       },
       "put": {
+        "description": "Integration key only (`Authorization: Bearer qhi_...`); cookies and user API tokens are refused with 403. Needs the `contests:write` scope. Idempotent upsert of the contest `key` from an external system. The body replaces the contest: an omitted optional field returns to its default. A new contest is created hidden and private, owned by the client and authored by its acting user; a person publishes it later.\nWith `dryRun=true` everything is validated and nothing is written. `action` tells whether the contest was `created`, `updated` or `unchanged`.\nErrors: 400 `validation_failed` (reserved key `key_reserved`, unknown problem code, invalid times or format), 403 `forbidden` when the key belongs to a contest this client does not manage or the acting user lost its permissions, 409 `contest_frozen` when a published or started contest would change, 429 `rate_limited` (60 requests per client per minute across all sync routes).",
         "operationId": "SyncContestsController_put",
         "parameters": [
           {
+            "description": "Contest key chosen by the client.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -29621,16 +30155,19 @@
             }
           }
         },
+        "summary": "Create or update a synced contest",
         "tags": [
-          "SyncContests"
+          "Sync API (integrations)"
         ]
       }
     },
     "/api/sync/v1/contests/{key}/participants": {
       "put": {
+        "description": "Integration key only (`Authorization: Bearer qhi_...`); cookies and user API tokens are refused with 403. Needs the `contests:write` scope. Replaces the contestant list with the given usernames, at any time, even after the contest is published or started. Sync never creates users: usernames that match no active user are returned in `unknown` and skipped. At most 2000 usernames. 404 `not_found`, 429 `rate_limited`.",
         "operationId": "SyncContestsController_setParticipants",
         "parameters": [
           {
+            "description": "Contest key chosen by the client.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -29688,16 +30225,19 @@
             }
           }
         },
+        "summary": "Replace the participants of a synced contest",
         "tags": [
-          "SyncContests"
+          "Sync API (integrations)"
         ]
       }
     },
     "/api/sync/v1/contests/{key}/standings": {
       "get": {
+        "description": "Integration key only (`Authorization: Bearer qhi_...`); cookies and user API tokens are refused with 403. Needs the `contests:read` scope. Returns the scoreboard as an anonymous visitor would see it: frozen values during a freeze, live values otherwise. Errors: 403 `forbidden` (issue `board_hidden`) while the board is hidden from the public, 404 `not_found`, 429 `rate_limited`.",
         "operationId": "SyncContestsController_getStandings",
         "parameters": [
           {
+            "description": "Contest key chosen by the client.",
             "in": "path",
             "name": "key",
             "required": true,
@@ -29745,8 +30285,9 @@
             }
           }
         },
+        "summary": "Get the standings of a synced contest",
         "tags": [
-          "SyncContests"
+          "Sync API (integrations)"
         ]
       }
     },
@@ -29800,9 +30341,11 @@
     },
     "/s/{code}": {
       "get": {
+        "description": "Public, not under `/api`. Redirects (302) to the stored site path with `Cache-Control: no-store` and always a relative `Location`. A HEAD request, as link previews send, redirects without counting a hit. Limited to 120 visits per IP per minute (429 `rate_limited`). 404 `not_found` for an unknown or expired code, never cached.",
         "operationId": "ShortLinkRedirectController_go",
         "parameters": [
           {
+            "description": "Short code; matched case-insensitively, unknown gives 404.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -29835,13 +30378,102 @@
             }
           }
         },
-        "summary": "A `@Res()` handler returns no body: the 302 is documented by hand. The error envelope is the global `default` response, nothing per route. This route is not added to `UNDOCUMENTED_BODY`.",
+        "summary": "Follow a short link",
         "tags": [
-          "ShortLinkRedirect"
+          "Short links"
         ]
       }
     }
   },
   "servers": [],
-  "tags": []
+  "tags": [
+    {
+      "description": "Sign in and out, register, activate accounts, reset passwords, social sign-in, two-factor authentication and impersonation.",
+      "name": "Auth"
+    },
+    {
+      "description": "The signed-in user's own profile and personal data export.",
+      "name": "Account"
+    },
+    {
+      "description": "Public user pages, rating history, activity heatmaps and the leaderboards.",
+      "name": "Users"
+    },
+    {
+      "description": "Browse the problem archive, read statements and data, and see a problem's languages, groups and types.",
+      "name": "Problems"
+    },
+    {
+      "description": "Create and edit problems, their statements, test data, packages and revisions.",
+      "name": "Problem editing"
+    },
+    {
+      "description": "Submit solutions and read submissions, their results and source code.",
+      "name": "Submissions"
+    },
+    {
+      "description": "Judge queue and rejudging operations.",
+      "name": "Judging"
+    },
+    {
+      "description": "Browse contests, join them, read rankings, announcements and take part.",
+      "name": "Contests"
+    },
+    {
+      "description": "Create and manage contests, their problems, participants and settings.",
+      "name": "Contest editing"
+    },
+    {
+      "description": "Organizations, their members, requests and pages.",
+      "name": "Organizations"
+    },
+    {
+      "description": "Blog posts and their lifecycle.",
+      "name": "Blog"
+    },
+    {
+      "description": "Comments on problems, contests and posts, with votes and moderation.",
+      "name": "Comments"
+    },
+    {
+      "description": "Problem tickets, messages and canned replies.",
+      "name": "Tickets"
+    },
+    {
+      "description": "The signed-in user's notification inbox.",
+      "name": "Notifications"
+    },
+    {
+      "description": "Server-sent event streams that push updates to the browser.",
+      "name": "Live events"
+    },
+    {
+      "description": "The home page, site shell data, static pages and RSS and Atom feeds.",
+      "name": "Home & site"
+    },
+    {
+      "description": "Site search and tags.",
+      "name": "Search & tags"
+    },
+    {
+      "description": "Integration keys and the key-authenticated API external systems use to sync contests.",
+      "name": "Sync API (integrations)"
+    },
+    {
+      "description": "Staff tools to find, ban and recover users and to read user activity.",
+      "name": "Admin: users"
+    },
+    {
+      "description": "Staff tools for site settings, navigation, public config and static pages.",
+      "name": "Admin: site & settings"
+    },
+    {
+      "description": "Staff tools for judge servers, programming languages and judging infrastructure.",
+      "name": "Admin: judges & languages"
+    },
+    {
+      "description": "Create, manage and follow short `/s/<code>` links to site pages.",
+      "name": "Short links"
+    }
+  ]
 }

@@ -6,8 +6,10 @@ import type { SettingKey } from '@libs/settings';
 import type { SettingDefinition } from '@libs/settings';
 
 export class SettingResponse {
+  /** Setting key. */
   @ApiProperty({ enum: SETTING_KEYS, enumName: 'SettingKey' })
   key!: SettingKey;
+  /** What the setting controls. */
   description!: string;
   /** True when the value holds a secret; its secret parts read `{set: boolean}`. */
   hasSecret!: boolean;
@@ -18,7 +20,9 @@ export class SettingResponse {
   default!: unknown;
   /** True while the value equals the registry default (also after a patch back to it). */
   isDefault!: boolean;
+  /** When the value was last changed; null if never. */
   updatedAt!: Date | null;
+  /** Id of the user who last changed it; null if never changed. */
   updatedBy!: string | null;
 
   static of(

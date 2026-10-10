@@ -5,9 +5,13 @@ export const SYNC_UPSERT_ACTIONS = ['created', 'updated', 'unchanged'] as const;
 export type SyncUpsertAction = (typeof SYNC_UPSERT_ACTIONS)[number];
 
 export class SyncContestResponse {
+  /** Contest key. */
   key!: string;
+  /** Contest name. */
   name!: string;
+  /** Start time. */
   startTime!: Date;
+  /** End time. */
   endTime!: Date;
   /** False until a person publishes it; the sync API cannot change it. */
   isVisible!: boolean;

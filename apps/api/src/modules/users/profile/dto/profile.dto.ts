@@ -84,27 +84,39 @@ export const PERCENT_SCHEMA = {
 } as const;
 
 export class AppearanceDto {
+  /** Accent colour preset. */
   @IsIn(APPEARANCE_ACCENTS) accent!: AppearanceAccent;
+  /** Glass effect strength, 0-100. */
   @ApiProperty(PERCENT_SCHEMA) @IsInt() @Min(0) @Max(100) glass!: number;
+  /** Glow effect strength, 0-100. */
   @ApiProperty(PERCENT_SCHEMA) @IsInt() @Min(0) @Max(100) glow!: number;
 }
 
 /** Legacy `ProfileForm` fields; every one optional. */
 export class UpdateProfileDto {
+  /** About-me text in Markdown, rendered and sanitised on save. */
   @IsOptional() @IsString() @MaxLength(ABOUT_MAX_LENGTH) about?: string;
+  /** Display first name, up to 30 characters. */
   @IsOptional()
   @IsString()
   @MaxLength(FIRST_NAME_MAX_LENGTH)
   firstName?: string;
+  /** IANA time zone name used to show dates, for example `Asia/Ho_Chi_Minh`. */
   @IsOptional() @IsTimeZone() timezone?: string;
+  /** Id of the default programming language. */
   @IsOptional() @IsUUID('7') languageId?: string;
+  /** Code editor theme. */
   @IsOptional() @IsIn(ACE_THEMES) aceTheme?: string;
+  /** Site theme id; unknown ids fall back to the operating system scheme. */
   @IsOptional() @Matches(SITE_THEME_PATTERN) siteTheme?: string;
+  /** How math is rendered. */
   @IsOptional() @IsIn(MATH_ENGINES) mathEngine?: string;
+  /** Custom JavaScript run on the site for this user, up to 65536 characters. */
   @IsOptional()
   @IsString()
   @MaxLength(USER_SCRIPT_MAX_LENGTH)
   userScript?: string;
+  /** Id of one of the user's badges to display; `null` shows none. */
   @IsOptional() @IsUUID('7') displayBadgeId?: string | null;
   /** The whole look replaces the stored one; `null` clears it (the site's look). */
   @IsOptional()

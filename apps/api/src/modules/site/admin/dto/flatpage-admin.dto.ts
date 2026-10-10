@@ -16,9 +16,11 @@ import {
 export class CreateFlatpageDto {
   /** Canonicalised on save (`about/` becomes `/about`). */
   @IsString() @MaxLength(FLATPAGE_URL_MAX_LENGTH) url!: string;
+  /** Page title. */
   @IsString() @Length(1, FLATPAGE_TITLE_MAX_LENGTH) title!: string;
   /** Markdown, rendered and sanitised on save in the `blog` style. */
   @IsString() @MaxLength(FLATPAGE_CONTENT_MAX_LENGTH) content!: string;
+  /** Only signed-in users may read the page; default false. */
   @IsOptional() @IsBoolean() registrationRequired?: boolean;
 }
 

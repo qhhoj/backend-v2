@@ -1,3 +1,4 @@
+import { ApiParam, ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -24,6 +25,7 @@ const STATE_COOKIE_PATH = '/api/internal/auth/social';
 const PENDING_COOKIE = 'oauth_pending';
 
 @Public()
+@ApiTags('Auth')
 @Controller('api/internal/auth/social')
 export class SocialController {
   constructor(
@@ -31,11 +33,27 @@ export class SocialController {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
+  /**
+   * List enabled social sign-in providers
+   *
+   * @remarks
+   * Public. Returns the slugs of the OAuth providers that are configured, for the login page buttons.
+   */
   @Get('providers')
   providers(): SocialProvidersResponse {
     return { providers: this.social.enabledProviders() };
   }
 
+  /**
+   * Begin a social sign-in
+   *
+   * @remarks
+   * Public. Redirects (302) the browser to the provider's authorization page and sets a short-lived `oauth_state` cookie that ties the flow to this browser. Limited to 30 starts per IP per 10 minutes (429 `rate_limited`); 404 `not_found` for an unknown provider.
+   */
+  @ApiParam({
+    name: 'provider',
+    description: 'Provider slug, one of `GET /auth/social/providers`.',
+  })
   @Get(':provider/start')
   async start(
     @Param('provider') provider: string,
@@ -48,6 +66,17 @@ export class SocialController {
     reply.redirect(location, 302);
   }
 
+  /**
+   * Finish a social sign-in
+   *
+   * @remarks
+   * Public. The provider redirects the browser here. Always answers with a 302 to the site: to `/` (or `/login/2fa` when a second factor is pending) after signing in, to `/register/social?token=...` when a new account must be completed with `POST /auth/social/complete`, or to `/login?error=<code>` with `oauth_state`, `oauth_failed`, `email_unverified`, `banned` or `account_not_activated`.
+   * A verified email that matches exactly one active account links the provider to it. The state is single use.
+   */
+  @ApiParam({
+    name: 'provider',
+    description: 'Provider slug the flow was started with.',
+  })
   @Get(':provider/callback')
   async callback(
     @Param('provider') provider: string,
@@ -74,6 +103,13 @@ export class SocialController {
     reply.redirect(location, 302);
   }
 
+  /**
+   * Complete a social sign-up
+   *
+   * @remarks
+   * Public. Creates the account for a pending social sign-in using the `token` from the callback redirect (valid 10 minutes, single use, and only from the browser that ran the callback, which holds the `oauth_pending` cookie). The account is active at once and the response signs it in like login.
+   * Errors: 400 `invalid_token`, 400 `validation_failed` (taken username, password policy), 409 `conflict`, 429 `rate_limited` (shares the registration budget of 5 per IP per hour).
+   */
   @Post('complete')
   @HttpCode(200)
   async complete(
