@@ -2,6 +2,7 @@
 # deploy/migrate/qhhoj-migrate.test.sh: qhhoj-migrate against a fake root with stub podman/systemctl/mongosh/rsync/df/openssl.
 # shellcheck disable=SC2015,SC2016 # stub bodies are written literally into fake binaries
 set -euo pipefail
+exec </dev/null # stub `cat`s must never wait on an interactive stdin; piped calls still override it
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(mktemp -d)"; bin="$(mktemp -d)"; trap 'rm -rf "$root" "$bin"' EXIT
 calls="$root/calls"
@@ -99,13 +100,20 @@ grep -q "mongodump" "$calls" && grep -q "systemctl start qhhoj.target" "$calls" 
 [ "$(grep -n 'mongodump' "$calls" | cut -d: -f1)" -lt "$(grep -n 'start qhhoj.target' "$calls" | cut -d: -f1)" ] || fail "dump before start"
 
 fresh; stub nginx; mkdir -p "$root/etc/nginx/snippets"
-out="$(migrate preview on staff)" || fail "preview on"
-grep -q "auth_basic" "$root/etc/nginx/snippets/qhhoj-gate.conf" || fail "gate written"
-grep -q "allow 127.0.0.1" "$root/etc/nginx/snippets/qhhoj-gate.conf" || fail "loopback exempt"
-grep -q "^staff:" "$root/etc/nginx/qhhoj-preview.htpasswd" || fail "htpasswd"
-grep -q "password" <<<"$out" || fail "prints the password once"
+out="$(migrate preview on)" || fail "preview on"
+gate="$root/etc/nginx/snippets/qhhoj-gate.conf"
+token="$(sed -n 's/.*__preview?key=\([^ ]*\).*/\1/p' <<<"$out")"
+[ "$token" = "$GENPW" ] || fail "prints the staff link with the generated token once"
+grep -q 'return 503' "$gate" || fail "visitors get 503"
+grep -q 'error_page 503 /maintenance.html' "$gate" || fail "maintenance page"
+grep -q "cookie_qhhoj_preview = \"$token\"" "$gate" || fail "staff cookie opens the site"
+grep -q 'remote_addr = "127.0.0.1"' "$gate" || fail "loopback exempt (health checks)"
+grep -q 'uri = "/maintenance.html"' "$gate" || fail "error page exempt (no redirect loop)"
+[ "$(stat -c %a "$gate")" = 600 ] || fail "gate (holds the token) is private"
+grep -q "auth_basic" "$gate" && fail "no browser password box"
+grep -q "nginx -t" "$calls" || fail "config checked before reload"
 migrate preview off >/dev/null || fail "preview off"
-grep -q "auth_basic" "$root/etc/nginx/snippets/qhhoj-gate.conf" && fail "gate emptied"
+grep -q "return 503" "$gate" && fail "gate emptied"
 migrate status >/dev/null || fail "status"
 # --- fix round 1 ---
 # C1: a container started by import-dump must not keep the lock
@@ -161,10 +169,6 @@ grep -q "uri: 'mongodb://m'" "$root/cfgcopy" || fail "dump config holds the uri"
 [ -z "$(ls "$root/srv/qhhoj-migrate"/mongodump.* 2>/dev/null)" ] || fail "dump config removed after go-live"
 grep -q -e "$MONGO" "$calls" && fail "mongo uri in argv"
 
-# I7: the preview password reaches openssl on stdin, not argv
-fresh; stub nginx; mkdir -p "$root/etc/nginx/snippets"
-migrate preview on staff >/dev/null || fail "preview on"
-grep -q "$GENPW" "$calls" && fail "preview password in argv"
 
 
 # M3: import-dump refuses after go-live

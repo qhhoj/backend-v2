@@ -4,7 +4,7 @@
 #   snapshot                         frozen copy of the local old site (dump and files) into incoming/, read-only to it
 #   run [--accept-rating-coverage]   every migrator step in runbook order into MONGO_URL; repeatable until go-live
 #   go-live                          finish, mongodump, start the site (asks for the typed word go-live; resumable)
-#   preview on <user> | off          basic-auth gate on the site for the staff review
+#   preview on | off                 maintenance page for everyone; staff get in through a one-time cookie link
 #   status                           last run, go-live state
 set -euo pipefail
 
@@ -22,7 +22,6 @@ LEGACY=qhhoj-legacy
 LEGACY_PORT=3307
 SHARED_KEYS=(MONGO_URL REDIS_URL MEDIA_URL ENCRYPTION_KEY)
 GATE="$ROOT/etc/nginx/snippets/qhhoj-gate.conf"
-HTPASSWD="$ROOT/etc/nginx/qhhoj-preview.htpasswd"
 LOGDIR=""
 ACCEPT_RATING=0
 ACCEPTED_NOTE=""
@@ -221,7 +220,7 @@ cmd_import_dump() { # <file.sql.gz>
   install -m 600 /dev/null "$WORK/legacy.env"
   echo "LEGACY_MYSQL_URL=mysql://root:$password@127.0.0.1:$LEGACY_PORT/legacy" > "$WORK/legacy.env"
   sha256sum "$dump" | cut -d' ' -f1 > "$WORK/dump.sha256"
-  MYSQL_PWD="$password" podman exec -i -e MYSQL_PWD "$LEGACY" mariadb -uroot -N legacy -e "
+  MYSQL_PWD="$password" podman exec -e MYSQL_PWD "$LEGACY" mariadb -uroot -N legacy -e "
     SELECT 'auth_user', COUNT(*) FROM auth_user UNION ALL SELECT 'judge_problem', COUNT(*) FROM judge_problem
     UNION ALL SELECT 'judge_submission', COUNT(*) FROM judge_submission UNION ALL SELECT 'judge_contest', COUNT(*) FROM judge_contest"
 }
@@ -268,26 +267,43 @@ reload_nginx() { nginx -t && systemctl reload nginx; }
 gate_off() {
   mkdir -p "$(dirname "$GATE")"
   # shellcheck disable=SC2016 # backticks are literal text in the comment
-  printf '# Empty in production; `qhhoj-migrate preview on` writes basic auth here.\n' > "$GATE"
+  printf '# Empty in production; `qhhoj-migrate preview on` writes the maintenance gate here.\n' > "$GATE"
   reload_nginx
 }
 
-gate_on() { # <user>
-  mkdir -p "$(dirname "$GATE")"
-  local password; password="$(openssl rand -base64 18)"
-  printf '%s:%s\n' "$1" "$(printf '%s' "$password" | openssl passwd -apr1 -stdin)" > "$HTPASSWD"
-  chmod 640 "$HTPASSWD"; chgrp www-data "$HTPASSWD" 2>/dev/null || true
-  cat > "$GATE" <<CONF
-# Written by qhhoj-migrate preview on; \`qhhoj-migrate preview off\` empties it.
-satisfy any;
-allow 127.0.0.1;
-allow ::1;
-deny all;
-auth_basic "QHHOJ preview";
-auth_basic_user_file /etc/nginx/qhhoj-preview.htpasswd;
+gate_config() { # <token>: nginx server-context gate; everyone but staff (cookie) and loopback gets the 503 page
+  cat <<CONF
+# Written by \`qhhoj-migrate preview on\`; \`qhhoj-migrate preview off\` empties it.
+# Visitors get /maintenance.html (503, Retry-After); staff open /__preview?key=<token> once (cookie, 14 days).
+set \$qhhoj_open 0;
+if (\$cookie_qhhoj_preview = "$1") { set \$qhhoj_open 1; }
+if (\$remote_addr = "127.0.0.1") { set \$qhhoj_open 1; }
+if (\$remote_addr = "::1") { set \$qhhoj_open 1; }
+if (\$uri = "/maintenance.html") { set \$qhhoj_open 1; }
+if (\$uri = "/__preview") { set \$qhhoj_open 1; }
+if (\$qhhoj_open = 0) { return 503; }
+error_page 503 /maintenance.html;
+location = /maintenance.html {
+    root /var/www/qhhoj-maintenance;
+    add_header Retry-After 3600 always;
+    add_header Cache-Control "no-store" always;
+}
+location = /__preview {
+    if (\$arg_key != "$1") { return 404; }
+    add_header Set-Cookie "qhhoj_preview=$1; Path=/; Max-Age=1209600; Secure; HttpOnly; SameSite=Lax" always;
+    add_header Cache-Control "no-store" always;
+    return 302 /;
+}
 CONF
+}
+
+gate_on() {
+  local token host; token="$(openssl rand -hex 16)"
+  host="$(value "$SITE_ENV" SITE_URL)"; host="${host%/}"
+  mkdir -p "$(dirname "$GATE")"
+  ( umask 077; gate_config "$token" > "$GATE" )
   reload_nginx
-  echo "preview user $1, password (shown once): $password"
+  echo "maintenance page on. Staff link (shown once, sets a 14-day cookie): ${host:-https://<site>}/__preview?key=$token"
 }
 
 cmd_status() {
@@ -341,7 +357,7 @@ main() {
     snapshot) cmd_snapshot ;;
     run) cmd_run "${2:-}" ;;
     go-live) cmd_go_live ;;
-    preview) case "${2:-}" in on) [ -n "${3:-}" ] || usage; gate_on "$3" ;; off) gate_off ;; *) usage ;; esac ;;
+    preview) case "${2:-}" in on) gate_on ;; off) gate_off ;; *) usage ;; esac ;;
     status) cmd_status ;;
     *) usage ;;
   esac
