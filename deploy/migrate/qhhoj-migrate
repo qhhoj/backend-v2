@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # qhhoj-migrate: the freeze-and-iterate migration on the v2 host (root). RUNBOOK "Migration week".
 #   import-dump <file.sql.gz>        load the frozen legacy dump into a temporary MariaDB container (127.0.0.1:3307)
-#   snapshot                         frozen copy of the local old site (dump and files) into incoming/, read-only to it
+#   snapshot                         dump of the local old site's database into incoming/ (read-only to it; run copies its files)
 #   run [--accept-rating-coverage]   every migrator step in runbook order into MONGO_URL; repeatable until go-live
 #   go-live                          finish, mongodump, start the site (asks for the typed word go-live; resumable)
 #   preview on | off                 maintenance page for everyone; staff get in through a one-time cookie link
@@ -114,10 +114,11 @@ recompute_with_worker() {
   return "$rc"
 }
 
-sync_files() {
-  for dir in media problem-data; do
-    rsync -a --delete --chown=987:987 --chmod=D2750,F640 "$INCOMING/$dir/" "$DATA/$dir/" || return 1
-  done
+sync_files() { # straight from the old site's dirs (read-only to them): one copy of ~20 GB, not two
+  local media problems
+  media="$(legacy_setting LEGACY_MEDIA_DIR /qhh/media)"; problems="$(legacy_setting LEGACY_PROBLEM_DIR /qhh/problems)"
+  rsync -a --delete --chown=987:987 --chmod=D2750,F640 "$media/" "$DATA/media/" || return 1
+  rsync -a --delete --chown=987:987 --chmod=D2750,F640 "$problems/" "$DATA/problem-data/" || return 1
 }
 
 # Rating coverage lines (RUNBOOK "Rating coverage"); check-integrity logs problems as Nest ERROR lines.
@@ -338,19 +339,12 @@ dump_legacy() { # <stamp>: the dump is written as .part and renamed only when my
   mv "$part" "${part%.part}"
 }
 
-copy_legacy_files() { # read-only toward the old site: rsync only reads its source
-  rsync -a --delete "$(legacy_setting LEGACY_MEDIA_DIR /qhh/media)/" "$INCOMING/media/" || return 1
-  rsync -a --delete "$(legacy_setting LEGACY_PROBLEM_DIR /qhh/problems)/" "$INCOMING/problem-data/" || return 1
-}
-
 cmd_snapshot() {
   local stamp; stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   [ -f "$MIGRATE_ENV" ] || die "missing $MIGRATE_ENV; snapshot needs the legacy settings"
-  umask 077 # the dump and copies are created private (mode 600 / 700)
+  umask 077 # the dump is created private (mode 600)
   take_lock
-  install -d "$INCOMING/media" "$INCOMING/problem-data"
   dump_legacy "$stamp"
-  copy_legacy_files
   echo "$INCOMING/legacy-$stamp.sql.gz"
 }
 

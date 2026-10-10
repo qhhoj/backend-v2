@@ -129,7 +129,7 @@ grep -q "podman run -d --name .* --memory 2g " "$calls" || fail "legacy MariaDB 
 grep -q -e "$GENPW" -e "$MONGO" -e "$SECRET" "$calls" && fail "import-dump put a secret in argv"
 
 # I2: a failed media rsync stops the run at sync-files; a worker that does not start fails recompute
-fresh; stub rsync 'case "$*" in *"/incoming/media/"*) exit 23 ;; esac; true'
+fresh; stub rsync 'case "$*" in *" /qhh/media/ "*) exit 23 ;; esac; true'
 migrate run >/dev/null 2>&1 && fail "failed media sync must fail the run"
 [ "$(steps_run)" = "audit backfill grant-permissions verify recompute" ] || fail "sync-files stops the run: $(steps_run)"
 fresh; stub systemctl 'case "$*" in *"start qhhoj-worker"*) exit 1 ;; *is-active*) exit 3 ;; esac; true'
@@ -206,12 +206,15 @@ migrate snapshot >/dev/null || fail "snapshot"
 ls "$root/srv/qhhoj-migrate/incoming"/legacy-*.sql.gz >/dev/null 2>&1 || fail "snapshot writes .sql.gz"
 ls "$root/srv/qhhoj-migrate/incoming"/*.part >/dev/null 2>&1 && fail "no .part left after success"
 grep -q "mysqldump --single-transaction --quick --routines --default-character-set=utf8mb4 oldsite" "$calls" || fail "dump flags and db name"
-grep -q "rsync -a --delete /old/media/ " "$calls" || fail "media rsync from the configured dir"
-grep -q "rsync -a --delete /qhh/problems/ " "$calls" || fail "problem data rsync defaults to /qhh/problems"
+grep -q "^rsync" "$calls" && fail "snapshot copies no files (run copies them straight from the old site)"
 fresh; stub mysqldump 'echo SQL'; stub rsync
 migrate snapshot >/dev/null || fail "snapshot with defaults"
 grep -q "mysqldump --single-transaction --quick --routines --default-character-set=utf8mb4 qhhoj$" "$calls" || fail "db name defaults to qhhoj"
-grep -q "rsync -a --delete /qhh/media/ " "$calls" || fail "media defaults to /qhh/media"
+migrate run >/dev/null || fail "run after snapshot"
+grep -q "rsync -a --delete --chown=987:987 --chmod=D2750,F640 /qhh/media/ $root/srv/qhhoj/media/" "$calls" || fail "run copies media from /qhh/media"
+grep -q "rsync -a --delete --chown=987:987 --chmod=D2750,F640 /qhh/problems/ $root/srv/qhhoj/problem-data/" "$calls" || fail "run copies problem data from /qhh/problems"
+fresh; echo 'LEGACY_MEDIA_DIR=/old/media' >> "$root/root/migrate.env"; migrate run >/dev/null || fail "run with LEGACY_MEDIA_DIR"
+grep -q " /old/media/ $root/srv/qhhoj/media/" "$calls" || fail "media from the configured dir"
 fresh; stub mysqldump 'echo partial; exit 2'; stub rsync
 set +e; migrate snapshot >/dev/null 2>&1; code=$?; set -e
 [ "$code" != 0 ] || fail "failing mysqldump must fail the snapshot"
