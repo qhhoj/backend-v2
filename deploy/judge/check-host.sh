@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy/judge/check-host.sh: verifies a judge host against the "Judge hosts" runbook section.
+# packaging/check-host.sh: verifies a judge host against DEPLOY.md (and the site RUNBOOK "Judge hosts" section).
 # Usage: check-host.sh [--bridge HOST:PORT --server-name NAME]
 # Env: CHECK_ROOT (default /), CHECK_SKIP_COMMANDS=1 (file checks only), CHECK_KEY_OWNER (default 0),
 #      CHECK_FIXTURES (a directory holding saved `isolate-check-environment` and `nft-output` outputs).
