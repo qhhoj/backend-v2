@@ -1,5 +1,6 @@
+# workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
 name: ci
-on: { push: { branches: [main] }, pull_request: {} }
+on: { push: { branches: [main] }, pull_request: {}, workflow_dispatch: {} }
 jobs:
   # Pushes that touch only docs, changesets or deploy scripts skip the heavy jobs below; a skipped job counts as a
   # pass, so the run (and the deploy gate waiting on it) stays green. deploy-scripts always runs.

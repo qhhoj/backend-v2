@@ -1,11 +1,15 @@
 # Opens or updates the "Version Packages" PR from the pending .changeset/*.md files on every push to main.
 # Merging that PR leaves no changesets, so the next run takes the publish branch: release:tag tags v<version>
 # (no npm publish; the app is private). Third-party actions are pinned by commit SHA; bump them deliberately.
+# commitMode github-api: GitHub signs the version commit (Verified), as the protected main requires. A PR made with
+# GITHUB_TOKEN starts no pull_request workflow, so the job dispatches ci and changeset on the version branch; their
+# check runs attach to its head commit under the names the branch protection requires.
 name: release
 on: { push: { branches: [main] } }
 permissions:
   contents: write
   pull-requests: write
+  actions: write # dispatch ci and changeset on the version branch
 jobs:
   release:
     concurrency:
@@ -21,15 +25,23 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
-      - uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
+      - id: version
+        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
         with:
           version: npm run release:version
           publish: npm run release:tag
           title: 'chore: version packages'
           commit: 'chore: version packages'
-          createGithubReleases: false
+          commitMode: github-api
+          createGithubReleases: false # release:tag creates the Release itself, with the changelog section
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run the required checks on the Version Packages PR
+        if: steps.version.outputs.hasChangesets == 'true'
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          gh workflow run ci.yml --ref changeset-release/main
+          gh workflow run changeset.yml --ref changeset-release/main
       - id: created
         name: Did this run create the version tag?
         run: |

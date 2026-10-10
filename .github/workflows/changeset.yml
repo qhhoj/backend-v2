@@ -1,5 +1,6 @@
 name: changeset
-on: { pull_request: {} }
+# workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
+on: { pull_request: {}, workflow_dispatch: {} }
 jobs:
   status:
     # the bot's Version Packages PR consumes the changesets, so it has none to show
@@ -14,4 +15,11 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
       - name: the PR carries a changeset
+        if: github.event_name == 'pull_request'
         run: npx changeset status --since=origin/main
+      - name: the Version Packages branch consumed every changeset
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          [ "$GITHUB_REF_NAME" = changeset-release/main ] || { echo "dispatch only on changeset-release/main" >&2; exit 1; }
+          left="$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md)"
+          [ -z "$left" ] || { echo "unconsumed changesets: $left" >&2; exit 1; }
