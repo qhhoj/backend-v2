@@ -7,7 +7,7 @@ import {
   StorageModule,
 } from '@libs/common';
 import { DatabaseModule } from '@libs/database';
-import { ProblemFilesModule } from '@libs/problems';
+import { PolygonApiModule, ProblemFilesModule } from '@libs/problems';
 import { SettingsModule } from '@libs/settings';
 import { ContestDataModule } from './jobs/contest-data/contest-data.module';
 import { ContestExportModule } from './jobs/contest-export/contest-export.module';
@@ -26,6 +26,7 @@ import { PdfRenderModule } from './jobs/pdf-render/pdf-render.module';
 import { ProblemDataBytesModule } from './jobs/problem-databytes/problem-databytes.module';
 import { OrganizationUsageAuditModule } from './jobs/organization-usage-audit/organization-usage-audit.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
+import { PolygonAutoSyncModule } from './jobs/polygon-autosync/polygon-autosync.module';
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
 import { ProblemSolversModule } from './jobs/problem-solvers/problem-solvers.module';
 import { SubmissionEffectsModule } from './jobs/submission-effects/submission-effects.module';
@@ -46,10 +47,12 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     ScheduleModule.forRoot(),
     SettingsModule,
     ProblemFilesModule,
+    PolygonApiModule,
     PdfRenderModule,
     ProblemPackageModule,
     ProblemPurgeModule,
     PolygonImportModule,
+    PolygonAutoSyncModule,
     ProblemDataBytesModule,
     SubmissionEffectsModule,
     EffectsSweepModule,

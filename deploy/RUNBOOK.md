@@ -143,6 +143,12 @@ Per judge machine, against the review stack (`qhhoj.target` running, bridge on 9
 - A client's acting user must not be a superuser and must hold `judge.add_contest` and `judge.create_private_contest`; it may hold more than the key's creator, so use a dedicated account. Keys may carry `expiresAt`; each client gets 60 requests per minute.
 - nginx needs the `/s/` and `/api/sync/` locations from `deploy/nginx/qhhoj.conf`.
 
+## Polygon account
+
+- Create (or reuse) one Polygon account for QHHOJ; in Polygon, Settings -> API keys, create a key. In QHHOJ admin settings (`judge.change_settings`) set `polygon.apiKey`, `polygon.apiSecret` (stored encrypted, never shown again) and `polygon.accountName` (its login), then "test connection" (`POST /api/internal/polygon/test`). `polygon_clock_skew` means the server clock is off: check `timedatectl` / NTP.
+- Setters add `polygon.accountName` as a READ co-author of their problem and build a full package (with Linux tests); the problem then appears under "Import from Polygon" for staff with `judge.import_polygon_package`.
+- The worker downloads packages from `https://polygon.codeforces.com/api/` (outbound HTTPS from the worker host) and checks auto-sync problems every 10 minutes, skipping problems of a running contest. Emptying the key or secret disconnects; linked problems keep their content.
+
 ## Deploy notes
 
 - Stream caps per api process (fixed defaults, no env override): public submission feed 900 (was 1000), contest event-feed streams 100 (`contestFeedTotal`, new), contest streams 1500, notification streams 2000, total 5000. The caps add up to 4500, which leaves 500 slots for submission and ticket streams. Beyond a cap the api answers 429; with several api processes behind nginx each process counts on its own. A load balancer or monitoring that assumed 1000 feed streams per process needs the new numbers.

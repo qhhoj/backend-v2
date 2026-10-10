@@ -139,6 +139,7 @@ export * from './organization-request.schema';
 export * from './organization-usage.schema';
 export * from './organization.schema';
 export * from './problem-data.schema';
+export * from './polygon-link.schema';
 export * from './problem-group.schema';
 export * from './problem-type.schema';
 export * from './problem.schema';

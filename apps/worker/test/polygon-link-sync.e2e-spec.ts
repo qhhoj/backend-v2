@@ -1,0 +1,348 @@
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Job, Queue } from 'bullmq';
+import { newId } from '@libs/database';
+import {
+  autoSyncJobId,
+  POLYGON_ERROR_PREFIX,
+  POLYGON_FETCH,
+  POLYGON_QUEUE,
+} from '@libs/problems';
+import type { ImportProgress, PolygonImportJob } from '@libs/problems';
+import { FakePolygon } from '@libs/problems/testing';
+import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
+import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
+import { PolygonAutoSyncService } from '../src/jobs/polygon-autosync/polygon-autosync.service';
+import { seedContest } from './effects-fixtures';
+import { buildPolygonPackage, properties } from './polygon-fixtures';
+import type { PolygonFixture } from './polygon-fixtures';
+import { setupWorkerTest } from './setup';
+import type { WorkerTest } from './setup';
+
+const fakePandoc = {
+  assertAvailable: () => Promise.resolve(),
+  texToMarkdown: (tex: string) => Promise.resolve(tex),
+};
+const POLYGON_ID = 4242;
+const fixtureNamed = (name: string, timeLimitMs = 1000): PolygonFixture => ({
+  tests: [{ input: '1 2', answer: '3', points: 100 }],
+  timeLimitMs,
+  statements: [
+    {
+      language: 'english',
+      name,
+      properties: properties({ legend: `${name}.` }),
+    },
+  ],
+  solution: null,
+});
+const ready = (id: number, revision: number) => ({
+  id,
+  revision,
+  state: 'READY',
+  creationTimeSeconds: 0,
+});
+
+describe('Polygon link, sync and auto-sync', () => {
+  let worker: WorkerTest;
+  let processor: PolygonImportProcessor;
+  let autoSync: PolygonAutoSyncService;
+  let imports: Queue<PolygonImportJob>;
+  const polygon = new FakePolygon();
+  let requesterId: string, groupId: string, otherGroupId: string;
+  let typeId: string, otherLanguageId: string;
+
+  /** A job as BullMQ hands it to the processor, recording the progress it reports. */
+  const runJob = async (data: PolygonImportJob) => {
+    const progress: ImportProgress[] = [];
+    const job = {
+      id: newId(),
+      data,
+      updateProgress: (value: ImportProgress) => {
+        progress.push(value);
+        return Promise.resolve();
+      },
+    } as unknown as Job<PolygonImportJob>;
+    const outcome = await processor.process(job).then(
+      (result) => ({ result, error: null }),
+      (error: Error) => ({ result: null, error: error.message }),
+    );
+    return { ...outcome, steps: progress.map(({ step }) => step) };
+  };
+  const linkJob = (code: string, packageId: number): PolygonImportJob => ({
+    requesterId,
+    code,
+    mode: 'create',
+    groupId,
+    typeIds: [typeId],
+    points: 900,
+    authors: [requesterId],
+    isFullMarkup: false,
+    mainStatementLanguage: 'english',
+    statementLanguages: {},
+    tutorialLanguage: null,
+    ignoreZeroPointBatches: false,
+    ignoreZeroPointCases: false,
+    appendMainSolution: false,
+    maxCases: 300,
+    polygon: {
+      problemId: POLYGON_ID,
+      name: 'sum-polygon',
+      owner: 'setter',
+      revision: 3,
+      packageId,
+      purpose: 'link',
+      autoSync: true,
+    },
+  });
+  const syncJob = (
+    code: string,
+    { packageId, revision }: { packageId: number; revision: number },
+    dataVersion: number,
+  ): PolygonImportJob => ({
+    ...linkJob(code, packageId),
+    mode: 'update',
+    groupId: undefined,
+    typeIds: undefined,
+    points: undefined,
+    authors: undefined,
+    expectedDataVersion: dataVersion,
+    polygon: {
+      ...linkJob(code, packageId).polygon!,
+      revision,
+      purpose: 'sync',
+    },
+  });
+  const linked = async (code: string, packageId = 10) => {
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum')),
+    });
+    const { error } = await runJob(linkJob(code, packageId));
+    expect(error).toBeNull();
+    return (await worker.problems.findOne({ code }))!.toObject({
+      getters: true,
+    });
+  };
+
+  beforeAll(async () => {
+    worker = await setupWorkerTest({
+      overrides: [
+        { provide: PandocService, useValue: fakePandoc },
+        { provide: POLYGON_FETCH, useValue: polygon.fetch },
+      ],
+    });
+    processor = worker.module.get(PolygonImportProcessor);
+    autoSync = worker.module.get(PolygonAutoSyncService);
+    imports = worker.module.get(getQueueToken(POLYGON_QUEUE));
+    await worker.setSetting('polygon.apiKey', 'KEY');
+    await worker.setSetting('polygon.apiSecret', 'SECRET');
+    groupId = (await worker.problemGroups.create({ name: 'A', fullName: 'A' }))
+      ._id;
+    otherGroupId = (
+      await worker.problemGroups.create({ name: 'B', fullName: 'B' })
+    )._id;
+    typeId = (await worker.problemTypes.create({ name: 't', fullName: 'T' }))
+      ._id;
+    const language = (key: string) =>
+      worker.languages.create({
+        key,
+        name: key,
+        commonName: key,
+        ace: 'c_cpp',
+        pygments: 'cpp',
+        extension: 'cpp',
+        includeInProblem: true,
+      });
+    await language('CPP17');
+    otherLanguageId = (await language('CPP20'))._id;
+    requesterId = (
+      await worker.users.create({ username: 'setter', password: '!' })
+    )._id;
+  });
+  beforeEach(() => polygon.reset());
+  afterAll(() => worker.teardown());
+
+  it('downloads the package from Polygon, imports it and links the problem, reporting each step', async () => {
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum')),
+    });
+    const { result, error, steps } = await runJob(linkJob('linked', 10));
+    expect(error).toBeNull();
+    expect(result).toMatchObject({ code: 'linked' });
+    expect(polygon.callsOf('problem.package')[0].params).toMatchObject({
+      problemId: String(POLYGON_ID),
+      packageId: '10',
+      type: 'linux',
+    });
+    expect(steps[0]).toBe('downloading');
+    expect(steps.slice(-2)).toEqual(['statements', 'tests']);
+    const problem = (await worker.problems.findOne({
+      code: 'linked',
+    }))!.toObject({
+      getters: true,
+    });
+    expect(problem).toMatchObject({ name: 'Sum', points: 900 });
+    expect(problem.polygonLink).toMatchObject({
+      problemId: POLYGON_ID,
+      revision: 3,
+      packageId: 10,
+      linkedBy: requesterId,
+      autoSync: true,
+      lastSyncResult: 'ok',
+      lastSyncPackageId: 10,
+      options: { mainStatementLanguage: 'english', maxCases: 300 },
+    });
+  });
+
+  it('syncs statement, tests and limits from a newer package and keeps the QHHOJ-owned fields', async () => {
+    const before = await linked('kept');
+    await worker.problems.updateOne(
+      { code: 'kept' },
+      {
+        $set: {
+          points: 1500,
+          groupId: otherGroupId,
+          authors: [],
+          curators: [requesterId],
+          allowedLanguages: [otherLanguageId],
+        },
+      },
+    );
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
+    });
+    const { error } = await runJob(
+      syncJob('kept', { packageId: 11, revision: 4 }, before.dataVersion),
+    );
+    expect(error).toBeNull();
+    const after = (await worker.problems.findOne({ code: 'kept' }))!.toObject({
+      getters: true,
+    });
+    expect(after).toMatchObject({
+      name: 'Sum v2',
+      timeLimit: 2,
+      points: 1500,
+      groupId: otherGroupId,
+      authors: [],
+      curators: [requesterId],
+      allowedLanguages: [otherLanguageId],
+      dataVersion: before.dataVersion + 1,
+    });
+    expect(after.polygonLink).toMatchObject({
+      revision: 4,
+      packageId: 11,
+      lastSyncResult: 'ok',
+      lastSyncError: null,
+      autoSync: true,
+      linkedAt: before.polygonLink!.linkedAt,
+    });
+  });
+
+  it('records a failed sync on the link and leaves the problem as it was', async () => {
+    const before = await linked('broken');
+    polygon.reply('problem.package', {
+      failed: 'packageId: Package is not full',
+    });
+    const { error } = await runJob(
+      syncJob('broken', { packageId: 12, revision: 5 }, before.dataVersion),
+    );
+    expect(error).toBe(
+      `${POLYGON_ERROR_PREFIX}Polygon: problem.package: packageId: Package is not full`,
+    );
+    const after = (await worker.problems.findOne({ code: 'broken' }))!.toObject(
+      {
+        getters: true,
+      },
+    );
+    expect(after.name).toBe('Sum');
+    expect(after.dataVersion).toBe(before.dataVersion);
+    expect(after.polygonLink).toMatchObject({
+      packageId: 10,
+      lastSyncResult: 'failed',
+      lastSyncError: 'Polygon: problem.package: packageId: Package is not full',
+      lastSyncPackageId: 12,
+    });
+  });
+
+  it('refuses a sync of a problem unlinked after it was queued, before downloading', async () => {
+    const before = await linked('unlinked');
+    await worker.problems.updateOne(
+      { code: 'unlinked' },
+      { $set: { polygonLink: null } },
+    );
+    polygon.reset();
+    const { error } = await runJob(
+      syncJob('unlinked', { packageId: 11, revision: 4 }, before.dataVersion),
+    );
+    expect(error).toBe(
+      `${POLYGON_ERROR_PREFIX}the problem is no longer linked to Polygon problem ${POLYGON_ID}`,
+    );
+    expect(polygon.calls).toEqual([]);
+  });
+
+  describe('auto-sync', () => {
+    beforeAll(() => imports.pause());
+    afterAll(() => imports.resume());
+    beforeEach(() => imports.drain(true));
+
+    it('queues a sync of a newer READY package, with the linking user as requester', async () => {
+      const problem = await linked('auto_new');
+      polygon.reply('problem.packages', {
+        result: [ready(10, 3), ready(20, 6)],
+      });
+      const summary = await autoSync.run();
+      expect(summary.queued).toBeGreaterThanOrEqual(1);
+      const job = await imports.getJob(autoSyncJobId(problem._id, 20));
+      expect(job?.data).toMatchObject({
+        code: 'auto_new',
+        mode: 'update',
+        requesterId,
+        expectedDataVersion: problem.dataVersion,
+        polygon: { packageId: 20, revision: 6, purpose: 'sync' },
+      });
+      expect(job?.data.points).toBeUndefined();
+    });
+
+    it('defers a problem used by a running contest, and skips the synced package, a failed one and switched-off links', async () => {
+      const inContest = await linked('auto_contest');
+      await seedContest(worker, {
+        problems: [{ problem: inContest._id, points: 100, order: 0 }],
+      } as never);
+      const failed = await linked('auto_failed');
+      await worker.problems.updateOne(
+        { code: 'auto_failed' },
+        {
+          $set: {
+            'polygonLink.lastSyncResult': 'failed',
+            'polygonLink.lastSyncPackageId': 30,
+          },
+        },
+      );
+      const off = await linked('auto_off');
+      await worker.problems.updateOne(
+        { code: 'auto_off' },
+        { $set: { 'polygonLink.autoSync': false } },
+      );
+      polygon.reply('problem.packages', { result: [ready(30, 7)] });
+      const summary = await autoSync.run();
+      expect(summary.deferred).toBe(1);
+      for (const problem of [inContest, failed, off])
+        expect(
+          await imports.getJob(autoSyncJobId(problem._id, 30)),
+        ).toBeUndefined();
+    });
+
+    it('does nothing while Polygon is not connected', async () => {
+      await worker.setSetting('polygon.apiSecret', '');
+      try {
+        expect(await autoSync.run()).toEqual({
+          checked: 0,
+          queued: 0,
+          deferred: 0,
+        });
+        expect(polygon.calls).toEqual([]);
+      } finally {
+        await worker.setSetting('polygon.apiSecret', 'SECRET');
+      }
+    });
+  });
+});

@@ -123,6 +123,19 @@ export const optionalDatetimeType: SettingType<string> = {
   },
 };
 
+const hasControlCharacter = (text: string): boolean =>
+  [...text].some((char) => char.charCodeAt(0) < 0x20 || char === '\u007f');
+
+/** Short single-line text such as an API key; `''` means unset. No control characters, so the value cannot break a header or a log line. Surrounding spaces (a sloppy paste) are dropped. */
+export const optionalTextType = (maxLength: number): SettingType<string> => ({
+  parse: (raw) =>
+    typeof raw === 'string' &&
+    raw.length <= maxLength &&
+    !hasControlCharacter(raw)
+      ? raw.trim()
+      : fail(`Must be text of at most ${maxLength} characters on one line.`),
+});
+
 /** `''` switches the feature off. */
 export const optionalUrlType: SettingType<string> = {
   parse: (raw) =>

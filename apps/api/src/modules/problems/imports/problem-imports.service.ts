@@ -9,13 +9,20 @@ import { AppError, RateLimitService, unique } from '@libs/common';
 import { newId } from '@libs/database';
 import type { StatementLanguage } from '@libs/database';
 import {
+  IMPORT_STEPS,
   listZipEntries,
   POLYGON_ERROR_PREFIX,
+  POLYGON_PACKAGE_MAX_BYTES,
   POLYGON_QUEUE,
   ProblemDataFilesService,
   ZipError,
 } from '@libs/problems';
-import type { PolygonImportJob, PolygonImportResult } from '@libs/problems';
+import type {
+  ImportProgress,
+  ImportStep,
+  PolygonImportJob,
+  PolygonImportResult,
+} from '@libs/problems';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { ImportJobResponse } from './dto/import-job.response';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
@@ -24,10 +31,10 @@ import { rejectFile, saveMultipartFile } from '../core/multipart';
 import { ProblemDataStore } from '../data/problem-data.store';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemsRepository } from '../core/problems.repository';
+import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from '../core/rate-limits';
 
-export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** A finished import job stays readable for a day, so the staff member can see its outcome. */
 const IMPORT_JOB_KEEP_SECONDS = 24 * 60 * 60;
 const IMPORT_JOB_KEEP = { age: IMPORT_JOB_KEEP_SECONDS };
@@ -54,29 +61,47 @@ export class ProblemImportsService {
     query: PolygonImportQueryDto,
     request: FastifyRequest,
   ): Promise<{ jobId: string }> {
-    const job = await this.resolveJob(auth, query);
-    await this.policy.assertReferences(query);
-    await this.rateLimit.reserve(
-      [`import:user:${auth.principal.userId}`],
-      IMPORT_LIMIT,
-      IMPORT_WINDOW_SECONDS,
-    );
+    const job = await this.prepare(auth, query);
+    await this.reserveImport(auth);
     const jobId = newId();
     const packagePath = await this.dataFiles.importPackagePath(jobId);
     try {
       await saveMultipartFile(request, POLYGON_PACKAGE_MAX_BYTES, packagePath);
       await this.assertPackage(packagePath);
       await this.assertStorage(auth, query, packagePath);
-      await this.queue.add('import', job, {
-        jobId,
-        removeOnComplete: IMPORT_JOB_KEEP,
-        removeOnFail: IMPORT_JOB_KEEP,
-      });
+      await this.enqueue(jobId, job);
     } catch (error) {
       await rm(packagePath, { force: true });
       throw error;
     }
     return { jobId };
+  }
+
+  /** The checks every import shares (permission, free code or writable problem, references) and the job they resolve; also used by the Polygon import. The caller reserves the rate limit once its own checks passed. */
+  async prepare(
+    auth: AuthContext,
+    query: PolygonImportQueryDto,
+  ): Promise<PolygonImportJob> {
+    const job = await this.resolveJob(auth, query);
+    await this.policy.assertReferences(query);
+    return job;
+  }
+
+  /** One import of the user's hourly budget; a Polygon sync spends it too. */
+  async reserveImport(auth: AuthContext): Promise<void> {
+    await this.rateLimit.reserve(
+      [`import:user:${auth.principal.userId}`],
+      IMPORT_LIMIT,
+      IMPORT_WINDOW_SECONDS,
+    );
+  }
+
+  async enqueue(jobId: string, job: PolygonImportJob): Promise<void> {
+    await this.queue.add('import', job, {
+      jobId,
+      removeOnComplete: IMPORT_JOB_KEEP,
+      removeOnFail: IMPORT_JOB_KEEP,
+    });
   }
 
   /** Only the requester (or a superuser) can see a job; anyone else gets the same 404 as an unknown id. */
@@ -88,9 +113,13 @@ export class ProblemImportsService {
       (job.data.requesterId !== principal.userId && !principal.isSuperuser)
     )
       throw new AppError('not_found', 404, 'No such import');
+    const state = await job.getState();
+    const progress = progressOf(job.progress);
     return {
       id: jobId,
-      state: await job.getState(),
+      state,
+      step: stepOf(state, progress),
+      progress,
       result: job.returnvalue ?? null,
       error: job.failedReason ? shownReason(job.failedReason) : null,
     };
@@ -102,37 +131,9 @@ export class ProblemImportsService {
     query: PolygonImportQueryDto,
   ): Promise<PolygonImportJob> {
     const { principal } = auth;
-    const options = {
-      requesterId: principal.userId,
-      code: query.code,
-      mode: query.mode,
-      authors: query.authors && unique(query.authors),
-      groupId: query.groupId,
-      typeIds: query.typeIds && unique(query.typeIds),
-      points: query.points,
-      mainStatementLanguage: query.mainStatementLanguage ?? null,
-      statementLanguages: Object.fromEntries(
-        (query.statementLanguages ?? []).map(
-          (pair) => pair.split('=') as [string, StatementLanguage],
-        ),
-      ),
-      tutorialLanguage: query.tutorialLanguage ?? null,
-      ignoreZeroPointBatches: query.ignoreZeroPointBatches,
-      ignoreZeroPointCases: query.ignoreZeroPointCases,
-      appendMainSolution: query.appendMainSolution,
-      maxCases: maxTestcasesFor(principal),
-    };
+    const options = requestedOptions(principal, query);
     if (query.mode === 'update') {
-      const problem = await this.store.writableProblem(principal, query.code);
-      if (
-        problem.isFullMarkup &&
-        !hasPermission(principal, 'judge.problem_full_markup')
-      )
-        throw new AppError(
-          'forbidden',
-          403,
-          'Full markup requires judge.problem_full_markup',
-        );
+      const problem = await this.importableProblem(principal, query.code);
       return {
         ...options,
         curators: query.curators && unique(query.curators),
@@ -152,6 +153,24 @@ export class ProblemImportsService {
       curators: unique([...(query.curators ?? []), principal.userId]),
       isFullMarkup: false,
     };
+  }
+
+  /** An existing problem an import may overwrite: writable test data, and statement text on a full-markup problem needs `judge.problem_full_markup`. */
+  async importableProblem(
+    principal: AuthContext['principal'],
+    code: string,
+  ): Promise<ProblemDocument> {
+    const problem = await this.store.writableProblem(principal, code);
+    if (
+      problem.isFullMarkup &&
+      !hasPermission(principal, 'judge.problem_full_markup')
+    )
+      throw new AppError(
+        'forbidden',
+        403,
+        'Full markup requires judge.problem_full_markup',
+      );
+    return problem;
   }
 
   /** Live, deleted (restorable) and purged codes are all taken; a purge removes the data directory, so the tombstone row is what blocks the code. */
@@ -194,6 +213,45 @@ export class ProblemImportsService {
     }
   }
 }
+
+/** The options every import job carries, as the user gave them. */
+const requestedOptions = (
+  principal: AuthContext['principal'],
+  query: PolygonImportQueryDto,
+) => ({
+  requesterId: principal.userId,
+  code: query.code,
+  mode: query.mode,
+  authors: query.authors && unique(query.authors),
+  groupId: query.groupId,
+  typeIds: query.typeIds && unique(query.typeIds),
+  points: query.points,
+  mainStatementLanguage: query.mainStatementLanguage ?? null,
+  statementLanguages: Object.fromEntries(
+    (query.statementLanguages ?? []).map(
+      (pair) => pair.split('=') as [string, StatementLanguage],
+    ),
+  ),
+  tutorialLanguage: query.tutorialLanguage ?? null,
+  ignoreZeroPointBatches: query.ignoreZeroPointBatches,
+  ignoreZeroPointCases: query.ignoreZeroPointCases,
+  appendMainSolution: query.appendMainSolution,
+  maxCases: maxTestcasesFor(principal),
+});
+
+/** The worker reports `{step, done, total}`; anything else (a job queued before progress existed) reads as none. */
+const progressOf = (progress: unknown): ImportProgress | null =>
+  typeof progress === 'object' &&
+  progress !== null &&
+  IMPORT_STEPS.includes((progress as ImportProgress).step)
+    ? (progress as ImportProgress)
+    : null;
+
+const stepOf = (state: string, progress: ImportProgress | null): ImportStep => {
+  if (state === 'completed') return 'done';
+  if (state === 'failed') return 'failed';
+  return progress?.step ?? 'queued';
+};
 
 /** Only a failure the worker wrote for the requester is shown; the rest may carry paths and driver details. */
 const shownReason = (reason: string): string =>

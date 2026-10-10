@@ -16,3 +16,4 @@ export * from './problem-publish';
 export * from './package-manifest';
 export * from './package-cache.service';
 export * from './quota-queues';
+export * from './polygon';
