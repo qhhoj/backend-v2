@@ -34,8 +34,10 @@ drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
 
 migration_running() { [ -e "$MIGRATE_LOCK" ] && ! flock -n "$MIGRATE_LOCK" true; }
 running_contest() {
-  # shellcheck disable=SC2016 # the eval is JavaScript, not shell
-  mongosh "$(env_value MONGO_URL)" --quiet --eval '
+  # The URL carries the DB password: pass it in the environment, never in argv (visible in ps).
+  # shellcheck disable=SC2016 # the eval is JavaScript ($lte/$gt are Mongo operators), not shell
+  QHHOJ_MONGO_URL="$(env_value MONGO_URL)" mongosh --nodb --quiet --eval '
+    const db = connect(process.env.QHHOJ_MONGO_URL);
     const now = new Date();
     const c = db.contests.findOne({ startTime: { $lte: now }, endTime: { $gt: now } }, { key: 1, endTime: 1 });
     if (c) print(c.key + " ends " + c.endTime.toISOString());'

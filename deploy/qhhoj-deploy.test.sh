@@ -35,6 +35,7 @@ set +e; deploy backend latest >/dev/null 2>&1; code=$?; set -e
 
 : > "$calls"; set +e; STUB_CONTEST="r42 2026-10-10T12:00:00.000Z" deploy backend v2.2.0 >/dev/null; code=$?; set -e
 [ "$code" = 75 ] || fail "running contest must defer (75), got $code"
+grep -q 'mongodb://x' "$calls" && fail "MONGO_URL (password) must not be a mongosh argument"
 grep -q "systemctl restart" "$calls" && fail "deferred deploy restarted"
 STUB_CONTEST="r42 2026-10-10T12:00:00.000Z" deploy backend v2.2.0 --force >/dev/null || fail "--force overrides the contest guard"
 [ "$(hist | tail -1)" = v2.2.0 ] || fail "forced deploy recorded"
