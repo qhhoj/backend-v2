@@ -322,6 +322,28 @@ describe('organization join requests', () => {
     await decide(organization.slug, pending.id, ownerSession, 'A').expect(409);
   });
 
+  it('never leaves a member behind a rejected request when approve and reject race', async () => {
+    const { user: owner, session: ownerSession } = await person();
+    const organization = await createOrganization(api, {
+      isOpen: false,
+      adminIds: [owner._id],
+    });
+    for (let round = 0; round < 8; round++) {
+      const { user, session } = await person();
+      const pending = await request(organization.slug, session);
+      await Promise.all([
+        decide(organization.slug, pending.id, ownerSession, 'A'),
+        decide(organization.slug, pending.id, ownerSession, 'R'),
+      ]);
+      const { state } = (await api.organizationRequests
+        .findById(pending.id)
+        .lean())!;
+      expect((await membershipsOf(user._id)).includes(organization._id)).toBe(
+        state === 'A',
+      );
+    }
+  });
+
   it('lets edit_all_organization list and read, and keeps other organizations admins out', async () => {
     const { user: ownerA } = await person();
     const { session: ownerBSession, user: ownerB } = await person();

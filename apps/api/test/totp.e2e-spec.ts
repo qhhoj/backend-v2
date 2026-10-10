@@ -293,7 +293,18 @@ describe('totp endpoints', () => {
   it('rate limits wrong codes and reports 400 when TOTP is not enabled', async () => {
     await api.users.updateOne(
       { username: 'alice' },
-      { isWebauthnEnabled: true },
+      {
+        isWebauthnEnabled: true,
+        webauthnCredentials: [
+          {
+            _id: '01900000-0000-7000-8000-0000000000aa',
+            name: 'key',
+            credId: 'AA',
+            publicKey: 'AA',
+            counter: 0,
+          },
+        ],
+      },
     );
     await post(`${TOTP}/verify`, await login(), { code: '123456' })
       .expect(400)

@@ -42,7 +42,13 @@ class Target implements DispatchTarget {
   }
 }
 
-const TIMINGS = { resumeGraceMs: 30_000 } as BridgeTimings;
+const TIMINGS = {
+  resumeGraceMs: 30_000,
+  runMarginMs: 60_000,
+  runCaseBudget: 10,
+} as BridgeTimings;
+/** Deadline of a run with the stand-in claim's 2 s time limit. */
+const RUN_DEADLINE_MS = 60_000 + 2 * 1000 * 10;
 const entry = (fields: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   id: newId(),
   problemCode: 'sum',
@@ -80,6 +86,7 @@ describe('DispatcherService', () => {
       return {
         request: {
           ref: { submissionId: queued.id, generation },
+          timeLimit: 2,
         } as AssignRequest,
         subject: { submissionId: queued.id, userId: 'u', problemId: 'p' },
       };
@@ -449,6 +456,45 @@ describe('DispatcherService', () => {
         /Judge j1 did not accept submission \S+ gen 1 in time/,
       ),
     ]);
+  });
+
+  describe('run deadline', () => {
+    it('aborts a run its judge never finishes, frees nothing early, and requeues it once', async () => {
+      const judge = await online(new Target('j1', 2));
+      const hung = entry();
+      await queue(hung);
+      jest.advanceTimersByTime(RUN_DEADLINE_MS - 1);
+      await flush();
+      expect(judge.aborted).toEqual([]);
+      jest.advanceTimersByTime(1);
+      await flush();
+      expect(judge.aborted).toEqual([{ submissionId: hung.id, generation: 1 }]);
+      expect(expired).toEqual([
+        {
+          ref: { submissionId: hung.id, generation: 1 },
+          abortRequested: false,
+        },
+      ]);
+      // the slot is held until the judge's Final{ABORTED}
+      expect(judge.winding.size).toBe(1);
+      // requeued once: handed out again as a new generation
+      expect(judge.inFlight.get(hung.id)).toBe(2);
+    });
+
+    it('does nothing for a run that ended in time', async () => {
+      const judge = await online(new Target('j1'));
+      const done = entry();
+      await queue(done);
+      await dispatcher.runEnded(
+        judge,
+        { submissionId: done.id, generation: 1 },
+        { retried: false },
+      );
+      jest.advanceTimersByTime(RUN_DEADLINE_MS * 2);
+      await flush();
+      expect(judge.aborted).toEqual([]);
+      expect(expired).toEqual([]);
+    });
   });
 
   it('records an abort sent during the grace: sent after a resume, AB on expiry', async () => {

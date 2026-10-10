@@ -300,8 +300,26 @@ describe('blog editing', () => {
       .expect(errorCode('validation_failed'));
   });
 
-  it('edits only the fields sent, so a summary edit never rewrites content', async () => {
+  it('lets only edit_all_post set the summary and image, on create and edit', async () => {
     const { user, session } = await person();
+    await create(session, { summary: 'hi' }).expect(403);
+    await create(session, { ogImage: 'https://x.test/a.png' }).expect(403);
+    await create(session, { summary: '', ogImage: '' }).expect(201);
+    const post = await createPost(api, { authors: [user._id] });
+    await patch(post._id, session, { summary: 'hi' }).expect(403);
+    await patch(post._id, session, { ogImage: '/a.png' }).expect(403);
+    await patch(post._id, session, { summary: '', title: 'T2' }).expect(200);
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_post'],
+    });
+    await create(staff, { summary: 'hi' }).expect(201);
+    await patch(post._id, staff, { ogImage: '/a.png' }).expect(200);
+  });
+
+  it('edits only the fields sent, so a summary edit never rewrites content', async () => {
+    const { user, session } = await person({
+      permissions: ['judge.edit_all_post'],
+    });
     const post = await createPost(api, { authors: [user._id], content: 'old' });
     await api.blogPosts.updateOne(
       { _id: post._id },

@@ -116,6 +116,15 @@ describe('auth session endpoints', () => {
       email: 'both@example.com',
       isTotpEnabled: true,
       isWebauthnEnabled: true,
+      webauthnCredentials: [
+        {
+          _id: '01900000-0000-7000-8000-0000000000aa',
+          name: 'key',
+          credId: 'AA',
+          publicKey: 'AA',
+          counter: 0,
+        },
+      ],
     });
     const login = await api
       .http()
@@ -123,6 +132,32 @@ describe('auth session endpoints', () => {
       .send({ username: 'both', password: 'correct horse battery' })
       .expect(200);
     expect(sessionOf(login).twoFactor?.methods).toEqual(['totp', 'webauthn']);
+  });
+
+  it('offers webauthn only with a stored key; a legacy flag alone neither blocks nor lists it', async () => {
+    await createUser(api.users, {
+      username: 'flagonly',
+      email: 'flagonly@example.com',
+      isWebauthnEnabled: true,
+    });
+    const flagOnly = await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'flagonly', password: 'correct horse battery' })
+      .expect(200);
+    expect(sessionOf(flagOnly).twoFactorRequired).toBe(false);
+    await createUser(api.users, {
+      username: 'totpflag',
+      email: 'totpflag@example.com',
+      isTotpEnabled: true,
+      isWebauthnEnabled: true,
+    });
+    const mixed = await api
+      .http()
+      .post(LOGIN)
+      .send({ username: 'totpflag', password: 'correct horse battery' })
+      .expect(200);
+    expect(sessionOf(mixed).twoFactor?.methods).toEqual(['totp']);
   });
 
   it('upgrades weak password hashes on login', async () => {

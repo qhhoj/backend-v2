@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { unique } from '@libs/common';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef, Resume } from '@libs/judge-proto';
-import { BRIDGE_TIMINGS } from '../bridge-timings';
+import { BRIDGE_TIMINGS, runDeadlineMs } from '../bridge-timings';
 import type { BridgeTimings } from '../bridge-timings';
 import type { JudgeAccess } from '../judges/judges.repository';
 import type { ResumeCandidate } from '../link/messages';
@@ -37,6 +37,9 @@ const GRACE_OUTCOME_TEXT: Record<GraceOutcome, string> = {
   stale: 'nothing to do (the row moved on)',
 };
 
+/** A resumed run's time limit is not known to the bridge; its deadline assumes this one (seconds). */
+const RESUMED_RUN_TIME_LIMIT_SECONDS = 20;
+
 const isSameEntry = (left: QueuedSubmission, right: QueuedSubmission) =>
   left.priority === right.priority &&
   left.judgeName === right.judgeName &&
@@ -62,11 +65,13 @@ export class DispatcherService {
   /** `windingKey`s of held runs the api aborted, until they leave their session: a run that enters grace carries the abort even when its Abort reached a stream already dead. */
   private readonly abortsRequested = new Set<string>();
   private stopped = false;
+  /** Per-run deadline timers by `windingKey`. */
+  private readonly deadlines = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly submissions: SubmissionsRepository,
     private readonly runs: RunsService,
-    @Inject(BRIDGE_TIMINGS) timings: BridgeTimings,
+    @Inject(BRIDGE_TIMINGS) private readonly timings: BridgeTimings,
   ) {
     this.grace = new GraceRegistry(
       timings.resumeGraceMs,
@@ -128,6 +133,7 @@ export class DispatcherService {
     if (judge.inFlight.get(ref.submissionId) === ref.generation)
       judge.inFlight.delete(ref.submissionId);
     this.abortsRequested.delete(windingKey(ref));
+    this.clearDeadline(ref);
     if (retried) {
       const rows = await this.submissions.loadQueued([ref.submissionId]);
       await this.enqueue(
@@ -166,8 +172,50 @@ export class DispatcherService {
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return false;
     judge.inFlight.delete(ref.submissionId);
     this.abortsRequested.delete(windingKey(ref));
+    this.clearDeadline(ref);
     judge.winding.add(windingKey(ref));
     return true;
+  }
+
+  /** Starts the run's deadline: a judge that keeps answering pings but never sends `Final` would hold the slot and the row for ever. */
+  private armDeadline(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+    timeLimitSeconds: number,
+  ): void {
+    const delay = runDeadlineMs(this.timings, timeLimitSeconds);
+    if (delay === null) return;
+    this.clearDeadline(ref);
+    const timer = setTimeout(
+      () => void this.deadlineExpired(judge, ref),
+      delay,
+    );
+    timer.unref();
+    this.deadlines.set(windingKey(ref), timer);
+  }
+
+  private clearDeadline(ref: AssignmentRef): void {
+    const key = windingKey(ref);
+    clearTimeout(this.deadlines.get(key));
+    this.deadlines.delete(key);
+  }
+
+  /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge). */
+  private async deadlineExpired(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+  ): Promise<void> {
+    this.deadlines.delete(windingKey(ref));
+    if (!this.windDown(judge, ref)) return;
+    this.logger.warn(
+      `Judge ${judge.name} did not finish submission ${runOf(ref)} before its deadline; aborted`,
+    );
+    judge.abort(ref);
+    await this.graceExpired({
+      ref,
+      judgeName: judge.name,
+      abortRequested: false,
+    });
   }
 
   /** The judge's `Final` for a winding run: nothing is written, the slot is free. */
@@ -271,6 +319,8 @@ export class DispatcherService {
   stop(): void {
     this.stopped = true;
     this.grace.clear();
+    for (const timer of this.deadlines.values()) clearTimeout(timer);
+    this.deadlines.clear();
   }
 
   isStopped(): boolean {
@@ -328,6 +378,7 @@ export class DispatcherService {
       return;
     }
     judge.inFlight.set(ref.submissionId, ref.generation);
+    this.armDeadline(judge, ref, RESUMED_RUN_TIME_LIMIT_SECONDS);
     plan.resume.push({
       ref,
       action: Resume_Action.ACTION_CONTINUE,
@@ -398,6 +449,7 @@ export class DispatcherService {
           this.abortsRequested.delete(windingKey(ref)),
         );
         held.push(runOf(ref));
+        this.clearDeadline(ref);
       }
     }
     if (held.length)
@@ -488,6 +540,7 @@ export class DispatcherService {
     judge.inFlight.set(submission.id, claimed.request.ref.generation);
     this.runs.sent(claimed);
     judge.assign(claimed.request);
+    this.armDeadline(judge, claimed.request.ref, claimed.request.timeLimit);
   }
 
   /** The session ended while its claim was in flight: it never saw the run, so the claim goes back without spending the requeue. */

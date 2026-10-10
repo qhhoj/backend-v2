@@ -33,7 +33,7 @@ export const withoutRenderedHtml = (
   })),
 });
 
-/** DTO → document fields (`date` string → Date); unsent fields and nulls (except where legal) are left out, since `update()` runs no validators. */
+/** DTO → document fields (`date` string → Date, null clears it); unsent fields and nulls (except where legal) are left out, since `update()` runs no validators. */
 export function toFields(dto: UpdateProblemDto): Partial<Problem> {
   const { date, ...rest } = dto;
   const fields = Object.fromEntries(
@@ -49,7 +49,7 @@ export function toFields(dto: UpdateProblemDto): Partial<Problem> {
     const ids = record[field];
     if (Array.isArray(ids)) record[field] = unique(ids as string[]);
   }
-  if (date) fields.date = new Date(date);
+  if (date !== undefined) fields.date = date === null ? null : new Date(date);
   return fields;
 }
 

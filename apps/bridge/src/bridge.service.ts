@@ -58,6 +58,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       await this.reconcileJudges();
       await this.requeueStranded();
+      await this.unpinAbsent();
       await this.dispatch.clearRetryBans();
       const rows = await this.submissions.loadQueued();
       // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it
@@ -69,6 +70,19 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     } finally {
       this.resyncing = false;
     }
+  }
+
+  /** Queued rows pinned to a judge that stayed away past `pinFallbackMs` go to any judge; the queue entries are refreshed so the dropped pin takes effect now. */
+  private async unpinAbsent(): Promise<void> {
+    const ids = await this.submissions.unpinAbsent(
+      this.dispatch.connectedNames(),
+      new Date(Date.now() - this.timings.pinFallbackMs),
+    );
+    if (!ids.length) return;
+    this.logger.warn(
+      `Resync released ${ids.length} submissions pinned to an absent judge`,
+    );
+    await this.dispatch.enqueue(await this.submissions.loadQueued(ids));
   }
 
   /** A block, disable or key rotation whose command was lost still takes effect: connected judges are compared with their rows. */

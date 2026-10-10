@@ -51,7 +51,8 @@ export class ProblemEditingController {
   edit(
     @CurrentAuth() auth: AuthContext,
     @Param() { code }: ProblemCodeParamDto,
-    @Body(new RefuseNullFieldsPipe(['licenseId'])) body: UpdateProblemDto,
+    @Body(new RefuseNullFieldsPipe(['licenseId', 'date']))
+    body: UpdateProblemDto,
   ): Promise<ProblemDetailResponse> {
     return this.editing.edit(auth, code, body);
   }

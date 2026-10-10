@@ -87,6 +87,11 @@ export class OrganizationMembersRepository {
     return this.users.countDocuments({ organizations: organizationId }).exec();
   }
 
+  /** True when `slots` is set and the live member count has reached it. */
+  async isFull(organizationId: string, slots: number | null): Promise<boolean> {
+    return slots !== null && (await this.countMembers(organizationId)) >= slots;
+  }
+
   async isMember(userId: string, organizationId: string): Promise<boolean> {
     return (
       (await this.users

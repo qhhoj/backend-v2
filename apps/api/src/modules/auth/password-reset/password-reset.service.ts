@@ -13,6 +13,7 @@ import {
 import type { UserDocument } from '@libs/auth';
 import {
   AppError,
+  assertMailAvailable,
   ENV,
   MAILER,
   RateLimitService,
@@ -48,6 +49,7 @@ export class PasswordResetService {
 
   /** Also serves active accounts with an unusable (`!`) hash: the reset sets their first password. Always resolves the same way whether or not the email is known; mails go out in the background so timing does not reveal it. */
   async request(email: string, ip: string): Promise<void> {
+    assertMailAvailable(this.mailer);
     // Never released: every request spends budget.
     await this.rateLimit.reserve(
       [`password-reset:ip:${ip}`],
@@ -55,7 +57,7 @@ export class PasswordResetService {
       PASSWORD_RESET_WINDOW_SECONDS,
     );
     await this.rateLimit.reserve(
-      [`password-reset:email:${email.toLowerCase()}`],
+      [`password-reset:email:${email.trim().toLowerCase()}`],
       PASSWORD_RESET_EMAIL_LIMIT,
       PASSWORD_RESET_WINDOW_SECONDS,
     );

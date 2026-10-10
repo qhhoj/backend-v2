@@ -284,6 +284,18 @@ describe('organization editing and membership', () => {
     );
   });
 
+  it('refuses a direct join into a full organization', async () => {
+    const { user: member } = await person();
+    const full = await createOrganization(api, { slots: 1 }, [member._id]);
+    const { user, session } = await person();
+    const refused = await post(organizationUrl(full.slug, '/join'), session);
+    expect(refused.status).toBe(409);
+    expect(JSON.stringify(refused.body)).toContain('organization_full');
+    expect(await membershipsOf(user._id)).toEqual([]);
+    await api.organizations.updateOne({ _id: full._id }, { slots: 2 });
+    await post(organizationUrl(full.slug, '/join'), session).expect(204);
+  });
+
   it('lets only one of five parallel joins through at the open-organization cap', async () => {
     const { user, session } = await person();
     await createOrganization(api, {}, [user._id]);

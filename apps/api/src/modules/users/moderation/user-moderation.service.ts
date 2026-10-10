@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SessionService, UsersRepository } from '@libs/auth';
 import type { Principal, UserDocument } from '@libs/auth';
 import { AppError } from '@libs/common';
+import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { CONTEST_CHEATING_BAN_REASON } from '../../contests/participation/contest-participation.service';
 
 @Injectable()
@@ -9,6 +10,7 @@ export class UserModerationService {
   constructor(
     private readonly users: UsersRepository,
     private readonly sessions: SessionService,
+    private readonly revisions: RevisionsRepository,
   ) {}
 
   /** Legacy `Profile.ban_user`, plus every session revoked (the guard also rejects inactive users on the next request). */
@@ -49,6 +51,34 @@ export class UserModerationService {
       throw new AppError('conflict', 409, 'That user is not banned');
   }
 
+  /** Recovery for a locked-out user: removes TOTP and every security key, then signs the user out everywhere. Audit-logged as a `user` revision. */
+  async resetTwoFactor(principal: Principal, username: string): Promise<void> {
+    const user = await this.target(principal, username);
+    await this.users.update(user._id, {
+      isTotpEnabled: false,
+      totpKey: null,
+      scratchCodes: null,
+      isWebauthnEnabled: false,
+      webauthnCredentials: [],
+    });
+    await this.sessions.destroyAllForUser(user._id);
+    await this.revisions.append({
+      entity: 'user',
+      entityId: user._id,
+      action: 'reset_two_factor',
+      userId: principal.userId,
+      changes: {
+        isTotpEnabled: { before: user.isTotpEnabled, after: false },
+        isWebauthnEnabled: { before: user.isWebauthnEnabled, after: false },
+        webauthnCredentials: {
+          before: user.webauthnCredentials?.length ?? 0,
+          after: 0,
+        },
+      },
+      comment: 'Two-factor reset by staff',
+    });
+  }
+
   /** Legacy `can_be_banned_by`. */
   private async target(
     principal: Principal,
@@ -57,7 +87,7 @@ export class UserModerationService {
     const user = await this.users.findByUsername(username);
     if (!user) throw new AppError('not_found', 404, 'No such user');
     if (user._id === principal.userId || user.isSuperuser)
-      throw new AppError('forbidden', 403, 'You cannot ban this user');
+      throw new AppError('forbidden', 403, 'You cannot moderate this user');
     return user;
   }
 }

@@ -272,6 +272,25 @@ describe('problem create, suggest and edit', () => {
       .expect(403)
       .expect(errorCode('forbidden'));
   });
+  it('clears the publish date with date: null and sets it again', async () => {
+    await createProblem(api, catalog, {
+      code: 'dated',
+      authors: [setterId],
+      isPublic: false,
+      date: new Date('2026-01-01T00:00:00Z'),
+    });
+    await authed(api.http().patch(`${PROBLEMS}/dated`), admin)
+      .send({ date: null })
+      .expect(200);
+    expect((await api.problems.findOne({ code: 'dated' }))!.date).toBeNull();
+    await authed(api.http().patch(`${PROBLEMS}/dated`), admin)
+      .send({ date: '2026-02-03T00:00:00Z' })
+      .expect(200);
+    expect((await api.problems.findOne({ code: 'dated' }))!.date).toEqual(
+      new Date('2026-02-03T00:00:00Z'),
+    );
+  });
+
   it('leaves unsent fields intact on PATCH and rejects out-of-range values', async () => {
     await createProblem(api, catalog, {
       code: 'keep',

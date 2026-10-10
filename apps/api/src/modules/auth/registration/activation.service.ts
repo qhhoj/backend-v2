@@ -3,7 +3,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { sha256, UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
-import { ENV, MAILER, RateLimitService } from '@libs/common';
+import {
+  assertMailAvailable,
+  ENV,
+  MAILER,
+  RateLimitService,
+} from '@libs/common';
 import type { Env, MailMessage, Mailer } from '@libs/common';
 import { ActivationKey } from '@libs/database';
 import { Model } from 'mongoose';
@@ -50,6 +55,7 @@ export class ActivationService {
 
   /** Always resolves the same way whether or not the email belongs to a pending signup; mails go out in the background so timing does not tell. */
   async resend(email: string, ip: string): Promise<void> {
+    assertMailAvailable(this.mailer);
     // Never released: every request spends budget.
     await this.rateLimit.reserve(
       [`activation-resend:ip:${ip}`],
@@ -57,7 +63,7 @@ export class ActivationService {
       ACTIVATION_RESEND_WINDOW_SECONDS,
     );
     await this.rateLimit.reserve(
-      [`activation-resend:email:${email.toLowerCase()}`],
+      [`activation-resend:email:${email.trim().toLowerCase()}`],
       ACTIVATION_RESEND_EMAIL_LIMIT,
       ACTIVATION_RESEND_WINDOW_SECONDS,
     );

@@ -41,6 +41,10 @@ export class SmtpMailer implements Mailer {
       .options;
   }
 
+  isConfigured(): boolean {
+    return Boolean(this.settings.get('mail.smtpUrl'));
+  }
+
   async send(message: MailMessage): Promise<void> {
     if (!MAIL_ADDRESS_PATTERN.test(message.to))
       throw new Error('Invalid mail recipient');

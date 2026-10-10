@@ -189,6 +189,17 @@ describe('registration extras', () => {
   describe('POST activate/resend', () => {
     const resend = (email: string) =>
       api.http().post(`${AUTH}/activate/resend`).send({ email });
+
+    it('answers 503 mail_unavailable while mail is not configured', async () => {
+      Object.assign(api.mailer, { isConfigured: () => false });
+      try {
+        await resend('newbie@example.com')
+          .expect(503)
+          .expect(errorCode('mail_unavailable'));
+      } finally {
+        delete (api.mailer as { isConfigured?: unknown }).isConfigured;
+      }
+    });
     const waitForMail = async (count: number) => {
       for (
         let attempt = 0;
