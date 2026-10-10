@@ -239,7 +239,10 @@ dump_mongo() { # the URI goes through a mode-600 config file, never argv; remove
   DUMP_CFG="$(mktemp "$WORK/mongodump.XXXXXX")"
   trap 'rm -f "$DUMP_CFG"' EXIT
   printf "uri: '%s'\n" "${uri//\'/\'\'}" > "$DUMP_CFG"
-  mongodump --config "$DUMP_CFG" --gzip --archive="$ROOT/backup/qhhoj-cutover.gz"
+  local archive="$ROOT/backup/qhhoj-cutover.gz"
+  rm -f "$archive.part" # a half-written dump is never taken for the cutover backup
+  mongodump --config "$DUMP_CFG" --gzip --archive="$archive.part" || return 1
+  mv "$archive.part" "$archive"
 }
 
 cmd_go_live() {
