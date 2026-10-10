@@ -533,3 +533,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - A line starting with `#word` (`#include <bits/stdc++.h>`, `#12 …`) outside a code fence is a heading, as on the old site (no-space hash headers); authors put code in fences.
 - Statement base language is Vietnamese (the migrated site's language): requesting it is `translated: true`, a missing translation falls back to the Vi base with `translated: false`; base PDFs are cached as `<code>.vi.pdf`.
 - nginx serves the legacy /pdf/, /materials/ and /submission_file/ paths (like /martor/) through /media/: 713 statement PDFs and 33 materials link them; found at the cutover review.
+- 2FA wiped for every migrated account at the cutover (product owner, 2026-10-10: the legacy SECRET_KEY changed several times; 9 accounts held TOTP/scratch codes); users re-enrol in settings.
