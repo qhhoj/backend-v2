@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# qhhoj-deploy: the one root command the CD `deploy` user may run (sudoers). Installed to /usr/local/sbin.
+#   backend <tag> [--force]   move the local :current image tag to <tag>, restart qhhoj.target, health-check, roll back on failure
+#   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, flip /var/www/qhhoj/current, check, roll back on failure
+#   rollback backend|frontend go back to the previous history entry
+#   status                    live versions and recent history
+# Exit: 0 ok, 1 failed (previous version live), 64 usage, 75 deferred (migration or contest running; retry later).
+set -euo pipefail
+
+ROOT="${QHHOJ_DEPLOY_ROOT:-}"
+IMAGE=ghcr.io/qhhoj/backend-v2
+STATE="$ROOT/var/lib/qhhoj-deploy"
+ENV_FILE="$ROOT/etc/qhhoj/env"
+AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
+MIGRATE_LOCK="$ROOT/run/qhhoj-migrate.lock"
+HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
+KEEP=5
+TAG_RE='^(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{12})$'
+EX_USAGE=64
+EX_DEFERRED=75
+
+die() { echo "qhhoj-deploy: $*" >&2; exit 1; }
+usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "$EX_USAGE"; }
+defer() { echo "deferred: $*"; exit "$EX_DEFERRED"; }
+valid_tag() { [[ $1 =~ $TAG_RE ]] || { echo "qhhoj-deploy: bad version '$1'" >&2; exit "$EX_USAGE"; }; }
+env_value() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -1; }
+
+history_file() { echo "$STATE/$1.history"; }
+live() { tail -n 1 "$(history_file "$1")" 2>/dev/null || true; }
+record() { echo "$2" >> "$(history_file "$1")"; }
+drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
+
+migration_running() { [ -e "$MIGRATE_LOCK" ] && ! flock -n "$MIGRATE_LOCK" true; }
+running_contest() {
+  # shellcheck disable=SC2016 # the eval is JavaScript, not shell
+  mongosh "$(env_value MONGO_URL)" --quiet --eval '
+    const now = new Date();
+    const c = db.contests.findOne({ startTime: { $lte: now }, endTime: { $gt: now } }, { key: 1, endTime: 1 });
+    if (c) print(c.key + " ends " + c.endTime.toISOString());'
+}
+
+backend_healthy() {
+  local port; port="$(env_value PORT)"
+  for _ in $(seq "$HEALTH_TRIES"); do
+    if curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site" \
+      && systemctl is-active --quiet qhhoj-api qhhoj-bridge qhhoj-worker; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+switch_backend() {
+  podman tag "$IMAGE:$1" "$IMAGE:current"
+  systemctl restart qhhoj.target
+}
+
+prune_images() {
+  local keep; keep="$(tail -n "$KEEP" "$(history_file backend)")"
+  podman image ls --format '{{.Tag}}' "$IMAGE" | while read -r tag; do
+    [[ $tag =~ $TAG_RE ]] || continue
+    grep -qxF "$tag" <<<"$keep" || podman rmi "$IMAGE:$tag" >/dev/null 2>&1 || true
+  done
+}
+
+deploy_backend() { # <tag> [--force]
+  local tag=$1 force=${2:-} previous
+  valid_tag "$tag"
+  [ -z "$force" ] || [ "$force" = --force ] || usage
+  if migration_running; then defer "migration running"; fi
+  if [ -z "$force" ]; then
+    local contest; contest="$(running_contest)"
+    [ -z "$contest" ] || defer "contest $contest"
+  fi
+  podman pull --authfile "$AUTHFILE" "$IMAGE:$tag"
+  previous="$(live backend)"
+  switch_backend "$tag"
+  if backend_healthy; then
+    record backend "$tag"; prune_images; echo "deployed backend $tag"; return
+  fi
+  echo "qhhoj-deploy: backend $tag unhealthy; restoring ${previous:-nothing}" >&2
+  if [ -n "$previous" ]; then switch_backend "$previous"; fi
+  exit 1
+}
+
+rollback() { # backend|frontend
+  local app=$1 count target
+  count="$(wc -l < "$(history_file "$app")" 2>/dev/null || echo 0)"
+  [ "$count" -ge 2 ] || die "no previous $app version to roll back to"
+  drop_last "$app"; target="$(live "$app")"
+  if [ "$app" = backend ]; then
+    if migration_running; then defer "migration running"; fi
+    switch_backend "$target"; backend_healthy || die "backend $target unhealthy after rollback"
+  else
+    point_frontend "$target"; frontend_healthy "$target" || die "frontend $target unhealthy after rollback"
+  fi
+  echo "rolled back $app to $target"
+}
+
+status() {
+  echo "backend: $(live backend)"
+  echo "frontend: $(live frontend)"
+  for app in backend frontend; do
+    echo "--- $app history"; tail -n 10 "$(history_file "$app")" 2>/dev/null || true
+  done
+}
+
+deploy_frontend() { die "frontend deploy not available"; }
+point_frontend() { die "frontend deploy not available"; }
+frontend_healthy() { return 1; }
+
+main() {
+  mkdir -p "$STATE" "$ROOT/run"
+  exec 9>"$ROOT/run/qhhoj-deploy.lock"
+  flock -w 900 9 || die "another deploy holds the lock"
+  case "${1:-}" in
+    backend) deploy_backend "${2:-}" "${3:-}" ;;
+    frontend) deploy_frontend "${2:-}" ;;
+    rollback) case "${2:-}" in backend | frontend) rollback "$2" ;; *) usage ;; esac ;;
+    status) status ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"
