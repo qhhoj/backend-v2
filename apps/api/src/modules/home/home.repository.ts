@@ -46,6 +46,7 @@ export class HomeRepository {
       .exec();
   }
 
+  /** `problems` is the archive size (every live problem, private ones included), not the public listing's. */
   async counts(): Promise<{
     users: number;
     problems: number;
@@ -54,7 +55,7 @@ export class HomeRepository {
   }> {
     const [users, problems, submissions, contests] = await Promise.all([
       this.users.estimatedDocumentCount().exec(),
-      this.problems.countDocuments(PUBLIC_PROBLEMS).exec(),
+      this.problems.countDocuments({ deletedAt: null }).exec(),
       this.submissions.estimatedDocumentCount().exec(),
       this.contests.countDocuments(ContestAccess.visibleFilter(null)).exec(),
     ]);
