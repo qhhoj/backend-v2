@@ -6,9 +6,9 @@ bin="$(mktemp -d)"; repo="$(mktemp -d)"; trap 'rm -rf "$bin" "$repo"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 printf '#!/usr/bin/env bash\ntrue\n' > "$bin/sleep"; chmod +x "$bin/sleep"
 
-git -C "$repo" init -q; git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one
-git -C "$repo" tag v2.0.0; git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m two
-git -C "$repo" tag v2.10.0; head="$(git -C "$repo" rev-parse HEAD)"
+git -C "$repo" init -q; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -q --allow-empty -m one
+git -C "$repo" -c tag.gpgSign=false tag v2.0.0; git -C "$repo" -c user.email=t@t -c user.name=t -c commit.gpgSign=false commit -q --allow-empty -m two
+git -C "$repo" -c tag.gpgSign=false tag v2.10.0; head="$(git -C "$repo" rev-parse HEAD)"
 resolve() { (cd "$repo" && bash "$here/resolve-ref.sh" "$1"); }
 [ "$(resolve '')" = "$(printf 'sha=%s\ntag=v2.10.0' "$head")" ] || fail "empty ref = highest version tag"
 [ "$(resolve v2.0.0 | sed -n 's/^tag=//p')" = v2.0.0 ] || fail "tag ref keeps the tag"
