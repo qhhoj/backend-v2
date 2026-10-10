@@ -138,3 +138,14 @@ jobs:
         run: |
           shopt -s nullglob
           for t in deploy/*.test.sh deploy/*/*.test.sh; do echo "== $t"; bash "$t"; done
+  # The one required check: a skipped matrix reports as "test", not "test (n)", so branch protection names this job.
+  ci-ok:
+    if: always()
+    needs: [changes, checks, test, openapi, image, deploy-scripts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - env: { RESULTS: '${{ join(needs.*.result, '' '') }}' }
+        run: |
+          echo "$RESULTS"
+          ! grep -qE 'failure|cancelled' <<< "$RESULTS"
