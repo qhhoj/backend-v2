@@ -1,6 +1,7 @@
 import { escapeRegExp } from '@libs/common';
 import { Problem } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { diacriticInsensitivePattern } from './vietnamese-fold';
 
 export const PROBLEM_SORT_FIELDS = [
   'date',
@@ -14,15 +15,27 @@ export const PROBLEM_SORT_OPTIONS = PROBLEM_SORT_FIELDS.flatMap((field) => [
   field,
   `-${field}`,
 ]);
-const SHORT_QUERY_LENGTH = 3;
+const MAX_SEARCH_WORDS = 8;
 
-/** Short queries are prefix matches (the text index only matches whole words); longer ones use the weighted text index. */
+const anyTitleMatches = (pattern: RegExp): FilterQuery<Problem> => ({
+  $or: [{ code: pattern }, { name: pattern }, { 'translations.name': pattern }],
+});
+
+/**
+ * `search`: every whitespace-separated word (first 8) must be a substring of the code or any title,
+ * ignoring case and Vietnamese diacritics. A blank query filters nothing (`{}`).
+ */
 export function searchFilter(search: string): FilterQuery<Problem> {
-  if (search.length >= SHORT_QUERY_LENGTH)
-    return { $text: { $search: search } };
-  const prefix = new RegExp(`^${escapeRegExp(search)}`, 'i');
+  const words = search
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, MAX_SEARCH_WORDS);
+  if (words.length === 0) return {};
   return {
-    $or: [{ code: prefix }, { name: prefix }, { 'translations.name': prefix }],
+    $and: words.map((word) =>
+      anyTitleMatches(new RegExp(diacriticInsensitivePattern(word), 'i')),
+    ),
   };
 }
 

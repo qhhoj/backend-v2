@@ -64,8 +64,9 @@ export class ProblemsController {
    * @remarks
    * Public. Returns one page of the problems the viewer may see, a signed-in
    * viewer's own solved or attempted mark included. `visibility` narrows to
-   * public, private or all visible problems (default public). `search` uses the
-   * text index, `q` is a substring match on the code or any title, and `sort`
+   * public, private or all visible problems (default public). `search` splits on
+   * spaces and needs every word inside the code or a title, ignoring case and
+   * Vietnamese accents; `q` is a substring match on the code or any title; `sort`
    * takes `date`, `code`, `name`, `points`, `acRate` or `userCount`, with a
    * leading `-` for descending (default `-date`). Paging: `page` from 1,
    * `pageSize` 1-100 (default 50). While the viewer is in a contest, its

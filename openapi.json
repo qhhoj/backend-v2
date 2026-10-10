@@ -24503,7 +24503,7 @@
     },
     "/api/internal/problems": {
       "get": {
-        "description": "Public. Returns one page of the problems the viewer may see, a signed-in\nviewer's own solved or attempted mark included. `visibility` narrows to\npublic, private or all visible problems (default public). `search` uses the\ntext index, `q` is a substring match on the code or any title, and `sort`\ntakes `date`, `code`, `name`, `points`, `acRate` or `userCount`, with a\nleading `-` for descending (default `-date`). Paging: `page` from 1,\n`pageSize` 1-100 (default 50). While the viewer is in a contest, its\nproblems are listed even if private, and nothing is listed before the\ncontest starts.",
+        "description": "Public. Returns one page of the problems the viewer may see, a signed-in\nviewer's own solved or attempted mark included. `visibility` narrows to\npublic, private or all visible problems (default public). `search` splits on\nspaces and needs every word inside the code or a title, ignoring case and\nVietnamese accents; `q` is a substring match on the code or any title; `sort`\ntakes `date`, `code`, `name`, `points`, `acRate` or `userCount`, with a\nleading `-` for descending (default `-date`). Paging: `page` from 1,\n`pageSize` 1-100 (default 50). While the viewer is in a contest, its\nproblems are listed even if private, and nothing is listed before the\ncontest starts.",
         "operationId": "ProblemsController_list",
         "parameters": [
           {
@@ -24564,7 +24564,7 @@
             }
           },
           {
-            "description": "Text search over code, names and source; terms of 3+ characters use the full-text index, shorter ones match prefixes of the code or a title.",
+            "description": "Words separated by spaces (first 8 used); each must be a substring of the code or any title, ignoring case and Vietnamese accents.",
             "in": "query",
             "name": "search",
             "required": false,
@@ -25196,7 +25196,7 @@
             }
           },
           {
-            "description": "Text search over code, names and source; terms of 3+ characters use the full-text index, shorter ones match prefixes of the code or a title.",
+            "description": "Words separated by spaces (first 8 used); each must be a substring of the code or any title, ignoring case and Vietnamese accents.",
             "in": "query",
             "name": "search",
             "required": false,

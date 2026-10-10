@@ -23,7 +23,7 @@ export type ProblemVisibility = (typeof PROBLEM_VISIBILITIES)[number];
 
 /** The filters shared by the list and the random pick. */
 export class ProblemFilterQueryDto {
-  /** Text search over code, names and source; terms of 3+ characters use the full-text index, shorter ones match prefixes of the code or a title. */
+  /** Words separated by spaces (first 8 used); each must be a substring of the code or any title, ignoring case and Vietnamese accents. */
   @IsOptional()
   @IsString()
   @MaxLength(100)

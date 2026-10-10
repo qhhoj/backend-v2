@@ -51,7 +51,7 @@ const byField =
   (left: Item, right: Item) =>
     String(left[field]).localeCompare(String(right[field]));
 
-/** `search` (text index, prefix when short) and `q` (substring), both optional and both applied. */
+/** `search` (every word a substring, accent-insensitive) and `q` (substring), both optional and both applied. */
 function textClauses(query: ProblemFilterQueryDto): FilterQuery<Problem>[] {
   const search = query.search?.trim();
   const substring = query.q?.trim();
