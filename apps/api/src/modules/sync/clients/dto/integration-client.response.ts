@@ -3,28 +3,37 @@ import type { IntegrationClient, IntegrationScope } from '@libs/database';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class IntegrationClientActingUserResponse {
+  /** User id. */
   id!: string;
+  /** Login name. */
   username!: string;
 }
 
 export class IntegrationClientResponse {
+  /** Client id. */
   id!: string;
+  /** Label of the client. */
   name!: string;
   /** First characters of the key, to recognise it in this list. */
   keyPrefix!: string;
+  /** What the client may do. */
   @ApiProperty({
     enum: INTEGRATION_SCOPES,
     enumName: 'IntegrationScope',
     isArray: true,
   })
   scopes!: IntegrationScope[];
+  /** CIDR blocks the client may call from. */
   allowedCidrs!: string[];
   /** The user whose permissions bound the client. */
   actsAs!: IntegrationClientActingUserResponse;
+  /** When the key was last used; null if never. */
   lastUsedAt!: Date | null;
+  /** When the client was revoked; null while active. */
   revokedAt!: Date | null;
   /** The key stops working at this instant; null when it never expires. */
   expiresAt!: Date | null;
+  /** When the client was created. */
   createdAt!: Date;
 
   static from(

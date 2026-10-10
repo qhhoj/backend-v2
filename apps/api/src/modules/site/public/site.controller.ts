@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Header } from '@nestjs/common';
 import { Public } from '@libs/auth';
 import { isOfficialModeActive, officialModeEndsAt } from '@libs/community';
@@ -6,6 +7,7 @@ import { SiteResponse } from './dto/site.response';
 import { MiscConfigQuerier } from './misc-config.querier';
 
 @Public()
+@ApiTags('Home & site')
 @Controller('api/internal/site')
 export class SiteController {
   constructor(
@@ -13,7 +15,12 @@ export class SiteController {
     private readonly settings: SettingsService,
   ) {}
 
-  /** What the SPA shell needs on every load. `private`: the auth guard may attach a refreshed session cookie to any request, so a shared cache must never store this response. */
+  /**
+   * Get the site shell data
+   *
+   * @remarks
+   * Public. Returns what the web app needs on every load: the navigation bar entries (hidden ones included, flagged), the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.
+   */
   @Header('Cache-Control', 'private, max-age=60')
   @Get()
   site(): SiteResponse {

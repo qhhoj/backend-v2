@@ -28,7 +28,9 @@ import { MAX_MARKDOWN_LENGTH } from '../../../problems/core/dto/limits';
 import { IsTimestamp } from '../../../problems/core/dto/timestamp';
 
 export class SyncProblemDto {
+  /** Code of an existing problem the acting user can see. */
   @Matches(PROBLEM_CODE_PATTERN) code!: string;
+  /** Points the problem is worth in this contest. */
   @IsInt() @Min(0) @Max(PROBLEM_LIMITS.points.max) points!: number;
   /** Partial scoring; true when omitted. */
   @IsOptional() @IsBoolean() partial?: boolean;
@@ -36,15 +38,20 @@ export class SyncProblemDto {
 
 /** Everything a sync client may set. There is deliberately no visibility, privacy, organization, author, access-code or rating field: the global pipe refuses unknown fields, so "never public" holds by construction. A `PUT` replaces: an omitted optional field returns to its default. */
 export class SyncContestDto {
+  /** Contest name, 1-100 characters. */
   @IsString() @Length(1, 100) name!: string;
+  /** Contest description in Markdown. */
   @IsOptional()
   @IsString()
   @MaxLength(MAX_MARKDOWN_LENGTH)
   description?: string;
+  /** Start time, ISO 8601. */
   @IsTimestamp() startTime!: string;
+  /** End time, ISO 8601. */
   @IsTimestamp() endTime!: string;
   /** Seconds a participant has once started; omitted, the whole window. */
   @IsOptional() @IsInt() @Min(1) timeLimit?: number;
+  /** Minutes before the end during which the scoreboard is frozen. */
   @IsOptional() @IsInt() @Min(0) frozenLastMinutes?: number;
   // An alias of a union, so spelled out with the SDK's shared enum name (SDK R3).
   /** The scoring format; `default` when omitted. */
@@ -68,6 +75,7 @@ export class SyncContestDto {
 }
 
 export class SyncContestKeyParamDto {
+  /** Contest key chosen by the client. */
   @Matches(CONTEST_KEY_PATTERN, {
     message: 'Only lowercase letters, digits and underscores (1-32).',
   })

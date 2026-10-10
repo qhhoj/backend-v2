@@ -15,6 +15,7 @@ export const USER_SORTS = [
 export type UserSort = (typeof USER_SORTS)[number];
 
 export class ContributorListQueryDto {
+  /** Page number, starting at 1. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -22,6 +23,7 @@ export class ContributorListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Entries per page, 1-100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -32,6 +34,7 @@ export class ContributorListQueryDto {
 }
 
 export class UserListQueryDto extends ContributorListQueryDto {
+  /** Ranking field; ties share a rank. */
   @ApiPropertyOptional()
   @IsOptional()
   @IsIn(USER_SORTS)
@@ -39,6 +42,7 @@ export class UserListQueryDto extends ContributorListQueryDto {
 }
 
 export class RankQueryDto {
+  /** Leaderboard field to rank by. */
   @ApiPropertyOptional()
   @IsOptional()
   @IsIn(LEADERBOARD_FIELDS)

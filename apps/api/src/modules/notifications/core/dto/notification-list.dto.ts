@@ -17,6 +17,7 @@ export const NOTIFICATION_STATES = ['all', 'unread', 'read'] as const;
 export type NotificationState = (typeof NOTIFICATION_STATES)[number];
 
 export class NotificationListQueryDto {
+  /** Read state to show; default `all`. */
   @ApiPropertyOptional({
     enum: NOTIFICATION_STATES,
     enumName: 'NotificationState',
@@ -46,6 +47,7 @@ export class NotificationListQueryDto {
   @IsIn(NOTIFICATION_KINDS, { each: true })
   kind?: NotificationKind[];
 
+  /** Page number, starting at 1; pages hold 20 rows. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -57,5 +59,6 @@ export class NotificationListQueryDto {
 
 /** Unvalidated: a malformed id is a 404. */
 export class NotificationIdParamDto {
+  /** Notification id; an unknown id gives 404. */
   @IsString() id!: string;
 }

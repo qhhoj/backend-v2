@@ -6,6 +6,8 @@ export const FEED_FORMATS = ['rss', 'atom'] as const;
 export type FeedFormat = (typeof FEED_FORMATS)[number];
 
 export class FeedParamsDto {
+  /** Which feed: `blog`, `comments` or `problems`. */
   @IsIn(FEED_KINDS) kind!: FeedKind;
+  /** Feed format: `rss` or `atom`. */
   @IsIn(FEED_FORMATS) format!: FeedFormat;
 }

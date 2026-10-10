@@ -8,5 +8,6 @@ export class SocialCompleteDto extends PickType(RegisterDto, [
   'organizationId',
   'languageId',
 ] as const) {
+  /** The pending sign-up token from the callback redirect. */
   @IsString() @Length(1, 512) token!: string;
 }
