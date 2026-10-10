@@ -1,21 +1,9 @@
-import {
-  BlogPost,
-  BlogVote,
-  Comment,
-  CommentLock,
-  CommentVote,
-  uuidStr,
-} from '@libs/database';
+import { Comment, CommentLock, CommentVote, uuidStr } from '@libs/database';
+import { IntegrityCheckService } from '../src/integrity-check.service';
 import { MigrationService } from '../src/migration.service';
 import { setupMigratorTest } from './setup';
 
-const JOBS = [
-  'comments',
-  'comment-votes',
-  'comment-locks',
-  'blog-posts',
-  'blog-votes',
-];
+const JOBS = ['comments', 'comment-votes', 'comment-locks'];
 
 describe('community jobs', () => {
   let harness: Awaited<ReturnType<typeof setupMigratorTest>>;
@@ -73,9 +61,6 @@ describe('community jobs', () => {
       'judge_comment:8003 hidden under hidden judge_comment:8002',
     );
     expect((await comment(8007))!.page.type).toBe('editorial');
-    expect(uuidStr((await comment(8006))!.page.id)).toBe(
-      await id('judge_blogpost', 8001),
-    );
   });
 
   it('skips comments on gone pages and every reply under them', async () => {
@@ -114,30 +99,38 @@ describe('community jobs', () => {
     );
   });
 
-  it('maps posts with blog-style HTML and keeps only ±1 votes', async () => {
-    const post = (await docOf<BlogPost>('blogPosts', 'judge_blogpost', 8001))!;
-    expect(post).toMatchObject({
-      title: 'News',
-      slug: 'news',
-      visible: true,
-      sticky: false,
-      globalPost: true,
-      organization: null,
-      score: 3,
-      publishOn: new Date('2023-03-01T00:00:00Z'),
-    });
-    expect(post.contentHtml).toContain('<strong>big</strong>');
-    expect(post.summaryHtml).toContain('sum');
-    expect(post.authors.map(uuidStr)).toEqual([await id('auth_user', 1)]);
+  it('does not migrate the legacy blog: its comments, votes and locks are skipped and reported', async () => {
+    for (const collection of ['blogPosts', 'blogVotes'])
+      expect(await harness.db.collection(collection).countDocuments()).toBe(0);
+    expect(await comment(8006)).toBeNull();
+    expect(await comment(8008)).toBeNull();
+    expect(reports.comments).toEqual(
+      expect.arrayContaining([
+        'skipped judge_comment:8006 (legacy blog not migrated)',
+        'skipped judge_comment:8008 (ancestor skipped)',
+      ]),
+    );
+    for (const legacyId of [8004, 8005])
+      expect(
+        await docOf<CommentVote>('commentVotes', 'judge_commentvote', legacyId),
+      ).toBeNull();
     expect(
-      await docOf<BlogVote>('blogVotes', 'judge_blogvote', 8001),
-    ).toMatchObject({ score: -1 });
-    expect(
-      await docOf<BlogVote>('blogVotes', 'judge_blogvote', 8002),
+      await docOf<CommentLock>('commentLocks', 'judge_commentlock', 8004),
     ).toBeNull();
+    expect(reports['comment-locks']).toContain(
+      'skipped judge_commentlock:8004 (legacy blog not migrated)',
+    );
   });
 
-  it('verifies clean', async () => {
+  it('rejects the retired blog job names', async () => {
+    await expect(migration.backfill(['blog-posts'])).rejects.toThrow(
+      'unknown job: blog-posts',
+    );
+  });
+
+  it('verifies clean and leaves no dangling comment or blog reference', async () => {
     expect(await migration.verify(JOBS)).toBe(0);
+    const lines = await harness.testingModule.get(IntegrityCheckService).run();
+    expect(lines.filter((line) => /comment|blog/i.test(line))).toEqual([]);
   });
 });

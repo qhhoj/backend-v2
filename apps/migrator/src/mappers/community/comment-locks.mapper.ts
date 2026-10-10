@@ -29,7 +29,10 @@ export class CommentLocksMapper implements Mapper<Row> {
   map(row: Row, ctx: MapCtx): MappedDocument | null {
     const target = this.pages.resolve(row.page);
     if (!target) {
-      ctx.report(`skipped judge_commentlock:${row.id} (page gone)`);
+      const why = this.pages.isBlog(row.page)
+        ? 'legacy blog not migrated'
+        : 'page gone';
+      ctx.report(`skipped judge_commentlock:${row.id} (${why})`);
       return null;
     }
     if (this.owners.get(`${target.type}:${target.id}`) !== row.id) {

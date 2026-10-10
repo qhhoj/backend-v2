@@ -3,6 +3,18 @@ export const SKIPPED_TABLES: readonly { table: string; reason: string }[] = [
   { table: 'judge_judge', reason: 'judge-v2 registers judges fresh' },
   { table: 'judge_judge_problems', reason: 'judge-v2 registers judges fresh' },
   { table: 'judge_judge_runtimes', reason: 'judge-v2 registers judges fresh' },
+  {
+    table: 'judge_blogpost',
+    reason: 'legacy blog unused; its comments are skipped',
+  },
+  {
+    table: 'judge_blogpost_authors',
+    reason: 'legacy blog unused; its comments are skipped',
+  },
+  {
+    table: 'judge_blogvote',
+    reason: 'legacy blog unused; its comments are skipped',
+  },
   { table: 'judge_badge', reason: 'badges dropped' },
   { table: 'judge_profile_badges', reason: 'badges dropped' },
   {

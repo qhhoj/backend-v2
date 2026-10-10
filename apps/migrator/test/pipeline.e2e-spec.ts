@@ -28,8 +28,6 @@ const COLLECTIONS = [
   'comments',
   'commentVotes',
   'commentLocks',
-  'blogPosts',
-  'blogVotes',
   'generalIssues',
   'tickets',
   'flatpages',
@@ -105,7 +103,7 @@ describe('full migration pipeline', () => {
        INSERT INTO ${harness.name}.judge_submission (id, date, status, result, case_points, case_total, problem_id, user_id, language_id) VALUES (7100, NOW(), 'D', 'AC', 1, 1, 7001, 1, 4);
        INSERT INTO ${harness.name}.judge_submissiontestcase (id, \`case\`, status, submission_id) VALUES (7100, 1, 'AC', 7100);
        INSERT INTO ${harness.name}.judge_submissionsource (id, source, submission_id) VALUES (7100, 'x', 7100);
-       DELETE FROM ${harness.name}.judge_blogvote WHERE id = 8001;`,
+       DELETE FROM ${harness.name}.judge_commentvote WHERE id = 8001;`,
     );
     await migration.backfill();
     expect(
@@ -122,8 +120,8 @@ describe('full migration pipeline', () => {
         }
       ).cases,
     ).toHaveLength(1);
-    expect(await migration.verify(['blog-votes'])).toBe(1);
-    await migration.backfill(['blog-votes'], true);
+    expect(await migration.verify(['comment-votes'])).toBe(1);
+    await migration.backfill(['comment-votes'], true);
     expect(await migration.verify()).toBe(0);
   });
 });

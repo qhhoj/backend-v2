@@ -526,3 +526,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Deploy: one GHCR image run by rootful podman quadlets (host network, uid 987); nginx, Mongo, Redis native — pins the worker toolchain, rollback by re-tagging.
 - CD: release tag → CI-gated build → SSH as deploy → sudo qhhoj-deploy; contest running defers (exit 75), migration lock always defers.
 - Migration: freeze-and-iterate on one frozen dump (up to a week down) instead of a short window; go-live is the single irreversible step.
+- Legacy blog (7 posts, 6 comments, 45 votes) is not migrated: unused; comments on it are skipped and reported.

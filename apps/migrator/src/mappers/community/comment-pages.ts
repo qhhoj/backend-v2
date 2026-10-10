@@ -17,15 +17,13 @@ export const PAGE_TABLES = [
   'judge_problem',
   'judge_contest',
   'judge_tagproblem',
-  'judge_blogpost',
 ];
 
-/** Legacy comment page strings (`p:`, `s:`, `c:`, `b:`, `t:` plus a natural key) resolved to imported entities. */
+/** Legacy comment page strings (`p:`, `s:`, `c:`, `t:` plus a natural key) resolved to imported entities. */
 export class CommentPages {
   private problems = new Map<string, number>();
   private contests = new Map<string, number>();
   private tagProblems = new Map<string, number>();
-  private blogs = new Set<number>();
 
   async load(source: LegacySourceService): Promise<void> {
     this.problems = byKey(
@@ -38,11 +36,6 @@ export class CommentPages {
     );
     this.tagProblems = byKey(
       await source.query('SELECT id, code AS `key` FROM judge_tagproblem'),
-    );
-    this.blogs = new Set(
-      (await source.query<{ id: number }>('SELECT id FROM judge_blogpost')).map(
-        (row) => row.id,
-      ),
     );
   }
 
@@ -65,17 +58,14 @@ export class CommentPages {
           'judge_tagproblem',
           this.tagProblems.get(key),
         );
-      case 'b:':
-        return this.blogTarget(Number(key));
       default:
         return null;
     }
   }
 
-  private blogTarget(id: number): PageTarget | null {
-    return this.blogs.has(id)
-      ? { type: 'blog', table: 'judge_blogpost', id }
-      : null;
+  /** The legacy blog (`b:<id>`) is not migrated by decision; its pages never resolve. */
+  isBlog(page: string): boolean {
+    return page.startsWith('b:');
   }
 
   private target(

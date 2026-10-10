@@ -111,12 +111,6 @@ const REFERENCES: readonly Reference[] = [
     field: 'comment',
     foreign: 'comments',
   },
-  {
-    what: 'blogVotes whose post is missing',
-    collection: 'blogVotes',
-    field: 'blog',
-    foreign: 'blogPosts',
-  },
 ];
 
 const lookup = (from: string, field: string, as: string): Document => ({
