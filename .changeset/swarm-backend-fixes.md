@@ -3,6 +3,7 @@
 ---
 
 Backend fixes from the site review:
+
 - Organizations: a direct join honours `slots` (409 `organization_full`); an approval decides the request before adding the member, so a concurrent rejection never leaves a member.
 - Blog: `summary` and `ogImage` need `judge.edit_all_post` to be set or changed.
 - Contests: editors and testers joining an ended contest spectate instead of becoming virtual contestants.
