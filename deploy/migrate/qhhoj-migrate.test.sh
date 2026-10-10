@@ -176,4 +176,23 @@ fresh; exec 8>"$root/run/qhhoj-deploy.lock"; flock 8
 QHHOJ_MIGRATE_LOCK_WAIT=1 migrate run >/dev/null 2>&1 && fail "run must refuse while a deploy holds the lock"
 exec 8>&-
 grep -q "backend-v2" "$calls" && fail "no migrator step behind a deploy"
+# Task 14: snapshot copies the old site read-only and renames the dump only on success
+fresh; stub mysqldump 'echo SQL'; stub rsync
+echo 'LEGACY_DB_NAME=oldsite' >> "$root/root/migrate.env"; echo 'LEGACY_MEDIA_DIR=/old/media' >> "$root/root/migrate.env"
+migrate snapshot >/dev/null || fail "snapshot"
+ls "$root/srv/qhhoj-migrate/incoming"/legacy-*.sql.gz >/dev/null 2>&1 || fail "snapshot writes .sql.gz"
+ls "$root/srv/qhhoj-migrate/incoming"/*.part >/dev/null 2>&1 && fail "no .part left after success"
+grep -q "mysqldump --single-transaction --quick --routines --default-character-set=utf8mb4 oldsite" "$calls" || fail "dump flags and db name"
+grep -q "rsync -a --delete /old/media/ " "$calls" || fail "media rsync from the configured dir"
+grep -q "rsync -a --delete /qhh/problems/ " "$calls" || fail "problem data rsync defaults to /qhh/problems"
+fresh; stub mysqldump 'echo SQL'; stub rsync
+migrate snapshot >/dev/null || fail "snapshot with defaults"
+grep -q "mysqldump --single-transaction --quick --routines --default-character-set=utf8mb4 qhhoj$" "$calls" || fail "db name defaults to qhhoj"
+grep -q "rsync -a --delete /qhh/media/ " "$calls" || fail "media defaults to /qhh/media"
+fresh; stub mysqldump 'echo partial; exit 2'; stub rsync
+set +e; migrate snapshot >/dev/null 2>&1; code=$?; set -e
+[ "$code" != 0 ] || fail "failing mysqldump must fail the snapshot"
+ls "$root/srv/qhhoj-migrate/incoming"/legacy-*.sql.gz >/dev/null 2>&1 && fail "no .sql.gz after a failed dump"
+ls "$root/srv/qhhoj-migrate/incoming"/*.part >/dev/null 2>&1 && fail "failed dump removes its .part"
+grep -q "rsync" "$calls" && fail "no file copy after a failed dump"
 echo "qhhoj-migrate run ok"

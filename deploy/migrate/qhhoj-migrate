@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # qhhoj-migrate: the freeze-and-iterate migration on the v2 host (root). RUNBOOK "Migration week".
 #   import-dump <file.sql.gz>        load the frozen legacy dump into a temporary MariaDB container (127.0.0.1:3307)
+#   snapshot                         frozen copy of the local old site (dump and files) into incoming/, read-only to it
 #   run [--accept-rating-coverage]   every migrator step in runbook order into MONGO_URL; repeatable until go-live
 #   go-live                          finish, mongodump, start the site (asks for the typed word go-live; resumable)
 #   preview on <user> | off          basic-auth gate on the site for the staff review
@@ -28,7 +29,7 @@ ACCEPTED_NOTE=""
 DUMP_CFG=""
 
 die() { echo "qhhoj-migrate: $*" >&2; exit 1; }
-usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
 value() { sed -n "s/^$2=//p" "$1" | tail -1; } # <file> <key>
 take_lock() { exec 9>"$LOCK"; flock -n 9 || die "another qhhoj-migrate holds $LOCK"; }
 take_deploy_lock() { exec 8>"$DEPLOY_LOCK"; flock -w "${QHHOJ_MIGRATE_LOCK_WAIT:-900}" 8 || die "a deploy holds $DEPLOY_LOCK; retry when it finishes"; }
@@ -295,11 +296,46 @@ cmd_status() {
   if [ -s "$WORK/last-run-ok" ]; then cat "$(cat "$WORK/last-run-ok")/summary.txt"; else echo "no successful run"; fi
 }
 
+legacy_setting() { # <key> <default>: a LEGACY_* value from migrate.env, or the default
+  local v; v="$(value "$MIGRATE_ENV" "$1")"
+  echo "${v:-$2}"
+}
+
+dump_legacy() { # <stamp>: the dump is written as .part and renamed only when mysqldump and gzip both succeed
+  local db part rc
+  db="$(legacy_setting LEGACY_DB_NAME qhhoj)"
+  part="$INCOMING/legacy-$1.sql.gz.part"
+  set +e
+  mysqldump --single-transaction --quick --routines --default-character-set=utf8mb4 "$db" | gzip > "$part"
+  rc=("${PIPESTATUS[@]}")
+  set -e
+  if [ "${rc[0]}" != 0 ] || [ "${rc[1]}" != 0 ]; then
+    rm -f "$part"
+    die "mysqldump failed (exit ${rc[0]}, gzip ${rc[1]}); no snapshot written"
+  fi
+  mv "$part" "${part%.part}"
+}
+
+copy_legacy_files() { # read-only toward the old site: rsync only reads its source
+  rsync -a --delete "$(legacy_setting LEGACY_MEDIA_DIR /qhh/media)/" "$INCOMING/media/" || return 1
+  rsync -a --delete "$(legacy_setting LEGACY_PROBLEM_DIR /qhh/problems)/" "$INCOMING/problem-data/" || return 1
+}
+
+cmd_snapshot() {
+  local stamp; stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  take_lock
+  install -d "$INCOMING/media" "$INCOMING/problem-data"
+  dump_legacy "$stamp"
+  copy_legacy_files
+  echo "$INCOMING/legacy-$stamp.sql.gz"
+}
+
 main() {
   mkdir -p "$ROOT/run" "$WORK" "$LOGS"
   install -d -m 700 "$ROOT/backup"
   case "${1:-}" in
     import-dump) cmd_import_dump "${2:-}" ;;
+    snapshot) cmd_snapshot ;;
     run) cmd_run "${2:-}" ;;
     go-live) cmd_go_live ;;
     preview) case "${2:-}" in on) [ -n "${3:-}" ] || usage; gate_on "$3" ;; off) gate_off ;; *) usage ;; esac ;;
