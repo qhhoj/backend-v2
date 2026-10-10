@@ -122,7 +122,9 @@ describe('ProblemsRepository', () => {
     jest.spyOn(Math, 'random').mockReturnValueOnce(0.99);
     const code = await repository.randomCode({ isPublic: true });
     jest.restoreAllMocks();
-    expect(['banana', 'apple', 'cherry']).toContain(code);
+    // Other tests add public problems too: any live public code satisfies the filter.
+    expect(code).not.toBeNull();
+    expect((await repository.findByCode(code!))?.isPublic).toBe(true);
     expect(await repository.randomCode({ code: 'nothing' })).toBeNull();
   });
 });
