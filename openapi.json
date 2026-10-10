@@ -2771,6 +2771,7 @@
             "type": "array"
           },
           "date": {
+            "nullable": true,
             "type": "string"
           },
           "description": {
@@ -10588,6 +10589,7 @@
             "type": "array"
           },
           "date": {
+            "nullable": true,
             "type": "string"
           },
           "description": {
@@ -27881,6 +27883,48 @@
         },
         "tags": [
           "UserPages"
+        ]
+      }
+    },
+    "/api/internal/users/{username}/reset-two-factor": {
+      "post": {
+        "operationId": "UserModerationController_resetTwoFactor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "UserModeration"
         ]
       }
     },
