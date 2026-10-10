@@ -12,7 +12,7 @@ expect() { # <unit> <pattern>
 
 for unit in qhhoj-api qhhoj-bridge qhhoj-worker; do
   expect "$unit" '--network host'
-  expect "$unit" '--user 991:991'
+  expect "$unit" '--user 987:987'
   expect "$unit" '--read-only'
   expect "$unit" 'ghcr.io/qhhoj/backend-v2:current'
   expect "$unit" '--env-file /etc/qhhoj/env'
@@ -22,6 +22,6 @@ done
 expect qhhoj-bridge '/srv/qhhoj/problem-data:/srv/qhhoj/problem-data:ro'
 expect qhhoj-bridge '/etc/qhhoj/bridge-tls:/etc/qhhoj/bridge-tls:ro'
 expect qhhoj-api '/srv/qhhoj:/srv/qhhoj'
-expect qhhoj-worker '^MemoryMax=7G'
+expect qhhoj-worker '^MemoryMax=5G'
 expect qhhoj-worker '--shm-size=1g'
 echo "quadlets ok"

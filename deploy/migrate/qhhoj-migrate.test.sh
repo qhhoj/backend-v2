@@ -124,6 +124,7 @@ migrate import-dump "$root/dump.sql.gz" >/dev/null 2>&1 || fail "import-dump"
 run_rc=0; out="$(migrate run 2>&1)" || run_rc=$?
 kill "$(cat "$bg_pid")" 2>/dev/null || true
 [ "$run_rc" = 0 ] || fail "run after import-dump: $out"
+grep -q "podman run -d --name .* --memory 2g " "$calls" || fail "legacy MariaDB container is memory-capped"
 grep -q -e "$GENPW" -e "$MONGO" -e "$SECRET" "$calls" && fail "import-dump put a secret in argv"
 
 # I2: a failed media rsync stops the run at sync-files; a worker that does not start fails recompute

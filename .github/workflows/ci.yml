@@ -94,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: sudo apt-get install -y shellcheck
-      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh
+      - run: shellcheck -S warning deploy/qhhoj-deploy deploy/migrate/qhhoj-migrate deploy/install-host.sh deploy/*.test.sh deploy/ci/*.sh deploy/judge/*.sh deploy/container/*.sh deploy/quadlet/*.sh
       - name: Run script tests
         run: |
           shopt -s nullglob
