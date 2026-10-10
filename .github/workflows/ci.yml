@@ -33,8 +33,6 @@ jobs:
       - run: npm run typecheck
       # The vendored judge-v2 proto matches proto.lock.json and the committed TypeScript is current.
       - run: npm run judge-proto:check
-      # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config.
-      - run: npm run test:openapi -- --forceExit
       - run: npm run build && npx nest build migrator && npx nest build worker && npx nest build bridge
   test:
     needs: changes
@@ -90,6 +88,9 @@ jobs:
       - run: pandoc --version
       # --forceExit: one leaked handle must not hang the job until the timeout.
       - run: npm test -- --shard=${{ matrix.shard }}/3 --forceExit
+      # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config (needs Redis).
+      - if: matrix.shard == 1
+        run: npm run test:openapi -- --forceExit
   openapi:
     needs: changes
     if: needs.changes.outputs.code == 'true'

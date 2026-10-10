@@ -22,7 +22,9 @@ describe('SubmissionEventsService', () => {
         'processing',
         'P',
       );
-      await new SubmissionEventsService(redis).publish(event);
+      const service = new SubmissionEventsService(redis);
+      await service.onModuleInit(); // as Nest does: wait for the connection, else the ready guard skips the publish
+      await service.publish(event);
       await recorder.waitFor((events) => events.length === 1);
       expect(recorder.events).toEqual([event]);
     } finally {
