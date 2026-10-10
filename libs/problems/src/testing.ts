@@ -208,3 +208,76 @@ function zip64Tail(layout: ZipLayout, options: ZipTestOptions): Buffer {
   locator.writeUInt32LE(1, 16);
   return Buffer.concat([record, locator]);
 }
+
+/** What a fake Polygon method answers: an OK `result`, a FAILED `comment`, a package zip, or a bare HTTP status. */
+export type FakePolygonReply =
+  | { result: unknown }
+  | { failed: string }
+  | { zip: Buffer }
+  | { status: number };
+
+/** A stand-in for Polygon's HTTP API, given to the client as its `fetch`; it records every call's method and form fields. */
+export class FakePolygon {
+  readonly calls: Array<{ method: string; params: Record<string, string> }> =
+    [];
+  private replies = new Map<
+    string,
+    (params: Record<string, string>) => FakePolygonReply
+  >();
+
+  reply(
+    method: string,
+    answer:
+      FakePolygonReply | ((params: Record<string, string>) => FakePolygonReply),
+  ): this {
+    this.replies.set(
+      method,
+      typeof answer === 'function' ? answer : () => answer,
+    );
+    return this;
+  }
+
+  callsOf(method: string) {
+    return this.calls.filter((call) => call.method === method);
+  }
+
+  reset(): void {
+    this.calls.length = 0;
+    this.replies.clear();
+  }
+
+  readonly fetch = (
+    url: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const href = url instanceof Request ? url.url : url.toString();
+    const method = href.split('/api/')[1];
+    const params = Object.fromEntries(
+      new URLSearchParams(init?.body as URLSearchParams | undefined),
+    );
+    this.calls.push({ method, params });
+    const reply = this.replies.get(method)?.(params) ?? {
+      failed: `fake: no reply for ${method}`,
+    };
+    return Promise.resolve(responseOf(reply));
+  };
+}
+
+const responseOf = (reply: FakePolygonReply): Response => {
+  if ('zip' in reply)
+    return new Response(new Uint8Array(reply.zip), {
+      headers: {
+        'content-type': 'application/zip',
+        'content-length': String(reply.zip.length),
+      },
+    });
+  if ('status' in reply) return new Response('busy', { status: reply.status });
+  const body =
+    'result' in reply
+      ? { status: 'OK', result: reply.result }
+      : { status: 'FAILED', comment: reply.failed };
+  return new Response(JSON.stringify(body), {
+    status: 'failed' in reply ? 400 : 200,
+    headers: { 'content-type': 'application/json' },
+  });
+};

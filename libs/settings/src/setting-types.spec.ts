@@ -5,6 +5,7 @@ import {
   oauthClientType,
   oneOfType,
   optionalDatetimeType,
+  optionalTextType,
   optionalUrlType,
   SettingError,
   smtpUrlType,
@@ -232,5 +233,14 @@ describe('oneOfType', () => {
     );
     expect(messageOf(() => mode.parse(1))).toContain('Must be one of');
     expect(messageOf(() => mode.parse(null))).toContain('Must be one of');
+  });
+
+  it('takes short one-line text, trimmed, and refuses control characters or overlong values', () => {
+    const text = optionalTextType(10);
+    expect(text.parse('')).toBe('');
+    expect(text.parse('  abc123 ')).toBe('abc123');
+    expect(messageOf(() => text.parse('a\nb'))).toContain('one line');
+    expect(messageOf(() => text.parse('x'.repeat(11)))).toContain('at most 10');
+    expect(messageOf(() => text.parse(5))).toContain('at most 10');
   });
 });

@@ -1,7 +1,10 @@
 import type { StatementLanguage } from '@libs/database';
+import type { PolygonSource } from './polygon/polygon-link';
 
 export const PDF_QUEUE = 'pdf-render';
 export const POLYGON_QUEUE = 'polygon-import';
+/** Largest Polygon package accepted, uploaded or downloaded from Polygon. */
+export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** Marks a job failure reason as written for the requester; any other reason (I/O errors with absolute paths, driver messages) stays in the logs and is never shown. */
 export const POLYGON_ERROR_PREFIX = 'polygon-import: ';
 
@@ -39,6 +42,8 @@ export interface PolygonImportJob {
   maxCases: number;
   /** The problem's `dataVersion` when the import was queued (update only); the worker refuses if it moved since. */
   expectedDataVersion?: number;
+  /** Set when the worker downloads the package from Polygon instead of reading an uploaded one; the import then writes `polygonLink`. */
+  polygon?: PolygonSource;
 }
 
 export interface PolygonImportResult {
