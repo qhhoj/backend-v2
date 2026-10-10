@@ -20,22 +20,35 @@ const LANGUAGE_TEXT_MAX = 65_536;
 
 /** No property initializers (`PartialType` would inherit them). */
 export class CreateLanguageDto {
+  /** Key judges report for the language; letters, digits and `_+#.-`, up to 10 characters. Fixed once created. */
   @Matches(LANGUAGE_KEY_PATTERN) key!: string;
+  /** Display name, up to 20 characters. */
   @IsString() @Length(1, 20) name!: string;
+  /** Short display name; omit for none. */
   @IsOptional() @IsString() @Length(1, 20) shortName?: string;
+  /** Generic family name shared by versions of the language. */
   @IsString() @Length(1, 20) commonName!: string;
+  /** Editor mode name for the code editor. */
   @IsString() @Length(1, 50) ace!: string;
+  /** Syntax highlighter name. */
   @IsString() @Length(1, 50) pygments!: string;
+  /** Starter code offered in the editor. */
   @IsOptional() @IsString() @MaxLength(LANGUAGE_TEXT_MAX) template?: string;
+  /** Notes shown to users about the compiler or runtime. */
   @IsOptional() @IsString() @MaxLength(LANGUAGE_TEXT_MAX) info?: string;
+  /** Longer description of the language. */
   @IsOptional() @IsString() @MaxLength(LANGUAGE_TEXT_MAX) description?: string;
+  /** File extension without the dot. */
   @Matches(LANGUAGE_EXTENSION_PATTERN) extension!: string;
+  /** Whether solutions are uploaded as a file instead of typed. */
   @IsOptional() @IsBoolean() fileOnly?: boolean;
+  /** Largest uploaded file in MB; 0 turns uploads off. */
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(LANGUAGE_FILE_SIZE_LIMIT_MAX)
   fileSizeLimit?: number;
+  /** Whether new problems allow this language by default. */
   @IsOptional() @IsBoolean() includeInProblem?: boolean;
 }
 
@@ -43,9 +56,11 @@ export class CreateLanguageDto {
 export class UpdateLanguageDto extends PartialType(
   OmitType(CreateLanguageDto, ['key', 'shortName'] as const),
 ) {
+  /** Short display name; null clears it. */
   @IsOptional() @IsString() @Length(1, 20) shortName?: string | null;
 }
 
 export class LanguageIdParamDto {
+  /** Language id. */
   @IsUUID('7') id!: string;
 }

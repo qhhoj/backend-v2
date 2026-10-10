@@ -37,39 +37,61 @@ export interface ProblemDetailContext {
 type Summaries = (ids: unknown[]) => UserSummaryResponse[];
 
 export class LanguageLimitResponse {
+  /** Language key. */
   language!: string;
+  /** Time limit in seconds for this language. */
   timeLimit!: number;
+  /** Memory limit in KiB for this language. */
   memoryLimit!: number;
 }
 
 export class ProblemTranslationResponse {
+  /** Language of the translation. */
   @ApiProperty({ enum: STATEMENT_LANGUAGES, enumName: 'StatementLanguage' })
   language!: StatementLanguage;
+  /** Translated title. */
   name!: string;
+  /** Translated statement in markdown. */
   description!: string;
 }
 
 export class ProblemEditorialDraftResponse {
+  /** Whether the editorial is marked public. */
   isPublic!: boolean;
+  /** When it becomes readable by everyone (ISO 8601). */
   publishOn!: string;
+  /** Editorial authors. */
   authors!: UserSummaryResponse[];
+  /** Editorial markdown. */
   content!: string;
 }
 
 export class ProblemEditorResponse {
   /** The base (default-language) name, whatever `lang` the detail was read in; the detail's own `name` follows `lang`. */
   baseName!: string;
+  /** Base-language statement in markdown. */
   description!: string;
+  /** Statement translations. */
   translations!: ProblemTranslationResponse[];
+  /** The editorial draft; null when none. */
   solution!: ProblemEditorialDraftResponse | null;
+  /** Users who can edit the problem. */
   curators!: UserSummaryResponse[];
+  /** Users who can see the problem while it is private. */
   testers!: UserSummaryResponse[];
+  /** Users who may not submit. */
   bannedUsers!: UserSummaryResponse[];
+  /** User who suggested the problem; null if it was not suggested. */
   suggester!: UserSummaryResponse | null;
+  /** Problem type ids. */
   typeIds!: string[];
+  /** Problem group id. */
   groupId!: string;
+  /** License id; null when none. */
   licenseId!: string | null;
+  /** Ids of languages solutions may use. */
   allowedLanguageIds!: string[];
+  /** Ids of the organizations the problem is private to. */
   organizations!: string[];
 
   static from(
@@ -106,62 +128,98 @@ export class ProblemEditorResponse {
 }
 
 export class ProblemContestResponse {
+  /** Key of the viewer's current contest. */
   contestKey!: string;
   /** Null when the contest problem has no `maxSubmissions`. */
   attemptsLeft!: number | null;
 }
 
 export class ProblemDetailResponse {
+  /** Problem id. */
   id!: string;
+  /** Problem code, unique and used in URLs. */
   code!: string;
+  /** Title in the returned `language`. */
   name!: string;
+  /** Language of the returned statement. */
   @ApiProperty({ enum: STATEMENT_LANGUAGES, enumName: 'StatementLanguage' })
   language!: StatementLanguage;
   /** True when the statement is in the requested language (the base language counts); false when it fell back to the base statement. */
   translated!: boolean;
+  /** Rendered statement HTML. */
   descriptionHtml!: string;
+  /** Where the problem comes from (contest or author credit). */
   source!: string;
+  /** Short summary for previews. */
   summary!: string;
+  /** Default time limit in seconds. */
   timeLimit!: number;
+  /** Default memory limit in KiB. */
   memoryLimit!: number;
+  /** Points the problem is worth. */
   points!: number;
+  /** Whether partial scores are given. */
   partial!: boolean;
+  /** Publication date (ISO 8601); null when unset. */
   date!: string | null;
+  /** Whether the problem is public. */
   isPublic!: boolean;
+  /** Whether only members of the listed organizations can see it. */
   isOrganizationPrivate!: boolean;
+  /** Ids of those organizations. */
   organizations!: string[];
+  /** Whether test data is managed outside the site (the data editor is off). */
   isManuallyManaged!: boolean;
+  /** Whether the statement may contain unsanitized HTML. */
   isFullMarkup!: boolean;
+  /** Problem types. */
   types!: CatalogItemResponse[];
+  /** Problem group; null when none. */
   group!: CatalogItemResponse | null;
+  /** License; null when none. */
   license!: LicenseResponse | null;
+  /** Problem authors. */
   authors!: UserSummaryResponse[];
+  /** Languages solutions may use. */
   allowedLanguages!: LanguageResponse[];
+  /** Per-language limits overriding the defaults. */
   languageLimits!: LanguageLimitResponse[];
+  /** URL of the uploaded PDF statement; null when none. */
   pdfStatementUrl!: string | null;
+  /** URL of the downloadable material; null when none. */
   materialUrl!: string | null;
+  /** Languages with a translated statement. */
   @ApiProperty({
     enum: STATEMENT_LANGUAGES,
     enumName: 'StatementLanguage',
     isArray: true,
   })
   availableTranslations!: StatementLanguage[];
+  /** Whether the viewer can read an editorial. */
   hasEditorial!: boolean;
+  /** Who may read submitted sources: `F` follow the site setting, `A` everyone who sees the problem, `S` users who solved it, `O` only the owner, testers and editors. */
   @ApiSubmissionSourceVisibility()
   submissionSourceVisibility!: string;
+  /** When program output of test cases is shown to non-editors: `O` never, `C` outside contests, `A` always. */
   @ApiTestcaseVisibility()
   testcaseVisibility!: string;
+  /** How much of the test case results is shown: `A` every case, `B` batch summaries, `S` totals only. */
   @ApiTestcaseResultVisibility()
   testcaseResultVisibility!: string;
+  /** Whether checker feedback is shown to submitters. */
   allowViewFeedback!: boolean;
+  /** Number of users who solved the problem. */
   userCount!: number;
+  /** Percentage of accepted submissions, 0 to 100. */
   acRate!: number;
+  /** Whether the viewer can edit the problem. */
   canEdit!: boolean;
   /** For the signed-in viewer; null when anonymous or never submitted. */
   @ApiProperty({ enum: VIEWER_MARKS, nullable: true })
   viewerStatus!: ViewerStatus;
   /** The viewer's current contest when it lists this problem. */
   contest!: ProblemContestResponse | null;
+  /** Raw fields for the editor; null unless `canEdit`. */
   editor!: ProblemEditorResponse | null;
 
   static from(

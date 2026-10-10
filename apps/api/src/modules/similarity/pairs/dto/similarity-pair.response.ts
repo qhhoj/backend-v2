@@ -2,8 +2,11 @@ import { uuidStr } from '@libs/database';
 import type { SimilarityPair, SimilaritySide } from '@libs/database';
 
 export class SimilaritySideResponse {
+  /** Submission id. */
   submissionId!: string;
+  /** Submitter id. */
   userId!: string;
+  /** Submitter username. */
   username!: string;
 
   /** `usernames` maps user ids to usernames; a deleted user shows as ''. */
@@ -21,9 +24,13 @@ export class SimilaritySideResponse {
 }
 
 export class SimilarityPairResponse {
+  /** Pair id. */
   id!: string;
+  /** Run id. */
   runId!: string;
+  /** Problem id. */
   problemId!: string;
+  /** Problem code. */
   problemCode!: string;
   /** Engine family. */
   language!: string;
@@ -33,8 +40,11 @@ export class SimilarityPairResponse {
   longestFragment!: number;
   /** Shared k-grams over both files. */
   totalOverlap!: number;
+  /** Number of matched fragments. */
   fragmentCount!: number;
+  /** One submission of the pair. */
   left!: SimilaritySideResponse;
+  /** The other submission of the pair. */
   right!: SimilaritySideResponse;
 
   static from(

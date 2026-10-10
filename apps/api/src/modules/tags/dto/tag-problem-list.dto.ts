@@ -14,6 +14,7 @@ import { toArray } from '@libs/common';
 import { TAG_JUDGES } from '../tag-links';
 
 export class TagProblemListQueryDto {
+  /** Page number, from 1. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -21,6 +22,7 @@ export class TagProblemListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Items per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -36,6 +38,7 @@ export class TagProblemListQueryDto {
   search?: string;
   /** A tag code. */
   @IsOptional() @IsString() @MaxLength(30) tag?: string;
+  /** Only problems from these judges: `Atcoder`, `Codeforces`, `CodeforcesGym`, `Kattis` or `VNOJ`; repeat the parameter. */
   @IsOptional()
   @Transform(toArray)
   @IsIn(TAG_JUDGES, { each: true })

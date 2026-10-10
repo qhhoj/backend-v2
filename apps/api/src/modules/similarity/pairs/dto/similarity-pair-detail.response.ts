@@ -7,11 +7,13 @@ import {
 } from './similarity-pair.response';
 
 export class SimilarityFragmentResponse {
-  /** 1-based, inclusive, in the left source. */
+  /** First matched line in the left source (1-based). */
   leftStart!: number;
+  /** Last matched line in the left source (inclusive). */
   leftEnd!: number;
-  /** 1-based, inclusive, in the right source. */
+  /** First matched line in the right source (1-based). */
   rightStart!: number;
+  /** Last matched line in the right source (inclusive). */
   rightEnd!: number;
 
   static from(fragment: SimilarityFragment): SimilarityFragmentResponse {
@@ -28,8 +30,10 @@ export class SimilarityPairSourceResponse extends SimilaritySideResponse {
   /** Null when the submission no longer exists. */
   @ApiProperty({ type: Date, nullable: true })
   date!: Date | null;
+  /** Submission verdict; null when the submission no longer exists. */
   @ApiProperty({ type: String, nullable: true })
   result!: string | null;
+  /** Submission points; null when it no longer exists. */
   @ApiProperty({ type: Number, nullable: true })
   points!: number | null;
   /** The code as submitted; empty when it no longer exists. */
@@ -56,7 +60,9 @@ export class SimilarityPairDetailResponse extends OmitType(
   SimilarityPairResponse,
   ['left', 'right'] as const,
 ) {
+  /** One submission of the pair, with its source. */
   left!: SimilarityPairSourceResponse;
+  /** The other submission of the pair, with its source. */
   right!: SimilarityPairSourceResponse;
   /** Matched regions in left-file order, at most 50. */
   fragments!: SimilarityFragmentResponse[];

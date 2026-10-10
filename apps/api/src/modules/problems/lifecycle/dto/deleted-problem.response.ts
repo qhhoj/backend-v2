@@ -4,9 +4,13 @@ import { UserSummaryResponse } from '../../core/dto/user-summary.response';
 import { daysLeft } from '../problem-lifecycle-rules';
 
 export class DeletedProblemResponse {
+  /** Problem code. */
   code!: string;
+  /** Problem title. */
   name!: string;
+  /** When the problem was deleted. */
   deletedAt!: Date;
+  /** Who deleted it; null when unknown. */
   deletedBy!: UserSummaryResponse | null;
   /** Whole days before the purge job may take it; 0 once the grace period is over. */
   daysLeft!: number;
