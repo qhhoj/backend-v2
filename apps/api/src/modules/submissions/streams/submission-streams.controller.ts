@@ -17,7 +17,7 @@ import { SubmissionStreamsService } from './submission-streams.service';
 export class SubmissionStreamsController {
   constructor(private readonly streams: SubmissionStreamsService) {}
 
-  /** Public feed: `queued`, `processing`, `grading-begin` and `done` of submissions on public, non-organisation-private problems, as ids and status. */
+  /** Public feed: `queued`, `processing`, `grading-begin` and `done` of the submissions the anonymous submission list shows (public, non-organisation-private problems; never a contest whose list is hidden, e.g. running or frozen), as ids and status. */
   @Public()
   @ApiEventStream(SubmissionFeedFrame, ResyncFrame)
   @Get()

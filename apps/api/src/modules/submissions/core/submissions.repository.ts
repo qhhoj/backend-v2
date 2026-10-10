@@ -110,6 +110,17 @@ export class SubmissionsRepository {
       .exec();
   }
 
+  /** The submission's contest id, null for practice; undefined when there is no such submission. */
+  async findContestId(id: string): Promise<string | null | undefined> {
+    if (!isUuid(id)) return undefined;
+    const row = await this.submissions
+      .findById(id, { contest: 1 })
+      .lean<Pick<Submission, '_id' | 'contest'>>()
+      .exec();
+    if (!row) return undefined;
+    return row.contest ? uuidStr(row.contest) : null;
+  }
+
   async findSource(id: string): Promise<string | null> {
     return (await this.sources.findById(id).lean())?.source ?? null;
   }

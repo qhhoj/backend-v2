@@ -393,19 +393,88 @@ describe('contest submissions and the freeze', () => {
       expect((await open(who)).status).toBe(200);
   });
 
-  it('keeps verdicts out of the public feed', async () => {
-    const { bobId } = await frozenScene('feed_frozen_p');
-    const streams = streamsOf(api);
-    const feed = await openStream(api, EVENTS);
-    opened.push(feed);
-    await waitUntil(() => streams.openCounts().feed === 1);
-    const submission = await api.submissions.findById(bobId).lean().exec();
+  const publishDone = async (id: string) => {
+    const submission = await api.submissions.findById(id).lean().exec();
     await api.app
       .get(SubmissionEventsService)
       .publish(submissionEvent(gradedJobOf(submission!), 'done', 'D'));
-    const frame = (await feed.next('done')).data as Record<string, unknown>;
+  };
+  const openFeeds = async () => {
+    const streams = streamsOf(api);
+    const feeds = [
+      await openStream(api, EVENTS),
+      await openStream(api, EVENTS, { Cookie: sessions.alice.cookie }),
+    ];
+    opened.push(...feeds);
+    await waitUntil(() => streams.openCounts().feed === feeds.length);
+    return feeds;
+  };
+  /** The feed delivers in order, so the practice event arriving first proves the contest one was dropped. */
+  const nextDoneIds = async (feeds: SseClient[]) =>
+    Promise.all(
+      feeds.map(
+        async (feed) =>
+          ((await feed.next('done')).data as { submissionId: string })
+            .submissionId,
+      ),
+    );
+
+  it.each([
+    ['a frozen contest', 'feed_frozen_p', {}],
+    [
+      'a running contest that hides its list',
+      'feed_running_p',
+      {
+        formatName: 'default',
+        frozenLastMinutes: 0,
+        showSubmissionList: false,
+      },
+    ],
+    [
+      'a running contest with a hidden scoreboard',
+      'feed_board_h_p',
+      {
+        formatName: 'default',
+        frozenLastMinutes: 0,
+        scoreboardVisibility: 'H',
+      },
+    ],
+  ])(
+    'keeps submissions of %s out of the public feed, anonymous or signed in',
+    async (_label, code, extra) => {
+      const { bobId, bobOutside } = await frozenScene(code, extra);
+      const feeds = await openFeeds();
+      await publishDone(bobId);
+      await publishDone(bobOutside);
+      expect(await nextDoneIds(feeds)).toEqual([bobOutside, bobOutside]);
+      for (const feed of feeds) expect(feed.messages).toEqual([]);
+    },
+  );
+
+  it('streams a contest submission on the public feed once the list is open, as ids and status', async () => {
+    const { contest, bobId } = await frozenScene('feed_thawed_p');
+    const feeds = await openFeeds();
+    await api.contests.updateOne({ _id: contest._id }, endedUnfrozen);
+    await publishDone(bobId);
+    expect(await nextDoneIds(feeds)).toEqual([bobId, bobId]);
+    await publishDone(bobId);
+    const frame = (await feeds[0].next('done')).data as Record<string, unknown>;
     expect(Object.keys(frame).sort()).toEqual(
       ['problemId', 'status', 'submissionId', 'type', 'userId'].sort(),
     );
+  });
+
+  it("still streams a frozen contest submission's live updates to its owner", async () => {
+    const { aliceId } = await frozenScene('feed_owner_p');
+    const own = await openStream(api, `${EVENTS}/${aliceId}`, {
+      Cookie: sessions.alice.cookie,
+    });
+    opened.push(own);
+    await own.next('state');
+    await publishDone(aliceId);
+    expect((await own.next('done')).data).toMatchObject({
+      submissionId: aliceId,
+      status: 'D',
+    });
   });
 });

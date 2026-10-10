@@ -453,6 +453,20 @@ export class SubmissionsService {
     return user ? [{ user: user._id }] : null;
   }
 
+  /** One submission against `hiddenContestClauses`: whether the lists leave it out for this viewer because of its contest (problem visibility is the caller's). */
+  async hiddenByContest(
+    principal: Principal | null,
+    { contestId, userId }: { contestId: string | null; userId: string },
+  ): Promise<boolean> {
+    if (contestId === null || userId === principal?.userId) return false;
+    const hidden = await this.viewers.hiddenSubmissionContests(
+      principal,
+      new Date(),
+      [contestId],
+    );
+    return hidden.length > 0;
+  }
+
   /** Other users' submissions of contests whose list the viewer may not see; the viewer's own stay. */
   private async hiddenContestClauses(
     principal: Principal | null,

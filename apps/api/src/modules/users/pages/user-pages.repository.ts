@@ -32,6 +32,17 @@ export interface SolvedRow {
   problem: { code: string; name: string; points: number; groupId: unknown };
 }
 
+/** The user's scored submissions outside `hiddenContests` (practice ones have no contest and always count). */
+const scoredOutside = (userId: string, hiddenContests: readonly string[]) => ({
+  $match: {
+    user: toUuid(userId),
+    points: { $gt: 0 },
+    ...(hiddenContests.length && {
+      contest: { $nin: hiddenContests.map(toUuid) },
+    }),
+  },
+});
+
 /** Public, non-organization-private, not-deleted problems: what legacy counts on user pages. */
 const publicProblem = (from: string, project: Record<string, 0 | 1>) => ({
   $lookup: {
@@ -107,11 +118,14 @@ export class UserPagesRepository {
     }));
   }
 
-  /** Legacy `UserProblemsPage`: best positive points per public problem. */
-  solved(userId: string): Promise<SolvedRow[]> {
+  /** Legacy `UserProblemsPage`: best positive points per public problem, leaving out `hiddenContests`. */
+  solved(
+    userId: string,
+    hiddenContests: readonly string[],
+  ): Promise<SolvedRow[]> {
     return this.submissions
       .aggregate<SolvedRow>([
-        { $match: { user: toUuid(userId), points: { $gt: 0 } } },
+        scoredOutside(userId, hiddenContests),
         { $group: { _id: '$problem', points: { $max: '$points' } } },
         publicProblem(this.problems.collection.name, {
           code: 1,
@@ -124,11 +138,15 @@ export class UserPagesRepository {
       .exec();
   }
 
-  /** Legacy `get_pp_breakdown`: per public problem the best, latest submission, best first, at most `limit` rows. */
-  ppBreakdown(userId: string, limit: number): Promise<BestSubmissionRow[]> {
+  /** Legacy `get_pp_breakdown`: per public problem the best, latest submission outside `hiddenContests`, best first, at most `limit` rows. */
+  ppBreakdown(
+    userId: string,
+    limit: number,
+    hiddenContests: readonly string[],
+  ): Promise<BestSubmissionRow[]> {
     return this.submissions
       .aggregate<BestSubmissionRow>([
-        { $match: { user: toUuid(userId), points: { $gt: 0 } } },
+        scoredOutside(userId, hiddenContests),
         {
           $project: {
             problem: 1,

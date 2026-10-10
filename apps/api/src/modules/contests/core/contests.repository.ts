@@ -95,11 +95,15 @@ export class ContestsRepository {
       : Promise.resolve(null);
   }
 
-  /** Contests that can hide a submission list now: not ended, a scoreboard other than V, or a freezing format with a freeze (which outlives the end). Ended, always-visible boards (most contests) are never read. */
-  candidatesHidingSubmissions(now: Date): Promise<Contest[]> {
+  /** Contests that can hide a submission list now: not ended, a scoreboard other than V, or a freezing format with a freeze (which outlives the end). Ended, always-visible boards (most contests) are never read. `among` narrows the read to those ids. */
+  candidatesHidingSubmissions(
+    now: Date,
+    among?: readonly string[],
+  ): Promise<Contest[]> {
     return this.contests
       .find(
         {
+          ...(among && { _id: { $in: among } }),
           $or: [
             { endTime: { $gte: now } },
             { scoreboardVisibility: { $ne: 'V' } },

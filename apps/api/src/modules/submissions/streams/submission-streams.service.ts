@@ -27,6 +27,8 @@ import type {
 /** How long the feed trusts a problem's publicity; a `publicityChanged` in this process drops it at once. */
 const FEED_PROBLEM_TTL_MS = 30_000;
 const FEED_PROBLEM_CACHE_SIZE = 10_000;
+/** A submission's contest never changes; its few feed events share one lookup. */
+const FEED_CONTEST_CACHE_SIZE = 10_000;
 
 interface SubmissionStream extends OpenStream {
   /** Null on the public feed. */
@@ -77,6 +79,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     string,
     { eligible: boolean; expiresAt: number }
   >();
+  private readonly feedContests = new Map<string, string | null>();
   /** Feed deliveries run one after another, so a cache miss never reorders events. */
   private feedQueue: Promise<void> = Promise.resolve();
 
@@ -160,7 +163,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     return { submissions: this.bySubmission.size, feed: this.feed.size };
   }
 
-  /** One frame per event, written to every matching stream: viewers of the submission get every event (progress only with `caseEvents`); the feed gets ids and status of public, non-organisation-private problems, without progress. */
+  /** One frame per event, written to every matching stream: viewers of the submission get every event (progress only with `caseEvents`); the feed gets ids and status of what the anonymous submission list shows (public, non-organisation-private problems, no contest whose list is hidden), without progress. */
   deliver(raw: string): void {
     const event = parseSubmissionEvent(raw);
     if (!event) return;
@@ -208,7 +211,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
 
   private async deliverToFeed(event: SubmissionEvent): Promise<void> {
     try {
-      if (!(await this.isFeedProblem(event.problemId))) return;
+      if (!(await this.isFeedSubmission(event))) return;
     } catch (error) {
       this.logger.error(
         `Public feed lookup failed: ${(error as Error).message}`,
@@ -217,6 +220,30 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     }
     const frame = sseFrame(event.type, feedEventOf(event));
     for (const entry of this.feed) entry.stream.send(frame);
+  }
+
+  /** The anonymous submission list's rules: the problem, then the contest (`SubmissionsService.hiddenByContest`), read when the event is delivered so a freeze or a closed list applies at once. */
+  private async isFeedSubmission(event: SubmissionEvent): Promise<boolean> {
+    if (!(await this.isFeedProblem(event.problemId))) return false;
+    const contestId = await this.contestOf(event.submissionId);
+    if (contestId === undefined) return false;
+    return !(await this.submissions.hiddenByContest(null, {
+      contestId,
+      userId: event.userId,
+    }));
+  }
+
+  private async contestOf(
+    submissionId: string,
+  ): Promise<string | null | undefined> {
+    if (this.feedContests.has(submissionId))
+      return this.feedContests.get(submissionId);
+    const contestId = await this.submissionRows.findContestId(submissionId);
+    if (contestId === undefined) return undefined;
+    if (this.feedContests.size >= FEED_CONTEST_CACHE_SIZE)
+      this.feedContests.clear();
+    this.feedContests.set(submissionId, contestId);
+    return contestId;
   }
 
   private async isFeedProblem(problemId: string): Promise<boolean> {

@@ -13,6 +13,7 @@ import { uuidStr } from '@libs/database';
 import { PP_ENTRIES, PP_STEP } from '@libs/judging';
 import type Redis from 'ioredis';
 import { ContestAccess } from '../../contests/core/contest-access';
+import { ContestViewerService } from '../../contests/core/contest-viewer.service';
 import { OrganizationSummaryResponse } from '../../organizations/core/dto/organization.response';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
@@ -69,6 +70,7 @@ export class UserPagesService {
     private readonly organizations: OrganizationsService,
     private readonly languages: LanguagesQuerier,
     private readonly groups: ProblemGroupsQuerier,
+    private readonly contestViewers: ContestViewerService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -150,10 +152,16 @@ export class UserPagesService {
     });
   }
 
+  /** Contests whose submissions the anonymous submission list hides now (running, frozen, hidden board, private): the public pages leave them out, whoever views. */
+  private hiddenContests(): Promise<string[]> {
+    return this.contestViewers.hiddenSubmissionContests(null, new Date());
+  }
+
   async solved(username: string): Promise<SolvedResponse> {
     const user = await this.userOf(username);
     const byGroup = new Map<string, SolvedResponse['groups'][number]>();
-    for (const row of await this.pages.solved(user._id)) {
+    const rows = await this.pages.solved(user._id, await this.hiddenContests());
+    for (const row of rows) {
       const name =
         this.groups.byId(uuidStr(row.problem.groupId))?.fullName ?? '';
       const group = byGroup.get(name) ?? { name, points: 0, problems: [] };
@@ -234,27 +242,30 @@ export class UserPagesService {
     const key = `user-pp:${userId}`;
     const cached = await this.redis.get(key);
     if (cached) return JSON.parse(cached) as PpEntryResponse[];
-    const entries = (await this.pages.ppBreakdown(userId, PP_ENTRIES)).map(
-      (row, index): PpEntryResponse => {
-        const weight = PP_STEP ** index;
-        const language = this.languages.byId(uuidStr(row.submission.language));
-        return {
-          rank: index + 1,
-          weight: weight * 100,
-          points: row.submission.points,
-          scaledPoints: row.submission.points * weight,
-          problem: { code: row.problem.code, name: row.problem.name },
-          submission: {
-            id: uuidStr(row.submission._id),
-            date: row.submission.date.toISOString(),
-            casePoints: row.submission.casePoints,
-            caseTotal: row.submission.caseTotal,
-            result: row.submission.result,
-            language: language?.shortName || language?.key || '',
-          },
-        };
-      },
+    const rows = await this.pages.ppBreakdown(
+      userId,
+      PP_ENTRIES,
+      await this.hiddenContests(),
     );
+    const entries = rows.map((row, index): PpEntryResponse => {
+      const weight = PP_STEP ** index;
+      const language = this.languages.byId(uuidStr(row.submission.language));
+      return {
+        rank: index + 1,
+        weight: weight * 100,
+        points: row.submission.points,
+        scaledPoints: row.submission.points * weight,
+        problem: { code: row.problem.code, name: row.problem.name },
+        submission: {
+          id: uuidStr(row.submission._id),
+          date: row.submission.date.toISOString(),
+          casePoints: row.submission.casePoints,
+          caseTotal: row.submission.caseTotal,
+          result: row.submission.result,
+          language: language?.shortName || language?.key || '',
+        },
+      };
+    });
     await this.redis.set(key, JSON.stringify(entries), 'EX', CACHE_SECONDS);
     return entries;
   }
