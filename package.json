@@ -49,6 +49,7 @@
     "@nestjs/platform-fastify": "^11.2.7",
     "@nestjs/schedule": "^6.1.3",
     "@nestjs/swagger": "^11.4.7",
+    "@scalar/fastify-api-reference": "1.72.0",
     "@simplewebauthn/server": "^13.3.3",
     "bullmq": "5.81.5",
     "class-transformer": "^0.5.1",
@@ -126,7 +127,14 @@
       "/openapi\\.e2e-spec\\.ts$"
     ],
     "transform": {
-      "^.+\\.ts$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "allowJs": true
+          }
+        }
+      ]
     },
     "testEnvironment": "node",
     "roots": [
@@ -137,6 +145,9 @@
     "moduleNameMapper": {
       "^@libs/(common|database|auth|render|problems|judging|judge-proto|contests|community|settings)(|/.*)$": "<rootDir>/libs/$1/src$2"
     },
-    "testTimeout": 60000
+    "testTimeout": 60000,
+    "transformIgnorePatterns": [
+      "/node_modules/(?!@scalar/|github-slugger/)"
+    ]
   }
 }

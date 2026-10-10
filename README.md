@@ -54,7 +54,9 @@ Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
 | bridge (`:9999`, exactly one instance) | `npm run start:bridge`    | `npx nest build bridge && npm run start:prod:bridge` |
 | migrator (CLI)                         | `npx nest build migrator` | `node dist/apps/migrator/main <command>`             |
 
-OpenAPI JSON: `GET /api/internal/openapi.json` (request and response schemas of every route); the committed copy is `openapi.json` (`npm run openapi:emit` rewrites it offline); the frontend generates its types from it. `npm run test:openapi` checks the schemas.
+API reference: `GET /api/docs` ([Scalar](https://scalar.com), https://qhhoj.com/api/docs and https://api-v2.qhhoj.com/api/docs) renders the live OpenAPI document, so it cannot drift from the code; the bundle is served by the api itself (no third-party script or font).
+
+OpenAPI JSON: `GET /api/internal/openapi.json` (request and response schemas of every route); the committed copy is `openapi.json` (`npm run openapi:emit` rewrites it offline); the frontend generates its types from it. After a DTO or route change run `npm run openapi:emit` and commit `openapi.json` (CI fails on a stale copy). `npm run test:openapi` checks the schemas.
 
 Dev and end-to-end data: `NODE_ENV=development npm run seed:e2e` creates `e2e_admin`, `e2e_user`, problem `e2e_sum` and the Mailpit mail setting (idempotent, refuses outside `test`/`development`).
 

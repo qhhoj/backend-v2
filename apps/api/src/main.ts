@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { configureApp, fastifyAdapter, loadEnv } from '@libs/common';
+import { setupApiDocs } from './api-docs';
 import { AppModule } from './app.module';
 import { setupOpenApi } from './openapi';
 
@@ -12,6 +13,7 @@ async function bootstrap() {
   );
   await configureApp(app);
   setupOpenApi(app);
+  setupApiDocs(app);
   await app.listen(env.port, env.host);
 }
 void bootstrap();
