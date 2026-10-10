@@ -1,4 +1,5 @@
-import { AppError } from '@libs/common';
+import { AppError, REDIS } from '@libs/common';
+import type Redis from 'ioredis';
 import { newId } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
 import type {
@@ -410,6 +411,60 @@ describe('user pages', () => {
     expect(
       secondPage.filter(({ collection }) => collection === 'submissions'),
     ).toEqual([]);
+  });
+
+  it("leaves a running contest's solves out of solved and pp-breakdown until the contest ends", async () => {
+    const racer = await createUserWith(api, 'racer', {});
+    const viewer = await loginAs(
+      api,
+      (await createUserWith(api, 'race_viewer', {}))._id,
+    );
+    const inContest = await createProblem(api, catalog, {
+      code: 'race_c',
+      points: 1000,
+    });
+    const practice = await createProblem(api, catalog, {
+      code: 'race_p',
+      points: 900,
+    });
+    const contest = await createContest(api, { showSubmissionList: false });
+    await submit(racer._id, inContest._id, {
+      points: 1000,
+      contest: contest._id,
+    });
+    await submit(racer._id, practice._id, { points: 900 });
+    const shown = async (session?: TestSession) => {
+      const solved = dataOf<SolvedResponse>(
+        await get('/api/internal/users/racer/solved', session).expect(200),
+      );
+      const pp = dataOf<PpEntryResponse[]>(
+        await get('/api/internal/users/racer/pp-breakdown', session).expect(
+          200,
+        ),
+      );
+      return {
+        solved: solved.groups
+          .flatMap((group) => group.problems.map((problem) => problem.code))
+          .sort(),
+        pp: pp.map((entry) => entry.problem.code).sort(),
+      };
+    };
+    for (const session of [undefined, viewer])
+      expect(await shown(session)).toEqual({
+        solved: ['race_p'],
+        pp: ['race_p'],
+      });
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { startTime: hoursFromNow(-5), endTime: hoursFromNow(-1) },
+    );
+    // The breakdown is cached per user for ten minutes.
+    await api.app.get<Redis>(REDIS).del(`user-pp:${racer._id}`);
+    for (const session of [undefined, viewer])
+      expect(await shown(session)).toEqual({
+        solved: ['race_c', 'race_p'],
+        pp: ['race_c', 'race_p'],
+      });
   });
 
   it('buckets submissions by day in negative and positive time zones', async () => {

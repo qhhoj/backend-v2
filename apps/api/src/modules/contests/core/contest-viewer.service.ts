@@ -67,14 +67,18 @@ export class ContestViewerService {
     return contest;
   }
 
-  /** Contests whose full submission list the viewer may not see now; other users' submissions of these leave every submission list. */
+  /** Contests whose full submission list the viewer may not see now (only those in `among` when given); other users' submissions of these leave every submission list, the public submission feed and the public user pages. */
   async hiddenSubmissionContests(
     principal: Principal | null,
     now: Date,
+    among?: readonly string[],
   ): Promise<string[]> {
     if (principal && hasPermission(principal, 'judge.view_all_submission'))
       return [];
-    const candidates = await this.contests.candidatesHidingSubmissions(now);
+    const candidates = await this.contests.candidatesHidingSubmissions(
+      now,
+      among,
+    );
     if (!candidates.length) return [];
     const live = principal
       ? await this.participations.liveOf(
