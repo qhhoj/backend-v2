@@ -8,6 +8,7 @@ import {
 import { trim } from '../../../problems/core/dto/transforms';
 
 export class CreateCannedReplyDto {
+  /** Short name of the template. */
   @Transform(trim)
   @IsString()
   @Length(1, TICKET_CANNED_REPLY_TITLE_MAX)
@@ -23,11 +24,13 @@ export class CreateCannedReplyDto {
 
 /** Every field is optional; `RefuseNullFieldsPipe` turns an explicit `null` into `must_not_be_null`. */
 export class UpdateCannedReplyDto {
+  /** Short name of the template. */
   @IsOptional()
   @Transform(trim)
   @IsString()
   @Length(1, TICKET_CANNED_REPLY_TITLE_MAX)
   title?: string;
+  /** Template text. */
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -37,6 +40,7 @@ export class UpdateCannedReplyDto {
 }
 
 export class CannedReplyPageQueryDto {
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

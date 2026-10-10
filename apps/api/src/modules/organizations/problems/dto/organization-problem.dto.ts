@@ -21,6 +21,7 @@ export const ARCHIVE_FILTERS = ['false', 'true', 'all'] as const;
 export type ArchiveFilter = (typeof ARCHIVE_FILTERS)[number];
 
 export class OrganizationProblemListQueryDto {
+  /** Only problems with this tag slug. */
   @IsOptional() @Matches(ORGANIZATION_TAG_SLUG_PATTERN) tag?: string;
   /** Default: archived problems are hidden. */
   @ApiPropertyOptional({
@@ -38,6 +39,7 @@ export class OrganizationProblemListQueryDto {
   @IsString()
   @Length(1, 50)
   search?: string;
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -45,6 +47,7 @@ export class OrganizationProblemListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Problems per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -55,6 +58,10 @@ export class OrganizationProblemListQueryDto {
 }
 
 export class SetProblemTagsDto {
+  /**
+   * Ids of the tags the problem should have, at most 20; replaces its current
+   * tags.
+   */
   @IsArray()
   @ArrayMaxSize(20)
   @ArrayUnique()

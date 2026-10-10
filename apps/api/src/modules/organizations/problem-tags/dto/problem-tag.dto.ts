@@ -14,10 +14,14 @@ import {
 } from 'class-validator';
 
 export class CreateProblemTagDto {
+  /**
+   * Lowercase letters, digits and hyphens, 1 to 20 characters; never changes.
+   */
   @Matches(ORGANIZATION_TAG_SLUG_PATTERN, {
     message: 'Lowercase letters, digits and hyphens (1-20).',
   })
   slug!: string;
+  /** Display name, 1 to 40 characters. */
   @IsString() @Length(1, 40) name!: string;
   /** The palette token keys, shared with the contest tags (`TagColor`). */
   @ApiPropertyOptional({
@@ -41,6 +45,7 @@ export class ProblemTagParamsDto {
 }
 
 export class ProblemTagListQueryDto {
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -48,6 +53,7 @@ export class ProblemTagListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Tags per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

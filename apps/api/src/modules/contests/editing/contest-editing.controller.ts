@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -23,6 +24,7 @@ import {
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import { QueuedResponse } from '../core/dto/queued.response';
 
+@ApiTags('Contest editing')
 @Controller('api/internal/contests')
 export class ContestEditingController {
   constructor(
@@ -30,6 +32,17 @@ export class ContestEditingController {
     private readonly actionStatus: ContestActionsService,
   ) {}
 
+  /**
+   * Create a contest
+   *
+   * @remarks
+   * Requires `judge.add_contest`. Creates a contest with the given key
+   * (reserved keys fail with 400 `key_reserved`) and makes the caller its
+   * author. Field errors are returned as issues (400 `validation_failed`). For
+   * an organization-private contest the first listed organization is charged
+   * against its quota. FSO judging and automatic publishing are scheduled for
+   * the contest's end.
+   */
   @RequirePermission('judge.add_contest')
   @Post()
   create(
@@ -39,6 +52,17 @@ export class ContestEditingController {
     return this.editing.create(auth.principal, dto);
   }
 
+  /**
+   * Update a contest
+   *
+   * @remarks
+   * Contest editors only. Changes the fields sent (null is refused for fields
+   * that cannot be cleared). Edits that affect scoring queue a rescore, the
+   * ranking cache is purged, changed rules raise the rules revision, and a new
+   * lock is copied onto live submissions. Fails with 409 `conflict` when the
+   * contest changed meanwhile or when leaving the final-submission format with
+   * pending submissions, and with 403 `forbidden` for non-editors.
+   */
   @Patch(':key')
   update(
     @CurrentAuth() auth: AuthContext,
@@ -49,6 +73,16 @@ export class ContestEditingController {
     return this.editing.update(auth.principal, key, dto);
   }
 
+  /**
+   * Clone a contest
+   *
+   * @remarks
+   * Requires `judge.clone_contest` and edit rights on the source. Copies
+   * settings and problems to a new, hidden contest under the new key, with the
+   * caller as its only author; participations, announcements and similar per-
+   * contest data stay with the source. Reserved keys fail with 400
+   * `key_reserved`.
+   */
   @RequirePermission('judge.clone_contest')
   @Post(':key/clone')
   clone(
@@ -59,6 +93,13 @@ export class ContestEditingController {
     return this.editing.clone(auth.principal, key, newKey);
   }
 
+  /**
+   * Rescore a contest
+   *
+   * @remarks
+   * Contest editors only. Queues a full rescore of the contest's submissions
+   * and ranking; returns 202 with `queued` true.
+   */
   @Post(':key/rescore')
   @HttpCode(202)
   rescore(
@@ -68,6 +109,14 @@ export class ContestEditingController {
     return this.editing.rescore(auth.principal, key);
   }
 
+  /**
+   * Judge the final submissions of a contest
+   *
+   * @remarks
+   * Contest editors only. Queues judging of the pending final submissions of
+   * an ended final-submission contest; returns 202. Fails with 409 `conflict`
+   * for any other format or while the contest is still running.
+   */
   @Post(':key/judge-final')
   @HttpCode(202)
   judgeFinal(
@@ -77,6 +126,15 @@ export class ContestEditingController {
     return this.editing.judgeFinal(auth.principal, key);
   }
 
+  /**
+   * Get the available editor actions of a contest
+   *
+   * @remarks
+   * Contest editors only. Reports, for each background action of the contest
+   * (rescore, judge final, rate, publish problems, rebuild replay, export),
+   * whether its job is currently queued or running, so the editing UI can show
+   * progress and disable buttons.
+   */
   @Get(':key/actions')
   actions(
     @CurrentAuth() auth: AuthContext,

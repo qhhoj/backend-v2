@@ -25,6 +25,7 @@ export class OrganizationListQueryDto {
   @IsString()
   @Length(1, 50)
   search?: string;
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -32,6 +33,7 @@ export class OrganizationListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Organizations per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -42,10 +44,12 @@ export class OrganizationListQueryDto {
 }
 
 export class MemberListQueryDto {
+  /** Ranking column, best first. */
   @ApiPropertyOptional()
   @IsOptional()
   @IsIn(MEMBER_SORTS)
   sort: MemberSort = 'performancePoints';
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -53,6 +57,7 @@ export class MemberListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+  /** Members per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

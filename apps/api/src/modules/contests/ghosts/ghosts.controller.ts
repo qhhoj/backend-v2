@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -22,11 +23,25 @@ import {
 } from './dto/ghosts.dto';
 import { GhostsService } from './ghosts.service';
 
+@ApiTags('Contest editing')
 @Controller('api/internal/contests/:key/ghosts')
 export class GhostsController {
   constructor(private readonly ghosts: GhostsService) {}
 
-  /** The whole request body is capped at `GHOST_CSV_MAX_BYTES` (Fastify answers 413 beyond it). */
+  /**
+   * Import ghost participants from CSV
+   *
+   * @remarks
+   * Contest editors only. Replaces the contest's ghosts (reference teams shown
+   * in the replay) with the rows of the CSV, with columns label, caption and
+   * then one per contest problem code (a cell is minute, optionally with
+   * points before an at sign and rejected tries after a plus sign). The whole
+   * request body is capped (413 beyond it). Use `dryRun` to validate and
+   * preview without storing and `anonymize` to relabel ghosts as Ghost 001 and
+   * so on. Fails with 400 `ghost_import_invalid` listing the row issues, or
+   * 409 `ghost_unsupported_format` for final-submission contests. Once the
+   * contest has ended a replay rebuild is queued.
+   */
   @Put()
   @RouteConfig({ bodyLimit: GHOST_CSV_MAX_BYTES })
   importCsv(
@@ -37,6 +52,13 @@ export class GhostsController {
     return this.ghosts.importCsv(auth.principal, key, dto);
   }
 
+  /**
+   * List the ghosts of a contest
+   *
+   * @remarks
+   * Contest editors only. Returns the stored ghosts with their per-problem
+   * cells.
+   */
   @Get()
   list(
     @CurrentAuth() auth: AuthContext,
@@ -45,6 +67,13 @@ export class GhostsController {
     return this.ghosts.list(auth.principal, key);
   }
 
+  /**
+   * Download the ghosts as CSV
+   *
+   * @remarks
+   * Contest editors only. Returns the current ghost set in the import grammar
+   * as a `text/csv` attachment, to edit and upload again.
+   */
   @ApiFileResponse('text/csv')
   @RawResponse()
   @Get('csv')
@@ -62,6 +91,13 @@ export class GhostsController {
     return file.text;
   }
 
+  /**
+   * Delete all ghosts of a contest
+   *
+   * @remarks
+   * Contest editors only. Removes every ghost and returns 204; a replay
+   * rebuild is queued when the contest has ended.
+   */
   @Delete()
   @HttpCode(204)
   remove(

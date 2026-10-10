@@ -6,14 +6,20 @@ import type { CommentPageType } from '@libs/community';
 
 /** An unknown type is a 400; an unknown or malformed key a 404. */
 export class CommentPageParamsDto {
+  /** Kind of page the comments belong to. */
   @ApiProperty({ enum: COMMENT_PAGE_TYPES, enumName: 'CommentPageType' })
   @IsIn(COMMENT_PAGE_TYPES)
   type!: CommentPageType;
 
+  /**
+   * Natural key of the page: problem code, contest key, post id or tag problem
+   * code.
+   */
   @IsString() key!: string;
 }
 
 export class CommentPageQueryDto {
+  /** 1-based page number of threads. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

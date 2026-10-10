@@ -23,6 +23,7 @@ import {
 export const MAX_CONTEST_TAGS = 100;
 
 export class ContestTagListQueryDto {
+  /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -31,6 +32,7 @@ export class ContestTagListQueryDto {
   @Max(10000)
   page: number = 1;
 
+  /** Tags per page, 1 to 100. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -41,11 +43,15 @@ export class ContestTagListQueryDto {
 }
 
 export class CreateContestTagDto {
+  /**
+   * Lowercase letters, digits and hyphens, 1 to 20 characters; never changes.
+   */
   @Matches(CONTEST_TAG_PATTERN, {
     message: 'Only lowercase letters, digits and hyphens (1-20).',
   })
   slug!: string;
 
+  /** Display name, 1 to 40 characters. */
   @IsString()
   @Length(1, 40)
   name!: string;
@@ -55,11 +61,13 @@ export class CreateContestTagDto {
   @IsIn(TAG_COLORS)
   color!: TagColor;
 
+  /** Short description, at most 200 characters. */
   @IsOptional()
   @IsString()
   @MaxLength(200)
   description?: string;
 
+  /** Sort position, from -1000 to 1000; lower comes first. */
   @IsOptional()
   @IsInt()
   @Min(-1000)

@@ -33,12 +33,15 @@ const REPLAY_EVENTS_SCHEMA: ApiPropertyOptions = {
 export class ReplayUserResponse {
   id!: string;
   username!: string;
+  /** Rating, null while unrated. */
   rating!: number | null;
+  /** Short name of the user's first listed organization, else null. */
   organization!: string | null;
 }
 
 /** At the position of its `participantIndex`. */
 export class ReplayParticipantResponse {
+  /** Id of the participation. */
   participationId!: string;
   user!: ReplayUserResponse;
 }
@@ -47,18 +50,24 @@ export class ReplayParticipantResponse {
 export class ReplayProblemResponse {
   problemId!: string;
   code!: string;
+  /** The problem's label in the contest. */
   label!: string;
+  /** Points the problem is worth. */
   points!: number;
 }
 
 /** A ghost's own stream; its events carry its position as `participantIndex`. */
 export class ReplayGhostResponse {
+  /** Name shown for the ghost. */
   label!: string;
+  /** Secondary text shown with the label. */
   caption!: string;
+  /** Whether the ghost is shown outside the ranking. */
   isUnranked!: boolean;
   /** Same named enum as `GhostResponse.gap`; R3: an alias of a union needs the explicit decorator. */
   @ApiProperty({ enum: GHOST_GAPS, enumName: 'GhostGap', nullable: true })
   gap!: GhostGap | null;
+  /** The ghost's events, in the same shape as the participants' events. */
   @ApiProperty(REPLAY_EVENTS_SCHEMA)
   events!: ReplayEvent[];
 }
@@ -68,14 +77,19 @@ export class ReplayResponse {
   state!: 'ready' | 'building';
   /** The build every later chunk request must send as `build`; null while building. */
   buildId!: string | null;
+  /** When the replay was built, ISO 8601; null while building. */
   builtAt!: string | null;
+  /** Index of this chunk. */
   chunk!: number;
+  /** Number of chunks in the build. */
   chunkCount!: number;
   /** Chunk 0 only; explicit, so the plugin does not lose the element class behind `| null`. */
   @ApiProperty({ type: () => [ReplayParticipantResponse], nullable: true })
   participants!: ReplayParticipantResponse[] | null;
+  /** Problems in the order that events index; chunk 0 only, else null. */
   @ApiProperty({ type: () => [ReplayProblemResponse], nullable: true })
   problems!: ReplayProblemResponse[] | null;
+  /** Ghost streams; chunk 0 only, else null. */
   @ApiProperty({ type: () => [ReplayGhostResponse], nullable: true })
   ghosts!: ReplayGhostResponse[] | null;
   /** Seconds from the participation's own start; see `REPLAY_EVENTS_SCHEMA` for the tuple. */

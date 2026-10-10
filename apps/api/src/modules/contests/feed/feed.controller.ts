@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, Param, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public } from '@libs/auth';
@@ -6,6 +7,7 @@ import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import { FeedAuthService } from './feed-auth.service';
 import { FeedService } from './feed.service';
 
+@ApiTags('Contest editing')
 @Controller('api/internal/contests/:key/feed')
 export class FeedController {
   constructor(
@@ -13,7 +15,18 @@ export class FeedController {
     private readonly feeds: FeedService,
   ) {}
 
-  /** HTTP Basic with the contest's feed key, no session: resolver tools only speak Basic. NDJSON, one event per line. */
+  /**
+   * Get the event feed of a contest
+   *
+   * @remarks
+   * For ICPC resolver tools. Authenticated with HTTP Basic, user `feed` and a
+   * contest feed key as password, no session. Returns the whole feed as
+   * NDJSON, one event per line. A key in `frozen-until-release` mode shows the
+   * feed cut at the freeze until an editor releases it. All failures are the
+   * same 401 `unauthorized` and wrong attempts are rate limited per IP (429
+   * `rate_limited`); 409 `feed_too_large` when the contest has too many
+   * submissions.
+   */
   @Public()
   @ApiFileResponse('application/x-ndjson')
   @RawResponse()

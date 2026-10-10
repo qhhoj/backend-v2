@@ -17,6 +17,7 @@ import {
 import type { OrganizationRequestState } from '@libs/database';
 
 export class CreateOrganizationRequestDto {
+  /** Why the user wants to join; must not be blank. */
   @IsString()
   @Length(1, REQUEST_REASON_MAX_LENGTH)
   @Matches(/\S/, { message: 'Give a reason.' })
@@ -24,6 +25,7 @@ export class CreateOrganizationRequestDto {
 }
 
 export class OrganizationRequestListQueryDto {
+  /** P pending, A approved or R rejected. */
   @ApiPropertyOptional({
     enum: ORGANIZATION_REQUEST_STATES,
     enumName: 'OrganizationRequestState',
@@ -31,6 +33,7 @@ export class OrganizationRequestListQueryDto {
   @IsOptional()
   @IsIn(ORGANIZATION_REQUEST_STATES)
   state: OrganizationRequestState = 'P';
+  /** 1-based page number; 50 requests per page. */
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
