@@ -31,258 +31,378 @@ import type { Catalog, TestSession } from './problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import { dataOf } from './submission-fixtures';
+import { PDF } from '@libs/problems/testing';
 
-const PROBLEMS = '/api/internal/problems';
+let api: ApiTest;
 
-describe('problem package download', () => {
-  let api: ApiTest;
-  let catalog: Catalog;
-  let queue: Queue<ProblemPackageJob>;
-  let cache: PackageCacheService;
-  const sessions: Record<string, TestSession> = {};
-  const ids: Record<string, string> = {};
-  let sequence = 0;
-  const editable = async (extra: object = {}) => {
-    sequence += 1;
-    return createProblem(api, catalog, {
-      code: `pk${sequence}`,
-      authors: [ids.editor],
-      data: {
-        ...emptyProblemData(),
-        cases: [
-          { ...EMPTY_TEST_CASE, input: '1.in', output: '1.out', points: 100 },
-        ],
-      },
-      ...extra,
-    });
-  };
-  const requestPackage = (who: string, code: string) =>
-    authed(api.http().post(`${PROBLEMS}/${code}/package`), sessions[who]);
-  const fetchPackage = (who: string, code: string) =>
-    authed(api.http().get(`${PROBLEMS}/${code}/package`), sessions[who])
-      .buffer(true)
-      .parse((response, done) => {
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () => {
-          const body = Buffer.concat(chunks);
-          const isZip = String(response.headers['content-type']).includes(
-            'zip',
-          );
-          done(
-            null,
-            isZip ? body : (JSON.parse(body.toString() || 'null') as object),
-          );
-        });
+beforeAll(async () => {
+  api = await setupApiTest();
+});
+afterAll(() => api.teardown());
+
+// from problem-package.e2e-spec.ts
+{
+  const PROBLEMS = '/api/internal/problems';
+
+  describe('problem package download', () => {
+    beforeAll(() => api.reset());
+    let catalog: Catalog;
+    let queue: Queue<ProblemPackageJob>;
+    let cache: PackageCacheService;
+    const sessions: Record<string, TestSession> = {};
+    const ids: Record<string, string> = {};
+    let sequence = 0;
+    const editable = async (extra: object = {}) => {
+      sequence += 1;
+      return createProblem(api, catalog, {
+        code: `pk${sequence}`,
+        authors: [ids.editor],
+        data: {
+          ...emptyProblemData(),
+          cases: [
+            { ...EMPTY_TEST_CASE, input: '1.in', output: '1.out', points: 100 },
+          ],
+        },
+        ...extra,
       });
-  const keyOf = async (id: string) =>
-    packageKey(
-      (await api.problems.findById(id).select('+data').lean<Problem>())!,
-    );
-  const cached = async (code: string, key: string, content: string) => {
-    await cache.write(code, key, (temporary) =>
-      Promise.resolve(writeFileSync(temporary, content)),
-    );
-  };
-
-  beforeAll(async () => {
-    api = await setupApiTest();
-    catalog = await seedCatalog(api);
-    queue = api.app.get(getQueueToken(PACKAGE_QUEUE));
-    cache = api.app.get(PackageCacheService);
-    for (const [name, permissions] of [
-      ['editor', ['judge.edit_own_problem']],
-      ['reader', []],
-      ['bystander', ['judge.edit_own_problem']],
-      ['burst', ['judge.edit_own_problem']],
-    ] as Array<[string, string[]]>) {
-      const user = await createUserWith(api, name, { permissions });
-      ids[name] = user._id;
-      sessions[name] = await loginAs(api, user._id);
-    }
-  });
-  afterAll(() => api.teardown());
-  beforeEach(async () => {
-    await clearRateLimits(api);
-    await queue.obliterate({ force: true });
-  });
-
-  it('is for editors only: 401, 403 for a reader of a public problem, 404 for a private one', async () => {
-    const open = await editable({ isPublic: true });
-    const hidden = await editable({ isPublic: false });
-    await api.http().post(`${PROBLEMS}/${open.code}/package`).expect(401);
-    await requestPackage('reader', open.code).expect(403);
-    await fetchPackage('reader', open.code).expect(403);
-    await requestPackage('reader', hidden.code).expect(404);
-  });
-
-  it('is closed to a holder of edit_own_problem who is not an author, on both routes', async () => {
-    const open = await editable({ isPublic: true });
-    const hidden = await editable({ isPublic: false });
-    await requestPackage('bystander', open.code).expect(403);
-    await fetchPackage('bystander', open.code).expect(403);
-    await requestPackage('bystander', hidden.code).expect(404);
-    await fetchPackage('bystander', hidden.code).expect(404);
-    expect(await queue.getJobs(['waiting', 'active'])).toEqual([]);
-  });
-
-  it('queues one build per problem and key, however many editors ask', async () => {
-    const problem = await editable();
-    const key = await keyOf(problem._id);
-    const first = dataOf<{ status: string; key: string }>(
-      await requestPackage('editor', problem.code).expect(202),
-    );
-    expect(first).toEqual({ status: 'building', key });
-    await requestPackage('editor', problem.code).expect(202);
-    expect((await queue.getJobs(['waiting'])).map((job) => job.id)).toEqual([
-      packageJobId(problem.code, key),
-    ]);
-    const waiting = await fetchPackage('editor', problem.code).expect(202);
-    expect(waiting.headers['retry-after']).toBeDefined();
-  });
-
-  it('answers 200 ready for a cached package and streams it as an attachment', async () => {
-    const problem = await editable();
-    const key = await keyOf(problem._id);
-    await cached(problem.code, key, 'ZIP-BYTES');
-    expect(
-      dataOf<{ status: string }>(
-        await requestPackage('editor', problem.code).expect(200),
-      ).status,
-    ).toBe('ready');
-    const download = await fetchPackage('editor', problem.code).expect(200);
-    expect(download.headers['content-type']).toContain('application/zip');
-    expect(download.headers['content-disposition']).toBe(
-      `attachment; filename="${problem.code}.zip"`,
-    );
-    expect(download.headers['x-content-type-options']).toBe('nosniff');
-    expect((download.body as Buffer).toString()).toBe('ZIP-BYTES');
-    expect(await queue.getJobs(['waiting'])).toHaveLength(0);
-  });
-
-  it('never serves a zip from before an edit: the key moves with the content', async () => {
-    const problem = await editable();
-    const before = await keyOf(problem._id);
-    await cached(problem.code, before, 'OLD');
-    await api.problems.updateOne(
-      { _id: problem._id },
-      { description: 'Edited statement.' },
-    );
-    await fetchPackage('editor', problem.code)
-      .expect(404)
-      .expect(errorCode('package_not_built'));
-    await requestPackage('editor', problem.code).expect(202);
-  });
-
-  it('says nothing was requested with 404 package_not_built', async () => {
-    const problem = await editable();
-    await fetchPackage('editor', problem.code)
-      .expect(404)
-      .expect(errorCode('package_not_built'));
-  });
-
-  it('reports a build over the size cap as 409 and any other failed build as 503', async () => {
-    const tooLarge = await editable();
-    const crashed = await editable();
-    const reasons = new Map([[tooLarge.code, PACKAGE_TOO_LARGE_REASON]]);
-    const failing = new Worker<ProblemPackageJob>(
-      PACKAGE_QUEUE,
-      (job) =>
-        Promise.reject(
-          new Error(reasons.get(job.data.code) ?? 'build crashed'),
-        ),
-      { connection: { url: TEST_REDIS_URL } },
-    );
-    await failing.waitUntilReady();
-    try {
-      for (const problem of [tooLarge, crashed]) {
-        await requestPackage('editor', problem.code).expect(202);
-        const key = await keyOf(problem._id);
-        await waitUntil(
-          async () =>
-            (await queue.getJob(packageJobId(problem.code, key)))?.isFailed() ??
-            false,
-        );
-      }
-      await fetchPackage('editor', tooLarge.code)
-        .expect(409)
-        .expect(errorCode('package_too_large'));
-      await requestPackage('editor', tooLarge.code)
-        .expect(409)
-        .expect(errorCode('package_too_large'));
-      const unavailable = await fetchPackage('editor', crashed.code).expect(
-        503,
+    };
+    const requestPackage = (who: string, code: string) =>
+      authed(api.http().post(`${PROBLEMS}/${code}/package`), sessions[who]);
+    const fetchPackage = (who: string, code: string) =>
+      authed(api.http().get(`${PROBLEMS}/${code}/package`), sessions[who])
+        .buffer(true)
+        .parse((response, done) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.on('end', () => {
+            const body = Buffer.concat(chunks);
+            const isZip = String(response.headers['content-type']).includes(
+              'zip',
+            );
+            done(
+              null,
+              isZip ? body : (JSON.parse(body.toString() || 'null') as object),
+            );
+          });
+        });
+    const keyOf = async (id: string) =>
+      packageKey(
+        (await api.problems.findById(id).select('+data').lean<Problem>())!,
       );
-      expect(unavailable.headers['retry-after']).toBeDefined();
-    } finally {
-      await failing.close();
-    }
-  });
+    const cached = async (code: string, key: string, content: string) => {
+      await cache.write(code, key, (temporary) =>
+        Promise.resolve(writeFileSync(temporary, content)),
+      );
+    };
 
-  it('allows three requests an hour per user and problem, counted on POST only', async () => {
-    const problem = await editable();
-    for (let count = 0; count < 3; count += 1)
+    beforeAll(async () => {
+      catalog = await seedCatalog(api);
+      queue = api.app.get(getQueueToken(PACKAGE_QUEUE));
+      cache = api.app.get(PackageCacheService);
+      for (const [name, permissions] of [
+        ['editor', ['judge.edit_own_problem']],
+        ['reader', []],
+        ['bystander', ['judge.edit_own_problem']],
+        ['burst', ['judge.edit_own_problem']],
+      ] as Array<[string, string[]]>) {
+        const user = await createUserWith(api, name, { permissions });
+        ids[name] = user._id;
+        sessions[name] = await loginAs(api, user._id);
+      }
+    });
+    beforeEach(async () => {
+      await clearRateLimits(api);
+      await queue.obliterate({ force: true });
+    });
+
+    it('is for editors only: 401, 403 for a reader of a public problem, 404 for a private one', async () => {
+      const open = await editable({ isPublic: true });
+      const hidden = await editable({ isPublic: false });
+      await api.http().post(`${PROBLEMS}/${open.code}/package`).expect(401);
+      await requestPackage('reader', open.code).expect(403);
+      await fetchPackage('reader', open.code).expect(403);
+      await requestPackage('reader', hidden.code).expect(404);
+    });
+
+    it('is closed to a holder of edit_own_problem who is not an author, on both routes', async () => {
+      const open = await editable({ isPublic: true });
+      const hidden = await editable({ isPublic: false });
+      await requestPackage('bystander', open.code).expect(403);
+      await fetchPackage('bystander', open.code).expect(403);
+      await requestPackage('bystander', hidden.code).expect(404);
+      await fetchPackage('bystander', hidden.code).expect(404);
+      expect(await queue.getJobs(['waiting', 'active'])).toEqual([]);
+    });
+
+    it('queues one build per problem and key, however many editors ask', async () => {
+      const problem = await editable();
+      const key = await keyOf(problem._id);
+      const first = dataOf<{ status: string; key: string }>(
+        await requestPackage('editor', problem.code).expect(202),
+      );
+      expect(first).toEqual({ status: 'building', key });
       await requestPackage('editor', problem.code).expect(202);
-    await requestPackage('editor', problem.code)
-      .expect(429)
-      .expect(errorCode('rate_limited'));
-    await fetchPackage('editor', problem.code).expect(202);
-    const other = await editable();
-    await requestPackage('editor', other.code).expect(202);
-  });
+      expect((await queue.getJobs(['waiting'])).map((job) => job.id)).toEqual([
+        packageJobId(problem.code, key),
+      ]);
+      const waiting = await fetchPackage('editor', problem.code).expect(202);
+      expect(waiting.headers['retry-after']).toBeDefined();
+    });
 
-  it('does not package a deleted problem', async () => {
-    const problem = await editable();
-    await softDelete(api, problem._id);
-    await requestPackage('editor', problem.code).expect(404);
-    await fetchPackage('editor', problem.code).expect(404);
-  });
+    it('answers 200 ready for a cached package and streams it as an attachment', async () => {
+      const problem = await editable();
+      const key = await keyOf(problem._id);
+      await cached(problem.code, key, 'ZIP-BYTES');
+      expect(
+        dataOf<{ status: string }>(
+          await requestPackage('editor', problem.code).expect(200),
+        ).status,
+      ).toBe('ready');
+      const download = await fetchPackage('editor', problem.code).expect(200);
+      expect(download.headers['content-type']).toContain('application/zip');
+      expect(download.headers['content-disposition']).toBe(
+        `attachment; filename="${problem.code}.zip"`,
+      );
+      expect(download.headers['x-content-type-options']).toBe('nosniff');
+      expect((download.body as Buffer).toString()).toBe('ZIP-BYTES');
+      expect(await queue.getJobs(['waiting'])).toHaveLength(0);
+    });
 
-  it('drops the cached zips of both codes when a problem is renamed', async () => {
-    const problem = await editable();
-    const key = await keyOf(problem._id);
-    await cached(problem.code, key, 'OLD');
-    const newCode = `${problem.code}_new`;
-    // A reused code must not serve another problem's package.
-    await cached(newCode, key, 'STALE');
-    await authed(
-      api.http().patch(`${PROBLEMS}/${problem.code}`),
-      sessions.editor,
-    )
-      .send({ code: newCode })
-      .expect(200);
-    const packages = join(api.pdfCacheRoot, 'packages');
-    await waitUntil(
-      () =>
-        !readdirSync(packages).some(
-          (name) =>
-            name.startsWith(`${problem.code}.`) ||
-            name.startsWith(`${newCode}.`),
-        ),
-    );
-  });
+    it('never serves a zip from before an edit: the key moves with the content', async () => {
+      const problem = await editable();
+      const before = await keyOf(problem._id);
+      await cached(problem.code, before, 'OLD');
+      await api.problems.updateOne(
+        { _id: problem._id },
+        { description: 'Edited statement.' },
+      );
+      await fetchPackage('editor', problem.code)
+        .expect(404)
+        .expect(errorCode('package_not_built'));
+      await requestPackage('editor', problem.code).expect(202);
+    });
 
-  describe('budgets', () => {
-    const hits = (key: string) => api.app.get(RateLimitService).count(key);
-    const problemOf = (name: string) => `package:user:${ids[name]}`;
-    const owned = (name: string) => editable({ authors: [ids[name]] });
+    it('says nothing was requested with 404 package_not_built', async () => {
+      const problem = await editable();
+      await fetchPackage('editor', problem.code)
+        .expect(404)
+        .expect(errorCode('package_not_built'));
+    });
 
-    it('a refusal by the per-user budget spends nothing of the per-problem one', async () => {
-      for (let count = 0; count < PACKAGE_USER_LIMIT; count += 1)
-        await requestPackage('burst', (await owned('burst')).code).expect(202);
-      const refused = await owned('burst');
-      await requestPackage('burst', refused.code)
+    it('reports a build over the size cap as 409 and any other failed build as 503', async () => {
+      const tooLarge = await editable();
+      const crashed = await editable();
+      const reasons = new Map([[tooLarge.code, PACKAGE_TOO_LARGE_REASON]]);
+      const failing = new Worker<ProblemPackageJob>(
+        PACKAGE_QUEUE,
+        (job) =>
+          Promise.reject(
+            new Error(reasons.get(job.data.code) ?? 'build crashed'),
+          ),
+        { connection: { url: TEST_REDIS_URL } },
+      );
+      await failing.waitUntilReady();
+      try {
+        for (const problem of [tooLarge, crashed]) {
+          await requestPackage('editor', problem.code).expect(202);
+          const key = await keyOf(problem._id);
+          await waitUntil(
+            async () =>
+              (
+                await queue.getJob(packageJobId(problem.code, key))
+              )?.isFailed() ?? false,
+          );
+        }
+        await fetchPackage('editor', tooLarge.code)
+          .expect(409)
+          .expect(errorCode('package_too_large'));
+        await requestPackage('editor', tooLarge.code)
+          .expect(409)
+          .expect(errorCode('package_too_large'));
+        const unavailable = await fetchPackage('editor', crashed.code).expect(
+          503,
+        );
+        expect(unavailable.headers['retry-after']).toBeDefined();
+      } finally {
+        await failing.close();
+      }
+    });
+
+    it('allows three requests an hour per user and problem, counted on POST only', async () => {
+      const problem = await editable();
+      for (let count = 0; count < 3; count += 1)
+        await requestPackage('editor', problem.code).expect(202);
+      await requestPackage('editor', problem.code)
         .expect(429)
         .expect(errorCode('rate_limited'));
-      expect(await hits(`${problemOf('burst')}:${refused.code}`)).toBe(0);
+      await fetchPackage('editor', problem.code).expect(202);
+      const other = await editable();
+      await requestPackage('editor', other.code).expect(202);
     });
 
-    it('a refusal by the per-problem budget gives the per-user hit back', async () => {
-      const problem = await owned('bystander');
-      for (let count = 0; count < PACKAGE_LIMIT; count += 1)
-        await requestPackage('bystander', problem.code).expect(202);
-      await requestPackage('bystander', problem.code).expect(429);
-      expect(await hits(problemOf('bystander'))).toBe(PACKAGE_LIMIT);
+    it('does not package a deleted problem', async () => {
+      const problem = await editable();
+      await softDelete(api, problem._id);
+      await requestPackage('editor', problem.code).expect(404);
+      await fetchPackage('editor', problem.code).expect(404);
+    });
+
+    it('drops the cached zips of both codes when a problem is renamed', async () => {
+      const problem = await editable();
+      const key = await keyOf(problem._id);
+      await cached(problem.code, key, 'OLD');
+      const newCode = `${problem.code}_new`;
+      // A reused code must not serve another problem's package.
+      await cached(newCode, key, 'STALE');
+      await authed(
+        api.http().patch(`${PROBLEMS}/${problem.code}`),
+        sessions.editor,
+      )
+        .send({ code: newCode })
+        .expect(200);
+      const packages = join(api.pdfCacheRoot, 'packages');
+      await waitUntil(
+        () =>
+          !readdirSync(packages).some(
+            (name) =>
+              name.startsWith(`${problem.code}.`) ||
+              name.startsWith(`${newCode}.`),
+          ),
+      );
+    });
+
+    describe('budgets', () => {
+      const hits = (key: string) => api.app.get(RateLimitService).count(key);
+      const problemOf = (name: string) => `package:user:${ids[name]}`;
+      const owned = (name: string) => editable({ authors: [ids[name]] });
+
+      it('a refusal by the per-user budget spends nothing of the per-problem one', async () => {
+        for (let count = 0; count < PACKAGE_USER_LIMIT; count += 1)
+          await requestPackage('burst', (await owned('burst')).code).expect(
+            202,
+          );
+        const refused = await owned('burst');
+        await requestPackage('burst', refused.code)
+          .expect(429)
+          .expect(errorCode('rate_limited'));
+        expect(await hits(`${problemOf('burst')}:${refused.code}`)).toBe(0);
+      });
+
+      it('a refusal by the per-problem budget gives the per-user hit back', async () => {
+        const problem = await owned('bystander');
+        for (let count = 0; count < PACKAGE_LIMIT; count += 1)
+          await requestPackage('bystander', problem.code).expect(202);
+        await requestPackage('bystander', problem.code).expect(429);
+        expect(await hits(problemOf('bystander'))).toBe(PACKAGE_LIMIT);
+      });
     });
   });
-});
+}
+
+// from problem-package-uploads.e2e-spec.ts
+{
+  const PROBLEMS = '/api/internal/problems';
+
+  describe('problem package cache and uploads', () => {
+    beforeAll(() => api.reset());
+    let catalog: Catalog;
+    let editor: TestSession;
+    let editorId: string;
+    let cache: PackageCacheService;
+    const keyOf = async (code: string) =>
+      packageKey(
+        (await api.problems.findOne({ code }).select('+data').lean<Problem>())!,
+      );
+    const cacheNow = async (code: string) => {
+      const key = await keyOf(code);
+      await cache.write(code, key, (temporary) =>
+        Promise.resolve(writeFileSync(temporary, 'zip')),
+      );
+      return key;
+    };
+    const upload = (path: string, filename: string, content: Buffer) =>
+      authed(api.http().post(`${PROBLEMS}/${path}`), editor).attach(
+        'file',
+        content,
+        {
+          filename,
+          contentType: 'application/octet-stream',
+        },
+      );
+
+    beforeAll(async () => {
+      catalog = await seedCatalog(api);
+      const user = await createUserWith(api, 'pkg_editor', {
+        permissions: [
+          'judge.edit_own_problem',
+          'judge.upload_file_statement',
+          'judge.upload_problem_material',
+        ],
+      });
+      editorId = user._id;
+      editor = await loginAs(api, user._id);
+      cache = api.app.get(PackageCacheService);
+    });
+    beforeEach(() => clearRateLimits(api));
+
+    it('serves a fresh package after a PDF statement is re-uploaded', async () => {
+      await createProblem(api, catalog, {
+        code: 'pk_pdf',
+        authors: [editorId],
+      });
+      await upload('pk_pdf/statement', 'one.pdf', PDF).expect(201);
+      const before = await cacheNow('pk_pdf');
+      await upload('pk_pdf/statement', 'two.pdf', PDF).expect(201);
+      expect(await cache.has('pk_pdf', before)).toBe(false);
+      expect(await keyOf('pk_pdf')).not.toBe(before);
+    });
+
+    it('serves a fresh package after a same-named material is replaced', async () => {
+      await createProblem(api, catalog, {
+        code: 'pk_mat',
+        authors: [editorId],
+      });
+      await upload('pk_mat/material', 'notes.zip', Buffer.from('first')).expect(
+        201,
+      );
+      const before = await cacheNow('pk_mat');
+      await upload(
+        'pk_mat/material',
+        'notes.zip',
+        Buffer.from('second'),
+      ).expect(201);
+      expect(await keyOf('pk_mat')).toBe(before);
+      expect(await cache.has('pk_mat', before)).toBe(false);
+    });
+
+    it('keeps the cached package of another problem', async () => {
+      await createProblem(api, catalog, {
+        code: 'pk_other',
+        authors: [editorId],
+      });
+      await createProblem(api, catalog, {
+        code: 'pk_mover',
+        authors: [editorId],
+      });
+      const other = await cacheNow('pk_other');
+      await upload('pk_mover/material', 'a.zip', Buffer.from('x')).expect(201);
+      expect(await cache.has('pk_other', other)).toBe(true);
+    });
+
+    it('refuses the eleventh package request of one user across problems', async () => {
+      const codes = ['pu1', 'pu2', 'pu3', 'pu4'];
+      for (const code of codes)
+        await createProblem(api, catalog, { code, authors: [editorId] });
+      for (let count = 0; count < 10; count += 1)
+        await authed(
+          api
+            .http()
+            .post(`${PROBLEMS}/${codes[Math.floor(count / 3)]}/package`),
+          editor,
+        ).expect((response) => expect([200, 202]).toContain(response.status));
+      await authed(api.http().post(`${PROBLEMS}/pu4/package`), editor).expect(
+        429,
+      );
+    });
+  });
+}
