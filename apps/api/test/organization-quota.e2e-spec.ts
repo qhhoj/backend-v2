@@ -108,12 +108,15 @@ describe('organization quota', () => {
     const unlimited = await createOrganization(api, { quotaUnlimited: true });
     const normal = await createOrganization(api);
     await api.setSetting('quota.cost.problem', 1000);
-    await quota.charged(unlimited._id, request(), () => Promise.resolve(1));
-    expect(await usedBy(unlimited._id)).toBe(1000);
-    await expect(
-      quota.charged(normal._id, request(), () => Promise.resolve(1)),
-    ).rejects.toMatchObject({ code: 'quota_exceeded' });
-    await api.setSetting('quota.cost.problem', 10);
+    try {
+      await quota.charged(unlimited._id, request(), () => Promise.resolve(1));
+      expect(await usedBy(unlimited._id)).toBe(1000);
+      await expect(
+        quota.charged(normal._id, request(), () => Promise.resolve(1)),
+      ).rejects.toMatchObject({ code: 'quota_exceeded' });
+    } finally {
+      await api.setSetting('quota.cost.problem', 10);
+    }
   });
 
   it('never refuses storage for an unlimited organization, but does for a normal one', async () => {
