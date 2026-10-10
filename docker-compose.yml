@@ -13,7 +13,3 @@ services:
   mailpit:
     image: axllent/mailpit
     ports: ["1025:1025", "8025:8025"]
-  mariadb:
-    image: mariadb:11
-    environment: { MARIADB_ROOT_PASSWORD: root }
-    ports: ["3306:3306"]

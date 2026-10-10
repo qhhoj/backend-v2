@@ -41,12 +41,6 @@ grep -q "systemctl restart" "$calls" && fail "deferred deploy restarted"
 STUB_CONTEST="r42 2026-10-10T12:00:00.000Z" deploy backend v2.2.0 --force >/dev/null || fail "--force overrides the contest guard"
 [ "$(hist | tail -1)" = v2.2.0 ] || fail "forced deploy recorded"
 
-exec 8>"$root/run/qhhoj-migrate.lock"; flock 8
-: > "$calls"; set +e; deploy backend v2.3.0 --force >/dev/null; code=$?; set -e
-exec 8>&-
-[ "$code" = 75 ] || fail "migration lock must defer even with --force, got $code"
-grep -q "systemctl restart" "$calls" && fail "deploy restarted during migration"
-
 : > "$calls"; set +e; STUB_HEALTH=fail deploy backend v2.3.0 >/dev/null 2>&1; code=$?; set -e
 [ "$code" = 1 ] || fail "failed health must exit 1"
 grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.2.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "rollback to v2.2.0"
@@ -145,14 +139,6 @@ set +e; deploy backend v2.2.0 >/dev/null 2>&1; code=$?; set -e
 grep -q "podman tag ghcr.io/qhhoj/backend-v2:v2.1.0 ghcr.io/qhhoj/backend-v2:current" "$calls" || fail "failed restart did not restore v2.1.0"
 [ "$(hist)" = v2.1.0 ] || fail "failed restart must not be recorded"
 
-# rollback defers under the migrate lock before touching history
-fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null
-exec 8>"$root/run/qhhoj-migrate.lock"; flock 8
-set +e; deploy rollback backend >/dev/null; code=$?; set -e
-exec 8>&-
-[ "$code" = 75 ] || fail "rollback under migration lock must defer (75), got $code"
-[ "$(hist)" = "$(printf 'v2.1.0\nv2.2.0')" ] || fail "deferred rollback changed history"
-
 # rollback to a pruned backend image is refused with history unchanged
 fresh; deploy backend v2.1.0 >/dev/null; deploy backend v2.2.0 >/dev/null; : > "$calls"
 export STUB_IMAGE_MISSING=1
@@ -189,17 +175,12 @@ fresh; set +e; printf '\n' | deploy backend v2.1.0 --token-stdin >/dev/null 2>&1
 ! grep -q "podman pull" "$calls" || fail "empty token must fail before pulling"
 
 # --- final-review fixes ---
-# I1: the migration check precedes the deploy lock; a held deploy lock defers (75) instead of failing
-fresh; exec 8>"$root/run/qhhoj-migrate.lock"; flock 8; exec 7>"$root/run/qhhoj-deploy.lock"; flock 7
-: > "$calls"; set +e; timeout 10 env QHHOJ_DEPLOY_LOCK_WAIT=60 bash -c 'PATH="$1:$PATH" QHHOJ_DEPLOY_ROOT="$2" exec bash "$3/qhhoj-deploy" backend v2.1.0 --force' _ "$bin" "$root" "$here" >/dev/null; code=$?
-timeout 10 env QHHOJ_DEPLOY_LOCK_WAIT=60 bash -c 'PATH="$1:$PATH" QHHOJ_DEPLOY_ROOT="$2" exec bash "$3/qhhoj-deploy" rollback backend' _ "$bin" "$root" "$here" >/dev/null; code2=$?; set -e
-exec 8>&-; exec 7>&-
-[ "$code" = 75 ] && [ "$code2" = 75 ] || fail "migration holding the deploy lock must defer at once (75), got $code/$code2"
+# I1: a held deploy lock defers (75) instead of failing
 fresh; exec 7>"$root/run/qhhoj-deploy.lock"; flock 7
 set +e; out="$(QHHOJ_DEPLOY_LOCK_WAIT=1 deploy backend v2.1.0 2>&1)"; code=$?; set -e
 exec 7>&-
 [ "$code" = 75 ] || fail "deploy lock timeout must exit 75, got $code"
-grep -q "deferred: another deploy or a migration holds the lock" <<<"$out" || fail "lock timeout message"
+grep -q "deferred: another deploy holds the lock" <<<"$out" || fail "lock timeout message"
 
 # I2: reset-failed before restart; the restored version is health-checked
 fresh; deploy backend v2.1.0 >/dev/null; : > "$calls"; deploy backend v2.2.0 >/dev/null

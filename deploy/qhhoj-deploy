@@ -6,7 +6,7 @@
 #   frontend <version>        unpack incoming/frontend-dist-<version>.tar.gz, carry kept releases' recent assets/ over, flip /var/www/qhhoj/current, check, roll back on failure
 #   rollback backend|frontend go back to the previous history entry
 #   status                    live versions and recent history
-# Exit: 0 ok, 1 failed (previous version live), 64 usage, 75 deferred (migration or contest running; retry later).
+# Exit: 0 ok, 1 failed (previous version live), 64 usage, 75 deferred (contest running; retry later).
 set -euo pipefail
 
 ROOT="${QHHOJ_DEPLOY_ROOT:-}"
@@ -17,7 +17,6 @@ INCOMING="$STATE/incoming"
 WWW="$ROOT/var/www/qhhoj"
 ENV_FILE="$ROOT/etc/qhhoj/env"
 AUTHFILE="$ROOT/etc/qhhoj/ghcr-auth.json"
-MIGRATE_LOCK="$ROOT/run/qhhoj-migrate.lock"
 HEALTH_TRIES="${QHHOJ_DEPLOY_HEALTH_TRIES:-30}"
 LOCK_WAIT="${QHHOJ_DEPLOY_LOCK_WAIT:-900}" # seconds; sudo env_reset keeps the override out of production
 KEEP=5
@@ -37,7 +36,6 @@ live() { tail -n 1 "$(history_file "$1")" 2>/dev/null || true; }
 record() { echo "$2" >> "$(history_file "$1")"; }
 drop_last() { local file; file="$(history_file "$1")"; sed -i '$d' "$file"; }
 
-migration_running() { [ -e "$MIGRATE_LOCK" ] && ! flock -n "$MIGRATE_LOCK" true; }
 running_contest() { # a running contest that ends within 24 h; long practice contests do not block deploys
 
   # The URL carries the DB password: pass it in the environment, never in argv (visible in ps).
@@ -248,11 +246,8 @@ deploy_frontend() { # <version>
 
 main() {
   mkdir -p "$STATE" "$WWW/releases" "$ROOT/run"
-  case "${1:-}:${2:-}" in backend:* | rollback:backend)
-    if migration_running; then defer "migration running"; fi ;;
-  esac
   exec 9>"$ROOT/run/qhhoj-deploy.lock"
-  flock -w "$LOCK_WAIT" 9 || defer "another deploy or a migration holds the lock"
+  flock -w "$LOCK_WAIT" 9 || defer "another deploy holds the lock"
   case "${1:-}" in
     backend) deploy_backend "${2:-}" "${@:3}" ;;
     frontend) deploy_frontend "${2:-}" ;;

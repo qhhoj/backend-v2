@@ -7,7 +7,7 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 - Node 22, TypeScript 5 (`tsconfig.json`, CI uses Node 22)
 - NestJS 11 on Fastify (`@nestjs/platform-fastify`)
 - Mongoose 8 via `@nestjs/mongoose`; MongoDB 8 **replica set** (change streams)
-- Redis >= 7 (the rate limiter uses `EXPIRE ... NX`), MariaDB 11 (legacy source for the migrator only)
+- Redis >= 7 (the rate limiter uses `EXPIRE ... NX`)
 - Jest 29 + `mongodb-memory-server`; ESLint + Prettier
 - Render stack pins: `markdown-it` 15.0.2, `katex` 0.19.0, `sanitize-html` 2.17.5 (2.17.6+ pulls ESM-only `htmlparser2@12`, breaks Jest CJS; do not bump), `@fastify/multipart` 10.1.2
 - Versions pinned in `package.json`; `fastify` pinned via `overrides` to a single copy; bump when `@nestjs/platform-fastify` or an advisory requires it
@@ -15,14 +15,13 @@ Why things are the way they are: [docs/decisions.md](docs/decisions.md).
 - `playwright` 1.63.0 (Chromium: `npx playwright install --with-deps chromium`), `yaml` 2.9.1 (dev), `yauzl` 3.4.0 / `yazl` 3.3.1, `saxes` 6.0.0 (`fast-xml-parser` 5 is ESM-only)
 - Worker image: official static `pandoc` >= 3 (not the Debian/Ubuntu package: it fails with "failed to create OS thread" under the cap), util-linux `prlimit` (pandoc runs under `prlimit --as=768MiB`; without it conversion fails closed), Chromium
 - `@dodona/dolos-lib` 3.5.1 (code similarity; ESM-only, so the worker runs it in a child process; V8 heap cap 2 GiB, native parser memory is bounded by the container; `npm ci` compiles its tree-sitter grammars with node-gyp, so the worker image and CI need `python3`, `make`, `g++`)
-- Local services: `docker-compose.yml` (`mongo`, `redis`, `mariadb`, `mailpit`); env vars in `.env.example`
+- Local services: `docker-compose.yml` (`mongo`, `redis`, `mailpit`); env vars in `.env.example`
 
 ## Layout
 
 ```
 apps/
   api/        HTTP app (Fastify): AppModule, main.ts, health.controller.ts, modules/ (feature modules incl. `mail/` (SMTP mailer) and `settings/` (admin API)), seed/ (`npm run seed:e2e`)
-  migrator/   CLI (nest-commander): MariaDB -> MongoDB backfill/verify
   worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, contest-export, organization-points, user-data, contribution-points, discord-webhook)
   bridge/     judge gRPC server (qhhoj.judge.v1): link/ (server, sessions, messages, FetchSource), dispatch/ (slots, grace, dispatcher, commands), judges/, submissions/ (claims, run writes, runs), bridge-core.module.ts, bridge.service.ts
   worker/     BullMQ jobs: jobs/<job>/<job>.module|processor|service|repository.ts (pdf-render, polygon-import, submission-effects, effects-sweep, problem-rescore, contest-rescore, contest-final-judge, contest-rating, similarity, contest-data, contest-replay, organization-points, user-data, contribution-points, discord-webhook)
@@ -40,8 +39,8 @@ libs/
   contests/   contest time windows, standings and ranking cache keys, queue contracts (`queues.ts`: contest-rescore, contest-final-judge, contest-rating, contest-data; `replay-queue.ts`: contest-replay and its coalescing `requestReplayBuild`), replay events and ghost scoring (`replay-events`, `ghost-replay`, `ghost-gap`), Elo-MMR (`rating/elo-mmr.ts`), contest events, data paths, one module per format in `formats/` (registry in `formats/registry.ts`)
   community/  org PP, ranks, interaction gate, user-data paths, comment paths and pages, blog post rules, contribution formula, Discord payloads, tickets (limits, Discord texts), ticket-events contract, flatpage urls, user activity rules (session keys, user agent classifier, CSV cells), queue contracts (`queues.ts`: organization-points, user-data, contribution-points, discord-webhook), notifications (drafts, event contract, queues, repository, service, module)
   render/     Markdown -> HTML (markdown-it, KaTeX, sanitizer, `blog` style); pure functions, golden fixtures in src/fixtures
-test/fixtures/  legacy MariaDB dump (legacy.sql, django.json)
-tools/legacy/   regenerates the fixtures
+test/fixtures/  django.json (Django password hashes and Fernet secrets for the auth specs)
+tools/legacy/   elo_mmr_goldens.py
 ```
 
 - Layer order (no cycles): `database` <- `common` <- `settings` <- `auth` <- every other lib and app
@@ -172,7 +171,7 @@ user-activity/
 
 ## Runtime settings
 
-- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SSE_IP_ALLOWLIST`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `JUDGE_BRIDGE_TLS_CERT`, `JUDGE_BRIDGE_TLS_KEY`, `LEGACY_MYSQL_URL`, `LEGACY_SECRET_KEY`, `TEST_MYSQL_URL`, `TEST_REDIS_URL`
+- Env keeps infrastructure and key material: `MONGO_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `TOKEN_SECRET`, `SITE_URL`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SSE_IP_ALLOWLIST`, `COOKIE_SECURE`, `MEDIA_ROOT`, `MEDIA_URL`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`, `CONTEST_DATA_ROOT`, `USER_DATA_ROOT`, `PDF_CONCURRENCY`, `JUDGE_BRIDGE_HOST`, `JUDGE_BRIDGE_PORT`, `JUDGE_BRIDGE_TLS_CERT`, `JUDGE_BRIDGE_TLS_KEY`, `TEST_REDIS_URL`
 - Settings (the admin edits them, no restart): `site.timeZone`, `contest.officialMode`, `contest.banAfterDisqualifications`, `discord.webhooks`, `mail.from`, `mail.smtpUrl`, `auth.pwnedApiUrl`, `auth.google`, `auth.github`, `auth.facebook`, `pdf.renderTimeoutMs`, `pdf.maxBytes`, `similarity.minPercent`, `similarity.maxPairs`, `similarity.maxSubmissions`
 - Add one: a `define({ type, default, description, secret, combine? })` entry in `SETTINGS` (`libs/settings/src/registry.ts`), `type` from `setting-types.ts` (add a type there when none fits); no other file changes, the admin API and revisions pick it up. `secret: true` encrypts the whole value, `secret: ['clientSecret']` those top-level fields; `combine` merges a PATCH into the stored object (the `auth.*` clients), without it the patch replaces the value
 - Read: inject `SettingsService` and call `settings.get('<key>')` where the value is used, never cache it (it is a synchronous read of an in-memory snapshot kept fresh by change stream plus a one-minute resync, so a change reaches api, worker and bridge within seconds); a consumer that builds something expensive keys it by the value (the mailer keeps its SMTP transport per URL)
@@ -368,7 +367,7 @@ user-activity/
 - Detail problems: `viewerResult {cell, isSolved, attempts, hasPendingSubmission}` comes from the current scoring participation (else the live one). The cell comes through `standingOf`, so it is frozen for non-editors during a freeze, like the viewer's own ranking row. `attempts` counts what `maxSubmissions` counts (`UNCOUNTED_ATTEMPT_STATUSES`). `solverCount` is the ranking's `acceptedCount` over live rows, from one aggregate on `{contest, virtual}`, cached 30 s per frozen view (`solverCountsCacheKey`), purged by `purgeRankingCache`, and null unless `canSeeFullScoreboard`
 - Refusals: `participation/participation-refusals.ts` is the one table of register, join and leave codes; add a case there, never a bare `AppError` in the service
 - Disqualify (`POST /:key/participations/:id/disqualify`, `{ disqualified }`): scores -9999 (frozen fields too), bans or unbans the user from the contest, clears the current pointer, queues a rescore. The `contest.banAfterDisqualifications` setting (0 = off) bans the account (`isActive` false, `isUnlisted`) at that many disqualifications outside organisation-private contests; lifting uses compare-and-set on the ban reason
-- Legacy migration (migrator requirement): `formatConfig` keys `last_score_altering` -> `lastScoreAltering`, `auto_judge` -> `autoJudge`, `LSO` -> `lso`; drop `cumtime` on `final_submission`; format name `Ultimate` -> `ultimate`; Lua label scripts become `labelStyle`
+- Legacy `formatConfig` (imported contests) keys `last_score_altering` -> `lastScoreAltering`, `auto_judge` -> `autoJudge`, `LSO` -> `lso`; drop `cumtime` on `final_submission`; format name `Ultimate` -> `ultimate`; Lua label scripts become `labelStyle`
 - Deviations from legacy: `ultimate` takes the latest row (no double count on equal dates), writes its tiebreaker and rounds its score; FSO final judging requeues `PD` rows only; no fifth ranking sort key (`-submission_count`); frozen results never reach non-editors
 
 ## Contest extras
@@ -387,7 +386,7 @@ user-activity/
 - Contest rules: `rules` (<= 8192, trimmed; blank = none), `rulesHtml`, `rulesRevision` (bumped when the trimmed text changes; compare-and-set, a concurrent save is 409) on the contest; `register` and `join` take `{acceptRules}`; a new row (registration, first live join, every virtual join) of a contest with rules needs `acceptRules: true` (`400 rules_not_accepted`), stored as `rulesAcceptedAt` and `rulesAcceptedRevision` on the participation (shown in the participations list); re-entering and spectating are exempt
 - Problem limits: `ContestProblemResponse.timeLimit` (s) and `memoryLimit` (KiB), null when the viewer cannot see the problem (`ProblemAccess.canSee` with the contest scope while in the contest)
 - Publish after the contest: `POST /contests/:key/publish-problems {editorials?, dryRun?}` -> per-problem `{outcome: published|unchanged|skipped, reason: no_permission|organization_private|not_found|deleted|null, editorial}`; `409 contest_not_ended`; 5 completed real runs per hour per user (dry runs free); verdict `publishVerdict` (edit rights + `judge.change_public_visibility`) in `libs/problems`; `publishAfterEnd` (+ `publishAfterEndBy`, `autoPublishOutcome`) and the `contest-publish` worker job (delayed at the end, `upsertJobScheduler` minute sweep over the partial index `publish_after_end_due`, re-checks the recorded editor's account, rights and contest edit rights; failure reasons `actor_unavailable`, `no_permission`, `cannot_edit_contest`); a clone resets the switch; `GET /contests/:key/actions` gains `publish` and `autoPublish`
-- New codenames reach migrated groups and users with `node dist/apps/migrator/main grant-permissions` (idempotent; anchors in `apps/migrator/src/permission-grants.ts`, e.g. `judge.change_contest_tag` ← `judge.edit_all_contest`; there is no `npm run migrate` script). `verify` ignores the granted codenames, so the order against it does not matter. Run it once per deploy, then check one staff user: the api sees the changed group rows only after `GroupsQuerier` resyncs (change stream, else the 10-minute cron)
+- New codenames reach existing groups and users only through the admin UI (group edit); the api sees changed group rows after `GroupsQuerier` resyncs (change stream, else the 10-minute cron).
 
 ## Similarity
 
@@ -483,24 +482,6 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - `submissions`, `submissionSources` and `judges` are repository-backed
 - Register every schema in `SCHEMAS` (`libs/database/src/schemas/index.ts`) and export it there
 
-## Backfill jobs (migrator)
-
-Commands: `audit | backfill | verify | grant-permissions | recompute | check-files | check-integrity | finish`; the run order and manual checks are in `deploy/RUNBOOK.md`. A new legacy table gets a mapper in `apps/migrator/src/mappers/<area>/`, its `refTables`, a `legacy-<area>.sql` seed (ids in the area's range) and an e2e that ends with `verify` = 0.
-
-- Build first (`npx nest build migrator`), then `node dist/apps/migrator/main backfill [jobs...] [--fresh]`: idempotent upsert by `_id`; `--fresh` empties each selected collection first
-- `node dist/apps/migrator/main verify [jobs...]`: compares Mongo vs MariaDB, exit code 1 on mismatch
-- Ids are stable: legacy `table:id` -> UUIDv7 stored in `migrationIdMap` (`apps/migrator/src/id-map.repository.ts`)
-
-Not migrated: `judge_contestmoss` (no mapper; see Similarity).
-
-Add a job:
-
-1. `apps/migrator/src/mappers/<collection>.mapper.ts`: `@Injectable() class <Name>Mapper implements Mapper<Row>` (template: `groups.mapper.ts`)
-2. Set `name`, `collection`, `refTables` (legacy tables whose ids it resolves, incl. its own), `sql` (**must `ORDER BY` the primary key**)
-3. `map(row, ctx)` returns `{ _id: ctx.ref(table, row.id)!, ... }`; use `ctx.ref|refs|date|bool|json`; no `undefined` (use `null`/`[]`)
-4. Extra lookups go in `prepare(source)`; non-deterministic fields (random-IV ciphertext) are replaced in `normalize(doc)`
-5. Add the class to `ORDER` in `apps/migrator/src/mappers/index.ts` (dependency order)
-
 ## Naming and style
 
 - Meaningful names; no single-character identifiers (variables, params, lambda args, catch vars); lint `id-length` min 2
@@ -553,14 +534,14 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 - Unit: `<file>.spec.ts` next to the file under test; e2e: `apps/<app>/test/*.e2e-spec.ts` for apps, next to the file for libs
 - Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
-- The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush); migrator e2e also needs MariaDB (`TEST_MYSQL_URL`): `podman compose up -d mariadb redis` (or `docker compose`)
+- The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush): `podman compose up -d redis` (or `docker compose`)
 - Each jest worker flushes its own Redis db: `TEST_REDIS_URL`'s db plus `JEST_WORKER_ID - 1` (`redisUrlForWorker`, `@libs/common/testing`). A base db plus `--maxWorkers` must fit the server's `databases` (16 by default, 64 on the lane Redis); CI runs `--runInBand`, so it stays on db 15
 - Bridge e2e: `setupBridgeTest` (`apps/bridge/test/setup.ts`, millisecond `FAST_TIMINGS`, `restart()`), `FakeJudge` (real TCP), `RecordingJudge` (no socket); api specs read the command stream through `apps/api/test/submission-fixtures.ts`
 - Index use is asserted with `profileQueries` (`@libs/database/testing`): no `COLLSCAN`, documents examined bounded; worker effects fixtures in `apps/worker/test/effects-fixtures.ts`; SSE through `apps/api/test/sse-client.ts` (supertest cannot read streams); `recordSubmissionEvents` (`@libs/judging/testing`)
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`
 - Playwright specs skip without Chromium; the pandoc spec skips locally and fails in CI without pandoc
 - Similarity specs spawn the real engine (about 1 s each); they need the grammars compiled by `npm ci`
-- Legacy fixtures in `test/fixtures/` are generated, never hand-edited: `tools/legacy/run.sh` (`CONTAINER=docker` to override podman)
+- `test/fixtures/django.json` is a frozen generated fixture, never hand-edited.
 - `libs/<lib>/src/testing.ts` is the lib's only test-support entry (`@libs/<lib>/testing`), imported by specs and `apps/*/test` only; lint refuses it in production code. Keep it one file per lib; when it outgrows one screen, add a sibling file under `libs/<lib>/src/testing/` and re-export it from `testing.ts`, so the import path never changes.
 
 ## Commands
@@ -574,7 +555,6 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 | `npm run seed:e2e`        | idempotent dev/e2e seed (see Seed script)                                     |
 | `npm run typecheck`       | `tsc --noEmit`                                                                |
 | `npm run build`           | build `api`                                                                   |
-| `npx nest build migrator` | build migrator                                                                |
 | `npx nest build worker`   | build worker                                                                  |
 | `npx nest build bridge`   | build bridge                                                                  |
 | `npx nest start api`      | run the API                                                                   |
@@ -586,7 +566,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 ## Env and deploy
 
 - Production install, nginx, systemd units, env template, cutover and rollback: `deploy/RUNBOOK.md`
-- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env); the migrator reads only `MONGO_URL`, `LEGACY_*`, `ENCRYPTION_KEY`, `MEDIA_URL`, `REDIS_URL` and, for `check-files`, `PROBLEM_DATA_ROOT` and `MEDIA_ROOT`
+- `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT` are required by the api, the worker and the bridge (all validate env)
 - The api and the worker share `MEDIA_ROOT`, `PROBLEM_DATA_ROOT`, `PDF_CACHE_ROOT`
 - `PROBLEM_DATA_ROOT` and `PDF_CACHE_ROOT` must not be under `MEDIA_ROOT` (served publicly); boot checks only `CONTEST_DATA_ROOT` against it, the others are the operator's to keep apart
 - `CONTEST_DATA_ROOT` is shared by the api and the worker and must not be under `MEDIA_ROOT`
@@ -597,7 +577,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 - `discord.webhooks` (api and worker): a map of `default` or `on_<event>` keys (`on_new_comment`, `on_new_blogpost`, `on_new_problem`, `on_new_suggested_problem`, `on_new_ticket`, `on_new_ticket_message`) to https URLs (http only for `localhost`/`127.0.0.1` outside production, see Runtime settings); empty sends nothing; the worker needs outbound HTTPS to Discord
 - nginx: serve `/media/submission_file/` with `Content-Disposition: attachment`, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` (file submissions are user bytes stored under their language's extension, which may be `html`, `svg` or `xml`; `nosniff` alone does not stop those).
 - nginx: map the legacy `/feed/<blog|comment|problems>/<rss|atom>/` to `/api/internal/feeds/<blog|comments|problems>/<rss|atom>`
-- The `.hint()` queries (organization members, submissions, comment threads) throw until their indexes exist: build them before serving (mongoose `autoIndex` or the migrator's `syncIndexes`); the leaderboards are not hinted but are only fast with theirs
+- The `.hint()` queries (organization members, submissions, comment threads) throw until their indexes exist: build them before serving (mongoose `autoIndex`); the leaderboards are not hinted but are only fast with theirs
 - Worker memory limit: about 2 GB x job concurrency (Chromium, pandoc), plus up to 2 GiB for the similarity engine child (V8 heap cap, not a hard cap; native parser memory comes on top)
 - The worker runs one similarity job at a time (queue concurrency 1)
 - Worker image and CI need `python3`, `make` and `g++` at `npm ci`: the tree-sitter grammars of `@dodona/dolos-parsers` are compiled by node-gyp (never `--ignore-scripts`); the child resolves `@dodona/dolos-lib` itself, so the worker does not depend on its working directory
@@ -620,7 +600,7 @@ The app follows Semantic Versioning (`package.json` `version`, starting at 2.0.0
 - Modules: `modules/short-links/` (redirect `/s/:code`, staff list and delete) and `modules/sync/` (`clients/` admin routes, `contests/` the sync routes).
 - A route for external systems is `@ServiceOnly()` + `@RequireScope(...)` under `api/sync/v1`; the guard attaches `request.serviceClient` and never `request.auth`; a missing `@RequireScope` refuses every key.
 - Read official mode only through `isOfficialModeActive` / `officialModeLocks` / `assertNotLockedByOfficialMode` (`libs/community/src/official-mode.ts`); a structural spec fails on any other reader of `contest.officialMode*`.
-- Operator command `node dist/apps/migrator/main grant-permissions`: run once per deploy, then check one staff user after the groups resync; it grants `judge.manage_short_link` and `judge.manage_integration`.
+- `judge.manage_short_link` and `judge.manage_integration` are granted to staff groups in the admin UI; check one staff user after the groups resync.
 - Taking over a client-managed contest: no route writes `managedBy` (only a clone resets it), so revoke the client (its key stops working at once), then edit the contest by hand in the editor; a revoked client leaves its contests behind. While the client is live, its next sync `PUT` overwrites hand edits of an unpublished contest.
 - Keys are `qhi_` + 256 random bits, shown once; only the sha256 is stored. Queries on `Contest.managedBy` must include `$type: 'binData'`.
 
