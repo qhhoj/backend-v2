@@ -191,7 +191,7 @@ describe('homepage and user comments', () => {
     ]);
   });
 
-  it('serves new public problems, top users and counts', async () => {
+  it('serves new public problems, top users and counts (problems = all live ones)', async () => {
     await api.problems.deleteMany({});
     const organization = await createOrganization(api);
     for (let index = 0; index < 8; index += 1)
@@ -237,7 +237,7 @@ describe('homepage and user comments', () => {
         contributionPoints: 7,
       }),
     ]);
-    expect(data.counts).toMatchObject({ problems: 8 });
+    expect(data.counts).toMatchObject({ problems: 10 });
     const newest = operations.filter(
       ({ collection, operation }) =>
         collection === 'problems' && operation === 'query',
