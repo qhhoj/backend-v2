@@ -13,7 +13,7 @@ import { ProblemsRepository } from '../core/problems.repository';
 import { ProblemsService } from '../core/problems.service';
 import { RevisionsRepository } from '../core/revisions.repository';
 
-/** Never carried over by a clone: identity, timestamps, people, statement translations, editorial, mirror links and test data. */
+/** Never carried over by a clone: identity, timestamps, people, statement translations, editorial, mirror and Polygon links, and test data. */
 export const CLONE_RESET_FIELDS = [
   'id',
   'createdAt',
@@ -39,6 +39,7 @@ export const CLONE_RESET_FIELDS = [
   'solution',
   'mirrorOf',
   'mirrorRoot',
+  'polygonLink',
 ];
 /** Copied by value; together with CLONE_RESET_FIELDS this must cover every schema path. */
 export const CLONE_COPIED_FIELDS = [
