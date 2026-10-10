@@ -10,7 +10,7 @@ set +e; docker run --rm "$image" >/dev/null 2>&1; code=$?; set -e
 
 docker run --rm --entrypoint sh "$image" -c '
   set -e
-  [ "$(id -u):$(id -g)" = 991:991 ]
+  [ "$(id -u):$(id -g)" = 987:987 ]
   pandoc --version | head -1 | grep -q "pandoc 3.1.3"
   prlimit --version >/dev/null
   node -e "require(\"playwright\").chromium.launch().then((b) => b.close())"

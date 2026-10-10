@@ -60,7 +60,7 @@ preflight() {
   [ "$free" -ge $((20 * 1024 * 1024 * 1024)) ] || die "less than 20 GiB free under $DATA"
 }
 
-migrator() { # <command...> in the image, as uid 991, with the migrate env, the legacy URL and the file roots
+migrator() { # <command...> in the image, as uid 987, with the migrate env, the legacy URL and the file roots
   podman run --rm --network host --memory 4g \
     --env-file "$MIGRATE_ENV" --env-file "$WORK/legacy.env" \
     -e APP=migrator -e NODE_OPTIONS=--max-old-space-size=3072 -e NO_COLOR=1 \
@@ -116,7 +116,7 @@ recompute_with_worker() {
 
 sync_files() {
   for dir in media problem-data; do
-    rsync -a --delete --chown=991:991 --chmod=D2750,F640 "$INCOMING/$dir/" "$DATA/$dir/" || return 1
+    rsync -a --delete --chown=987:987 --chmod=D2750,F640 "$INCOMING/$dir/" "$DATA/$dir/" || return 1
   done
 }
 
@@ -186,7 +186,7 @@ cmd_run() { # [--accept-rating-coverage]
   take_deploy_lock
   preflight
   LOGDIR="$LOGS/$(date -u +%Y%m%dT%H%M%SZ)"
-  install -d -m 700 "$LOGDIR"; chown 991:991 "$LOGDIR"
+  install -d -m 700 "$LOGDIR"; chown 987:987 "$LOGDIR"
   rm -f "$WORK/last-run-ok"
   systemctl stop qhhoj.target
   run_steps
@@ -212,7 +212,7 @@ cmd_import_dump() { # <file.sql.gz>
   rm -f "$WORK/last-run-ok" "$WORK/legacy.env" "$WORK/dump.sha256"
   rm -rf "$WORK/mariadb"; install -d -m 700 "$WORK/mariadb"
   password="$(openssl rand -hex 24)"
-  MARIADB_ROOT_PASSWORD="$password" podman run -d --name "$LEGACY" --network host -v "$WORK/mariadb:/var/lib/mysql" \
+  MARIADB_ROOT_PASSWORD="$password" podman run -d --name "$LEGACY" --memory 2g --network host -v "$WORK/mariadb:/var/lib/mysql" \
     -e MARIADB_ROOT_PASSWORD -e MARIADB_DATABASE=legacy docker.io/library/mariadb:11 \
     --port="$LEGACY_PORT" --bind-address=127.0.0.1 --max-allowed-packet=1G >/dev/null 9>&-
   wait_for_legacy
