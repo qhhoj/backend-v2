@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+# qhhoj-migrate: the freeze-and-iterate migration on the v2 host (root). RUNBOOK "Migration week".
+#   import-dump <file.sql.gz>        load the frozen legacy dump into a temporary MariaDB container (127.0.0.1:3307)
+#   snapshot                         frozen copy of the local old site (dump and files) into incoming/, read-only to it
+#   run [--accept-rating-coverage]   every migrator step in runbook order into MONGO_URL; repeatable until go-live
+#   go-live                          finish, mongodump, start the site (asks for the typed word go-live; resumable)
+#   preview on <user> | off          basic-auth gate on the site for the staff review
+#   status                           last run, go-live state
+set -euo pipefail
+
+ROOT="${QHHOJ_MIGRATE_ROOT:-}"
+WORK="$ROOT/srv/qhhoj-migrate"
+INCOMING="$WORK/incoming"
+DATA="$ROOT/srv/qhhoj"
+LOGS="$ROOT/var/log/qhhoj-migrate"
+MIGRATE_ENV="$ROOT/root/migrate.env"
+SITE_ENV="$ROOT/etc/qhhoj/env"
+LOCK="$ROOT/run/qhhoj-migrate.lock"
+DEPLOY_LOCK="$ROOT/run/qhhoj-deploy.lock"
+IMAGE=ghcr.io/qhhoj/backend-v2:current
+LEGACY=qhhoj-legacy
+LEGACY_PORT=3307
+SHARED_KEYS=(MONGO_URL REDIS_URL MEDIA_URL ENCRYPTION_KEY)
+GATE="$ROOT/etc/nginx/snippets/qhhoj-gate.conf"
+HTPASSWD="$ROOT/etc/nginx/qhhoj-preview.htpasswd"
+LOGDIR=""
+ACCEPT_RATING=0
+ACCEPTED_NOTE=""
+DUMP_CFG=""
+
+die() { echo "qhhoj-migrate: $*" >&2; exit 1; }
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
+value() { sed -n "s/^$2=//p" "$1" | tail -1; } # <file> <key>
+take_lock() { exec 9>"$LOCK"; flock -n 9 || die "another qhhoj-migrate holds $LOCK"; }
+take_deploy_lock() { exec 8>"$DEPLOY_LOCK"; flock -w "${QHHOJ_MIGRATE_LOCK_WAIT:-900}" 8 || die "a deploy holds $DEPLOY_LOCK; retry when it finishes"; }
+
+check_env_files() {
+  for file in "$MIGRATE_ENV" "$SITE_ENV"; do
+    [ -f "$file" ] || die "missing $file"
+    [ "$(stat -c %a "$file")" = 600 ] || die "$file must be mode 600"
+  done
+  for key in "${SHARED_KEYS[@]}"; do
+    [ -n "$(value "$MIGRATE_ENV" "$key")" ] || die "$key missing in $MIGRATE_ENV"
+    [ "$(value "$MIGRATE_ENV" "$key")" = "$(value "$SITE_ENV" "$key")" ] \
+      || die "$key differs between $MIGRATE_ENV and $SITE_ENV"
+  done
+  for key in LEGACY_SECRET_KEY DAY_ONE_LANGUAGES; do
+    [ -n "$(value "$MIGRATE_ENV" "$key")" ] || die "$key missing in $MIGRATE_ENV"
+  done
+  if [ -n "${MIGRATION_REHEARSAL:-}" ] || grep -q '^MIGRATION_REHEARSAL=' "$MIGRATE_ENV"; then
+    die "MIGRATION_REHEARSAL must not be set (it locks 2FA off for every account)"
+  fi
+}
+
+preflight() {
+  [ ! -e "$WORK/went-live" ] || die "the site went live; run would re-arm the migration marker and wipe ratings"
+  check_env_files
+  [ -f "$WORK/legacy.env" ] || die "no legacy database: run import-dump first"
+  [ "$(podman container inspect -f '{{.State.Running}}' "$LEGACY" 2>/dev/null)" = true ] || die "$LEGACY is not running"
+  local free; free="$(df --output=avail -B1 "$DATA" | tail -1)"
+  [ "$free" -ge $((20 * 1024 * 1024 * 1024)) ] || die "less than 20 GiB free under $DATA"
+}
+
+migrator() { # <command...> in the image, as uid 991, with the migrate env, the legacy URL and the file roots
+  podman run --rm --network host --memory 4g \
+    --env-file "$MIGRATE_ENV" --env-file "$WORK/legacy.env" \
+    -e APP=migrator -e NODE_OPTIONS=--max-old-space-size=3072 -e NO_COLOR=1 \
+    -e MEDIA_ROOT=/srv/qhhoj/media -e PROBLEM_DATA_ROOT=/srv/qhhoj/problem-data \
+    -v "$DATA:/srv/qhhoj" -v "$LOGDIR:/reports" "$IMAGE" "$@"
+}
+
+run_logged() { # <name> <command...>: logged and timed; returns the command's exit code
+  local name=$1 start rc; shift
+  start=$(date +%s)
+  echo "== $name"
+  set +e; "$@" 2>&1 | tee "$LOGDIR/$name.log"; rc=${PIPESTATUS[0]}; set -e
+  printf '%s\t%s\t%s\n' "$name" "$rc" "$(( $(date +%s) - start ))" >> "$LOGDIR/timings.tsv"
+  return "$rc"
+}
+
+step() { # <name> <command...>: stops the run on failure
+  local rc=0
+  run_logged "$@" || rc=$?
+  [ "$rc" = 0 ] || die "step $1 failed (exit $rc); log: $LOGDIR/$1.log"
+}
+
+reserved_codes_free() {
+  local n expr
+  # shellcheck disable=SC2016 # the Mongo expression is meant literally
+  expr='const db = connect(process.env.QHHOJ_MONGO_URL); db.problems.countDocuments({ code: { $in: ["deleted", "meta", "imports"] } })'
+  n="$(QHHOJ_MONGO_URL="$(value "$MIGRATE_ENV" MONGO_URL)" mongosh --nodb --quiet --eval "$expr")"
+  [ "$n" = 0 ] || { echo "problems with reserved codes (deleted, meta, imports): $n; rename them on the old site"; return 1; }
+}
+
+recompute_until_worker_registered() { # the worker may still be booting: retry only that failure
+  local try="$LOGDIR/recompute.try" rc=0 _
+  for _ in $(seq 12); do
+    set +e; migrator recompute 2>&1 | tee "$try"; rc=${PIPESTATUS[0]}; set -e
+    [ "$rc" = 0 ] && break
+    grep -q 'no worker on migration-recompute' "$try" || break
+    sleep 5
+  done
+  rm -f "$try"
+  return "$rc"
+}
+
+recompute_with_worker() {
+  local rc=0
+  if systemctl start qhhoj-worker; then
+    recompute_until_worker_registered || rc=$?
+  else
+    rc=1
+  fi
+  systemctl stop qhhoj-worker || rc=1
+  return "$rc"
+}
+
+sync_files() {
+  for dir in media problem-data; do
+    rsync -a --delete --chown=991:991 --chmod=D2750,F640 "$INCOMING/$dir/" "$DATA/$dir/" || return 1
+  done
+}
+
+# Rating coverage lines (RUNBOOK "Rating coverage"); check-integrity logs problems as Nest ERROR lines.
+only_rating_coverage() { # <log>: every problem line is a rating-coverage line, and there is at least one
+  local problems
+  problems="$(sed -n -e 's/\x1b\[[0-9;]*m//g' -e 's/.*ERROR \[check-integrity\] //p' "$1")"
+  [ -n "$problems" ] || return 1
+  ! grep -qvE -e '^legacy-rated participations without a v2 rating: [0-9]+$' \
+    -e '^v2 ratings without a legacy rating: [0-9]+$' \
+    -e '^rated contests: legacy [0-9]+, v2 [0-9]+$' \
+    -e '^ *judge_contest:[0-9]+: [0-9]+$' <<<"$problems"
+}
+
+check_integrity_step() {
+  local rc=0
+  run_logged check-integrity migrator check-integrity || rc=$?
+  [ "$rc" = 0 ] && return 0
+  if [ "$ACCEPT_RATING" = 1 ] && only_rating_coverage "$LOGDIR/check-integrity.log"; then
+    ACCEPTED_NOTE="check-integrity: rating coverage accepted"
+    echo "$ACCEPTED_NOTE"
+    return 0
+  fi
+  die "step check-integrity failed (exit $rc); log: $LOGDIR/check-integrity.log"
+}
+
+run_steps() {
+  local keep; keep="$(value "$MIGRATE_ENV" DAY_ONE_LANGUAGES),OUTPUT"
+  step audit migrator audit
+  step backfill migrator backfill --fresh --report /reports/backfill-report.txt
+  step grant-permissions migrator grant-permissions
+  step reserved-codes reserved_codes_free
+  step verify migrator verify
+  step recompute recompute_with_worker
+  step sync-files sync_files
+  step check-files migrator check-files
+  check_integrity_step
+  step stamp-data-versions migrator stamp-data-versions --root /srv/qhhoj/problem-data
+  step count-data-shapes migrator count-data-shapes
+  step prune-languages-dry-run migrator prune-languages --keep "$keep" --dry-run
+  step prune-languages migrator prune-languages --keep "$keep"
+}
+
+write_summary() {
+  local report="$LOGDIR/backfill-report.txt" count
+  {
+    echo "snapshot: $(cat "$WORK/dump.sha256" 2>/dev/null || echo unknown)"
+    echo "--- step / exit / seconds"; cat "$LOGDIR/timings.tsv"
+    echo "--- accepted"; echo "${ACCEPTED_NOTE:-none}"
+    echo "--- manual items (backfill report)"
+    for pattern in 'Lua label script' 'clamped points' 'deactivated superusers' 'template' 'RJ'; do
+      count="$(grep -c "$pattern" "$report" 2>/dev/null || true)"
+      printf '%s: %s\n' "$pattern" "${count:-0}"
+    done
+    echo "--- stamp-data-versions"; tail -n 20 "$LOGDIR/stamp-data-versions.log"
+    echo "--- prune-languages"; tail -n 20 "$LOGDIR/prune-languages.log"
+  } > "$LOGDIR/summary.txt"
+}
+
+cmd_run() { # [--accept-rating-coverage]
+  case "${1:-}" in
+    '') ACCEPT_RATING=0 ;;
+    --accept-rating-coverage) ACCEPT_RATING=1 ;;
+    *) usage ;;
+  esac
+  take_lock
+  take_deploy_lock
+  preflight
+  LOGDIR="$LOGS/$(date -u +%Y%m%dT%H%M%SZ)"
+  install -d -m 700 "$LOGDIR"; chown 991:991 "$LOGDIR"
+  rm -f "$WORK/last-run-ok"
+  systemctl stop qhhoj.target
+  run_steps
+  write_summary
+  echo "$LOGDIR" > "$WORK/last-run-ok"
+  cat "$LOGDIR/summary.txt"
+}
+
+wait_for_legacy() {
+  for _ in $(seq 120); do
+    podman exec "$LEGACY" healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1 && return 0
+    sleep 2
+  done
+  die "$LEGACY did not become ready"
+}
+
+cmd_import_dump() { # <file.sql.gz>
+  local dump=${1:-} password
+  [ -f "$dump" ] || die "no dump file: ${dump:-<none>}"
+  [ ! -e "$WORK/went-live" ] || die "the site went live; import-dump would replace the legacy database"
+  take_lock
+  podman rm -f "$LEGACY" >/dev/null 2>&1 || true
+  rm -f "$WORK/last-run-ok" "$WORK/legacy.env" "$WORK/dump.sha256"
+  rm -rf "$WORK/mariadb"; install -d -m 700 "$WORK/mariadb"
+  password="$(openssl rand -hex 24)"
+  MARIADB_ROOT_PASSWORD="$password" podman run -d --name "$LEGACY" --network host -v "$WORK/mariadb:/var/lib/mysql" \
+    -e MARIADB_ROOT_PASSWORD -e MARIADB_DATABASE=legacy docker.io/library/mariadb:11 \
+    --port="$LEGACY_PORT" --bind-address=127.0.0.1 --max-allowed-packet=1G >/dev/null 9>&-
+  wait_for_legacy
+  gunzip -c "$dump" | MYSQL_PWD="$password" podman exec -i -e MYSQL_PWD "$LEGACY" mariadb -uroot legacy
+  install -m 600 /dev/null "$WORK/legacy.env"
+  echo "LEGACY_MYSQL_URL=mysql://root:$password@127.0.0.1:$LEGACY_PORT/legacy" > "$WORK/legacy.env"
+  sha256sum "$dump" | cut -d' ' -f1 > "$WORK/dump.sha256"
+  MYSQL_PWD="$password" podman exec -i -e MYSQL_PWD "$LEGACY" mariadb -uroot -N legacy -e "
+    SELECT 'auth_user', COUNT(*) FROM auth_user UNION ALL SELECT 'judge_problem', COUNT(*) FROM judge_problem
+    UNION ALL SELECT 'judge_submission', COUNT(*) FROM judge_submission UNION ALL SELECT 'judge_contest', COUNT(*) FROM judge_contest"
+}
+
+smoke() {
+  local port host; port="$(value "$SITE_ENV" PORT)"; host="$(value "$SITE_ENV" SITE_URL)"; host="${host#https://}"; host="${host%%/*}"
+  for _ in $(seq 60); do curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site" && break; sleep 2; done
+  curl -fsS -o /dev/null "http://127.0.0.1:${port:-3000}/api/internal/site" || die "api not answering"
+  curl -fsS -k -o /dev/null --resolve "$host:443:127.0.0.1" "https://$host/problems" || die "SPA route not served"
+  [ "$(curl -s -k -o /dev/null -w '%{http_code}' --resolve "$host:443:127.0.0.1" "https://$host/s/nonexistent")" = 404 ] \
+    || die "/s/ location missing"
+}
+
+dump_mongo() { # the URI goes through a mode-600 config file, never argv; removed on any exit
+  local uri; uri="$(value "$MIGRATE_ENV" MONGO_URL)"
+  DUMP_CFG="$(mktemp "$WORK/mongodump.XXXXXX")"
+  trap 'rm -f "$DUMP_CFG"' EXIT
+  printf "uri: '%s'\n" "${uri//\'/\'\'}" > "$DUMP_CFG"
+  mongodump --config "$DUMP_CFG" --gzip --archive="$ROOT/backup/qhhoj-cutover.gz"
+}
+
+cmd_go_live() {
+  local answer
+  take_lock
+  take_deploy_lock
+  [ -s "$WORK/last-run-ok" ] || die "no successful run since the last import or failure"
+  read -r -p "Type go-live to finish the migration and open the site: " answer || true
+  [ "$answer" = go-live ] || die "aborted"
+  LOGDIR="$(cat "$WORK/last-run-ok")"
+  if [ ! -e "$WORK/went-live" ]; then
+    systemctl stop qhhoj.target
+    step finish migrator finish
+    touch "$WORK/went-live" # from here on run must refuse, even if a later line fails
+  fi
+  step mongodump dump_mongo
+  systemctl start qhhoj.target
+  gate_off
+  smoke
+  echo "live. Switch DNS now."
+}
+
+reload_nginx() { nginx -t && systemctl reload nginx; }
+
+gate_off() {
+  mkdir -p "$(dirname "$GATE")"
+  # shellcheck disable=SC2016 # backticks are literal text in the comment
+  printf '# Empty in production; `qhhoj-migrate preview on` writes basic auth here.\n' > "$GATE"
+  reload_nginx
+}
+
+gate_on() { # <user>
+  mkdir -p "$(dirname "$GATE")"
+  local password; password="$(openssl rand -base64 18)"
+  printf '%s:%s\n' "$1" "$(printf '%s' "$password" | openssl passwd -apr1 -stdin)" > "$HTPASSWD"
+  chmod 640 "$HTPASSWD"; chgrp www-data "$HTPASSWD" 2>/dev/null || true
+  cat > "$GATE" <<CONF
+# Written by qhhoj-migrate preview on; \`qhhoj-migrate preview off\` empties it.
+satisfy any;
+allow 127.0.0.1;
+allow ::1;
+deny all;
+auth_basic "QHHOJ preview";
+auth_basic_user_file /etc/nginx/qhhoj-preview.htpasswd;
+CONF
+  reload_nginx
+  echo "preview user $1, password (shown once): $password"
+}
+
+cmd_status() {
+  echo "went live: $([ -e "$WORK/went-live" ] && echo yes || echo no)"
+  echo "snapshot: $(cat "$WORK/dump.sha256" 2>/dev/null || echo none)"
+  if [ -s "$WORK/last-run-ok" ]; then cat "$(cat "$WORK/last-run-ok")/summary.txt"; else echo "no successful run"; fi
+}
+
+legacy_setting() { # <key> <default>: a LEGACY_* value from migrate.env, or the default
+  local v; v="$(value "$MIGRATE_ENV" "$1")"
+  echo "${v:-$2}"
+}
+
+dump_legacy() { # <stamp>: the dump is written as .part and renamed only when mysqldump and gzip both succeed
+  local db part rc
+  db="$(legacy_setting LEGACY_DB_NAME qhhoj)"
+  part="$INCOMING/legacy-$1.sql.gz.part"
+  set +e
+  mysqldump --single-transaction --quick --routines --default-character-set=utf8mb4 "$db" | gzip > "$part"
+  rc=("${PIPESTATUS[@]}")
+  set -e
+  if [ "${rc[0]}" != 0 ] || [ "${rc[1]}" != 0 ]; then
+    rm -f "$part"
+    die "mysqldump failed (exit ${rc[0]}, gzip ${rc[1]}); no snapshot written"
+  fi
+  mv "$part" "${part%.part}"
+}
+
+copy_legacy_files() { # read-only toward the old site: rsync only reads its source
+  rsync -a --delete "$(legacy_setting LEGACY_MEDIA_DIR /qhh/media)/" "$INCOMING/media/" || return 1
+  rsync -a --delete "$(legacy_setting LEGACY_PROBLEM_DIR /qhh/problems)/" "$INCOMING/problem-data/" || return 1
+}
+
+cmd_snapshot() {
+  local stamp; stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  [ -f "$MIGRATE_ENV" ] || die "missing $MIGRATE_ENV; snapshot needs the legacy settings"
+  umask 077 # the dump and copies are created private (mode 600 / 700)
+  take_lock
+  install -d "$INCOMING/media" "$INCOMING/problem-data"
+  dump_legacy "$stamp"
+  copy_legacy_files
+  echo "$INCOMING/legacy-$stamp.sql.gz"
+}
+
+main() {
+  mkdir -p "$ROOT/run" "$WORK" "$INCOMING" "$LOGS"
+  chmod 700 "$WORK" "$INCOMING" # the dump is private even when the directories pre-date this
+  install -d -m 700 "$ROOT/backup"
+  case "${1:-}" in
+    import-dump) cmd_import_dump "${2:-}" ;;
+    snapshot) cmd_snapshot ;;
+    run) cmd_run "${2:-}" ;;
+    go-live) cmd_go_live ;;
+    preview) case "${2:-}" in on) [ -n "${3:-}" ] || usage; gate_on "$3" ;; off) gate_off ;; *) usage ;; esac ;;
+    status) cmd_status ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"
