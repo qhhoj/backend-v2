@@ -164,11 +164,6 @@ export const RANGE_CHECKS: readonly [string, string, boolean][] = [
     NOTE,
   ],
   [
-    'judge_blogvote.score not -1/1',
-    count('judge_blogvote WHERE score NOT IN (-1, 1)'),
-    NOTE,
-  ],
-  [
     'judge_commentlock pages locked twice (later locks skipped)',
     count(
       '(SELECT page FROM judge_commentlock GROUP BY page HAVING COUNT(*) > 1) x',
@@ -225,16 +220,6 @@ export const RANGE_CHECKS: readonly [string, string, boolean][] = [
   [
     'judge_organization.short_name empty',
     count("judge_organization WHERE short_name = ''"),
-    BOUND,
-  ],
-  [
-    'judge_blogpost.title empty',
-    count("judge_blogpost WHERE title = ''"),
-    BOUND,
-  ],
-  [
-    'judge_blogpost.content empty',
-    count("judge_blogpost WHERE content = ''"),
     BOUND,
   ],
   [

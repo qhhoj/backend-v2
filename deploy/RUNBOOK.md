@@ -110,7 +110,7 @@ Manual items:
 - Not migrated, tell the users: API tokens (`judge_profile.api_token`; regenerate them) and IP auth.
 - Template-valued misc config entries are kept raw and only reported: convert them by hand. Re-enter the legacy site settings (the env/settings import is paused) in the admin UI.
 - Permissions that exist only in v2 (for example `judge.change_settings`, `judge.import_polygon_package`, `judge.create_mass_testcases`) are held by no migrated group, except those `grant-permissions` derives from an anchor permission (see `apps/migrator/src/permission-grants.ts`, e.g. `judge.change_contest_tag`, `judge.delete_problem`). Superusers bypass them; grant them to the staff groups that need them.
-- Badges, legacy ratings, activity, sessions and logs are not migrated by decision; users log in again.
+- The legacy blog (7 posts, 6 comments, 45 votes), badges, legacy ratings, activity, sessions and logs are not migrated by decision; users log in again.
 
 ### Judge switch
 

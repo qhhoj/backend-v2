@@ -65,6 +65,7 @@ export class CommentTree {
     if (depth > MAX_DEPTH) return 'cycle';
     if (node.parent_id !== null && this.skipReason(node.parent_id, depth + 1))
       return 'ancestor skipped';
+    if (this.pages.isBlog(node.page)) return 'legacy blog not migrated';
     if (!this.pages.resolve(node.page)) return 'page gone';
     if (!Number(node.author_exists)) return 'author missing';
     return node.body_length ? null : 'empty body';

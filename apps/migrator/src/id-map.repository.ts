@@ -18,7 +18,6 @@ const ALIASES: Record<string, { sql: string; target: string }> = {
 export const TIMED_TABLES: Record<string, string> = {
   judge_submission: 'date',
   judge_comment: 'time',
-  judge_blogpost: 'publish_on',
   judge_ticket: 'time',
   judge_ticketmessage: 'time',
   judge_contestannouncement: 'date',
