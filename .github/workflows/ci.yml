@@ -76,3 +76,14 @@ jobs:
             echo "openapi.json is stale: run npm run openapi:emit and commit it"
             exit 1
           fi
+  deploy-scripts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: sudo apt-get install -y shellcheck
+      - run: shellcheck -S warning deploy/ci/*.sh deploy/judge/*.sh
+      - name: Run script tests
+        run: |
+          shopt -s nullglob
+          for t in deploy/*.test.sh deploy/*/*.test.sh; do echo "== $t"; bash "$t"; done

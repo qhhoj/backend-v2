@@ -1,0 +1,70 @@
+# Builds the backend image, pushes it to GHCR and deploys it with qhhoj-deploy on the production host.
+# Called by release.yml when that run created the version tag (a tag pushed with GITHUB_TOKEN starts no
+# workflow itself) and run by hand (Actions → deploy → Run workflow) for any ref. A running contest defers
+# the restart (retried for 6 h) unless `force`; a running migration always defers.
+name: deploy
+on:
+  workflow_call:
+    inputs:
+      ref: { type: string, required: true }
+  workflow_dispatch:
+    inputs:
+      ref: { description: 'Tag, branch or SHA (empty: latest v* tag)', type: string, default: '' }
+      force: { description: 'Deploy even while a contest is running', type: boolean, default: false }
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+permissions:
+  contents: read
+  actions: read
+  packages: write
+env:
+  IMAGE: ghcr.io/qhhoj/backend-v2
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    outputs:
+      tag: ${{ steps.ref.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0 }
+      - id: ref
+        env: { REF: '${{ inputs.ref }}' }
+        run: bash deploy/ci/resolve-ref.sh "$REF" >> "$GITHUB_OUTPUT"
+      - run: git checkout --detach "${{ steps.ref.outputs.sha }}"
+      - name: Wait for CI on this commit
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: bash deploy/ci/wait-for-ci.sh "${{ steps.ref.outputs.sha }}" ci.yml 90
+      - name: Build and push
+        env:
+          TAG: ${{ steps.ref.outputs.tag }}
+          SHA: ${{ steps.ref.outputs.sha }}
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker buildx create --use
+          docker buildx build -f Containerfile --push \
+            --cache-from "type=registry,ref=$IMAGE:buildcache" \
+            --cache-to "type=registry,ref=$IMAGE:buildcache,mode=max" \
+            -t "$IMAGE:$TAG" -t "$IMAGE:sha-${SHA:0:12}" .
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 380
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          TAG: ${{ needs.build.outputs.tag }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: bash deploy/ci/remote-deploy.sh backend "$TAG" $FORCE
