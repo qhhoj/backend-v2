@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # deploy/container/smoke.sh <image>: checks a built backend image. Needs docker, and Mongo (replica set rs0) and Redis on localhost.
+# SMOKE_MONGO_PORT and SMOKE_REDIS_PORT override the default ports 27017 and 6379.
 set -euo pipefail
 image="${1:?image}"
 work="$(mktemp -d)"; trap 'docker rm -f qhhoj-smoke-api qhhoj-smoke-worker >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
@@ -18,8 +19,8 @@ docker run --rm --entrypoint sh "$image" -c '
 mkdir -p "$work/srv/media" "$work/srv/problem-data" "$work/srv/pdf-cache" "$work/srv/contest-data" "$work/srv/user-data"
 chmod -R 777 "$work/srv"
 cat > "$work/env" <<ENV
-MONGO_URL=mongodb://127.0.0.1:27017/qhhoj_smoke?replicaSet=rs0
-REDIS_URL=redis://127.0.0.1:6379/14
+MONGO_URL=mongodb://127.0.0.1:${SMOKE_MONGO_PORT:-27017}/qhhoj_smoke?replicaSet=rs0
+REDIS_URL=redis://127.0.0.1:${SMOKE_REDIS_PORT:-6379}/14
 ENCRYPTION_KEY=$(openssl rand -hex 32)
 TOKEN_SECRET=$(openssl rand -hex 32)
 SITE_URL=http://localhost
