@@ -307,6 +307,7 @@
       "AssignTagsDto": {
         "properties": {
           "tagCodes": {
+            "description": "Codes of the tags to add (from `GET /tags/catalog`), 1 to 50.",
             "items": {
               "maxLength": 30,
               "type": "string"
@@ -510,10 +511,12 @@
             "type": "string"
           },
           "idTo": {
+            "description": "Highest submission id to rejudge.",
             "format": "uuid",
             "type": "string"
           },
           "languages": {
+            "description": "Only submissions in these language ids.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -526,6 +529,7 @@
             "type": "string"
           },
           "results": {
+            "description": "Only submissions with these verdicts.",
             "items": {
               "$ref": "#/components/schemas/SubmissionResult"
             },
@@ -544,9 +548,11 @@
             "type": "boolean"
           },
           "count": {
+            "description": "Submissions matched (dry run) or reset for rejudging.",
             "type": "number"
           },
           "dryRun": {
+            "description": "Whether nothing was changed.",
             "type": "boolean"
           }
         },
@@ -624,12 +630,15 @@
       "CatalogItemResponse": {
         "properties": {
           "fullName": {
+            "description": "Full display name.",
             "type": "string"
           },
           "id": {
+            "description": "Catalog item id.",
             "type": "string"
           },
           "name": {
+            "description": "Short name.",
             "type": "string"
           }
         },
@@ -674,6 +683,7 @@
       "CloneProblemDto": {
         "properties": {
           "code": {
+            "description": "Code of the new problem.",
             "pattern": "^[a-z0-9_]{1,32}$",
             "type": "string"
           }
@@ -1056,6 +1066,7 @@
       "ConfirmCodeDto": {
         "properties": {
           "confirmCode": {
+            "description": "The problem code, typed again to confirm.",
             "type": "string"
           }
         },
@@ -2732,6 +2743,7 @@
       "CreateJudgeDto": {
         "properties": {
           "description": {
+            "description": "Free-form notes about the judge, up to 10000 characters.",
             "maxLength": 10000,
             "type": "string"
           },
@@ -2748,56 +2760,69 @@
       "CreateLanguageDto": {
         "properties": {
           "ace": {
+            "description": "Editor mode name for the code editor.",
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
           "commonName": {
+            "description": "Generic family name shared by versions of the language.",
             "maxLength": 20,
             "minLength": 1,
             "type": "string"
           },
           "description": {
+            "description": "Longer description of the language.",
             "maxLength": 65536,
             "type": "string"
           },
           "extension": {
+            "description": "File extension without the dot.",
             "type": "string"
           },
           "fileOnly": {
+            "description": "Whether solutions are uploaded as a file instead of typed.",
             "type": "boolean"
           },
           "fileSizeLimit": {
+            "description": "Largest uploaded file in MB; 0 turns uploads off.",
             "maximum": 1073741824,
             "minimum": 0,
             "type": "number"
           },
           "includeInProblem": {
+            "description": "Whether new problems allow this language by default.",
             "type": "boolean"
           },
           "info": {
+            "description": "Notes shown to users about the compiler or runtime.",
             "maxLength": 65536,
             "type": "string"
           },
           "key": {
+            "description": "Key judges report for the language; letters, digits and `_+#.-`, up to 10 characters. Fixed once created.",
             "type": "string"
           },
           "name": {
+            "description": "Display name, up to 20 characters.",
             "maxLength": 20,
             "minLength": 1,
             "type": "string"
           },
           "pygments": {
+            "description": "Syntax highlighter name.",
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
           "shortName": {
+            "description": "Short display name; omit for none.",
             "maxLength": 20,
             "minLength": 1,
             "type": "string"
           },
           "template": {
+            "description": "Starter code offered in the editor.",
             "maxLength": 65536,
             "type": "string"
           }
@@ -2942,9 +2967,11 @@
       "CreateProblemDto": {
         "properties": {
           "allowViewFeedback": {
+            "description": "Whether checker feedback is shown to submitters. Needs `judge.edit_all_problem`.",
             "type": "boolean"
           },
           "allowedLanguages": {
+            "description": "Ids of languages solutions may use; defaults to the languages flagged for new problems.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -2952,7 +2979,7 @@
             "type": "array"
           },
           "authors": {
-            "description": "The rest need judge.edit_all_problem (Django-admin-only in legacy).",
+            "description": "Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem`.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -2960,6 +2987,7 @@
             "type": "array"
           },
           "bannedUsers": {
+            "description": "User ids that may not submit to the problem.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -2967,10 +2995,12 @@
             "type": "array"
           },
           "code": {
+            "description": "Unique code: lowercase letters, digits and underscores, 1 to 32 characters; a few words used by routes are reserved.",
             "pattern": "^[a-z0-9_]{1,32}$",
             "type": "string"
           },
           "curators": {
+            "description": "Curator user ids; curators can edit the problem.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -2978,58 +3008,68 @@
             "type": "array"
           },
           "date": {
+            "description": "Publication date (ISO 8601 with offset); null clears it.",
             "nullable": true,
             "type": "string"
           },
           "description": {
+            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set.",
             "maxLength": 200000,
             "type": "string"
           },
           "groupId": {
+            "description": "Problem group id.",
             "format": "uuid",
             "type": "string"
           },
           "isFullMarkup": {
-            "description": "judge.problem_full_markup",
+            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`.",
             "type": "boolean"
           },
           "isManuallyManaged": {
-            "description": "judge.change_manually_managed",
+            "description": "Whether test data is managed outside the site, turning the data editor off. Changing it needs `judge.change_manually_managed`.",
             "type": "boolean"
           },
           "isOrganizationPrivate": {
+            "description": "Whether only members of `organizations` can see the problem.",
             "type": "boolean"
           },
           "isPublic": {
-            "description": "judge.change_public_visibility",
+            "description": "Whether the problem is public. Changing it needs `judge.change_public_visibility`.",
             "type": "boolean"
           },
           "languageLimits": {
+            "description": "Per-language limits overriding the defaults; each language at most once.",
             "items": {
               "$ref": "#/components/schemas/LanguageLimitDto"
             },
             "type": "array"
           },
           "licenseId": {
+            "description": "License id; null for none. Needs `judge.edit_all_problem`.",
             "format": "uuid",
             "nullable": true,
             "type": "string"
           },
           "memoryLimit": {
+            "description": "Memory limit in KiB, up to 1048576.",
             "maximum": 1048576,
             "minimum": 0,
             "type": "number"
           },
           "name": {
+            "description": "Base-language title, 1 to 100 characters.",
             "maxLength": 100,
             "minLength": 1,
             "type": "string"
           },
           "ogImage": {
+            "description": "Image URL used for link previews, up to 150 characters.",
             "maxLength": 150,
             "type": "string"
           },
           "organizations": {
+            "description": "Ids of the organizations the problem is private to (with `isOrganizationPrivate`).",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -3037,14 +3077,17 @@
             "type": "array"
           },
           "partial": {
+            "description": "Whether partial scores are given.",
             "type": "boolean"
           },
           "points": {
+            "description": "Points the problem is worth, 800 to 3500.",
             "maximum": 3500,
             "minimum": 800,
             "type": "number"
           },
           "source": {
+            "description": "Origin or credit line, up to 200 characters.",
             "maxLength": 200,
             "type": "string"
           },
@@ -3053,9 +3096,11 @@
               {
                 "$ref": "#/components/schemas/SubmissionSourceVisibility"
               }
-            ]
+            ],
+            "description": "Who may read submitted sources: `F` follow the site setting, `A` everyone who sees the problem, `S` users who solved it, `O` only the owner, testers and editors."
           },
           "summary": {
+            "description": "Short summary for previews, up to 1000 characters. Needs `judge.edit_all_problem`.",
             "maxLength": 1000,
             "type": "string"
           },
@@ -3064,16 +3109,19 @@
               {
                 "$ref": "#/components/schemas/TestcaseResultVisibility"
               }
-            ]
+            ],
+            "description": "How much of the test case results is shown: `A` every case, `B` batch summaries, `S` totals only. Needs `judge.edit_all_problem`."
           },
           "testcaseVisibility": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/TestcaseVisibility"
               }
-            ]
+            ],
+            "description": "When program output of test cases is shown to non-editors: `O` never, `C` outside contests, `A` always."
           },
           "testers": {
+            "description": "Users who can see the problem while it is private.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -3081,11 +3129,13 @@
             "type": "array"
           },
           "timeLimit": {
+            "description": "Time limit in seconds, 0.01 to 60; above 5 needs `judge.high_problem_timelimit`.",
             "maximum": 60,
             "minimum": 0.01,
             "type": "number"
           },
           "typeIds": {
+            "description": "Problem type ids, at least one (ids from `GET /problems/meta`).",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -3156,6 +3206,7 @@
       "CreateTagProblemDto": {
         "properties": {
           "link": {
+            "description": "URL of the problem on a supported judge; the problem code and judge are derived from it.",
             "format": "uri",
             "maxLength": 200,
             "type": "string"
@@ -3252,7 +3303,12 @@
             "type": "string"
           },
           "judge": {
-            "$ref": "#/components/schemas/JudgeResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JudgeResponse"
+              }
+            ],
+            "description": "The registered judge."
           }
         },
         "required": [
@@ -3408,6 +3464,7 @@
       "DeletedProblemResponse": {
         "properties": {
           "code": {
+            "description": "Problem code.",
             "type": "string"
           },
           "daysLeft": {
@@ -3415,6 +3472,7 @@
             "type": "number"
           },
           "deletedAt": {
+            "description": "When the problem was deleted.",
             "format": "date-time",
             "type": "string"
           },
@@ -3424,6 +3482,7 @@
                 "$ref": "#/components/schemas/UserSummaryResponse"
               }
             ],
+            "description": "Who deleted it; null when unknown.",
             "nullable": true,
             "type": "object"
           },
@@ -3432,6 +3491,7 @@
             "type": "boolean"
           },
           "name": {
+            "description": "Problem title.",
             "type": "string"
           }
         },
@@ -3449,6 +3509,7 @@
         "properties": {
           "force": {
             "default": false,
+            "description": "true retires every session and socket of the judge at once. Default false.",
             "type": "boolean"
           }
         },
@@ -3479,24 +3540,34 @@
       "EditorialResponse": {
         "properties": {
           "authors": {
+            "description": "Authors of the editorial.",
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
             },
             "type": "array"
           },
           "canEdit": {
+            "description": "Whether the viewer can edit the problem.",
             "type": "boolean"
           },
           "contentHtml": {
+            "description": "Rendered, sanitized HTML.",
             "type": "string"
           },
           "isPublic": {
+            "description": "Whether the editorial is marked public.",
             "type": "boolean"
           },
           "problem": {
-            "$ref": "#/components/schemas/ProblemRefResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProblemRefResponse"
+              }
+            ],
+            "description": "The problem the editorial belongs to."
           },
           "publishOn": {
+            "description": "When it becomes readable by everyone (ISO 8601).",
             "type": "string"
           }
         },
@@ -4170,6 +4241,7 @@
             "type": "string"
           },
           "id": {
+            "description": "Job id.",
             "type": "string"
           },
           "result": {
@@ -4178,6 +4250,7 @@
                 "$ref": "#/components/schemas/ImportResultResponse"
               }
             ],
+            "description": "The imported problem; null until the job completes.",
             "nullable": true,
             "type": "object"
           },
@@ -4197,6 +4270,7 @@
       "ImportJobStartedResponse": {
         "properties": {
           "jobId": {
+            "description": "Job id to poll at `GET /problems/imports/{jobId}`.",
             "type": "string"
           }
         },
@@ -4208,9 +4282,11 @@
       "ImportResultResponse": {
         "properties": {
           "code": {
+            "description": "Its code.",
             "type": "string"
           },
           "problemId": {
+            "description": "Id of the created or updated problem.",
             "type": "string"
           }
         },
@@ -4324,6 +4400,7 @@
       "JudgeKeyResponse": {
         "properties": {
           "authKey": {
+            "description": "The new authentication key, shown only this once; only its hash is stored.",
             "type": "string"
           }
         },
@@ -4335,6 +4412,7 @@
       "JudgeResponse": {
         "properties": {
           "build": {
+            "description": "Judge software build identifier.",
             "type": "string"
           },
           "busy": {
@@ -4342,35 +4420,44 @@
             "type": "number"
           },
           "description": {
+            "description": "Free-form notes.",
             "type": "string"
           },
           "features": {
+            "description": "Optional protocol features the judge supports.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "id": {
+            "description": "Judge id.",
             "type": "string"
           },
           "isBlocked": {
+            "description": "Whether the judge is refused.",
             "type": "boolean"
           },
           "isDisabled": {
+            "description": "Whether the judge is told to take no new work.",
             "type": "boolean"
           },
           "lastIp": {
+            "description": "IP address of the last connection; null if it never connected.",
             "nullable": true,
             "type": "string"
           },
           "load": {
+            "description": "Load reported by the judge; null if never reported.",
             "nullable": true,
             "type": "number"
           },
           "name": {
+            "description": "Unique judge name.",
             "type": "string"
           },
           "online": {
+            "description": "Whether the judge is connected now.",
             "type": "boolean"
           },
           "ping": {
@@ -4379,9 +4466,11 @@
             "type": "number"
           },
           "protocolMinor": {
+            "description": "Minor version of the judge protocol it speaks.",
             "type": "number"
           },
           "runtimes": {
+            "description": "Languages the judge can run.",
             "items": {
               "$ref": "#/components/schemas/JudgeRuntimeResponse"
             },
@@ -4392,6 +4481,7 @@
             "type": "number"
           },
           "startTime": {
+            "description": "When the judge process last started; null if it never connected.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -4420,15 +4510,19 @@
       "JudgeRuntimeResponse": {
         "properties": {
           "language": {
+            "description": "Language key the runtime serves.",
             "type": "string"
           },
           "name": {
+            "description": "Compiler or interpreter name.",
             "type": "string"
           },
           "priority": {
+            "description": "Preference among runtimes of the same language; higher is tried first.",
             "type": "number"
           },
           "version": {
+            "description": "Runtime version.",
             "type": "string"
           }
         },
@@ -4455,46 +4549,60 @@
       "LanguageAdminResponse": {
         "properties": {
           "ace": {
+            "description": "Editor mode name.",
             "type": "string"
           },
           "commonName": {
+            "description": "Generic family name shared by versions.",
             "type": "string"
           },
           "description": {
+            "description": "Longer description.",
             "type": "string"
           },
           "extension": {
+            "description": "File extension without the dot.",
             "type": "string"
           },
           "fileOnly": {
+            "description": "Whether solutions are uploaded as a file.",
             "type": "boolean"
           },
           "fileSizeLimit": {
+            "description": "Largest uploaded file in MB; 0 turns uploads off.",
             "type": "number"
           },
           "id": {
+            "description": "Language id.",
             "type": "string"
           },
           "includeInProblem": {
+            "description": "Whether new problems allow it by default.",
             "type": "boolean"
           },
           "info": {
+            "description": "Notes about the compiler or runtime.",
             "type": "string"
           },
           "key": {
+            "description": "Key judges report for the language.",
             "type": "string"
           },
           "name": {
+            "description": "Display name.",
             "type": "string"
           },
           "pygments": {
+            "description": "Syntax highlighter name.",
             "type": "string"
           },
           "shortName": {
+            "description": "Short display name; null when none.",
             "nullable": true,
             "type": "string"
           },
           "template": {
+            "description": "Starter code offered in the editor.",
             "type": "string"
           }
         },
@@ -4519,15 +4627,18 @@
       "LanguageLimitDto": {
         "properties": {
           "languageId": {
+            "description": "Language id.",
             "format": "uuid",
             "type": "string"
           },
           "memoryLimit": {
+            "description": "Memory limit in KiB for this language.",
             "maximum": 1048576,
             "minimum": 0,
             "type": "number"
           },
           "timeLimit": {
+            "description": "Time limit in seconds for this language.",
             "maximum": 60,
             "minimum": 0.01,
             "type": "number"
@@ -4543,12 +4654,15 @@
       "LanguageLimitResponse": {
         "properties": {
           "language": {
+            "description": "Language key.",
             "type": "string"
           },
           "memoryLimit": {
+            "description": "Memory limit in KiB for this language.",
             "type": "number"
           },
           "timeLimit": {
+            "description": "Time limit in seconds for this language.",
             "type": "number"
           }
         },
@@ -4562,37 +4676,48 @@
       "LanguageResponse": {
         "properties": {
           "ace": {
+            "description": "Editor mode name for the code editor.",
             "type": "string"
           },
           "commonName": {
+            "description": "Generic family name, shared by versions.",
             "type": "string"
           },
           "extension": {
+            "description": "File extension without the dot.",
             "type": "string"
           },
           "fileOnly": {
+            "description": "Whether solutions are uploaded as a file instead of typed.",
             "type": "boolean"
           },
           "fileSizeLimit": {
+            "description": "Largest uploaded file in MB; 0 turns uploads off.",
             "type": "number"
           },
           "id": {
+            "description": "Language id.",
             "type": "string"
           },
           "includeInProblem": {
+            "description": "Whether new problems allow this language by default.",
             "type": "boolean"
           },
           "key": {
+            "description": "Key judges report for the language.",
             "type": "string"
           },
           "name": {
+            "description": "Display name.",
             "type": "string"
           },
           "shortName": {
+            "description": "Short display name; null when none.",
             "nullable": true,
             "type": "string"
           },
           "template": {
+            "description": "Starter code offered in the editor.",
             "type": "string"
           }
         },
@@ -4673,21 +4798,27 @@
       "LicenseResponse": {
         "properties": {
           "display": {
+            "description": "Text shown beside problems under this license.",
             "type": "string"
           },
           "icon": {
+            "description": "URL of the license icon.",
             "type": "string"
           },
           "id": {
+            "description": "License id.",
             "type": "string"
           },
           "key": {
+            "description": "Unique key.",
             "type": "string"
           },
           "link": {
+            "description": "URL of the license text.",
             "type": "string"
           },
           "name": {
+            "description": "License name.",
             "type": "string"
           }
         },
@@ -5552,6 +5683,7 @@
       "PackageBuildingResponse": {
         "properties": {
           "status": {
+            "description": "Always `building`.",
             "enum": [
               "building"
             ],
@@ -5570,6 +5702,7 @@
             "type": "string"
           },
           "status": {
+            "description": "`ready`: the package is cached; `building`: a build is queued or running.",
             "enum": [
               "building",
               "ready"
@@ -5783,6 +5916,7 @@
       "PdfRenderingResponse": {
         "properties": {
           "status": {
+            "description": "Always `rendering`.",
             "type": "string"
           }
         },
@@ -6076,6 +6210,7 @@
             "type": "number"
           },
           "contestKey": {
+            "description": "Key of the viewer's current contest.",
             "type": "string"
           }
         },
@@ -6088,9 +6223,11 @@
       "ProblemDataLimitsResponse": {
         "properties": {
           "maxCases": {
+            "description": "Most cases the caller may save.",
             "type": "number"
           },
           "softCases": {
+            "description": "Number of cases above which the editor warns; never enforced.",
             "type": "number"
           }
         },
@@ -6103,6 +6240,7 @@
       "ProblemDataResponse": {
         "properties": {
           "archive": {
+            "description": "Name of the uploaded test data zip; null when none.",
             "nullable": true,
             "type": "string"
           },
@@ -6114,12 +6252,14 @@
             "type": "array"
           },
           "cases": {
+            "description": "Every test case, in judging order.",
             "items": {
               "$ref": "#/components/schemas/TestCaseResponse"
             },
             "type": "array"
           },
           "checker": {
+            "description": "Problem-wide checker.",
             "enum": [
               "bridged",
               "floats",
@@ -6133,18 +6273,22 @@
           },
           "checkerArgs": {
             "additionalProperties": true,
+            "description": "Arguments of the checker; null for none.",
             "nullable": true,
             "type": "object"
           },
           "customChecker": {
+            "description": "Name of the uploaded checker source; null when none.",
             "nullable": true,
             "type": "string"
           },
           "customGrader": {
+            "description": "Name of the uploaded grader source; null when none.",
             "nullable": true,
             "type": "string"
           },
           "customHeader": {
+            "description": "Name of the uploaded header file; null when none.",
             "nullable": true,
             "type": "string"
           },
@@ -6153,10 +6297,12 @@
             "type": "string"
           },
           "generator": {
+            "description": "Name of the uploaded generator source; null when none.",
             "nullable": true,
             "type": "string"
           },
           "grader": {
+            "description": "Grader.",
             "enum": [
               "interactive",
               "output_only",
@@ -6167,27 +6313,38 @@
           },
           "graderArgs": {
             "additionalProperties": true,
+            "description": "Arguments of the grader; null for none.",
             "nullable": true,
             "type": "object"
           },
           "hasInit": {
+            "description": "Whether an `init.yml` was generated; see `GET /problems/{code}/data/init`.",
             "type": "boolean"
           },
           "limits": {
-            "$ref": "#/components/schemas/ProblemDataLimitsResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProblemDataLimitsResponse"
+              }
+            ],
+            "description": "Case count limits for the editor."
           },
           "nobigmath": {
+            "description": "Judge `nobigmath` flag: big-number arithmetic is off in the checker.",
             "type": "boolean"
           },
           "outputLimit": {
+            "description": "Largest output accepted, in bytes (`output_limit_length`); null for the default.",
             "nullable": true,
             "type": "number"
           },
           "outputPrefix": {
+            "description": "Leading output bytes kept for display (`output_prefix_length`); null for the default.",
             "nullable": true,
             "type": "number"
           },
           "unicode": {
+            "description": "Judge `unicode` flag: output is read as Unicode text.",
             "type": "boolean"
           }
         },
@@ -6216,33 +6373,40 @@
       "ProblemDetailResponse": {
         "properties": {
           "acRate": {
+            "description": "Percentage of accepted submissions, 0 to 100.",
             "type": "number"
           },
           "allowViewFeedback": {
+            "description": "Whether checker feedback is shown to submitters.",
             "type": "boolean"
           },
           "allowedLanguages": {
+            "description": "Languages solutions may use.",
             "items": {
               "$ref": "#/components/schemas/LanguageResponse"
             },
             "type": "array"
           },
           "authors": {
+            "description": "Problem authors.",
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
             },
             "type": "array"
           },
           "availableTranslations": {
+            "description": "Languages with a translated statement.",
             "items": {
               "$ref": "#/components/schemas/StatementLanguage"
             },
             "type": "array"
           },
           "canEdit": {
+            "description": "Whether the viewer can edit the problem.",
             "type": "boolean"
           },
           "code": {
+            "description": "Problem code, unique and used in URLs.",
             "type": "string"
           },
           "contest": {
@@ -6256,10 +6420,12 @@
             "type": "object"
           },
           "date": {
+            "description": "Publication date (ISO 8601); null when unset.",
             "nullable": true,
             "type": "string"
           },
           "descriptionHtml": {
+            "description": "Rendered statement HTML.",
             "type": "string"
           },
           "editor": {
@@ -6268,6 +6434,7 @@
                 "$ref": "#/components/schemas/ProblemEditorResponse"
               }
             ],
+            "description": "Raw fields for the editor; null unless `canEdit`.",
             "nullable": true,
             "type": "object"
           },
@@ -6277,25 +6444,32 @@
                 "$ref": "#/components/schemas/CatalogItemResponse"
               }
             ],
+            "description": "Problem group; null when none.",
             "nullable": true,
             "type": "object"
           },
           "hasEditorial": {
+            "description": "Whether the viewer can read an editorial.",
             "type": "boolean"
           },
           "id": {
+            "description": "Problem id.",
             "type": "string"
           },
           "isFullMarkup": {
+            "description": "Whether the statement may contain unsanitized HTML.",
             "type": "boolean"
           },
           "isManuallyManaged": {
+            "description": "Whether test data is managed outside the site (the data editor is off).",
             "type": "boolean"
           },
           "isOrganizationPrivate": {
+            "description": "Whether only members of the listed organizations can see it.",
             "type": "boolean"
           },
           "isPublic": {
+            "description": "Whether the problem is public.",
             "type": "boolean"
           },
           "language": {
@@ -6303,9 +6477,11 @@
               {
                 "$ref": "#/components/schemas/StatementLanguage"
               }
-            ]
+            ],
+            "description": "Language of the returned statement."
           },
           "languageLimits": {
+            "description": "Per-language limits overriding the defaults.",
             "items": {
               "$ref": "#/components/schemas/LanguageLimitResponse"
             },
@@ -6317,36 +6493,45 @@
                 "$ref": "#/components/schemas/LicenseResponse"
               }
             ],
+            "description": "License; null when none.",
             "nullable": true,
             "type": "object"
           },
           "materialUrl": {
+            "description": "URL of the downloadable material; null when none.",
             "nullable": true,
             "type": "string"
           },
           "memoryLimit": {
+            "description": "Default memory limit in KiB.",
             "type": "number"
           },
           "name": {
+            "description": "Title in the returned `language`.",
             "type": "string"
           },
           "organizations": {
+            "description": "Ids of those organizations.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "partial": {
+            "description": "Whether partial scores are given.",
             "type": "boolean"
           },
           "pdfStatementUrl": {
+            "description": "URL of the uploaded PDF statement; null when none.",
             "nullable": true,
             "type": "string"
           },
           "points": {
+            "description": "Points the problem is worth.",
             "type": "number"
           },
           "source": {
+            "description": "Where the problem comes from (contest or author credit).",
             "type": "string"
           },
           "submissionSourceVisibility": {
@@ -6354,9 +6539,11 @@
               {
                 "$ref": "#/components/schemas/SubmissionSourceVisibility"
               }
-            ]
+            ],
+            "description": "Who may read submitted sources: `F` follow the site setting, `A` everyone who sees the problem, `S` users who solved it, `O` only the owner, testers and editors."
           },
           "summary": {
+            "description": "Short summary for previews.",
             "type": "string"
           },
           "testcaseResultVisibility": {
@@ -6364,16 +6551,19 @@
               {
                 "$ref": "#/components/schemas/TestcaseResultVisibility"
               }
-            ]
+            ],
+            "description": "How much of the test case results is shown: `A` every case, `B` batch summaries, `S` totals only."
           },
           "testcaseVisibility": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/TestcaseVisibility"
               }
-            ]
+            ],
+            "description": "When program output of test cases is shown to non-editors: `O` never, `C` outside contests, `A` always."
           },
           "timeLimit": {
+            "description": "Default time limit in seconds.",
             "type": "number"
           },
           "translated": {
@@ -6381,12 +6571,14 @@
             "type": "boolean"
           },
           "types": {
+            "description": "Problem types.",
             "items": {
               "$ref": "#/components/schemas/CatalogItemResponse"
             },
             "type": "array"
           },
           "userCount": {
+            "description": "Number of users who solved the problem.",
             "type": "number"
           },
           "viewerStatus": {
@@ -6444,12 +6636,14 @@
       "ProblemEditorResponse": {
         "properties": {
           "allowedLanguageIds": {
+            "description": "Ids of languages solutions may use.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "bannedUsers": {
+            "description": "Users who may not submit.",
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
             },
@@ -6460,22 +6654,27 @@
             "type": "string"
           },
           "curators": {
+            "description": "Users who can edit the problem.",
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
             },
             "type": "array"
           },
           "description": {
+            "description": "Base-language statement in markdown.",
             "type": "string"
           },
           "groupId": {
+            "description": "Problem group id.",
             "type": "string"
           },
           "licenseId": {
+            "description": "License id; null when none.",
             "nullable": true,
             "type": "string"
           },
           "organizations": {
+            "description": "Ids of the organizations the problem is private to.",
             "items": {
               "type": "string"
             },
@@ -6487,6 +6686,7 @@
                 "$ref": "#/components/schemas/ProblemEditorialDraftResponse"
               }
             ],
+            "description": "The editorial draft; null when none.",
             "nullable": true,
             "type": "object"
           },
@@ -6496,22 +6696,26 @@
                 "$ref": "#/components/schemas/UserSummaryResponse"
               }
             ],
+            "description": "User who suggested the problem; null if it was not suggested.",
             "nullable": true,
             "type": "object"
           },
           "testers": {
+            "description": "Users who can see the problem while it is private.",
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
             },
             "type": "array"
           },
           "translations": {
+            "description": "Statement translations.",
             "items": {
               "$ref": "#/components/schemas/ProblemTranslationResponse"
             },
             "type": "array"
           },
           "typeIds": {
+            "description": "Problem type ids.",
             "items": {
               "type": "string"
             },
@@ -6538,18 +6742,22 @@
       "ProblemEditorialDraftResponse": {
         "properties": {
           "authors": {
+            "description": "Editorial authors.",
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
             },
             "type": "array"
           },
           "content": {
+            "description": "Editorial markdown.",
             "type": "string"
           },
           "isPublic": {
+            "description": "Whether the editorial is marked public.",
             "type": "boolean"
           },
           "publishOn": {
+            "description": "When it becomes readable by everyone (ISO 8601).",
             "type": "string"
           }
         },
@@ -6564,12 +6772,15 @@
       "ProblemListItemResponse": {
         "properties": {
           "acRate": {
+            "description": "Percentage of accepted submissions, 0 to 100.",
             "type": "number"
           },
           "code": {
+            "description": "Problem code, unique and used in URLs.",
             "type": "string"
           },
           "date": {
+            "description": "Publication date (ISO 8601); null when unset.",
             "nullable": true,
             "type": "string"
           },
@@ -6579,40 +6790,51 @@
                 "$ref": "#/components/schemas/CatalogItemResponse"
               }
             ],
+            "description": "Problem group; null when none.",
             "nullable": true,
             "type": "object"
           },
           "hasPdfStatement": {
+            "description": "Whether a PDF statement was uploaded.",
             "type": "boolean"
           },
           "hasPublicEditorial": {
+            "description": "Whether an editorial is published.",
             "type": "boolean"
           },
           "id": {
+            "description": "Problem id.",
             "type": "string"
           },
           "isOrganizationPrivate": {
+            "description": "Whether only members of the listed organizations can see it.",
             "type": "boolean"
           },
           "isPublic": {
+            "description": "Whether the problem is public.",
             "type": "boolean"
           },
           "name": {
+            "description": "Title in the requested language, or the base language when untranslated.",
             "type": "string"
           },
           "partial": {
+            "description": "Whether partial scores are given.",
             "type": "boolean"
           },
           "points": {
+            "description": "Points the problem is worth.",
             "type": "number"
           },
           "types": {
+            "description": "Problem types.",
             "items": {
               "$ref": "#/components/schemas/CatalogItemResponse"
             },
             "type": "array"
           },
           "userCount": {
+            "description": "Number of users who solved the problem.",
             "type": "number"
           },
           "viewerStatus": {
@@ -6647,24 +6869,28 @@
       "ProblemMetaResponse": {
         "properties": {
           "groups": {
+            "description": "Problem groups.",
             "items": {
               "$ref": "#/components/schemas/CatalogItemResponse"
             },
             "type": "array"
           },
           "languages": {
+            "description": "Judge languages.",
             "items": {
               "$ref": "#/components/schemas/LanguageResponse"
             },
             "type": "array"
           },
           "licenses": {
+            "description": "Licenses a problem can use.",
             "items": {
               "$ref": "#/components/schemas/LicenseResponse"
             },
             "type": "array"
           },
           "types": {
+            "description": "Problem types.",
             "items": {
               "$ref": "#/components/schemas/CatalogItemResponse"
             },
@@ -6682,9 +6908,11 @@
       "ProblemRefResponse": {
         "properties": {
           "code": {
+            "description": "Problem code.",
             "type": "string"
           },
           "name": {
+            "description": "Problem title.",
             "type": "string"
           }
         },
@@ -6745,6 +6973,7 @@
       "ProblemTranslationResponse": {
         "properties": {
           "description": {
+            "description": "Translated statement in markdown.",
             "type": "string"
           },
           "language": {
@@ -6752,9 +6981,11 @@
               {
                 "$ref": "#/components/schemas/StatementLanguage"
               }
-            ]
+            ],
+            "description": "Language of the translation."
           },
           "name": {
+            "description": "Translated title.",
             "type": "string"
           }
         },
@@ -7011,6 +7242,7 @@
       "PurgeQueuedResponse": {
         "properties": {
           "queued": {
+            "description": "Always true: the purge job was queued.",
             "type": "boolean"
           }
         },
@@ -7023,6 +7255,7 @@
         "properties": {
           "authors": {
             "default": [],
+            "description": "Ids of the editorial authors.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -7030,13 +7263,16 @@
             "type": "array"
           },
           "content": {
+            "description": "Editorial markdown.",
             "maxLength": 200000,
             "type": "string"
           },
           "isPublic": {
+            "description": "Whether the editorial is public once `publishOn` has passed.",
             "type": "boolean"
           },
           "publishOn": {
+            "description": "When the editorial becomes readable (ISO 8601 with offset).",
             "type": "string"
           }
         },
@@ -7063,12 +7299,14 @@
       "PutProblemDataDto": {
         "properties": {
           "cases": {
+            "description": "Every test case, in judging order.",
             "items": {
               "$ref": "#/components/schemas/TestCaseDto"
             },
             "type": "array"
           },
           "checker": {
+            "description": "Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical` or `linecount`.",
             "enum": [
               "bridged",
               "floats",
@@ -7083,10 +7321,12 @@
           "checkerArgs": {
             "additionalProperties": true,
             "default": null,
+            "description": "Arguments of the checker; null for none.",
             "nullable": true,
             "type": "object"
           },
           "grader": {
+            "description": "Grader: `standard`, `interactive`, `signature` or `output_only`.",
             "enum": [
               "interactive",
               "output_only",
@@ -7098,25 +7338,30 @@
           "graderArgs": {
             "additionalProperties": true,
             "default": null,
+            "description": "Arguments of the grader; null for none.",
             "nullable": true,
             "type": "object"
           },
           "nobigmath": {
             "default": false,
+            "description": "Judge `nobigmath` flag: turns off big-number arithmetic in the checker.",
             "type": "boolean"
           },
           "outputLimit": {
             "default": null,
+            "description": "Largest output accepted, in bytes (`output_limit_length`); null for the default.",
             "nullable": true,
             "type": "number"
           },
           "outputPrefix": {
             "default": null,
+            "description": "Leading output bytes kept for display (`output_prefix_length`); null for the default.",
             "nullable": true,
             "type": "number"
           },
           "unicode": {
             "default": false,
+            "description": "Judge `unicode` flag: output is read as Unicode text.",
             "type": "boolean"
           }
         },
@@ -7130,10 +7375,12 @@
       "PutTranslationDto": {
         "properties": {
           "description": {
+            "description": "Translated statement in markdown.",
             "maxLength": 200000,
             "type": "string"
           },
           "name": {
+            "description": "Translated title, 1 to 100 characters.",
             "maxLength": 100,
             "minLength": 1,
             "type": "string"
@@ -7187,6 +7434,7 @@
       "RandomProblemResponse": {
         "properties": {
           "code": {
+            "description": "Code of the picked problem.",
             "type": "string"
           }
         },
@@ -7628,10 +7876,12 @@
       "RenderPreviewDto": {
         "properties": {
           "markdown": {
+            "description": "Markdown to render.",
             "maxLength": 200000,
             "type": "string"
           },
           "style": {
+            "description": "Render style: `problem`, `problem-full` (unsanitized, needs `judge.problem_full_markup`), `solution`, `blog` or `user`.",
             "enum": [
               "blog",
               "problem",
@@ -7882,6 +8132,7 @@
             "type": "object"
           },
           "event": {
+            "description": "Always `resync`.",
             "enum": [
               "resync"
             ],
@@ -8188,17 +8439,19 @@
       "SimilarityFragmentResponse": {
         "properties": {
           "leftEnd": {
+            "description": "Last matched line in the left source (inclusive).",
             "type": "number"
           },
           "leftStart": {
-            "description": "1-based, inclusive, in the left source.",
+            "description": "First matched line in the left source (1-based).",
             "type": "number"
           },
           "rightEnd": {
+            "description": "Last matched line in the right source (inclusive).",
             "type": "number"
           },
           "rightStart": {
-            "description": "1-based, inclusive, in the right source.",
+            "description": "First matched line in the right source (1-based).",
             "type": "number"
           }
         },
@@ -8225,18 +8478,23 @@
             "type": "string"
           },
           "pairCount": {
+            "description": "Pairs found in this group.",
             "type": "number"
           },
           "problemCode": {
+            "description": "Problem code.",
             "type": "string"
           },
           "problemId": {
+            "description": "Problem id.",
             "type": "string"
           },
           "skippedEmpty": {
+            "description": "Submissions skipped because their source is empty.",
             "type": "number"
           },
           "skippedTooLarge": {
+            "description": "Submissions skipped because their source is too large.",
             "type": "number"
           },
           "submissionCount": {
@@ -8244,6 +8502,7 @@
             "type": "number"
           },
           "tokenizer": {
+            "description": "How sources were tokenized: `syntax` (language-aware) or `text` (plain text).",
             "enum": [
               "syntax",
               "text"
@@ -8273,12 +8532,15 @@
       "SimilarityLimitsResponse": {
         "properties": {
           "maxPairs": {
+            "description": "Most pairs kept per run.",
             "type": "number"
           },
           "maxSubmissions": {
+            "description": "Most submissions compared per problem and language; the newest are kept.",
             "type": "number"
           },
           "minPercent": {
+            "description": "Pairs below this similarity percentage are dropped.",
             "type": "number"
           }
         },
@@ -8292,6 +8554,7 @@
       "SimilarityPairDetailResponse": {
         "properties": {
           "fragmentCount": {
+            "description": "Number of matched fragments.",
             "type": "number"
           },
           "fragments": {
@@ -8302,6 +8565,7 @@
             "type": "array"
           },
           "id": {
+            "description": "Pair id.",
             "type": "string"
           },
           "language": {
@@ -8309,22 +8573,35 @@
             "type": "string"
           },
           "left": {
-            "$ref": "#/components/schemas/SimilarityPairSourceResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SimilarityPairSourceResponse"
+              }
+            ],
+            "description": "One submission of the pair, with its source."
           },
           "longestFragment": {
             "description": "Longest shared fragment, in k-grams.",
             "type": "number"
           },
           "problemCode": {
+            "description": "Problem code.",
             "type": "string"
           },
           "problemId": {
+            "description": "Problem id.",
             "type": "string"
           },
           "right": {
-            "$ref": "#/components/schemas/SimilarityPairSourceResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SimilarityPairSourceResponse"
+              }
+            ],
+            "description": "The other submission of the pair, with its source."
           },
           "runId": {
+            "description": "Run id.",
             "type": "string"
           },
           "similarity": {
@@ -8355,9 +8632,11 @@
       "SimilarityPairResponse": {
         "properties": {
           "fragmentCount": {
+            "description": "Number of matched fragments.",
             "type": "number"
           },
           "id": {
+            "description": "Pair id.",
             "type": "string"
           },
           "language": {
@@ -8365,22 +8644,35 @@
             "type": "string"
           },
           "left": {
-            "$ref": "#/components/schemas/SimilaritySideResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SimilaritySideResponse"
+              }
+            ],
+            "description": "One submission of the pair."
           },
           "longestFragment": {
             "description": "Longest shared fragment, in k-grams.",
             "type": "number"
           },
           "problemCode": {
+            "description": "Problem code.",
             "type": "string"
           },
           "problemId": {
+            "description": "Problem id.",
             "type": "string"
           },
           "right": {
-            "$ref": "#/components/schemas/SimilaritySideResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SimilaritySideResponse"
+              }
+            ],
+            "description": "The other submission of the pair."
           },
           "runId": {
+            "description": "Run id.",
             "type": "string"
           },
           "similarity": {
@@ -8416,10 +8708,12 @@
             "type": "string"
           },
           "points": {
+            "description": "Submission points; null when it no longer exists.",
             "nullable": true,
             "type": "number"
           },
           "result": {
+            "description": "Submission verdict; null when the submission no longer exists.",
             "nullable": true,
             "type": "string"
           },
@@ -8428,12 +8722,15 @@
             "type": "string"
           },
           "submissionId": {
+            "description": "Submission id.",
             "type": "string"
           },
           "userId": {
+            "description": "Submitter id.",
             "type": "string"
           },
           "username": {
+            "description": "Submitter username.",
             "type": "string"
           }
         },
@@ -8451,14 +8748,17 @@
       "SimilarityRunResponse": {
         "properties": {
           "contestId": {
+            "description": "Contest id for a contest run; null otherwise.",
             "nullable": true,
             "type": "string"
           },
           "createdAt": {
+            "description": "When the run was requested.",
             "format": "date-time",
             "type": "string"
           },
           "error": {
+            "description": "Why a failed run failed: `deadline`, `engine_failed`, `internal_error` or `abandoned`; null otherwise.",
             "enum": [
               "abandoned",
               "deadline",
@@ -8469,27 +8769,37 @@
             "type": "string"
           },
           "finishedAt": {
+            "description": "When the run ended; null while unfinished.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "groups": {
+            "description": "Compared groups, one per problem and language family.",
             "items": {
               "$ref": "#/components/schemas/SimilarityGroupResponse"
             },
             "type": "array"
           },
           "id": {
+            "description": "Run id.",
             "type": "string"
           },
           "limits": {
-            "$ref": "#/components/schemas/SimilarityLimitsResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SimilarityLimitsResponse"
+              }
+            ],
+            "description": "Limits that were in force when the run started."
           },
           "problemId": {
+            "description": "Problem id for a problem run; null otherwise.",
             "nullable": true,
             "type": "string"
           },
           "scope": {
+            "description": "`problem` or `contest`.",
             "enum": [
               "contest",
               "problem"
@@ -8497,11 +8807,13 @@
             "type": "string"
           },
           "startedAt": {
+            "description": "When the job started; null while queued.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "status": {
+            "description": "`queued`, `running`, `done` or `failed`.",
             "enum": [
               "done",
               "failed",
@@ -8511,6 +8823,7 @@
             "type": "string"
           },
           "unsupported": {
+            "description": "Languages whose submissions were not compared.",
             "items": {
               "$ref": "#/components/schemas/SimilarityUnsupportedResponse"
             },
@@ -8536,12 +8849,15 @@
       "SimilaritySideResponse": {
         "properties": {
           "submissionId": {
+            "description": "Submission id.",
             "type": "string"
           },
           "userId": {
+            "description": "Submitter id.",
             "type": "string"
           },
           "username": {
+            "description": "Submitter username.",
             "type": "string"
           }
         },
@@ -8559,6 +8875,7 @@
             "type": "string"
           },
           "submissionCount": {
+            "description": "Submissions in a language that cannot be compared.",
             "type": "number"
           }
         },
@@ -8770,6 +9087,7 @@
       "StartedSimilarityRunResponse": {
         "properties": {
           "runId": {
+            "description": "Id of the queued run.",
             "type": "string"
           }
         },
@@ -8788,12 +9106,15 @@
       "SubmissionBatchResponse": {
         "properties": {
           "batch": {
+            "description": "Batch number, from 1.",
             "type": "number"
           },
           "points": {
+            "description": "Smallest points of the batch's cases.",
             "type": "number"
           },
           "status": {
+            "description": "Verdict of the first non-accepted case of the batch, or accepted.",
             "enum": [
               "AC",
               "IR",
@@ -8807,6 +9128,7 @@
             "type": "string"
           },
           "total": {
+            "description": "Largest total of the batch's cases.",
             "type": "number"
           }
         },
@@ -8821,28 +9143,36 @@
       "SubmissionCaseResponse": {
         "properties": {
           "batch": {
+            "description": "Batch number, from 1; null for a case outside any batch.",
             "nullable": true,
             "type": "number"
           },
           "extendedFeedback": {
+            "description": "Longer checker feedback; present only when the viewer may see feedback.",
             "type": "string"
           },
           "feedback": {
+            "description": "Checker feedback; present only when the viewer may see feedback.",
             "type": "string"
           },
           "memory": {
+            "description": "Memory used in KiB.",
             "type": "number"
           },
           "output": {
+            "description": "Program output; present only when the problem shows output to the viewer.",
             "type": "string"
           },
           "points": {
+            "description": "Points earned by the case.",
             "type": "number"
           },
           "position": {
+            "description": "Position of the case in judging order.",
             "type": "number"
           },
           "status": {
+            "description": "Case verdict: `AC`, `WA`, `TLE`, `MLE`, `OLE`, `IR`, `RTE` or `SC`.",
             "enum": [
               "AC",
               "IR",
@@ -8856,9 +9186,11 @@
             "type": "string"
           },
           "time": {
+            "description": "Running time in seconds.",
             "type": "number"
           },
           "total": {
+            "description": "Points available for the case.",
             "type": "number"
           }
         },
@@ -8884,9 +9216,11 @@
             "type": "array"
           },
           "casePoints": {
+            "description": "Points earned over all test cases.",
             "type": "number"
           },
           "caseTotal": {
+            "description": "Points available over all test cases.",
             "type": "number"
           },
           "cases": {
@@ -8898,9 +9232,11 @@
             "type": "array"
           },
           "currentTestcase": {
+            "description": "Number of the case being judged while the submission runs.",
             "type": "number"
           },
           "date": {
+            "description": "When the submission was made.",
             "format": "date-time",
             "type": "string"
           },
@@ -8910,17 +9246,21 @@
             "type": "string"
           },
           "id": {
+            "description": "Submission id; ids sort by submission time.",
             "type": "string"
           },
           "isPretested": {
+            "description": "Whether only the pretests are judged (contest pretest mode).",
             "type": "boolean"
           },
           "judgedDate": {
+            "description": "When judging finished; null when not judged yet.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
           },
           "judgedOn": {
+            "description": "Name of the judge that graded it; null when not judged yet.",
             "nullable": true,
             "type": "string"
           },
@@ -8930,6 +9270,7 @@
                 "$ref": "#/components/schemas/SubmissionLanguageResponse"
               }
             ],
+            "description": "The language; null if it was removed.",
             "nullable": true,
             "type": "object"
           },
@@ -8945,6 +9286,7 @@
             "type": "number"
           },
           "points": {
+            "description": "Points awarded for the submission; null while unjudged.",
             "nullable": true,
             "type": "number"
           },
@@ -8954,10 +9296,12 @@
                 "$ref": "#/components/schemas/SubmissionProblemResponse"
               }
             ],
+            "description": "The problem; null if it no longer exists.",
             "nullable": true,
             "type": "object"
           },
           "rejudgedDate": {
+            "description": "When an admin last rejudged it; null if never.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -8968,6 +9312,7 @@
                 "$ref": "#/components/schemas/SubmissionResult"
               }
             ],
+            "description": "Verdict: `AC` accepted, `WA` wrong answer, `TLE` time limit, `MLE` memory limit, `OLE` output limit, `IR` invalid return, `RTE` runtime error, `CE` compile error, `IE` internal error, `SC` short circuited, `AB` aborted, `RJ` rejected; null while unjudged.",
             "nullable": true
           },
           "status": {
@@ -8975,7 +9320,8 @@
               {
                 "$ref": "#/components/schemas/SubmissionStatus"
               }
-            ]
+            ],
+            "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end."
           },
           "time": {
             "description": "Seconds (largest case).",
@@ -8993,11 +9339,17 @@
                 "$ref": "#/components/schemas/UserSummaryResponse"
               }
             ],
+            "description": "The submitter; null if the account no longer exists.",
             "nullable": true,
             "type": "object"
           },
           "viewer": {
-            "$ref": "#/components/schemas/SubmissionViewerResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionViewerResponse"
+              }
+            ],
+            "description": "Which actions the caller may use on this submission."
           }
         },
         "required": [
@@ -9030,6 +9382,7 @@
       "SubmissionFeedEventResponse": {
         "properties": {
           "problemId": {
+            "description": "Problem id.",
             "type": "string"
           },
           "status": {
@@ -9037,12 +9390,15 @@
               {
                 "$ref": "#/components/schemas/SubmissionStatus"
               }
-            ]
+            ],
+            "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end."
           },
           "submissionId": {
+            "description": "Submission id.",
             "type": "string"
           },
           "type": {
+            "description": "Event type: `queued`, `processing`, `grading-begin` or `done`.",
             "enum": [
               "done",
               "grading-begin",
@@ -9052,6 +9408,7 @@
             "type": "string"
           },
           "userId": {
+            "description": "Submitter id.",
             "type": "string"
           }
         },
@@ -9067,9 +9424,15 @@
       "SubmissionFeedFrame": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SubmissionFeedEventResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionFeedEventResponse"
+              }
+            ],
+            "description": "Event payload."
           },
           "event": {
+            "description": "Event name.",
             "enum": [
               "done",
               "grading-begin",
@@ -9088,12 +9451,15 @@
       "SubmissionLanguageResponse": {
         "properties": {
           "id": {
+            "description": "Language id.",
             "type": "string"
           },
           "key": {
+            "description": "Key judges report for the language.",
             "type": "string"
           },
           "name": {
+            "description": "Display name.",
             "type": "string"
           }
         },
@@ -9107,16 +9473,20 @@
       "SubmissionListItemResponse": {
         "properties": {
           "casePoints": {
+            "description": "Points earned over all test cases.",
             "type": "number"
           },
           "caseTotal": {
+            "description": "Points available over all test cases.",
             "type": "number"
           },
           "date": {
+            "description": "When the submission was made.",
             "format": "date-time",
             "type": "string"
           },
           "id": {
+            "description": "Submission id; ids sort by submission time.",
             "type": "string"
           },
           "language": {
@@ -9125,6 +9495,7 @@
                 "$ref": "#/components/schemas/SubmissionLanguageResponse"
               }
             ],
+            "description": "The language; null if it was removed.",
             "nullable": true,
             "type": "object"
           },
@@ -9134,6 +9505,7 @@
             "type": "number"
           },
           "points": {
+            "description": "Points awarded for the submission; null while unjudged.",
             "nullable": true,
             "type": "number"
           },
@@ -9143,6 +9515,7 @@
                 "$ref": "#/components/schemas/SubmissionProblemResponse"
               }
             ],
+            "description": "The problem; null if it no longer exists.",
             "nullable": true,
             "type": "object"
           },
@@ -9152,6 +9525,7 @@
                 "$ref": "#/components/schemas/SubmissionResult"
               }
             ],
+            "description": "Verdict: `AC` accepted, `WA` wrong answer, `TLE` time limit, `MLE` memory limit, `OLE` output limit, `IR` invalid return, `RTE` runtime error, `CE` compile error, `IE` internal error, `SC` short circuited, `AB` aborted, `RJ` rejected; null while unjudged.",
             "nullable": true
           },
           "status": {
@@ -9159,7 +9533,8 @@
               {
                 "$ref": "#/components/schemas/SubmissionStatus"
               }
-            ]
+            ],
+            "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end."
           },
           "time": {
             "description": "Seconds (largest case).",
@@ -9172,6 +9547,7 @@
                 "$ref": "#/components/schemas/UserSummaryResponse"
               }
             ],
+            "description": "The submitter; null if the account no longer exists.",
             "nullable": true,
             "type": "object"
           }
@@ -9195,6 +9571,7 @@
       "SubmissionProblemResponse": {
         "properties": {
           "code": {
+            "description": "Problem code.",
             "type": "string"
           },
           "isDeleted": {
@@ -9202,6 +9579,7 @@
             "type": "boolean"
           },
           "name": {
+            "description": "Problem title.",
             "type": "string"
           },
           "points": {
@@ -9224,6 +9602,7 @@
             "type": "number"
           },
           "problemId": {
+            "description": "Problem id.",
             "type": "string"
           },
           "status": {
@@ -9231,9 +9610,11 @@
               {
                 "$ref": "#/components/schemas/SubmissionStatus"
               }
-            ]
+            ],
+            "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end."
           },
           "submissionId": {
+            "description": "Submission id.",
             "type": "string"
           },
           "type": {
@@ -9248,6 +9629,7 @@
             "type": "string"
           },
           "userId": {
+            "description": "Submitter id.",
             "type": "string"
           }
         },
@@ -9264,9 +9646,15 @@
       "SubmissionProgressFrame": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SubmissionProgressEventResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionProgressEventResponse"
+              }
+            ],
+            "description": "Event payload."
           },
           "event": {
+            "description": "Event name.",
             "enum": [
               "done",
               "grading-begin",
@@ -9284,6 +9672,7 @@
         "type": "object"
       },
       "SubmissionResult": {
+        "description": "Verdict: `AC` accepted, `WA` wrong answer, `TLE` time limit, `MLE` memory limit, `OLE` output limit, `IR` invalid return, `RTE` runtime error, `CE` compile error, `IE` internal error, `SC` short circuited, `AB` aborted, `RJ` rejected; null while unjudged.",
         "enum": [
           "AB",
           "AC",
@@ -9303,9 +9692,11 @@
       "SubmissionSourceResponse": {
         "properties": {
           "id": {
+            "description": "Submission id.",
             "type": "string"
           },
           "source": {
+            "description": "Submitted source text; for a file-only language, the URL of the uploaded file.",
             "type": "string"
           }
         },
@@ -9316,6 +9707,7 @@
         "type": "object"
       },
       "SubmissionSourceVisibility": {
+        "description": "Who may read submitted sources: `F` follow the site setting, `A` everyone who sees the problem, `S` users who solved it, `O` only the owner, testers and editors.",
         "enum": [
           "A",
           "F",
@@ -9327,9 +9719,11 @@
       "SubmissionStateEventResponse": {
         "properties": {
           "casePoints": {
+            "description": "Points earned over all test cases.",
             "type": "number"
           },
           "caseTotal": {
+            "description": "Points available over all test cases.",
             "type": "number"
           },
           "currentTestcase": {
@@ -9338,6 +9732,7 @@
             "type": "number"
           },
           "points": {
+            "description": "Points awarded for the submission; null while unjudged.",
             "nullable": true,
             "type": "number"
           },
@@ -9347,6 +9742,7 @@
                 "$ref": "#/components/schemas/SubmissionResult"
               }
             ],
+            "description": "Verdict: `AC` accepted, `WA` wrong answer, `TLE` time limit, `MLE` memory limit, `OLE` output limit, `IR` invalid return, `RTE` runtime error, `CE` compile error, `IE` internal error, `SC` short circuited, `AB` aborted, `RJ` rejected; null while unjudged.",
             "nullable": true
           },
           "status": {
@@ -9354,9 +9750,11 @@
               {
                 "$ref": "#/components/schemas/SubmissionStatus"
               }
-            ]
+            ],
+            "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end."
           },
           "submissionId": {
+            "description": "Submission id.",
             "type": "string"
           }
         },
@@ -9374,9 +9772,15 @@
       "SubmissionStateFrame": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SubmissionStateEventResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionStateEventResponse"
+              }
+            ],
+            "description": "Event payload."
           },
           "event": {
+            "description": "Always `state`.",
             "enum": [
               "state"
             ],
@@ -9392,18 +9796,23 @@
       "SubmissionStatsResponse": {
         "properties": {
           "acceptedToday": {
+            "description": "Those among them that were accepted.",
             "type": "number"
           },
           "judgedToday": {
+            "description": "Submissions judged since midnight in the site time zone.",
             "type": "number"
           },
           "judgesOnline": {
+            "description": "Usable judges that are connected.",
             "type": "number"
           },
           "judgesTotal": {
+            "description": "Judges that are neither blocked nor disabled.",
             "type": "number"
           },
           "queueLength": {
+            "description": "Submissions queued or being judged now.",
             "type": "number"
           }
         },
@@ -9417,6 +9826,7 @@
         "type": "object"
       },
       "SubmissionStatus": {
+        "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end.",
         "enum": [
           "AB",
           "CE",
@@ -9432,12 +9842,15 @@
       "SubmissionViewerResponse": {
         "properties": {
           "canAbort": {
+            "description": "Whether `POST /submissions/{id}/abort` is allowed.",
             "type": "boolean"
           },
           "canReject": {
+            "description": "Whether `POST /submissions/{id}/reject` is allowed.",
             "type": "boolean"
           },
           "canRejudge": {
+            "description": "Whether `POST /submissions/{id}/rejudge` is allowed.",
             "type": "boolean"
           }
         },
@@ -9460,6 +9873,7 @@
             "type": "string"
           },
           "source": {
+            "description": "Source code, 1 to 65536 characters.",
             "type": "string"
           }
         },
@@ -9472,6 +9886,7 @@
       "SubmitResponse": {
         "properties": {
           "id": {
+            "description": "Id of the new submission.",
             "type": "string"
           }
         },
@@ -9695,11 +10110,17 @@
                 "$ref": "#/components/schemas/UserSummaryResponse"
               }
             ],
+            "description": "User who assigned it; null if the account no longer exists.",
             "nullable": true,
             "type": "object"
           },
           "tag": {
-            "$ref": "#/components/schemas/TagResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TagResponse"
+              }
+            ],
+            "description": "The tag."
           }
         },
         "required": [
@@ -9711,6 +10132,7 @@
       "TagCatalogResponse": {
         "properties": {
           "groups": {
+            "description": "Tag groups, sorted by code.",
             "items": {
               "$ref": "#/components/schemas/TagGroupResponse"
             },
@@ -9739,15 +10161,19 @@
       "TagGroupResponse": {
         "properties": {
           "code": {
+            "description": "Unique group code.",
             "type": "string"
           },
           "id": {
+            "description": "Group id.",
             "type": "string"
           },
           "name": {
+            "description": "Group name.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags of the group, sorted by code.",
             "items": {
               "$ref": "#/components/schemas/TagResponse"
             },
@@ -9765,19 +10191,24 @@
       "TagProblemListItemResponse": {
         "properties": {
           "code": {
+            "description": "Problem code on its judge, with the judge prefix.",
             "type": "string"
           },
           "id": {
+            "description": "Entry id.",
             "type": "string"
           },
           "judge": {
+            "description": "Judge the problem belongs to; null when unknown.",
             "nullable": true,
             "type": "string"
           },
           "link": {
+            "description": "URL of the problem.",
             "type": "string"
           },
           "name": {
+            "description": "Problem title.",
             "type": "string"
           },
           "tags": {
@@ -9801,25 +10232,31 @@
       "TagProblemResponse": {
         "properties": {
           "assignments": {
+            "description": "Each tag with the user who assigned it.",
             "items": {
               "$ref": "#/components/schemas/TagAssignmentResponse"
             },
             "type": "array"
           },
           "code": {
+            "description": "Problem code on its judge, with the judge prefix.",
             "type": "string"
           },
           "id": {
+            "description": "Entry id.",
             "type": "string"
           },
           "judge": {
+            "description": "Judge the problem belongs to; null when unknown.",
             "nullable": true,
             "type": "string"
           },
           "link": {
+            "description": "URL of the problem.",
             "type": "string"
           },
           "name": {
+            "description": "Problem title.",
             "type": "string"
           },
           "tags": {
@@ -9844,15 +10281,19 @@
       "TagResponse": {
         "properties": {
           "code": {
+            "description": "Unique tag code.",
             "type": "string"
           },
           "groupId": {
+            "description": "Id of the tag group.",
             "type": "string"
           },
           "id": {
+            "description": "Tag id.",
             "type": "string"
           },
           "name": {
+            "description": "Tag name.",
             "type": "string"
           }
         },
@@ -9883,42 +10324,51 @@
           "checkerArgs": {
             "additionalProperties": true,
             "default": null,
+            "description": "Arguments of the case checker; null for none.",
             "nullable": true,
             "type": "object"
           },
           "generatorArgs": {
             "default": "",
+            "description": "Arguments passed to the uploaded generator, one per line, up to 1000 characters.",
             "maxLength": 1000,
             "type": "string"
           },
           "input": {
             "default": "",
+            "description": "Input file name inside the archive.",
             "type": "string"
           },
           "isPretest": {
             "default": false,
+            "description": "Whether this case belongs to the pretests.",
             "type": "boolean"
           },
           "output": {
             "default": "",
+            "description": "Output file name inside the archive.",
             "type": "string"
           },
           "outputLimit": {
             "default": null,
+            "description": "Largest output accepted, in bytes (`output_limit_length`); null for the default.",
             "nullable": true,
             "type": "number"
           },
           "outputPrefix": {
             "default": null,
+            "description": "Leading output bytes kept for display (`output_prefix_length`); null for the default.",
             "nullable": true,
             "type": "number"
           },
           "points": {
             "default": null,
+            "description": "Points of the case or batch; null when unscored.",
             "nullable": true,
             "type": "number"
           },
           "type": {
+            "description": "`C` normal case, `S` start of a batch, `E` end of a batch.",
             "enum": [
               "C",
               "E",
@@ -9935,6 +10385,7 @@
       "TestCaseResponse": {
         "properties": {
           "checker": {
+            "description": "Per-case checker override; empty for the problem-wide checker.",
             "enum": [
               "",
               "floats",
@@ -9948,34 +10399,43 @@
           },
           "checkerArgs": {
             "additionalProperties": true,
+            "description": "Arguments of the case checker; null for none.",
             "nullable": true,
             "type": "object"
           },
           "generatorArgs": {
+            "description": "Arguments passed to the generator, one per line.",
             "type": "string"
           },
           "input": {
+            "description": "Input file name.",
             "type": "string"
           },
           "isPretest": {
+            "description": "Whether this case belongs to the pretests.",
             "type": "boolean"
           },
           "output": {
+            "description": "Output file name.",
             "type": "string"
           },
           "outputLimit": {
+            "description": "Largest output accepted, in bytes (`output_limit_length`); null for the default.",
             "nullable": true,
             "type": "number"
           },
           "outputPrefix": {
+            "description": "Leading output bytes kept for display; null for the default.",
             "nullable": true,
             "type": "number"
           },
           "points": {
+            "description": "Points of the case or batch; null when unscored.",
             "nullable": true,
             "type": "number"
           },
           "type": {
+            "description": "`C` normal case, `S` start of a batch, `E` end of a batch.",
             "enum": [
               "C",
               "E",
@@ -9999,6 +10459,7 @@
         "type": "object"
       },
       "TestcaseResultVisibility": {
+        "description": "How much of the test case results is shown: `A` every case, `B` batch summaries, `S` totals only.",
         "enum": [
           "A",
           "B",
@@ -10007,6 +10468,7 @@
         "type": "string"
       },
       "TestcaseVisibility": {
+        "description": "When program output of test cases is shown to non-editors: `O` never, `C` outside contests, `A` always.",
         "enum": [
           "A",
           "C",
@@ -10853,13 +11315,16 @@
       "UpdateJudgeDto": {
         "properties": {
           "description": {
+            "description": "Free-form notes about the judge, up to 10000 characters.",
             "maxLength": 10000,
             "type": "string"
           },
           "isBlocked": {
+            "description": "true disconnects the judge and refuses it until unblocked.",
             "type": "boolean"
           },
           "isDisabled": {
+            "description": "true tells the judge to stop taking new work.",
             "type": "boolean"
           }
         },
@@ -10868,54 +11333,66 @@
       "UpdateLanguageDto": {
         "properties": {
           "ace": {
+            "description": "Editor mode name for the code editor.",
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
           "commonName": {
+            "description": "Generic family name shared by versions of the language.",
             "maxLength": 20,
             "minLength": 1,
             "type": "string"
           },
           "description": {
+            "description": "Longer description of the language.",
             "maxLength": 65536,
             "type": "string"
           },
           "extension": {
+            "description": "File extension without the dot.",
             "type": "string"
           },
           "fileOnly": {
+            "description": "Whether solutions are uploaded as a file instead of typed.",
             "type": "boolean"
           },
           "fileSizeLimit": {
+            "description": "Largest uploaded file in MB; 0 turns uploads off.",
             "maximum": 1073741824,
             "minimum": 0,
             "type": "number"
           },
           "includeInProblem": {
+            "description": "Whether new problems allow this language by default.",
             "type": "boolean"
           },
           "info": {
+            "description": "Notes shown to users about the compiler or runtime.",
             "maxLength": 65536,
             "type": "string"
           },
           "name": {
+            "description": "Display name, up to 20 characters.",
             "maxLength": 20,
             "minLength": 1,
             "type": "string"
           },
           "pygments": {
+            "description": "Syntax highlighter name.",
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           },
           "shortName": {
+            "description": "Short display name; null clears it.",
             "maxLength": 20,
             "minLength": 1,
             "nullable": true,
             "type": "string"
           },
           "template": {
+            "description": "Starter code offered in the editor.",
             "maxLength": 65536,
             "type": "string"
           }
@@ -11035,9 +11512,11 @@
       "UpdateProblemDto": {
         "properties": {
           "allowViewFeedback": {
+            "description": "Whether checker feedback is shown to submitters. Needs `judge.edit_all_problem`.",
             "type": "boolean"
           },
           "allowedLanguages": {
+            "description": "Ids of languages solutions may use; defaults to the languages flagged for new problems.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -11045,7 +11524,7 @@
             "type": "array"
           },
           "authors": {
-            "description": "The rest need judge.edit_all_problem (Django-admin-only in legacy).",
+            "description": "Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem`.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -11053,6 +11532,7 @@
             "type": "array"
           },
           "bannedUsers": {
+            "description": "User ids that may not submit to the problem.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -11060,10 +11540,12 @@
             "type": "array"
           },
           "code": {
+            "description": "Unique code: lowercase letters, digits and underscores, 1 to 32 characters; a few words used by routes are reserved.",
             "pattern": "^[a-z0-9_]{1,32}$",
             "type": "string"
           },
           "curators": {
+            "description": "Curator user ids; curators can edit the problem.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -11071,58 +11553,68 @@
             "type": "array"
           },
           "date": {
+            "description": "Publication date (ISO 8601 with offset); null clears it.",
             "nullable": true,
             "type": "string"
           },
           "description": {
+            "description": "Statement in markdown. Rendered with the problem style, or as raw HTML when `isFullMarkup` is set.",
             "maxLength": 200000,
             "type": "string"
           },
           "groupId": {
+            "description": "Problem group id.",
             "format": "uuid",
             "type": "string"
           },
           "isFullMarkup": {
-            "description": "judge.problem_full_markup",
+            "description": "Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`.",
             "type": "boolean"
           },
           "isManuallyManaged": {
-            "description": "judge.change_manually_managed",
+            "description": "Whether test data is managed outside the site, turning the data editor off. Changing it needs `judge.change_manually_managed`.",
             "type": "boolean"
           },
           "isOrganizationPrivate": {
+            "description": "Whether only members of `organizations` can see the problem.",
             "type": "boolean"
           },
           "isPublic": {
-            "description": "judge.change_public_visibility",
+            "description": "Whether the problem is public. Changing it needs `judge.change_public_visibility`.",
             "type": "boolean"
           },
           "languageLimits": {
+            "description": "Per-language limits overriding the defaults; each language at most once.",
             "items": {
               "$ref": "#/components/schemas/LanguageLimitDto"
             },
             "type": "array"
           },
           "licenseId": {
+            "description": "License id; null for none. Needs `judge.edit_all_problem`.",
             "format": "uuid",
             "nullable": true,
             "type": "string"
           },
           "memoryLimit": {
+            "description": "Memory limit in KiB, up to 1048576.",
             "maximum": 1048576,
             "minimum": 0,
             "type": "number"
           },
           "name": {
+            "description": "Base-language title, 1 to 100 characters.",
             "maxLength": 100,
             "minLength": 1,
             "type": "string"
           },
           "ogImage": {
+            "description": "Image URL used for link previews, up to 150 characters.",
             "maxLength": 150,
             "type": "string"
           },
           "organizations": {
+            "description": "Ids of the organizations the problem is private to (with `isOrganizationPrivate`).",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -11130,14 +11622,17 @@
             "type": "array"
           },
           "partial": {
+            "description": "Whether partial scores are given.",
             "type": "boolean"
           },
           "points": {
+            "description": "Points the problem is worth, 800 to 3500.",
             "maximum": 3500,
             "minimum": 800,
             "type": "number"
           },
           "source": {
+            "description": "Origin or credit line, up to 200 characters.",
             "maxLength": 200,
             "type": "string"
           },
@@ -11146,9 +11641,11 @@
               {
                 "$ref": "#/components/schemas/SubmissionSourceVisibility"
               }
-            ]
+            ],
+            "description": "Who may read submitted sources: `F` follow the site setting, `A` everyone who sees the problem, `S` users who solved it, `O` only the owner, testers and editors."
           },
           "summary": {
+            "description": "Short summary for previews, up to 1000 characters. Needs `judge.edit_all_problem`.",
             "maxLength": 1000,
             "type": "string"
           },
@@ -11157,16 +11654,19 @@
               {
                 "$ref": "#/components/schemas/TestcaseResultVisibility"
               }
-            ]
+            ],
+            "description": "How much of the test case results is shown: `A` every case, `B` batch summaries, `S` totals only. Needs `judge.edit_all_problem`."
           },
           "testcaseVisibility": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/TestcaseVisibility"
               }
-            ]
+            ],
+            "description": "When program output of test cases is shown to non-editors: `O` never, `C` outside contests, `A` always."
           },
           "testers": {
+            "description": "Users who can see the problem while it is private.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -11174,11 +11674,13 @@
             "type": "array"
           },
           "timeLimit": {
+            "description": "Time limit in seconds, 0.01 to 60; above 5 needs `judge.high_problem_timelimit`.",
             "maximum": 60,
             "minimum": 0.01,
             "type": "number"
           },
           "typeIds": {
+            "description": "Problem type ids, at least one (ids from `GET /problems/meta`).",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -11407,6 +11909,7 @@
       "UploadedFileResponse": {
         "properties": {
           "url": {
+            "description": "Public URL of the stored file.",
             "type": "string"
           }
         },
@@ -11724,9 +12227,11 @@
       "UserSummaryResponse": {
         "properties": {
           "id": {
+            "description": "User id.",
             "type": "string"
           },
           "username": {
+            "description": "Username.",
             "type": "string"
           }
         },
@@ -11859,6 +12364,7 @@
   "paths": {
     "/api/internal/admin/languages": {
       "get": {
+        "description": "Needs `judge.change_language`. Returns every programming language of the\nsite, sorted by name, including editor, highlighting and file-size settings\nthat the public catalog omits.",
         "operationId": "LanguagesAdminController_list",
         "parameters": [],
         "responses": {
@@ -11903,11 +12409,13 @@
             }
           }
         },
+        "summary": "List judge languages with their full settings",
         "tags": [
-          "LanguagesAdmin"
+          "Admin: judges & languages"
         ]
       },
       "post": {
+        "description": "Needs `judge.add_language`. The `key` is what judges report for the language\nand cannot be changed afterwards. Responds 409 `conflict` when the key\nalready exists. The change takes effect on this server at once and on others\nthrough the change stream.",
         "operationId": "LanguagesAdminController_create",
         "parameters": [],
         "requestBody": {
@@ -11959,16 +12467,19 @@
             }
           }
         },
+        "summary": "Add a judge language",
         "tags": [
-          "LanguagesAdmin"
+          "Admin: judges & languages"
         ]
       }
     },
     "/api/internal/admin/languages/{id}": {
       "patch": {
+        "description": "Needs `judge.change_language`. Send only the fields to change;\n`shortName: null` clears the short name and every other field refuses null.\nThe `key` cannot be changed. Responds 404 `not_found` for an unknown id.",
         "operationId": "LanguagesAdminController_update",
         "parameters": [
           {
+            "description": "Language id.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -12027,8 +12538,9 @@
             }
           }
         },
+        "summary": "Update a judge language",
         "tags": [
-          "LanguagesAdmin"
+          "Admin: judges & languages"
         ]
       }
     },
@@ -19240,6 +19752,7 @@
             }
           },
           {
+            "description": "Page number, from 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -19251,6 +19764,7 @@
             }
           },
           {
+            "description": "Items per page, 1 to 100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -19262,6 +19776,7 @@
             }
           },
           {
+            "description": "Only submissions with these verdicts (`AC`, `WA`, `TLE`, ...); repeat the parameter. `IE`, `SC` are staff only.",
             "in": "query",
             "name": "result",
             "required": false,
@@ -19273,6 +19788,7 @@
             }
           },
           {
+            "description": "Only submissions in these judging states (`QU`, `P`, `G`, `D`, `IE`, `CE`, `AB`, `PD`); repeat the parameter. `IE`, `QU`, `P`, `G`, `D` are staff only.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -19563,6 +20079,7 @@
     },
     "/api/internal/events/submissions": {
       "get": {
+        "description": "Public Server-Sent Events stream (`text/event-stream`). Emits `queued`,\n`processing`, `grading-begin` and `done` for the submissions the anonymous\nsubmission list shows, with\n`{ submissionId, userId, problemId, type, status }` as data; per-case\nprogress is never sent. A `resync` event means events may have been missed,\nso reload the list. A `: ping` comment is sent every 15 seconds and the\nstream asks clients to retry after 3 seconds, so `EventSource` reconnects by\nitself. Open streams are capped per client IP and per server (429\n`rate_limited`).",
         "operationId": "SubmissionStreamsController_feed",
         "parameters": [],
         "responses": {
@@ -19603,17 +20120,19 @@
             }
           }
         },
-        "summary": "Public feed: `queued`, `processing`, `grading-begin` and `done` of the submissions the anonymous submission list shows (public, non-organisation-private problems; never a contest whose list is hidden, e.g. running or frozen), as ids and status.",
+        "summary": "Stream the public submission feed",
         "tags": [
-          "SubmissionStreams"
+          "Live events"
         ]
       }
     },
     "/api/internal/events/submissions/{id}": {
       "get": {
+        "description": "Needs a signed-in user who may see the submission's detail (same access\nrules and 404 or 403 errors). Server-Sent Events (`text/event-stream`): a\n`state` event first with the current status, result and points, then\n`queued`, `processing`, `grading-begin` and `done` events, and `test-case`\nevents only when the viewer may see every case result. `resync` means events\nmay have been missed, so reload the submission. Heartbeat `: ping` every 15\nseconds. Access is re-checked every minute and the stream closes when it is\nlost. Open streams are capped per user and per client IP (429\n`rate_limited`).",
         "operationId": "SubmissionStreamsController_submission",
         "parameters": [
           {
+            "description": "Submission id.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -19663,9 +20182,9 @@
             }
           }
         },
-        "summary": "One submission, gated like its detail: `state` first, then its events (`test-case` only when every case result is visible), `resync` after a lost subscription.",
+        "summary": "Stream the live judging progress of one submission",
         "tags": [
-          "SubmissionStreams"
+          "Live events"
         ]
       }
     },
@@ -20124,6 +20643,7 @@
     },
     "/api/internal/judges": {
       "get": {
+        "description": "Needs `judge.change_judge`. Returns every judge sorted by name with its\nonline state, ping, load, slots in use, runtimes and last IP. Authentication\nkeys are never returned.",
         "operationId": "JudgesController_list",
         "parameters": [],
         "responses": {
@@ -20168,11 +20688,13 @@
             }
           }
         },
+        "summary": "List judge servers",
         "tags": [
-          "Judges"
+          "Admin: judges & languages"
         ]
       },
       "post": {
+        "description": "Needs `judge.change_judge`. `name` uses letters, digits, `_`, `.` or `-` (at\nmost 50) and is what the judge sends when it connects. Returns the judge and\nits `authKey`, shown only this once (only a hash is stored). Responds 409\n`conflict` (issue `name_taken`) when the name exists.",
         "operationId": "JudgesController_create",
         "parameters": [],
         "requestBody": {
@@ -20224,16 +20746,19 @@
             }
           }
         },
+        "summary": "Register a judge server",
         "tags": [
-          "Judges"
+          "Admin: judges & languages"
         ]
       }
     },
     "/api/internal/judges/{name}": {
       "patch": {
+        "description": "Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,\n`isDisabled` and `description`. Blocking disconnects the judge and refuses\nit until unblocked; disabling tells a connected judge to stop taking work,\nenabling lets it resume. Responds 404 `not_found` (issue `judge_not_found`)\nfor an unknown name.",
         "operationId": "JudgesController_update",
         "parameters": [
           {
+            "description": "Judge name.",
             "in": "path",
             "name": "name",
             "required": true,
@@ -20291,16 +20816,19 @@
             }
           }
         },
+        "summary": "Update a judge server",
         "tags": [
-          "Judges"
+          "Admin: judges & languages"
         ]
       }
     },
     "/api/internal/judges/{name}/disconnect": {
       "post": {
+        "description": "Needs `judge.change_judge`. Asks the bridge to disconnect the judge; it may\nreconnect. With `force` every session and socket of the judge is retired at\nonce. Answers 204; 404 `not_found` for an unknown name.",
         "operationId": "JudgesController_disconnect",
         "parameters": [
           {
+            "description": "Judge name.",
             "in": "path",
             "name": "name",
             "required": true,
@@ -20343,16 +20871,19 @@
             }
           }
         },
+        "summary": "Disconnect a judge server",
         "tags": [
-          "Judges"
+          "Admin: judges & languages"
         ]
       }
     },
     "/api/internal/judges/{name}/key": {
       "post": {
+        "description": "Needs `judge.change_judge`. The old key stops working and a connected judge\nis disconnected; it can only reconnect with the new `authKey`, returned only\nthis once. Responds 404 `not_found` for an unknown name.",
         "operationId": "JudgesController_rotateKey",
         "parameters": [
           {
+            "description": "Judge name.",
             "in": "path",
             "name": "name",
             "required": true,
@@ -20400,8 +20931,9 @@
             }
           }
         },
+        "summary": "Issue a new authentication key for a judge",
         "tags": [
-          "Judges"
+          "Admin: judges & languages"
         ]
       }
     },
@@ -22873,9 +23405,11 @@
     },
     "/api/internal/problems": {
       "get": {
+        "description": "Public. Returns one page of the problems the viewer may see, a signed-in\nviewer's own solved or attempted mark included. `visibility` narrows to\npublic, private or all visible problems (default public). `search` uses the\ntext index, `q` is a substring match on the code or any title, and `sort`\ntakes `date`, `code`, `name`, `points`, `acRate` or `userCount`, with a\nleading `-` for descending (default `-date`). Paging: `page` from 1,\n`pageSize` 1-100 (default 50). While the viewer is in a contest, its\nproblems are listed even if private, and nothing is listed before the\ncontest starts.",
         "operationId": "ProblemsController_list",
         "parameters": [
           {
+            "description": "`public` (default): public problems; `private`: visible problems that are not public; `all`: both.",
             "in": "query",
             "name": "visibility",
             "required": false,
@@ -22890,6 +23424,7 @@
             }
           },
           {
+            "description": "Language of the returned titles; falls back to the base language when untranslated.",
             "in": "query",
             "name": "lang",
             "required": false,
@@ -22898,6 +23433,7 @@
             }
           },
           {
+            "description": "Page number, from 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -22909,6 +23445,7 @@
             }
           },
           {
+            "description": "Items per page, 1 to 100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -22920,6 +23457,7 @@
             }
           },
           {
+            "description": "Sort field (`date`, `code`, `name`, `points`, `acRate`, `userCount`); a leading `-` sorts descending.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -22928,6 +23466,7 @@
             }
           },
           {
+            "description": "Text search over code, names and source; terms of 3+ characters use the full-text index, shorter ones match prefixes of the code or a title.",
             "in": "query",
             "name": "search",
             "required": false,
@@ -22949,6 +23488,7 @@
             }
           },
           {
+            "description": "Only problems in this problem group (id from `GET /problems/meta`).",
             "in": "query",
             "name": "groupId",
             "required": false,
@@ -22958,6 +23498,7 @@
             }
           },
           {
+            "description": "Only problems having any of these problem types (ids from `GET /problems/meta`); repeat the parameter.",
             "in": "query",
             "name": "typeIds",
             "required": false,
@@ -22970,6 +23511,7 @@
             }
           },
           {
+            "description": "Only problems worth at least this many points.",
             "in": "query",
             "name": "pointsMin",
             "required": false,
@@ -22978,6 +23520,7 @@
             }
           },
           {
+            "description": "Only problems worth at most this many points.",
             "in": "query",
             "name": "pointsMax",
             "required": false,
@@ -22986,6 +23529,7 @@
             }
           },
           {
+            "description": "true: only problems with a published editorial; false: only problems without one.",
             "in": "query",
             "name": "hasEditorial",
             "required": false,
@@ -23049,12 +23593,14 @@
             }
           }
         },
+        "summary": "List problems visible to the viewer",
         "tags": [
           "Problems"
         ],
         "x-enveloped": true
       },
       "post": {
+        "description": "Needs `judge.add_problem`. The creator becomes a curator. Some fields are\ngated: `isPublic` needs `judge.change_public_visibility`,\n`isManuallyManaged` needs `judge.change_manually_managed`, `isFullMarkup`\nneeds `judge.problem_full_markup`, people, licence, organizations and other\nstaff fields need `judge.edit_all_problem`, and a time limit above 5 seconds\nneeds `judge.high_problem_timelimit` (400 `time_limit_too_high`). Writes a\nrevision, charges the organization's quota for organization-private problems\n(403 `quota_exceeded`) and returns the new problem as `GET /problems/{code}`\nwould. A taken or reserved code is 400 `code_taken`.",
         "operationId": "ProblemEditingController_create",
         "parameters": [],
         "requestBody": {
@@ -23106,16 +23652,19 @@
             }
           }
         },
+        "summary": "Create a problem",
         "tags": [
-          "ProblemEditing"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/deleted": {
       "get": {
+        "description": "Needs `judge.delete_problem`. Returns one page (`page`, `pageSize` up to\n100) of deleted problems the caller could see before deletion, with who\ndeleted them, the whole days left before the purge job may take them\n(`daysLeft`) and whether the heavy data is already gone (`isPurged`).",
         "operationId": "ProblemLifecycleController_list",
         "parameters": [
           {
+            "description": "Page number, from 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -23127,6 +23676,7 @@
             }
           },
           {
+            "description": "Items per page, 1 to 100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -23184,17 +23734,20 @@
             }
           }
         },
+        "summary": "List deleted problems awaiting purge",
         "tags": [
-          "ProblemLifecycle"
+          "Problem editing"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/problems/imports": {
       "post": {
+        "description": "Needs `judge.import_polygon_package`; creating a problem also needs\n`judge.add_problem`, updating needs write access to the problem's test data.\nSend the Polygon package as a multipart `file` (a zip with `problem.xml` at\nits root, up to 512 MiB) and the options in the query string: `code`, `mode`\n(`create` or `update`), authors, curators, group, types, points, statement\nlanguage mapping and the zero-point and main-solution switches. The package\nis checked, then imported by a background job; the answer is 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}`. Limited to 10 imports\nper hour per user. Errors: 400 `code_taken`, 400 for a bad package\n(`no_problem_xml` or a zip error code), 403 `quota_exceeded`, 413\n`file_too_large`, 429 `rate_limited`.",
         "operationId": "ProblemImportsController_start",
         "parameters": [
           {
+            "description": "Code of the problem to create or update.",
             "in": "query",
             "name": "code",
             "required": true,
@@ -23204,6 +23757,7 @@
             }
           },
           {
+            "description": "`create` (default) makes a new problem; `update` replaces the data and statement of an existing one.",
             "in": "query",
             "name": "mode",
             "required": false,
@@ -23217,6 +23771,7 @@
             }
           },
           {
+            "description": "Skip batches worth zero points.",
             "in": "query",
             "name": "ignoreZeroPointBatches",
             "required": false,
@@ -23226,6 +23781,7 @@
             }
           },
           {
+            "description": "Skip cases worth zero points.",
             "in": "query",
             "name": "ignoreZeroPointCases",
             "required": false,
@@ -23235,6 +23791,7 @@
             }
           },
           {
+            "description": "Append the package's main solution to the editorial.",
             "in": "query",
             "name": "appendMainSolution",
             "required": false,
@@ -23244,6 +23801,7 @@
             }
           },
           {
+            "description": "Author user ids; repeat the parameter.",
             "in": "query",
             "name": "authors",
             "required": false,
@@ -23256,6 +23814,7 @@
             }
           },
           {
+            "description": "Curator user ids; repeat the parameter. On create the caller is added.",
             "in": "query",
             "name": "curators",
             "required": false,
@@ -23268,6 +23827,7 @@
             }
           },
           {
+            "description": "Problem group id.",
             "in": "query",
             "name": "groupId",
             "required": false,
@@ -23277,6 +23837,7 @@
             }
           },
           {
+            "description": "Problem type ids; repeat the parameter.",
             "in": "query",
             "name": "typeIds",
             "required": false,
@@ -23289,6 +23850,7 @@
             }
           },
           {
+            "description": "Points the problem is worth, 800 to 3500.",
             "in": "query",
             "name": "points",
             "required": false,
@@ -23299,6 +23861,7 @@
             }
           },
           {
+            "description": "Polygon language of the statement stored as the base statement.",
             "in": "query",
             "name": "mainStatementLanguage",
             "required": false,
@@ -23308,6 +23871,7 @@
             }
           },
           {
+            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter.",
             "in": "query",
             "name": "statementLanguages",
             "required": false,
@@ -23319,6 +23883,7 @@
             }
           },
           {
+            "description": "Polygon language of the tutorial imported as the editorial.",
             "in": "query",
             "name": "tutorialLanguage",
             "required": false,
@@ -23386,16 +23951,19 @@
             }
           }
         },
+        "summary": "Import a Polygon package as a new or existing problem",
         "tags": [
-          "ProblemImports"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/imports/{jobId}": {
       "get": {
+        "description": "Needs `judge.import_polygon_package`. Returns the job state (`waiting`,\n`active`, `completed`, `failed`, ...), the imported problem when completed,\nand the error written for the requester when it failed. Only the user who\nstarted the job, or a superuser, can read it; anyone else gets the same 404\n`not_found` as for an unknown id. Finished jobs stay readable for a day.",
         "operationId": "ProblemImportsController_status",
         "parameters": [
           {
+            "description": "Job id from the start response.",
             "in": "path",
             "name": "jobId",
             "required": true,
@@ -23444,13 +24012,15 @@
             }
           }
         },
+        "summary": "Get the state of a Polygon import job",
         "tags": [
-          "ProblemImports"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/meta": {
       "get": {
+        "description": "Public. Returns the problem types, problem groups, licenses and judge\nlanguages, each sorted by name. Use the ids to fill the filters of\n`GET /problems` and the fields of the problem editor.",
         "operationId": "ProblemsController_meta",
         "parameters": [],
         "responses": {
@@ -23492,6 +24062,7 @@
             }
           }
         },
+        "summary": "List the catalogs used to classify and filter problems",
         "tags": [
           "Problems"
         ]
@@ -23499,9 +24070,11 @@
     },
     "/api/internal/problems/random": {
       "get": {
+        "description": "Public. Applies the same filters and visibility rules as `GET /problems`\n(search, groups, types, points, editorial, solved, visibility) and returns\nthe code of one matching problem. Responds 404 `no_problem` when nothing\nmatches.",
         "operationId": "ProblemsController_random",
         "parameters": [
           {
+            "description": "`public` (default): public problems; `private`: visible problems that are not public; `all`: both.",
             "in": "query",
             "name": "visibility",
             "required": false,
@@ -23516,6 +24089,7 @@
             }
           },
           {
+            "description": "Language of the returned titles; falls back to the base language when untranslated.",
             "in": "query",
             "name": "lang",
             "required": false,
@@ -23524,6 +24098,7 @@
             }
           },
           {
+            "description": "Text search over code, names and source; terms of 3+ characters use the full-text index, shorter ones match prefixes of the code or a title.",
             "in": "query",
             "name": "search",
             "required": false,
@@ -23545,6 +24120,7 @@
             }
           },
           {
+            "description": "Only problems in this problem group (id from `GET /problems/meta`).",
             "in": "query",
             "name": "groupId",
             "required": false,
@@ -23554,6 +24130,7 @@
             }
           },
           {
+            "description": "Only problems having any of these problem types (ids from `GET /problems/meta`); repeat the parameter.",
             "in": "query",
             "name": "typeIds",
             "required": false,
@@ -23566,6 +24143,7 @@
             }
           },
           {
+            "description": "Only problems worth at least this many points.",
             "in": "query",
             "name": "pointsMin",
             "required": false,
@@ -23574,6 +24152,7 @@
             }
           },
           {
+            "description": "Only problems worth at most this many points.",
             "in": "query",
             "name": "pointsMax",
             "required": false,
@@ -23582,6 +24161,7 @@
             }
           },
           {
+            "description": "true: only problems with a published editorial; false: only problems without one.",
             "in": "query",
             "name": "hasEditorial",
             "required": false,
@@ -23638,6 +24218,7 @@
             }
           }
         },
+        "summary": "Pick a random problem code",
         "tags": [
           "Problems"
         ]
@@ -23645,6 +24226,7 @@
     },
     "/api/internal/problems/render-preview": {
       "post": {
+        "description": "Needs `judge.edit_own_problem`. Renders `markdown` with one of the site's\nrender styles and returns the HTML; nothing is saved. The unsanitized\n`problem-full` style also needs `judge.problem_full_markup`. Limited to 60\npreviews per minute per user (429 `rate_limited`).",
         "operationId": "ProblemEditingController_preview",
         "parameters": [],
         "requestBody": {
@@ -23696,13 +24278,15 @@
             }
           }
         },
+        "summary": "Render markdown to HTML for the editor preview",
         "tags": [
-          "ProblemEditing"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/suggest": {
       "post": {
+        "description": "Needs `judge.suggest_new_problem`. Same body as creating a problem, but the\nproblem is stored private with the caller as its suggester and is announced\nto the configured Discord webhook for review. Suggested problems stay\nvisible to their suggester and to reviewers until published.",
         "operationId": "ProblemEditingController_suggest",
         "parameters": [],
         "requestBody": {
@@ -23754,13 +24338,15 @@
             }
           }
         },
+        "summary": "Suggest a problem for review",
         "tags": [
-          "ProblemEditing"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/uploads/image": {
       "post": {
+        "description": "Allowed for staff and users with `judge.can_upload_image`. Send one\nmultipart `file` of up to 5 MiB; the type is detected from the content and\nonly JPG, PNG, GIF and SVG are accepted (400 `image_type_not_allowed`). SVGs\nare sanitized and must stay under 512 KiB (400 `svg_too_large`). Returns the\npublic `url` to reference from markdown. Shares the upload budget of 30 per\nhour per user (429 `rate_limited`).",
         "operationId": "ProblemUploadsController_uploadImage",
         "parameters": [],
         "requestBody": {
@@ -23821,16 +24407,19 @@
             }
           }
         },
+        "summary": "Upload an image for use in statements",
         "tags": [
-          "ProblemUploads"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}": {
       "delete": {
+        "description": "Needs `judge.delete_problem` and edit rights on the problem. The body's\n`confirmCode` must repeat the problem code. The problem is hidden at once;\nit can be restored until the purge job removes its data after the grace\nperiod (setting `problem.deleteGraceDays`), and its submissions are kept. A\nproblem used by a contest is refused with 409 `problem_in_contest`; each\nuser may delete 10 problems per hour (429 `rate_limited`). Queues a\nrecomputation of the points of everyone who solved it. Failures carry the\ncode in `error.issues[0].code`.",
         "operationId": "ProblemLifecycleController_remove",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -23873,14 +24462,17 @@
             }
           }
         },
+        "summary": "Delete a problem (restorable during the grace period)",
         "tags": [
-          "ProblemLifecycle"
+          "Problem editing"
         ]
       },
       "get": {
+        "description": "Public for problems the viewer may see; an unknown, malformed or invisible\ncode is 404 `not_found` either way, so existence never leaks. `lang` selects\nthe statement language and falls back to the base statement when no\ntranslation exists (`translated` tells which). When the viewer can edit the\nproblem the response also carries the `editor` block with raw markdown,\ntranslations and people. Inside a running contest that lists the problem,\n`contest` reports the remaining attempts.",
         "operationId": "ProblemsController_detail",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -23889,6 +24481,7 @@
             }
           },
           {
+            "description": "Statement language; falls back to the base statement when no translation exists.",
             "in": "query",
             "name": "lang",
             "required": false,
@@ -23936,14 +24529,17 @@
             }
           }
         },
+        "summary": "Get a problem statement and its metadata",
         "tags": [
           "Problems"
         ]
       },
       "patch": {
+        "description": "Needs edit rights on the problem (404 `not_found` when it is invisible to\nthe caller, 403 `forbidden` when visible but not editable). Send only the\nfields to change; `licenseId` and `date` accept null, other fields refuse\nit. The same permission gates as on creation apply to the fields they\nprotect. Changing the description re-renders the statement; changing the\ncode moves the test data directory (400 `data_directory_taken` if one\nexists) and changing points, partial scoring or organization privacy\nrescores the problem. Writes a revision and returns the updated problem.",
         "operationId": "ProblemEditingController_edit",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24001,8 +24597,9 @@
             }
           }
         },
+        "summary": "Update a problem",
         "tags": [
-          "ProblemEditing"
+          "Problem editing"
         ]
       }
     },
@@ -24068,9 +24665,11 @@
     },
     "/api/internal/problems/{code}/clone": {
       "post": {
+        "description": "Needs `judge.clone_problem` and edit rights on the source. Copies the\nstatement, limits, languages, classification and visibility settings; test\ndata, translations, editorial, people and counters are not copied. The\ncaller becomes the only curator and the clone starts private. Charges the\norganization's quota when the source is organization-private (403\n`quota_exceeded`); a taken code is 400 `code_taken`. Returns the new\nproblem.",
         "operationId": "ProblemEditingController_clone",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24128,16 +24727,19 @@
             }
           }
         },
+        "summary": "Clone a problem under a new code",
         "tags": [
-          "ProblemEditing"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/data": {
       "get": {
+        "description": "Needs edit rights on the problem. Returns the checker, grader, limits,\nuploaded file names, the list of test cases, the members of the archive and\nthe last `init.yml` generation error. Problems managed manually are 404\n`not_found` here.",
         "operationId": "ProblemDataController_get",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24185,14 +24787,17 @@
             }
           }
         },
+        "summary": "Get the test data configuration of a problem",
         "tags": [
-          "ProblemData"
+          "Problem editing"
         ]
       },
       "put": {
+        "description": "Needs edit rights; mirror problems are refused (403) because they use their\nsource problem's data. Send the whole configuration, including every test\ncase (at most 300, or 9999 with `judge.create_mass_testcases`; body up to 8\nMiB). The server regenerates `init.yml`; a configuration problem is reported\nin `feedback`, not as an error. Responds 409 `conflict` when the data\nchanged meanwhile, so reload and retry.",
         "operationId": "ProblemDataController_put",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24250,16 +24855,19 @@
             }
           }
         },
+        "summary": "Replace the test data configuration of a problem",
         "tags": [
-          "ProblemData"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/data/archive": {
       "post": {
+        "description": "Needs edit rights; mirror problems are refused. Send one multipart `file`, a\n.zip of up to 512 MiB (400 `zip_required` or a zip error code otherwise). It\nreplaces the previous archive, regenerates `init.yml` and is counted against\nthe organization's storage and credits (403 `quota_exceeded`). Limited to 30\nuploads per hour per user. Returns the new data configuration.",
         "operationId": "ProblemDataController_uploadArchive",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24326,16 +24934,19 @@
             }
           }
         },
+        "summary": "Upload the test data archive of a problem",
         "tags": [
-          "ProblemData"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/data/files/{kind}": {
       "delete": {
+        "description": "Needs edit rights; mirror problems are refused. `kind` is `archive`,\n`generator`, `customChecker`, `customGrader` or `customHeader`. Clears the\nsetting, regenerates `init.yml` and deletes the file. Returns the new data\nconfiguration.",
         "operationId": "ProblemDataController_deleteFile",
         "parameters": [
           {
+            "description": "Problem code.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24344,6 +24955,7 @@
             }
           },
           {
+            "description": "Which data file: `archive`, `generator`, `customChecker`, `customGrader` or `customHeader`.",
             "in": "path",
             "name": "kind",
             "required": true,
@@ -24398,14 +25010,17 @@
             }
           }
         },
+        "summary": "Remove an uploaded data file",
         "tags": [
-          "ProblemData"
+          "Problem editing"
         ]
       },
       "post": {
+        "description": "Needs edit rights; mirror problems are refused. `kind` is `generator`,\n`customChecker`, `customGrader` or `customHeader`; send one multipart `file`\nof up to 1 MiB whose extension fits the kind (400 `extension_not_allowed`).\nIt replaces the previous file of that kind and returns the new data\nconfiguration. Shares the upload budget of 30 per hour per user.",
         "operationId": "ProblemDataController_uploadSource",
         "parameters": [
           {
+            "description": "Problem code.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24414,6 +25029,7 @@
             }
           },
           {
+            "description": "Which source file: `generator`, `customChecker`, `customGrader` or `customHeader`.",
             "in": "path",
             "name": "kind",
             "required": true,
@@ -24486,16 +25102,19 @@
             }
           }
         },
+        "summary": "Upload a generator, checker, grader or header file",
         "tags": [
-          "ProblemData"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/data/files/{name}": {
       "get": {
+        "description": "Needs edit rights on the problem. Always sent as an attachment with\n`X-Content-Type-Options: nosniff`, so the browser never renders it. An\nunknown or unsafe file name is 404 `not_found`.",
         "operationId": "ProblemDataController_download",
         "parameters": [
           {
+            "description": "Problem code.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24504,6 +25123,7 @@
             }
           },
           {
+            "description": "File name as stored in the problem data directory.",
             "in": "path",
             "name": "name",
             "required": true,
@@ -24545,18 +25165,20 @@
             }
           }
         },
-        "summary": "Always an attachment with `nosniff`: uploaded files are never rendered by the browser.",
+        "summary": "Download an uploaded test data file",
         "tags": [
-          "ProblemData"
+          "Problem editing"
         ],
         "x-raw": true
       }
     },
     "/api/internal/problems/{code}/data/init": {
       "get": {
+        "description": "Needs edit rights on the problem. Returns the judge configuration file\ngenerated from the test data as `text/yaml`. Responds 404 `not_found` when\nnone was generated, for example because of a configuration error.",
         "operationId": "ProblemDataController_init",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24596,17 +25218,20 @@
             }
           }
         },
+        "summary": "Get the generated init.yml of a problem",
         "tags": [
-          "ProblemData"
+          "Problem editing"
         ],
         "x-raw": true
       }
     },
     "/api/internal/problems/{code}/editorial": {
       "get": {
+        "description": "Public once the editorial is published (`isPublic` set and `publishOn`\nreached). Viewers with `judge.see_private_solution` and problem editors can\nread it earlier. Responds 404 `not_found` when there is no editorial, when\nthe viewer may not read it yet, or when the viewer is taking part in a\ncontest.",
         "operationId": "ProblemsController_editorial",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24615,6 +25240,7 @@
             }
           },
           {
+            "description": "Statement language; falls back to the base statement when no translation exists.",
             "in": "query",
             "name": "lang",
             "required": false,
@@ -24662,14 +25288,17 @@
             }
           }
         },
+        "summary": "Get the editorial of a problem",
         "tags": [
           "Problems"
         ]
       },
       "put": {
+        "description": "Needs edit rights on the problem. Sets `isPublic`, the `publishOn` time (ISO\n8601 with offset), the author ids and the markdown `content`. Readers see\nthe editorial once it is public and `publishOn` has passed. The markdown is\nalways sanitized. Answers 204.",
         "operationId": "ProblemEditingController_putEditorial",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24712,16 +25341,19 @@
             }
           }
         },
+        "summary": "Create or replace the editorial of a problem",
         "tags": [
-          "ProblemEditing"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/material": {
       "post": {
+        "description": "Needs `judge.upload_problem_material` and edit rights on the problem. Send\none multipart `file` of up to 20 MiB with an allowed extension (archives,\ndocuments, sources, plain images and data files; 400\n`material_type_not_allowed` otherwise). It replaces the previous material\nand returns its `url`. Shares the upload budget of 30 per hour per user.",
         "operationId": "ProblemUploadsController_uploadMaterial",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24788,16 +25420,19 @@
             }
           }
         },
+        "summary": "Upload the downloadable material of a problem",
         "tags": [
-          "ProblemUploads"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/package": {
       "get": {
+        "description": "Needs edit rights on the problem. 200 returns the cached zip as an\nattachment named `<code>.zip`; 202 `{ data: { status: 'building' } }` with\n`Retry-After` means the build is still running. Other outcomes: 404\n`package_not_built` when no package was requested for the current data, 409\n`package_too_large`, 503 `package_unavailable` with `Retry-After` when the\nbuild failed. Polling is free of rate limits.",
         "operationId": "ProblemPackageController_download",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24856,16 +25491,18 @@
             }
           }
         },
-        "summary": "200 the zip (attachment), 202 while building, 404 `package_not_built`, 409 `package_too_large`, 503 `package_unavailable`.",
+        "summary": "Download the package of a problem",
         "tags": [
-          "ProblemPackage"
+          "Problem editing"
         ],
         "x-enveloped": true
       },
       "post": {
+        "description": "Needs edit rights on the problem. Asks for a zip of the problem as it is now\n(statement and test data). 200 `{ data: { status: 'ready', key } }` means\nthe package is cached and `GET` on the same path returns it; 202\n`{ data: { status: 'building', key } }` means a build is queued or running,\nso poll `GET`. Every request counts against 3 per problem and 10 in total\nper user per hour (429 `rate_limited`). Responds 409 `package_too_large`\nwhen the package is over the size limit.",
         "operationId": "ProblemPackageController_request",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24931,18 +25568,20 @@
             }
           }
         },
-        "summary": "200 `{data: {status: 'ready', key}}` when the current package is cached, 202 `{data: {status: 'building', key}}` when a build is queued or running. Plain `@Res()` because the status depends on the answer.",
+        "summary": "Request a downloadable package of a problem",
         "tags": [
-          "ProblemPackage"
+          "Problem editing"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/problems/{code}/pdf": {
       "get": {
+        "description": "Public for problems the viewer may see. The PDF is rendered by a background\njob and cached per problem and language: 200 returns the file inline\n(`application/pdf`); 202 `{ data: { status: 'rendering' } }` with\n`Retry-After` means the render is pending, so poll the same URL; 503\n`pdf_unavailable` with `Retry-After` means the last render failed. `lang`\npicks the statement language (falling back to the base one). Starting a\nrender is limited to 30 per minute per client IP, `HEAD` requests never\nstart one, and polling a pending render is free. Unknown or invisible\nproblems are 404 `not_found`.",
         "operationId": "ProblemPdfController_pdf",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -24951,6 +25590,7 @@
             }
           },
           {
+            "description": "Statement language; falls back to the base statement when no translation exists.",
             "in": "query",
             "name": "lang",
             "required": false,
@@ -25019,18 +25659,20 @@
             }
           }
         },
-        "summary": "Outcomes, documented here because the plain `@Res()` hides them from the plugin:\n200 the PDF (`application/pdf`, inline); 202 `{ data: { status: 'rendering' } }` with `Retry-After` while the render is pending, poll the same URL;\n503 `pdf_unavailable` with `Retry-After` when the render failed; 404 when the problem is not visible.",
+        "summary": "Download the problem statement as a PDF",
         "tags": [
-          "ProblemPdf"
+          "Problems"
         ],
         "x-enveloped": true
       }
     },
     "/api/internal/problems/{code}/purge-now": {
       "post": {
+        "description": "Superuser only (403 `forbidden` otherwise), and the body's `confirmCode`\nmust repeat the problem code. Queues the purge job without waiting for the\ngrace period and answers 202 `{ queued: true }`; the job deletes the test\ndata and statement files but leaves a tombstone with the code and name, and\nall submissions. Responds 409 `purged` when the purge already finished and\n409 `not_deleted` for a live problem.",
         "operationId": "ProblemLifecycleController_purgeNow",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -25088,16 +25730,19 @@
             }
           }
         },
+        "summary": "Purge a deleted problem immediately",
         "tags": [
-          "ProblemLifecycle"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/restore": {
       "post": {
+        "description": "Needs `judge.delete_problem` and edit rights. Brings the problem back, with\nits data, until it is purged. Responds 409 `not_deleted` when the problem is\nlive and 409 `purged` when the purge has started or finished. Queues a\nrecomputation of the solvers' points.",
         "operationId": "ProblemLifecycleController_restore",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -25130,16 +25775,19 @@
             }
           }
         },
+        "summary": "Restore a deleted problem",
         "tags": [
-          "ProblemLifecycle"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/statement": {
       "post": {
+        "description": "Needs `judge.upload_file_statement` and edit rights on the problem. Send one\nmultipart `file`, a PDF of up to 5 MiB (400 `statement_not_pdf` otherwise).\nIt replaces the previous PDF statement and returns its `url`. Cached\npackages of the problem are dropped. Shares the upload budget of 30 per hour\nper user.",
         "operationId": "ProblemUploadsController_uploadStatement",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -25206,16 +25854,19 @@
             }
           }
         },
+        "summary": "Upload the PDF statement of a problem",
         "tags": [
-          "ProblemUploads"
+          "Problem editing"
         ]
       }
     },
     "/api/internal/problems/{code}/submit": {
       "post": {
+        "description": "Needs a signed-in user who can see the problem. `language` must be one of\nthe problem's allowed languages and not a file-only language (400\n`language_takes_file`); `source` is 1 to 65536 characters. `judgeId` pins a\njudge and is for problem editors only (403 `judge_choice_forbidden`; 400\n`judge_unavailable` if it is offline or lacks the language). When the\ncaller's current contest lists the problem, the submission counts as a\ncontest submission, subject to the contest's attempt cap (403\n`contest_submission_limit`). Other errors: 403 `banned_from_problem`, 429\n`rate_limited` (20 per minute per user) and 429\n`unfinished_submission_limit` (2 unfinished submissions, waived by\n`judge.spam_submission`). Queues the submission for judging and returns its\n`id`.",
         "operationId": "SubmissionCreateController_submit",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -25273,16 +25924,19 @@
             }
           }
         },
+        "summary": "Submit a solution as typed source code",
         "tags": [
-          "SubmissionCreate"
+          "Submissions"
         ]
       }
     },
     "/api/internal/problems/{code}/submit/file": {
       "post": {
+        "description": "Same rules and errors as the typed submission, for languages that take a\nfile (`fileOnly`); a typed-source language is 400 `language_takes_text`.\nSend a multipart form with `language`, optional `judgeId` and one `file`\nwhose extension is the language's (400 `file_wrong_extension`) and whose\nsize is within the language's `fileSizeLimit` in MB (413 `file_too_large`;\n400 `file_upload_disabled` when uploads are off). The file is stored and its\nmedia URL becomes the submission's source.",
         "operationId": "SubmissionCreateController_submitFile",
         "parameters": [
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -25359,9 +26013,9 @@
             }
           }
         },
-        "summary": "Multipart: `language`, optional `judgeId`, and one `file` (file-only languages).",
+        "summary": "Submit a solution as an uploaded file",
         "tags": [
-          "SubmissionCreate"
+          "Submissions"
         ]
       }
     },
@@ -25515,9 +26169,11 @@
     },
     "/api/internal/problems/{code}/translations/{lang}": {
       "put": {
+        "description": "Needs edit rights on the problem. Stores the name and markdown description\nfor `lang` (`en` or `vi`) and re-renders it. Problems in full-markup mode\nneed `judge.problem_full_markup` to change the text. Sending the stored text\nagain changes nothing. Answers 204 and invalidates the cached PDF\nstatements.",
         "operationId": "ProblemEditingController_putTranslation",
         "parameters": [
           {
+            "description": "Language of the translation.",
             "in": "path",
             "name": "lang",
             "required": true,
@@ -25526,6 +26182,7 @@
             }
           },
           {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -25568,8 +26225,9 @@
             }
           }
         },
+        "summary": "Create or replace a statement translation",
         "tags": [
-          "ProblemEditing"
+          "Problem editing"
         ]
       }
     },
@@ -26062,9 +26720,11 @@
     },
     "/api/internal/similarity/pairs/{pairId}": {
       "get": {
+        "description": "Needs `judge.moss_contest` and edit rights on the run's scope. Returns the\npair, both submitted sources and the matched fragments. It is 404\n`not_found` unless the viewer could open both submissions' sources, so\nnothing is shown that the submission routes would hide.",
         "operationId": "SimilarityPairsController_detail",
         "parameters": [
           {
+            "description": "Pair id.",
             "in": "path",
             "name": "pairId",
             "required": true,
@@ -26112,13 +26772,15 @@
             }
           }
         },
+        "summary": "Get one similar pair with both sources",
         "tags": [
-          "SimilarityPairs"
+          "Judging"
         ]
       }
     },
     "/api/internal/similarity/runs": {
       "get": {
+        "description": "Needs `judge.moss_contest` and edit rights on the scope. Give exactly one of\nthe `problem` (code) or `contest` (key) query parameters. Returns the 10\nnewest runs, newest first, with their status, limits and per-language\ngroups. Unknown or not editable scopes are 404 `not_found`.",
         "operationId": "SimilarityRunsController_list",
         "parameters": [
           {
@@ -26182,11 +26844,13 @@
             }
           }
         },
+        "summary": "List recent similarity runs of a problem or contest",
         "tags": [
-          "SimilarityRuns"
+          "Judging"
         ]
       },
       "post": {
+        "description": "Needs `judge.moss_contest` and edit rights on the scope. Give exactly one of\n`problem` (code) or `contest` (key) in the body (400 `scope_required`); an\nunknown or not editable scope is 404 `not_found`. A background job compares\nthe submitted sources of the scope using the limits in the site settings at\nthis moment. Responds 409 `conflict` while the scope has a run in progress\nand 429 `rate_limited` after 10 starts per hour per user. Answers 202 with\nthe new `runId`; poll `GET /similarity/runs/{runId}`.",
         "operationId": "SimilarityStartController_start",
         "parameters": [],
         "requestBody": {
@@ -26238,16 +26902,19 @@
             }
           }
         },
+        "summary": "Start a code similarity check",
         "tags": [
-          "SimilarityStart"
+          "Judging"
         ]
       }
     },
     "/api/internal/similarity/runs/{runId}": {
       "get": {
+        "description": "Needs `judge.moss_contest` and edit rights on the run's scope. Returns the\nstatus (`queued`, `running`, `done` or `failed`), the error code for a\nfailed run, the limits used and the compared groups, plus languages that\ncould not be compared. Unknown, malformed and hidden ids are all 404\n`not_found`.",
         "operationId": "SimilarityRunsController_detail",
         "parameters": [
           {
+            "description": "Run id.",
             "in": "path",
             "name": "runId",
             "required": true,
@@ -26295,16 +26962,19 @@
             }
           }
         },
+        "summary": "Get a similarity run",
         "tags": [
-          "SimilarityRuns"
+          "Judging"
         ]
       }
     },
     "/api/internal/similarity/runs/{runId}/pairs": {
       "get": {
+        "description": "Needs `judge.moss_contest` and edit rights on the run's scope. Returns one\npage (`page`, `pageSize` up to 100), most similar first. Filter by\n`problemId`, `language` (engine family such as `cpp`) and `minSimilarity` (0\nto 1). Pairs on problems the viewer cannot see are left out. Unknown or\nhidden runs are 404 `not_found`.",
         "operationId": "SimilarityPairsController_list",
         "parameters": [
           {
+            "description": "Run id.",
             "in": "path",
             "name": "runId",
             "required": true,
@@ -26313,6 +26983,7 @@
             }
           },
           {
+            "description": "Page number, from 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -26324,6 +26995,7 @@
             }
           },
           {
+            "description": "Items per page, 1 to 100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -26335,6 +27007,7 @@
             }
           },
           {
+            "description": "Only pairs on this problem id.",
             "in": "query",
             "name": "problemId",
             "required": false,
@@ -26410,8 +27083,9 @@
             }
           }
         },
+        "summary": "List the similar submission pairs of a run",
         "tags": [
-          "SimilarityPairs"
+          "Judging"
         ],
         "x-enveloped": true
       }
@@ -26467,9 +27141,11 @@
     },
     "/api/internal/submissions": {
       "get": {
+        "description": "Public. Returns one page, newest first (`page` from 1, `pageSize` 1-100,\ndefault 50), of submissions on problems the viewer may see. Filter by `user`\n(username), `problem` (code), `language` (ids, repeat the parameter),\n`result` and `status` (repeat the parameter). Other users' submissions of a\ncontest are left out while that contest's submission list is closed to the\nviewer. Filtering by the internal codes `IE`, `QU`, `P`, `G`, `D` or `SC` is\nstaff only (400 `validation_failed`). A deleted problem's history stays\nvisible to its submitters.",
         "operationId": "SubmissionsController_list",
         "parameters": [
           {
+            "description": "Page number, from 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -26481,6 +27157,7 @@
             }
           },
           {
+            "description": "Items per page, 1 to 100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -26492,6 +27169,7 @@
             }
           },
           {
+            "description": "Only submissions with these verdicts (`AC`, `WA`, `TLE`, ...); repeat the parameter. `IE`, `SC` are staff only.",
             "in": "query",
             "name": "result",
             "required": false,
@@ -26503,6 +27181,7 @@
             }
           },
           {
+            "description": "Only submissions in these judging states (`QU`, `P`, `G`, `D`, `IE`, `CE`, `AB`, `PD`); repeat the parameter. `IE`, `QU`, `P`, `G`, `D` are staff only.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -26594,6 +27273,7 @@
             }
           }
         },
+        "summary": "List submissions visible to the viewer",
         "tags": [
           "Submissions"
         ],
@@ -26602,6 +27282,7 @@
     },
     "/api/internal/submissions/rejudge": {
       "post": {
+        "description": "Needs `judge.rejudge_submission` and edit rights on the problem named by\n`problem` (code). Matches the problem's submissions by optional `idFrom` and\n`idTo`, `languages` and `results`; submissions a judge currently holds and\npending final-submission rows are skipped, and locked ones unless `force` is\nset. More than 10 matches also need `judge.rejudge_submission_lot` (403\n`forbidden`). With `dryRun` nothing changes and `count` and `allowed` report\nwhat would happen. Otherwise the matches are queued at batch priority and\n`count` is how many were reset.",
         "operationId": "SubmissionActionsController_bulkRejudge",
         "parameters": [],
         "requestBody": {
@@ -26653,13 +27334,15 @@
             }
           }
         },
+        "summary": "Rejudge many submissions of a problem",
         "tags": [
-          "SubmissionActions"
+          "Judging"
         ]
       }
     },
     "/api/internal/submissions/stats": {
       "get": {
+        "description": "Public. Returns the submissions judged and accepted today (site time zone),\nthe number of queued or running submissions and the judges online out of all\nusable judges, counted over what a signed-out viewer may see. Cached for 30\nseconds.",
         "operationId": "SubmissionsController_statistics",
         "parameters": [],
         "responses": {
@@ -26701,7 +27384,7 @@
             }
           }
         },
-        "summary": "Declared before `:id`, which would take `stats` for an id.",
+        "summary": "Get the judging figures shown above the submission list",
         "tags": [
           "Submissions"
         ]
@@ -26709,9 +27392,11 @@
     },
     "/api/internal/submissions/{id}": {
       "get": {
+        "description": "Needs a signed-in user. The owner, problem editors and users with\n`judge.view_all_submission` always see it; others depend on the problem's\n`submissionSourceVisibility` (everyone, only after solving the problem, or\nowner and testers only). Test case results follow\n`testcaseResultVisibility`: every case, batch summaries only, or totals\nonly; feedback and program output have their own rules. `viewer` tells which\nof abort, rejudge and reject the caller may use. Errors: 404 `not_found`,\n403 `hidden`, 403 `solve_first` (solve the problem to see it) and 403\n`contest_running` (the contest's list is not open to the viewer yet).",
         "operationId": "SubmissionsController_detail",
         "parameters": [
           {
+            "description": "Submission id.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -26759,6 +27444,7 @@
             }
           }
         },
+        "summary": "Get a submission with its judging details",
         "tags": [
           "Submissions"
         ]
@@ -26766,9 +27452,11 @@
     },
     "/api/internal/submissions/{id}/abort": {
       "post": {
+        "description": "Allowed for the submission's owner, until an admin rejudges it, and for\nusers with `judge.abort_any_submission` (403 `forbidden` otherwise). A\nqueued submission becomes aborted at once; a running one is stopped through\nthe bridge; a finished one is left alone. Answers 204.",
         "operationId": "SubmissionActionsController_abort",
         "parameters": [
           {
+            "description": "Submission id.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -26801,16 +27489,19 @@
             }
           }
         },
+        "summary": "Abort a submission that is waiting or being judged",
         "tags": [
-          "SubmissionActions"
+          "Judging"
         ]
       }
     },
     "/api/internal/submissions/{id}/reject": {
       "post": {
+        "description": "Needs `judge.reject_submission` and edit rights on the problem (403\n`forbidden`). Sets the result to `RJ` with zero points and clears the case\nresults. Responds 409 `conflict` while the submission is still queued or\nbeing judged, and 409 `problem_deleted` when the problem is deleted. Answers\n204.",
         "operationId": "SubmissionActionsController_reject",
         "parameters": [
           {
+            "description": "Submission id.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -26843,16 +27534,19 @@
             }
           }
         },
+        "summary": "Reject a submission",
         "tags": [
-          "SubmissionActions"
+          "Judging"
         ]
       }
     },
     "/api/internal/submissions/{id}/rejudge": {
       "post": {
+        "description": "Needs `judge.rejudge_submission` and edit rights on the problem (403\n`forbidden`). Resets the submission and queues it again at rejudge priority.\nResponds 409 `conflict` when the submission is locked after a contest, is a\npending final submission or is being judged, and 409 `problem_deleted` when\nthe problem is deleted. Answers 204.",
         "operationId": "SubmissionActionsController_rejudge",
         "parameters": [
           {
+            "description": "Submission id.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -26885,16 +27579,19 @@
             }
           }
         },
+        "summary": "Rejudge one submission",
         "tags": [
-          "SubmissionActions"
+          "Judging"
         ]
       }
     },
     "/api/internal/submissions/{id}/source": {
       "get": {
+        "description": "Needs a signed-in user and follows the same access rules and errors as the\nsubmission detail. Returns the submitted source text; for a file-only\nlanguage it is the URL of the uploaded file.",
         "operationId": "SubmissionsController_source",
         "parameters": [
           {
+            "description": "Submission id.",
             "in": "path",
             "name": "id",
             "required": true,
@@ -26942,6 +27639,7 @@
             }
           }
         },
+        "summary": "Get the source code of a submission",
         "tags": [
           "Submissions"
         ]
@@ -26949,9 +27647,11 @@
     },
     "/api/internal/tags": {
       "get": {
+        "description": "Public. Returns one page (`page` from 1, `pageSize` 1-100) of external\nproblems that users have tagged. Filter by `tag` (tag code), `search`\n(substring of the code or name) and `judges` (`Atcoder`, `Codeforces`,\n`CodeforcesGym`, `Kattis`, `VNOJ`; repeat the parameter).",
         "operationId": "TagsController_list",
         "parameters": [
           {
+            "description": "Page number, from 1.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -26963,6 +27663,7 @@
             }
           },
           {
+            "description": "Items per page, 1 to 100.",
             "in": "query",
             "name": "pageSize",
             "required": false,
@@ -26995,6 +27696,7 @@
             }
           },
           {
+            "description": "Only problems from these judges: `Atcoder`, `Codeforces`, `CodeforcesGym`, `Kattis` or `VNOJ`; repeat the parameter.",
             "in": "query",
             "name": "judges",
             "required": false,
@@ -27059,12 +27761,14 @@
             }
           }
         },
+        "summary": "List tagged problems from other online judges",
         "tags": [
-          "Tags"
+          "Search & tags"
         ],
         "x-enveloped": true
       },
       "post": {
+        "description": "Needs a user who opted in to tagging and has `judge.add_tagproblem` or a\nrating of at least 1900 (403 `forbidden`). `link` must be the URL of a\nproblem on a supported judge; the code and judge are derived from it (400\n`validation_failed` otherwise) and `name` is the title. Responds 409\n`conflict` when the problem already exists. Writes a revision and returns\nthe new entry.",
         "operationId": "TagsController_create",
         "parameters": [],
         "requestBody": {
@@ -27116,13 +27820,15 @@
             }
           }
         },
+        "summary": "Add an external problem to the tag index",
         "tags": [
-          "Tags"
+          "Search & tags"
         ]
       }
     },
     "/api/internal/tags/catalog": {
       "get": {
+        "description": "Public. Returns the tag groups, sorted by code, each with its tags. Use the\ntag codes with `GET /tags` and `POST /tags/{code}/assign`.",
         "operationId": "TagsController_catalog",
         "parameters": [],
         "responses": {
@@ -27164,16 +27870,19 @@
             }
           }
         },
+        "summary": "List the available tags",
         "tags": [
-          "Tags"
+          "Search & tags"
         ]
       }
     },
     "/api/internal/tags/{code}": {
       "get": {
+        "description": "Public. Returns the problem, its tags and who assigned each one. A malformed\nor unknown code is 404 `not_found`.",
         "operationId": "TagsController_detail",
         "parameters": [
           {
+            "description": "Code of the tagged problem.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -27221,16 +27930,19 @@
             }
           }
         },
+        "summary": "Get a tagged problem",
         "tags": [
-          "Tags"
+          "Search & tags"
         ]
       }
     },
     "/api/internal/tags/{code}/assign": {
       "post": {
+        "description": "Same permission as adding a problem. Adds the tags in `tagCodes` (1 to 50)\nthat the problem does not have yet, recording the caller as assigner; tags\nalready present are ignored. Responds 400 `validation_failed` for an unknown\ntag code and 404 `not_found` for an unknown problem. Returns the updated\nproblem.",
         "operationId": "TagsController_assign",
         "parameters": [
           {
+            "description": "Code of the tagged problem.",
             "in": "path",
             "name": "code",
             "required": true,
@@ -27288,8 +28000,9 @@
             }
           }
         },
+        "summary": "Add tags to a tagged problem",
         "tags": [
-          "Tags"
+          "Search & tags"
         ]
       }
     },
