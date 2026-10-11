@@ -1261,6 +1261,11 @@ afterAll(() => api.teardown());
       const settings = api.app.get<Model<SettingRevision>>(
         getModelToken(SettingRevision.name),
       );
+      // Setup writes its own setting revisions; the feed here holds only this block's rows.
+      await Promise.all([
+        api.revisions.deleteMany({}),
+        settings.deleteMany({}),
+      ]);
       // Ids in write order, alternating between the two collections.
       ids = Array.from({ length: 5 }, () => newId()).sort();
       const revision = (id: string, userId: string | null) => ({
