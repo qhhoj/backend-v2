@@ -11,6 +11,7 @@ import {
   SubmissionEventsService,
 } from '@libs/judging';
 import type { SubmissionEventType } from '@libs/judging';
+import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
 import { SubmissionsService } from '../src/modules/submissions/core/submissions.service';
 import { STREAM_LIMITS } from '../src/modules/events/stream-limits';
 import type { StreamLimits } from '../src/modules/events/stream-limits';
@@ -41,6 +42,7 @@ const LIMITS: StreamLimits = {
   userTotal: 50,
   maxBufferedBytes: 256 * 1024,
   ticketBacklog: 1000,
+  feedBacklog: 1000,
   heartbeatMs: 100,
   recheckMs: 150,
 };
@@ -197,6 +199,30 @@ describe('submission event streams', () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(feed.messages).toEqual([]);
+  });
+
+  it('public feed: drops events beyond the backlog and tells the feed to resync once it drains', async () => {
+    const feed = await open(null, EVENTS);
+    await waitUntil(() => streams.openCounts().feed === 1);
+    const rows = api.app.get(SubmissionsRepository);
+    const findContestId = rows.findContestId.bind(rows);
+    const slow = jest
+      .spyOn(rows, 'findContestId')
+      .mockImplementation(async (...args) => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return findContestId(...args);
+      });
+    LIMITS.feedBacklog = 3;
+    try {
+      for (let count = 0; count < 6; count += 1)
+        await publish(await seed('stream_a'), 'done', 'D');
+      await feed.next('resync', 5000);
+    } finally {
+      slow.mockRestore();
+      LIMITS.feedBacklog = 1000;
+    }
+    const done = feed.messages.filter((message) => message.event === 'done');
+    expect(done.length).toBeLessThan(6);
   });
 
   it('public feed: a submission of a deleted problem never appears', async () => {

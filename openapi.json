@@ -10211,7 +10211,8 @@
             "type": "array"
           },
           "currentTestcase": {
-            "description": "Number of the case being judged while the submission runs.",
+            "description": "Number of the case being judged while the submission runs; null unless the viewer sees every case result (it would tell where judging stopped).",
+            "nullable": true,
             "type": "number"
           },
           "date": {

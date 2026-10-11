@@ -71,8 +71,8 @@ export class SubmissionViewerResponse implements SubmissionActions {
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
   /** Compile log or compiler warnings; the judge's internal error message only for editors. */
   error!: string | null;
-  /** Number of the case being judged while the submission runs. */
-  currentTestcase!: number;
+  /** Number of the case being judged while the submission runs; null unless the viewer sees every case result (it would tell where judging stopped). */
+  currentTestcase!: number | null;
   /** Whether only the pretests are judged (contest pretest mode). */
   isPretested!: boolean;
   /** Name of the judge that graded it; null when not judged yet. */
@@ -112,7 +112,8 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
     return {
       ...SubmissionListItemResponse.from(submission, refs),
       error: showError ? submission.error : null,
-      currentTestcase: submission.currentTestcase,
+      currentTestcase:
+        visibility.cases === 'all' ? submission.currentTestcase : null,
       isPretested: submission.isPretested,
       judgedOn: submission.judgedOn,
       judgedDate: submission.judgedDate,
