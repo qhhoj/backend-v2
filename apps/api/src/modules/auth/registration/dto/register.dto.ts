@@ -1,28 +1,20 @@
-import { MAIL_ADDRESS_PATTERN } from '@libs/common';
 import {
   IsOptional,
   IsString,
   IsUUID,
-  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { IsMailAddress } from '../../../users/core/dto/email';
+import { IsUsername } from '../../../users/core/dto/username';
 
 export class RegisterDto {
   /** Desired login name: letters, digits and underscores, up to 30 characters. */
-  @Matches(/^\w+$/, {
-    message: 'A username must contain letters, numbers, or underscores.',
-    context: { code: 'username_invalid_characters' },
-  })
-  @MaxLength(30)
+  @IsUsername()
   username!: string;
 
   /** Email address for the activation link and password resets, up to 254 characters. */
-  @Matches(MAIL_ADDRESS_PATTERN, {
-    message: 'Enter a valid email address.',
-    context: { code: 'email_invalid' },
-  })
-  @MaxLength(254)
+  @IsMailAddress()
   email!: string;
 
   /**

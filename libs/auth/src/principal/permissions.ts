@@ -83,6 +83,10 @@ export const PERMISSIONS = [
   'judge.change_problemgroup',
   'judge.add_license',
   'judge.change_license',
+  // Staff user editing: legacy Django admin codenames (Profile and auth User), so migrated groups keep them.
+  'judge.change_profile',
+  'auth.change_user',
+  'auth.add_user',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

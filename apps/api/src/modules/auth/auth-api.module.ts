@@ -46,5 +46,6 @@ import { WebauthnService } from './two-factor/webauthn.service';
     SocialService,
     OAuthProvidersService,
   ],
+  exports: [AuthService, PasswordResetService],
 })
 export class AuthApiModule {}

@@ -16,7 +16,6 @@ import {
   RateLimitService,
   REDIS,
   ValidationFailedError,
-  withRedisLock,
 } from '@libs/common';
 import type { FieldIssue, Mailer } from '@libs/common';
 import { ActivationKey, Language, Organization, uuidStr } from '@libs/database';
@@ -24,6 +23,7 @@ import type { User } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import { OrganizationPointsService } from '../../organizations/core/organization-points.service';
+import { withEmailLock } from '../../users/core/email-lock';
 import { ACTIVATION_DAYS, ActivationService } from './activation.service';
 import type { RegisterDto } from './dto/register.dto';
 import {
@@ -32,8 +32,6 @@ import {
   USERNAME_CHECK_IP_LIMIT,
   USERNAME_CHECK_WINDOW_SECONDS,
 } from '../core/rate-limits';
-
-const EMAIL_LOCK_SECONDS = 30;
 
 @Injectable()
 export class RegistrationService {
@@ -72,15 +70,10 @@ export class RegistrationService {
       REGISTRATION_IP_LIMIT,
       REGISTRATION_WINDOW_SECONDS,
     );
-    // Emails are not uniquely indexed (legacy duplicates), so serialize per email.
-    const lockKey = `register-lock:email:${email.toLowerCase()}`;
-    return withRedisLock(
+    return withEmailLock(
       this.redis,
-      {
-        key: lockKey,
-        ttlSeconds: EMAIL_LOCK_SECONDS,
-        busyMessage: 'Registration in progress; try again',
-      },
+      email,
+      'Registration in progress; try again',
       signup,
     );
   }

@@ -24,12 +24,18 @@ export class SocialAuth {
 export class User {
   @IdProp() _id!: string;
   @Prop({ required: true }) username!: string;
+  /** Names the account had before a staff rename; old profile links still find it while no account holds the name. */
+  @Prop({ type: [String], default: [] }) previousUsernames!: string[];
+  /** When staff last renamed the account: of several accounts that once had a name, the most recently renamed answers to it. */
+  @Prop({ type: Date, default: null }) renamedAt!: Date | null;
   @Prop({ default: '' }) email!: string;
   @Prop({ required: true }) password!: string;
   @Prop({ default: '' }) firstName!: string;
   @Prop({ default: '' }) lastName!: string;
   @Prop({ default: false }) isStaff!: boolean;
   @Prop({ default: false }) isActive!: boolean;
+  /** Set while staff keep the account deactivated, so it is never mistaken for an abandoned signup and reclaimed. */
+  @Prop({ type: Date, default: null }) deactivatedAt!: Date | null;
   @Prop({ default: false }) isSuperuser!: boolean;
   @Prop({ type: Date, default: null }) lastLogin!: Date | null;
   @Prop({ type: Date, default: () => new Date() }) dateJoined!: Date;
@@ -87,6 +93,7 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 ciIndex(UserSchema, 'username');
 ciIndex(UserSchema, 'email', false);
+ciIndex(UserSchema, 'previousUsernames', false);
 UserSchema.index(
   { 'socialAuth.provider': 1, 'socialAuth.uid': 1 },
   {

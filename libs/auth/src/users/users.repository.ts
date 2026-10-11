@@ -13,10 +13,11 @@ import { HydratedDocument, Model } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
 
-/** An abandoned signup: never activated, never logged in, not banned, older than `cutoff`. */
+/** An abandoned signup: never activated, never logged in, not banned or deactivated by staff, older than `cutoff`. */
 export const stalePendingFilter = (cutoff: Date) => ({
   isActive: false,
   banReason: null,
+  deactivatedAt: null,
   lastLogin: null,
   dateJoined: { $lt: cutoff },
 });
@@ -50,6 +51,40 @@ export class UsersRepository {
     fields?: Record<string, 1>,
   ): Promise<UserDocument | null> {
     return this.users.findOne({ username }, fields).collation(CI).exec();
+  }
+
+  /** The account that used to be called `username` (staff rename), case-insensitive; the most recently renamed when several did. */
+  findByPreviousUsername(username: string): Promise<UserDocument | null> {
+    return this.users
+      .findOne({ previousUsernames: username })
+      .collation(CI)
+      .sort({ renamedAt: -1 })
+      .exec();
+  }
+
+  /** Compare-and-set on the current name, keeping it in `previousUsernames` (minus the new name, case-insensitively); false when the name changed meanwhile. A name taken by another account throws the unique-index duplicate key. */
+  async rename(id: string, from: string, to: string): Promise<boolean> {
+    const renamed = await this.users
+      .findOneAndUpdate(
+        { _id: id, username: from },
+        {
+          $set: { username: to, renamedAt: new Date() },
+          $addToSet: { previousUsernames: from },
+        },
+        { new: true, projection: { previousUsernames: 1 } },
+      )
+      .lean()
+      .exec();
+    if (!renamed) return false;
+    const target = to.toLowerCase();
+    const aliases = renamed.previousUsernames.filter(
+      (name) => name.toLowerCase() !== target,
+    );
+    if (aliases.length !== renamed.previousUsernames.length)
+      await this.users
+        .updateOne({ _id: id }, { $set: { previousUsernames: aliases } })
+        .exec();
+    return true;
   }
 
   findByEmail(email: string): Promise<UserDocument | null> {
