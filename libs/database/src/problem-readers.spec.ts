@@ -47,6 +47,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'a submission queued before the delete must still be dispatched with the problem limits',
   ],
+  'apps/bridge/src/external/external-runs.repository.ts': [
+    'S',
+    'like the dispatch: a submission queued before the delete is still sent to the external judge and scored',
+  ],
   'apps/bridge/src/submissions/run-writes.repository.ts': [
     'S',
     'a submission graded after the delete is still scored with the problem points it was judged against',

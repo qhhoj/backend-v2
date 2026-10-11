@@ -39,6 +39,10 @@ function setup() {
       start: () => calls.push('commands.start'),
       stop: record('commands.stop', undefined),
     },
+    external: {
+      start: () => calls.push('external.start'),
+      stop: record('external.stop', undefined),
+    },
     server: {
       listen: record('listen', 9999),
       acceptJudges: () => calls.push('acceptJudges'),
@@ -53,6 +57,7 @@ function setup() {
     services.judges as never,
     services.submissions as never,
     services.runs as never,
+    services.external as never,
   );
   return { bridge, calls, services, unpinAbsent };
 }
@@ -94,6 +99,7 @@ describe('BridgeService', () => {
       'loadQueued',
       'enqueue',
       'commands.start',
+      'external.start',
       'acceptJudges',
     ]);
     await bridge.onModuleDestroy();
@@ -105,6 +111,7 @@ describe('BridgeService', () => {
     calls.length = 0;
     await bridge.onModuleDestroy();
     expect(calls).toEqual([
+      'external.stop',
       'dispatch.stop',
       'commands.stop',
       'server.close',

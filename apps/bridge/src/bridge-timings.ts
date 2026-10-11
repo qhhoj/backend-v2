@@ -15,6 +15,12 @@ export interface BridgeTimings {
   runCaseBudget: number;
   /** A queued submission pinned to a judge that has not been connected this long after it was submitted falls back to any judge. */
   pinFallbackMs: number;
+  /** The external adapter looks for queued external submissions and runs due for a poll at this interval (and at once on a command). */
+  externalTickMs: number;
+  /** A run on the external judge is polled this often; failed polls back off ×1.5 each, up to `EXTERNAL_MAX_BACKOFF_MS`. */
+  externalPollMs: number;
+  /** At most one submit to the external judge per this interval. */
+  externalSubmitGapMs: number;
 }
 
 export const BRIDGE_TIMINGS = Symbol('BRIDGE_TIMINGS');
@@ -30,6 +36,9 @@ export const DEFAULT_BRIDGE_TIMINGS: BridgeTimings = {
   runMarginMs: 10 * 60_000,
   runCaseBudget: 100,
   pinFallbackMs: 5 * 60_000,
+  externalTickMs: 2000,
+  externalPollMs: 5000,
+  externalSubmitGapMs: 1000,
 };
 
 /** Deadline of one run from its Assign; `null` (no deadline) when the inputs are not finite. */

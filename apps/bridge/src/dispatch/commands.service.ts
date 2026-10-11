@@ -7,6 +7,7 @@ import type { BridgeCommand } from '@libs/judging';
 import { JudgeLinkServer } from '../link/judge-link.server';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { DispatcherService } from './dispatcher.service';
+import { ExternalRunnerService } from '../external/external-runner.service';
 
 const READ_BLOCK_MS = 5000;
 const READ_BATCH = 100;
@@ -34,6 +35,7 @@ export class CommandsService {
     private readonly dispatch: DispatcherService,
     private readonly submissions: SubmissionsRepository,
     private readonly link: JudgeLinkServer,
+    private readonly external: ExternalRunnerService,
   ) {}
 
   /** The newest entry id (`0-0` when empty). Taken before the queue is rebuilt from Mongo, so a command published meanwhile is still read. */
@@ -144,6 +146,8 @@ export class CommandsService {
     switch (command.type) {
       case 'judge': {
         const queued = await this.submissions.loadQueued(command.submissionIds);
+        // submissions of external problems are not in `queued`: the adapter claims them
+        this.external.wake();
         return this.dispatch.enqueue(
           queued.map((submission) => ({
             ...submission,
@@ -156,7 +160,8 @@ export class CommandsService {
         );
       }
       case 'abort':
-        return this.dispatch.abort(command.submissionId);
+        this.dispatch.abort(command.submissionId);
+        return this.external.abort(command.submissionId);
       case 'disconnect-judge':
         this.dispatch.disconnect(command.judgeName, {
           isForced: command.force,

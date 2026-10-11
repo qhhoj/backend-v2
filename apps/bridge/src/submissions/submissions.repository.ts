@@ -16,7 +16,7 @@ import {
   SubmissionSource,
   uuidStr,
 } from '@libs/database';
-import { effectsDue, gradedJobOf } from '@libs/judging';
+import { effectsDue, EXTERNAL_JUDGE_NAME, gradedJobOf } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
 import type { AssignmentRef } from '@libs/judge-proto';
 import type { QueuedSubmission } from '../dispatch/slots';
@@ -154,8 +154,11 @@ export class SubmissionsRepository {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Queued submissions (all, or those of `ids`) in dispatch order, with the codes judges know (a mirror is judged under its root's code) and the judge pinned at submit, kept by an accept timeout and a resync (a judge loss or RETRY drops it). A row whose problem or language is gone is skipped. */
-  async loadQueued(ids?: string[]): Promise<QueuedSubmission[]> {
+  /** Queued submissions (all, or those of `ids`) in dispatch order; those of a problem the external judge takes only with `external` (then only those), with the codes judges know (a mirror is judged under its root's code) and the judge pinned at submit, kept by an accept timeout and a resync (a judge loss or RETRY drops it). A row whose problem or language is gone is skipped. */
+  async loadQueued(
+    ids?: string[],
+    { external = false }: { external?: boolean } = {},
+  ): Promise<QueuedSubmission[]> {
     const rows = await this.submissions
       .find(
         { status: 'QU', ...(ids && { _id: { $in: ids } }) },
@@ -173,9 +176,14 @@ export class SubmissionsRepository {
     const problems = await this.problems
       .find(
         { _id: { $in: unique(rows.map((row) => uuidStr(row.problem))) } },
-        { code: 1, mirrorRoot: 1 },
+        { code: 1, mirrorRoot: 1, 'externalJudge.isActive': 1 },
       )
       .lean();
+    const isExternal = new Set(
+      problems
+        .filter((problem) => problem.externalJudge?.isActive)
+        .map((problem) => uuidStr(problem._id)),
+    );
     const rootIds = problems.flatMap((problem) =>
       problem.mirrorRoot ? [uuidStr(problem.mirrorRoot)] : [],
     );
@@ -207,6 +215,7 @@ export class SubmissionsRepository {
       rows.filter((row) => row.contest).map((row) => uuidStr(row._id)),
     );
     return rows.flatMap((row) => {
+      if (isExternal.has(uuidStr(row.problem)) !== external) return [];
       const problemCode = judgedCodeOf.get(uuidStr(row.problem));
       const languageKey = keyOf.get(uuidStr(row.language));
       return problemCode && languageKey
@@ -542,9 +551,13 @@ export class SubmissionsRepository {
     return row ? row.judgeSeq : null;
   }
 
+  /** P/G runs of judges; the external adapter's (`@external`) are its own to recover. */
   async inFlightRuns(): Promise<InFlightRun[]> {
     const rows = await this.submissions
-      .find({ status: IN_FLIGHT }, { judgedOn: 1, judgeGeneration: 1 })
+      .find(
+        { status: IN_FLIGHT, judgedOn: { $ne: EXTERNAL_JUDGE_NAME } },
+        { judgedOn: 1, judgeGeneration: 1 },
+      )
       .lean();
     return rows.map((row) => ({
       id: uuidStr(row._id),
