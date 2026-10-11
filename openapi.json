@@ -467,6 +467,129 @@
         ],
         "type": "object"
       },
+      "AuditActorResponse": {
+        "properties": {
+          "id": {
+            "description": "User id.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username; null when the account no longer exists.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username"
+        ],
+        "type": "object"
+      },
+      "AuditEntryResponse": {
+        "properties": {
+          "action": {
+            "description": "What was done: `create`, `edit`, `delete`, `hide`, `lock`, ... as the writer recorded it.",
+            "type": "string"
+          },
+          "actor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuditActorResponse"
+              }
+            ],
+            "description": "Who made it; null for system writes (workers, imports).",
+            "nullable": true,
+            "type": "object"
+          },
+          "at": {
+            "description": "When the change was made.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "changedFields": {
+            "description": "Names of the changed fields. Values are never returned: some records hold sensitive before/after values.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "comment": {
+            "description": "The writer's free-text note, often empty.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Record id (UUIDv7, sorts by time).",
+            "type": "string"
+          },
+          "object": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuditObjectResponse"
+              }
+            ],
+            "description": "The object changed."
+          },
+          "type": {
+            "description": "Object kind: a `revisions` entity such as `problem`, or `setting`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "type",
+          "action",
+          "object",
+          "changedFields",
+          "comment"
+        ],
+        "type": "object"
+      },
+      "AuditFeedResponse": {
+        "properties": {
+          "items": {
+            "description": "Newest first, at most `limit`.",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryResponse"
+            },
+            "type": "array"
+          },
+          "nextBefore": {
+            "description": "Pass as `before` to read the next (older) page; null on the last page.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "nextBefore"
+        ],
+        "type": "object"
+      },
+      "AuditObjectResponse": {
+        "properties": {
+          "deleted": {
+            "description": "The object no longer exists (or is soft-deleted); clients show the label without a link.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Object id, or the key for a setting.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What to call the object: problem code, contest key, username, organization slug, page url, post title, setting key, catalog name. Null when the kind has no name (comment, submission) or the object is gone.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "deleted"
+        ],
+        "type": "object"
+      },
       "BalloonPageMetaResponse": {
         "properties": {
           "deliveredTotal": {
@@ -587,6 +710,178 @@
         },
         "required": [
           "reason"
+        ],
+        "type": "object"
+      },
+      "BulkContestResponse": {
+        "properties": {
+          "done": {
+            "description": "Number of contests changed.",
+            "type": "number"
+          },
+          "failed": {
+            "description": "Number of contests refused.",
+            "type": "number"
+          },
+          "results": {
+            "description": "One entry per requested key, in request order.",
+            "items": {
+              "$ref": "#/components/schemas/BulkContestResultResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "done",
+          "failed"
+        ],
+        "type": "object"
+      },
+      "BulkContestResultResponse": {
+        "properties": {
+          "key": {
+            "description": "The contest key from the request.",
+            "type": "string"
+          },
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BulkVisibilityOutcome"
+              }
+            ],
+            "description": "`done` when the contest changed, `unchanged` when it already was so, `failed` when the edit was refused."
+          },
+          "reason": {
+            "description": "Set when failed: the error code the single-contest PATCH would answer (`not_found`, `forbidden`, `conflict`, ...), or `too_many_tags`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "key"
+        ],
+        "type": "object"
+      },
+      "BulkContestTagDto": {
+        "properties": {
+          "assigned": {
+            "description": "true adds the tag to every listed contest, false removes it.",
+            "type": "boolean"
+          },
+          "keys": {
+            "description": "Contest keys to change, 1 to 100, no repeats.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "tag": {
+            "description": "The tag slug to add or remove.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "assigned",
+          "keys"
+        ],
+        "type": "object"
+      },
+      "BulkContestVisibilityDto": {
+        "properties": {
+          "isVisible": {
+            "description": "true shows every listed contest, false hides it.",
+            "type": "boolean"
+          },
+          "keys": {
+            "description": "Contest keys to change, 1 to 100, no repeats.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "isVisible",
+          "keys"
+        ],
+        "type": "object"
+      },
+      "BulkDisqualifyDto": {
+        "properties": {
+          "disqualified": {
+            "description": "True to disqualify the participation, false to reinstate it.",
+            "type": "boolean"
+          },
+          "ids": {
+            "description": "Participation ids, 1 to 100, no repeats.",
+            "items": {
+              "maxLength": 36,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "disqualified",
+          "ids"
+        ],
+        "type": "object"
+      },
+      "BulkDisqualifyResponse": {
+        "properties": {
+          "done": {
+            "description": "Number of participations changed.",
+            "type": "number"
+          },
+          "failed": {
+            "description": "Number of ids refused.",
+            "type": "number"
+          },
+          "results": {
+            "description": "One entry per requested id, in request order.",
+            "items": {
+              "$ref": "#/components/schemas/BulkDisqualifyResultResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "done",
+          "failed"
+        ],
+        "type": "object"
+      },
+      "BulkDisqualifyResultResponse": {
+        "properties": {
+          "id": {
+            "description": "The participation id from the request.",
+            "type": "string"
+          },
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BulkVisibilityOutcome"
+              }
+            ],
+            "description": "`done` when the flag changed, `unchanged` when it already had that value, `failed` when the participation is not in the contest."
+          },
+          "reason": {
+            "description": "Set when failed: the error code (`not_found`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "id"
         ],
         "type": "object"
       },
@@ -2064,6 +2359,10 @@
               }
             ]
           },
+          "logoOverrideImage": {
+            "description": "Shown instead of the site logo inside the contest; empty for none.",
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -2203,6 +2502,7 @@
           "rules",
           "rulesHtml",
           "rulesRevision",
+          "logoOverrideImage",
           "authors",
           "frozenLastMinutes",
           "showSubmissionList",
@@ -2323,11 +2623,46 @@
         ],
         "type": "object"
       },
+      "ContestListEditorResponse": {
+        "properties": {
+          "isVisible": {
+            "description": "Whether the contest is shown to users who may see it.",
+            "type": "boolean"
+          },
+          "lockedAfter": {
+            "description": "Live submissions are not rejudged after this time; null for no lock.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "pendingCount": {
+            "description": "Submissions still waiting for the final judge; null unless the format is `final_submission`.",
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "isVisible",
+          "lockedAfter",
+          "pendingCount"
+        ],
+        "type": "object"
+      },
       "ContestListItemResponse": {
         "properties": {
           "disallowVirtual": {
             "description": "Virtual participation after the end is not allowed.",
             "type": "boolean"
+          },
+          "editor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestListEditorResponse"
+              }
+            ],
+            "description": "Null unless the viewer may edit the contest.",
+            "nullable": true,
+            "type": "object"
           },
           "endTime": {
             "description": "When the contest ends, ISO 8601.",
@@ -2439,6 +2774,7 @@
           "phase",
           "formatName",
           "viewer",
+          "editor",
           "key",
           "name",
           "summary",
@@ -2459,6 +2795,15 @@
           "registrationEnd"
         ],
         "type": "object"
+      },
+      "ContestListSort": {
+        "enum": [
+          "name",
+          "newest",
+          "oldest",
+          "users"
+        ],
+        "type": "string"
       },
       "ContestListViewerResponse": {
         "properties": {
@@ -2831,6 +3176,10 @@
             "nullable": true,
             "type": "string"
           },
+          "ogImage": {
+            "description": "Image for link previews; empty for the site image.",
+            "type": "string"
+          },
           "organizations": {
             "description": "Organization ids tied to the contest.",
             "items": {
@@ -2933,6 +3282,7 @@
           "balloonStaff",
           "publishAfterEnd",
           "publishAfterEndBy",
+          "ogImage",
           "hasRankingAccessCode",
           "problemOutputPrefixes",
           "users"
@@ -2972,6 +3322,10 @@
             ],
             "description": "A theme token key (`tag-1`..`tag-8`), never a hex."
           },
+          "contestCount": {
+            "description": "Contests carrying the tag, among those the viewer may see.",
+            "type": "number"
+          },
           "description": {
             "description": "Short description.",
             "type": "string"
@@ -2994,7 +3348,8 @@
           "slug",
           "name",
           "description",
-          "order"
+          "order",
+          "contestCount"
         ],
         "type": "object"
       },
@@ -3238,10 +3593,20 @@
             "nullable": true,
             "type": "string"
           },
+          "logoOverrideImage": {
+            "description": "Replaces the site logo inside the contest: an http(s) URL or a site path, up to 150 characters; empty for none.",
+            "maxLength": 150,
+            "type": "string"
+          },
           "name": {
             "description": "Contest name, 1 to 100 characters.",
             "maxLength": 100,
             "minLength": 1,
+            "type": "string"
+          },
+          "ogImage": {
+            "description": "Image for link previews: an http(s) URL or a site path, up to 150 characters; empty for the site image.",
+            "maxLength": 150,
             "type": "string"
           },
           "organizations": {
@@ -3363,7 +3728,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 20,
             "type": "array"
           },
           "testers": {
@@ -14208,10 +14572,20 @@
             "nullable": true,
             "type": "string"
           },
+          "logoOverrideImage": {
+            "description": "Replaces the site logo inside the contest: an http(s) URL or a site path, up to 150 characters; empty for none.",
+            "maxLength": 150,
+            "type": "string"
+          },
           "name": {
             "description": "Contest name, 1 to 100 characters.",
             "maxLength": 100,
             "minLength": 1,
+            "type": "string"
+          },
+          "ogImage": {
+            "description": "Image for link previews: an http(s) URL or a site path, up to 150 characters; empty for the site image.",
+            "maxLength": 150,
             "type": "string"
           },
           "organizations": {
@@ -14333,7 +14707,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 20,
             "type": "array"
           },
           "testers": {
@@ -15908,6 +16281,134 @@
   },
   "openapi": "3.0.0",
   "paths": {
+    "/api/internal/admin/audit": {
+      "get": {
+        "description": "Requires `judge.change_settings`. The global change log: every write that already leaves a record (the `revisions` rows of problems, contests, users, organizations, posts, comments, pages, catalogs, submission locks and batch rejudges, and setting changes), newest first, 50 per page (`limit` 1-50). Each entry names the actor, the action, the object (with a label and whether it still exists) and the changed field names; values are never returned. Filters: `actor` (exact username; unknown gives an empty page), `type`, and a `from`/`to` time range. Page with `before` = the previous page's `nextBefore`. Reads are not logged.",
+        "operationId": "AuditController_list",
+        "parameters": [
+          {
+            "description": "Only changes to this kind of object.",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "enum": [
+                "blogPost",
+                "comment",
+                "contest",
+                "contestParticipation",
+                "flatpage",
+                "group",
+                "license",
+                "organization",
+                "problem",
+                "problemGroup",
+                "problemType",
+                "setting",
+                "submission",
+                "submission_batch",
+                "tagProblem",
+                "user"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size, 1-50; default 50.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Only changes made by this user (exact username, case-insensitive). An unknown username gives an empty feed.",
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "maxLength": 150,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Changes at or after this time (ISO 8601 with offset).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Changes before this time (ISO 8601 with offset).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The `nextBefore` of the previous page: only changes older than that entry.",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AuditFeedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List recorded changes across the site",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      }
+    },
     "/api/internal/admin/comments": {
       "get": {
         "description": "Requires `judge.change_comment`. Lists the comments of the whole site,\nnewest first, 30 per page, hidden ones included unless `state` narrows\nit: filter by body text `search` (deleted comments left out), the\nauthor's exact `author` username and the `pageType`. Comments on pages the moderator\ncannot read are left out of the page. A body search that runs too long\nfails with 422 `search_too_broad`.",
@@ -22057,7 +22558,7 @@
     },
     "/api/internal/contest-tags": {
       "get": {
-        "description": "Returns the contest tag catalogue, public. Paged with `page` and\n`pageSize`.",
+        "description": "Returns the contest tag catalogue, public, each tag with the number of\ncontests the viewer may see that carry it. Paged with `page` and\n`pageSize`.",
         "operationId": "ContestTagsController_list",
         "parameters": [
           {
@@ -22348,6 +22849,15 @@
             }
           },
           {
+            "description": "Row order; without it upcoming contests come soonest first and the rest newest first.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ContestListSort"
+            }
+          },
+          {
             "description": "Only contests carrying this tag slug.",
             "in": "query",
             "name": "tag",
@@ -22382,6 +22892,42 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "description": "true: only visible contests; false: only hidden ones (which only their editors, testers and staff see).",
+            "in": "query",
+            "name": "visible",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "true: only contests the viewer authors, curates or tests; a signed-out visitor gets none.",
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only contests starting at or after this time, ISO 8601.",
+            "in": "query",
+            "name": "startFrom",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only contests starting before this time, ISO 8601.",
+            "in": "query",
+            "name": "startBefore",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -22513,6 +23059,126 @@
           }
         },
         "summary": "Create a contest",
+        "tags": [
+          "Contest editing"
+        ]
+      }
+    },
+    "/api/internal/contests/bulk/tag": {
+      "post": {
+        "description": "Requires `judge.change_contest_tag`. Adds (`assigned` true) or removes\nthe tag on each listed contest as `PATCH /contests/{key}` would, so the\ncaller needs edit rights on each and an added tag must exist. A contest\nwhose tags changed meanwhile fails with `conflict`, one already holding 20\ntags with `too_many_tags`; failures do not stop the others. Limited to 20\nruns per hour per user, shared with the bulk visibility route (429\n`rate_limited`).",
+        "operationId": "ContestBulkController_tag",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkContestTagDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BulkContestResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Add or remove a tag on contests in bulk",
+        "tags": [
+          "Contest editing"
+        ]
+      }
+    },
+    "/api/internal/contests/bulk/visibility": {
+      "post": {
+        "description": "Applies `isVisible` to each listed contest exactly as `PATCH\n/contests/{key}` would: the caller needs edit rights on each, and showing\none needs `judge.change_contest_visibility` (or\n`judge.create_private_contest` for a private contest). A refused contest\nis reported as `failed` with the PATCH's error code and does not stop the\nothers. Limited to 20 runs per hour per user, shared with the bulk tag\nroute (429 `rate_limited`).",
+        "operationId": "ContestBulkController_visibility",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkContestVisibilityDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BulkContestResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Show or hide contests in bulk",
         "tags": [
           "Contest editing"
         ]
@@ -24454,7 +25120,7 @@
     },
     "/api/internal/contests/{key}/judge-final": {
       "post": {
-        "description": "Contest editors only. Queues judging of the pending final submissions of\nan ended final-submission contest; returns 202. Fails with 409 `conflict`\nfor any other format or while the contest is still running.",
+        "description": "Contest editors only. Queues judging of the pending final submissions of\na final-submission contest that has started; returns 202. A running\ncontest is judged early (results become visible) and what is submitted\nafterwards waits for the end. Fails with 409 `conflict` for any other\nformat or before the start.",
         "operationId": "ContestEditingController_judgeFinal",
         "parameters": [
           {
@@ -24730,7 +25396,7 @@
     },
     "/api/internal/contests/{key}/participations": {
       "get": {
-        "description": "Returns the viewer's own participations in the contest, or anyone's for\ncontest editors (filter by `user`; other users are refused with 403 for\nnon-editors). Live and virtual participations are included (not spectator\nrows). Results are frozen for non-editors while the ranking is frozen.\nPaged with `page` and `pageSize`.",
+        "description": "Returns the viewer's own participations in the contest, or anyone's for\ncontest editors (filter by the exact `user`, or by `search` for usernames\ncontaining the text; other users and `search` are refused with 403 for\nnon-editors). Live and virtual participations are included (not spectator\nrows). Results are frozen for non-editors while the ranking is frozen.\nPaged with `page` and `pageSize`.",
         "operationId": "ContestParticipationController_participations",
         "parameters": [
           {
@@ -24796,6 +25462,16 @@
             "description": "Username; others than the viewer need edit rights.",
             "in": "query",
             "name": "user",
+            "required": false,
+            "schema": {
+              "maxLength": 30,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Usernames containing this text, case-insensitive; contest editors only.",
+            "in": "query",
+            "name": "search",
             "required": false,
             "schema": {
               "maxLength": 30,
@@ -24930,6 +25606,76 @@
         "summary": "Add a participation",
         "tags": [
           "Contest editing"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/participations/disqualify": {
+      "post": {
+        "description": "Contest editors only. Applies `disqualified` to each listed participation\nof the contest as the single route does (contest ban, current contest,\ncheating ban), then purges the ranking cache and queues one rescore. An\nid that is not a participation of this contest is reported as `failed`\n(`not_found`) and does not stop the others; a row that already had the\nvalue is `unchanged`. Limited to 20 runs per hour per user (429\n`rate_limited`).",
+        "operationId": "ContestParticipationController_disqualifyMany",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkDisqualifyDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BulkDisqualifyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Disqualify or reinstate many participants",
+        "tags": [
+          "Contests"
         ]
       }
     },
