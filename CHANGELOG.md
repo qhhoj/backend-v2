@@ -1,5 +1,13 @@
 # qhhoj-backend
 
+## 2.5.1
+
+### Patch Changes
+
+- 4d4105e: Deploy: install-host.sh creates problem-data as 2750 again so the local judge can read it through group qhhoj.
+- 0f844a2: Comments: edits are limited to 20 per 5 minutes per user, and a page lists at most 100 replies per thread (`truncatedThreads` names the threads cut).
+- 4af72ac: Render: the raw-HTML math scan runs in linear time, and statement iframes are always sandboxed with `allow` limited to `fullscreen`.
+
 ## 2.5.0
 
 ### Minor Changes
