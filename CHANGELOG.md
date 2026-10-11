@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.5.2
+
+### Patch Changes
+
+- 40ec7e4: Auth: login failures are counted per IP and per (account, IP), so failures from elsewhere no longer lock an account out. `POST /auth/token/regenerate` now requires `currentPassword`, and a password change or `logout-all` revokes the API token.
+- 77a9c98: Submissions: the public feed's delivery queue is bounded (drops and sends `resync` when backed up), and the detail's `currentTestcase` is null unless the viewer sees every case result.
+
 ## 2.5.1
 
 ### Patch Changes
