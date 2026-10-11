@@ -214,6 +214,13 @@ export class ContestsRepository {
     );
   }
 
+  /** Pending final submissions the end-of-contest judging will queue (`{status, contest, _id}` index). */
+  countPendingSubmissions(contestId: string): Promise<number> {
+    return this.submissions
+      .countDocuments({ contest: contestId, ...JUDGEABLE_PENDING })
+      .exec();
+  }
+
   /** Legacy `set_locked_after`: the lock is copied onto every live submission of the contest, a chunk at a time. */
   async propagateLock(
     contestId: string,

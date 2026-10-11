@@ -255,20 +255,32 @@ export class ParticipationsRepository {
   }
 
   /** Null when a live participation already exists. `placeholder` fills `realStart` until the first join. */
-  async register(
+  register(
     contestId: string,
     userId: string,
     placeholder: Date,
     acceptance: RulesAcceptance | null,
   ): Promise<ParticipationDocument | null> {
+    return this.insertLive(contestId, userId, {
+      realStart: placeholder,
+      isRegistered: true,
+      ...acceptance,
+    });
+  }
+
+  /** Null when a live participation already exists (unique `{contest, user, virtual}`). */
+  async insertLive(
+    contestId: string,
+    userId: string,
+    fields: Pick<ContestParticipation, 'realStart'> &
+      Partial<ContestParticipation>,
+  ): Promise<ParticipationDocument | null> {
     try {
       return await this.participations.create({
+        ...fields,
         contest: contestId,
         user: userId,
         virtual: LIVE,
-        realStart: placeholder,
-        isRegistered: true,
-        ...acceptance,
       });
     } catch (error) {
       if (isDuplicateKey(error)) return null;
@@ -311,15 +323,17 @@ export class ParticipationsRepository {
     return { userCount, virtualCount };
   }
 
+  /** Default order: live before virtual, oldest first. */
   async list(
     filter: FilterQuery<ContestParticipation>,
     page: number,
     pageSize: number,
+    order: Record<string, 1 | -1> = { virtual: 1, _id: 1 },
   ): Promise<{ items: ParticipationDocument[]; total: number }> {
     const [items, total] = await Promise.all([
       this.participations
         .find(filter)
-        .sort({ virtual: 1, _id: 1 })
+        .sort(order)
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .exec(),

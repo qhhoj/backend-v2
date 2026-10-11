@@ -2,17 +2,21 @@ import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { RefuseNullFieldsPipe } from '@libs/common';
 import { ContestActionsService } from './contest-actions.service';
 import { ContestEditingService } from './contest-editing.service';
+import { ContestRemovalService } from './contest-removal.service';
+import { ContestDeleteQueryDto } from './dto/contest-delete.dto';
 import { ContestActionsResponse } from './dto/contest-actions.response';
 import { ContestDetailResponse } from '../core/dto/contest-detail.response';
 import { CloneContestDto } from './dto/contest-clone.dto';
@@ -30,6 +34,7 @@ export class ContestEditingController {
   constructor(
     private readonly editing: ContestEditingService,
     private readonly actionStatus: ContestActionsService,
+    private readonly removal: ContestRemovalService,
   ) {}
 
   /**
@@ -71,6 +76,27 @@ export class ContestEditingController {
     dto: UpdateContestDto,
   ): Promise<ContestDetailResponse> {
     return this.editing.update(auth.principal, key, dto);
+  }
+
+  /**
+   * Delete a contest
+   *
+   * @remarks
+   * Contest editors only, with the key typed again in `confirm` (400
+   * `confirmation_mismatch` otherwise). Only a hidden contest without ratings
+   * or pending final submissions can be deleted (409 `contest_not_deletable`).
+   * Its participations, announcements, ranking link, ghosts, balloons, feed
+   * keys, replay and official ranking are deleted; its submissions are kept
+   * outside any contest. Returns 204.
+   */
+  @Delete(':key')
+  @HttpCode(204)
+  remove(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key }: ContestKeyParamDto,
+    @Query() { confirm }: ContestDeleteQueryDto,
+  ): Promise<void> {
+    return this.removal.remove(auth.principal, key, confirm);
   }
 
   /**

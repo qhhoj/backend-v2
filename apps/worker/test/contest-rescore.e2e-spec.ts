@@ -172,6 +172,33 @@ describe('contest rescore', () => {
     });
   });
 
+  it('narrows to one participation, or to the participations that sent the problem a submission', async () => {
+    const { problem, contest, participation, full } = await contestWith();
+    const other = await seedParticipation(
+      worker,
+      contest._id,
+      (await seedUser(worker))._id,
+    );
+    const othersFull = await seedContestSubmission(worker, other, problem._id, {
+      fields: { casePoints: 4, caseTotal: 4 },
+      points: 100,
+    });
+    await worker.contests.updateOne(
+      { _id: contest._id },
+      { 'problems.0.points': 200 },
+    );
+    expect(
+      await rescores.rescore(contest._id, { participationId: other._id }),
+    ).toEqual({ rescored: 1, participations: 1 });
+    expect([await pointsOf(full._id), await pointsOf(othersFull._id)]).toEqual([
+      100, 200,
+    ]);
+    expect(
+      await rescores.rescore(contest._id, { problemId: problem._id }),
+    ).toEqual({ rescored: 2, participations: 2 });
+    expect((await participationOf(participation._id)).score).toBe(200);
+  });
+
   it('keeps disqualified participations at -9999', async () => {
     const { contest, participation } = await contestWith();
     await worker.participations.updateOne(

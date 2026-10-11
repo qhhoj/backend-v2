@@ -42,6 +42,25 @@ export class AnnouncementsRepository {
       .exec();
   }
 
+  /** The edited row, or null when it is not in this contest; `createdAt` is kept. */
+  updateInContest(
+    contestId: string,
+    id: string,
+    fields: Pick<
+      ContestAnnouncement,
+      'title' | 'description' | 'descriptionHtml'
+    >,
+  ) {
+    return this.announcements
+      .findOneAndUpdate(
+        { _id: id, contest: contestId },
+        { $set: fields },
+        { new: true },
+      )
+      .lean<ContestAnnouncement>()
+      .exec();
+  }
+
   async deleteInContest(contestId: string, id: string): Promise<boolean> {
     const { deletedCount } = await this.announcements
       .deleteOne({ _id: id, contest: contestId })

@@ -197,6 +197,7 @@ user-activity/
 - `extra` (6th `AppError` argument) is merged into the error object next to `code` and `message`, never overriding them; `BannedError` (login) uses it for `banReason`
 - Contest participation refusals (`participation-refusals.ts`): 409 `editor_cannot_register`, `registration_not_required`, `registration_closed`, `contest_ended`, `already_registered`, `contest_not_started`, `virtual_disallowed`, `not_registered`; 403 `banned_from_contest`, `access_code_required`, `wrong_access_code`; 404 `not_in_contest`; 400 `rules_not_accepted` (field `acceptRules`, a contest with rules and a new participation without the box ticked)
 - Contest participation refusals (`participation-refusals.ts`): 409 `editor_cannot_register`, `registration_not_required`, `registration_closed`, `contest_ended`, `already_registered`, `contest_not_started`, `virtual_disallowed`, `not_registered`; 403 `banned_from_contest`, `access_code_required`, `wrong_access_code`; 404 `not_in_contest`
+- Contest admin refusals: 400 `confirmation_mismatch` (delete without the key typed again), 409 `contest_not_deletable` (visible, rated or pending final submissions), 409 `already_participating`, `participation_has_submissions` and `banned_from_contest` (hand-edited participations), issue `user_unknown`
 - Contest replay refusals (`replay/replay-refusal.ts`, every one carries `issues[].code`): 403 `forbidden` with issue `board_frozen` or `board_hidden`; 409 `contest_not_ended`, `replay_unsupported`, `replay_changed`; 400 `replay_build_required`; 404 `replay_chunk_not_found`, `replay_not_ready`, `not_found`; 429 `rate_limited`
 - Contest replay refusals (`replay/replay-refusal.ts`, every one carries `issues[].code`): 403 `forbidden` with issue `board_frozen` or `board_hidden`; 409 `contest_not_ended`, `replay_unsupported`, `replay_changed`; 400 `replay_build_required`; 404 `replay_chunk_not_found`, `replay_not_ready` (also when Redis is down on the lazy path), `not_found`; 429 `rate_limited`; 503 `replay_unavailable` (rebuild while Redis or the queue is down; the budget is given back)
 - Contest ghost refusals (`ghosts/`): 400 `ghost_import_invalid` with `issues[].code` from `GHOST_CSV_ISSUE_CODES` (`label_missing`, `label_formula`, `label_repeats`, `label_invalid`, `caption_invalid`, `caption_formula`, `control_character`, `cell_invalid`, `columns_mismatch`, `header_invalid`, `csv_invalid`, `too_many_ghosts`; `row` is the 1-based CSV row); 409 `ghost_unsupported_format` (import into a `final_submission` contest); 413 from Fastify's body limit (`GHOST_CSV_MAX_BYTES`, 1 MiB) before the handler runs
@@ -547,20 +548,20 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 
 ## Commands
 
-| Command                   | Purpose                                                                       |
-| ------------------------- | ----------------------------------------------------------------------------- |
-| `npm test`                | Jest, runs in band                                                            |
-| `npm run format`          | Prettier write on `apps/` and `libs/`                                         |
-| `npm run lint`            | ESLint (+ Prettier) on `apps/` and `libs/`                                    |
-| `npm run test:openapi`    | the OpenAPI coverage spec with the swagger plugin (see OpenAPI)               |
-| `npm run seed:e2e`        | idempotent dev/e2e seed (see Seed script)                                     |
-| `npm run typecheck`       | `tsc --noEmit`                                                                |
-| `npm run build`           | build `api`                                                                   |
-| `npx nest build worker`   | build worker                                                                  |
-| `npx nest build bridge`   | build bridge                                                                  |
-| `npx nest start api`      | run the API                                                                   |
-| `npx nest start bridge`   | run the bridge                                                                |
-| `npx nest start worker`   | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
+| Command                 | Purpose                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `npm test`              | Jest, runs in band                                                            |
+| `npm run format`        | Prettier write on `apps/` and `libs/`                                         |
+| `npm run lint`          | ESLint (+ Prettier) on `apps/` and `libs/`                                    |
+| `npm run test:openapi`  | the OpenAPI coverage spec with the swagger plugin (see OpenAPI)               |
+| `npm run seed:e2e`      | idempotent dev/e2e seed (see Seed script)                                     |
+| `npm run typecheck`     | `tsc --noEmit`                                                                |
+| `npm run build`         | build `api`                                                                   |
+| `npx nest build worker` | build worker                                                                  |
+| `npx nest build bridge` | build bridge                                                                  |
+| `npx nest start api`    | run the API                                                                   |
+| `npx nest start bridge` | run the bridge                                                                |
+| `npx nest start worker` | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
 
 CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 

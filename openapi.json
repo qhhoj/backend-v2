@@ -212,6 +212,58 @@
         ],
         "type": "object"
       },
+      "AddParticipationDto": {
+        "properties": {
+          "kind": {
+            "description": "`live` (one per user) or a new `virtual` run.",
+            "enum": [
+              "live",
+              "virtual"
+            ],
+            "type": "string"
+          },
+          "realStart": {
+            "description": "When the participation starts, ISO 8601; defaults to now while the contest runs, else to the contest start (live) or now (virtual).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "user": {
+            "description": "Username of the participant.",
+            "maxLength": 30,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "user"
+        ],
+        "type": "object"
+      },
+      "AnnouncementPreviewDto": {
+        "properties": {
+          "description": {
+            "description": "Markdown to render, as the announcement body would be.",
+            "maxLength": 200000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "AnnouncementPreviewResponse": {
+        "properties": {
+          "html": {
+            "description": "The Markdown rendered to HTML.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "html"
+        ],
+        "type": "object"
+      },
       "AnnouncementResponse": {
         "properties": {
           "createdAt": {
@@ -1404,6 +1456,10 @@
               }
             ]
           },
+          "pendingCount": {
+            "description": "Pending final submissions still to be judged (final-submission contests; 0 otherwise).",
+            "type": "number"
+          },
           "publish": {
             "allOf": [
               {
@@ -1440,7 +1496,8 @@
           "publish",
           "replay",
           "export",
-          "autoPublish"
+          "autoPublish",
+          "pendingCount"
         ],
         "type": "object"
       },
@@ -2148,6 +2205,19 @@
           "problemId",
           "outputPrefixOverride"
         ],
+        "type": "object"
+      },
+      "ContestProblemRejudgeDto": {
+        "properties": {
+          "dryRun": {
+            "description": "Count what would be rejudged and change nothing.",
+            "type": "boolean"
+          },
+          "force": {
+            "description": "Also rejudge locked submissions.",
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "ContestProblemResponse": {
@@ -12655,6 +12725,19 @@
         },
         "type": "object"
       },
+      "UpdateParticipationDto": {
+        "properties": {
+          "realStart": {
+            "description": "New start, ISO 8601: moves a timed participant's window.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "realStart"
+        ],
+        "type": "object"
+      },
       "UpdatePolygonLinkDto": {
         "properties": {
           "autoSync": {
@@ -18608,6 +18691,59 @@
       }
     },
     "/api/internal/contests/{key}": {
+      "delete": {
+        "description": "Contest editors only, with the key typed again in `confirm` (400\n`confirmation_mismatch` otherwise). Only a hidden contest without ratings\nor pending final submissions can be deleted (409 `contest_not_deletable`).\nIts participations, announcements, ranking link, ghosts, balloons, feed\nkeys, replay and official ranking are deleted; its submissions are kept\noutside any contest. Returns 204.",
+        "operationId": "ContestEditingController_remove",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The contest key typed again, to confirm the delete.",
+            "in": "query",
+            "name": "confirm",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a contest",
+        "tags": [
+          "Contest editing"
+        ]
+      },
       "get": {
         "description": "Returns the contest's description, rules, scoring settings, authors and\nthe viewer's own participation state. The problem list is null until the\nviewer may see it (taking part, contest ended, or editor or tester), and\n`settings` is only filled for viewers who can edit. Fails with 404\n`not_found` for a malformed, unknown or invisible key alike, so existence\nnever leaks.",
         "operationId": "ContestsController_detail",
@@ -18955,6 +19091,76 @@
         ]
       }
     },
+    "/api/internal/contests/{key}/announcements/preview": {
+      "post": {
+        "description": "Contest editors only. Renders the Markdown exactly as posting would and\nreturns the HTML; nothing is stored. Fails with 400 `validation_failed`\nwhen the text cannot be rendered.",
+        "operationId": "ContestAnnouncementsController_preview",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementPreviewDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AnnouncementPreviewResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Preview an announcement",
+        "tags": [
+          "Contests"
+        ]
+      }
+    },
     "/api/internal/contests/{key}/announcements/{id}": {
       "delete": {
         "description": "Contest editors only. Deletes the announcement and returns 204, or 404\n`not_found` when it does not exist in this contest.",
@@ -19005,6 +19211,84 @@
           }
         },
         "summary": "Delete a contest announcement",
+        "tags": [
+          "Contests"
+        ]
+      },
+      "patch": {
+        "description": "Contest editors only. Replaces the title and Markdown body (re-rendered)\nand keeps the original post time; the edit is not pushed again (resend\ndoes that). Fails with 404 `not_found` for an unknown announcement and 400\n`validation_failed` when the text cannot be rendered.",
+        "operationId": "ContestAnnouncementsController_update",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Id of the announcement.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnouncementDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AnnouncementResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Edit a contest announcement",
         "tags": [
           "Contests"
         ]
@@ -20600,6 +20884,32 @@
             }
           },
           {
+            "description": "Only live, virtual or spectating rows; default live and virtual.",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "live",
+                "spectate",
+                "virtual"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "`score`: best first (score, then time, then tiebreaker); default: live before virtual, oldest first.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "score"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "description": "Username; others than the viewer need edit rights.",
             "in": "query",
             "name": "user",
@@ -20607,6 +20917,15 @@
             "schema": {
               "maxLength": 30,
               "type": "string"
+            }
+          },
+          {
+            "description": "Only disqualified (true) or only valid (false) rows.",
+            "in": "query",
+            "name": "disqualified",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -20661,6 +20980,205 @@
           "Contests"
         ],
         "x-enveloped": true
+      },
+      "post": {
+        "description": "Contest editors only. Adds a live participation (409\n`already_participating` when the user has one) or a new virtual run for\nthe user, starting at `realStart` (default: now while the contest runs,\nelse the contest start for a live row and now for a virtual one). The\nuser's current contest is not changed. Fails with 400 `validation_failed`\n(issue `user_unknown`) and 409 `banned_from_contest`.",
+        "operationId": "ParticipationAdminController_add",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddParticipationDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ParticipationSummaryResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Add a participation",
+        "tags": [
+          "Contest editing"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/participations/{id}": {
+      "delete": {
+        "description": "Contest editors only. Deletes a participation that has no submissions\n(409 `participation_has_submissions` otherwise: disqualify it instead) and\nclears the user's current contest when it pointed there. Returns 204;\n404 `not_found` for an unknown participation.",
+        "operationId": "ParticipationAdminController_remove",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Id of the participation.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a participation",
+        "tags": [
+          "Contest editing"
+        ]
+      },
+      "patch": {
+        "description": "Contest editors only. Sets `realStart` (a pending registration counts as\nstarted), purges the ranking cache and queues a recompute of the\nparticipation. Fails with 404 `not_found`.",
+        "operationId": "ParticipationAdminController_update",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Id of the participation.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateParticipationDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ParticipationSummaryResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Change a participation's start",
+        "tags": [
+          "Contest editing"
+        ]
       }
     },
     "/api/internal/contests/{key}/participations/{id}/disqualify": {
@@ -20739,6 +21257,223 @@
         "summary": "Disqualify or reinstate a participant",
         "tags": [
           "Contests"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/participations/{id}/recompute": {
+      "post": {
+        "description": "Contest editors only. Queues a rescore of the participation's submissions\nand results, for one stale score; returns 202 with `queued` true.",
+        "operationId": "ParticipationAdminController_recompute",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Id of the participation.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/QueuedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Recompute a participation",
+        "tags": [
+          "Contest editing"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/problems/{code}/rejudge": {
+      "post": {
+        "description": "Contest editors with `judge.rejudge_submission` (403 `forbidden`\notherwise). Rejudges the submissions sent to the problem inside this\ncontest only; submissions a judge holds and pending final-submission rows\nare skipped, and locked ones unless `force` is set. More than 10 matches\nalso need `judge.rejudge_submission_lot` (403 `forbidden`). With `dryRun`\nnothing changes and `count` and `allowed` report what would happen. Fails\nwith 404 `not_found` when the problem is not in the contest.",
+        "operationId": "ContestProblemOpsController_rejudge",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Code of a problem in the contest.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContestProblemRejudgeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BulkRejudgeResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Rejudge a contest problem's submissions",
+        "tags": [
+          "Contest editing"
+        ]
+      }
+    },
+    "/api/internal/contests/{key}/problems/{code}/rescore": {
+      "post": {
+        "description": "Contest editors only. Queues a rescore of the problem's submissions in\nthis contest and of the participations that sent one, cheaper than a full\ncontest rescore; returns 202 with `queued` true. Fails with 404\n`not_found` when the problem is not in the contest.",
+        "operationId": "ContestProblemOpsController_rescore",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Code of a problem in the contest.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/QueuedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Rescore a contest problem",
+        "tags": [
+          "Contest editing"
         ]
       }
     },

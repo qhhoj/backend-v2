@@ -115,6 +115,7 @@ afterAll(() => api.teardown());
       replay: 'idle',
       export: 'idle',
       autoPublish: null,
+      pendingCount: 0,
     };
 
     beforeAll(async () => {

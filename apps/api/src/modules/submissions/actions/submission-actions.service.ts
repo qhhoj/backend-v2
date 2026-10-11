@@ -48,7 +48,19 @@ const cannotManageProblem = (): AppError =>
     'You cannot manage submissions of this problem',
   );
 
-/** Legacy `apply_submission_filter` for one problem; submissions a judge holds are never reset, and pending final-submission rows belong to contest judging. */
+/** What a bulk rejudge never resets: submissions a judge holds, pending final-submission rows (contest judging owns them) and, unless forced, locked ones. */
+function rejudgeableFilter(
+  force: boolean | undefined,
+): FilterQuery<Submission> {
+  return {
+    status: { $nin: [...IN_FLIGHT_STATUSES, 'PD'] },
+    ...(force
+      ? {}
+      : { $or: [{ lockedAfter: null }, { lockedAfter: { $gt: new Date() } }] }),
+  };
+}
+
+/** Legacy `apply_submission_filter` for one problem. */
 function bulkFilter(
   problemId: string,
   dto: BulkRejudgeDto,
@@ -59,13 +71,10 @@ function bulkFilter(
   };
   return {
     problem: problemId,
-    status: { $nin: [...IN_FLIGHT_STATUSES, 'PD'] },
+    ...rejudgeableFilter(dto.force),
     ...(Object.keys(idRange).length ? { _id: idRange } : {}),
     ...(dto.languages?.length ? { language: { $in: dto.languages } } : {}),
     ...(dto.results?.length ? { result: { $in: dto.results } } : {}),
-    ...(dto.force
-      ? {}
-      : { $or: [{ lockedAfter: null }, { lockedAfter: { $gt: new Date() } }] }),
   };
 }
 
@@ -181,12 +190,39 @@ export class SubmissionActionsService {
     );
     if (!mayRejudgeSubmission(principal, editsProblem(principal, problem)))
       throw cannotManageProblem();
-    const filter = bulkFilter(problem._id, dto);
+    return this.rejudgeMatching(
+      principal,
+      bulkFilter(problem._id, dto),
+      dto.dryRun === true,
+    );
+  }
+
+  /** Legacy contest admin `rejudge_view`: every submission sent to the problem inside the contest. The caller has checked edit rights on the contest; the rejudge permission stands in for edit rights on the problem, which a contest editor may lack. */
+  async contestProblemRejudge(
+    principal: Principal,
+    target: { contestId: string; problemId: string },
+    options: { force?: boolean; dryRun?: boolean },
+  ): Promise<BulkRejudgeResponse> {
+    if (!mayRejudgeSubmission(principal, true)) throw cannotManageProblem();
+    const filter: FilterQuery<Submission> = {
+      contest: target.contestId,
+      problem: target.problemId,
+      ...rejudgeableFilter(options.force),
+    };
+    return this.rejudgeMatching(principal, filter, options.dryRun === true);
+  }
+
+  /** Counts first: above `BULK_REJUDGE_LIMIT` needs `judge.rejudge_submission_lot`; a dry run stops at the count. */
+  private async rejudgeMatching(
+    principal: Principal,
+    filter: FilterQuery<Submission>,
+    dryRun: boolean,
+  ): Promise<BulkRejudgeResponse> {
     const matching = await this.submissions.countMatching(filter);
     const allowed =
       matching <= BULK_REJUDGE_LIMIT ||
       hasPermission(principal, 'judge.rejudge_submission_lot');
-    if (dto.dryRun) return { count: matching, dryRun: true, allowed };
+    if (dryRun) return { count: matching, dryRun: true, allowed };
     if (!allowed)
       throw new AppError(
         'forbidden',

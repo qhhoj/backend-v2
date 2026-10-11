@@ -9,7 +9,11 @@ import {
   notifyReplayBuild,
   replayDelayMs,
 } from '@libs/contests';
-import type { ContestRatingJob, ContestReplayJob } from '@libs/contests';
+import type {
+  ContestRatingJob,
+  ContestReplayJob,
+  ContestRescoreScope,
+} from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import type { ScoringContest } from '../submission-effects/contest-results.repository';
 import { ContestResultsRepository } from '../submission-effects/contest-results.repository';
@@ -36,11 +40,12 @@ export class ContestRescoreService {
   /** Legacy `rescore_contest` plus the per-submission `update_contest` it relied on: every contest submission's points from its case totals and the contest's current problems, then every participation through the coalesced recompute. Rows of problems no longer in the contest keep their points. A contest that has ratings is re-rated afterwards (disqualifications and scoring edits change the standings the ratings came from); an enqueue failure fails the run, and the retry rescores again. Last, the contest's replay is rebuilt: a request that cannot be queued never fails the run. */
   async rescore(
     contestId: string,
+    scope: ContestRescoreScope = {},
   ): Promise<{ rescored: number; participations: number }> {
     const contest = await this.contestResults.findContest(contestId);
     if (!contest) return { rescored: 0, participations: 0 };
-    const rescored = await this.rescoreSubmissions(contestId, contest);
-    const participations = await this.recomputeParticipations(contestId);
+    const rescored = await this.rescoreSubmissions(contestId, contest, scope);
+    const participations = await this.recomputeParticipations(contestId, scope);
     // Keyed on stored ratings, not `isRated`: a contest no longer rated but still holding ratings loses them here.
     if (await this.repository.hasRatings(contestId))
       await enqueueContestRating(this.ratingQueue, contestId);
@@ -52,10 +57,11 @@ export class ContestRescoreService {
     return { rescored, participations };
   }
 
-  /** Points of every contest submission of the contest's current problems, written only where they changed. */
+  /** Points of every contest submission (in the scope) of the contest's current problems, written only where they changed. */
   private async rescoreSubmissions(
     contestId: string,
     contest: ScoringContest,
+    scope: ContestRescoreScope,
   ): Promise<number> {
     const entries = new Map(
       contest.problems.map((entry) => [uuidStr(entry.problem), entry]),
@@ -64,7 +70,10 @@ export class ContestRescoreService {
       ...entries.keys(),
     ]);
     let rescored = 0;
-    for await (const chunk of this.repository.submissionChunks(contestId)) {
+    for await (const chunk of this.repository.submissionChunks(
+      contestId,
+      scope,
+    )) {
       const totals = await this.contestResults.caseTotals(
         chunk.map((row) => uuidStr(row._id)),
       );
@@ -89,10 +98,13 @@ export class ContestRescoreService {
     return rescored;
   }
 
-  /** Every participation of the contest through the coalesced recompute, a parallel batch at a time. */
-  private async recomputeParticipations(contestId: string): Promise<number> {
+  /** Every participation in the scope through the coalesced recompute, a parallel batch at a time. */
+  private async recomputeParticipations(
+    contestId: string,
+    scope: ContestRescoreScope,
+  ): Promise<number> {
     let participations = 0;
-    for await (const chunk of this.repository.participationChunks(contestId)) {
+    for await (const chunk of this.participationsIn(contestId, scope)) {
       participations += chunk.length;
       for (
         let start = 0;
@@ -106,5 +118,19 @@ export class ContestRescoreService {
         );
     }
     return participations;
+  }
+
+  /** One participation, those that sent the problem a submission, or the whole contest. */
+  private async *participationsIn(
+    contestId: string,
+    scope: ContestRescoreScope,
+  ): AsyncGenerator<string[]> {
+    if (scope.participationId) yield [scope.participationId];
+    else if (scope.problemId)
+      yield* this.repository.participationsOfProblem(
+        contestId,
+        scope.problemId,
+      );
+    else yield* this.repository.participationChunks(contestId);
   }
 }
