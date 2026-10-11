@@ -37,7 +37,12 @@ class FakePcd {
   /** HTTP status of the next submits (200 by default). */
   submitStatus = 200;
 
-  readonly fetch = async (input: URL | string, init?: RequestInit) => {
+  readonly fetch = (
+    input: URL | string,
+    init?: RequestInit,
+  ): Promise<Response> => Promise.resolve(this.answer(input, init));
+
+  private answer(input: URL | string, init?: RequestInit): Response {
     const url = new URL(String(input));
     if (!url.href.startsWith(BASE_URL))
       throw new Error(`unexpected ${url.href}`);
@@ -47,7 +52,7 @@ class FakePcd {
     return (
       (queue.length > 1 ? queue.shift() : queue[0]?.clone()) ?? json(404, {})
     );
-  };
+  }
 
   private submit(init: RequestInit): Response {
     if (this.submitStatus !== 200) return json(this.submitStatus, {});
@@ -113,7 +118,7 @@ describe('External judge adapter (bridge)', () => {
 
   beforeAll(async () => {
     pcd = new FakePcd();
-    global.fetch = pcd.fetch as typeof fetch;
+    global.fetch = pcd.fetch;
     bridge = await setupBridgeTest();
     catalog = await seedCatalog(bridge);
     await settings().set('externalJudge.baseUrl', BASE_URL, null);
