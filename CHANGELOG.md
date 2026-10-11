@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.15.0
+
+### Minor Changes
+
+- c6c8e14: Polygon: import and sync from a standard package, generating its tests on a judge with test generation (new `generating` step, `type` on the latest package, `packageType` on sync runs).
+
 ## 2.14.0
 
 ### Minor Changes
