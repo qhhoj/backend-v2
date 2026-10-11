@@ -10753,11 +10753,19 @@
           "queueLength": {
             "description": "Submissions queued or being judged now.",
             "type": "number"
+          },
+          "verdictsToday": {
+            "description": "Today's judged submissions by result, most frequent first; their counts add up to `judgedToday`.",
+            "items": {
+              "$ref": "#/components/schemas/VerdictCountResponse"
+            },
+            "type": "array"
           }
         },
         "required": [
           "judgedToday",
           "acceptedToday",
+          "verdictsToday",
           "queueLength",
           "judgesOnline",
           "judgesTotal"
@@ -13272,6 +13280,23 @@
         },
         "required": [
           "available"
+        ],
+        "type": "object"
+      },
+      "VerdictCountResponse": {
+        "properties": {
+          "count": {
+            "description": "Submissions judged today with this result.",
+            "type": "number"
+          },
+          "result": {
+            "description": "Result code, such as `AC` or `WA`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result",
+          "count"
         ],
         "type": "object"
       },
