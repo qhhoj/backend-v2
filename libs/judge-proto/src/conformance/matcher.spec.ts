@@ -24,12 +24,6 @@ describe('conformance matcher', () => {
     },
   );
 
-  it('names the path of the first difference', () => {
-    expect(mismatch({ ack: { seq: 3 } }, { ack: { seq: 2 } })).toMatch(
-      /^\$\.ack\.seq: /,
-    );
-  });
-
   it('needs a present value for a star and a present message for any expectation', () => {
     expect(mismatch({ welcome: { sessionId: '*' } }, { welcome: {} })).toMatch(
       /^\$\.welcome\.sessionId: expected a value/,

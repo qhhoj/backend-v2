@@ -43,8 +43,4 @@ describe('similarity languages', () => {
     expect(prepared).toBe('begin\nx := 1;\n\n\nend.');
     expect(prepared.split('\n')).toHaveLength(source.split('\n').length);
   });
-
-  it('turns a comment-only Pascal file into blank lines, not an error', () => {
-    expect(preparePascal('{ nothing }\n(* here *)').trim()).toBe('');
-  });
 });

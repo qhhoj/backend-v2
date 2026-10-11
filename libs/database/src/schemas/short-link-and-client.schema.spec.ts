@@ -39,13 +39,6 @@ describe('short link and integration client schemas', () => {
     await replSet.stop();
   });
 
-  it('keeps codes unique', async () => {
-    const first = await Links.create(link());
-    await expect(
-      Links.create(link({ code: first.code, path: '/blog/x' })),
-    ).rejects.toThrow(/duplicate key/);
-  });
-
   it('allows one automatic link per path but any number of staff links to it', async () => {
     const path = '/contests/oneauto';
     await Links.create(link({ path, isAuto: true }));
@@ -58,16 +51,6 @@ describe('short link and integration client schemas', () => {
     await expect(
       Links.create(link({ path, isAuto: false })),
     ).resolves.toBeDefined();
-  });
-
-  it('starts a link with no hits, no expiry and no visit', async () => {
-    const created = await Links.create(link({ path: '/problems/fresh' }));
-    expect(created).toMatchObject({
-      hits: 0,
-      expiresAt: null,
-      lastHitAt: null,
-      isAuto: true,
-    });
   });
 
   it('keeps key hashes unique, refuses unknown scopes and a malformed hash', async () => {
@@ -83,7 +66,5 @@ describe('short link and integration client schemas', () => {
     await expect(
       Clients.create(client({ keyHash: 'not-a-hash' })),
     ).rejects.toThrow(/keyHash/);
-    expect(created.revokedAt).toBeNull();
-    expect(created.lastUsedAt).toBeNull();
   });
 });

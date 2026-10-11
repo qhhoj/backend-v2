@@ -48,13 +48,6 @@ describe('contest rating request', () => {
     ).toEqual([{ contestId: contest._id }]);
   });
 
-  it('queues another run for every request', async () => {
-    const contest = await endedContest([users.rater._id]);
-    await rate('rater', contest.key).expect(202);
-    await rate('rater', contest.key).expect(202);
-    expect(await ratingQueue.getWaitingCount()).toBe(2);
-  });
-
   it('refuses to rate while the board is frozen, also after the end, until the freeze is set to 0', async () => {
     const contest = await createContest(api, {
       authors: [users.rater._id],

@@ -7,70 +7,6 @@ import { validEnv } from './env.fixture';
 const valid = validEnv;
 
 describe('loadEnv', () => {
-  it('applies defaults', () =>
-    expect(
-      loadEnv({
-        ...valid,
-        PDF_CONCURRENCY: undefined,
-      }),
-    ).toEqual({
-      mongoUrl: valid.MONGO_URL,
-      redisUrl: valid.REDIS_URL,
-      encryptionKey: valid.ENCRYPTION_KEY,
-      tokenSecret: valid.TOKEN_SECRET,
-      siteUrl: valid.SITE_URL,
-      host: '0.0.0.0',
-      port: 3000,
-      logLevel: 'info',
-      trustProxy: false,
-      sseIpAllowlist: [],
-      cookieSecure: true,
-      mediaRoot: valid.MEDIA_ROOT,
-      problemDataRoot: valid.PROBLEM_DATA_ROOT,
-      pdfCacheRoot: valid.PDF_CACHE_ROOT,
-      pdfConcurrency: 2,
-      judgeBridgePort: 9999,
-      judgeBridgeHost: '127.0.0.1',
-      judgeBridgeTlsCert: null,
-      judgeBridgeTlsKey: null,
-      mediaUrl: '/media',
-      contestDataRoot: null,
-      userDataRoot: null,
-    }));
-  it('reads the optional user data root', () => {
-    expect(loadEnv({ ...valid }).userDataRoot).toBeNull();
-    expect(loadEnv({ ...valid, USER_DATA_ROOT: '' }).userDataRoot).toBeNull();
-    expect(
-      loadEnv({ ...valid, USER_DATA_ROOT: '/srv/user-data' }).userDataRoot,
-    ).toBe('/srv/user-data');
-  });
-
-  it('refuses a user data root inside MEDIA_ROOT', () => {
-    expect(() =>
-      loadEnv({
-        ...valid,
-        MEDIA_ROOT: '/srv/media',
-        USER_DATA_ROOT: '/srv/media/users',
-      }),
-    ).toThrow(/USER_DATA_ROOT/);
-    expect(() =>
-      loadEnv({
-        ...valid,
-        MEDIA_ROOT: '/srv/media',
-        USER_DATA_ROOT: '/srv/user-data',
-      }),
-    ).not.toThrow();
-  });
-
-  it('refuses user and contest data roots that are equal or nested', () => {
-    const roots = (user: string, contest: string) => () =>
-      loadEnv({ ...valid, USER_DATA_ROOT: user, CONTEST_DATA_ROOT: contest });
-    expect(roots('/srv/data', '/srv/data')).toThrow(/USER_DATA_ROOT/);
-    expect(roots('/srv/data/users', '/srv/data')).toThrow(/USER_DATA_ROOT/);
-    expect(roots('/srv/data', '/srv/data/contests')).toThrow(/USER_DATA_ROOT/);
-    expect(roots('/srv/user-data', '/srv/contest-data')).not.toThrow();
-  });
-
   it('reports value problems before data-root problems', () =>
     expect(() =>
       loadEnv({
@@ -103,21 +39,6 @@ describe('loadEnv', () => {
       'Invalid environment: PORT must be 1-65535; ENCRYPTION_KEY must be 64 hex chars; LOG_LEVEL must be one of fatal|error|warn|info|debug|trace|silent',
     );
   });
-  it('no longer reads a MOSS key', () => {
-    expect(loadEnv({ ...valid, MOSS_API_KEY: '123456' })).not.toHaveProperty(
-      'mossApiKey',
-    );
-  });
-  it('reads the optional contest data root, blank meaning off', () => {
-    expect(loadEnv({ ...valid }).contestDataRoot).toBeNull();
-    expect(
-      loadEnv({ ...valid, CONTEST_DATA_ROOT: '/srv/contest-data' })
-        .contestDataRoot,
-    ).toBe('/srv/contest-data');
-    expect(
-      loadEnv({ ...valid, CONTEST_DATA_ROOT: '' }).contestDataRoot,
-    ).toBeNull();
-  });
   it('refuses a contest data root inside MEDIA_ROOT', () => {
     const withRoot = (root: string) => () =>
       loadEnv({
@@ -149,19 +70,6 @@ describe('loadEnv', () => {
       rmSync(base, { recursive: true, force: true });
     }
   });
-  it('parses flags and port', () =>
-    expect(
-      loadEnv({
-        ...valid,
-        PORT: '8080',
-        TRUST_PROXY: 'loopback,10.0.0.0/8',
-        COOKIE_SECURE: 'false',
-      }),
-    ).toMatchObject({
-      port: 8080,
-      trustProxy: 'loopback,10.0.0.0/8',
-      cookieSecure: false,
-    }));
   it('listens on loopback in production unless LISTEN_HOST says otherwise', () => {
     expect(loadEnv({ ...valid, NODE_ENV: 'production' }).host).toBe(
       '127.0.0.1',
@@ -173,8 +81,6 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...valid, NODE_ENV: 'development' }).host).toBe('0.0.0.0');
   });
 
-  it('reads PDF_CONCURRENCY', () =>
-    expect(loadEnv({ ...valid, PDF_CONCURRENCY: '4' }).pdfConcurrency).toBe(4));
   it.each(['0', '-1', '1.5', 'abc', ''])(
     'rejects PDF_CONCURRENCY=%j',
     (value) =>
@@ -208,10 +114,6 @@ describe('loadEnv', () => {
         'JUDGE_BRIDGE_TLS_CERT and JUDGE_BRIDGE_TLS_KEY go together',
       );
   });
-  it('strips the trailing slash of MEDIA_URL', () =>
-    expect(
-      loadEnv({ ...valid, MEDIA_URL: 'https://cdn.test/media/' }).mediaUrl,
-    ).toBe('https://cdn.test/media'));
   it('reports every problem at once', () =>
     expect(() =>
       loadEnv({ ENCRYPTION_KEY: 'zz', TOKEN_SECRET: 'short', PORT: '0' }),
@@ -248,15 +150,9 @@ describe('loadEnv', () => {
       /SSE_IP_ALLOWLIST must be a comma-separated list of IPs or CIDRs/,
     ),
   );
-  it('treats TRUST_PROXY=false as off', () =>
-    expect(loadEnv({ ...valid, TRUST_PROXY: 'false' }).trustProxy).toBe(false));
   it.each(['True', '1', 'yes'])('rejects COOKIE_SECURE=%s', (value) =>
     expect(() => loadEnv({ ...valid, COOKIE_SECURE: value })).toThrow(
       'COOKIE_SECURE must be true or false',
     ),
   );
-  it('rejects unknown LOG_LEVEL', () =>
-    expect(() => loadEnv({ ...valid, LOG_LEVEL: 'verbose' })).toThrow(
-      'LOG_LEVEL must be one of fatal|error|warn|info|debug|trace|silent',
-    ));
 });

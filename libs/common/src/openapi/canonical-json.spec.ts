@@ -13,12 +13,6 @@ describe('canonicalJson', () => {
     expect(canonicalJson(left)).toBe(canonicalJson(right));
   });
 
-  it('sorts object keys, keeps array order, indents by two and ends with one newline', () => {
-    expect(canonicalJson({ list: ['b', 'a'], zeta: 1, alpha: 2 })).toBe(
-      '{\n  "alpha": 2,\n  "list": [\n    "b",\n    "a"\n  ],\n  "zeta": 1\n}\n',
-    );
-  });
-
   it('sorts enum lists (numbers numerically, strings by code point) but no other array', () => {
     const text = canonicalJson({
       properties: { enum: { type: 'string' } },

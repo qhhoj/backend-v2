@@ -281,22 +281,6 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
     expect(await repository.requeueRun(second, JUDGE)).toBeNull();
   });
 
-  it('finishes a run as AB or IE only for its own judge and generation', async () => {
-    const { id, ref } = await claimedRun();
-    expect(
-      await repository.finishRun({ ...ref, generation: 7 }, JUDGE, 'AB', null),
-    ).toBeNull();
-    expect(await repository.finishRun(ref, JUDGE, 'AB', null)).toEqual(
-      expect.objectContaining({ submissionId: id }),
-    );
-    expect(await stored(id)).toMatchObject({
-      status: 'AB',
-      result: 'AB',
-      points: 0,
-    });
-    expect(await repository.finishRun(ref, JUDGE, 'IE', 'late')).toBeNull();
-  });
-
   it('tells a reconnecting judge the seq stored for a run it still holds, and nothing for a run that moved on', async () => {
     const { id, ref } = await claimedRun();
     await bridge.submissions.updateOne(

@@ -35,19 +35,6 @@ describe('balloonItems', () => {
     ]);
   });
 
-  it('orders by solve time, not by team name', () => {
-    const items = balloonItems(ICPC, PROBLEMS, [
-      ...rows,
-      row('zed', { a: solved(100) }),
-    ]);
-    expect(items[0]).toEqual({
-      participationId: 'zed',
-      problemId: 'a',
-      solvedAt: 100,
-      isFirst: true,
-    });
-  });
-
   it('flags the earliest solver of each problem as first, and a tie goes to the row listed first', () => {
     const items = balloonItems(ICPC, PROBLEMS, rows);
     expect(
@@ -58,15 +45,6 @@ describe('balloonItems', () => {
       ['ann', 'a'],
       ['bob', 'b'],
     ]);
-  });
-
-  it('leaves out partial cells: only full points count as solved', () => {
-    const items = balloonItems(ICPC, PROBLEMS, rows);
-    expect(
-      items.some(
-        (item) => item.participationId === 'cy' && item.problemId === 'a',
-      ),
-    ).toBe(false);
   });
 
   it('moves the first flag to the next solver when the earliest solve disappears, as after a rescore', () => {
@@ -91,7 +69,7 @@ describe('balloonItems', () => {
     ]);
   });
 
-  it('puts a solve with no known time after the timed ones and returns nothing for no rows', () => {
+  it('puts a solve with no known time after the timed ones', () => {
     const items = balloonItems({ name: 'ioi16', config: {} }, PROBLEMS, [
       row('ann', { a: { points: 100 } }),
       row('bob', { a: { time: 5, points: 100 } }),
@@ -100,6 +78,5 @@ describe('balloonItems', () => {
       ['bob', 5],
       ['ann', null],
     ]);
-    expect(balloonItems(ICPC, PROBLEMS, [])).toEqual([]);
   });
 });

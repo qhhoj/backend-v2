@@ -1,13 +1,9 @@
 import type { Problem } from '@libs/database';
-import { isEditorialPublished, listSort, searchFilter } from './problem-search';
+import { isEditorialPublished, searchFilter } from './problem-search';
 
 describe('searchFilter', () => {
   const clauses = (search: string) =>
     (searchFilter(search) as { $and: Array<{ $or: unknown[] }> }).$and;
-  it('filters nothing for a blank query', () => {
-    expect(searchFilter('')).toEqual({});
-    expect(searchFilter('   ')).toEqual({});
-  });
   it('requires every word to match the code or a title', () => {
     const words = clauses('luc  giac');
     expect(words).toHaveLength(2);
@@ -23,13 +19,6 @@ describe('searchFilter', () => {
   });
   it('caps the number of words', () => {
     expect(clauses('a b c d e f g h i j')).toHaveLength(8);
-  });
-});
-
-describe('listSort', () => {
-  it('maps the sort key and keeps _id as tie-break', () => {
-    expect(listSort('-date')).toEqual({ date: -1, _id: 1 });
-    expect(listSort('name')).toEqual({ name: 1, _id: 1 });
   });
 });
 

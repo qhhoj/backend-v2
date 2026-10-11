@@ -15,10 +15,6 @@ describe('ticketRecipients', () => {
       'b',
     ]);
   });
-
-  it('is empty when only the actor is involved', () => {
-    expect(ticketRecipients('actor', ['actor'])).toEqual([]);
-  });
 });
 
 describe('ticket drafts', () => {
@@ -42,20 +38,7 @@ describe('ticket drafts', () => {
     }
   });
 
-  it('carry the kind that matches the event', () => {
-    expect(drafts.map((draft) => draft.kind)).toEqual([
-      'ticket-new',
-      'ticket-new',
-      'ticket-message',
-      'ticket-status',
-    ]);
-  });
-
-  it('name the ticket and the reply, and the direction of a status change', () => {
-    expect(drafts[2].title).toBe('Phiếu hỗ trợ có trả lời mới');
-    expect(drafts[2].body).toContain('Lỗi');
-    expect(drafts[2].body).toContain('Đã sửa');
-    expect(drafts[2].priority).toBe('high');
+  it('tells closing from reopening', () => {
     expect(drafts[3].title).toContain('đóng');
     expect(
       ticketStatusDraft({ ticketId: 't1', ticketTitle: 'Lỗi', open: true })

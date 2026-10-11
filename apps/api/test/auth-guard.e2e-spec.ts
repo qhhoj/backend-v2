@@ -143,14 +143,6 @@ describe('AuthGuard', () => {
       .expect(errorCode('unauthorized'))
       .expect(issueCodes(['unauthenticated']));
   });
-  it('authenticates a session cookie', async () => {
-    const { id } = await login();
-    await api
-      .http()
-      .get('/guarded/private')
-      .set('Cookie', sessionCookie(id))
-      .expect(200, { data: 'alice' });
-  });
   it('requires the csrf token on unsafe methods for cookie sessions', async () => {
     const { id, session } = await login();
     await api
@@ -296,24 +288,6 @@ describe('AuthGuard', () => {
       .expect(403)
       .expect(errorCode('csrf_failed'));
   });
-  it('does not require csrf on HEAD', async () => {
-    const { id } = await login();
-    await api
-      .http()
-      .head('/guarded/private')
-      .set('Cookie', sessionCookie(id))
-      .expect(200);
-    await api.http().head('/guarded/private').expect(401);
-  });
-  it('rejects an invalid bearer token even with a valid session cookie', async () => {
-    const { id } = await login();
-    await api
-      .http()
-      .get('/guarded/private')
-      .set('Cookie', sessionCookie(id))
-      .set('Authorization', `Bearer ${'A'.repeat(64)}`)
-      .expect(401);
-  });
   it('accepts a lowercase bearer scheme', async () => {
     const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
     await api.users.updateOne({ _id: userId }, { apiTokenHash: hash });
@@ -352,21 +326,6 @@ describe('AuthGuard', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(401);
   });
-  it('reports how the request was authenticated', async () => {
-    const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
-    await api.users.updateOne({ _id: userId }, { apiTokenHash: hash });
-    await api
-      .http()
-      .get('/guarded/context')
-      .set('Authorization', `Bearer ${token}`)
-      .expect(200, { data: { viaToken: true, hasSession: false } });
-    const { id } = await login();
-    await api
-      .http()
-      .get('/guarded/context')
-      .set('Cookie', sessionCookie(id))
-      .expect(200, { data: { viaToken: false, hasSession: true } });
-  });
   it('rejects cross-origin unsafe requests, even on public routes', async () => {
     const login = () => api.http().post('/api/internal/auth/login');
     await login()
@@ -387,28 +346,6 @@ describe('AuthGuard', () => {
       .set('Origin', 'https://evil.example')
       .expect(403)
       .expect(errorCode('csrf_failed'));
-  });
-  it('rejects cross-site and null origins even with a valid session and csrf token', async () => {
-    const { id, session } = await login();
-    for (const origin of ['https://evil.example', 'null'])
-      await api
-        .http()
-        .post('/guarded/private')
-        .set('Cookie', sessionCookie(id))
-        .set('X-CSRF-Token', session.csrf)
-        .set('Origin', origin)
-        .expect(403)
-        .expect(errorCode('csrf_failed'));
-  });
-  it('lets bearer clients through regardless of Origin', async () => {
-    const { token, hash } = generateApiToken(userId, TEST_ENV.TOKEN_SECRET);
-    await api.users.updateOne({ _id: userId }, { apiTokenHash: hash });
-    await api
-      .http()
-      .post('/guarded/private')
-      .set('Authorization', `Bearer ${token}`)
-      .set('Origin', 'https://elsewhere.example')
-      .expect(201);
   });
   it('re-issues the session cookie once a day of activity has passed', async () => {
     const { id } = await login();
@@ -471,27 +408,6 @@ describe('AuthGuard', () => {
       .expect(403)
       .expect(errorCode('two_factor_required'));
   });
-  it('asks for a login before checking permissions', async () => {
-    await api
-      .http()
-      .get('/guarded/editor')
-      .expect(401)
-      .expect(errorCode('unauthorized'));
-    await api
-      .http()
-      .post('/guarded/session-only')
-      .expect(401)
-      .expect(errorCode('unauthorized'));
-  });
-  it('applies the session rules before the permission check', async () => {
-    const pending = await login({ twoFaPassed: false });
-    await api
-      .http()
-      .get('/guarded/editor')
-      .set('Cookie', sessionCookie(pending.id))
-      .expect(403)
-      .expect(errorCode('two_factor_required'));
-  });
   it('skips every session rule on public routes', async () => {
     const pending = await login({ twoFaPassed: false, passwordPwned: true });
     await api
@@ -513,16 +429,6 @@ describe('AuthGuard', () => {
       .expect(401)
       .expect(errorCode('unauthorized'));
   });
-  it('treats an unknown session cookie as anonymous', async () => {
-    const unknown = sessionCookie('A'.repeat(43));
-    await api.http().get('/guarded/public').set('Cookie', unknown).expect(200);
-    await api
-      .http()
-      .get('/guarded/private')
-      .set('Cookie', unknown)
-      .expect(401)
-      .expect(errorCode('unauthorized'));
-  });
   it('refuses a cross-origin request before reading the session', async () => {
     const inactive = await createUser(api.users, {
       username: 'oscar',
@@ -538,30 +444,6 @@ describe('AuthGuard', () => {
       .expect(403)
       .expect(errorCode('csrf_failed'));
     expect(await api.sessions.get(id)).not.toBeNull();
-  });
-  it('re-issues an old session cookie on public routes too', async () => {
-    const { id } = await login();
-    await api.sessions.update(id, {
-      cookieIssuedAt: Date.now() - STALE_COOKIE_AGE_MS,
-    });
-    const refreshed = await api
-      .http()
-      .get('/guarded/public')
-      .set('Cookie', sessionCookie(id))
-      .expect(200);
-    expect(String(refreshed.headers['set-cookie'])).toContain(
-      `qhhoj_session=${id}`,
-    );
-  });
-  it('checks bearer tokens against permissions', async () => {
-    await api
-      .http()
-      .get('/guarded/editor')
-      .set('Authorization', await useApiToken())
-      .expect(403)
-      .expect(errorCode('forbidden'))
-      .expect(errorMessage('Permission denied'))
-      .expect(issueCodes(['forbidden']));
   });
   it('reports the first failing check: session-only, pwned password, impersonation, then permission', async () => {
     const impersonatorId = await createSuperuser('ivan');

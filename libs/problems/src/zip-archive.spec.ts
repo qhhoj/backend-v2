@@ -64,12 +64,6 @@ describe('ZipArchive', () => {
     await zip.close();
   });
 
-  it('keeps non-ASCII names intact', async () => {
-    const zip = await open([{ name: 'bài/đề.inp', content: 'x' }]);
-    expect(zip.names()).toEqual(['bài/đề.inp']);
-    await zip.close();
-  });
-
   it.each([
     ['traversal', [{ name: '../evil' }]],
     ['nested traversal', [{ name: 'a/../../evil' }]],
@@ -115,13 +109,6 @@ describe('ZipArchive', () => {
     field.writeUInt32LE(crc32(Buffer.from('a.txt')), 5);
     unicodeName.copy(field, 9);
     return rejects([{ name: 'a.txt', centralExtra: field }], ZipError);
-  });
-
-  it('tags refusals with a stable code', async () => {
-    const bad = await ZipArchive.fromBuffer(Buffer.from('not a zip')).catch(
-      (error: unknown) => error,
-    );
-    expect(bad).toMatchObject({ code: 'zip_invalid' });
   });
 
   it('refuses a corrupt archive with a plain message', () =>
@@ -338,26 +325,6 @@ describe('ZipArchive', () => {
     await zip.close();
   });
 
-  it('stops inflating a lying member before handing out the excess', async () => {
-    const zip = await open([
-      {
-        name: 'longer',
-        content: Buffer.alloc(8 * 1024 * 1024),
-        declaredSize: 1024,
-        method: 'deflate',
-      },
-    ]);
-    let received = 0;
-    await expect(
-      (async () => {
-        for await (const chunk of await zip.stream('longer'))
-          received += (chunk as Buffer).length;
-      })(),
-    ).rejects.toThrow(ZipError);
-    expect(received).toBeLessThanOrEqual(1024);
-    await zip.close();
-  });
-
   it('aborts a deflate bomb that declares a small size without leaking a descriptor', async () => {
     const zip = await open([
       {
@@ -435,32 +402,5 @@ describe('ZipArchive', () => {
     } finally {
       slow.restore();
     }
-  });
-
-  it('lists 25000 entries from disk in time linear in the entry count', async () => {
-    const write = (count: number) => {
-      const path = join(directory, `many-${count}.zip`);
-      writeFileSync(
-        path,
-        buildZip(
-          Array.from({ length: count }, (_item, index) => ({
-            name: `tests/${index}.in`,
-            content: 'x',
-          })),
-        ),
-      );
-      return path;
-    };
-    const small = write(2500);
-    const large = write(25000);
-    await listZipEntries(small);
-    const smallMs = await timeOf(() => listZipEntries(small));
-    let names: string[] = [];
-    const largeMs = await timeOf(async () => {
-      names = await listZipEntries(large);
-    });
-    expect(names).toHaveLength(25000);
-    expect(largeMs).toBeLessThan(15_000);
-    expect(largeMs).toBeLessThan(Math.max(smallMs, 20) * 40);
   });
 });

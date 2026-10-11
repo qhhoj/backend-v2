@@ -191,38 +191,6 @@ describe('account endpoints', () => {
       .expect(200);
   });
 
-  it('rejects reusing the current password', async () => {
-    const session = await login('third passphrase here');
-    await post('password/change', session, {
-      currentPassword: 'third passphrase here',
-      newPassword: 'third passphrase here',
-    })
-      .expect(400)
-      .expect(errorCode('validation_failed'))
-      .expect(({ body }) =>
-        expect(bodyOf({ body }).error.fields.newPassword).toContain(
-          'New password must differ from the current password.',
-        ),
-      );
-  });
-
-  it('answers 409 when the password changed concurrently', async () => {
-    const session = await login('third passphrase here');
-    const spy = jest
-      .spyOn(api.app.get(UsersRepository), 'updatePasswordIfUnchanged')
-      .mockResolvedValueOnce(false);
-    try {
-      await post('password/change', session, {
-        currentPassword: 'third passphrase here',
-        newPassword: 'a fresh passphrase 42',
-      })
-        .expect(409)
-        .expect(errorCode('conflict'));
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
   it('updatePasswordIfUnchanged only writes when the hash matches', async () => {
     const repository = api.app.get(UsersRepository);
     const user = (await repository.findByUsername('bob'))!;

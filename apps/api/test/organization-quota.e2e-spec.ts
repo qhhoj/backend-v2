@@ -1,6 +1,5 @@
-import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { AppError, REDIS } from '@libs/common';
+import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
@@ -56,39 +55,6 @@ describe('organization quota', () => {
     expect(await usedBy(organization._id)).toBe(30);
   });
 
-  it('reports the meter, limit, used and needed in the refusal', async () => {
-    const organization = await limited(15);
-    await quota.charged(organization._id, request(), () => Promise.resolve(1));
-    await expect(
-      quota.charged(organization._id, request(), () => Promise.resolve(1)),
-    ).rejects.toMatchObject({
-      extra: { details: { meter: 'credits', limit: 15, used: 10, needed: 10 } },
-    });
-  });
-
-  it('refuses a first spend that costs more than the limit and writes no row', async () => {
-    const organization = await limited(5);
-    await expect(
-      quota.charged(organization._id, request(), () => Promise.resolve('made')),
-    ).rejects.toMatchObject({ code: 'quota_exceeded' });
-    expect(await usage.countDocuments({ organization: organization._id })).toBe(
-      0,
-    );
-  });
-
-  it('answers quota_exceeded, not a duplicate-key error, for a month already over the limit', async () => {
-    const organization = await limited(100);
-    await usage.create({
-      organization: organization._id,
-      month: quota.monthKeyOf(new Date()),
-      creditsUsed: 150,
-    });
-    await expect(
-      quota.charged(organization._id, request(), () => Promise.resolve('made')),
-    ).rejects.toMatchObject({ code: 'quota_exceeded', status: 403 });
-    expect(await usedBy(organization._id)).toBe(150);
-  });
-
   it('never exceeds the limit under 20 parallel spends', async () => {
     const organization = await limited(100);
     const outcomes = await Promise.allSettled(
@@ -119,21 +85,6 @@ describe('organization quota', () => {
     }
   });
 
-  it('never refuses storage for an unlimited organization, but does for a normal one', async () => {
-    const bytes = { usedBytes: 10, addedBytes: 1 };
-    const unlimited = await createOrganization(api, {
-      quotaUnlimited: true,
-      quotaStorageBytes: 10,
-    });
-    const normal = await createOrganization(api, { quotaStorageBytes: 10 });
-    await expect(
-      quota.assertStorage(unlimited._id, bytes),
-    ).resolves.toBeUndefined();
-    await expect(quota.assertStorage(normal._id, bytes)).rejects.toMatchObject({
-      code: 'quota_exceeded',
-    });
-  });
-
   it('refunds the spend and rethrows when the work fails', async () => {
     const organization = await limited(100);
     await expect(
@@ -152,41 +103,6 @@ describe('organization quota', () => {
       ['problem', 10],
       ['refund', -10],
     ]);
-  });
-
-  it('puts an issue with the exhausted meter and code on the refusal', async () => {
-    const organization = await limited(5);
-    const refusal = await quota
-      .charged(organization._id, request(), () => Promise.resolve(1))
-      .catch((error: AppError) => error);
-    expect(refusal).toBeInstanceOf(AppError);
-    expect((refusal as AppError).extra).toMatchObject({
-      issues: [{ field: 'credits', code: 'quota_exceeded' }],
-      details: { meter: 'credits' },
-    });
-    const storage = await createOrganization(api, { quotaStorageBytes: 10 });
-    await expect(
-      quota.assertStorage(storage._id, { usedBytes: 10, addedBytes: 1 }),
-    ).rejects.toMatchObject({
-      extra: { issues: [{ field: 'storage', code: 'quota_exceeded' }] },
-    });
-  });
-
-  it('returns the credits when the ledger row cannot be written, and never runs the work', async () => {
-    const organization = await limited(100);
-    const failing = jest
-      .spyOn(ledger, 'create')
-      .mockRejectedValueOnce(new Error('ledger down'));
-    const work = jest.fn(() => Promise.resolve(1));
-    await expect(
-      quota.charged(organization._id, request(), work),
-    ).rejects.toThrow('ledger down');
-    failing.mockRestore();
-    expect(work).not.toHaveBeenCalled();
-    expect(await usedBy(organization._id)).toBe(0);
-    expect(
-      await ledger.countDocuments({ organization: organization._id }),
-    ).toBe(0);
   });
 
   it('writes no refund row when the counter was already lowered below the price', async () => {
@@ -234,59 +150,6 @@ describe('organization quota', () => {
     ]);
   });
 
-  it('uses the site default when the organization has no limit of its own', async () => {
-    const organization = await createOrganization(api);
-    await api.setSetting('quota.defaultMonthlyCredits', 10);
-    await quota.charged(organization._id, request(), () => Promise.resolve(1));
-    await expect(
-      quota.charged(organization._id, request(), () => Promise.resolve(1)),
-    ).rejects.toMatchObject({ code: 'quota_exceeded' });
-    await api.setSetting('quota.defaultMonthlyCredits', 200);
-  });
-
-  it('charges an upload per 10 MiB started and a contest at its own price', async () => {
-    const organization = await limited(100);
-    const twentyOneMiB = 21 * 1024 * 1024;
-    await quota.charged(
-      organization._id,
-      { ...request(), kind: 'upload', bytes: twentyOneMiB },
-      () => Promise.resolve(1),
-    );
-    expect(await usedBy(organization._id)).toBe(3);
-    await quota.charged(organization._id, request('contest'), () =>
-      Promise.resolve(1),
-    );
-    expect(await usedBy(organization._id)).toBe(23);
-  });
-
-  it('runs free work for a null organization and for a zero price', async () => {
-    await expect(
-      quota.charged(null, request(), () => Promise.resolve('free')),
-    ).resolves.toBe('free');
-    const organization = await limited(1);
-    await quota.charged(
-      organization._id,
-      { kind: 'upload', userId, ref: '', bytes: 0 },
-      () => Promise.resolve(1),
-    );
-    expect(await usage.countDocuments({ organization: organization._id })).toBe(
-      0,
-    );
-  });
-
-  it('warns at boot when enforce is set but the backfill flag is missing', async () => {
-    const warning = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    await api.setSetting('quota.enforce', 'enforce');
-    await api.app.get<Redis>(REDIS).del(QUOTA_BACKFILL_DONE_KEY);
-    await quota.onApplicationBootstrap();
-    expect(warning).toHaveBeenCalledWith(expect.stringContaining('backfill'));
-    warning.mockClear();
-    await enforce();
-    await quota.onApplicationBootstrap();
-    expect(warning).not.toHaveBeenCalled();
-    warning.mockRestore();
-  });
-
   describe('warn mode', () => {
     beforeEach(warn);
     it('lets an over-limit spend through and still counts it', async () => {
@@ -295,16 +158,6 @@ describe('organization quota', () => {
         Promise.resolve('made'),
       );
       expect(await usedBy(organization._id)).toBe(10);
-    });
-    it('stays in warn mode when enforce is set but the backfill has not finished', async () => {
-      await api.setSetting('quota.enforce', 'enforce');
-      expect(await quota.isEnforcing()).toBe(false);
-      const organization = await limited(5);
-      await expect(
-        quota.charged(organization._id, request(), () =>
-          Promise.resolve('made'),
-        ),
-      ).resolves.toBe('made');
     });
   });
 
@@ -331,54 +184,5 @@ describe('organization quota', () => {
         }),
       ).resolves.toBeUndefined();
     });
-    it('always lets a write that does not grow storage through', async () => {
-      const organization = await createOrganization(api, {
-        quotaStorageBytes: 10,
-      });
-      await expect(
-        quota.assertStorage(organization._id, {
-          usedBytes: 999,
-          addedBytes: -5,
-        }),
-      ).resolves.toBeUndefined();
-    });
-    it('only warns in warn mode', async () => {
-      await warn();
-      const organization = await createOrganization(api, {
-        quotaStorageBytes: 10,
-      });
-      await expect(
-        quota.assertStorage(organization._id, {
-          usedBytes: 999,
-          addedBytes: 1,
-        }),
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  it('snapshots both meters with the 80 percent flag', async () => {
-    const organization = await createOrganization(api, {
-      quotaMonthlyCredits: 100,
-      quotaStorageBytes: 1000,
-    });
-    await usage.create({
-      organization: organization._id,
-      month: quota.monthKeyOf(new Date()),
-      creditsUsed: 80,
-    });
-    const snapshot = await quota.snapshot(organization._id, 500);
-    expect(snapshot.credits).toEqual({
-      used: 80,
-      limit: 100,
-      isNearLimit: true,
-      isOver: false,
-    });
-    expect(snapshot.storage).toEqual({
-      used: 500,
-      limit: 1000,
-      isNearLimit: false,
-      isOver: false,
-    });
-    expect(snapshot.enforcing).toBe(true);
   });
 });

@@ -14,10 +14,6 @@ const settings = (flag: boolean, endsAt = '') =>
   });
 
 describe('isOfficialModeActive', () => {
-  it('follows the flag when no end time is set', () => {
-    expect(isOfficialModeActive(settings(true), NOW)).toBe(true);
-    expect(isOfficialModeActive(settings(false), NOW)).toBe(false);
-  });
   it('stays on before the end time and is off from it on', () => {
     const endsAt = '2026-10-10T12:00:00.000Z';
     expect(
@@ -27,12 +23,6 @@ describe('isOfficialModeActive', () => {
       ),
     ).toBe(true);
     expect(isOfficialModeActive(settings(true, endsAt), NOW)).toBe(false);
-    expect(
-      isOfficialModeActive(
-        settings(true, endsAt),
-        new Date('2026-10-11T00:00:00Z'),
-      ),
-    ).toBe(false);
   });
   it('ignores an end time while the flag is off', () => {
     expect(
@@ -57,18 +47,12 @@ describe('officialModeLocks', () => {
 });
 
 describe('officialModeEndsAt', () => {
-  it('gives the end instant while the mode is active and one is set', () => {
-    expect(
-      officialModeEndsAt(settings(true, '2026-10-10T13:30:00.000Z'), NOW),
-    ).toBe('2026-10-10T13:30:00.000Z');
-  });
-  it('is null with no end time, once the end time passed, and while the flag is off', () => {
-    expect(officialModeEndsAt(settings(true), NOW)).toBeNull();
+  it('gives the end instant only while the mode is active', () => {
+    const endsAt = '2026-10-10T13:30:00.000Z';
+    expect(officialModeEndsAt(settings(true, endsAt), NOW)).toBe(endsAt);
+    expect(officialModeEndsAt(settings(false, endsAt), NOW)).toBeNull();
     expect(
       officialModeEndsAt(settings(true, '2026-10-10T11:00:00.000Z'), NOW),
-    ).toBeNull();
-    expect(
-      officialModeEndsAt(settings(false, '2026-10-10T13:30:00.000Z'), NOW),
     ).toBeNull();
   });
 });

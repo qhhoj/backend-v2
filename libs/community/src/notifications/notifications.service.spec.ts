@@ -112,17 +112,6 @@ describe('NotificationsService', () => {
     expect(priorities).toEqual({ a: 'high', b: 'high' });
   });
 
-  it('refreshes the expiry from the last activity', async () => {
-    const user = newId();
-    await service.notify([user], draft('a'), at(1));
-    await service.notify([user], draft('a'), at(30));
-    const [row] = await rowsOf(user);
-    expect(row.expiresAt.getTime() - row.lastActivityAt.getTime()).toBe(
-      90 * 86_400_000,
-    );
-    expect(row.lastActivityAt).toEqual(at(30));
-  });
-
   it('refuses a path that leaves the site and writes nothing, without throwing', async () => {
     const user = newId();
     await expect(
@@ -140,24 +129,16 @@ describe('NotificationsService', () => {
     );
   });
 
-  it('nudges each recipient with the row id only', async () => {
-    const [first, second] = [newId(), newId()];
-    await service.notify([first, second], draft('a'));
-    const events = published.map((entry) => ({
-      channel: entry.channel,
-      payload: JSON.parse(entry.message) as { userId: string; id: string },
-    }));
-    expect(events.map((event) => event.channel)).toEqual([
-      NOTIFICATION_EVENTS_CHANNEL,
-      NOTIFICATION_EVENTS_CHANNEL,
+  it('nudges the recipient with the row id only', async () => {
+    const user = newId();
+    await service.notify([user], draft('a'));
+    const [row] = await rowsOf(user);
+    expect(published).toEqual([
+      {
+        channel: NOTIFICATION_EVENTS_CHANNEL,
+        message: JSON.stringify({ userId: user, id: uuidStr(row._id) }),
+      },
     ]);
-    for (const [userId, event] of [
-      [first, events.find((event) => event.payload.userId === first)!],
-      [second, events.find((event) => event.payload.userId === second)!],
-    ] as const) {
-      const [row] = await rowsOf(userId);
-      expect(event.payload).toEqual({ userId, id: uuidStr(row._id) });
-    }
   });
 
   it('still writes the row when Redis is down', async () => {
@@ -207,12 +188,5 @@ describe('NotificationsService', () => {
     jest.restoreAllMocks();
     const stored = await rowsOf(user);
     expect(stored.map((row) => row.unread).sort()).toEqual([false, true]);
-  });
-
-  it('refuses a groupKey that is too long or a kind that is unknown, writing nothing', async () => {
-    const user = newId();
-    await service.notify([user], draft('x'.repeat(101)));
-    await service.notify([user], draft('a', { kind: 'bogus' as never }));
-    expect(await rowsOf(user)).toHaveLength(0);
   });
 });

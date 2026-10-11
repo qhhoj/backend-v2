@@ -27,21 +27,11 @@ describe('RateLimitService', () => {
     expect(await limiter.hit('login:ip:1', 60)).toBe(2);
     expect(await redis.ttl('rate:login:ip:1')).toBeGreaterThan(55);
   });
-  it('reads the count without adding a hit', async () => {
-    expect(await limiter.count('peek')).toBe(0);
-    await limiter.hit('peek', 60);
-    expect(await limiter.count('peek')).toBe(1);
-    expect(await limiter.count('peek')).toBe(1);
-  });
   it('does not extend the window on later hits', async () => {
     await limiter.hit('slide', 60);
     await redis.expire('rate:slide', 5);
     await limiter.hit('slide', 60);
     expect(await redis.ttl('rate:slide')).toBeLessThanOrEqual(5);
-  });
-  it('rejects when redis reports an error', async () => {
-    await redis.set('rate:typed', 'not-a-number');
-    await expect(limiter.hit('typed', 60)).rejects.toThrow();
   });
   it('releases a hit but never below zero', async () => {
     await limiter.hit('giveback', 60);

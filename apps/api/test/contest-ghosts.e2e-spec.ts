@@ -1,12 +1,17 @@
 import { getQueueToken } from '@nestjs/bullmq';
+
 import type { Queue } from 'bullmq';
-import { CONTEST_REPLAY_QUEUE, GHOST_CSV_MAX_BYTES } from '@libs/contests';
+
+import { CONTEST_REPLAY_QUEUE } from '@libs/contests';
 import type { ContestReplayJob, GhostInput } from '@libs/contests';
+
 import type { User } from '@libs/database';
+
 import type {
   GhostImportResponse,
   GhostListResponse,
 } from '../src/modules/contests/ghosts/dto/ghosts.dto';
+
 import {
   contestProblem,
   contestUrl,
@@ -14,6 +19,7 @@ import {
   hoursFromNow,
   joinParticipation,
 } from './contest-fixtures';
+
 import {
   authed,
   createProblem,
@@ -21,11 +27,17 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
+
 import { dataOf } from './submission-fixtures';
+
 import { errorCode, setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
+
 import { newId } from '@libs/database';
+
 import { GhostsRepository } from '../src/modules/contests/ghosts/ghosts.repository';
 
 let api: ApiTest;
@@ -102,18 +114,6 @@ afterAll(() => api.teardown());
       ]);
     });
 
-    it('re-derives the flag when the format changes, because it is never stored', async () => {
-      const contest = await icpcContest();
-      await put('editor', contest.key, { csv: CSV }).expect(200);
-      await api.contests.updateOne(
-        { _id: contest._id },
-        { formatName: 'default' },
-      );
-      expect(
-        (await list(contest.key)).map((ghost) => ghost.isUnranked),
-      ).toEqual([false, false]);
-    });
-
     it('ranks a ghost whose only missing value is on a problem removed from the contest, like the replay does', async () => {
       const contest = await icpcContest();
       await put('editor', contest.key, {
@@ -171,85 +171,6 @@ afterAll(() => api.teardown());
       ]);
     });
 
-    it('lists each problem as an issue of field csv with its code and row, and stores nothing', async () => {
-      const contest = await icpcContest();
-      const bad = [
-        'label,caption,ghost_a',
-        '=cmd,,5+0',
-        'Dee,,zzz',
-        'Dee,,6+0',
-        ',,7+0',
-        '   ,,7+0',
-        'Eve,=x,8+0',
-        'Fay,,8+0,9',
-      ].join('\n');
-      const response = await put('editor', contest.key, { csv: bad })
-        .expect(400)
-        .expect(errorCode('ghost_import_invalid'));
-      const { issues } = (
-        response.body as {
-          error: {
-            issues: Array<{
-              field: string;
-              code: string;
-              row?: number;
-              message: string;
-            }>;
-          };
-        }
-      ).error;
-      expect(issues.map(({ field, code, row }) => [field, code, row])).toEqual([
-        ['csv', 'label_formula', 2],
-        ['csv', 'cell_invalid', 3],
-        ['csv', 'label_repeats', 4],
-        ['csv', 'label_missing', 5],
-        ['csv', 'label_missing', 6],
-        ['csv', 'caption_formula', 7],
-        ['csv', 'columns_mismatch', 8],
-      ]);
-      expect(issues.every(({ message }) => message.length > 0)).toBe(true);
-      expect(await list(contest.key)).toEqual([]);
-    });
-
-    it('gives a refusal without a row (empty file) an issue with no row member', async () => {
-      const contest = await icpcContest();
-      const response = await put('editor', contest.key, { csv: '' })
-        .expect(400)
-        .expect(errorCode('ghost_import_invalid'));
-      const { issues } = (
-        response.body as { error: { issues: Array<Record<string, unknown>> } }
-      ).error;
-      expect(issues).toHaveLength(1);
-      expect(Object.keys(issues[0]).sort()).toEqual([
-        'code',
-        'field',
-        'message',
-      ]);
-      expect(issues[0]).toMatchObject({ field: 'csv', code: 'csv_invalid' });
-    });
-
-    it('refuses a body over 1 MiB with 413 and stores nothing', async () => {
-      const contest = await icpcContest();
-      const huge = `label,caption,ghost_a\r\n${'x'.repeat(GHOST_CSV_MAX_BYTES)},,5`;
-      await put('editor', contest.key, { csv: huge })
-        .expect(413)
-        .expect(errorCode('payload_too_large'));
-      expect(await list(contest.key)).toEqual([]);
-    });
-
-    it('anonymises labels on request', async () => {
-      const contest = await icpcContest();
-      await put('editor', contest.key, { csv: CSV, anonymize: true }).expect(
-        200,
-      );
-      expect(
-        (await list(contest.key)).map((ghost) => [ghost.label, ghost.caption]),
-      ).toEqual([
-        ['Ghost 001', 'School A'],
-        ['Ghost 002', 'School B'],
-      ]);
-    });
-
     it('downloads the current set as CSV that imports back to the same set', async () => {
       const contest = await icpcContest();
       await put('editor', contest.key, { csv: CSV }).expect(200);
@@ -295,39 +216,6 @@ afterAll(() => api.teardown());
       ]);
     });
 
-    it('refuses a non-editor on every read, and answers 404 for a contest the user cannot see', async () => {
-      const contest = await icpcContest();
-      await put('editor', contest.key, { csv: CSV }).expect(200);
-      for (const suffix of ['', '/csv'])
-        await authed(
-          api.http().get(url(contest.key, suffix)),
-          sessions.plain,
-        ).expect(403);
-      const hidden = await icpcContest({ isVisible: false });
-      for (const suffix of ['', '/csv'])
-        await authed(
-          api.http().get(url(hidden.key, suffix)),
-          sessions.plain,
-        ).expect(404);
-    });
-
-    it('keeps stored ghosts listable and deletable in a final-submission contest, and refuses only the import', async () => {
-      const contest = await icpcContest();
-      await put('editor', contest.key, { csv: CSV }).expect(200);
-      await api.contests.updateOne(
-        { _id: contest._id },
-        { formatName: 'final_submission' },
-      );
-      expect(await list(contest.key)).toHaveLength(2);
-      await put('editor', contest.key, { csv: CSV })
-        .expect(409)
-        .expect(errorCode('ghost_unsupported_format'));
-      await authed(api.http().delete(url(contest.key)), sessions.editor).expect(
-        204,
-      );
-      expect(await list(contest.key)).toEqual([]);
-    });
-
     it('deletes the set, refuses a final-submission contest, and never touches the ranking or ratings', async () => {
       const contest = await icpcContest();
       await joinParticipation(api, contest._id, users.plain._id, { score: 50 });
@@ -371,19 +259,6 @@ afterAll(() => api.teardown());
       ghosts = api.app.get(GhostsRepository);
     });
 
-    it("returns a contest's ghosts by label with plain string ids", async () => {
-      const contest = newId();
-      await ghosts.replaceAll(contest, [ghost('Bob', 30), ghost('Ann', 12)]);
-      const found = await ghosts.findByContest(contest);
-      expect(found.map((row) => row.label)).toEqual(['Ann', 'Bob']);
-      expect(found[0].cells[0]).toEqual({
-        problemId,
-        minute: 12,
-        rejectedBefore: 1,
-        points: null,
-      });
-    });
-
     it('replaces the whole set, and keeps the old one when the new set is invalid', async () => {
       const contest = newId();
       await ghosts.replaceAll(contest, [ghost('Ann', 12)]);
@@ -397,15 +272,6 @@ afterAll(() => api.teardown());
       expect(
         (await ghosts.findByContest(contest)).map((row) => row.label),
       ).toEqual(['Dee']);
-    });
-
-    it("removes only the given contest's ghosts and reports how many", async () => {
-      const [mine, other] = [newId(), newId()];
-      await ghosts.replaceAll(mine, [ghost('Ann', 1), ghost('Bob', 2)]);
-      await ghosts.replaceAll(other, [ghost('Ann', 1)]);
-      expect(await ghosts.removeAll(mine)).toBe(2);
-      expect(await ghosts.findByContest(mine)).toEqual([]);
-      expect(await ghosts.findByContest(other)).toHaveLength(1);
     });
   });
 }

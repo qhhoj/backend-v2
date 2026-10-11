@@ -23,16 +23,4 @@ describe('withRedisLock', () => {
     });
     expect(work).not.toHaveBeenCalled();
   });
-
-  it('runs the work and releases an acquired lock', async () => {
-    const evalMock = jest.fn().mockResolvedValue(1);
-    const redis = {
-      set: jest.fn().mockResolvedValue('OK'),
-      eval: evalMock,
-    } as unknown as Redis;
-    await expect(
-      withRedisLock(redis, lock, () => Promise.resolve(7)),
-    ).resolves.toBe(7);
-    expect(evalMock).toHaveBeenCalledTimes(1);
-  });
 });

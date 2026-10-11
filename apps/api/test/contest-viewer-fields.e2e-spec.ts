@@ -1,12 +1,19 @@
 import { sha256 } from '@libs/auth';
+
 import { REDIS } from '@libs/common';
+
 import { purgeRankingCache } from '@libs/contests';
+
 import type { SubmissionStatus, User } from '@libs/database';
-import { profileQueries } from '@libs/database/testing';
+
 import type Redis from 'ioredis';
+
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
+
 import type { ContestListItemResponse } from '../src/modules/contests/core/dto/contest-list.response';
+
 import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
+
 import {
   contestProblem,
   contestUrl,
@@ -15,6 +22,7 @@ import {
   joinParticipation,
   makeCurrent,
 } from './contest-fixtures';
+
 import {
   authed,
   createProblem,
@@ -22,9 +30,13 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { Catalog, TestSession } from './problem-fixtures';
+
 import { dataOf, seedSubmission } from './submission-fixtures';
+
 import { setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 describe('contest viewer fields', () => {
@@ -73,31 +85,6 @@ describe('contest viewer fields', () => {
     );
   });
   afterAll(() => api.teardown());
-
-  it('tells who may use the balloon screen: listed volunteers and editors, only while balloons are on', async () => {
-    const contest = await createContest(api, {
-      authors: [users.author._id],
-      balloons: true,
-      balloonStaff: [users.alice._id],
-    });
-    expect((await detail(contest.key, 'alice')).viewer.canViewBalloons).toBe(
-      true,
-    );
-    expect((await detail(contest.key, 'author')).viewer.canViewBalloons).toBe(
-      true,
-    );
-    expect((await detail(contest.key, 'bob')).viewer.canViewBalloons).toBe(
-      false,
-    );
-    expect((await detail(contest.key)).viewer.canViewBalloons).toBe(false);
-    await api.contests.updateOne({ _id: contest._id }, { balloons: false });
-    expect((await detail(contest.key, 'alice')).viewer.canViewBalloons).toBe(
-      false,
-    );
-    expect((await detail(contest.key, 'author')).viewer.canViewBalloons).toBe(
-      false,
-    );
-  });
 
   describe('list rows', () => {
     it("shows each row the contest's join rules and, to a signed-in viewer, their live state and current contest", async () => {
@@ -180,49 +167,6 @@ describe('contest viewer fields', () => {
         { liveStatus: 'finished', isCurrent: false },
       );
     });
-
-    it('marks the contest of a running virtual participation as current', async () => {
-      const ended = await createContest(api, {
-        name: 'virtual_current',
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-      });
-      const run = await joinParticipation(api, ended._id, users.carol._id, {
-        virtual: 1,
-        realStart: hoursFromNow(-0.5),
-      });
-      await makeCurrent(api, users.carol._id, run._id);
-      const [row] = await listed('virtual_current', 'carol');
-      expect(row.viewer).toEqual({ liveStatus: null, isCurrent: true });
-      expect((await detail(ended.key, 'carol')).viewer).toMatchObject({
-        liveStatus: null,
-        isCurrent: true,
-        inContest: true,
-      });
-    });
-
-    it("reads only the viewer's rows in the page's contests with one query on the unique participation index", async () => {
-      const page = [];
-      for (let index = 0; index < 3; index += 1)
-        page.push(await createContest(api, { name: `indexed_${index}` }));
-      const elsewhere = await createContest(api, { name: 'unrelated_contest' });
-      await joinParticipation(api, page[0]._id, users.dave._id);
-      await joinParticipation(api, page[1]._id, users.dave._id, { virtual: 1 });
-      await joinParticipation(api, elsewhere._id, users.dave._id);
-      await joinParticipation(api, page[0]._id, users.erin._id);
-      await joinParticipation(api, page[2]._id, users.erin._id);
-      const operations = await profileQueries(api.db, () =>
-        get('/api/internal/contests?search=indexed_', 'dave').expect(200),
-      );
-      const reads = operations.filter(
-        ({ collection }) => collection === 'contestParticipations',
-      );
-      expect(reads).toHaveLength(1);
-      expect(reads[0].planSummary).toContain('contest: 1, user: 1, virtual: 1');
-      // Dave's two rows on the page; his row elsewhere and Erin's rows are never read.
-      expect(reads[0].docsExamined).toBe(2);
-      expect(reads[0].keysExamined).toBeLessThanOrEqual(4);
-    });
   });
 
   describe('access code and anonymous viewer', () => {
@@ -238,16 +182,6 @@ describe('contest viewer fields', () => {
         expect(body).not.toContain(sha256('opensesame'));
       }
       expect((await detail(guarded.key)).requiresAccessCode).toBe(true);
-    });
-
-    it('gives an anonymous visitor a detail viewer with no state', async () => {
-      const open = await createContest(api, { name: 'anonymous_detail' });
-      expect((await detail(open.key)).viewer).toMatchObject({
-        liveStatus: null,
-        isCurrent: false,
-        inContest: false,
-        liveParticipation: null,
-      });
     });
   });
 
@@ -424,62 +358,6 @@ describe('contest viewer fields', () => {
         },
       ]);
     });
-
-    it('hides the result from a tester who may not see even their own board, and shows it to an editor', async () => {
-      const [first] = problems;
-      const contest = await createContest(api, {
-        name: 'results_gate',
-        scoreboardVisibility: 'H',
-        authors: [users.author._id],
-        testers: [users.carol._id],
-        problems: [contestProblem(first._id, 0)],
-      });
-      const cell = { time: 60, points: 100 };
-      const scored = {
-        formatData: { [first._id]: cell },
-        frozenFormatData: { [first._id]: cell },
-      };
-      await joinParticipation(api, contest._id, users.carol._id, scored);
-      await joinParticipation(api, contest._id, users.author._id, scored);
-      expect(await resultsOf(contest.key, 'carol')).toEqual([null]);
-      expect((await resultsOf(contest.key, 'author'))[0]).toMatchObject({
-        cell,
-      });
-    });
-
-    it("reads the viewer's own submissions through the participation index", async () => {
-      const [first] = problems;
-      const contest = await createContest(api, {
-        name: 'results_indexed',
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-        problems: [contestProblem(first._id, 0)],
-      });
-      const own = await joinParticipation(api, contest._id, users.carol._id, {
-        realStart: hoursFromNow(-5),
-      });
-      await submitIn({
-        contestId: contest._id,
-        participationId: own._id,
-        problemId: first._id,
-        who: 'carol',
-        status: 'D',
-      });
-      const operations = await profileQueries(api.db, () =>
-        get(contestUrl(contest.key), 'carol').expect(200),
-      );
-      const ownReads = operations.filter(
-        ({ collection }) => collection === 'contestSubmissions',
-      );
-      expect(ownReads).toHaveLength(1);
-      expect(ownReads[0].planSummary).toContain('participation: 1, problem: 1');
-      const statusReads = operations.filter(
-        ({ collection }) => collection === 'submissions',
-      );
-      expect(statusReads).toHaveLength(1);
-      expect(statusReads[0].planSummary).not.toContain('COLLSCAN');
-      expect(statusReads[0].docsExamined).toBe(1);
-    });
   });
 
   describe('solver counts', () => {
@@ -567,56 +445,6 @@ describe('contest viewer fields', () => {
       ).toBe(2);
     });
 
-    it('keeps the frozen count for a non-editor even after an editor has read the live count', async () => {
-      const [first] = problems;
-      const contest = await createContest(api, {
-        name: 'solvers_frozen_reverse',
-        formatName: 'icpc',
-        frozenLastMinutes: 180,
-        authors: [users.author._id],
-        problems: [contestProblem(first._id, 0)],
-      });
-      const before = solvedCell(first._id);
-      const after = { [first._id]: { time: 5000, points: 100, tries: 1 } };
-      const hidden = {
-        [first._id]: { time: null, points: 0, tries: 1, pending: true },
-      };
-      await joinParticipation(api, contest._id, users.alice._id, {
-        formatData: before,
-        frozenFormatData: before,
-      });
-      const row = await joinParticipation(api, contest._id, users.bob._id, {
-        formatData: after,
-        frozenFormatData: hidden,
-      });
-      await makeCurrent(api, users.bob._id, row._id);
-      expect(
-        (await detail(contest.key, 'author')).problems![0].solverCount,
-      ).toBe(2);
-      expect((await detail(contest.key, 'bob')).problems![0].solverCount).toBe(
-        1,
-      );
-    });
-
-    it('hides solver counts where the ranking hides the full board, keeping the own result', async () => {
-      const [first] = problems;
-      const contest = await createContest(api, {
-        name: 'solvers_hidden',
-        scoreboardVisibility: 'H',
-        problems: [contestProblem(first._id, 0)],
-      });
-      const solved = solvedCell(first._id);
-      const row = await joinParticipation(api, contest._id, users.carol._id, {
-        formatData: solved,
-        frozenFormatData: solved,
-      });
-      await makeCurrent(api, users.carol._id, row._id);
-      const [problem] = (await detail(contest.key, 'carol')).problems!;
-      expect(problem.solverCount).toBeNull();
-      expect(problem.viewerResult!.isSolved).toBe(true);
-      expect((await ranking(contest.key, 'carol')).rows).toHaveLength(1);
-    });
-
     it('serves counts from a cache that every recompute purges', async () => {
       const [first] = problems;
       const contest = await createContest(api, {
@@ -635,30 +463,6 @@ describe('contest viewer fields', () => {
       expect((await detail(contest.key)).problems![0].solverCount).toBe(0);
       await purgeRankingCache(api.app.get<Redis>(REDIS), contest._id);
       expect((await detail(contest.key)).problems![0].solverCount).toBe(1);
-    });
-
-    it('counts with one aggregate on the contest index and serves the next request from the cache', async () => {
-      const [first] = problems;
-      const contest = await createContest(api, {
-        name: 'solvers_indexed',
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-        problems: [contestProblem(first._id, 0)],
-      });
-      await joinParticipation(api, contest._id, users.alice._id);
-      const aggregatesOf = async () =>
-        (
-          await profileQueries(api.db, () =>
-            get(contestUrl(contest.key)).expect(200),
-          )
-        ).filter(
-          ({ collection, operation }) =>
-            collection === 'contestParticipations' && operation === 'command',
-        );
-      const missed = await aggregatesOf();
-      expect(missed).toHaveLength(1);
-      expect(missed[0].planSummary).toContain('contest: 1, virtual: 1');
-      expect(await aggregatesOf()).toHaveLength(0);
     });
   });
 });

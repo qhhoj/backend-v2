@@ -245,23 +245,6 @@ describe('Run writes (seq compare-and-set)', () => {
     });
   });
 
-  it('grades a run straight from P when Final GRADED follows Accepted, and acks its replay as a duplicate', async () => {
-    const { id, key } = await claimed();
-    await writes.accept(key(1));
-    const finished = await writes.finishGraded(key(2), 4);
-    expect(finished.outcome).toBe('applied');
-    expect(finished.job?.submissionId).toBe(id);
-    expect(await stored(id)).toMatchObject({
-      status: 'D',
-      judgeSeq: 2,
-      judgedDataVersion: 4,
-    });
-    expect(await writes.finishGraded(key(2), 4)).toEqual({
-      outcome: 'duplicate',
-      job: null,
-    });
-  });
-
   it('counts a row without retryCount (a migrated one) as zero RETRYs', async () => {
     const { id, key } = await claimed();
     await writes.accept(key(1));

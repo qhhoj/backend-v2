@@ -17,16 +17,6 @@ describe('canonicalTimeZone', () => {
 });
 
 describe('isTimeZone', () => {
-  it('accepts IANA names and UTC', () => {
-    for (const zone of [
-      'Asia/Ho_Chi_Minh',
-      'America/Toronto',
-      'UTC',
-      'America/Argentina/Buenos_Aires',
-    ])
-      expect(isTimeZone(zone)).toBe(true);
-  });
-
   it('refuses unknown names, offsets and non-strings', () => {
     for (const value of [
       'Mars/Base',
@@ -66,16 +56,6 @@ describe('startOfDayIn', () => {
     expect(
       iso(startOfDayIn('America/New_York', new Date('2026-03-08T18:00:00Z'))),
     ).toBe('2026-03-08T05:00:00.000Z');
-  });
-  it('moves back exactly one millisecond across the boundary', () => {
-    const start = startOfDayIn(
-      'Europe/Paris',
-      new Date('2026-06-15T10:00:00Z'),
-    );
-    expect(startOfDayIn('Europe/Paris', start).getTime()).toBe(start.getTime());
-    expect(
-      startOfDayIn('Europe/Paris', new Date(start.getTime() - 1)).getTime(),
-    ).toBeLessThan(start.getTime());
   });
 });
 

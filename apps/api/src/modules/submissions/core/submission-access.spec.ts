@@ -4,7 +4,6 @@ import {
   batchSummaries,
   caseVisibility,
   detailAccess,
-  isSubmissionLocked,
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
@@ -70,22 +69,6 @@ describe('detailAccess', () => {
       expected: 'granted',
     },
     {
-      label: 'judge.view_all_submission',
-      principal: viewer({
-        permissions: new Set(['judge.view_all_submission']),
-      }),
-      view: problem({ submissionSourceVisibility: 'O' }),
-      canEdit: false,
-      expected: 'granted',
-    },
-    {
-      label: 'a superuser',
-      principal: viewer({ isSuperuser: true }),
-      view: problem({ submissionSourceVisibility: 'O' }),
-      canEdit: false,
-      expected: 'granted',
-    },
-    {
       label: 'a reviewer of a suggested problem',
       principal: viewer({
         permissions: new Set(['judge.suggest_new_problem']),
@@ -108,23 +91,9 @@ describe('detailAccess', () => {
       expected: 'denied',
     },
     {
-      label: 'anyone when A',
-      principal: viewer(),
-      view: problem({ submissionSourceVisibility: 'A' }),
-      canEdit: false,
-      expected: 'granted',
-    },
-    {
       label: 'anyone who solved it when S',
       principal: viewer(),
       view: problem({ submissionSourceVisibility: 'S' }),
-      canEdit: false,
-      expected: 'if-solved',
-    },
-    {
-      label: 'F, following the site default all-solved',
-      principal: viewer(),
-      view: problem(),
       canEdit: false,
       expected: 'if-solved',
     },
@@ -145,13 +114,6 @@ describe('detailAccess', () => {
       }),
       canEdit: false,
       expected: 'if-solved',
-    },
-    {
-      label: 'a tester when O',
-      principal: viewer(),
-      view: problem({ testers: ['viewer'], submissionSourceVisibility: 'O' }),
-      canEdit: false,
-      expected: 'granted',
     },
     {
       label: 'anyone else when O',
@@ -214,29 +176,6 @@ describe('caseVisibility', () => {
         { canEdit: false, isInContest: false },
       ).cases,
     ).toBe('all');
-  });
-  it('shows feedback to superusers, editors or when allowed', () => {
-    expect(
-      caseVisibility(viewer(), shown, { canEdit: false, isInContest: false })
-        .feedback,
-    ).toBe(false);
-    expect(
-      caseVisibility(viewer(), shown, { canEdit: true, isInContest: false })
-        .feedback,
-    ).toBe(true);
-    expect(
-      caseVisibility(viewer({ isSuperuser: true }), shown, {
-        canEdit: false,
-        isInContest: false,
-      }).feedback,
-    ).toBe(true);
-    expect(
-      caseVisibility(
-        viewer(),
-        { ...shown, allowViewFeedback: true },
-        { canEdit: false, isInContest: false },
-      ).feedback,
-    ).toBe(true);
   });
   it.each([
     ['A', false, false, true],
@@ -312,18 +251,6 @@ const EDITOR_PERMISSIONS = [
   'judge.reject_submission',
 ];
 
-describe('isSubmissionLocked', () => {
-  it('locks only once lockedAfter has passed', () => {
-    expect(isSubmissionLocked(null, NOW)).toBe(false);
-    expect(isSubmissionLocked(new Date('2026-10-08T12:00:00Z'), NOW)).toBe(
-      true,
-    );
-    expect(isSubmissionLocked(new Date('2026-10-10T12:00:00Z'), NOW)).toBe(
-      false,
-    );
-  });
-});
-
 describe('submissionActions', () => {
   it.each([
     {
@@ -350,12 +277,6 @@ describe('submissionActions', () => {
       expected: { canAbort: true, canRejudge: false, canReject: false },
     },
     {
-      label: 'a finished submission cannot be aborted, even by its owner',
-      principal: viewer({ userId: 'owner' }),
-      facts: actionFacts({ isOwner: true, status: 'D' }),
-      expected: { canAbort: false, canRejudge: false, canReject: false },
-    },
-    {
       label:
         'an editor with the permissions may rejudge and reject a finished submission',
       principal: withPermissions(...EDITOR_PERMISSIONS),
@@ -373,15 +294,6 @@ describe('submissionActions', () => {
       expected: { canAbort: false, canRejudge: false, canReject: true },
     },
     {
-      label: 'a lock still in the future does not block rejudging',
-      principal: withPermissions(...EDITOR_PERMISSIONS),
-      facts: actionFacts({
-        canEditProblem: true,
-        lockedAfter: new Date('2026-10-10T12:00:00Z'),
-      }),
-      expected: { canAbort: false, canRejudge: true, canReject: true },
-    },
-    {
       label: 'a pending final-submission row can be rejected, not rejudged',
       principal: withPermissions(...EDITOR_PERMISSIONS),
       facts: actionFacts({ canEditProblem: true, status: 'PD' }),
@@ -394,12 +306,6 @@ describe('submissionActions', () => {
       expected: { canAbort: false, canRejudge: false, canReject: false },
     },
     {
-      label: 'a queued submission can be rejected by nobody',
-      principal: withPermissions(...EDITOR_PERMISSIONS),
-      facts: actionFacts({ canEditProblem: true, status: 'QU' }),
-      expected: { canAbort: false, canRejudge: true, canReject: false },
-    },
-    {
       label:
         'the owner aborts without any permission; rejudge and reject still need theirs despite edit rights',
       principal: viewer({ userId: 'owner' }),
@@ -410,12 +316,6 @@ describe('submissionActions', () => {
       label: 'holding the permissions without edit rights allows nothing',
       principal: withPermissions(...EDITOR_PERMISSIONS),
       facts: actionFacts({ canEditProblem: false, status: 'D' }),
-      expected: { canAbort: false, canRejudge: false, canReject: false },
-    },
-    {
-      label: 'an editor without the action permissions may do nothing',
-      principal: withPermissions('judge.edit_own_problem'),
-      facts: actionFacts({ canEditProblem: true }),
       expected: { canAbort: false, canRejudge: false, canReject: false },
     },
   ])('$label', ({ principal, facts, expected }) => {

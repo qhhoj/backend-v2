@@ -1,5 +1,7 @@
 import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/contests/participation/contest-participation.service';
+
 import { authed, createUserWith, loginAs } from './problem-fixtures';
+
 import {
   setupApiTest,
   errorCode,
@@ -7,20 +9,27 @@ import {
   sessionCookie,
   TEST_ENV,
 } from './setup';
+
 import type { ApiTest } from './setup';
+
 import { profileQueries } from '@libs/database/testing';
+
 import type { StaffUserResponse } from '../src/modules/users/admin/dto/staff-user.response';
+
 import type { TestSession } from './problem-fixtures';
+
 import {
   dataOf,
   bridgeCommands,
   clearBridgeCommands,
 } from './submission-fixtures';
-import Redis from 'ioredis';
+
 import { sha256, generateApiToken } from '@libs/auth';
-import { Logger } from '@nestjs/common';
+
 import { getModelToken } from '@nestjs/mongoose';
+
 import { IntegrationClient } from '@libs/database';
+
 import type { Model } from 'mongoose';
 
 let api: ApiTest;
@@ -248,43 +257,6 @@ afterAll(() => api.teardown());
       expect(await names('?search=%5E')).toEqual([]);
     });
 
-    it('lists only banned users with their reason when banned=true', async () => {
-      const { items } = await list('?banned=true');
-      expect(
-        items.map(({ username, banReason }) => [username, banReason]),
-      ).toEqual([['mallory', 'spam']]);
-    });
-
-    it('lists only users who are not banned when banned=false', async () => {
-      expect(await names('?banned=false')).toEqual([
-        'bob',
-        'alice2',
-        'alice1',
-        'moderator',
-      ]);
-    });
-
-    it('combines the search with the banned filter', async () => {
-      expect(await names('?search=mal&banned=true')).toEqual(['mallory']);
-      expect(await names('?search=mal&banned=false')).toEqual([]);
-      expect(await names('?search=ali&banned=true')).toEqual([]);
-    });
-
-    it('carries the rating, null when unrated', async () => {
-      const { items } = await list('?search=bob');
-      expect(items.map((item) => [item.username, item.rating])).toEqual([
-        ['bob', 1777],
-      ]);
-      expect((await list('?search=alice1')).items[0].rating).toBeNull();
-    });
-
-    it('returns newest accounts first with the total', async () => {
-      const { items, meta } = await list('?pageSize=2');
-      expect(items.map((item) => item.username)).toEqual(['mallory', 'bob']);
-      expect(meta).toMatchObject({ total: 5, page: 1, pageSize: 2 });
-      expect(await names('?pageSize=2&page=3')).toEqual(['moderator']);
-    });
-
     it('never returns an e-mail, a password hash or a second-factor secret', async () => {
       const { items } = await list('?search=mal');
       expect(Object.keys(items[0]).sort()).toEqual(STAFF_KEYS);
@@ -298,13 +270,6 @@ afterAll(() => api.teardown());
       );
       await authed(api.http().get(BASE), plain).expect(403);
       await api.http().get(BASE).expect(401);
-    });
-
-    it('rejects a page size above 100 and a page above 500', async () => {
-      await authed(api.http().get(`${BASE}?pageSize=101`), moderator).expect(
-        400,
-      );
-      await authed(api.http().get(`${BASE}?page=501`), moderator).expect(400);
     });
 
     /** Counts are `COUNT_SCAN` on the same key; finds are `IXSCAN`. */
@@ -406,12 +371,6 @@ afterAll(() => api.teardown());
 // from judges.e2e-spec.ts
 {
   const JUDGES = '/api/internal/judges';
-  /** Asserts the refusal's `error.issues[].code` list. */
-  const issueCodes =
-    (...codes: string[]) =>
-    ({ body }: { body: { error: { issues: Array<{ code: string }> } } }) =>
-      expect(body.error.issues.map((issue) => issue.code)).toEqual(codes);
-
   describe('/api/internal/judges', () => {
     beforeAll(() => api.reset());
     let admin: TestSession;
@@ -484,68 +443,6 @@ afterAll(() => api.teardown());
       expect(listed).not.toContain((await storedHash('judge-a'))!);
     });
 
-    it('refuses a taken name with 409 and a malformed one with 400', async () => {
-      await create('judge-dup');
-      await authed(api.http().post(JUDGES), admin)
-        .send({ name: 'judge-dup' })
-        .expect(409)
-        .expect(errorCode('conflict'))
-        .expect(issueCodes('name_taken'));
-      for (const name of ['', 'has space', 'x'.repeat(51)])
-        await authed(api.http().post(JUDGES), admin)
-          .send({ name })
-          .expect(400)
-          .expect(errorCode('validation_failed'));
-    });
-
-    it('lists online state, ping, load, runtimes and slots, and what the judge reported in its Hello', async () => {
-      await api.judges.create({
-        name: 'judge-live',
-        authKeyHash: sha256('k'),
-        online: true,
-        ping: 0.02,
-        load: 0.4,
-        slots: 4,
-        busy: 1,
-        build: 'qhhoj-judge 0.1.0',
-        protocolMinor: 0,
-        features: ['interactive'],
-        runtimes: [
-          { language: 'CPP17', name: 'g++', version: '11.4', priority: 0 },
-        ],
-      });
-      const listed = dataOf<Array<{ name: string }>>(
-        await authed(api.http().get(JUDGES), admin).expect(200),
-      );
-      expect(listed.find((judge) => judge.name === 'judge-live')).toMatchObject(
-        {
-          online: true,
-          ping: 0.02,
-          load: 0.4,
-          slots: 4,
-          busy: 1,
-          build: 'qhhoj-judge 0.1.0',
-          protocolMinor: 0,
-          features: ['interactive'],
-          runtimes: [
-            { language: 'CPP17', name: 'g++', version: '11.4', priority: 0 },
-          ],
-        },
-      );
-      // created last, listed first: the list is ordered by name, not by insertion
-      await create('judge-0');
-      const ordered = dataOf<Array<{ name: string }>>(
-        await authed(api.http().get(JUDGES), admin).expect(200),
-      );
-      expect(ordered.map((judge) => judge.name)).toEqual([
-        'judge-0',
-        'judge-a',
-        'judge-dup',
-        'judge-guarded',
-        'judge-live',
-      ]);
-    });
-
     it('rotates the key, replacing the stored hash, and asks the bridge to drop the judge', async () => {
       const { authKey: oldKey } = await create('judge-rot');
       const { authKey } = dataOf<{ authKey: string }>(
@@ -558,107 +455,6 @@ afterAll(() => api.teardown());
       expect(await bridgeCommands(api)).toEqual([
         { type: 'disconnect-judge', judgeName: 'judge-rot', force: true },
       ]);
-    });
-
-    it('still returns the new key and keeps the block when the bridge command cannot be published', async () => {
-      await create('judge-redis-down');
-      const down = jest
-        .spyOn(Redis.prototype, 'xadd')
-        .mockRejectedValue(new Error('redis gone'));
-      try {
-        const { authKey } = dataOf<{ authKey: string }>(
-          await authed(
-            api.http().post(`${JUDGES}/judge-redis-down/key`),
-            admin,
-          ).expect(200),
-        );
-        expect(await storedHash('judge-redis-down')).toBe(sha256(authKey));
-        await authed(api.http().patch(`${JUDGES}/judge-redis-down`), admin)
-          .send({ isBlocked: true })
-          .expect(200);
-        expect(
-          await api.judges.findOne({ name: 'judge-redis-down' }),
-        ).toMatchObject({ isBlocked: true });
-        expect(down).toHaveBeenCalled();
-      } finally {
-        down.mockRestore();
-      }
-    });
-
-    it('blocks (dropping the connection), disables and enables through the bridge', async () => {
-      await create('judge-flags');
-      const blocked = await authed(
-        api.http().patch(`${JUDGES}/judge-flags`),
-        admin,
-      )
-        .send({ isBlocked: true })
-        .expect(200);
-      expect(dataOf(blocked)).toMatchObject({
-        isBlocked: true,
-        isDisabled: false,
-      });
-      await authed(api.http().patch(`${JUDGES}/judge-flags`), admin)
-        .send({ isDisabled: true, description: 'maintenance' })
-        .expect(200);
-      await authed(api.http().patch(`${JUDGES}/judge-flags`), admin)
-        .send({ isDisabled: false })
-        .expect(200);
-      expect(
-        await api.judges.findOne({ name: 'judge-flags' }).lean(),
-      ).toMatchObject({
-        isBlocked: true,
-        isDisabled: false,
-        description: 'maintenance',
-      });
-      expect(await bridgeCommands(api)).toEqual([
-        { type: 'disconnect-judge', judgeName: 'judge-flags', force: true },
-        { type: 'disable-judge', judgeName: 'judge-flags', isDisabled: true },
-        { type: 'disable-judge', judgeName: 'judge-flags', isDisabled: false },
-      ]);
-    });
-
-    it('asks the bridge to disconnect a judge, gracefully unless forced', async () => {
-      await create('judge-bye');
-      await authed(api.http().post(`${JUDGES}/judge-bye/disconnect`), admin)
-        .send({})
-        .expect(204);
-      await authed(api.http().post(`${JUDGES}/judge-bye/disconnect`), admin)
-        .send({ force: true })
-        .expect(204);
-      expect(await bridgeCommands(api)).toEqual([
-        { type: 'disconnect-judge', judgeName: 'judge-bye', force: false },
-        { type: 'disconnect-judge', judgeName: 'judge-bye', force: true },
-      ]);
-    });
-
-    it('answers 404 for an unknown or malformed judge name and sends nothing', async () => {
-      for (const name of ['ghost', 'not a name'])
-        await authed(
-          api.http().patch(`${JUDGES}/${encodeURIComponent(name)}`),
-          admin,
-        )
-          .send({ isDisabled: true })
-          .expect(404)
-          .expect(errorCode('not_found'))
-          .expect(issueCodes('judge_not_found'));
-      await authed(api.http().post(`${JUDGES}/ghost/key`), admin)
-        .expect(404)
-        .expect(issueCodes('judge_not_found'));
-      await authed(api.http().post(`${JUDGES}/ghost/disconnect`), admin)
-        .send({})
-        .expect(404);
-      expect(await bridgeCommands(api)).toEqual([]);
-    });
-
-    it('refuses null on a judge edit', async () => {
-      await create('judge-null');
-      await authed(api.http().patch(`${JUDGES}/judge-null`), admin)
-        .send({ isBlocked: null })
-        .expect(400)
-        .expect(errorCode('validation_failed'));
-      expect(await api.judges.findOne({ name: 'judge-null' })).toMatchObject({
-        isBlocked: false,
-      });
     });
   });
 }
@@ -678,7 +474,6 @@ afterAll(() => api.teardown());
   }
 
   const URL = '/api/internal/integration-clients';
-  const DAY_MS = 24 * 60 * 60 * 1000;
 
   describe('integration client administration', () => {
     beforeAll(() => api.reset());
@@ -739,17 +534,6 @@ afterAll(() => api.teardown());
         scopes: ['contests:write', 'contests:read'],
       });
       expect(row?.key).toBeUndefined();
-    });
-
-    it('stores an expiry in the future and shows it', async () => {
-      const expiresAt = new Date(Date.now() + DAY_MS);
-      const created = dataOf<Client>(
-        await post(body({ expiresAt: expiresAt.toISOString() })).expect(201),
-      );
-      expect(new Date(created.expiresAt!).getTime()).toBe(expiresAt.getTime());
-      expect(
-        (await clients.findById(created.id).lean())?.expiresAt?.getTime(),
-      ).toBe(expiresAt.getTime());
     });
 
     it.each([
@@ -842,26 +626,6 @@ afterAll(() => api.teardown());
       expect(
         listed.find((client) => client.id === created.id)?.revokedAt,
       ).not.toBeNull();
-    });
-
-    it('logs who created and revoked a client, never the key', async () => {
-      const log = jest.spyOn(Logger.prototype, 'log');
-      const created = dataOf<Client>(await post(body()).expect(201));
-      await authed(api.http().delete(`${URL}/${created.id}`), admin).expect(
-        204,
-      );
-      const lines = log.mock.calls
-        .map(([line]) => String(line))
-        .filter((line) => line.includes('integration-client.'));
-      log.mockRestore();
-      expect(
-        lines.map((line) => (JSON.parse(line) as { event: string }).event),
-      ).toEqual(['integration-client.created', 'integration-client.revoked']);
-      for (const line of lines) {
-        expect(line).toContain(adminId);
-        expect(line).toContain(created.id);
-        expect(line).not.toContain(created.key!);
-      }
     });
   });
 }

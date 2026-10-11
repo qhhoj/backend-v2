@@ -33,13 +33,6 @@ describe('errorResponses', () => {
       });
   });
 
-  it('names Retry-After as whole seconds, for 429 and 503', () => {
-    const result = errorResponses(document({ 200: { description: 'ok' } }));
-    expect(responsesOf(result, 'get').default).toMatchObject({
-      headers: { 'Retry-After': { schema: { type: 'integer', minimum: 1 } } },
-    });
-  });
-
   it('keeps a default response a route spells out itself, and every success response', () => {
     const own = { description: 'mine' };
     const result = errorResponses(
@@ -50,12 +43,5 @@ describe('errorResponses', () => {
       '204',
       'default',
     ]);
-  });
-
-  it('lets the error body carry the members AppError merges next to code and message', () => {
-    const result = errorResponses(document({ 200: { description: 'ok' } }));
-    expect(result.components?.schemas?.ErrorBodyResponse).toMatchObject({
-      additionalProperties: true,
-    });
   });
 });

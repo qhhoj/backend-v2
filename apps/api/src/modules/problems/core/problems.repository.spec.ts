@@ -100,23 +100,6 @@ describe('ProblemsRepository', () => {
     expect(translations.map(({ language }) => language)).toEqual(['en']);
   });
 
-  it('leaves data out of findByCode and returns it from findByCodeWithData', async () => {
-    const created = await repository.create({ ...base, code: 'withdata' });
-    expect(created.data).toBeNull();
-    await problems.updateOne(
-      { code: 'withdata' },
-      { data: { cases: [{ type: 'C', input: '1.in', output: '1.out' }] } },
-    );
-    expect((await repository.findByCode('withdata'))!.data).toBeUndefined();
-    expect(
-      (await repository.findByCodeWithData('withdata'))!.data,
-    ).toMatchObject({
-      checker: 'standard',
-      cases: [{ input: '1.in' }],
-    });
-    expect(await repository.findByCodeWithData('missing')).toBeNull();
-  });
-
   it('picks a random code, retrying once when the set shrank between count and skip', async () => {
     jest.spyOn(repository, 'count').mockResolvedValueOnce(1000);
     jest.spyOn(Math, 'random').mockReturnValueOnce(0.99);

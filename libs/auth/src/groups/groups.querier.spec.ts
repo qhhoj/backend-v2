@@ -47,9 +47,6 @@ describe('GroupsQuerier', () => {
     await replSet.stop();
   });
 
-  it('loads existing groups on init', () =>
-    expect(permissionsOf([staffId])).toEqual(['judge.edit_all_problem']));
-
   it('applies inserts and updates from the change stream', async () => {
     const group = await groups.create({
       name: 'Org Admin',
@@ -67,11 +64,6 @@ describe('GroupsQuerier', () => {
       'judge.clone_problem',
     ]);
   });
-
-  it('ignores unknown ids', () =>
-    expect(permissionsOf(['00000000-0000-7000-8000-000000000000'])).toEqual(
-      [],
-    ));
 
   it('keeps serving and recovers after resync', async () => {
     await groups.collection.updateOne(

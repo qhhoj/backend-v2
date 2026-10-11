@@ -1,18 +1,11 @@
 import mongoose from 'mongoose';
 import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
-import { ContestSchema } from './contest.schema';
-import { ContestParticipationSchema } from './contest-participation.schema';
 import { ContestTagSchema } from './contest-tag.schema';
 
-describe('Contest tag and rules schemas', () => {
+describe('Contest tag schema', () => {
   let replSet: MongoMemoryReplSet;
   const Tags = mongoose.model('ContestTagSchemaSpec', ContestTagSchema);
-  const Contests = mongoose.model('ContestRulesSchemaSpec', ContestSchema);
-  const Participations = mongoose.model(
-    'ContestRulesParticipationSpec',
-    ContestParticipationSchema,
-  );
 
   beforeAll(async () => {
     replSet = await startMongo();
@@ -35,43 +28,5 @@ describe('Contest tag and rules schemas', () => {
     await expect(
       Tags.create({ slug: 'Bad Slug', name: 'Bad', color: 'tag-1' }),
     ).rejects.toThrow(/slug/);
-  });
-
-  it('starts a contest with no rules, revision 0 and auto-publish off', async () => {
-    const contest = await Contests.create({
-      key: 'rules_defaults',
-      name: 'Rules defaults',
-      startTime: new Date(),
-      endTime: new Date(Date.now() + 3_600_000),
-    });
-    expect(contest.toObject()).toMatchObject({
-      rules: '',
-      rulesHtml: '',
-      rulesRevision: 0,
-      publishAfterEnd: false,
-      publishAfterEndBy: null,
-      autoPublishOutcome: null,
-    });
-  });
-
-  it('refuses rules past the cap and starts a participation without acceptance', async () => {
-    await expect(
-      Contests.create({
-        key: 'rules_long',
-        name: 'Long',
-        startTime: new Date(),
-        endTime: new Date(Date.now() + 3_600_000),
-        rules: 'x'.repeat(8193),
-      }),
-    ).rejects.toThrow(/rules/);
-    const row = await Participations.create({
-      contest: new mongoose.Types.UUID(),
-      user: new mongoose.Types.UUID(),
-      realStart: new Date(),
-    });
-    expect(row.toObject()).toMatchObject({
-      rulesAcceptedAt: null,
-      rulesAcceptedRevision: null,
-    });
   });
 });

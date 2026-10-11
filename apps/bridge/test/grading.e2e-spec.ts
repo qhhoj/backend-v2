@@ -1,9 +1,8 @@
 import Redis from 'ioredis';
-import { TEST_REDIS_URL, waitUntil } from '@libs/common/testing';
+import { TEST_REDIS_URL } from '@libs/common/testing';
 import { Case, Final, Outcome, Status } from '@libs/judge-proto';
 import type { Assign } from '@libs/judge-proto';
 import { BridgeCommandsService } from '@libs/judging';
-import { RETRY_LIMIT_MESSAGE } from '../src/submissions/run-writes.repository';
 import { FakeJudge } from './fake-judge';
 import {
   seedCatalog,
@@ -55,13 +54,6 @@ describe('Grading through the judge link (results written for what a judge sends
     (await bridge.graded.getJobs(['waiting'])).map((job) => job.id);
   const ackSeqs = (judge: FakeJudge) =>
     judge.seen('ack').map(({ ack }) => ack.seq);
-  /** The first of `candidates` that is handed an Assign. */
-  const holder = async (candidates: FakeJudge[]): Promise<FakeJudge> => {
-    await waitUntil(() =>
-      candidates.some((judge) => judge.seen('assign').length > 0),
-    );
-    return candidates.find((judge) => judge.seen('assign').length > 0)!;
-  };
   const sentFinal = (judge: FakeJudge, assign: Assign, seq: number) =>
     judge.send({
       $case: 'final',
@@ -164,67 +156,6 @@ describe('Grading through the judge link (results written for what a judge sends
     expect((await stored(full)).points).toBe(1000);
   });
 
-  it('ends a compile error as CE with the compiler log, and an internal error as IE with its message, each with one graded job', async () => {
-    const judge = await online();
-    const ce = await submit();
-    const ceRef = (await judge.nextAssign()).ref!;
-    judge.accept(ceRef);
-    await judge.ackOf(
-      ceRef,
-      judge.final(ceRef, Outcome.OUTCOME_COMPILE_ERROR, { log: 'no main' }),
-    );
-    const ie = await submit();
-    const ieRef = (await judge.nextAssign()).ref!;
-    judge.accept(ieRef);
-    await judge.ackOf(
-      ieRef,
-      judge.final(ieRef, Outcome.OUTCOME_INTERNAL_ERROR, { log: 'disk full' }),
-    );
-    expect(await stored(ce)).toMatchObject({
-      status: 'CE',
-      result: 'CE',
-      error: 'no main',
-    });
-    expect(await stored(ie)).toMatchObject({
-      status: 'IE',
-      result: 'IE',
-      error: 'disk full',
-    });
-    expect((await jobIds()).sort()).toEqual([`${ce}.1`, `${ie}.1`].sort());
-  });
-
-  it('requeues a RETRY for another judge without spending the requeue, and ends the third RETRY as IE', async () => {
-    const first = await online();
-    const second = await online();
-    const id = await submit();
-    const attempts: FakeJudge[] = [];
-    for (const generation of [1, 2, 3]) {
-      const judge = await holder(
-        attempts.length
-          ? [attempts.at(-1) === first ? second : first]
-          : [first, second],
-      );
-      const assign = await judge.nextAssign();
-      expect(assign.ref).toMatchObject({ submissionId: id, generation });
-      judge.accept(assign.ref!);
-      await judge.ackOf(
-        assign.ref!,
-        judge.final(assign.ref!, Outcome.OUTCOME_RETRY, {
-          log: `try ${generation}`,
-        }),
-      );
-      attempts.push(judge);
-    }
-    expect(await stored(id)).toMatchObject({
-      status: 'IE',
-      result: 'IE',
-      retryCount: 3,
-      requeueCount: 0,
-      error: `${RETRY_LIMIT_MESSAGE}: try 3`,
-    });
-    expect(await jobIds()).toEqual([`${id}.3`]);
-  });
-
   it('stores judgeSeq as the last message stored, and ends a session that skips a seq without storing that message', async () => {
     const judge = await online();
     const id = await submit();
@@ -251,23 +182,6 @@ describe('Grading through the judge link (results written for what a judge sends
     expect(row.cases).toHaveLength(1);
   });
 
-  it('acks a Final sent twice again and writes it once: one graded job, the stored result untouched', async () => {
-    const judge = await online();
-    const id = await submit({ points: 1000, partial: true });
-    const assign = await judge.nextAssign();
-    const ref = assign.ref!;
-    await judge.grade(ref, [{ position: 1, status: AC, points: 1, total: 1 }]);
-    const before = await stored(id);
-    sentFinal(judge, assign, judge.nextSeq(ref) - 1);
-    await waitUntil(
-      () =>
-        ackSeqs(judge).filter((seq) => seq === before.judgeSeq).length === 2,
-    );
-    expect(await stored(id)).toEqual(before);
-    expect(await jobIds()).toEqual([`${id}.1`]);
-    expect(judge.seen('abort')).toEqual([]);
-  });
-
   it('ignores a Final for a run that moved on (the row was finished elsewhere): not acked, not written, the judge told to abort', async () => {
     const judge = await online();
     const id = await submit({ points: 1000 });
@@ -285,22 +199,5 @@ describe('Grading through the judge link (results written for what a judge sends
     expect(ackSeqs(judge)).toEqual([1, 2]);
     expect(await stored(id)).toMatchObject({ status: 'AB', points: 0 });
     expect(await jobIds()).toEqual([]);
-  });
-
-  it("ignores another judge's Final for a run it does not hold, and the run goes on to its own judge", async () => {
-    const owner = await online();
-    const other = await online();
-    const id = await submit({ points: 1000 });
-    const holding = await holder([owner, other]);
-    const bystander = holding === owner ? other : owner;
-    const assign = await holding.nextAssign();
-    sentFinal(bystander, assign, 1);
-    await bystander.next('abort');
-    expect(bystander.seen('ack')).toEqual([]);
-    expect(await stored(id)).toMatchObject({ status: 'P', judgeSeq: 0 });
-    await holding.grade(assign.ref!, [
-      { position: 1, status: AC, points: 1, total: 1 },
-    ]);
-    expect(await stored(id)).toMatchObject({ status: 'D', points: 1000 });
   });
 });

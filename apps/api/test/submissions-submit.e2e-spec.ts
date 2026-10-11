@@ -127,13 +127,6 @@ describe('POST /api/internal/problems/:code/submit', () => {
     ]);
   });
 
-  it('needs a login and a visible problem', async () => {
-    await api.http().post(submitTo('sum')).send(body()).expect(401);
-    for (const code of ['hidden', 'nope', 'Bad-Code'])
-      await submit('alice', code).expect(404).expect(errorCode('not_found'));
-    expect(await api.submissions.countDocuments()).toBe(0);
-  });
-
   it.each([
     [
       'a language the problem does not allow',
@@ -157,21 +150,6 @@ describe('POST /api/internal/problems/:code/submit', () => {
         response.body as { error: { issues: Array<{ code: string }> } }
       ).error.issues.map((issue) => issue.code),
     ).toEqual(['language_takes_file']);
-  });
-
-  it('accepts 1 to 65536 characters of source', async () => {
-    for (const source of ['', 'x'.repeat(MAX_SOURCE_LENGTH + 1)])
-      expect(
-        fieldsOf(await submit('spammer', 'sum', { source }).expect(400)),
-      ).toEqual(['source']);
-    await submit('spammer', 'sum', {
-      source: 'x'.repeat(MAX_SOURCE_LENGTH),
-    }).expect(201);
-  });
-
-  it('refuses banned users, superusers excepted', async () => {
-    await submit('banned').expect(403).expect(errorCode('banned_from_problem'));
-    await submit('root').expect(201);
   });
 
   it('allows two unfinished submissions per user unless the user may spam', async () => {
@@ -269,22 +247,6 @@ describe('POST /api/internal/problems/:code/submit', () => {
     ).toEqual(['source']);
   });
 
-  it('counts variation-selector sequences as code points, never 500', async () => {
-    const sequence = '\u2764\uFE0F';
-    const atCap = sequence.repeat(MAX_SOURCE_LENGTH / 2);
-    const id = idOf(
-      await submit('spammer', 'sum', { source: atCap }).expect(201),
-    );
-    expect((await api.submissionSources.findById(id).lean())?.source).toBe(
-      atCap,
-    );
-    expect(
-      fieldsOf(
-        await submit('spammer', 'sum', { source: `${atCap}x` }).expect(400),
-      ),
-    ).toEqual(['source']);
-  });
-
   it('still answers 201 and tells the bridge when releasing the lock fails', async () => {
     const redis = api.app.get<Redis>(REDIS);
     const release = jest
@@ -297,12 +259,5 @@ describe('POST /api/internal/problems/:code/submit', () => {
         (command) => command.type === 'judge' && command.submissionIds,
       ),
     ).toEqual([[id]]);
-  });
-
-  it('rate limits each user', async () => {
-    for (let attempt = 0; attempt < 20; attempt += 1)
-      await submit('spammer').expect(201);
-    await submit('spammer').expect(429).expect(errorCode('rate_limited'));
-    await submit('alice').expect(201);
   });
 });

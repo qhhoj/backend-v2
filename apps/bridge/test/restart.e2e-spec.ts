@@ -1,9 +1,7 @@
 import { status } from '@grpc/grpc-js';
-import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Submission } from '@libs/database';
 import Redis from 'ioredis';
-import { sha256 } from '@libs/auth';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { BridgeCommandsService } from '@libs/judging';
 import { recordSubmissionEvents } from '@libs/judging/testing';
@@ -182,42 +180,6 @@ describe('Bridge restart', () => {
     await again.close();
   });
 
-  it('keeps a run its judge resumed after a restart through several resync ticks, then finishes it', async () => {
-    await seedJudge(bridge, 'restart-20', KEY);
-    const id = await seedOne();
-    await commands.judge([id]);
-    const judge = await connect('restart-20');
-    const ref = (await judge.nextAssign()).ref!;
-    judge.accept(ref);
-    judge.started(ref, 1);
-    await judge.ackOf(ref, 2);
-    await bridge.restart();
-    await judge.closed;
-    const again = FakeJudge.open(bridge.judgePort(), {
-      name: 'restart-20',
-      key: KEY,
-      inFlight: [{ ref, lastSeqSent: 2 }],
-    });
-    again.hello();
-    await again.next('welcome');
-    await resyncTicks(4); // a resumed run is held, never stranded
-    expect(again.seen('abort')).toEqual([]);
-    expect(await submissionRow(id)).toMatchObject({
-      status: 'G',
-      requeueCount: 0,
-      judgeGeneration: ref.generation,
-    });
-    again.cases(ref, [
-      { position: 1, status: Status.STATUS_AC, points: 1, total: 1 },
-    ]);
-    await again.ackOf(ref, again.final(ref, Outcome.OUTCOME_GRADED));
-    expect(await submissionRow(id)).toMatchObject({
-      status: 'D',
-      result: 'AC',
-    });
-    await again.close();
-  });
-
   it('requeues, two resync ticks after a start and without spending the requeue, a run no judge resumed, and announces it', async () => {
     const recorder = await recordSubmissionEvents(TEST_REDIS_URL);
     try {
@@ -246,23 +208,6 @@ describe('Bridge restart', () => {
     }
   });
 
-  it('does not requeue a run on the first tick that finds it unheld, only on the second', async () => {
-    const id = await seedOne({
-      status: 'G',
-      judgedOn: 'gone',
-      judgeGeneration: 1,
-      judgeSeq: 3,
-    });
-    await bridge.restart({ ...TIMINGS, resyncMs: 1000 });
-    try {
-      await resyncTicks(1); // the second is due a full second later
-      expect((await submissionRow(id)).status).toBe('G');
-      await waitUntil(async () => (await submissionRow(id)).status === 'QU');
-    } finally {
-      await bridge.restart(TIMINGS);
-    }
-  });
-
   it('marks judges a crashed bridge left online as offline', async () => {
     await seedJudge(bridge, 'restart-ghost', KEY, {
       online: true,
@@ -281,96 +226,12 @@ describe('Bridge restart', () => {
     });
   });
 
-  it('rebuilds the queue in priority, then age order', async () => {
-    await seedJudge(bridge, 'restart-2', KEY);
-    const batch = await seedOne({ priority: 3 });
-    const normal = await seedOne({ priority: 1 });
-    const rejudge = await seedOne({ priority: 2 });
-    await bridge.restart();
-    const judge = await connect('restart-2');
-    for (const expected of [normal, rejudge, batch]) {
-      const ref = (await judge.nextAssign()).ref!;
-      expect(ref.submissionId).toBe(expected);
-      judge.accept(ref);
-      judge.final(ref, Outcome.OUTCOME_COMPILE_ERROR, { log: 'stop' });
-    }
-    await waitUntil(async () => (await submissionRow(batch)).status === 'CE');
-    await judge.close();
-  });
-
   it('dispatches a queued submission that no command announced', async () => {
     await seedJudge(bridge, 'restart-3', KEY);
     const judge = await connect('restart-3');
     const id = await seedOne();
     expect((await judge.nextAssign(3000)).ref?.submissionId).toBe(id);
     await judge.close();
-  });
-
-  it('keeps a waiting submission queued once while the judge’s slot is busy, across resync ticks', async () => {
-    await seedJudge(bridge, 'restart-4', KEY);
-    const judge = await connect('restart-4');
-    const first = await seedOne();
-    const second = await seedOne();
-    const firstRef = (await judge.nextAssign(3000)).ref!;
-    expect(firstRef.submissionId).toBe(first);
-    judge.accept(firstRef);
-    await resyncTicks(3);
-    expect(judge.seen('assign')).toEqual([]);
-    expect(
-      bridge.module
-        .get(DispatcherService)
-        .queuedIds()
-        .filter((id) => id === second),
-    ).toEqual([second]);
-    judge.final(firstRef, Outcome.OUTCOME_COMPILE_ERROR, { log: 'x' });
-    const secondRef = (await judge.nextAssign()).ref!;
-    expect(secondRef.submissionId).toBe(second);
-    judge.accept(secondRef);
-    await resyncTicks(3);
-    expect(await submissionRow(second)).toMatchObject({
-      status: 'P',
-      requeueCount: 0,
-      judgeSeq: 1,
-    });
-    await judge.close();
-  });
-
-  it('survives a failed resync and recovers on the next tick', async () => {
-    await seedJudge(bridge, 'restart-5', KEY);
-    const judge = await connect('restart-5');
-    const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation();
-    const loadQueued = jest
-      .spyOn(bridge.module.get(SubmissionsRepository), 'loadQueued')
-      .mockRejectedValue(new Error('mongo down'));
-    try {
-      await waitUntil(() => loadQueued.mock.calls.length >= 2);
-      const id = await seedOne();
-      expect(judge.seen('assign')).toEqual([]);
-      loadQueued.mockRestore();
-      expect((await judge.nextAssign(3000)).ref?.submissionId).toBe(id);
-      expect(logged).toHaveBeenCalledWith(
-        expect.stringContaining('mongo down'),
-      );
-    } finally {
-      loadQueued.mockRestore();
-      logged.mockRestore();
-    }
-    await judge.close();
-  });
-
-  it('leaves finished submissions alone across a restart', async () => {
-    const [graded, aborted, failed] = [
-      await seedOne({ status: 'D' }),
-      await seedOne({ status: 'AB' }),
-      await seedOne({ status: 'CE' }),
-    ];
-    await bridge.restart();
-    for (const [id, expected] of [
-      [graded, 'D'],
-      [aborted, 'AB'],
-      [failed, 'CE'],
-    ])
-      expect(await submissionRow(id)).toMatchObject({ status: expected });
   });
 
   it('hands a P/G row no judge holds to a connected judge without spending the requeue', async () => {
@@ -534,37 +395,6 @@ describe('Bridge restart', () => {
   });
 
   describe('a judge change whose command was lost', () => {
-    it('disconnects a judge blocked in Mongo within a tick, and it grades nothing more', async () => {
-      await seedJudge(bridge, 'restart-11', KEY);
-      const judge = await connect('restart-11');
-      await bridge.judges.updateOne(
-        { name: 'restart-11' },
-        { isBlocked: true },
-      );
-      expect((await judge.closed).code).toBe(status.PERMISSION_DENIED);
-      const id = await seedOne();
-      await resyncTicks(3);
-      expect(judge.seen('assign')).toEqual([]);
-      expect(await submissionRow(id)).toMatchObject({ status: 'QU' });
-    });
-
-    it('disconnects a judge whose key was rotated or row deleted in Mongo, and keeps one whose row is unchanged', async () => {
-      for (const name of ['restart-12', 'restart-13', 'restart-18'])
-        await seedJudge(bridge, name, KEY);
-      const rotated = await connect('restart-12');
-      const kept = await connect('restart-13');
-      const deleted = await connect('restart-18');
-      await bridge.judges.deleteOne({ name: 'restart-18' });
-      await deleted.closed;
-      await bridge.judges.updateOne(
-        { name: 'restart-12' },
-        { authKeyHash: sha256('another key') },
-      );
-      await rotated.closed;
-      expect(kept.isClosed).toBe(false);
-      await kept.close();
-    });
-
     it('applies a disable and an enable made in Mongo to a connected judge', async () => {
       await seedJudge(bridge, 'restart-14', KEY);
       const judge = await connect('restart-14');

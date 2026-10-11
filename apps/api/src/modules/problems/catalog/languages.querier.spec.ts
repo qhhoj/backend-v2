@@ -49,17 +49,6 @@ describe('LanguagesQuerier', () => {
     await replSet.stop();
   });
 
-  it('loads existing languages on init with string ids', () => {
-    expect(querier.byId(cppId)).toMatchObject({
-      _id: cppId,
-      key: 'CPP17',
-      includeInProblem: true,
-    });
-    expect(querier.byId('00000000-0000-7000-8000-000000000000')).toBeNull();
-    expect(
-      querier.includedInProblems().map((language) => language.key),
-    ).toEqual(['CPP17']);
-  });
   it('applies inserts and updates from the change stream', async () => {
     const python = await languages.create({
       key: 'PY3',

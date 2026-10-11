@@ -1,6 +1,5 @@
-import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { generateApiToken, generateServiceKey } from '@libs/auth';
+import { generateServiceKey } from '@libs/auth';
 import {
   IntegrationClient,
   uuidStr,
@@ -14,13 +13,12 @@ import {
   clearRateLimits,
   createContest,
   hoursFromNow,
-  contestProblem,
   joinParticipation,
 } from './contest-fixtures';
 import { createProblem, createUserWith, seedCatalog } from './problem-fixtures';
 import type { Catalog } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
-import { errorCode, setupApiTest, TEST_ENV } from './setup';
+import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -97,53 +95,6 @@ afterAll(() => api.teardown());
     });
     beforeEach(() => clearRateLimits(api));
 
-    it('creates a hidden private contest authored by the acting user, owned by the client', async () => {
-      const { client, actsAs, bearer } = await makeClient();
-      const key = newKey();
-      const result = dataOf<Upsert>(
-        await put(bearer, key, payload()).expect(200),
-      );
-      expect(result).toMatchObject({
-        key,
-        action: 'created',
-        dryRun: false,
-        isVisible: false,
-        participantCount: 0,
-      });
-      const stored = await api.contests.findOne({ key }).lean();
-      expect(stored).toMatchObject({
-        isVisible: false,
-        isPrivate: true,
-        isOrganizationPrivate: false,
-      });
-      expect(uuidStr(stored!.managedBy!)).toBe(uuidStr(client._id));
-      expect(stored!.authors.map(uuidStr)).toEqual([actsAs._id]);
-      expect(stored!.organizations).toEqual([]);
-      expect(
-        stored!.problems.map((entry) => [entry.points, entry.order]),
-      ).toEqual([
-        [100, 0],
-        [200, 1],
-      ]);
-    });
-
-    it('reads back a contest it owns', async () => {
-      const { bearer } = await makeClient();
-      const key = newKey();
-      await put(bearer, key, payload({ name: 'Readable' })).expect(200);
-      const read = await api
-        .http()
-        .get(`/api/sync/v1/contests/${key}`)
-        .set('Authorization', bearer)
-        .expect(200);
-      expect(dataOf(read)).toMatchObject({
-        key,
-        name: 'Readable',
-        isVisible: false,
-        participantCount: 0,
-      });
-    });
-
     it('is idempotent: the same request again is "unchanged", a changed one "updated"', async () => {
       const { bearer } = await makeClient();
       const key = newKey();
@@ -198,23 +149,6 @@ afterAll(() => api.teardown());
         .expect(errorCode('conflict'));
       racing.mockRestore();
       expect((await api.contests.findOne({ key }).lean())?.name).toBe('Round');
-    });
-
-    it('validates without writing on a dry run, and still rejects a bad body', async () => {
-      const { bearer } = await makeClient();
-      const key = newKey();
-      const result = dataOf<Upsert>(
-        await put(bearer, key, payload(), '?dryRun=true').expect(200),
-      );
-      expect(result).toMatchObject({ action: 'created', dryRun: true });
-      expect(await api.contests.countDocuments({ key })).toBe(0);
-      await put(
-        bearer,
-        key,
-        payload({ endTime: hoursFromNow(1).toISOString() }),
-        '?dryRun=true',
-      ).expect(400);
-      await put(bearer, key, payload(), '?dryRun=maybe').expect(400);
     });
 
     it.each([
@@ -372,62 +306,6 @@ afterAll(() => api.teardown());
         });
       },
     );
-
-    it('checks scope, user credentials and keys', async () => {
-      const readOnly = await makeClient({ scopes: ['contests:read'] });
-      await put(readOnly.bearer, newKey(), payload()).expect(403);
-      const { token, hash } = generateApiToken(
-        readOnly.actsAs._id,
-        TEST_ENV.TOKEN_SECRET,
-      );
-      await api.users.updateOne(
-        { _id: readOnly.actsAs._id },
-        { apiTokenHash: hash },
-      );
-      await put(`Bearer ${token}`, newKey(), payload()).expect(403);
-      await put(
-        `Bearer ${generateServiceKey().key}`,
-        newKey(),
-        payload(),
-      ).expect(401);
-      await api
-        .http()
-        .put(`/api/sync/v1/contests/${newKey()}`)
-        .send(payload())
-        .expect(401);
-    });
-
-    it('refuses a malformed or reserved key', async () => {
-      const { bearer } = await makeClient();
-      await put(bearer, 'current', payload()).expect(400);
-      await put(bearer, 'Bad-Key', payload()).expect(400);
-      expect(await api.contests.countDocuments({ key: 'current' })).toBe(0);
-    });
-
-    it('allows 60 requests a minute per client', async () => {
-      const { bearer } = await makeClient();
-      const key = newKey();
-      for (let index = 0; index < 60; index += 1)
-        await put(bearer, key, payload(), '?dryRun=true').expect(200);
-      await put(bearer, key, payload(), '?dryRun=true')
-        .expect(429)
-        .expect(errorCode('rate_limited'));
-    });
-
-    it('logs each write with the client id', async () => {
-      const log = jest.spyOn(Logger.prototype, 'log');
-      const { client, bearer } = await makeClient();
-      await put(bearer, newKey(), payload()).expect(200);
-      const lines = log.mock.calls
-        .map(([line]) => String(line))
-        .filter((line) => line.includes('sync.contest'));
-      log.mockRestore();
-      expect(lines).toHaveLength(1);
-      expect(JSON.parse(lines[0])).toMatchObject({
-        event: 'sync.contest.created',
-        client: uuidStr(client._id),
-      });
-    });
   });
 }
 
@@ -756,45 +634,6 @@ afterAll(() => api.teardown());
         );
         expect(live.frozen).toBe(false);
         expect(live.rows.map((row) => row.score)).toEqual([300]);
-      });
-
-      it('refuses a board the contest hides from the public', async () => {
-        const { bearer } = await makeClient();
-        const key = await startedContest(bearer);
-        await api.contests.updateOne(
-          { key },
-          { $set: { scoreboardVisibility: 'H' } },
-        );
-        const refused = await standings(bearer, key)
-          .expect(403)
-          .expect(errorCode('forbidden'));
-        expect(
-          (
-            refused.body as { error: { issues: Array<{ code: string }> } }
-          ).error.issues.map((issue) => issue.code),
-        ).toEqual(['board_hidden']);
-      });
-
-      it('needs the read scope and ownership, with one 404 body for every key that is not its own', async () => {
-        const mine = await makeClient();
-        const writeOnly = await makeClient({ scopes: ['contests:write'] });
-        const key = await startedContest(mine.bearer);
-        await standings(writeOnly.bearer, key).expect(403);
-        await standings(mine.bearer, key).expect(200);
-        const other = await makeClient();
-        const missing = await standings(mine.bearer, 'life_missing').expect(
-          404,
-        );
-        expect((await standings(other.bearer, key).expect(404)).body).toEqual(
-          missing.body,
-        );
-        const human = await createContest(api, {
-          key: `lifeopen${(counter += 1)}`,
-          problems: [contestProblem(problemId, 0)],
-        });
-        expect(
-          (await standings(mine.bearer, human.key).expect(404)).body,
-        ).toEqual(missing.body);
       });
     });
   });

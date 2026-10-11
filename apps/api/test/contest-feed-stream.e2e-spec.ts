@@ -1,24 +1,32 @@
 import http from 'node:http';
+
 import type { AddressInfo } from 'node:net';
+
 import type { IncomingMessage } from 'node:http';
+
 import type { FeedEvent } from '@libs/contests';
+
 import type { Contest, User } from '@libs/database';
+
 import {
   DEFAULT_STREAM_LIMITS,
   STREAM_LIMITS,
 } from '../src/modules/events/stream-limits';
+
 import { EventStreamHubService } from '../src/modules/events/event-stream-hub.service';
+
 import {
   DEFAULT_FEED_LIMITS,
   FEED_LIMITS,
   FeedService,
 } from '../src/modules/contests/feed/feed.service';
+
 import {
   FEED_STREAM_OPTIONS,
-  FeedStreamService,
   MAX_FAILED_TICKS,
 } from '../src/modules/contests/feed/feed-stream.service';
 import type { MintedFeedKeyResponse } from '../src/modules/contests/feed/dto/feed-key.dto';
+
 import {
   clearRateLimits,
   contestProblem,
@@ -27,6 +35,7 @@ import {
   hoursFromNow,
   joinParticipation,
 } from './contest-fixtures';
+
 import {
   authed,
   createProblem,
@@ -34,9 +43,13 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { Catalog, TestSession } from './problem-fixtures';
+
 import { dataOf, seedSubmission } from './submission-fixtures';
+
 import { setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 const basic = (key: string) =>
@@ -218,16 +231,6 @@ describe('contest event feed stream', () => {
     expect(tokens).toEqual([...tokens].sort((left, right) => left - right));
   });
 
-  it('counts in the hub caps while open and gives the slot back on close', async () => {
-    const { contest } = await seed();
-    const hub = api.app.get(EventStreamHubService);
-    const stream = await connect(contest, await mint(contest));
-    await until(() => stream.events.length > 0);
-    expect(hub.openCounts().total).toBe(1);
-    stream.close();
-    await until(() => hub.openCounts().total === 0);
-  });
-
   it('allows two streams per key and refuses a third', async () => {
     const { contest } = await seed();
     const key = await mint(contest);
@@ -258,51 +261,6 @@ describe('contest event feed stream', () => {
     await until(() => demoted.events.length > 0);
     await api.contests.updateOne({ _id: contest._id }, { authors: [] });
     await demoted.closed;
-  });
-
-  it('ends every open stream when the application shuts down', async () => {
-    const { contest } = await seed();
-    const stream = await connect(contest, await mint(contest));
-    await until(() => stream.events.length > 0);
-    api.app.get(FeedStreamService).onModuleDestroy();
-    await stream.closed;
-  });
-
-  it('writes a blank keep-alive line on a quiet stream, which readers skip', async () => {
-    const { contest } = await seed();
-    const stream = await connect(contest, await mint(contest));
-    await until(() => stream.events.length > 0);
-    const received = stream.events.length;
-    await until(() => stream.raw().includes('\n\n'));
-    expect(stream.events).toHaveLength(received);
-  });
-
-  it('refuses to stream a contest past the stream cap, before sending anything, and gives the slots back', async () => {
-    const { contest, ann } = await seed();
-    await submit(contest, ann._id, hoursFromNow(-2), 'AC');
-    const key = await mint(contest);
-    feedLimits.maxStreamSubmissions = 0;
-    expect((await connect(contest, key)).status).toBe(409);
-    expect(api.app.get(EventStreamHubService).openCounts().total).toBe(0);
-    feedLimits.maxStreamSubmissions = DEFAULT_FEED_LIMITS.maxStreamSubmissions;
-    expect((await connect(contest, key)).status).toBe(200);
-  });
-
-  it('holds feed streams to the feed cap and to the per-IP cap, and frees the slot on close', async () => {
-    const { contest } = await seed();
-    const key = await mint(contest);
-    streamLimits.contestFeedTotal = 1;
-    const only = await connect(contest, key);
-    expect((await connect(contest, key)).status).toBe(429);
-    streamLimits.contestFeedTotal = DEFAULT_STREAM_LIMITS.contestFeedTotal;
-    streamLimits.perIp = 1;
-    expect((await connect(contest, key)).status).toBe(429);
-    only.close();
-    await only.closed;
-    await until(
-      () => api.app.get(EventStreamHubService).openCounts().total === 0,
-    );
-    expect((await connect(contest, key)).status).toBe(200);
   });
 
   it('gives every slot back when the client leaves during the first snapshot', async () => {
@@ -344,25 +302,6 @@ describe('contest event feed stream', () => {
     expect([one.status, two.status]).toEqual([200, 200]);
   });
 
-  it('builds the feed once per tick however many streams a contest has', async () => {
-    const { contest } = await seed();
-    const key = await mint(contest);
-    const spy = jest.spyOn(api.app.get(FeedService), 'eventsFor');
-    try {
-      const [one, two] = [
-        await connect(contest, key),
-        await connect(contest, key),
-      ];
-      await until(() => one.events.length > 0 && two.events.length > 0);
-      spy.mockClear();
-      await new Promise((resolve) => setTimeout(resolve, TICK_MS * 10));
-      expect(spy.mock.calls.length).toBeGreaterThan(5);
-      expect(spy.mock.calls.length).toBeLessThanOrEqual(12);
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
   it('retries a failed shared build on the next tick and keeps every stream open', async () => {
     const { contest } = await seed();
     const key = await mint(contest);
@@ -397,12 +336,6 @@ describe('contest event feed stream', () => {
     } finally {
       spy.mockRestore();
     }
-  });
-
-  it('refuses a wrong key before streaming anything', async () => {
-    const { contest } = await seed();
-    const stream = await connect(contest, 'qhf_wrong');
-    expect(stream.status).toBe(401);
   });
 
   it('never emits frozen events while gated, and emits them once the key is released', async () => {

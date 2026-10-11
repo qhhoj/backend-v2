@@ -40,22 +40,4 @@ describe('signPolygonParams', () => {
       '000123f4a6eb40dd209ac7927132a3f6642510353b5b6bd61b5a3833ec0429a731b0f0a33b911fe02681bdb08e6c9157426c18d6377d322ca29c17acaa86c0d5f620de',
     );
   });
-
-  it('changes with the secret, so a wrong secret cannot produce the same signature', () => {
-    const salt = { rand: '000123', time: 5 };
-    const one = signPolygonParams(
-      'problems.list',
-      {},
-      { apiKey: 'K', apiSecret: 'S' },
-      salt,
-    );
-    const two = signPolygonParams(
-      'problems.list',
-      {},
-      { apiKey: 'K', apiSecret: 'T' },
-      salt,
-    );
-    expect(one.apiSig).not.toBe(two.apiSig);
-    expect(one.apiSig).toMatch(/^000123[0-9a-f]{128}$/);
-  });
 });

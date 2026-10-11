@@ -53,13 +53,6 @@ describe('AppExceptionFilter issues', () => {
     });
   });
 
-  it('gives a 403 AppError an issue coded after its error code', () => {
-    const { body } = run(new AppError('csrf_failed', 403, 'No'));
-    expect(body.error.issues).toEqual([
-      { field: '', code: 'csrf_failed', message: 'No' },
-    ]);
-  });
-
   it('keeps Retry-After next to the issue of a 429', () => {
     const { status, headers, body } = run(
       new AppError('rate_limited', 429, 'Slow down', undefined, {

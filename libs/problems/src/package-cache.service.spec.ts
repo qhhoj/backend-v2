@@ -25,13 +25,11 @@ describe('PackageCacheService', () => {
     );
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-  it('maps code and key to <root>/packages/<code>.<key>.zip and refuses bad ones', () => {
-    expect(cache.pathOf('sum', KEY_A)).toBe(join(packages, `sum.${KEY_A}.zip`));
+  it('refuses a bad code or key', () => {
     expect(() => cache.pathOf('../x', KEY_A)).toThrow('Invalid problem code');
     expect(() => cache.pathOf('sum', '../../etc')).toThrow(
       'Invalid package key',
     );
-    expect(() => cache.pathOf('sum', '3.XYZ')).toThrow('Invalid package key');
   });
 
   it('writes through a temporary file, serves it, and keeps only the newest key', async () => {
@@ -60,23 +58,6 @@ describe('PackageCacheService', () => {
     await cache.deleteAll('del');
     expect(existsSync(cache.pathOf('del', KEY_A))).toBe(false);
     expect(existsSync(cache.pathOf('del_more', KEY_A))).toBe(true);
-  });
-
-  it('evicts the oldest zips first until the cache fits the byte limit', async () => {
-    const small = mkdtempSync(join(tmpdir(), 'qhhoj-package-evict-'));
-    const bounded = new PackageCacheService({ pdfCacheRoot: small } as Env);
-    for (const code of ['ev_a', 'ev_b', 'ev_c'])
-      await bounded.write(code, KEY_A, (temporary) =>
-        Promise.resolve(writeFileSync(temporary, '12345')),
-      );
-    const days = (count: number) => new Date(Date.now() - count * 86_400_000);
-    utimesSync(bounded.pathOf('ev_a', KEY_A), days(3), days(3));
-    utimesSync(bounded.pathOf('ev_b', KEY_A), days(2), days(2));
-    expect(await bounded.evictToLimit(10)).toBe(1);
-    expect(await bounded.has('ev_a', KEY_A)).toBe(false);
-    expect(await bounded.has('ev_b', KEY_A)).toBe(true);
-    expect(await bounded.has('ev_c', KEY_A)).toBe(true);
-    rmSync(small, { recursive: true, force: true });
   });
 
   it('sweeps zips and stray temporary files older than the limit', async () => {

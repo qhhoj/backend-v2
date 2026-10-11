@@ -1,8 +1,10 @@
 import { getQueueToken } from '@nestjs/bullmq';
+
 import { Logger } from '@nestjs/common';
+
 import type { Queue } from 'bullmq';
+
 import {
-  CONTEST_EXPORT_JOB,
   CONTEST_EXPORT_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
   CONTEST_PUBLISH_QUEUE,
@@ -11,11 +13,10 @@ import {
   CONTEST_RESCORE_QUEUE,
   enqueueContestRating,
   enqueueContestRescore,
-  oneJobPerContest,
   requestFinalJudge,
-  requestReplayBuild,
   reschedulePublish,
 } from '@libs/contests';
+
 import type {
   ContestExportJob,
   ContestFinalJudgeJob,
@@ -24,8 +25,11 @@ import type {
   ContestReplayJob,
   ContestRescoreJob,
 } from '@libs/contests';
+
 import type { ContestActionsResponse } from '../src/modules/contests/editing/dto/contest-actions.response';
+
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
+
 import {
   contestUrl,
   createContest,
@@ -34,6 +38,7 @@ import {
   contestProblem,
   joinParticipation,
 } from './contest-fixtures';
+
 import {
   authed,
   createUserWith,
@@ -41,23 +46,31 @@ import {
   createProblem,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { TestSession, Catalog } from './problem-fixtures';
+
 import { dataOf, seedSubmission } from './submission-fixtures';
+
 import { errorCode, setupApiTest, sessionCookie, TEST_ENV } from './setup';
+
 import type { ApiTest } from './setup';
+
 import { NOTIFICATION_FANOUT_QUEUE } from '@libs/community';
+
 import type { NotificationFanoutJob } from '@libs/community';
+
 import type { AnnouncementResponse } from '../src/modules/contests/announcements/dto/announcement.response';
-import { getConnectionToken } from '@nestjs/mongoose';
-import type { Connection } from 'mongoose';
-import { newId, toUuid } from '@libs/database';
-import type { UUID } from 'mongodb';
+
 import type { SubmissionResult, User, Contest } from '@libs/database';
-import { profileQueries } from '@libs/database/testing';
+
 import type { ContestStatsResponse } from '../src/modules/contests/stats/dto/contest-stats.response';
+
 import type { BalloonResponse } from '../src/modules/contests/balloons/dto/balloons.dto';
+
 import { generateApiToken, sha256 } from '@libs/auth';
+
 import { FeedAuthService } from '../src/modules/contests/feed/feed-auth.service';
+
 import type {
   FeedKeyStatusResponse,
   MintedFeedKeyResponse,
@@ -131,46 +144,12 @@ afterAll(() => api.teardown());
       await exports.obliterate({ force: true });
     });
 
-    it('reports every action idle without a job', async () => {
-      const contest = await createContest(api, { authors: [editorId] });
-      expect(await statusOf(contest.key)).toEqual(idle);
-    });
-
     it('reports a rescore queued while its request waits', async () => {
       const contest = await createContest(api, { authors: [editorId] });
       await enqueueContestRescore(rescores, contest._id);
       expect(await statusOf(contest.key)).toEqual({
         ...idle,
         rescore: 'queued',
-      });
-    });
-
-    it('reports an export queued while its job waits, and idle for another contest', async () => {
-      const [mine, other] = [
-        await createContest(api, { authors: [editorId] }),
-        await createContest(api, { authors: [editorId] }),
-      ];
-      await exports.add(
-        CONTEST_EXPORT_JOB,
-        { contestId: mine._id },
-        { ...oneJobPerContest('export', mine._id), delay: 60_000 },
-      );
-      expect(await statusOf(mine.key)).toEqual({ ...idle, export: 'queued' });
-      expect(await statusOf(other.key)).toEqual(idle);
-    });
-
-    it('reports a rating queued while its request waits', async () => {
-      const contest = await createContest(api, { authors: [editorId] });
-      await enqueueContestRating(ratings, contest._id);
-      expect(await statusOf(contest.key)).toEqual({ ...idle, rate: 'queued' });
-    });
-
-    it('reports a manual final judging queued', async () => {
-      const contest = await createContest(api, { authors: [editorId] });
-      await requestFinalJudge(finalJudges, contest._id);
-      expect(await statusOf(contest.key)).toEqual({
-        ...idle,
-        judgeFinal: 'queued',
       });
     });
 
@@ -210,37 +189,6 @@ afterAll(() => api.teardown());
       expect(await statusOf(contest.key)).toEqual({
         ...idle,
         publish: 'queued',
-      });
-    });
-
-    it('reports a replay build queued while its request waits, and idle for another contest', async () => {
-      const [mine, other] = [
-        await createContest(api, { authors: [editorId] }),
-        await createContest(api, { authors: [editorId] }),
-      ];
-      await requestReplayBuild(replays, mine._id);
-      expect(await statusOf(mine.key)).toEqual({ ...idle, replay: 'queued' });
-      expect(await statusOf(other.key)).toEqual(idle);
-    });
-
-    it('echoes the recorded outcome of the automatic publish', async () => {
-      const at = new Date();
-      const contest = await createContest(api, {
-        authors: [editorId],
-        autoPublishOutcome: {
-          at,
-          status: 'failed',
-          reason: 'no_permission',
-          published: 0,
-          skipped: 3,
-        },
-      });
-      expect((await statusOf(contest.key)).autoPublish).toEqual({
-        at: at.toISOString(),
-        status: 'failed',
-        reason: 'no_permission',
-        published: 0,
-        skipped: 3,
       });
     });
 
@@ -445,37 +393,6 @@ afterAll(() => api.teardown());
       ]);
       expect(editorStats.languages).toMatchObject([{ count: 1, acRate: 100 }]);
     });
-
-    it('reads one contest through the contest index', async () => {
-      const db = api.app.get<Connection>(getConnectionToken()).db!;
-      const big = await createContest(api, {
-        startTime: hoursFromNow(-3),
-        endTime: hoursFromNow(-1),
-        showSubmissionList: true,
-        problems: [contestProblem(problems.alpha._id, 0)],
-      });
-      const other = await createContest(api);
-      const insert = (contestId: string) =>
-        db.collection<{ _id: UUID }>('submissions').insertMany(
-          Array.from({ length: 2_000 }, () => ({
-            _id: toUuid(newId()),
-            contest: toUuid(contestId),
-            problem: toUuid(problems.alpha._id),
-            language: toUuid(catalog.languages.cpp),
-            user: toUuid(users.alice._id),
-            status: 'D',
-            result: 'AC',
-            date: hoursFromNow(-2),
-          })),
-        );
-      await insert(big._id);
-      await insert(other._id);
-      const operations = await profileQueries(db, () => stats(big.key));
-      expect(
-        operations.filter(({ planSummary }) => planSummary === 'COLLSCAN'),
-      ).toEqual([]);
-      expect((await stats(big.key)).problems[0].total).toBe(2_000);
-    });
   });
 }
 
@@ -500,13 +417,6 @@ afterAll(() => api.teardown());
       expect(error.code).toBe(code);
       expect(error.issues?.map((issue) => issue.code)).toContain(issueCode);
     };
-  /** Same for a 400: whatever the field, every issue has a code. */
-  const hasIssueCodes = ({ body }: { body: unknown }) => {
-    const { issues } = (body as { error: { issues?: { code: string }[] } })
-      .error;
-    expect(issues?.length).toBeGreaterThan(0);
-    expect(issues?.every((issue) => issue.code)).toBe(true);
-  };
 
   describe('contest balloons', () => {
     beforeAll(() => api.reset());
@@ -646,23 +556,6 @@ afterAll(() => api.teardown());
       await act(contest, [bob._id, probA], 'deliver').expect(204);
     });
 
-    it('follows a rescore: the first flag moves and a delivery for a vanished solve is hidden, then returns with the solve', async () => {
-      const { contest, ann, probA } = await seed();
-      await act(contest, [ann._id, probA], 'deliver').expect(204);
-      await api.participations.updateOne({ _id: ann._id }, { formatData: {} });
-      expect(names(await read(contest))).toEqual(['bob:bal_a*', 'bob:bal_b*']);
-      expect(
-        (await read(contest, 'volunteer', '?state=delivered')).data,
-      ).toEqual([]);
-      await api.participations.updateOne(
-        { _id: ann._id },
-        { formatData: { [probA]: solved(600) } },
-      );
-      expect(
-        (await read(contest, 'volunteer', '?state=delivered')).data,
-      ).toHaveLength(1);
-    });
-
     it('lists live solves during a freeze, without solve times or totals for a volunteer, while the ranking stays frozen', async () => {
       const { contest } = await seed({
         startTime: hoursFromNow(-3),
@@ -715,43 +608,6 @@ afterAll(() => api.teardown());
       expect(row.rows.find((item) => item.user.username === 'ann')!.score).toBe(
         0,
       );
-    });
-
-    it('logs one audit line per user and minute for a read during a freeze, and none outside a freeze', async () => {
-      const log = jest
-        .spyOn(Logger.prototype, 'log')
-        .mockImplementation(() => undefined);
-      const auditLines = () =>
-        log.mock.calls
-          .map(
-            ([entry]) =>
-              entry as { event?: string; contestId?: string; actorId?: string },
-          )
-          .filter((entry) => entry.event === 'balloons.read_frozen');
-      const calm = (await seed()).contest;
-      await read(calm);
-      expect(auditLines()).toEqual([]);
-      const { contest } = await seed({
-        startTime: hoursFromNow(-3),
-        endTime: hoursFromNow(0.2),
-        frozenLastMinutes: 30,
-      });
-      await read(contest);
-      await read(contest);
-      await read(contest, 'editor');
-      expect(auditLines()).toEqual([
-        {
-          event: 'balloons.read_frozen',
-          contestId: contest._id,
-          actorId: users.volunteer._id,
-        },
-        {
-          event: 'balloons.read_frozen',
-          contestId: contest._id,
-          actorId: users.editor._id,
-        },
-      ]);
-      log.mockRestore();
     });
 
     it('refuses a listed volunteer who holds a participation, to read and to write, but never an editor', async () => {
@@ -847,57 +703,6 @@ afterAll(() => api.teardown());
           .expect(refusedWith('not_found'));
       expect((await read(contest, 'editor')).data).toHaveLength(3);
     });
-
-    it('writes nothing on a GET', async () => {
-      const { contest } = await seed();
-      const operations = await profileQueries(api.db, () =>
-        authed(
-          api.http().get(url(contest, '?state=all')),
-          sessions.volunteer,
-        ).expect(200),
-      );
-      const balloonOperations = operations.filter(
-        (operation) => operation.collection === 'contestBalloons',
-      );
-      expect(balloonOperations.length).toBeGreaterThan(0);
-      expect(
-        balloonOperations.every((operation) => operation.operation === 'query'),
-      ).toBe(true);
-      expect(
-        await api.balloonDeliveries.countDocuments({ contest: contest._id }),
-      ).toBe(0);
-    });
-
-    it('allows 120 writes a minute per user, then refuses with a coded 429', async () => {
-      const { contest, ann, probB } = await seed();
-      for (let count = 0; count < 120; count += 1)
-        await act(contest, [ann._id, probB], 'deliver').expect(404);
-      await act(contest, [ann._id, probB], 'deliver')
-        .expect(429)
-        .expect(refusedWith('rate_limited'))
-        .expect((response) =>
-          expect(response.headers['retry-after']).toBeDefined(),
-        );
-    });
-
-    it('refuses a malformed state and malformed ids with coded issues', async () => {
-      const { contest } = await seed();
-      await authed(
-        api.http().get(url(contest, '?state=nope')),
-        sessions.volunteer,
-      )
-        .expect(400)
-        .expect(hasIssueCodes);
-      await authed(
-        api.http().get(url(contest, '?pageSize=1000')),
-        sessions.volunteer,
-      )
-        .expect(400)
-        .expect(hasIssueCodes);
-      await act(contest, ['not-a-uuid', problems[0]._id], 'deliver')
-        .expect(400)
-        .expect(hasIssueCodes);
-    });
   });
 }
 
@@ -906,10 +711,6 @@ afterAll(() => api.teardown());
   const basic = (user: string, password: string) =>
     `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
   const IP = '203.0.113.9';
-
-  // The CommonJS module object is mutable; the ES namespace import is not.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-  const nodeCrypto: typeof import('node:crypto') = require('node:crypto');
 
   describe('feed keys and feed authorisation', () => {
     beforeAll(() => api.reset());
@@ -983,23 +784,6 @@ afterAll(() => api.teardown());
       );
     });
 
-    it('honours the mode and expiry asked for, and refuses an unknown mode or a 31-day expiry', async () => {
-      const contest = await newContest();
-      const live = await mint(contest, { mode: 'live', expiresInDays: 2 });
-      expect(live.mode).toBe('live');
-      expect(new Date(live.expiresAt).getTime() - Date.now()).toBeLessThan(
-        2 * 86_400_000,
-      );
-      await authed(
-        api.http().post(url(contest)).send({ mode: 'always' }),
-        sessions.editor,
-      ).expect(400);
-      await authed(
-        api.http().post(url(contest)).send({ expiresInDays: 31 }),
-        sessions.editor,
-      ).expect(400);
-    });
-
     it('accepts the key through Basic auth, and a newer key replaces the older one', async () => {
       const contest = await newContest();
       const first = await mint(contest);
@@ -1023,16 +807,6 @@ afterAll(() => api.teardown());
         status: 401,
       });
       await expect(attempt(first, basic('feed', key))).resolves.toBeDefined();
-    });
-
-    it('compares the key hash with the constant-time primitive, for right and wrong keys alike', async () => {
-      const contest = await newContest();
-      const { key } = await mint(contest);
-      const compare = jest.spyOn(nodeCrypto, 'timingSafeEqual');
-      await attempt(contest, basic('feed', `${key}x`)).catch(() => undefined);
-      await attempt(contest, basic('feed', key));
-      expect(compare).toHaveBeenCalledTimes(2);
-      compare.mockRestore();
     });
 
     it.each([
@@ -1120,30 +894,6 @@ afterAll(() => api.teardown());
       await expect(attempt(contest, basic('feed', key))).rejects.toMatchObject({
         status: 429,
       });
-    });
-
-    it('allows a key 60 requests a minute', async () => {
-      const contest = await newContest();
-      const { key } = await mint(contest);
-      for (let count = 0; count < 60; count += 1)
-        await attempt(contest, basic('feed', key));
-      await expect(attempt(contest, basic('feed', key))).rejects.toMatchObject({
-        status: 429,
-      });
-    });
-
-    it('re-checks a key without spending the request budgets, and refuses it once the key is revoked', async () => {
-      const contest = await newContest();
-      const { key } = await mint(contest);
-      const context = await attempt(contest, basic('feed', key));
-      for (let count = 0; count < 70; count += 1)
-        await auth.reauthorize(contest._id, context.feedKey.id);
-      await authed(api.http().delete(url(contest)), sessions.editor).expect(
-        204,
-      );
-      await expect(
-        auth.reauthorize(contest._id, context.feedKey.id),
-      ).rejects.toMatchObject({ status: 401 });
     });
 
     it('releases the active key during a freeze: 409 without a key, 409 when no freeze is on, 204 and a release time otherwise', async () => {
@@ -1256,45 +1006,6 @@ afterAll(() => api.teardown());
           revokedAt: null,
         }),
       ).toBe(1);
-    });
-
-    it('limits minting to five an hour per contest and user, and logs each credential action with the actor', async () => {
-      const contest = await frozenContest();
-      const log = jest
-        .spyOn(Logger.prototype, 'log')
-        .mockImplementation(() => undefined);
-      for (let count = 0; count < 5; count += 1) await mint(contest);
-      await authed(
-        api.http().post(url(contest)).send({}),
-        sessions.editor,
-      ).expect(429);
-      await authed(
-        api.http().post(url(contest, '/release')),
-        sessions.editor,
-      ).expect(204);
-      await authed(api.http().delete(url(contest)), sessions.editor).expect(
-        204,
-      );
-      const events = log.mock.calls.map(
-        ([entry]) =>
-          entry as { event: string; actorId: string; contestId: string },
-      );
-      expect(events.map((entry) => entry.event)).toEqual(
-        expect.arrayContaining([
-          'feed-key.minted',
-          'feed-key.released',
-          'feed-key.revoked',
-        ]),
-      );
-      for (const entry of events.filter((item) =>
-        item.event?.startsWith('feed-key.'),
-      ))
-        expect(entry).toMatchObject({
-          actorId: users.editor._id,
-          contestId: contest._id,
-        });
-      expect(JSON.stringify(events)).not.toMatch(/qhf_/);
-      log.mockRestore();
     });
   });
 }

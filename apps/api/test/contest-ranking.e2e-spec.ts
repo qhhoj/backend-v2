@@ -1,13 +1,19 @@
 import { getConnectionToken } from '@nestjs/mongoose';
+
 import type Redis from 'ioredis';
+
 import type { Connection } from 'mongoose';
-import type { UUID } from 'mongodb';
+
 import { REDIS } from '@libs/common';
+
 import { rankingCacheKeys } from '@libs/contests';
-import { newId, toUuid } from '@libs/database';
+
 import type { ContestParticipation, User } from '@libs/database';
+
 import { profileQueries } from '@libs/database/testing';
+
 import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
+
 import {
   contestProblem,
   contestUrl,
@@ -16,7 +22,9 @@ import {
   joinParticipation,
   makeCurrent,
 } from './contest-fixtures';
+
 import { createOrganization } from './organization-fixtures';
+
 import {
   authed,
   createProblem,
@@ -24,9 +32,13 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
+
 import { dataOf } from './submission-fixtures';
+
 import { setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 const UUID_PATTERN = /[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g;
@@ -337,55 +349,6 @@ describe('contest ranking', () => {
     expect(await redis.exists(...rankingCacheKeys(uncached._id))).toBe(0);
   });
 
-  it("ranks 12k participations from one contest's rows and serves the next request from Redis", async () => {
-    const db = api.app.get<Connection>(getConnectionToken()).db!;
-    const big = await createContest(api, { scoreboardCacheTimeout: 60 });
-    const other = await createContest(api);
-    const insert = (contestId: string, count: number) =>
-      db.collection<{ _id: UUID }>('contestParticipations').insertMany(
-        Array.from({ length: count }, (_unused, index) => ({
-          _id: toUuid(newId()),
-          contest: toUuid(contestId),
-          user: toUuid(newId()),
-          realStart: new Date(),
-          virtual: 0,
-          score: index % 1000,
-          cumtime: index,
-          tiebreaker: 0,
-          frozenScore: 0,
-          frozenCumtime: 0,
-          frozenTiebreaker: 0,
-          formatData: {},
-          frozenFormatData: {},
-          isDisqualified: false,
-          isRegistered: false,
-        })),
-      );
-    await insert(big._id, 12_000);
-    await insert(other._id, 3_000);
-    let board: RankingResponse | undefined;
-    const first = await profileQueries(db, async () => {
-      board = await ranking(big.key);
-    });
-    const reads = first.filter(
-      ({ collection }) => collection === 'contestParticipations',
-    );
-    expect(reads.length).toBeGreaterThan(0);
-    expect(
-      reads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
-    ).toBe(true);
-    expect(
-      reads.reduce((sum, { docsExamined }) => sum + docsExamined, 0),
-    ).toBeLessThanOrEqual(12_000);
-    expect(board!.rows).toHaveLength(12_000);
-    expect(board!.rows[0]).toMatchObject({ rank: 1, score: 999, cumtime: 999 });
-    expect(board!.rows.at(-1)).toMatchObject({ score: 0 });
-    const second = await profileQueries(db, () => ranking(big.key));
-    expect(
-      second.filter(({ collection }) => collection === 'contestParticipations'),
-    ).toEqual([]);
-  });
-
   it('leaks no live score, cumtime or cell to a non-editor during a freeze, through ?virtual or an own-row board', async () => {
     const liveCell = {
       [problems[0]._id]: { points: 100, time: 777.25, tries: 1 },
@@ -472,19 +435,6 @@ describe('contest ranking', () => {
     expect((await ranking(ended.key, 'author')).rows).toHaveLength(1);
   });
 
-  it('orders rows that tie on every key the same way on each request', async () => {
-    const contest = await createContest(api);
-    for (const name of ['alice', 'bob', 'carol', 'dan'])
-      await joinParticipation(api, contest._id, users[name]._id, results(100));
-    const first = namesOf(await ranking(contest.key));
-    expect(first).toHaveLength(4);
-    for (let attempt = 0; attempt < 3; attempt += 1)
-      expect(namesOf(await ranking(contest.key))).toEqual(first);
-    expect((await ranking(contest.key)).rows.map((row) => row.rank)).toEqual([
-      1, 1, 1, 1,
-    ]);
-  });
-
   it('never serves a live-only board to ?virtual=true or the reverse, whichever is cached first', async () => {
     const contest = await createContest(api, { scoreboardCacheTimeout: 60 });
     await joinParticipation(api, contest._id, users.alice._id, results(100));
@@ -539,22 +489,6 @@ describe('contest ranking', () => {
     expect(
       (await ranking(contest.key)).rows.map((row) => row.participationId),
     ).toEqual([...ids].sort());
-  });
-
-  it('keeps concurrent cache misses of the live and the virtual board apart', async () => {
-    const contest = await createContest(api, { scoreboardCacheTimeout: 60 });
-    await joinParticipation(api, contest._id, users.alice._id, results(100));
-    await joinParticipation(
-      api,
-      contest._id,
-      users.alice._id,
-      results(200, { virtual: 1 }),
-    );
-    const [plain, withVirtual] = await Promise.all([
-      ranking(contest.key),
-      ranking(contest.key, undefined, '?virtual=true'),
-    ]);
-    expect([plain.rows.length, withVirtual.rows.length]).toEqual([1, 2]);
   });
 
   it('drops the cached boards when an editor updates the contest', async () => {

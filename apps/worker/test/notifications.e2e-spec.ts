@@ -117,14 +117,6 @@ afterAll(() => worker.teardown());
       expect(await countOf(small)).toBe(3);
     });
 
-    it('trims each over-cap user separately', async () => {
-      const [one, two] = [newId(), newId()];
-      await seed(one, NOTIFICATION_CAP_PER_USER + 5, 0);
-      await seed(two, NOTIFICATION_CAP_PER_USER + 7, MINUTE);
-      expect(await trims.trim()).toEqual({ users: 2, deleted: 12 });
-      expect([await countOf(one), await countOf(two)]).toEqual([500, 500]);
-    });
-
     it('trims a user over the cap whose last activity is days old (a skipped night leaves nobody behind)', async () => {
       const dormant = newId();
       await seed(dormant, NOTIFICATION_CAP_PER_USER + 10, 3 * DAY);

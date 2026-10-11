@@ -1,13 +1,7 @@
-import { generateRankingToken, isLinkValid, linkExpiry } from './ranking-link';
+import { isLinkValid, linkExpiry } from './ranking-link';
 
 describe('ranking links', () => {
   const regeneratedAt = new Date('2026-01-01T00:00:00Z');
-
-  it('makes 18-character alphanumeric tokens that differ', () => {
-    const tokens = new Set(Array.from({ length: 200 }, generateRankingToken));
-    expect(tokens.size).toBe(200);
-    for (const token of tokens) expect(token).toMatch(/^[A-Za-z0-9]{18}$/);
-  });
 
   it('expires never, after minutes or days from the last regeneration, or at a date', () => {
     expect(

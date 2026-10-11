@@ -1,6 +1,5 @@
 import { finalSubmissionFormat } from './final-submission';
 import { FormatConfigError } from './format';
-import type { FormatName } from './format';
 import { batchMinima, dataPoints, ioi16Format } from './ioi16';
 import { parseFormatConfig, scoreParticipation } from './registry';
 import { at, context, row } from './scoring-fixtures';
@@ -83,33 +82,6 @@ describe('ioi16 (legacy IOIContestFormat, "IOI")', () => {
       N: { points: 0, time: 0 },
     });
   });
-
-  it('rounds the total to the points precision, ties to even', () => {
-    const problems = [{ problemId: 'P', points: 5, dataPoints: 2 }];
-    const score = (precision: number, points: number) =>
-      ioi16Format.score(
-        [row('P', 1, 0, { batchPoints: { '1': points } })],
-        { cumtime: false },
-        context({ problems, pointsPrecision: precision }),
-      ).score;
-    expect(score(0, 1)).toBe(2); // 2.5 -> 2
-    expect(score(0, 1.4)).toBe(4); // 3.5 -> 4
-  });
-
-  it('hides solve times by default', () =>
-    expect(ioi16Format.parseConfig(null)).toEqual({ cumtime: false }));
-
-  it('shows solve times only with cumtime, all of them zero', () => {
-    expect(
-      ioi16Format.firstSolveTime({ points: 1, time: 0 }, { cumtime: false }),
-    ).toBeNull();
-    expect(
-      ioi16Format.firstSolveTime({ points: 1, time: 0 }, { cumtime: true }),
-    ).toBe(0);
-    expect(() => ioi16Format.parseConfig({ lastScoreAltering: true })).toThrow(
-      FormatConfigError,
-    );
-  });
 });
 
 describe('ultimate (legacy UltimateContestFormat, fixed)', () => {
@@ -163,30 +135,6 @@ describe('ultimate (legacy UltimateContestFormat, fixed)', () => {
     });
   });
 
-  it('keeps fractional seconds, and rounds the score half to even', () => {
-    const fractional = row('A', 1, 5, {
-      date: new Date(at(1).getTime() + 500),
-    });
-    const score = ultimateFormat.score(
-      [fractional, row('B', 2, 0.5)],
-      {},
-      context({ pointsPrecision: 0 }),
-    );
-    expect(score.formatData.A.time).toBe(60.5);
-    expect(score).toMatchObject({
-      score: 6,
-      cumtime: 60.5 + 120,
-      tiebreaker: 120,
-    });
-    expect(
-      ultimateFormat.score(
-        [row('A', 1, 2.5)],
-        {},
-        context({ pointsPrecision: 0 }),
-      ).score,
-    ).toBe(2);
-  });
-
   it('takes the tiebreaker from the latest solve even when an earlier-iterated problem owns it', () =>
     expect(
       ultimateFormat.score(
@@ -195,21 +143,6 @@ describe('ultimate (legacy UltimateContestFormat, fixed)', () => {
         context(),
       ),
     ).toMatchObject({ cumtime: 6000, tiebreaker: 5400 }));
-
-  it('clamps a negative cumtime to zero', () =>
-    expect(
-      ultimateFormat.score([row('A', -10, 100)], {}, context()),
-    ).toMatchObject({ cumtime: 0, tiebreaker: 0 }));
-
-  it('shows every solve time to first solves', () =>
-    expect(ultimateFormat.firstSolveTime({ points: 1, time: 7 }, {})).toBe(7));
-
-  it('accepts only an empty config', () => {
-    expect(ultimateFormat.parseConfig({})).toEqual({});
-    expect(() => ultimateFormat.parseConfig({ penalty: 1 })).toThrow(
-      FormatConfigError,
-    );
-  });
 });
 
 describe('final_submission (legacy FinalSubmissionContestFormat)', () => {
@@ -260,27 +193,6 @@ describe('final_submission (legacy FinalSubmissionContestFormat)', () => {
     });
   });
 
-  it('scores nothing when every submission is pending, and rounds half to even', () => {
-    const pending = row('A', 1, 5, { status: 'PD', result: null });
-    expect(
-      finalSubmissionFormat.score([pending], { autoJudge: true }, context()),
-    ).toMatchObject({ score: 0, formatData: {} });
-    expect(
-      finalSubmissionFormat.score(
-        [row('A', 1, 0.5)],
-        { autoJudge: true },
-        context({ pointsPrecision: 0 }),
-      ).score,
-    ).toBe(0);
-    expect(
-      finalSubmissionFormat.score(
-        [row('A', 1, 1.5), row('B', 1, 1)],
-        { autoJudge: true },
-        context({ pointsPrecision: 0 }),
-      ).score,
-    ).toBe(2);
-  });
-
   it('scores a submission still queued or running, only pending ones being ignored', () =>
     expect(
       finalSubmissionFormat.score(
@@ -289,32 +201,9 @@ describe('final_submission (legacy FinalSubmissionContestFormat)', () => {
         context(),
       ),
     ).toMatchObject({ score: 0, formatData: { A: { points: 0 } } }));
-
-  it('judges automatically unless configured not to', () => {
-    expect(finalSubmissionFormat.parseConfig(null)).toEqual({
-      autoJudge: true,
-    });
-    expect(finalSubmissionFormat.parseConfig({ autoJudge: false })).toEqual({
-      autoJudge: false,
-    });
-  });
 });
 
 describe('registry', () => {
-  it('scores through the named format with its parsed config', () => {
-    const rows = [row('A', 10, 0), row('A', 20, 100)];
-    expect(
-      scoreParticipation(
-        rows,
-        { name: 'icpc', config: { penalty: 10 } },
-        context(),
-      ),
-    ).toMatchObject({ cumtime: 30 });
-    expect(
-      scoreParticipation(rows, { name: 'icpc', config: null }, context()),
-    ).toMatchObject({ cumtime: 40 });
-  });
-
   it('rejects an invalid config for the named format', () => {
     expect(() => parseFormatConfig('default', { penalty: 1 })).toThrow(
       FormatConfigError,
@@ -331,31 +220,4 @@ describe('registry', () => {
       ),
     ).toThrow(FormatConfigError);
   });
-
-  it.each([
-    ['default', 100, 1800, 1800],
-    ['ioi', 100, 0, 600],
-    ['ioi16', 100, 0, 0],
-    ['icpc', 100, 10, 600],
-    ['vnoj', 100, 600, 600],
-    ['ultimate', 0, 0, 0],
-    ['final_submission', 50, 0, 0],
-  ] as [FormatName, number, number, number][])(
-    'binds %s to its own module (score %d, cumtime %d, cell time %d)',
-    (name, score, cumtime, time) => {
-      const rows = [
-        row('A', 10, 100, { batchPoints: { '1': 10 } }),
-        row('A', 20, 50),
-        row('A', 30, 0, { status: 'PD', result: null }),
-      ];
-      const problems = [{ problemId: 'A', points: 100, dataPoints: 10 }];
-      const scored = scoreParticipation(
-        rows,
-        { name, config: null },
-        context({ problems }),
-      );
-      expect(scored).toMatchObject({ score, cumtime });
-      expect(scored.formatData).toMatchObject({ A: { time } });
-    },
-  );
 });

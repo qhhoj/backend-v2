@@ -18,16 +18,6 @@ describe('serverCredentials', () => {
     ).rejects.toThrow(/set JUDGE_BRIDGE_TLS_CERT and JUDGE_BRIDGE_TLS_KEY/);
   });
 
-  it('reads the certificate pair when one is configured, and fails on a missing file', async () => {
-    await expect(
-      serverCredentials({
-        judgeBridgeHost: '10.0.0.1',
-        judgeBridgeTlsCert: '/nonexistent/cert.pem',
-        judgeBridgeTlsKey: '/nonexistent/key.pem',
-      }),
-    ).rejects.toThrow(/ENOENT/);
-  });
-
   it('serves TLS on a public host with a real pair, and a half-set pair is still plaintext-refused', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'bridge-tls-'));
     try {

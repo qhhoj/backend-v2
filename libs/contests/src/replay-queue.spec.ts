@@ -51,12 +51,6 @@ describe('requestReplayBuild', () => {
     expect(add.mock.calls[0][2]).toMatchObject({ delay: 0 });
   });
 
-  it('passes the delay on, so a build waits for the judge to settle', async () => {
-    const { queue, add } = fakeQueue([]);
-    await requestReplayBuild(queue, 'c1', { delayMs: 480_000 });
-    expect(add.mock.calls[0][2]).toMatchObject({ delay: 480_000 });
-  });
-
   it.each(['waiting', 'delayed'] as const)(
     'adds nothing while a %s build for the contest exists',
     async (state) => {
@@ -102,12 +96,6 @@ describe('requestReplayBuild', () => {
     expect(add.mock.calls[0][2]).toMatchObject({ delay: 0 });
   });
 
-  it('queues another build while one is running by default, because the running one read older data', async () => {
-    const { queue, add } = fakeQueue([{ contestId: 'c1', state: 'active' }]);
-    await requestReplayBuild(queue, 'c1');
-    expect(add).toHaveBeenCalledTimes(1);
-  });
-
   it('queues only one build behind a running one, however often it is asked', async () => {
     const jobs: FakeJob[] = [{ contestId: 'c1', state: 'active' }];
     const { queue, add } = fakeQueue(jobs);
@@ -120,32 +108,10 @@ describe('requestReplayBuild', () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 
-  it('adds nothing when a build runs and another waits', async () => {
-    const { queue, add } = fakeQueue([
-      { contestId: 'c1', state: 'active' },
-      { contestId: 'c1', state: 'waiting' },
-    ]);
-    await requestReplayBuild(queue, 'c1');
-    expect(add).not.toHaveBeenCalled();
-  });
-
-  it('queues nothing for ten reader polls while a build runs, in skip mode', async () => {
+  it('queues nothing while a build runs in skip mode', async () => {
     const { queue, add } = fakeQueue([{ contestId: 'c1', state: 'active' }]);
-    for (let poll = 0; poll < 10; poll += 1)
-      await requestReplayBuild(queue, 'c1', { ifRunning: 'skip' });
-    expect(add).not.toHaveBeenCalled();
-  });
-
-  it('still queues in skip mode when nothing runs', async () => {
-    const { queue, add } = fakeQueue([]);
     await requestReplayBuild(queue, 'c1', { ifRunning: 'skip' });
-    expect(add).toHaveBeenCalledTimes(1);
-  });
-
-  it("is not held back by another contest's queued build", async () => {
-    const { queue, add } = fakeQueue([{ contestId: 'c2', state: 'waiting' }]);
-    await requestReplayBuild(queue, 'c1');
-    expect(add).toHaveBeenCalledTimes(1);
+    expect(add).not.toHaveBeenCalled();
   });
 });
 

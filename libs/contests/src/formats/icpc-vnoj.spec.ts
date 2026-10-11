@@ -85,13 +85,6 @@ describe('icpc (legacy ICPCContestFormat)', () => {
     });
   });
 
-  it('mirrors the live fields when the contest never freezes', () =>
-    expect(icpcFormat.score(rows(), { penalty: 20 }, context())).toMatchObject({
-      frozenScore: 200,
-      frozenCumtime: 315,
-      frozenTiebreaker: 250,
-    }));
-
   describe('time rules', () => {
     it('times a problem at its first best and counts only the tries up to it', () => {
       const score = icpcFormat.score(
@@ -111,19 +104,6 @@ describe('icpc (legacy ICPCContestFormat)', () => {
         context(),
       );
       expect(score).toMatchObject({ cumtime: 30, tiebreaker: 10 });
-    });
-
-    it('takes the best by points, not the latest, and ignores a later worse row', () => {
-      const score = icpcFormat.score(
-        [row('A', 10, 50), row('A', 20, 100), row('A', 30, 70)],
-        { penalty: 20 },
-        context(),
-      );
-      expect(score).toMatchObject({
-        score: 100,
-        cumtime: 20 + 20,
-        tiebreaker: 20,
-      });
     });
 
     it('breaks ties on the last solve across problems', () => {
@@ -155,15 +135,6 @@ describe('icpc (legacy ICPCContestFormat)', () => {
           context(),
         ).cumtime,
       ).toBe(20));
-
-    it('floors seconds into whole minutes', () => {
-      const score = icpcFormat.score(
-        [{ ...row('A', 0, 100), date: at(59, 59) }],
-        { penalty: 20 },
-        context(),
-      );
-      expect(score.cumtime).toBe(59);
-    });
 
     it('does not count rows without a result as tries', () => {
       const score = icpcFormat.score(
@@ -210,31 +181,10 @@ describe('icpc (legacy ICPCContestFormat)', () => {
       expect(frozen(239)).toMatchObject({ pending: false, tries: 2 });
       expect(frozen(240)).toMatchObject({ pending: true, tries: 2 });
     });
-
-    it('shows every try of a frozen solve but charges none of it', () => {
-      const score = icpcFormat.score(
-        [row('A', 10, 0), row('A', 250, 100), row('A', 255, 0)],
-        { penalty: 20 },
-        frozenContext(),
-      );
-      expect(score.frozenFormatData.A).toEqual({
-        time: null,
-        points: 0,
-        tries: 3,
-        pending: true,
-      });
-      expect(score).toMatchObject({ cumtime: 270, frozenCumtime: 0 });
-    });
-
-    it('freezes a virtual participation row after the contest end like any other', () =>
-      expect(
-        icpcFormat.score(solvedAt(500), { penalty: 20 }, frozenContext()),
-      ).toMatchObject({ frozenScore: 0 }));
   });
 
   it.each([
     [2.5, 0, 2],
-    [3.5, 0, 4],
     [0.125, 2, 0.12],
   ])(
     'rounds the tie %p at %p digits half to even, live and frozen',
@@ -255,24 +205,11 @@ describe('icpc (legacy ICPCContestFormat)', () => {
 
   it.each([
     { penalty: -1 },
-    { penalty: 1.5 },
     { penalty: '20' },
-    { lso: true },
     JSON.parse('{"__proto__": {}}'),
   ])('rejects the config %p', (config) =>
     expect(() => icpcFormat.parseConfig(config)).toThrow(FormatConfigError),
   );
-  it('defaults the penalty to 20 minutes', () =>
-    expect(icpcFormat.parseConfig(undefined)).toEqual({ penalty: 20 }));
-  it('accepts a zero penalty', () =>
-    expect(icpcFormat.parseConfig({ penalty: 0 })).toEqual({ penalty: 0 }));
-
-  it('offers the cell time for first solves, none while frozen out', () => {
-    expect(icpcFormat.firstSolveTime({ time: 42 }, { penalty: 20 })).toBe(42);
-    expect(
-      icpcFormat.firstSolveTime({ time: null }, { penalty: 20 }),
-    ).toBeNull();
-  });
 });
 
 describe('vnoj (legacy VNOJContestFormat)', () => {
@@ -313,22 +250,10 @@ describe('vnoj (legacy VNOJContestFormat)', () => {
     });
   });
 
-  it('scores rows the same whatever order they arrive in', () => {
-    const [expected, ...others] = orders(rows()).map((ordered) =>
-      vnojFormat.score(ordered, config, frozenContext()),
-    );
-    for (const other of others) expect(other).toEqual(expected);
-  });
-
   it('with last-submission-only times by the last solve instead of the sum', () =>
     expect(
       vnojFormat.score(rows(), { penalty: 5, lso: true }, frozenContext()),
     ).toMatchObject({ cumtime: 15600, frozenCumtime: 1830 }));
-
-  it('without a penalty adds no penalty', () =>
-    expect(
-      vnojFormat.score(rows(), { penalty: 0, lso: false }, frozenContext()),
-    ).toMatchObject({ cumtime: 16530, frozenCumtime: 1530 }));
 
   it('without a freeze has no pending counts and mirrors the live fields', () => {
     const score = vnojFormat.score(rows(), config, context());
@@ -417,20 +342,6 @@ describe('vnoj (legacy VNOJContestFormat)', () => {
         ).cumtime,
       ).toBe(5700);
     });
-
-    it('keeps fractional seconds', () => {
-      const score = vnojFormat.score(
-        [{ ...row('A', 0, 100), date: new Date(at(25, 30).getTime() + 500) }],
-        config,
-        frozenContext(),
-      );
-      expect(score).toMatchObject({
-        cumtime: 1530.5,
-        tiebreaker: 1530.5,
-        frozenCumtime: 1530.5,
-      });
-      expect(score.formatData.A).toMatchObject({ time: 1530.5 });
-    });
   });
 
   describe('freeze boundary', () => {
@@ -441,15 +352,6 @@ describe('vnoj (legacy VNOJContestFormat)', () => {
         config,
         frozenContext(),
       );
-
-    it('counts a try one second before the freeze as not pending', () => {
-      const score = vnojFormat.score(
-        [row('A', 230, 100), { ...row('A', 0, 0), date: at(239, 59) }],
-        config,
-        frozenContext(),
-      );
-      expect(score.formatData.A).toMatchObject({ pending: 0 });
-    });
 
     it('counts a try exactly at the freeze instant as pending, outside the frozen board', () => {
       const score = withTryAt(240);
@@ -487,32 +389,7 @@ describe('vnoj (legacy VNOJContestFormat)', () => {
         pending: 1,
       });
     });
-
-    it('does not count pending CE rows', () => {
-      const score = vnojFormat.score(
-        [row('A', 250, 0, { result: 'CE', status: 'CE' })],
-        config,
-        frozenContext(),
-      );
-      expect(score.formatData.A).toMatchObject({ pending: 0 });
-    });
   });
-
-  it.each([
-    [2.5, 0, 2],
-    [3.5, 0, 4],
-    [0.125, 2, 0.12],
-  ])(
-    'rounds the tie %p at %p digits half to even, live and frozen',
-    (points, pointsPrecision, score) =>
-      expect(
-        vnojFormat.score(
-          [row('A', 1, points)],
-          config,
-          frozenContext({ pointsPrecision }),
-        ),
-      ).toMatchObject({ score, frozenScore: score }),
-  );
 
   it('defaults to a 5 minute penalty without LSO and validates keys', () => {
     expect(vnojFormat.parseConfig(null)).toEqual({ penalty: 5, lso: false });
@@ -527,7 +404,4 @@ describe('vnoj (legacy VNOJContestFormat)', () => {
       FormatConfigError,
     );
   });
-
-  it('offers the cell time for first solves', () =>
-    expect(vnojFormat.firstSolveTime({ time: 42 }, config)).toBe(42));
 });

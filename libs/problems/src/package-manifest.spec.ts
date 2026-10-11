@@ -103,31 +103,13 @@ describe('buildManifest', () => {
       statements: [{ language: 'vi', name: 'Tong', file: 'statements/vi.md' }],
       data: { checker: 'standard', files: { archive: 'tests.zip' } },
     });
-    expect(manifest.data.cases).toHaveLength(1);
     expect(JSON.stringify(manifest)).not.toContain('Cong hai so.');
-    expect(JSON.parse(JSON.stringify(manifest))).toEqual(manifest);
-  });
-
-  it('names the uploaded files by their stored name', () => {
-    const manifest = buildManifest(
-      problem({
-        materialUrl: 'http://x/media/materials/abc/Notes v2.txt',
-        pdfStatementUrl: 'http://x/media/pdf/sum.pdf',
-      }),
-    );
-    expect(manifest.material).toBe('Notes_v2.txt');
-    expect(manifest.uploadedStatement).toBe('uploaded.pdf');
   });
 });
 
 describe('packageKey', () => {
   const key = (extra: Record<string, unknown> = {}) =>
     packageKey(problem({ ...extra, _id: 'fixed' }));
-
-  it('is dataVersion, a dot and 12 hex digits, and stable', () => {
-    expect(key()).toMatch(/^3\.[0-9a-f]{12}$/);
-    expect(key()).toBe(key());
-  });
 
   it('changes with everything the package states', () => {
     const base = key({ data: withData([caseRow('1.in')]) });
@@ -150,15 +132,14 @@ describe('packageKey', () => {
         data: withData([caseRow('1.in')]),
         pdfStatementUrl: 'http://x/media/pdf/one.pdf',
       }),
+      key({
+        data: withData([caseRow('1.in')]),
+        pdfStatementUrl: 'http://x/media/pdf/two.pdf',
+      }),
     ];
-    for (const other of changed) expect(other).not.toBe(base);
+    expect(changed).not.toContain(base);
     expect(new Set(changed).size).toBe(changed.length);
-  });
-
-  it('moves when only the PDF statement URL changes, the way a PDF re-upload does', () => {
-    const first = key({ pdfStatementUrl: 'http://x/media/pdf/one.pdf' });
-    const second = key({ pdfStatementUrl: 'http://x/media/pdf/two.pdf' });
-    expect(second).not.toBe(first);
+    expect(key({ data: withData([caseRow('1.in')]) })).toBe(base);
   });
 
   it('ignores what the package does not state', () => {

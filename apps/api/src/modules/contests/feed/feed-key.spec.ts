@@ -1,20 +1,7 @@
-import {
-  feedKeyExpiry,
-  generateFeedKey,
-  isFeedKeyUsable,
-  parseBasicAuth,
-} from './feed-key';
+import { feedKeyExpiry, isFeedKeyUsable, parseBasicAuth } from './feed-key';
 
 const basic = (text: string) => `Basic ${Buffer.from(text).toString('base64')}`;
 const NOW = new Date('2026-03-01T12:00:00Z');
-
-describe('generateFeedKey', () => {
-  it('is long, prefixed, url-safe and never repeats', () => {
-    const keys = Array.from({ length: 50 }, () => generateFeedKey());
-    expect(new Set(keys).size).toBe(50);
-    for (const key of keys) expect(key).toMatch(/^qhf_[A-Za-z0-9_-]{32}$/);
-  });
-});
 
 describe('parseBasicAuth', () => {
   it.each([

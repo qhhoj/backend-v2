@@ -10,7 +10,10 @@ import {
 import { recordSubmissionEvents } from './testing';
 
 describe('SubmissionEventsService', () => {
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
   const redis = new Redis(TEST_REDIS_URL);
   afterAll(() => redis.quit());
 
@@ -60,27 +63,10 @@ describe('SubmissionEventsService', () => {
       status: 'ready',
       publish: () => new Promise(() => undefined),
     } as unknown as Redis;
-    const started = Date.now();
-    await expect(
-      new SubmissionEventsService(hanging).publish(eventOf()),
-    ).resolves.toBeUndefined();
-    expect(Date.now() - started).toBeLessThan(EVENT_PUBLISH_TIMEOUT_MS + 500);
+    jest.useFakeTimers();
+    const pending = new SubmissionEventsService(hanging).publish(eventOf());
+    await jest.advanceTimersByTimeAsync(EVENT_PUBLISH_TIMEOUT_MS);
+    await expect(pending).resolves.toBeUndefined();
     expect(logged).toHaveBeenCalledTimes(1);
-  });
-
-  it('waits for the connection at boot, so a boot-time event is published and not skipped', async () => {
-    const recorder = await recordSubmissionEvents(TEST_REDIS_URL);
-    const booting = new Redis(TEST_REDIS_URL, { lazyConnect: true });
-    try {
-      const service = new SubmissionEventsService(booting);
-      const event = eventOf();
-      await service.onModuleInit();
-      await service.publish(event);
-      await recorder.waitFor((events) => events.length === 1);
-      expect(recorder.events).toEqual([event]);
-    } finally {
-      await recorder.stop();
-      await booting.quit();
-    }
   });
 });

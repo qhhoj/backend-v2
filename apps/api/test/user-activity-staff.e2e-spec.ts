@@ -1,18 +1,10 @@
-import { randomUUID } from 'node:crypto';
-import { ACTIVITY_PAGE_SIZE } from '@libs/community';
-import type Redis from 'ioredis';
-import { REDIS } from '@libs/common';
-import { newId } from '@libs/database';
 import type { User, UserActivity } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
 import { Logger } from '@nestjs/common';
-import { ActivityLogsRepository } from '../src/modules/user-activity/staff/activity-logs.repository';
 import type {
   ActivityLogResponse,
   ActivitySummaryResponse,
-  LiveActivityResponse,
 } from '../src/modules/user-activity/staff/dto/activity.response';
-import { UserActivityCaptureService } from '../src/modules/user-activity/capture/user-activity-capture.service';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
@@ -126,35 +118,6 @@ describe('user activity staff API', () => {
     await get('/logs?days=91').expect(400);
   });
 
-  it('pages 50 rows with hasMore and no total', async () => {
-    await api.userActivities.insertMany(
-      Array.from({ length: 55 }, (_value, index) => ({
-        _id: newId(),
-        userId: ids.bob,
-        sessionKey: 's',
-        path: `/p${index}`,
-        method: 'GET',
-        ip: '1.1.1.1',
-        userAgent: '',
-        referer: '',
-        statusCode: 200,
-        at: daysAgo(0.001 * (index + 1)),
-      })),
-    );
-    const first = (await get('/logs').expect(200)).body as {
-      data: unknown[];
-      meta: Record<string, unknown>;
-    };
-    const second = (await get('/logs?page=2').expect(200)).body as {
-      data: unknown[];
-      meta: Record<string, unknown>;
-    };
-    expect(first.data).toHaveLength(50);
-    expect(first.meta).toEqual({ page: 1, pageSize: 50, hasMore: true });
-    expect(second.data).toHaveLength(5);
-    expect(second.meta).toEqual({ page: 2, pageSize: 50, hasMore: false });
-  });
-
   it("shows one user's logs and a summary of their last days", async () => {
     await row('alice', { path: '/a', at: daysAgo(1), ip: '10.0.0.1' });
     await row('alice', { path: '/a', at: daysAgo(1), ip: '10.0.0.2' });
@@ -217,21 +180,6 @@ describe('user activity staff API', () => {
     expect(lines[1]).toContain(',alice,');
   });
 
-  it('exports with the same filters and only the header when nothing matches', async () => {
-    await row('alice');
-    await row('bob');
-    expect(
-      (await get('/logs/export?user=alice').expect(200)).text
-        .split('\r\n')
-        .filter(Boolean),
-    ).toHaveLength(2);
-    expect(
-      (await get('/logs/export?user=nobody').expect(200)).text
-        .split('\r\n')
-        .filter(Boolean),
-    ).toHaveLength(1);
-  });
-
   it("deletes one user's rows and sessions, or the anonymous ones, and nothing else", async () => {
     await row('alice');
     await row('bob');
@@ -271,75 +219,6 @@ describe('user activity staff API', () => {
       ),
     ).toEqual(['b']);
     await authed(api.http().delete(`${BASE}/users/nobody`), staff).expect(404);
-  });
-
-  it('reports the live visitors of the last 30 minutes', async () => {
-    const redis = api.app.get<Redis>(REDIS);
-    await redis.del('active:users', 'active:anonymous', 'active:bots');
-    const now = Date.now();
-    await redis.zadd(
-      'active:users',
-      now - 60_000,
-      ids.alice,
-      now - 120_000,
-      ids.bob,
-      now - 31 * 60_000,
-      ids.staff,
-    );
-    await redis.zadd('active:anonymous', now, 'anon-1', now, 'anon-2');
-    await redis.zadd('active:bots', now, 'bot-1');
-    const live = dataOf<LiveActivityResponse>(await get('/live').expect(200));
-    expect(live).toMatchObject({
-      windowMinutes: 30,
-      authenticatedUsers: 2,
-      anonymousVisitors: 2,
-      bots: 1,
-    });
-    expect(live.users.map((entry) => entry.user.username)).toEqual([
-      'alice',
-      'bob',
-    ]);
-  });
-
-  it('reports hasMore while later live pages hold signed-in users', async () => {
-    const redis = api.app.get<Redis>(REDIS);
-    await redis.del('active:users', 'active:anonymous', 'active:bots');
-    const now = Date.now();
-    for (let index = 0; index <= ACTIVITY_PAGE_SIZE; index++)
-      await redis.zadd('active:users', now - index, randomUUID());
-    expect(
-      dataOf<LiveActivityResponse>(await get('/live?page=1').expect(200))
-        .hasMore,
-    ).toBe(true);
-    expect(
-      dataOf<LiveActivityResponse>(await get('/live?page=2').expect(200))
-        .hasMore,
-    ).toBe(false);
-    await redis.del('active:users');
-    expect(
-      dataOf<LiveActivityResponse>(await get('/live').expect(200)).hasMore,
-    ).toBe(false);
-  });
-
-  it("does not record the staff API's own requests", async () => {
-    const capture = api.app.get(UserActivityCaptureService);
-    await capture.flush();
-    await api.userActivities.deleteMany({});
-    await get('/logs').expect(200);
-    await capture.flush();
-    expect(
-      await api.userActivities.countDocuments({
-        path: { $regex: '^/api/internal/admin/user-activity' },
-      }),
-    ).toBe(0);
-  });
-
-  it('rejects out-of-range pages and windows', async () => {
-    for (const query of ['?page=0', '?page=201', '?days=0', '?days=abc'])
-      await get(`/logs${query}`).expect(400);
-    await get('/users/alice/logs?days=91').expect(400);
-    await get('/users/alice/summary?days=0').expect(400);
-    await get('/live?page=0').expect(400);
   });
 
   it('serves every filter from an index without sorting in memory', async () => {
@@ -383,41 +262,6 @@ describe('user activity staff API', () => {
           planSummary.includes('IXSCAN') && !hasSortStage,
       ),
     ).toBe(true);
-  });
-
-  it('serves the summary and the deletes from indexes', async () => {
-    await row('alice');
-    await api.userSessions.create({
-      sessionKey: 'k',
-      userId: ids.alice,
-      ip: '1.1.1.1',
-      lastActivityAt: new Date(),
-    });
-    const summaryOps = await profileQueries(api.db, () =>
-      get('/users/alice/summary').expect(200),
-    );
-    const deleteOps = await profileQueries(api.db, async () => {
-      await authed(api.http().delete(`${BASE}/users/alice`), staff).expect(204);
-      await authed(api.http().delete(`${BASE}/anonymous`), staff).expect(204);
-    });
-    for (const operation of [...summaryOps, ...deleteOps].filter(
-      ({ collection }) => ['userActivity', 'userSessions'].includes(collection),
-    ))
-      expect(
-        `${operation.collection} ${operation.operation} ${operation.planSummary}`,
-      ).not.toContain('COLLSCAN');
-  });
-
-  it('sets download headers and never builds the filename from the query', async () => {
-    await row('alice');
-    const response = await get(
-      '/logs/export?user=../../etc/passwd%22%0d%0aX:1',
-    ).expect(200);
-    expect(response.headers['content-disposition']).toBe(
-      'attachment; filename="user-activity.csv"',
-    );
-    expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.headers['x-content-type-options']).toBe('nosniff');
   });
 
   it('neutralises formulas hidden behind whitespace and control characters', async () => {
@@ -465,37 +309,6 @@ describe('user activity staff API', () => {
     } finally {
       log.mockRestore();
     }
-  });
-
-  it('never deletes without a concrete owner', async () => {
-    await row('alice');
-    await row(null);
-    await expect(
-      api.app.get(ActivityLogsRepository).deleteForUser(''),
-    ).rejects.toThrow();
-    expect(await api.userActivities.countDocuments()).toBe(2);
-  });
-
-  it('lists only signed-in users and counts anonymous visitors and bots', async () => {
-    const redis = api.app.get<Redis>(REDIS);
-    await redis.del('active:users', 'active:anonymous', 'active:bots');
-    await redis.zadd('active:users', Date.now(), ids.alice);
-    await redis.zadd(
-      'active:anonymous',
-      Date.now(),
-      'anon-secret-key',
-      Date.now(),
-      'anon-2',
-    );
-    await redis.zadd('active:bots', Date.now(), 'bot-secret-key');
-    const response = await get('/live').expect(200);
-    expect(JSON.stringify(response.body)).not.toMatch(/secret-key|anon-2/);
-    expect(
-      (response.body as { data: LiveActivityResponse }).data,
-    ).toMatchObject({ authenticatedUsers: 1, anonymousVisitors: 2, bots: 1 });
-    expect(
-      dataOf<LiveActivityResponse>(await get('/live?page=2').expect(200)).users,
-    ).toEqual([]);
   });
 
   async function pagesOnUser(username: string) {

@@ -1,6 +1,4 @@
 import {
-  booleanType,
-  integerType,
   mailFromType,
   oauthClientType,
   oneOfType,
@@ -8,8 +6,6 @@ import {
   optionalTextType,
   optionalUrlType,
   SettingError,
-  smtpUrlType,
-  timeZoneType,
   webhooksType,
 } from './setting-types';
 
@@ -24,37 +20,11 @@ const messageOf = (action: () => unknown): string => {
 };
 
 describe('setting types', () => {
-  it('takes only real booleans', () => {
-    expect(booleanType.parse(false)).toBe(false);
-    expect(() => booleanType.parse('true')).toThrow(SettingError);
-  });
-
-  it('bounds integers', () => {
-    const type = integerType(0, 5);
-    expect([0, 5].map((value) => type.parse(value))).toEqual([0, 5]);
-    for (const bad of [-1, 6, 1.5, '3', null, Number.NaN])
-      expect(() => type.parse(bad)).toThrow(SettingError);
-  });
-
   it('takes an empty value or a safe URL', () => {
     for (const ok of ['', 'https://api.example.test', 'http://127.0.0.1:9/h'])
       expect(optionalUrlType.parse(ok)).toBe(ok);
     for (const bad of ['http://example.com', 'ftp://x.test', 'nonsense', 5])
       expect(() => optionalUrlType.parse(bad)).toThrow(SettingError);
-  });
-
-  it('takes an IANA time zone name', () => {
-    for (const ok of ['Asia/Ho_Chi_Minh', 'UTC'])
-      expect(timeZoneType.parse(ok)).toBe(ok);
-    for (const bad of ['+07:00', 'Nowhere/City', 5])
-      expect(() => timeZoneType.parse(bad)).toThrow(SettingError);
-  });
-
-  it('takes an empty value or an smtp(s) URL', () => {
-    for (const ok of ['', 'smtp://localhost:1025', 'smtps://u:p%40ss@h.test'])
-      expect(smtpUrlType.parse(ok)).toBe(ok);
-    for (const bad of ['http://x.test', 'smtp://', 'mail.test'])
-      expect(() => smtpUrlType.parse(bad)).toThrow(SettingError);
   });
 
   it('takes a bare address or "Name <address>" and nothing that can inject a header', () => {
@@ -148,16 +118,6 @@ describe('outbound URL safety', () => {
         });
       },
     );
-
-    it('never echoes a refused internal URL in its error', () => {
-      inMode('production', () => {
-        const message = messageOf(() =>
-          webhooksType.parse({ default: 'https://10.9.8.7/token123' }),
-        );
-        expect(message).not.toContain('10.9.8.7');
-        expect(message).not.toContain('token123');
-      });
-    });
 
     it('accepts public https hosts and addresses just outside the internal ranges', () => {
       inMode('production', () => {

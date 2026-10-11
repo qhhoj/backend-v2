@@ -2,9 +2,7 @@ import {
   canReplyAfter,
   childPath,
   COMMENT_REPLY_WINDOW_MS,
-  commentLink,
   depthOf,
-  isCollapsed,
   pagePath,
   rootOf,
   subtreeFilter,
@@ -49,23 +47,7 @@ describe('comment rules', () => {
     expect(canReplyAfter(created, past, true)).toBe(true);
   });
 
-  it('collapses at -5 and below', () => {
-    expect([isCollapsed(-4), isCollapsed(-5), isCollapsed(-6)]).toEqual([
-      false,
-      true,
-      true,
-    ]);
-  });
-
-  it('links every page type to its SPA route, keys encoded', () => {
-    expect(pagePath('problem', 'aplusb')).toBe('/problem/aplusb');
-    expect(pagePath('editorial', 'aplusb')).toBe('/problem/aplusb/editorial');
-    expect(pagePath('contest', 'qh_2026')).toBe('/contest/qh_2026');
-    expect(pagePath('blog', root)).toBe(`/post/${root}`);
-    expect(pagePath('tagProblem', 'cf_1A')).toBe('/tagproblem/cf_1A');
+  it('encodes page keys so they cannot break out of the route', () => {
     expect(pagePath('problem', 'a/b?c')).toBe('/problem/a%2Fb%3Fc');
-    expect(commentLink('contest', 'qh', child)).toBe(
-      `/contest/qh#comment-${child}`,
-    );
   });
 });

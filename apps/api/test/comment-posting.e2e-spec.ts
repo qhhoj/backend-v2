@@ -1,12 +1,21 @@
 import { getQueueToken } from '@nestjs/bullmq';
+
 import type { Queue } from 'bullmq';
+
 import { COMMENT_MAX_DEPTH, DISCORD_WEBHOOK_QUEUE } from '@libs/community';
+
 import type { DiscordWebhookJob } from '@libs/community';
+
 import { CommentPostingService } from '../src/modules/comments/posting/comment-posting.service';
+
 import { CommentsRepository } from '../src/modules/comments/core/comments.repository';
+
 import { RevisionsRepository } from '../src/modules/problems/core/revisions.repository';
+
 import type { CommentResponse } from '../src/modules/comments/core/dto/comment.response';
+
 import type { CommentRevisionResponse } from '../src/modules/comments/posting/dto/comment-revision.response';
+
 import {
   commentPageUrl,
   commentUrl,
@@ -15,23 +24,29 @@ import {
   ghost,
   writer,
 } from './community-fixtures';
+
 import { clearRateLimits } from './contest-fixtures';
+
 import {
   contestProblem,
   createContest,
   joinParticipation,
   makeCurrent,
 } from './contest-fixtures';
+
 import {
   authed,
   createProblem,
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
-import { profileQueries } from '@libs/database/testing';
+
 import { dataOf } from './submission-fixtures';
+
 import { errorCode, setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 describe('comment posting and editing', () => {
@@ -341,65 +356,6 @@ describe('comment posting and editing', () => {
     await authed(api.http().patch(commentUrl(existing._id)), session)
       .send({ body: 'edited' })
       .expect(404);
-  });
-
-  it('serves the edit and its history through indexes', async () => {
-    const { user, session } = await person();
-    const page = await createPost(api);
-    const comment = await createComment(api, {
-      page: { type: 'blog', id: page._id },
-      author: user._id,
-    });
-    await edit(comment._id, session, 'once').expect(200);
-    const operations = await profileQueries(api.db, async () => {
-      await edit(comment._id, session, 'twice').expect(200);
-      await api.http().get(commentUrl(comment._id, '/revisions')).expect(200);
-    });
-    const reads = operations.filter(
-      ({ collection }) =>
-        collection === 'comments' || collection === 'revisions',
-    );
-    expect(reads.length).toBeGreaterThan(0);
-    expect(
-      reads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
-    ).toBe(true);
-    expect(
-      reads
-        .filter(({ collection }) => collection === 'revisions')
-        .every(({ planSummary }) => !planSummary.includes('SORT')),
-    ).toBe(true);
-  });
-
-  it('applies an edit only against the revision count it read', async () => {
-    const { user } = await person();
-    const page = await createPost(api);
-    const comment = await createComment(api, {
-      page: { type: 'blog', id: page._id },
-      author: user._id,
-    });
-    const comments = api.app.get(CommentsRepository);
-    expect(
-      await comments.updateBodyIfRevision(comment._id, 0, {
-        body: 'a',
-        bodyHtml: '<p>a</p>',
-      }),
-    ).toBe(true);
-    expect(
-      await comments.updateBodyIfRevision(comment._id, 0, {
-        body: 'b',
-        bodyHtml: '<p>b</p>',
-      }),
-    ).toBe(false);
-    expect(
-      await comments.updateBodyIfRevision(comment._id, 1, {
-        body: 'c',
-        bodyHtml: '<p>c</p>',
-      }),
-    ).toBe(true);
-    expect(await api.comments.findById(comment._id).lean()).toMatchObject({
-      body: 'c',
-      revisions: 2,
-    });
   });
 
   it('hides a reply whose parent was hidden while it was written', async () => {

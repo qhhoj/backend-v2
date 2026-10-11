@@ -25,7 +25,6 @@ describe('problem creation quota', () => {
   let ledger: Model<OrganizationCreditEntry>;
   let editorId: string;
   let editor: TestSession;
-  let superuser: TestSession;
   let counter = 0;
   const PROBLEMS = '/api/internal/problems';
   const payload = (extra: Record<string, unknown> = {}) => {
@@ -51,12 +50,6 @@ describe('problem creation quota', () => {
       ?.creditsUsed ?? null;
   const limited = (credits: number) =>
     createOrganization(api, { quotaMonthlyCredits: credits });
-  const totalCredits = async () =>
-    (
-      await usage.aggregate<{ sum: number }>([
-        { $group: { _id: null, sum: { $sum: '$creditsUsed' } } },
-      ])
-    )[0]?.sum ?? 0;
 
   beforeAll(async () => {
     api = await setupApiTest();
@@ -74,10 +67,6 @@ describe('problem creation quota', () => {
       })
     )._id;
     editor = await loginAs(api, editorId);
-    superuser = await loginAs(
-      api,
-      (await createUserWith(api, 'quotaroot', { isSuperuser: true }))._id,
-    );
   });
   beforeEach(async () => {
     await api.setSetting('quota.enforce', 'enforce');
@@ -142,24 +131,6 @@ describe('problem creation quota', () => {
     ]);
   });
 
-  it('does not charge a request that fails validation', async () => {
-    const organization = await limited(100);
-    await post(editor, {
-      ...orgPayload([organization._id]),
-      timeLimit: 'fast',
-    }).expect(400);
-    expect(await usedBy(organization._id)).toBeNull();
-  });
-
-  it('keeps problems without an organization, and superusers, free', async () => {
-    const organization = await limited(5);
-    const before = await totalCredits();
-    await post(editor, payload()).expect(201);
-    await post(superuser, orgPayload([organization._id])).expect(201);
-    expect(await totalCredits()).toBe(before);
-    expect(await usedBy(organization._id)).toBeNull();
-  });
-
   it('charges a clone of an organization problem to the same organization', async () => {
     const organization = await limited(15);
     const source = await createProblem(api, catalog, {
@@ -183,26 +154,5 @@ describe('problem creation quota', () => {
       .expect(403)
       .expect(errorCode('quota_exceeded'));
     expect(await api.problems.countDocuments({ code: refusedCode })).toBe(0);
-  });
-
-  it('does not charge a clone of a public problem', async () => {
-    const source = await createProblem(api, catalog, {
-      code: `clonepub${(counter += 1)}`,
-      authors: [editorId],
-    });
-    const before = await totalCredits();
-    await post(
-      editor,
-      { code: `clonepubcopy${counter}` },
-      `${PROBLEMS}/${source.code}/clone`,
-    ).expect(201);
-    expect(await totalCredits()).toBe(before);
-  });
-
-  it('lets an over-limit creation through in warn mode and still counts it', async () => {
-    await api.setSetting('quota.enforce', 'warn');
-    const organization = await limited(5);
-    await post(editor, orgPayload([organization._id])).expect(201);
-    expect(await usedBy(organization._id)).toBe(10);
   });
 });

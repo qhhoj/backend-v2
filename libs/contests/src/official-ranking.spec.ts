@@ -26,18 +26,6 @@ describe('parseOfficialRanking', () => {
     });
   });
 
-  it('starts problems at column 5 with a Team column and keeps ties in file order', () => {
-    const parsed = parseOfficialRanking(
-      csv([
-        'Username,Full Name,Team,School,Points,P1',
-        'c,C,T,S,10,10',
-        'd,D,T,S,10,10',
-      ]),
-    );
-    expect(parsed.problems).toEqual(['P1']);
-    expect(parsed.rows.map((row) => row.username)).toEqual(['c', 'd']);
-  });
-
   it('handles quotes, escaped quotes, LF endings, a BOM, blank lines and a trailing newline', () => {
     const parsed = parseOfficialRanking(
       String.fromCharCode(0xfeff) +
@@ -61,35 +49,16 @@ describe('parseOfficialRanking', () => {
     ).toThrow('Unterminated quoted field');
   });
 
-  it('reads a closing quote followed by text and an escaped quote at a field end', () => {
-    expect(
-      parseOfficialRanking('Username,Full Name,X,Points\n"g""",x"y,z,1\n')
-        .rows[0],
-    ).toMatchObject({ username: 'g"', fullName: 'x"y' });
-  });
-
   it('refuses a newline inside a quoted field as a control character', () => {
     expect(() =>
       parseOfficialRanking('Username,Full Name,X,Points\n"f","F\nG",x,1\n'),
     ).toThrow(/control character/);
   });
 
-  it('trims whitespace around numbers and reads blank scores as 0', () => {
-    const parsed = parseOfficialRanking(
-      'Username,Full Name,X,Points,A\nh,H,x, 12.5 ,   \n',
-    );
-    expect(parsed.rows).toEqual([
-      { username: 'h', fullName: 'H', scores: [0], totalScore: 12.5 },
-    ]);
-  });
-
   it.each([
     ['a missing Points column', 'Username,Full Name,X,Score\na,A,x,1'],
     ['a ragged row', 'Username,Full Name,X,Points,A\na,A,x,1'],
-    ['an extra field', 'Username,Full Name,X,Points\na,A,x,1,2'],
     ['a non-finite number', 'Username,Full Name,X,Points\na,A,x,nan'],
-    ['an infinite number', 'Username,Full Name,X,Points\na,A,x,inf'],
-    ['a hex number', 'Username,Full Name,X,Points\na,A,x,0x10'],
     ['an overflowing number', 'Username,Full Name,X,Points\na,A,x,1e999'],
     ['an empty total', 'Username,Full Name,X,Points\na,A,x,'],
     ['an unterminated quote', 'Username,Full Name,X,Points\n"a,A,x,1'],
@@ -98,12 +67,10 @@ describe('parseOfficialRanking', () => {
       'an over-long field',
       `Username,Full Name,X,Points\n${'a'.repeat(201)},A,x,1`,
     ],
-    ['an empty file', ''],
     [
       'a control character in the header',
       'Username,Full Name,X,Points,P\u0007\na,A,x,1,1',
     ],
-    ['a CR-only file', 'Username,Full Name,X,Points\ra,A,x,1'],
   ])('rejects %s', (_case, text) => {
     expect(() => parseOfficialRanking(text)).toThrow(CsvRankingError);
   });

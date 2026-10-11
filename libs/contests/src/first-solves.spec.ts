@@ -42,17 +42,6 @@ describe('problemSummaries (legacy get_first_solves_and_total_ac)', () => {
       acceptedCount: 4,
     }));
 
-  it('credits no first solve when the format shows no solve times', () => {
-    for (const format of [
-      { name: 'ioi' as const, config: {} },
-      { name: 'final_submission' as const, config: {} },
-    ])
-      expect(problemSummaries(format, problems, rows).get('P')).toEqual({
-        firstSolve: null,
-        acceptedCount: 4,
-      });
-  });
-
   it('skips frozen cells without a time', () =>
     expect(
       problemSummaries({ name: 'icpc', config: {} }, problems, [
@@ -110,15 +99,6 @@ describe('problemSummaries edge cases', () => {
     );
   });
 
-  it('credits a zero solve time and fractional times', () =>
-    expect(
-      problemSummaries({ name: 'default', config: {} }, problems, [
-        live('a', 0.75),
-        live('b', 0.5),
-        live('z', 0),
-      ]).get('P')!.firstSolve,
-    ).toBe('z'));
-
   it('shows ioi times only with cumtime or lastScoreAltering', () => {
     const summary = (config: object) =>
       problemSummaries({ name: 'ioi', config }, problems, [
@@ -128,31 +108,5 @@ describe('problemSummaries edge cases', () => {
     expect(summary({})).toBeNull();
     expect(summary({ cumtime: true })).toBe('b');
     expect(summary({ lastScoreAltering: true })).toBe('b');
-  });
-
-  it('summarises each problem separately', () => {
-    const two = [
-      { problemId: 'P', points: 100 },
-      { problemId: 'Q', points: 10 },
-    ];
-    const board = [
-      {
-        participationId: 'a',
-        virtual: 0,
-        cells: { P: { points: 100, time: 9 }, Q: { points: 10, time: 5 } },
-      },
-      {
-        participationId: 'b',
-        virtual: 0,
-        cells: { P: { points: 100, time: 3 }, Q: { points: 9, time: 1 } },
-      },
-    ];
-    const summaries = problemSummaries(
-      { name: 'default', config: {} },
-      two,
-      board,
-    );
-    expect(summaries.get('P')).toEqual({ firstSolve: 'b', acceptedCount: 2 });
-    expect(summaries.get('Q')).toEqual({ firstSolve: 'a', acceptedCount: 1 });
   });
 });

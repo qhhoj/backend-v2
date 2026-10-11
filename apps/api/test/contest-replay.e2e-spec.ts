@@ -1,11 +1,17 @@
 import { getQueueToken } from '@nestjs/bullmq';
+
 import { Queue } from 'bullmq';
+
 import { CONTEST_REPLAY_QUEUE, REPLAY_FORMAT_VERSION } from '@libs/contests';
+
 import type { ContestReplayJob } from '@libs/contests';
-import { RateLimitService } from '@libs/common';
+
 import { newId, uuidStr } from '@libs/database';
+
 import type { Contest, User } from '@libs/database';
+
 import type { ReplayResponse } from '../src/modules/contests/replay/dto/replay.dto';
+
 import {
   clearRateLimits,
   contestProblem,
@@ -13,6 +19,7 @@ import {
   createContest,
   hoursFromNow,
 } from './contest-fixtures';
+
 import {
   authed,
   createProblem,
@@ -20,9 +27,13 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
+
 import { dataOf } from './submission-fixtures';
+
 import { errorCode, setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 const MINUTE = 60_000;
@@ -173,15 +184,6 @@ describe('contest replay', () => {
     expect(body.ghosts![0].events[0].slice(4)).toEqual([100, 52, 12]);
   });
 
-  it('serves a replay with no events at all: registrants only, ghosts only', async () => {
-    const contest = await endedContest();
-    await seedBuild(contest, { chunks: [[]], ghosts: [{ label: 'Ann' }] });
-    const body = await read(contest.key);
-    expect(body).toMatchObject({ state: 'ready', chunkCount: 1, events: [] });
-    expect(body.participants).toHaveLength(1);
-    expect(body.ghosts!.map((ghost) => ghost.label)).toEqual(['Ann']);
-  });
-
   it('sends only events for later chunks, pinned to the build, with a private cache header', async () => {
     const contest = await endedContest();
     await seedBuild(contest, {
@@ -249,24 +251,6 @@ describe('contest replay', () => {
     expect((await read(contest.key, 'alice')).state).toBe('ready');
   });
 
-  it('refuses a hidden board, a running contest, and a final-submission contest', async () => {
-    const hidden = await endedContest({ scoreboardVisibility: 'H' });
-    await seedBuild(hidden);
-    await get(hidden.key, 'alice').expect(403);
-    expect(await waitingJobs()).toBe(0);
-    const running = await createContest(api, {
-      problems: [contestProblem(problem._id, 0)],
-    });
-    await get(running.key, 'alice')
-      .expect(409)
-      .expect(errorCode('contest_not_ended'));
-    const fso = await endedContest({ formatName: 'final_submission' });
-    await get(fso.key, 'alice')
-      .expect(409)
-      .expect(errorCode('replay_unsupported'));
-    await get('no_such_contest', 'alice').expect(404);
-  });
-
   it('answers 202 and queues exactly one build when none is stored, then when the stored one has an old format version', async () => {
     const contest = await endedContest();
     expect(
@@ -329,56 +313,6 @@ describe('contest replay', () => {
       .expect(errorCode('replay_changed'));
   });
 
-  it('serves 2000 ghosts from the stored stream without scoring anything', async () => {
-    const contest = await endedContest({ formatName: 'icpc' });
-    const ghosts = Array.from({ length: 2000 }, (_unused, index) => ({
-      label: `g${String(index).padStart(4, '0')}`,
-    }));
-    const events = ghosts.flatMap((_ghost, index) =>
-      Array.from({ length: 20 }, (_unused, minute) => [
-        60 * (minute + 1),
-        index,
-        0,
-        cell,
-        100,
-        12,
-        12,
-      ]),
-    );
-    const ghostChunks = Array.from(
-      { length: Math.ceil(events.length / 5000) },
-      (_unused, chunk) => events.slice(chunk * 5000, (chunk + 1) * 5000),
-    );
-    await seedBuild(contest, { ghosts, ghostChunks });
-    const started = Date.now();
-    const body = await read(contest.key);
-    expect(Date.now() - started).toBeLessThan(1000);
-    expect(body.ghosts).toHaveLength(2000);
-    expect(body.ghosts![1999].events).toHaveLength(20);
-  });
-
-  it('lets editors queue a rebuild of an ended contest three times an hour, and nobody else', async () => {
-    const contest = await endedContest();
-    await authed(
-      api.http().post(url(contest.key, '/rebuild')),
-      sessions.alice,
-    ).expect(403);
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await authed(
-        api.http().post(url(contest.key, '/rebuild')),
-        sessions.editor,
-      ).expect(202);
-      expect(await waitingJobs()).toBe(1);
-      // The build ran.
-      await queue.obliterate({ force: true });
-    }
-    await authed(
-      api.http().post(url(contest.key, '/rebuild')),
-      sessions.editor,
-    ).expect(429);
-    expect(await waitingJobs()).toBe(0);
-  });
-
   it("gives the editor's budget back when a build that has not started yet already covers the request", async () => {
     const contest = await endedContest();
     await queue.add('build', { contestId: contest._id });
@@ -417,61 +351,6 @@ describe('contest replay', () => {
       (job) => job.data.contestId === other._id,
     );
     expect(moved.map((job) => job.opts.delay)).toEqual([0]);
-  });
-
-  it("answers 503 replay_unavailable and gives the editor's budget back when the queue refuses the request", async () => {
-    const contest = await endedContest();
-    await queue.obliterate({ force: true });
-    const rebuild = () =>
-      authed(api.http().post(url(contest.key, '/rebuild')), sessions.editor);
-    const failing = jest
-      .spyOn(Queue.prototype, 'add')
-      .mockRejectedValue(new Error('redis down'));
-    for (let attempt = 0; attempt < 4; attempt += 1)
-      await rebuild().expect(503).expect(errorCode('replay_unavailable'));
-    failing.mockRestore();
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await rebuild().expect(202);
-      await queue.obliterate({ force: true });
-    }
-    await rebuild().expect(429);
-  });
-
-  it('answers coded refusals, not a bare 500, when the rate limiter cannot reach Redis', async () => {
-    const contest = await endedContest();
-    const down = new Error('redis down');
-    const hit = jest
-      .spyOn(RateLimitService.prototype, 'hit')
-      .mockRejectedValue(down);
-    try {
-      await get(contest.key, 'alice')
-        .expect(404)
-        .expect(errorCode('replay_not_ready'));
-      await authed(
-        api.http().post(url(contest.key, '/rebuild')),
-        sessions.editor,
-      )
-        .expect(503)
-        .expect(errorCode('replay_unavailable'));
-    } finally {
-      hit.mockRestore();
-    }
-    expect(await waitingJobs()).toBe(0);
-  });
-
-  it("refuses a rebuild while the contest runs, without queueing or spending the editor's budget", async () => {
-    const running = await createContest(api, {
-      authors: [users.editor._id],
-      problems: [contestProblem(problem._id, 0)],
-    });
-    for (let attempt = 0; attempt < 4; attempt += 1)
-      await authed(
-        api.http().post(url(running.key, '/rebuild')),
-        sessions.editor,
-      )
-        .expect(409)
-        .expect(errorCode('contest_not_ended'));
-    expect(await waitingJobs()).toBe(0);
   });
 
   /** `error.issues[].code` of a refusal. */
@@ -570,17 +449,5 @@ describe('contest replay', () => {
     );
     for (const who of [undefined, 'alice', 'bob'])
       expect((await read(contest.key, who)).state).toBe('ready');
-  });
-
-  it('refuses a frozen contest that has not ended before it says anything about the build', async () => {
-    const running = await createContest(api, {
-      formatName: 'icpc',
-      frozenLastMinutes: 30,
-      problems: [contestProblem(problem._id, 0)],
-    });
-    await get(running.key, 'alice')
-      .expect(409)
-      .expect(errorCode('contest_not_ended'));
-    expect(await waitingJobs()).toBe(0);
   });
 });

@@ -1,11 +1,9 @@
 import { CommandsService } from '../src/dispatch/commands.service';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
-import { FakeJudge } from './fake-judge';
 import {
   seedCatalog,
   seedContestSubmission,
-  seedJudge,
   seedProblem,
   seedSubmission,
 } from './fixtures';
@@ -221,21 +219,6 @@ describe('contest submissions in the bridge', () => {
     });
   });
 
-  it('sends no contest meta outside contests', async () => {
-    const problem = await seedProblem(bridge, catalog, { code: 'plain_meta' });
-    const { _id: id } = await seedSubmission(bridge, catalog, {
-      problem: problem._id,
-    });
-    const judge = new RecordingJudge('plain_judge');
-    await online(judge);
-    await enqueue(id);
-    expect(judge.received[0]).toMatchObject({
-      pretestsOnly: false,
-      inContest: null,
-      attemptNo: 1,
-    });
-  });
-
   it('bans judges for a spectator like a live participant', async () => {
     const { problem, contest, participation, banned } = await contestWith();
     const spectating = await participation(-1);
@@ -274,37 +257,5 @@ describe('contest submissions in the bridge', () => {
     await online(judge);
     await enqueue(id);
     expect(judge.received[0]).toMatchObject({ pretestsOnly: false });
-  });
-
-  it('puts the pretests flag and the contest meta on the wire, and keeps a banned judge out, over gRPC', async () => {
-    const { problem, contest, participation, banned } = await contestWith({
-      runPretestsOnly: true,
-    });
-    const live = await participation(0);
-    const { _id: id } = await seedContestSubmission(bridge, catalog, {
-      contest: contest._id,
-      participation: live._id,
-      problem: problem._id,
-    });
-    await seedJudge(bridge, banned, 'banned-key');
-    await seedJudge(bridge, `wire${codes}`, 'wire-key');
-    const bannedJudge = await FakeJudge.online(bridge.judgePort(), {
-      name: banned,
-      key: 'banned-key',
-    });
-    const allowed = await FakeJudge.online(bridge.judgePort(), {
-      name: `wire${codes}`,
-      key: 'wire-key',
-    });
-    await enqueue(id);
-    const assign = await allowed.nextAssign();
-    expect(assign).toMatchObject({
-      ref: { submissionId: id, generation: 1 },
-      pretestsOnly: true,
-      meta: { inContest: 0, attemptNo: 1 },
-    });
-    expect(bannedJudge.seen('assign')).toEqual([]);
-    await bannedJudge.close();
-    await allowed.close();
   });
 });

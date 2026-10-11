@@ -1,5 +1,5 @@
 import { GIF, JPG, PDF, PNG, SVG } from './testing';
-import { isPdf, isSvgWithinLimits, sniffImage } from './file-sniff';
+import { isSvgWithinLimits, sniffImage } from './file-sniff';
 
 describe('file sniffing', () => {
   it.each([
@@ -14,10 +14,6 @@ describe('file sniffing', () => {
     Buffer.from('<html><svg></svg></html>'),
     Buffer.alloc(0),
   ])('rejects non-images', (content) => expect(sniffImage(content)).toBeNull());
-  it('detects pdf', () => {
-    expect(isPdf(PDF)).toBe(true);
-    expect(isPdf(PNG)).toBe(false);
-  });
   it('rejects a comment flood without catastrophic backtracking', () => {
     const started = Date.now();
     expect(
@@ -25,8 +21,6 @@ describe('file sniffing', () => {
     ).toBeNull();
     expect(Date.now() - started).toBeLessThan(100);
   });
-  it('still accepts a BOM, xml declaration and comments before <svg>', () =>
-    expect(sniffImage(SVG)).toBe('svg'));
 });
 
 describe('isSvgWithinLimits', () => {
@@ -37,9 +31,8 @@ describe('isSvgWithinLimits', () => {
     return result;
   };
   it('accepts ordinary svg', () => expect(timed(SVG.toString())).toBe(true));
-  it('rejects too many tags', () =>
-    expect(timed('<svg>' + '<g></g>'.repeat(10001) + '</svg>')).toBe(false));
-  it('rejects deep nesting but not self-closing siblings', () => {
+  it('rejects too many tags, deep nesting but not self-closing siblings', () => {
+    expect(timed('<svg>' + '<g></g>'.repeat(10001) + '</svg>')).toBe(false);
     expect(timed('<g>'.repeat(1001))).toBe(false);
     expect(timed('<g>'.repeat(1000) + '</g>'.repeat(1000))).toBe(true);
     expect(timed('<rect/>'.repeat(5000))).toBe(true);

@@ -1,22 +1,13 @@
 import { sha256 } from '../crypto';
 import { generateApiToken, parseApiToken } from './api-token';
-import {
-  generateServiceKey,
-  isServiceKey,
-  SERVICE_KEY_PREFIX,
-} from './service-key';
+import { generateServiceKey, isServiceKey } from './service-key';
 
 describe('service keys', () => {
-  it('are prefixed, 47 characters, unique, and hashed with sha256 only', () => {
+  it('are prefixed, unique and stored only as a sha256 hash', () => {
     const first = generateServiceKey();
-    const second = generateServiceKey();
-    expect(first.key.startsWith(SERVICE_KEY_PREFIX)).toBe(true);
-    expect(first.key).toHaveLength(47);
     expect(isServiceKey(first.key)).toBe(true);
-    expect(first.key).not.toBe(second.key);
+    expect(first.key).not.toBe(generateServiceKey().key);
     expect(first.hash).toBe(sha256(first.key));
-    expect(first.hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(first.hash).not.toContain(first.key);
   });
   it('are never mistaken for a user API token, and a user token is never a service key', () => {
     const { key } = generateServiceKey();

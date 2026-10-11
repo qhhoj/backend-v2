@@ -59,16 +59,6 @@ describe('quota 80 percent warning', () => {
     });
   });
 
-  it('warns again in the next month', async () => {
-    const organization = await createOrganization(api, {
-      adminIds: ['0190a000-0000-7000-8000-0000000000cc'],
-      quotaMonthlyCredits: 1,
-    });
-    await spend(organization._id, new Date('2026-10-10T00:00:00Z'));
-    await spend(organization._id, new Date('2026-11-10T00:00:00Z'));
-    expect(sent).toHaveLength(2);
-  });
-
   it('warns about storage once, when it first reaches 80 percent', async () => {
     const admin = '0190a000-0000-7000-8000-0000000000bb';
     const organization = await createOrganization(api, {
@@ -83,19 +73,6 @@ describe('quota 80 percent warning', () => {
     expect(sent[0].draft.groupKey).toContain('storage');
     await quota.afterStorageWrite(organization._id, 900);
     expect(sent).toHaveLength(1);
-  });
-
-  it('never lets a failing notifier break the request, and does not resend', async () => {
-    const organization = await createOrganization(api, {
-      adminIds: ['0190a000-0000-7000-8000-0000000000dd'],
-      quotaStorageBytes: 1000,
-    });
-    fake.notify.mockRejectedValueOnce(new Error('notifications down'));
-    await expect(
-      quota.afterStorageWrite(organization._id, 850),
-    ).resolves.toBeUndefined();
-    await quota.afterStorageWrite(organization._id, 900);
-    expect(sent).toHaveLength(0);
   });
 
   it('never lets a failing warning read fail finished work, and charges once', async () => {

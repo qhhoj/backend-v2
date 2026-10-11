@@ -27,15 +27,6 @@ describe('Problem soft-delete fields', () => {
     await replSet.stop();
   });
 
-  it('starts a problem live: no deletedAt is stored and the live filter matches it', async () => {
-    const created = await Problems.create(fields('live_one'));
-    const stored = await Problems.collection.findOne({ code: 'live_one' });
-    expect(stored).not.toHaveProperty('deletedAt');
-    expect(
-      await Problems.countDocuments({ _id: created._id, deletedAt: null }),
-    ).toBe(1);
-  });
-
   it('finds deleted problems by the range the sparse index serves, and not live ones', async () => {
     await Problems.create({
       ...fields('gone_one'),

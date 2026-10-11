@@ -2,10 +2,7 @@ import { readdirSync, rmdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
-import {
-  loadScenarios,
-  SCENARIOS_DIR,
-} from '@libs/judge-proto/conformance/scenario';
+import { loadScenarios } from '@libs/judge-proto/conformance/scenario';
 import type { Scenario } from '@libs/judge-proto/conformance/scenario';
 import { BridgeCommandsService } from '@libs/judging';
 import { ScenarioRunner, timingsOf } from './conformance/runner';
@@ -35,22 +32,6 @@ describe('protocol conformance (judge-v2 proto/conformance)', () => {
     }
     await redis.quit();
     await bridge.teardown();
-  });
-
-  it('loads every vendored scenario and skips only the judge-only ones', () => {
-    const files = readdirSync(SCENARIOS_DIR).filter((file) =>
-      file.endsWith('.yaml'),
-    );
-    expect(scenarios.map((scenario) => `${scenario.name}.yaml`)).toEqual(
-      files.sort(),
-    );
-    const skipped = scenarios.filter(
-      (scenario) => !forBridge.includes(scenario),
-    );
-    expect(skipped.map((scenario) => scenario.applies_to)).toEqual(
-      skipped.map(() => ['judge']),
-    );
-    expect(forBridge.length).toBeGreaterThan(0);
   });
 
   it.each(

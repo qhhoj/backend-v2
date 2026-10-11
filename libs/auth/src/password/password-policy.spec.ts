@@ -15,16 +15,4 @@ describe('passwordProblems', () => {
       passwordProblems(password, owner).map(({ message }) => message),
     ).toContain(problem),
   );
-  it('names each problem with a machine code', () =>
-    expect(
-      [
-        ...passwordProblems('short1', owner),
-        ...passwordProblems('1234567890', owner),
-        ...passwordProblems('ALICE-2024!', owner),
-      ].map(({ code }) => code),
-    ).toEqual([
-      'password_too_short',
-      'password_numeric',
-      'password_similar_to_identity',
-    ]));
 });

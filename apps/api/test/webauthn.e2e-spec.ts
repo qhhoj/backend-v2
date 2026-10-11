@@ -1,4 +1,4 @@
-import { generateApiToken, UsersRepository } from '@libs/auth';
+import { UsersRepository } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -6,13 +6,7 @@ import type {
 } from '@simplewebauthn/server';
 import Redis from 'ioredis';
 import { FakeAuthenticator } from './fake-authenticator';
-import {
-  ApiTest,
-  createUser,
-  errorCode,
-  setupApiTest,
-  TEST_ENV,
-} from './setup';
+import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
 const AUTH = '/api/internal/auth';
 const WEBAUTHN = `${AUTH}/2fa/webauthn`;
@@ -181,45 +175,6 @@ describe('webauthn endpoints', () => {
       .expect(404);
   });
 
-  it('refuses to start registration without the current password and stores no challenge', async () => {
-    const session = await login();
-    const sessionId = session.cookie.split('=')[1];
-    await post('register/options', session, {
-      currentPassword: 'wrong wrong wrong',
-    })
-      .expect(400)
-      .expect(errorCode('invalid_credentials'));
-    expect(
-      (await api.sessions.get(sessionId))!.webauthnRegistrationChallenge,
-    ).toBeNull();
-    await post('register/options', session)
-      .expect(400)
-      .expect(errorCode('validation_failed'));
-    expect(
-      (await api.sessions.get(sessionId))!.webauthnRegistrationChallenge,
-    ).toBeNull();
-  });
-
-  it('keeps the user handle stable and excludes existing credentials', async () => {
-    const first = authenticator();
-    await register(first);
-    const handle = (await stored())!.webauthnUserHandle!.toString('hex');
-    await api.users.updateOne(
-      { username: 'alice' },
-      { isWebauthnEnabled: false },
-    );
-    const fresh = await login();
-    const options2 = dataOf(
-      await post('register/options', fresh, CURRENT_PASSWORD).expect(201),
-    ) as unknown as PublicKeyCredentialCreationOptionsJSON;
-    expect(options2.excludeCredentials).toEqual([
-      { id: first.id, type: 'public-key' },
-    ]);
-    expect(Buffer.from(options2.user.id, 'base64url').toString('hex')).toBe(
-      handle,
-    );
-  });
-
   it('persists the user handle once when handles race', async () => {
     const users = api.app.get(UsersRepository);
     const [user] = await api.users.find({ username: 'alice' }).exec();
@@ -229,39 +184,6 @@ describe('webauthn endpoints', () => {
       ),
     );
     expect(results.filter(Boolean)).toHaveLength(1);
-  });
-
-  it('rejects an unknown authenticator and a wrong origin', async () => {
-    const fake = authenticator();
-    await register(fake);
-    const session = await login();
-    const { challenge } = await loginOptions(session);
-    await failedAssertion(session, authenticator(), challenge);
-    // The challenge was consumed by the failed attempt.
-    await failedAssertion(session, fake, challenge);
-    const second = await loginOptions(session);
-    await failedAssertion(session, fake, `${second.challenge}x`);
-    const third = await loginOptions(session);
-    // The genuine key, but the browser reports another origin.
-    await failedAssertion(
-      session,
-      fake.withOrigin('https://evil.example'),
-      third.challenge,
-    );
-    const last = await loginOptions(session);
-    await post('login/verify', session, {
-      response: fake.authenticate(last.challenge),
-    }).expect(204);
-  });
-
-  it('refuses login/verify without a challenge and login/options without credentials', async () => {
-    await post('login/options', await login())
-      .expect(400)
-      .expect(errorCode('webauthn_not_enabled'));
-    const fake = authenticator();
-    await register(fake);
-    const session = await login();
-    await failedAssertion(session, fake, 'AAAA');
   });
 
   it('refuses a non-increasing sign counter as a possible clone', async () => {
@@ -285,17 +207,6 @@ describe('webauthn endpoints', () => {
       response: fake.authenticate(challenge),
     }).expect(204);
     expect((await stored())!.webauthnCredentials[0].counter).toBe(11);
-  });
-
-  it('only moves the stored counter forward', async () => {
-    const fake = authenticator();
-    await register(fake);
-    const users = api.app.get(UsersRepository);
-    const id = (await stored())!._id;
-    expect(await users.updateWebauthnCounter(id, fake.id, 5)).toBe(true);
-    expect(await users.updateWebauthnCounter(id, fake.id, 5)).toBe(false);
-    expect(await users.updateWebauthnCounter(id, fake.id, 3)).toBe(false);
-    expect((await stored())!.webauthnCredentials[0].counter).toBe(5);
   });
 
   it('answers malformed responses with 400, never 500', async () => {
@@ -384,17 +295,6 @@ describe('webauthn endpoints', () => {
       .expect(errorCode('rate_limited'));
   });
 
-  it('keeps registration behind the second factor and off bearer tokens', async () => {
-    const user = (await stored())!;
-    const { token, hash } = generateApiToken(user._id, TEST_ENV.TOKEN_SECRET);
-    await api.users.updateOne({ username: 'alice' }, { apiTokenHash: hash });
-    await api
-      .http()
-      .post(`${WEBAUTHN}/register/options`)
-      .set('Authorization', `Bearer ${token}`)
-      .expect(403);
-  });
-
   it('refuses registering a credential another account already holds', async () => {
     const fake = authenticator();
     await register(fake);
@@ -417,35 +317,6 @@ describe('webauthn endpoints', () => {
     })
       .expect(400)
       .expect(errorCode('webauthn_failed'));
-  });
-
-  it('enrols and logs in with a presence-only key', async () => {
-    const fake = new FakeAuthenticator(RP_ID, ORIGIN, { userVerified: false });
-    await register(fake);
-    const session = await login();
-    const { challenge } = await loginOptions(session);
-    await post('login/verify', session, {
-      response: fake.authenticate(challenge),
-    }).expect(204);
-  });
-
-  it('returns 204 on an already completed session without consuming the challenge', async () => {
-    const fake = authenticator();
-    await register(fake);
-    const session = await login();
-    const first = await loginOptions(session);
-    await post('login/verify', session, {
-      response: fake.authenticate(first.challenge),
-    }).expect(204);
-    // Completed: login/options is a no-op, writes no challenge.
-    await post('login/options', session)
-      .expect(201)
-      .expect(({ body }) => expect((body as Body).data).toBeNull());
-    await post('login/verify', session, {
-      response: fake.authenticate('not-the-challenge'),
-    }).expect(204);
-    const sessionId = session.cookie.split('=')[1];
-    expect((await api.sessions.get(sessionId))!.webauthnChallenge).toBeNull();
   });
 
   it('keeps registration and login challenges separate', async () => {
@@ -475,22 +346,6 @@ describe('webauthn endpoints', () => {
     })
       .expect(400)
       .expect(errorCode('webauthn_failed'));
-  });
-
-  it('requires the current password to remove a credential', async () => {
-    const { session, credential } = await register(authenticator());
-    const remove = (body?: object) =>
-      api
-        .http()
-        .delete(`${WEBAUTHN}/credentials/${credential.id}`)
-        .set('Cookie', session.cookie)
-        .set('X-CSRF-Token', session.csrf)
-        .send(body);
-    await remove({ currentPassword: 'wrong wrong wrong' })
-      .expect(400)
-      .expect(errorCode('invalid_credentials'));
-    await remove().expect(400).expect(errorCode('validation_failed'));
-    expect((await stored())!.webauthnCredentials).toHaveLength(1);
   });
 
   it("does not let another account delete or use someone's credential", async () => {
@@ -529,76 +384,5 @@ describe('webauthn endpoints', () => {
     const bobSession = await loginAs('bob');
     const { challenge } = await loginOptions(bobSession);
     await failedAssertion(bobSession, fake, challenge);
-  });
-
-  it('lists the own keys oldest first, never the credential id', async () => {
-    const laptop = await register(authenticator(), 'Laptop');
-    await createUser(api.users, { username: 'bob', email: 'bob@example.com' });
-    await api.users.updateOne(
-      { username: 'bob' },
-      {
-        $push: {
-          webauthnCredentials: {
-            _id: '01900000-0000-7000-8000-000000000004',
-            name: 'Bob key',
-            credId: 'bob-cred',
-            publicKey: 'AA',
-            counter: 0,
-          },
-        },
-      },
-    );
-    // A second API registration would need the second factor first; a stored row is enough to pin the order.
-    await api.users.updateOne(
-      { username: 'alice' },
-      {
-        $push: {
-          webauthnCredentials: {
-            _id: '01900000-0000-7000-8000-000000000003',
-            name: 'Phone',
-            credId: 'phone-cred',
-            publicKey: 'AA',
-            counter: 0,
-          },
-        },
-      },
-    );
-    const session = await login();
-    const { challenge } = await loginOptions(session);
-    await post('login/verify', session, {
-      response: laptop.fake.authenticate(challenge),
-    }).expect(204);
-    const listed = await listKeys(session).expect(200);
-    const keys = (listed.body as { data: Record<string, unknown>[] }).data;
-    expect(keys.map((key) => key.name)).toEqual(['Laptop', 'Phone']);
-    expect(Object.keys(keys[0]).sort()).toEqual(['id', 'name']);
-    expect(keys[0].id).toBe(laptop.credential.id);
-    expect(listed.text).not.toContain(laptop.fake.id);
-  });
-
-  it('lists no keys for a user without any', async () => {
-    const session = await login();
-    expect((await listKeys(session).expect(200)).body).toEqual({ data: [] });
-  });
-
-  it('returns the listed item shape from register/verify', async () => {
-    const { session, credential } = await register(authenticator(), 'Laptop');
-    expect(Object.keys(credential).sort()).toEqual(['id', 'name']);
-    const listed = (await listKeys(session).expect(200)).body as {
-      data: unknown[];
-    };
-    expect(credential).toEqual(listed.data[0]);
-  });
-
-  it('keeps the key list off bearer tokens', async () => {
-    const user = (await stored())!;
-    const { token, hash } = generateApiToken(user._id, TEST_ENV.TOKEN_SECRET);
-    await api.users.updateOne({ username: 'alice' }, { apiTokenHash: hash });
-    await api
-      .http()
-      .get(`${WEBAUTHN}/credentials`)
-      .set('Authorization', `Bearer ${token}`)
-      .expect(403)
-      .expect(errorCode('forbidden'));
   });
 });

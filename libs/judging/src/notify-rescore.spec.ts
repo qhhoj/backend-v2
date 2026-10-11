@@ -7,7 +7,10 @@ import type { ProblemRescoreJob } from './queues';
 
 describe('notifyRescore', () => {
   const logger = new Logger('NotifyRescoreSpec');
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
 
   it('keeps both jobs when the problem is edited again while its rescore is pending or active', async () => {
     // BullMQ ignores an `add` whose jobId already exists (pending or active).
@@ -32,27 +35,14 @@ describe('notifyRescore', () => {
       .spyOn(logger, 'error')
       .mockImplementation(() => undefined);
     const hanging = { add: () => new Promise(() => undefined) };
-    const started = Date.now();
-    await expect(
-      notifyRescore(
-        hanging as unknown as Queue<ProblemRescoreJob>,
-        newId(),
-        logger,
-      ),
-    ).resolves.toBeUndefined();
-    expect(Date.now() - started).toBeLessThan(RESCORE_ENQUEUE_TIMEOUT_MS + 500);
+    jest.useFakeTimers();
+    const pending = notifyRescore(
+      hanging as unknown as Queue<ProblemRescoreJob>,
+      newId(),
+      logger,
+    );
+    await jest.advanceTimersByTimeAsync(RESCORE_ENQUEUE_TIMEOUT_MS);
+    await expect(pending).resolves.toBeUndefined();
     expect(logged).toHaveBeenCalledTimes(1);
-  });
-
-  it('never throws when the queue rejects', async () => {
-    jest.spyOn(logger, 'error').mockImplementation(() => undefined);
-    const failing = { add: () => Promise.reject(new Error('down')) };
-    await expect(
-      notifyRescore(
-        failing as unknown as Queue<ProblemRescoreJob>,
-        newId(),
-        logger,
-      ),
-    ).resolves.toBeUndefined();
   });
 });

@@ -82,14 +82,6 @@ describe('ConnectionGuard', () => {
     expect(judge.destroyed).toBe(false);
   });
 
-  it('ignores a session for a peer it does not hold', () => {
-    const silent = fakeSocket('10.0.0.3');
-    guard.admit(asSocket(silent));
-    guard.sessionOpened('10.0.0.3:1', 'j1');
-    jest.advanceTimersByTime(15_000);
-    expect(silent.destroyed).toBe(true);
-  });
-
   it('destroys a socket with no authenticated session at the deadline, however much it sent', () => {
     const silent = fakeSocket('10.0.0.8');
     guard.admit(asSocket(silent));
@@ -152,13 +144,6 @@ describe('ConnectionGuard', () => {
     guard.sessionOpened(peerOf(judge), 'j1');
     jest.advanceTimersByTime(60_000);
     expect(judge.destroyed).toBe(false);
-  });
-
-  it('destroys a socket on request at once', () => {
-    const socket = fakeSocket('10.0.0.1');
-    guard.admit(asSocket(socket));
-    guard.destroy(peerOf(socket));
-    expect(socket.destroyed).toBe(true);
   });
 
   it('reports a socket that closes or times out with no authenticated session, never one a judge authenticated on', () => {

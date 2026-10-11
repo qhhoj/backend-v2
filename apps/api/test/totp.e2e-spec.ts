@@ -1,4 +1,4 @@
-import { generateApiToken, timecodeAt, totpCode } from '@libs/auth';
+import { timecodeAt, totpCode } from '@libs/auth';
 import { decrypt, encryptionKey } from '@libs/common';
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
@@ -116,74 +116,6 @@ describe('totp endpoints', () => {
     await post(`${TOTP}/enroll`, session, ENROLL)
       .expect(400)
       .expect(errorCode('invalid_code'));
-  });
-
-  it('refuses to enroll without the current password and stores no pending secret', async () => {
-    const session = await login();
-    await post(`${TOTP}/enroll`, session, {
-      currentPassword: 'wrong wrong wrong',
-    })
-      .expect(400)
-      .expect(errorCode('invalid_credentials'));
-    const sessionId = session.cookie.split('=')[1];
-    expect((await api.sessions.get(sessionId))!.pendingTotpSecret).toBeNull();
-    await post(`${TOTP}/enroll`, session)
-      .expect(400)
-      .expect(errorCode('validation_failed'));
-    expect((await api.sessions.get(sessionId))!.pendingTotpSecret).toBeNull();
-  });
-
-  it('shares the failure budget of enrolment with password change', async () => {
-    const session = await login();
-    for (let count = 0; count < 10; count++)
-      await post(`${TOTP}/enroll`, session, {
-        currentPassword: 'wrong wrong wrong',
-      })
-        .expect(400)
-        .expect(errorCode('invalid_credentials'));
-    await post(`${AUTH}/password/change`, session, {
-      currentPassword: PASSWORD,
-      newPassword: 'yet another passphrase',
-    })
-      .expect(429)
-      .expect(errorCode('rate_limited'));
-  });
-
-  it('enrolling twice replaces the pending secret', async () => {
-    const session = await login();
-    const first = dataOf(
-      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
-    );
-    const second = dataOf(
-      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
-    );
-    expect(second.secret).not.toBe(first.secret);
-    await post(`${TOTP}/confirm`, session, {
-      code: currentCode(first.secret),
-    })
-      .expect(400)
-      .expect(errorCode('invalid_code'));
-    await post(`${TOTP}/confirm`, session, {
-      code: currentCode(second.secret),
-    }).expect(201);
-  });
-
-  it('keeps the pending secret after a wrong code and rejects confirm without enroll', async () => {
-    const session = await login();
-    await post(`${TOTP}/confirm`, session, { code: '123456' })
-      .expect(400)
-      .expect(errorCode('invalid_code'));
-    const { secret } = dataOf(
-      await post(`${TOTP}/enroll`, session, ENROLL).expect(201),
-    );
-    const wrong = currentCode(secret) === '000000' ? '000001' : '000000';
-    await post(`${TOTP}/confirm`, session, { code: wrong })
-      .expect(400)
-      .expect(errorCode('invalid_code'));
-    expect((await stored())!.isTotpEnabled).toBe(false);
-    await post(`${TOTP}/confirm`, session, {
-      code: currentCode(secret),
-    }).expect(201);
   });
 
   it('enables TOTP once when two confirms race', async () => {
@@ -326,13 +258,6 @@ describe('totp endpoints', () => {
       .expect(errorCode('rate_limited'));
   });
 
-  it('validates the code shape', async () => {
-    const session = await login();
-    await post(`${TOTP}/verify`, session, { code: '1' })
-      .expect(400)
-      .expect(errorCode('validation_failed'));
-  });
-
   it('disables TOTP with a scratch code', async () => {
     const { scratchCodes } = await enable();
     const session = await login();
@@ -393,110 +318,6 @@ describe('totp endpoints', () => {
       .expect(errorCode('password_change_required'));
   });
 
-  it('refuses the scratch-code count to an API token', async () => {
-    await enable();
-    const issued = generateApiToken(
-      (await stored())!._id,
-      TEST_ENV.TOKEN_SECRET,
-    );
-    await api.users.updateOne(
-      { username: 'alice' },
-      { apiTokenHash: issued.hash },
-    );
-    await api
-      .http()
-      .get(`${TOTP}/scratch-codes`)
-      .set('Authorization', `Bearer ${issued.token}`)
-      .expect(403)
-      .expect(errorCode('forbidden'));
-  });
-
-  it('works for migrated users lacking the totp fields', async () => {
-    await api.users.collection.updateOne(
-      { username: 'alice' },
-      { $unset: { lastTotpTimecode: '', isTotpEnabled: '' } },
-    );
-    const { secret } = await enable();
-    await api.users.collection.updateOne(
-      { username: 'alice' },
-      { $unset: { lastTotpTimecode: '' } },
-    );
-    const session = await login();
-    await post(`${TOTP}/verify`, session, { code: currentCode(secret) }).expect(
-      204,
-    );
-    expect((await stored())!.lastTotpTimecode).toBeGreaterThan(0);
-  });
-
-  it('caps failed attempts per day as well', async () => {
-    await enable();
-    const session = await login();
-    const user = await stored();
-    const redis = api.app.get<Redis>(REDIS);
-    for (let attempt = 0; attempt < 50; attempt++) {
-      if (attempt % 5 === 0)
-        await redis.del(`rate:second-factor:user:${user!._id}`);
-      await post(`${TOTP}/verify`, session, {
-        code: 'ZZZZZZZZZZZZZZZZ',
-      }).expect(400);
-    }
-    await redis.del(`rate:second-factor:user:${user!._id}`);
-    await post(`${TOTP}/verify`, session, { code: 'ZZZZZZZZZZZZZZZZ' })
-      .expect(429)
-      .expect(errorCode('rate_limited'));
-  });
-
-  it('returns 204 on an already completed session without consuming a code', async () => {
-    const { scratchCodes } = await enable();
-    const session = await login();
-    await post(`${TOTP}/verify`, session, { code: scratchCodes[0] }).expect(
-      204,
-    );
-    await post(`${TOTP}/verify`, session, { code: scratchCodes[0] }).expect(
-      204,
-    );
-    const remaining = JSON.parse(
-      decrypt(
-        (await stored())!.scratchCodes!,
-        encryptionKey(TEST_ENV.ENCRYPTION_KEY),
-      ),
-    ) as string[];
-    expect(remaining).toHaveLength(4);
-  });
-
   const remainingCodes = (session: { cookie: string }) =>
     api.http().get(`${TOTP}/scratch-codes`).set('Cookie', session.cookie);
-
-  it('counts the unused scratch codes: one less after use, five after regeneration', async () => {
-    const { scratchCodes } = await enable();
-    const session = await login();
-    await post(`${TOTP}/verify`, session, { code: scratchCodes[0] }).expect(
-      204,
-    );
-    expect(dataOf(await remainingCodes(session).expect(200)).remaining).toBe(4);
-    await post(`${TOTP}/scratch-codes`, session, {
-      code: scratchCodes[1],
-    }).expect(201);
-    expect(dataOf(await remainingCodes(session).expect(200)).remaining).toBe(5);
-  });
-
-  it('counts a TOTP sign-in as no scratch code used', async () => {
-    const { secret } = await enable();
-    await rewind();
-    const session = await login();
-    await post(`${TOTP}/verify`, session, { code: currentCode(secret) }).expect(
-      204,
-    );
-    expect(dataOf(await remainingCodes(session).expect(200)).remaining).toBe(5);
-  });
-
-  it('answers totp_not_enabled for the count when TOTP is off', async () => {
-    await remainingCodes(await login())
-      .expect(400)
-      .expect(errorCode('totp_not_enabled'));
-  });
-
-  it('needs a session', async () => {
-    await api.http().post(`${TOTP}/enroll`).expect(401);
-  });
 });

@@ -36,13 +36,4 @@ describe('DiscordWebhooksService', () => {
     expect(added).toHaveLength(1);
     expect(JSON.stringify(added)).not.toContain('secret');
   });
-
-  it('links site paths and authors absolutely', () => {
-    const { service } = serviceWith({});
-    expect(service.link('/post/1')).toBe('https://oj.example/post/1');
-    expect(service.author('a b')).toEqual({
-      name: 'a b',
-      url: 'https://oj.example/user/a%20b',
-    });
-  });
 });

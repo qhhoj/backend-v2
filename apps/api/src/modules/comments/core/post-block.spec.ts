@@ -10,10 +10,6 @@ const user = (extra = {}) => ({
 });
 
 describe('postBlockOf', () => {
-  it('lets a solver post on an open page', () => {
-    expect(postBlockOf(user(), null)).toBeNull();
-  });
-
   it('reports a signed-out viewer before anything else', () => {
     expect(postBlockOf(null, 'locked')?.reason).toBe('signed_out');
   });

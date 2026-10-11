@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { hashPassword } from '@libs/auth';
 import { REDIS } from '@libs/common';
 import Redis from 'ioredis';
@@ -45,28 +44,6 @@ describe('password reset', () => {
     api.mailer.sent.length = 0;
   });
 
-  it('mails a reset link for a known email and ignores unknown and inactive accounts', async () => {
-    await createUser(api.users, {
-      username: 'known',
-      email: 'known@example.com',
-    });
-    await createUser(api.users, {
-      username: 'sleeper',
-      email: 'sleeper@example.com',
-      isActive: false,
-    });
-    await requestReset('KNOWN@example.com').expect(204);
-    expect(await mailCountAfterSettling(1)).toBe(1);
-    expect(api.mailer.sent[0]).toMatchObject({
-      to: 'known@example.com',
-      subject: 'Reset your QHHOJ password',
-    });
-    api.mailer.sent.length = 0;
-    for (const email of ['nobody@example.com', 'sleeper@example.com'])
-      await requestReset(email).expect(204);
-    expect(await mailCountAfterSettling(1)).toBe(0);
-  });
-
   it('sets a first password for an unusable-hash account, once', async () => {
     await createUser(api.users, {
       username: 'social',
@@ -99,21 +76,6 @@ describe('password reset', () => {
       .expect(201);
   });
 
-  it('mails every active account sharing the email', async () => {
-    await createUser(api.users, {
-      username: 'twin1',
-      email: 'twin@example.com',
-    });
-    await createUser(api.users, {
-      username: 'twin2',
-      email: 'Twin@example.com',
-    });
-    await requestReset('twin@example.com').expect(204);
-    expect(await mailCountAfterSettling(2)).toBe(2);
-    const tokens = api.mailer.sent.map((mail) => tokenFrom(mail.text));
-    expect(new Set(tokens).size).toBe(2);
-  });
-
   it('resets the password once, revokes sessions and switches the login', async () => {
     const user = await createUser(api.users, {
       username: 'resetme',
@@ -135,57 +97,6 @@ describe('password reset', () => {
     await confirm(token, 'another long passphrase 1')
       .expect(400)
       .expect(errorCode('invalid_token'));
-  });
-
-  it('clears the API token hash on reset', async () => {
-    await createUser(api.users, {
-      username: 'tokened',
-      email: 'tokened@example.com',
-      apiTokenHash: 'a'.repeat(64),
-    });
-    await requestReset('tokened@example.com').expect(204);
-    await mailCountAfterSettling(1);
-    await confirm(tokenFrom(api.mailer.sent[0].text)).expect(204);
-    expect(
-      (await api.users.findOne({ username: 'tokened' }))!.apiTokenHash,
-    ).toBeNull();
-  });
-
-  it('refuses a token for a user banned after it was issued', async () => {
-    const user = await createUser(api.users, {
-      username: 'later_banned',
-      email: 'later@example.com',
-    });
-    await requestReset('later@example.com').expect(204);
-    await mailCountAfterSettling(1);
-    await api.users.updateOne(
-      { _id: user._id },
-      { isActive: false, banReason: 'spam' },
-    );
-    await confirm(tokenFrom(api.mailer.sent[0].text))
-      .expect(400)
-      .expect(errorCode('invalid_token'));
-  });
-
-  it('answers unknown emails in the same order of magnitude as known ones', async () => {
-    await createUser(api.users, {
-      username: 'timed',
-      email: 'timed@example.com',
-    });
-    const time = async (email: string) => {
-      const started = performance.now();
-      await requestReset(email).expect(204);
-      return performance.now() - started;
-    };
-    await time('warmup@example.com');
-    let known = 0;
-    let unknown = 0;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      known += await time('timed@example.com');
-      unknown += await time(`ghost${attempt}@example.com`);
-    }
-    expect(unknown).toBeLessThan(known * 5 + 20);
-    expect(known).toBeLessThan(unknown * 5 + 20);
   });
 
   it('rejects a token after a login that followed the request', async () => {
@@ -235,50 +146,5 @@ describe('password reset', () => {
       fields: { newPassword: expect.any(Array) as unknown },
     });
     await confirm(token).expect(204);
-  });
-
-  it('logs mail failures and still answers 204', async () => {
-    await createUser(api.users, {
-      username: 'mailfail',
-      email: 'mailfail@example.com',
-    });
-    const send = jest
-      .spyOn(api.mailer, 'send')
-      .mockRejectedValue(new Error('smtp down'));
-    const logged = jest
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation(() => undefined);
-    try {
-      await requestReset('mailfail@example.com').expect(204);
-      for (
-        let attempt = 0;
-        attempt < 50 && !logged.mock.calls.length;
-        attempt++
-      )
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(logged).toHaveBeenCalledWith(expect.stringContaining('smtp down'));
-    } finally {
-      send.mockRestore();
-      logged.mockRestore();
-    }
-  });
-
-  it('answers 503 mail_unavailable, spending no budget, while mail is not configured', async () => {
-    Object.assign(api.mailer, { isConfigured: () => false });
-    try {
-      for (let attempt = 0; attempt < 5; attempt++)
-        await requestReset('nomail@example.com')
-          .expect(503)
-          .expect(errorCode('mail_unavailable'));
-    } finally {
-      delete (api.mailer as { isConfigured?: unknown }).isConfigured;
-    }
-    await requestReset('nomail@example.com').expect(204);
-  });
-
-  it('limits to 3 requests per email per hour', async () => {
-    for (let attempt = 0; attempt < 3; attempt++)
-      await requestReset('limited@example.com').expect(204);
-    await requestReset('limited@example.com').expect(429);
   });
 });

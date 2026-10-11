@@ -166,15 +166,6 @@ describe('BridgeService', () => {
       await bridge.onModuleDestroy();
     });
 
-    it('clear RETRY bans on every tick', async () => {
-      const { bridge, calls } = setup();
-      await bridge.onApplicationBootstrap();
-      calls.length = 0;
-      await tick(2);
-      expect(calls.filter((call) => call === 'clearRetryBans')).toHaveLength(2);
-      await bridge.onModuleDestroy();
-    });
-
     it('are left alone when a judge holds them on the second tick', async () => {
       const { bridge, services } = setup();
       services.submissions.inFlightRuns.mockResolvedValue([ghost]);

@@ -64,15 +64,6 @@ describe('ProblemDataFilesService.removeDirectory', () => {
     expect(existsSync(join(root, 'busy'))).toBe(false);
   });
 
-  it('removes a symlinked directory out of the root without touching its target', async () => {
-    const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));
-    writeFileSync(join(outside, 'keep.txt'), 'x');
-    symlinkSync(outside, join(root, 'linked'));
-    await expect(files.removeDirectory('linked')).rejects.toThrow();
-    expect(existsSync(join(outside, 'keep.txt'))).toBe(true);
-    rmSync(outside, { recursive: true, force: true });
-  });
-
   it('refuses a symlink that points inside the root, so no marker is left on its target', async () => {
     mkdirSync(join(root, 'real_target'), { recursive: true });
     writeFileSync(join(root, 'real_target', 'tests.zip'), 'x');

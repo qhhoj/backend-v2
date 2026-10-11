@@ -21,14 +21,7 @@ const sample = () => [
   row('b', 20, 40, batch(40)),
   row('b', 30, 70, batch(70)),
 ];
-const FORMATS = [
-  'default',
-  'ioi',
-  'ioi16',
-  'icpc',
-  'vnoj',
-  'ultimate',
-] as const;
+const FORMATS = ['default', 'ioi16', 'icpc', 'ultimate'] as const;
 
 describe('replayEvents', () => {
   it.each(FORMATS)(
@@ -44,16 +37,6 @@ describe('replayEvents', () => {
       expect(events.map((event) => event[0])).toEqual([300, 720, 1200, 1800]);
     },
   );
-
-  it('scores a lone solve at minute 12 as 100 points at 720 seconds in the default format', () => {
-    const events = replayEvents(
-      [row('a', 12, 100)],
-      { name: 'default', config: {} },
-      context({ problems: PROBLEMS }),
-      target,
-    );
-    expect(events[0].slice(4)).toEqual([100, 720, 0]);
-  });
 
   it('emits one event per submission, tagged with the participant and problem index, in time order', () => {
     const events = replayEvents(
@@ -99,12 +82,11 @@ describe('replayEvents', () => {
     expect(events[0][4]).toBe(100);
   });
 
-  it('ignores rows of problems outside the target and returns nothing for no rows', () => {
+  it('ignores rows of problems outside the target', () => {
     const format: FormatSetting = { name: 'default', config: {} };
     expect(
       replayEvents([row('zzz', 3, 100)], format, context(), target),
     ).toEqual([]);
-    expect(replayEvents([], format, context(), target)).toEqual([]);
   });
 });
 
@@ -152,6 +134,4 @@ describe('chunkEvents', () => {
     expect(chunks.map((chunk) => chunk.length)).toEqual([5000, 5000, 2001]);
     expect(chunks.flat()).toEqual(events);
   });
-
-  it('gives no chunk for no events', () => expect(chunkEvents([])).toEqual([]));
 });

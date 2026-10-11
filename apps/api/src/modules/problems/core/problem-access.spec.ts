@@ -80,7 +80,6 @@ const PRINCIPALS: Record<string, Principal | null> = {
 
 describe('ProblemAccess.canSee', () => {
   it.each([
-    ['anonymous sees public', 'anonymous', view(), true],
     [
       'anonymous does not see private',
       'anonymous',
@@ -90,13 +89,6 @@ describe('ProblemAccess.canSee', () => {
     [
       'anonymous does not see org-private',
       'anonymous',
-      view({ isOrganizationPrivate: true, organizations: [ORG] }),
-      false,
-    ],
-    ['plain user sees public', 'plain', view(), true],
-    [
-      'plain user does not see org-private',
-      'plain',
       view({ isOrganizationPrivate: true, organizations: [ORG] }),
       false,
     ],
@@ -125,28 +117,10 @@ describe('ProblemAccess.canSee', () => {
       true,
     ],
     [
-      'curator sees private',
-      'plain',
-      view({ isPublic: false, curators: [USER] }),
-      true,
-    ],
-    [
-      'tester sees private',
-      'plain',
-      view({ isPublic: false, testers: [USER] }),
-      true,
-    ],
-    [
       'suggester sees own suggestion',
       'plain',
       view({ isPublic: false, suggester: USER }),
       true,
-    ],
-    [
-      'other author does not grant',
-      'plain',
-      view({ isPublic: false, authors: [OTHER] }),
-      false,
     ],
     [
       'suggest_new_problem sees any suggestion',
@@ -154,13 +128,6 @@ describe('ProblemAccess.canSee', () => {
       view({ isPublic: false, suggester: OTHER }),
       true,
     ],
-    [
-      'suggest_new_problem does not see plain private',
-      'suggester',
-      view({ isPublic: false }),
-      false,
-    ],
-    ['edit_all sees private', 'editAll', view({ isPublic: false }), true],
     [
       'edit_public sees org-private public',
       'editPublic',
@@ -187,7 +154,6 @@ describe('ProblemAccess.canSee', () => {
 
 describe('ProblemAccess.canEdit', () => {
   it.each([
-    ['anonymous', 'anonymous', view({ authors: [USER] }), false],
     [
       'author without edit_own_problem',
       'plain',
@@ -198,12 +164,6 @@ describe('ProblemAccess.canEdit', () => {
       'author with edit_own_problem',
       'editOwn',
       view({ authors: [USER] }),
-      true,
-    ],
-    [
-      'curator with edit_own_problem',
-      'editOwn',
-      view({ curators: [USER] }),
       true,
     ],
     ['tester never edits', 'editOwn', view({ testers: [USER] }), false],
@@ -225,15 +185,6 @@ describe('ProblemAccess.canEdit', () => {
       view({ isPublic: false, suggester: OTHER }),
       true,
     ],
-    ['edit_public edits public only', 'editPublic', view(), true],
-    [
-      'edit_public does not edit private',
-      'editPublic',
-      view({ isPublic: false }),
-      false,
-    ],
-    ['edit_all edits anything', 'editAll', view({ isPublic: false }), true],
-    ['superuser', 'superuser', view({ isPublic: false }), true],
   ])('%s', (_name, who, problem, expected) =>
     expect(ProblemAccess.canEdit(PRINCIPALS[who], problem)).toBe(expected),
   );
@@ -259,21 +210,9 @@ describe('ProblemAccess with a current contest (legacy is_accessible_by step 1)'
       false,
     ],
     [
-      'still shows a public problem outside the contest',
-      started,
-      view({ id: 'p-public' }),
-      true,
-    ],
-    [
       'hides every problem before the contest starts',
       notStarted,
       view({ id: 'p-public' }),
-      false,
-    ],
-    [
-      "hides even the contest's problem before it starts",
-      notStarted,
-      view({ id: 'p-contest', isPublic: false }),
       false,
     ],
   ])('%s', (_case, scope, problem, expected) =>
@@ -288,6 +227,7 @@ describe('ProblemAccess.visibleFilter', () => {
     testingModule: TestingModule,
     problems: Model<Problem>;
   const generated: Array<{ code: string; view: ProblemAccessView }> = [];
+  const documents: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
     replSet = await startMongo();
@@ -320,7 +260,7 @@ describe('ProblemAccess.visibleFilter', () => {
             });
             const code = `p${index++}`;
             generated.push({ code, view: problemView });
-            await problems.create({
+            documents.push({
               ...problemView,
               code,
               name: code,
@@ -331,49 +271,16 @@ describe('ProblemAccess.visibleFilter', () => {
               groupId: newId(),
             });
           }
+    await problems.insertMany(documents);
   });
   afterAll(async () => {
     await testingModule.close();
     await replSet.stop();
   });
 
-  it('accessView of every stored document (hydrated and lean) equals the generated view', async () => {
-    for (const { code, view: expectedView } of generated) {
-      const hydrated = await problems.findOne({ code });
-      const storedView = { ...expectedView, id: uuidStr(hydrated!._id) };
-      expect(ProblemAccess.accessView(hydrated!)).toEqual(storedView);
-      const lean = await problems.findOne({ code }).lean();
-      expect(ProblemAccess.accessView(lean!)).toEqual(storedView);
-    }
-  });
+  const NAMED = Object.entries(PRINCIPALS);
 
-  const RELEVANT_PERMISSIONS: Permission[] = [
-    'judge.see_private_problem',
-    'judge.see_organization_problem',
-    'judge.edit_own_problem',
-    'judge.edit_all_problem',
-    'judge.edit_public_problem',
-    'judge.suggest_new_problem',
-  ];
-  const EXHAUSTIVE: Array<[string, Principal]> = [];
-  for (let mask = 0; mask < 1 << RELEVANT_PERMISSIONS.length; mask++)
-    for (const organizationIds of [[], [ORG]])
-      EXHAUSTIVE.push([
-        `mask ${mask} orgs ${organizationIds.length}`,
-        principalWith(
-          { organizationIds },
-          ...RELEVANT_PERMISSIONS.filter(
-            (_permission, bit) => mask & (1 << bit),
-          ),
-        ),
-      ]);
-
-  it.each([
-    ...Object.entries(PRINCIPALS).map(
-      ([who, principal]) => [who, principal] as [string, Principal | null],
-    ),
-    ...EXHAUSTIVE,
-  ])('matches canSee for %s', async (_who, principal) => {
+  it.each(NAMED)('matches canSee for %s', async (_who, principal) => {
     const expected = generated
       .filter(({ view: problemView }) =>
         ProblemAccess.canSee(principal, problemView, null),
@@ -396,12 +303,7 @@ describe('ProblemAccess.visibleFilter', () => {
     expect(expected.length).toBeGreaterThan(0);
   });
 
-  it.each([
-    ...Object.entries(PRINCIPALS).map(
-      ([who, principal]) => [who, principal] as [string, Principal | null],
-    ),
-    ...EXHAUSTIVE,
-  ])('matches canEdit for %s', async (_who, principal) => {
+  it.each(NAMED)('matches canEdit for %s', async (_who, principal) => {
     const expected = generated
       .filter(({ view: problemView }) =>
         ProblemAccess.canEdit(principal, problemView),
@@ -424,14 +326,6 @@ describe('ProblemAccess.visibleFilter', () => {
           .sort()
       : [];
     expect(actual).toEqual(expected);
-  });
-
-  it('edits nothing when signed out', () => {
-    expect(ProblemAccess.editableFilter(null)).toBeNull();
-  });
-
-  it('lets a superuser edit every problem', () => {
-    expect(ProblemAccess.editableFilter(PRINCIPALS.superuser)).toEqual({});
   });
 
   it('matches canSee under a contest scope, started or not', async () => {

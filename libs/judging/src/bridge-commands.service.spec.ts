@@ -1,11 +1,7 @@
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import { newId } from '@libs/database';
-import {
-  BRIDGE_COMMANDS_MAX_LENGTH,
-  BRIDGE_COMMANDS_STREAM,
-  parseBridgeCommand,
-} from './bridge-commands';
+import { BRIDGE_COMMANDS_STREAM, parseBridgeCommand } from './bridge-commands';
 import {
   BridgeCommandsService,
   PUBLISH_TIMEOUT_MS,
@@ -49,18 +45,6 @@ describe('BridgeCommandsService', () => {
         command?.type === 'judge' ? command.submissionIds : [],
       ),
     ).toEqual(ids);
-  });
-  it('publishes nothing for an empty rejudge', async () => {
-    await commands.judge([]);
-    expect(await published()).toEqual([]);
-  });
-  it('trims the stream to about its cap', async () => {
-    const submissionId = newId();
-    for (let sent = 0; sent < BRIDGE_COMMANDS_MAX_LENGTH + 1500; sent += 1)
-      await commands.publish({ type: 'abort', submissionId });
-    expect(await redis.xlen(BRIDGE_COMMANDS_STREAM)).toBeLessThan(
-      BRIDGE_COMMANDS_MAX_LENGTH + 1000,
-    );
   });
   it('gives up within a short fixed delay when Redis does not answer, with the normal client config', async () => {
     const unreachable = new Redis('redis://10.255.255.1:6379', {

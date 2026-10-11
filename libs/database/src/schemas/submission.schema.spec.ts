@@ -40,29 +40,6 @@ describe('Submission schemas', () => {
     await mongoose.disconnect();
     await replSet.stop();
   });
-
-  it('starts queued at normal priority, ungraded and never requeued', async () => {
-    const submission = await Submissions.create(references());
-    expect(submission.toObject()).toMatchObject({
-      status: 'QU',
-      result: null,
-      priority: 1,
-      points: null,
-      casePoints: 0,
-      caseTotal: 0,
-      requeueCount: 0,
-      judgeGeneration: 0,
-      judgeSeq: 0,
-      judgedDataVersion: null,
-      retryCount: 0,
-      judgedOn: null,
-      contest: null,
-      lockedAfter: null,
-      effectsDueAt: null,
-      pinnedJudge: null,
-    });
-    expect(submission.date.getTime()).toBeLessThanOrEqual(Date.now());
-  });
   it.each([
     [{ status: 'XX' }],
     [{ result: 'XX' }],

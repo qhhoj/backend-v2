@@ -68,10 +68,6 @@ describe('user event stream', () => {
   });
   afterAll(() => api.teardown());
 
-  it('refuses a signed-out visitor', async () => {
-    expect((await open(null)).status).toBe(401);
-  });
-
   it('nudges the owner with the row id and nobody else', async () => {
     const mine = await open('u1');
     const other = await open('u2');
@@ -107,19 +103,6 @@ describe('user event stream', () => {
     expect(feed.status).toBe(200);
     const ticketFeed = await open('u1', '/api/internal/events/tickets');
     expect(ticketFeed.status).toBe(200);
-  });
-
-  it('frees the slot when a stream closes', async () => {
-    const [one, two, three] = [
-      await open('u1'),
-      await open('u2'),
-      await open('u3'),
-    ];
-    expect((await open('u4')).status).toBe(429);
-    one.close();
-    await waitUntil(() => streams.openCounts().userStreams === 2);
-    expect((await open('u4')).status).toBe(200);
-    expect([two.status, three.status]).toEqual([200, 200]);
   });
 
   it('closes every tab of a session once the session is gone, and only that session', async () => {

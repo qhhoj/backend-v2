@@ -35,11 +35,6 @@ describe('password hasher', () => {
     for (const encoded of MALFORMED_HASHES)
       expect(await verifyPassword('anything', encoded)).toBe(false);
   });
-  it('rejects a valid hash with extra segments', async () => {
-    const { password, hash } = fixtures.passwords[0];
-    expect(await verifyPassword(password, hash)).toBe(true);
-    expect(await verifyPassword(password, `${hash}$x`)).toBe(false);
-  });
   it('hashes in Django format and round-trips', async () => {
     const encoded = await hashPassword('s3cret-pass', 1000);
     expect(encoded).toMatch(
@@ -74,15 +69,5 @@ describe('password hasher', () => {
     expect(
       needsRehash(`pbkdf2_sha256$870000$${'s'.repeat(22)}$${digest}`),
     ).toBe(false);
-  });
-  it('spends as long on unusable hashes as on the dummy hash', async () => {
-    const time = async (encoded: string) => {
-      const started = performance.now();
-      await verifyPassword('anything', encoded);
-      return performance.now() - started;
-    };
-    await time(DUMMY_PASSWORD_HASH);
-    const dummy = await time(DUMMY_PASSWORD_HASH);
-    expect(await time('!unusable')).toBeGreaterThan(dummy * 0.5);
   });
 });

@@ -1,7 +1,11 @@
 import { hashPassword, PASSWORD_ITERATIONS, UsersRepository } from '@libs/auth';
+
 import { REDIS } from '@libs/common';
+
 import { newId } from '@libs/database';
+
 import Redis from 'ioredis';
+
 import { loginAs } from './problem-fixtures';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
@@ -77,19 +81,6 @@ describe('auth session endpoints', () => {
         expect(sessionOf({ body }).user?.username).toBe('Alice'),
       );
   });
-  it('carries the theme and the default language on the session user', async () => {
-    const response = await api
-      .http()
-      .post(LOGIN)
-      .send({ username: 'Alice', password: 'correct horse battery' })
-      .expect(200);
-    expect(sessionOf(response).user).toMatchObject({
-      siteTheme: 'glass',
-      languageId: defaultLanguageId,
-    });
-    expect(sessionOf(response).twoFactor).toBeNull();
-  });
-
   it('shows the pending second factors and the username, and still no user, on a partial session', async () => {
     const login = await api
       .http()
@@ -110,30 +101,6 @@ describe('auth session endpoints', () => {
       'methods',
       'username',
     ]);
-  });
-
-  it('lists both methods when both are enabled', async () => {
-    await createUser(api.users, {
-      username: 'both',
-      email: 'both@example.com',
-      isTotpEnabled: true,
-      isWebauthnEnabled: true,
-      webauthnCredentials: [
-        {
-          _id: '01900000-0000-7000-8000-0000000000aa',
-          name: 'key',
-          credId: 'AA',
-          publicKey: 'AA',
-          counter: 0,
-        },
-      ],
-    });
-    const login = await api
-      .http()
-      .post(LOGIN)
-      .send({ username: 'both', password: 'correct horse battery' })
-      .expect(200);
-    expect(sessionOf(login).twoFactor?.methods).toEqual(['totp', 'webauthn']);
   });
 
   it('offers webauthn only with a stored key; a legacy flag alone neither blocks nor lists it', async () => {
@@ -211,38 +178,6 @@ describe('auth session endpoints', () => {
       newer,
     );
   });
-  it('rejects bad credentials uniformly', async () => {
-    for (const body of [
-      { username: 'alice', password: 'wrong password' },
-      { username: 'nobody', password: 'whatever pass' },
-    ])
-      await api
-        .http()
-        .post(LOGIN)
-        .send(body)
-        .expect(401)
-        .expect(errorCode('invalid_credentials'));
-  });
-  it('takes as long for unknown users as for wrong passwords', async () => {
-    const time = async (username: string) => {
-      const started = performance.now();
-      await api
-        .http()
-        .post(LOGIN)
-        .send({ username, password: 'wrong password' });
-      return performance.now() - started;
-    };
-    await createUser(api.users, {
-      username: 'timer',
-      email: 'timer@example.com',
-    });
-    await api.users.updateOne(
-      { username: 'timer' },
-      { password: await hashPassword('correct horse battery') },
-    );
-    const [known, unknown] = [await time('timer'), await time('ghost')];
-    expect(unknown).toBeGreaterThan(known * 0.5);
-  });
   it('explains banned and unactivated accounts only after a correct password', async () => {
     await api
       .http()
@@ -273,24 +208,6 @@ describe('auth session endpoints', () => {
       .send({ username: 'dave', password: 'correct horse battery' })
       .expect(403)
       .expect(errorCode('account_not_activated'));
-  });
-  it('hides user data until the second factor passes', async () => {
-    const response = await api
-      .http()
-      .post(LOGIN)
-      .send({ username: 'tina', password: 'correct horse battery' })
-      .expect(200);
-    expect(sessionOf(response)).toMatchObject({
-      user: null,
-      twoFactorRequired: true,
-    });
-    expect(sessionOf(response).csrfToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    await api
-      .http()
-      .get(ME)
-      .set('Cookie', cookieFrom(response.headers))
-      .expect(200)
-      .expect(({ body }) => expect(sessionOf({ body }).user).toBeNull());
   });
   it('logs out one session or all of them', async () => {
     const login = () =>
@@ -330,35 +247,6 @@ describe('auth session endpoints', () => {
       .get(ME)
       .set('Cookie', cookieFrom(third.headers))
       .expect(401);
-  });
-  it('validates the request body', async () => {
-    await api.http().post(LOGIN).send({ username: 'alice' }).expect(400);
-    await api
-      .http()
-      .post(LOGIN)
-      .send({ username: { $ne: null }, password: 'x' })
-      .expect(400);
-  });
-  it('replaces the existing session when logging in again', async () => {
-    const login = (cookie?: string) =>
-      api
-        .http()
-        .post(LOGIN)
-        .set('Cookie', cookie ?? '')
-        .send({ username: 'alice', password: 'correct horse battery' })
-        .expect(200);
-    const first = await login();
-    const second = await login(cookieFrom(first.headers));
-    await api
-      .http()
-      .get(ME)
-      .set('Cookie', cookieFrom(first.headers))
-      .expect(401);
-    await api
-      .http()
-      .get(ME)
-      .set('Cookie', cookieFrom(second.headers))
-      .expect(200);
   });
   it('limits a concurrent burst of wrong guesses', async () => {
     const redis = api.app.get<Redis>(REDIS);

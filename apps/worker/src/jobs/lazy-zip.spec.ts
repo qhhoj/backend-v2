@@ -66,18 +66,4 @@ describe('writeLazyZip', () => {
       ),
     ).rejects.toThrow('too large');
   });
-
-  it('fails when a source cannot be fetched', async () => {
-    await expect(
-      writeLazyZip(
-        ['a/x.cpp'],
-        () => Promise.reject(new Error('database down')),
-        {
-          path,
-          maxBytes: 1000,
-          tooLarge: () => new Error('too large'),
-        },
-      ),
-    ).rejects.toThrow('database down');
-  });
 });

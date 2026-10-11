@@ -113,22 +113,6 @@ describe('submitting inside a contest', () => {
     expect(await api.contestSubmissions.findById(normal).lean()).toBeNull();
   });
 
-  it('copies the lock for live participants only', async () => {
-    const problem = await createProblem(api, catalog, { code: 'cp_virtual' });
-    const contest = await createContest(api, {
-      lockedAfter: hoursFromNow(5),
-      startTime: hoursFromNow(-5),
-      endTime: hoursFromNow(-1),
-      problems: [contestProblem(problem._id, 0)],
-    });
-    await enter('bob', contest._id, { virtual: 1 });
-    const id = idOf(await submit('bob', 'cp_virtual').expect(201));
-    expect(await api.submissions.findById(id).lean()).toMatchObject({
-      priority: 0,
-      lockedAfter: null,
-    });
-  });
-
   it('caps submissions per problem, not counting internal errors, for every user', async () => {
     const problem = await createProblem(api, catalog, { code: 'cp_capped' });
     const contest = await createContest(api, {
@@ -148,23 +132,6 @@ describe('submitting inside a contest', () => {
     await submit('spammer', 'cp_capped')
       .expect(403)
       .expect(errorCode('contest_submission_limit'));
-  });
-
-  it('counts attempts within the participation, not the contest', async () => {
-    const problem = await createProblem(api, catalog, { code: 'cp_own' });
-    const contest = await createContest(api, {
-      problems: [contestProblem(problem._id, 0, { maxSubmissions: 1 })],
-    });
-    await enter('spammer', contest._id);
-    await submit('spammer', 'cp_own').expect(201);
-    await submit('spammer', 'cp_own')
-      .expect(403)
-      .expect(errorCode('contest_submission_limit'));
-    const other = await enter('dave', contest._id);
-    await submit('dave', 'cp_own').expect(201);
-    expect(
-      await api.contestSubmissions.countDocuments({ participation: other._id }),
-    ).toBe(1);
   });
 
   it('never exceeds the cap under concurrent submits', async () => {

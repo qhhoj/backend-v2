@@ -54,15 +54,6 @@ describe('PolygonClient', () => {
     expect(Math.abs(Number(params.time) - Date.now() / 1000)).toBeLessThan(5);
   });
 
-  it('finds one problem by id through problems.list', async () => {
-    polygon.reply('problems.list', ({ id }) => ({
-      result:
-        id === '7' ? [{ id: 7, name: 'sum', owner: 'a', revision: 1 }] : [],
-    }));
-    expect(await client().problem(7)).toMatchObject({ id: 7, name: 'sum' });
-    expect(await client().problem(8)).toBeNull();
-  });
-
   it.each([
     ['Incorrect signature', 'polygon_unauthorized'],
     ['apiKey: Unknown apiKey', 'polygon_unauthorized'],

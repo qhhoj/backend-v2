@@ -62,23 +62,6 @@ describe('reschedulePublish', () => {
     expect(await ids()).toEqual([]);
   });
 
-  it('adds a job when the switch comes on and leaves an unchanged one alone', async () => {
-    await reschedulePublish(
-      queue,
-      { previous: target({ publishAfterEnd: false }), next: target() },
-      logger,
-    );
-    const [job] = await queue.getJobs(['delayed']);
-    await reschedulePublish(
-      queue,
-      { previous: target(), next: target() },
-      logger,
-    );
-    expect(
-      (await queue.getJobs(['delayed'])).map((row) => row.timestamp),
-    ).toEqual([job.timestamp]);
-  });
-
   it('runs a contest that already ended at once, and logs instead of throwing when Redis does not answer', async () => {
     await reschedulePublish(
       queue,

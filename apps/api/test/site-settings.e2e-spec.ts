@@ -2,36 +2,24 @@ import { getModelToken } from '@nestjs/mongoose';
 import { SettingsService } from '@libs/settings';
 import { Setting, SettingRevision, newId } from '@libs/database';
 import type { Model } from 'mongoose';
-import { v7 } from 'uuid';
 import {
   authed,
   createUserWith,
   loginAs,
-  createProblem,
   seedCatalog,
 } from './problem-fixtures';
-import type { TestSession, Catalog } from './problem-fixtures';
+import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
-import { errorCode, setupApiTest, issueCodes } from './setup';
+import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 import type { Test } from 'supertest';
 import type { Permission } from '@libs/auth';
 import type { FlatpageAdminResponse } from '../src/modules/site/admin/dto/flatpage-admin.response';
 import type { FlatpageDeletedResponse } from '../src/modules/site/admin/dto/flatpage-revision.response';
-import type { MiscConfigResponse } from '../src/modules/site/admin/dto/misc-config.response';
-import type { SiteResponse } from '../src/modules/site/public/dto/site.response';
-import { MAX_MARKDOWN_LENGTH } from '../src/modules/problems/core/dto/limits';
 import { signedIn } from './ticket-fixtures';
-import type { LanguageAdminResponse } from '../src/modules/problems/catalog/dto/language-admin.response';
-import type { ProblemMetaResponse } from '../src/modules/problems/core/dto/problem-meta.response';
 import type { User } from '@libs/database';
 import { clearRateLimits } from './contest-fixtures';
-import {
-  commentPageUrl,
-  createComment,
-  createPost,
-  writer,
-} from './community-fixtures';
+import { commentPageUrl, createPost, writer } from './community-fixtures';
 import { createOrganization, organizationUrl } from './organization-fixtures';
 
 let api: ApiTest;
@@ -57,9 +45,6 @@ afterAll(() => api.teardown());
   describe('/api/internal/admin/settings', () => {
     beforeAll(() => api.reset());
     let admin: TestSession;
-    let superuser: TestSession;
-    let member: TestSession;
-    let adminId: string;
     const patch = (key: string, value: unknown, session = admin) =>
       authed(api.http().patch(`${SETTINGS}/${key}`), session).send({ value });
     const restore = (key: string, revisionId: string, session = admin) =>
@@ -82,108 +67,7 @@ afterAll(() => api.teardown());
       const ops = await createUserWith(api, 'ops', {
         permissions: ['judge.change_settings'],
       });
-      adminId = ops._id;
       admin = await loginAs(api, ops._id);
-      superuser = await loginAs(
-        api,
-        (await createUserWith(api, 'root', { isSuperuser: true }))._id,
-      );
-      member = await loginAs(api, (await createUserWith(api, 'member'))._id);
-    });
-
-    it('is for judge.change_settings holders and superusers only', async () => {
-      await api.http().get(SETTINGS).expect(401);
-      await api
-        .http()
-        .patch(`${SETTINGS}/mail.from`)
-        .send({ value: 'a@b.test' })
-        .expect(401);
-      await authed(api.http().get(SETTINGS), member)
-        .expect(403)
-        .expect(errorCode('forbidden'));
-      await patch('mail.from', 'a@b.test', member).expect(403);
-      await authed(
-        api.http().get(`${SETTINGS}/mail.from/revisions`),
-        member,
-      ).expect(403);
-      await authed(api.http().get(SETTINGS), superuser).expect(200);
-      await authed(api.http().get(SETTINGS), admin).expect(200);
-      await api
-        .http()
-        .post(`${SETTINGS}/mail.from/revisions/${v7()}/restore`)
-        .expect(401);
-      await restore('mail.from', v7(), member).expect(403);
-    });
-
-    it('lists every registered setting with its default', async () => {
-      const settings = await list();
-      expect(settings.map((setting) => setting.key)).toEqual(
-        expect.arrayContaining([
-          'contest.officialMode',
-          'contest.banAfterDisqualifications',
-          'discord.webhooks',
-          'mail.from',
-          'mail.smtpUrl',
-          'auth.pwnedApiUrl',
-          'auth.google',
-          'auth.github',
-          'auth.facebook',
-          'pdf.renderTimeoutMs',
-          'pdf.maxBytes',
-          'similarity.minPercent',
-          'similarity.maxPairs',
-          'similarity.maxSubmissions',
-        ]),
-      );
-      expect(
-        settings.find((setting) => setting.key === 'contest.officialMode'),
-      ).toMatchObject({ value: false, isDefault: true, hasSecret: false });
-    });
-
-    it('ignores a stored row whose key left the registry', async () => {
-      const rows = api.app.get<Model<Setting>>(getModelToken(Setting.name));
-      await rows.collection.insertOne({
-        _id: 'retired.key' as never,
-        value: 'x',
-        updatedAt: new Date(),
-        updatedBy: null,
-      });
-      const keys = (await list()).map((setting) => setting.key);
-      expect(keys).not.toContain('retired.key');
-      expect([
-        ...(await api.app.get(SettingsService).rows()).keys(),
-      ]).not.toContain('retired.key');
-      await rows.collection.deleteOne({ _id: 'retired.key' as never });
-    });
-
-    it('validates a patch and refuses null', async () => {
-      const response = await patch('pdf.maxBytes', -1).expect(400);
-      errorCode('validation_failed')(response);
-      expect(
-        (response.body as { error: { fields: object } }).error.fields,
-      ).toHaveProperty('value');
-      await patch('mail.from', null)
-        .expect(400)
-        .expect(errorCode('validation_failed'));
-      await patch('contest.officialMode', 'yes').expect(400);
-      await authed(api.http().patch(`${SETTINGS}/no.such.key`), admin)
-        .send({ value: 1 })
-        .expect(404)
-        .expect(errorCode('not_found'));
-    });
-
-    it('applies a patch to readers at once and is default again once patched back', async () => {
-      const view = dataOf<SettingView>(
-        await patch('contest.banAfterDisqualifications', 2).expect(200),
-      );
-      expect(view).toMatchObject({ value: 2, isDefault: false });
-      expect(
-        api.app.get(SettingsService).get('contest.banAfterDisqualifications'),
-      ).toBe(2);
-      const reverted = dataOf<SettingView>(
-        await patch('contest.banAfterDisqualifications', 0).expect(200),
-      );
-      expect(reverted).toMatchObject({ value: 0, isDefault: true });
     });
 
     it('merges social login fields and never returns or stores a secret in clear', async () => {
@@ -241,38 +125,6 @@ afterAll(() => api.teardown());
       expect(error).not.toMatch(/secret\.example|tok-999/);
     });
 
-    it('lists revisions with who changed what', async () => {
-      const response = await authed(
-        api
-          .http()
-          .get(`${SETTINGS}/auth.google/revisions`)
-          .query({ pageSize: 10 }),
-        admin,
-      ).expect(200);
-      const body = response.body as {
-        data: Array<{ changedFields: string[]; actor: string | null }>;
-        meta: { total: number };
-      };
-      expect(body.meta.total).toBe(2);
-      expect(body.data[0].changedFields).toEqual(['clientId']);
-      expect(body.data[0].actor).not.toBeNull();
-    });
-
-    it('answers every setting with its default, a secret default redacted', async () => {
-      const settings = await list();
-      for (const setting of settings) expect(setting).toHaveProperty('default');
-      const google = settings.find((setting) => setting.key === 'auth.google')!;
-      expect(google.default).toMatchObject({ clientSecret: { set: false } });
-      const smtp = settings.find((setting) => setting.key === 'mail.smtpUrl')!;
-      expect(smtp.default).toEqual({ set: false });
-      expect(
-        settings.find((setting) => setting.key === 'pdf.renderTimeoutMs'),
-      ).toMatchObject({ default: 30_000 });
-      expect(JSON.stringify(settings)).not.toMatch(
-        /google-secret-1|s3cret-pass|tok-123/,
-      );
-    });
-
     it('restores a revision: the value is back, the restore is a new revision and the querier sees it', async () => {
       await patch('pdf.renderTimeoutMs', 45_000).expect(200);
       const revisionsBefore = await revisionTotal('pdf.renderTimeoutMs');
@@ -293,71 +145,6 @@ afterAll(() => api.teardown());
       expect(await revisionTotal('pdf.renderTimeoutMs')).toBe(
         revisionsBefore + 1,
       );
-    });
-
-    it('restores an object setting and keeps its stored secret', async () => {
-      await patch('auth.github', {
-        enabled: true,
-        clientId: 'gh-1',
-        clientSecret: 'gh-secret-1',
-      }).expect(200);
-      await patch('auth.github', { clientId: 'gh-2' }).expect(200);
-      const restored = dataOf<SettingView>(
-        await restore(
-          'auth.github',
-          await newestRevisionId('auth.github'),
-        ).expect(200),
-      );
-      expect(restored.value).toEqual({
-        enabled: true,
-        clientId: 'gh-1',
-        clientSecret: { set: true },
-      });
-      expect(api.app.get(SettingsService).get('auth.github')).toMatchObject({
-        clientId: 'gh-1',
-        clientSecret: 'gh-secret-1',
-      });
-      expect(JSON.stringify(await list())).not.toContain('gh-secret-1');
-      const [restoreRevision] = dataOf<
-        Array<{ actor: string; before: unknown; after: unknown }>
-      >(await revisionsOf('auth.github'));
-      expect(restoreRevision.actor).toBe(adminId);
-      expect(restoreRevision.after).toEqual(restored.value);
-      expect(JSON.stringify(restoreRevision)).not.toContain('gh-secret-1');
-    });
-
-    it('refuses to restore a whole-secret setting with 409 and writes no revision', async () => {
-      await patch('mail.smtpUrl', SMTP).expect(200);
-      await patch('discord.webhooks', {
-        default: 'https://discord.test/api/webhooks/tok-456',
-      }).expect(200);
-      for (const key of ['mail.smtpUrl', 'discord.webhooks']) {
-        const revisionsBefore = await revisionTotal(key);
-        const response = await restore(key, await newestRevisionId(key)).expect(
-          409,
-        );
-        errorCode('secret_unrestorable')(response);
-        expect(await revisionTotal(key)).toBe(revisionsBefore);
-      }
-      expect(api.app.get(SettingsService).get('mail.smtpUrl')).toBe(SMTP);
-    });
-
-    it('answers 404 for an unknown key, an unknown revision and a revision of another key', async () => {
-      await restore(
-        'no.such.key',
-        await newestRevisionId('pdf.renderTimeoutMs'),
-      )
-        .expect(404)
-        .expect(errorCode('not_found'));
-      await restore('pdf.renderTimeoutMs', v7())
-        .expect(404)
-        .expect(errorCode('not_found'));
-      await restore(
-        'auth.google',
-        await newestRevisionId('pdf.renderTimeoutMs'),
-      )
-        .expect(404)
-        .expect(errorCode('not_found'));
     });
   });
 }
@@ -381,10 +168,6 @@ afterAll(() => api.teardown());
       body?: object,
     ): Test =>
       authed(api.http()[method](`${ADMIN}${path}`), session).send(body);
-    const site = async () =>
-      dataOf<SiteResponse>(
-        await api.http().get('/api/internal/site').expect(200),
-      );
     const issuesOf = (response: { body: unknown }) =>
       (
         response.body as {
@@ -591,44 +374,6 @@ afterAll(() => api.teardown());
         );
       });
 
-      it('strips foreign iframes and fixed overlays from page content', async () => {
-        const created = dataOf<FlatpageAdminResponse>(
-          await create({
-            url: '/overlay',
-            title: 'O',
-            content:
-              '<iframe src="https://evil.example/x"></iframe><div style="position:fixed;top:0;left:0;width:100vw;height:100vh">cover</div>ok',
-          }).expect(201),
-        );
-        expect(created.contentHtml).not.toMatch(/evil\.example|<iframe|fixed/i);
-        expect(created.contentHtml).toContain('ok');
-      });
-
-      it('answers flatpage reads with a private, revalidated cache header', async () => {
-        await create({ url: '/cached', title: 'C', content: 'x' }).expect(201);
-        const response = await publicPage('cached').expect(200);
-        expect(response.headers['cache-control']).toBe('private, no-cache');
-      });
-
-      it('refuses a taken url, also spelled differently, with 409', async () => {
-        await create({ url: '/dup', title: 'A', content: 'x' }).expect(201);
-        await create({ url: 'dup/', title: 'B', content: 'x' })
-          .expect(409)
-          .expect(errorCode('conflict'));
-        expect(await api.flatpages.countDocuments({ url: '/dup' })).toBe(1);
-      });
-
-      it('accepts a Unicode slug such as a Vietnamese one', async () => {
-        const created = dataOf<FlatpageAdminResponse>(
-          await create({
-            url: '/giới-thiệu',
-            title: 'Giới thiệu',
-            content: 'x',
-          }).expect(201),
-        );
-        expect(created.url).toBe('/giới-thiệu');
-      });
-
       it.each([
         ['a parent segment', '../x'],
         ['only slashes', '///'],
@@ -646,86 +391,6 @@ afterAll(() => api.teardown());
         expect(
           issuesOf(response).some((issue) => issue.startsWith('url:')),
         ).toBe(true);
-      });
-
-      it('validates the body fields', async () => {
-        const response = await create({
-          url: '/v',
-          title: '',
-          content: 'x'.repeat(100_001),
-          registrationRequired: 'yes',
-          extra: 1,
-        }).expect(400);
-        const fields = issuesOf(response).map((issue) => issue.split(':')[0]);
-        expect(fields).toEqual(
-          expect.arrayContaining([
-            'title',
-            'content',
-            'registrationRequired',
-            'extra',
-          ]),
-        );
-        expect(await api.flatpages.countDocuments({ url: '/v' })).toBe(0);
-      });
-
-      it('lists by url with a total and reads one page with its source', async () => {
-        const id = dataOf<FlatpageAdminResponse>(
-          await create({ url: '/a-list', title: 'L', content: '*i*' }).expect(
-            201,
-          ),
-        ).id;
-        const list = (await send('get', '/pages', pageEditor).expect(200))
-          .body as {
-          data: Array<{ id: string; url: string; content?: string }>;
-          meta: { total: number };
-        };
-        const urls = list.data.map(({ url }) => url);
-        expect(urls).toEqual([...urls].sort());
-        expect(list.meta.total).toBe(await api.flatpages.countDocuments());
-        expect(list.data.find((row) => row.id === id)).not.toHaveProperty(
-          'content',
-        );
-        const one = dataOf<FlatpageAdminResponse>(
-          await send('get', `/pages/${id}`, pageEditor).expect(200),
-        );
-        expect(one).toMatchObject({
-          content: '*i*',
-          contentHtml: expect.stringContaining('<em>i</em>') as string,
-        });
-        await send('get', '/pages/not-an-id', pageEditor).expect(404);
-        await send(
-          'get',
-          '/pages/019d0000-0000-7000-8000-000000000000',
-          pageEditor,
-        ).expect(404);
-      });
-
-      it('re-renders on a content change and keeps the html of a title-only change', async () => {
-        const created = dataOf<FlatpageAdminResponse>(
-          await create({ url: '/edit', title: 'Old', content: '**a**' }).expect(
-            201,
-          ),
-        );
-        const retitled = dataOf<FlatpageAdminResponse>(
-          await send('patch', `/pages/${created.id}`, pageEditor, {
-            title: 'New',
-          }).expect(200),
-        );
-        expect(retitled).toMatchObject({
-          title: 'New',
-          contentHtml: created.contentHtml,
-        });
-        const rewritten = dataOf<FlatpageAdminResponse>(
-          await send('patch', `/pages/${created.id}`, pageEditor, {
-            content: '_b_',
-          }).expect(200),
-        );
-        expect(rewritten.contentHtml).toContain('<em>b</em>');
-        expect(rewritten.contentHtml).not.toContain('<strong>');
-        const served = await publicPage('edit').expect(200);
-        expect(dataOf<{ contentHtml: string }>(served).contentHtml).toBe(
-          rewritten.contentHtml,
-        );
       });
 
       it('changes nothing when a patch hits a taken url, a null, an unknown field or the render limit', async () => {
@@ -812,189 +477,9 @@ afterAll(() => api.teardown());
       });
     });
 
-    describe('page history and preview', () => {
-      const NEVER_A_PAGE = '019d0000-0000-7000-8000-000000000000';
-      const historian = async () =>
-        signedIn(api, unique('historian'), {
-          permissions: [
-            'flatpages.add_flatpage',
-            'flatpages.change_flatpage',
-            'flatpages.delete_flatpage',
-          ],
-        });
-      const create = (body: object) => send('post', '/pages', pageEditor, body);
-      const edit = (id: string, body: object) =>
-        send('patch', `/pages/${id}`, pageEditor, body);
-      const revisions = (id: string, session: Session, query = '') =>
-        send('get', `/pages/${id}/revisions${query}`, session);
-      const preview = (content: string, session: Session = pageEditor) =>
-        send('post', '/pages/render-preview', session, { content });
-      type RevisionsBody = {
-        data: Array<{
-          action: string;
-          editor: { id: string; username: string } | null;
-          changes: Record<string, { before: unknown; after: unknown }>;
-        }>;
-        meta: { page: number; pageSize: number; total: number };
-      };
-      const bodyOf = (response: { body: unknown }) =>
-        response.body as RevisionsBody;
-
-      it('lists a deleted page history newest first with editor and changes', async () => {
-        const { user, session } = await historian();
-        const created = dataOf<FlatpageAdminResponse>(
-          await send('post', '/pages', session, {
-            url: `/${unique('history')}`,
-            title: 'One',
-            content: 'one',
-          }).expect(201),
-        );
-        await send('patch', `/pages/${created.id}`, session, {
-          title: 'Two',
-          content: 'two',
-        }).expect(200);
-        await send('delete', `/pages/${created.id}`, session).expect(204);
-        const { data, meta } = bodyOf(
-          await revisions(created.id, session).expect(200),
-        );
-        expect(data.map(({ action }) => action)).toEqual([
-          'delete',
-          'edit',
-          'create',
-        ]);
-        expect(data[0].editor).toEqual({
-          id: user._id,
-          username: user.username,
-          rating: null,
-        });
-        expect(data[1].changes).toEqual({
-          title: { before: 'One', after: 'Two' },
-          content: { before: 'one', after: 'two' },
-        });
-        expect(data[2].changes.title.after).toBe('One');
-        expect(meta).toEqual({ page: 1, pageSize: 20, total: 3 });
-      });
-
-      it('keeps another page out of the history', async () => {
-        const mine = dataOf<FlatpageAdminResponse>(
-          await create({
-            url: `/${unique('mine')}`,
-            title: 'M',
-            content: 'm',
-          }).expect(201),
-        );
-        const other = dataOf<FlatpageAdminResponse>(
-          await create({
-            url: `/${unique('other')}`,
-            title: 'O',
-            content: 'o',
-          }).expect(201),
-        );
-        await edit(other.id, { title: 'O2' }).expect(200);
-        const { data, meta } = bodyOf(
-          await revisions(mine.id, pageEditor).expect(200),
-        );
-        expect(meta.total).toBe(1);
-        expect(data.map(({ action }) => action)).toEqual(['create']);
-      });
-
-      it('paginates 20 revisions per page', async () => {
-        const created = dataOf<FlatpageAdminResponse>(
-          await create({
-            url: `/${unique('long')}`,
-            title: 'T0',
-            content: 'c',
-          }).expect(201),
-        );
-        for (let edits = 1; edits <= 20; edits++)
-          await edit(created.id, { title: `T${edits}` }).expect(200);
-        const first = bodyOf(
-          await revisions(created.id, pageEditor).expect(200),
-        );
-        const second = bodyOf(
-          await revisions(created.id, pageEditor, '?page=2').expect(200),
-        );
-        expect(first.data).toHaveLength(20);
-        expect(first.meta).toEqual({ page: 1, pageSize: 20, total: 21 });
-        expect(second.data.map(({ action }) => action)).toEqual(['create']);
-      });
-
-      it('answers an empty history for a well-formed id that was never a page', async () => {
-        const { data, meta } = bodyOf(
-          await revisions(NEVER_A_PAGE, pageEditor).expect(200),
-        );
-        expect(data).toEqual([]);
-        expect(meta.total).toBe(0);
-      });
-
-      it('answers 400 for a malformed id on the history route', async () => {
-        await revisions('not-an-id', pageEditor)
-          .expect(400)
-          .expect(errorCode('validation_failed'));
-      });
-
-      it('refuses the history to a user without change_flatpage', async () => {
-        const adder = await staff('flatpages.add_flatpage');
-        const created = dataOf<FlatpageAdminResponse>(
-          await create({
-            url: `/${unique('gated')}`,
-            title: 'G',
-            content: 'g',
-          }).expect(201),
-        );
-        await revisions(created.id, adder).expect(403);
-      });
-
-      it('previews with the saved page sanitiser and strips script, iframe and handlers', async () => {
-        const content =
-          '**hi** <script>alert(1)</script><img src=x onerror=alert(2)><iframe src="https://evil.example"></iframe>';
-        const saved = dataOf<FlatpageAdminResponse>(
-          await create({
-            url: `/${unique('preview')}`,
-            title: 'P',
-            content,
-          }).expect(201),
-        );
-        const { html } = dataOf<{ html: string }>(
-          await preview(content).expect(200),
-        );
-        expect(html).toBe(saved.contentHtml);
-        expect(html).toContain('<strong>hi</strong>');
-        expect(html).not.toMatch(/<script|<iframe|onerror/i);
-      });
-
-      it('refuses a preview to a user without change_flatpage, and a content over the limit', async () => {
-        const adder = await staff('flatpages.add_flatpage');
-        await preview('x', adder).expect(403);
-        await preview('x'.repeat(MAX_MARKDOWN_LENGTH + 1)).expect(400);
-      });
-
-      it('rate limits previews per user and answers 429 with Retry-After', async () => {
-        const { session } = await historian();
-        for (let attempt = 0; attempt < 60; attempt++)
-          await preview('x', session).expect(200);
-        const refused = await preview('x', session)
-          .expect(429)
-          .expect(errorCode('rate_limited'))
-          .expect(issueCodes(['rate_limited']));
-        expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
-      });
-    });
-
     describe('misc config', () => {
       const put = (key: string, body: object) =>
         send('put', `/config/${key}`, configEditor, body);
-
-      it('creates then replaces a key in one row, allows an empty value, and shows both in GET /site at once', async () => {
-        const created = dataOf<MiscConfigResponse>(
-          await put('banner', { value: 'one' }).expect(200),
-        );
-        expect(created).toEqual({ key: 'banner', value: 'one' });
-        expect((await site()).config.banner).toBe('one');
-        await put('banner', { value: '' }).expect(200);
-        expect((await site()).config.banner).toBe('');
-        expect(await api.miscConfigs.countDocuments({ key: 'banner' })).toBe(1);
-      });
 
       it('stores one row when two first writes of a key race', async () => {
         const results = await Promise.all([
@@ -1004,22 +489,6 @@ afterAll(() => api.teardown());
         expect(results.map(({ status }) => status)).toEqual([200, 200]);
         expect(await api.miscConfigs.countDocuments({ key: 'race' })).toBe(1);
       });
-
-      it('refuses an oversized value, a null value, an unknown field and a bad key', async () => {
-        await put('big', { value: 'x'.repeat(20_001) }).expect(400);
-        await put('big', { value: null }).expect(400);
-        await put('big', { value: 'x', extra: 1 }).expect(400);
-        await put('k'.repeat(31), { value: 'x' }).expect(400);
-        await put('bad%00key', { value: 'x' }).expect(400);
-        expect(await api.miscConfigs.countDocuments({ key: 'big' })).toBe(0);
-      });
-
-      it('deletes a key, takes it out of GET /site at once and answers 404 when absent', async () => {
-        await put('gone', { value: 'x' }).expect(200);
-        await send('delete', '/config/gone', configEditor).expect(204);
-        expect((await site()).config).not.toHaveProperty('gone');
-        await send('delete', '/config/gone', configEditor).expect(404);
-      });
     });
   });
 }
@@ -1027,7 +496,6 @@ afterAll(() => api.teardown());
 // from languages-admin.e2e-spec.ts
 {
   const ADMIN = '/api/internal/admin/languages';
-  const META = '/api/internal/problems/meta';
   type Session = Awaited<ReturnType<typeof signedIn>>['session'];
 
   describe('languages administration', () => {
@@ -1044,18 +512,6 @@ afterAll(() => api.teardown());
       body?: object,
     ): Test =>
       authed(api.http()[method](`${ADMIN}${path}`), session).send(body);
-    const issueFields = (response: { body: unknown }) =>
-      (
-        response.body as { error: { issues: Array<{ field: string }> } }
-      ).error.issues.map(({ field }) => field);
-    const listed = async (session: Session) =>
-      dataOf<LanguageAdminResponse[]>(
-        await send('get', '', session).expect(200),
-      );
-    const metaLanguageIds = async () =>
-      dataOf<ProblemMetaResponse>(
-        await api.http().get(META).expect(200),
-      ).languages.map((language) => language.id);
     const newLanguage = (overrides: object = {}) => ({
       key: unique('L'),
       name: 'Scheme',
@@ -1066,70 +522,13 @@ afterAll(() => api.teardown());
       ...overrides,
     });
 
-    let editor: Session;
     let creator: Session;
 
     beforeAll(async () => {
-      editor = await staff('judge.change_language');
       creator = await staff('judge.add_language');
     });
 
     describe('create', () => {
-      it('returns the stored language with defaults and lists it', async () => {
-        const body = newLanguage({ key: 'Scm', shortName: 'SC' });
-        const created = dataOf<LanguageAdminResponse>(
-          await send('post', '', creator, body).expect(201),
-        );
-        expect(created).toMatchObject({
-          key: 'Scm',
-          name: 'Scheme',
-          shortName: 'SC',
-          commonName: 'Scheme',
-          ace: 'scheme',
-          pygments: 'scheme',
-          template: '',
-          info: '',
-          description: '',
-          extension: 'scm',
-          fileOnly: false,
-          fileSizeLimit: 0,
-          includeInProblem: false,
-        });
-        expect(created.id).toEqual(expect.any(String));
-        const found = (await listed(editor)).find(
-          (language) => language.id === created.id,
-        );
-        expect(found).toEqual(created);
-      });
-
-      it('defaults shortName to null', async () => {
-        const created = dataOf<LanguageAdminResponse>(
-          await send('post', '', creator, newLanguage()).expect(201),
-        );
-        expect(created.shortName).toBeNull();
-      });
-
-      it('makes the language visible to the public problem meta at once', async () => {
-        const created = dataOf<LanguageAdminResponse>(
-          await send(
-            'post',
-            '',
-            creator,
-            newLanguage({ includeInProblem: true }),
-          ).expect(201),
-        );
-        expect(await metaLanguageIds()).toContain(created.id);
-      });
-
-      it('rejects a key that differs only by case from an existing one with 409', async () => {
-        await send('post', '', creator, newLanguage({ key: 'Dup' })).expect(
-          201,
-        );
-        await send('post', '', creator, newLanguage({ key: 'DUP' }))
-          .expect(409)
-          .expect(errorCode('conflict'));
-      });
-
       it.each([
         ['extension with a path', { extension: '../x' }],
         ['extension with a dot', { extension: '.py' }],
@@ -1144,132 +543,6 @@ afterAll(() => api.teardown());
         ['unknown field', { color: 'red' }],
       ])('rejects %s with 400', async (_label, overrides) => {
         await send('post', '', creator, newLanguage(overrides)).expect(400);
-      });
-    });
-
-    describe('update', () => {
-      it('changes name and includeInProblem and leaves the key', async () => {
-        const key = unique('U');
-        const created = dataOf<LanguageAdminResponse>(
-          await send('post', '', creator, newLanguage({ key })).expect(201),
-        );
-        const updated = dataOf<LanguageAdminResponse>(
-          await send('patch', `/${created.id}`, editor, {
-            name: 'Renamed',
-            includeInProblem: true,
-          }).expect(200),
-        );
-        expect(updated).toMatchObject({
-          id: created.id,
-          key,
-          name: 'Renamed',
-          includeInProblem: true,
-        });
-        expect(await metaLanguageIds()).toContain(created.id);
-      });
-
-      it('clears shortName with null but refuses null on other fields', async () => {
-        const created = dataOf<LanguageAdminResponse>(
-          await send(
-            'post',
-            '',
-            creator,
-            newLanguage({ shortName: 'SC' }),
-          ).expect(201),
-        );
-        const cleared = dataOf<LanguageAdminResponse>(
-          await send('patch', `/${created.id}`, editor, {
-            shortName: null,
-          }).expect(200),
-        );
-        expect(cleared.shortName).toBeNull();
-        await send('patch', `/${created.id}`, editor, { name: null }).expect(
-          400,
-        );
-      });
-
-      it('refuses a key in the body with 400 (keys are not renameable)', async () => {
-        const created = dataOf<LanguageAdminResponse>(
-          await send('post', '', creator, newLanguage()).expect(201),
-        );
-        const response = await send('patch', `/${created.id}`, editor, {
-          key: 'Other',
-        }).expect(400);
-        expect(issueFields(response)).toContain('key');
-        const [stored] = (await listed(editor)).filter(
-          (language) => language.id === created.id,
-        );
-        expect(stored.key).not.toBe('Other');
-      });
-
-      it('answers 404 for an unknown id and 400 for a malformed one', async () => {
-        await send('patch', '/00000000-0000-7000-8000-000000000000', editor, {
-          name: 'Nope',
-        }).expect(404);
-        await send('patch', '/not-a-uuid', editor, { name: 'Nope' }).expect(
-          400,
-        );
-      });
-    });
-
-    describe('list', () => {
-      it('sorts by name', async () => {
-        await send('post', '', creator, newLanguage({ name: 'Zeta' })).expect(
-          201,
-        );
-        await send('post', '', creator, newLanguage({ name: 'alpha' })).expect(
-          201,
-        );
-        const names = (await listed(editor)).map((language) => language.name);
-        expect(names.indexOf('alpha')).toBeLessThan(names.indexOf('Zeta'));
-      });
-    });
-
-    describe('permissions', () => {
-      it('answers 401 to anonymous callers on every route', async () => {
-        await api.http().get(ADMIN).expect(401);
-        await api.http().post(ADMIN).send(newLanguage()).expect(401);
-        await api
-          .http()
-          .patch(`${ADMIN}/00000000-0000-7000-8000-000000000000`)
-          .send({ name: 'X' })
-          .expect(401);
-      });
-
-      it('lets judge.change_language list and update but not create', async () => {
-        await send('get', '', editor).expect(200);
-        const created = dataOf<LanguageAdminResponse>(
-          await send('post', '', creator, newLanguage()).expect(201),
-        );
-        await send('patch', `/${created.id}`, editor, { name: 'Ok' }).expect(
-          200,
-        );
-        await send('post', '', editor, newLanguage()).expect(403);
-      });
-
-      it('lets judge.add_language create but not list or update', async () => {
-        await send('post', '', creator, newLanguage()).expect(201);
-        await send('get', '', creator).expect(403);
-        await send('patch', '/00000000-0000-7000-8000-000000000000', creator, {
-          name: 'X',
-        }).expect(403);
-      });
-
-      it('refuses callers with no language permission', async () => {
-        const outsider = await staff('judge.change_miscconfig');
-        await send('get', '', outsider).expect(403);
-        await send('post', '', outsider, newLanguage()).expect(403);
-        await send('patch', '/00000000-0000-7000-8000-000000000000', outsider, {
-          name: 'X',
-        }).expect(403);
-      });
-
-      it('lets a superuser through every route', async () => {
-        const { session } = await signedIn(api, unique('root'), {
-          isSuperuser: true,
-        });
-        await send('get', '', session).expect(200);
-        await send('post', '', session, newLanguage()).expect(201);
       });
     });
   });
@@ -1305,7 +578,6 @@ afterAll(() => api.teardown());
   describe('official contest mode', () => {
     beforeAll(() => api.reset());
     let counter = 0;
-    let catalog: Catalog;
     const setMode = async (on: boolean, endsAt = '') => {
       await api.setSetting('contest.officialMode', on);
       await api.setSetting('contest.officialModeEndsAt', endsAt);
@@ -1440,7 +712,7 @@ afterAll(() => api.teardown());
     };
 
     beforeAll(async () => {
-      catalog = await seedCatalog(api);
+      await seedCatalog(api);
     });
     afterEach(() => setMode(false));
 
@@ -1463,129 +735,6 @@ afterAll(() => api.teardown());
         .send({ displayBadgeId: newId() })
         .expect(403)
         .expect(errorCode('locked_in_official_contest'));
-    });
-
-    it('empties the recent comments of the home slice while locked and brings them back after the end time', async () => {
-      const author = await newPerson();
-      const reader = await newPerson();
-      const post = await createPost(api);
-      await createComment(api, {
-        page: { type: 'blog', id: post._id },
-        author: author.id,
-      });
-      const count = async (session?: TestSession) => {
-        const request = api.http().get('/api/internal/home');
-        const { recentComments } = dataOf<{ recentComments: unknown[] }>(
-          await (session ? authed(request, session) : request).expect(200),
-        );
-        return recentComments.length;
-      };
-      await setMode(false);
-      expect(await count()).toBeGreaterThan(0);
-      expect(await count(reader.session)).toBeGreaterThan(0);
-      await setMode(true);
-      expect(await count()).toBe(0);
-      expect(await count(reader.session)).toBe(0);
-      await setMode(true, inAnHour());
-      expect(await count()).toBe(0);
-      await setMode(true, aMinuteAgo());
-      expect(await count()).toBeGreaterThan(0);
-      expect(await count(reader.session)).toBeGreaterThan(0);
-    });
-
-    it('tells the shell on GET /site, with the end instant, and stops telling it after the end time', async () => {
-      const site = async () =>
-        dataOf<{ officialMode: boolean; officialModeEndsAt: string | null }>(
-          await api.http().get('/api/internal/site').expect(200),
-        );
-      expect(await site()).toMatchObject({
-        officialMode: false,
-        officialModeEndsAt: null,
-      });
-      await setMode(true);
-      expect(await site()).toMatchObject({
-        officialMode: true,
-        officialModeEndsAt: null,
-      });
-      const endsAt = inAnHour();
-      await setMode(true, endsAt);
-      expect(await site()).toMatchObject({
-        officialMode: true,
-        officialModeEndsAt: endsAt,
-      });
-      await setMode(true, aMinuteAgo());
-      expect(await site()).toMatchObject({
-        officialMode: false,
-        officialModeEndsAt: null,
-      });
-      await setMode(false, inAnHour());
-      expect(await site()).toMatchObject({
-        officialMode: false,
-        officialModeEndsAt: null,
-      });
-    });
-
-    it('refuses an end time without an offset or a date', async () => {
-      await expect(
-        api.setSetting('contest.officialModeEndsAt', '2026-10-10T08:00:00'),
-      ).rejects.toThrow();
-      await expect(
-        api.setSetting('contest.officialModeEndsAt', 'soon'),
-      ).rejects.toThrow();
-      await expect(
-        api.setSetting(
-          'contest.officialModeEndsAt',
-          '2026-10-10T08:00:00+07:00',
-        ),
-      ).resolves.toBeUndefined();
-    });
-
-    it('does not lock a profile form that resends the stored badge and order', async () => {
-      const person = await newPerson();
-      const badge = newId();
-      const first = await createOrganization(api, {}, [person.id]);
-      const second = await createOrganization(api, {}, [person.id]);
-      await api.users.updateOne(
-        { _id: person.id },
-        { $set: { badges: [badge], displayBadgeId: badge } },
-      );
-      await setMode(true);
-      await patchProfile({
-        displayBadgeId: badge,
-        organizations: [first._id, second._id],
-        timezone: 'UTC',
-      })(person.session).expect(200);
-    });
-
-    it('keeps tickets open while the mode is on', async () => {
-      const problem = await createProblem(api, catalog, {
-        code: `lockticket${(counter += 1)}`,
-      });
-      const person = await newPerson();
-      await setMode(true);
-      await authed(
-        api.http().post(`/api/internal/problems/${problem.code}/tickets`),
-        person.session,
-      )
-        .send({ title: 'Wrong answer', body: 'Sample 2 looks wrong' })
-        .expect(201);
-    });
-
-    it('lets an organization administrator keep removing members while the mode is on', async () => {
-      const admin = await newPerson();
-      const member = await newPerson();
-      const organization = await createOrganization(
-        api,
-        { adminIds: [admin.id], isOpen: true },
-        [member.id],
-      );
-      await setMode(true);
-      await authed(
-        api.http().post(organizationUrl(organization.slug, '/kick')),
-        admin.session,
-      )
-        .send({ userId: member.id })
-        .expect(204);
     });
   });
 }

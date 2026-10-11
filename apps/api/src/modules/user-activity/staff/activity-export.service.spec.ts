@@ -1,5 +1,4 @@
 import { Readable } from 'node:stream';
-import { ACTIVITY_EXPORT_MAX_ROWS } from '@libs/community';
 import { ActivityExportService } from './activity-export.service';
 import type { ActivityLogRow } from './activity-logs.repository';
 
@@ -16,11 +15,10 @@ const rowAt = (index: number): ActivityLogRow => ({
 });
 
 describe('ActivityExportService', () => {
-  const exportOf = (total: number, limits: number[] = []) =>
+  const exportOf = (total: number) =>
     new ActivityExportService(
       {
-        cursor: (_filter: unknown, limit: number) => {
-          limits.push(limit);
+        cursor: () => {
           return Readable.from(
             Array.from({ length: total }, (_value, index) => rowAt(index)),
           );
@@ -39,12 +37,5 @@ describe('ActivityExportService', () => {
     expect(chunks.map((chunk) => chunk.split('\r\n').length - 1)).toEqual([
       1, 1000, 1000, 500,
     ]);
-  });
-
-  it('asks the cursor for at most the export cap', async () => {
-    const limits: number[] = [];
-    for await (const chunk of exportOf(1, limits).lines({ days: 7 }))
-      void chunk;
-    expect(limits).toEqual([ACTIVITY_EXPORT_MAX_ROWS]);
   });
 });

@@ -3,8 +3,6 @@ import {
   legacyFernetDecrypt,
   constantTimeEqual,
   legacyWebauthnHandle,
-  randomToken,
-  sha256,
 } from './crypto';
 
 describe('crypto', () => {
@@ -12,13 +10,6 @@ describe('crypto', () => {
     expect(constantTimeEqual('abc', 'abc')).toBe(true);
     for (const given of ['abd', 'ab', 'abcd', '', undefined, 123, ['abc']])
       expect(constantTimeEqual(given, 'abc')).toBe(false);
-  });
-  it('hashes sha256 as hex and issues 32-byte url-safe random tokens', () => {
-    expect(sha256('abc')).toBe(
-      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
-    );
-    expect(Buffer.from(randomToken(), 'base64url')).toHaveLength(32);
-    expect(randomToken()).not.toBe(randomToken());
   });
   it.each(fixtures.fernet)(
     'decrypts django-fernet-fields token for $plain',

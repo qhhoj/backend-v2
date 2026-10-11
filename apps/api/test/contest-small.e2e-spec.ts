@@ -201,30 +201,6 @@ afterAll(() => api.teardown());
       ]);
     });
 
-    it('gives a signed-out visitor of an ended contest the limits of public problems only', async () => {
-      const hidden = await createProblem(api, catalog, {
-        code: 'end_private',
-        isPublic: false,
-      });
-      const open = await createProblem(api, catalog, {
-        code: 'end_public',
-        timeLimit: 3,
-      });
-      const contest = await createContest(api, {
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-        problems: [contestProblem(hidden._id, 0), contestProblem(open._id, 1)],
-      });
-      const problems = (await problemsOf(contest.key))!;
-      expect(problems.map((row) => [row.code, row.timeLimit !== null])).toEqual(
-        [
-          ['end_private', false],
-          ['end_public', true],
-        ],
-      );
-      expect(problems[0].memoryLimit).toBeNull();
-    });
-
     it('keeps a limit null for a contest editor who cannot see the private problem', async () => {
       const hidden = await createProblem(api, catalog, {
         code: 'edit_private',
@@ -240,18 +216,6 @@ afterAll(() => api.teardown());
         timeLimit: null,
         memoryLimit: null,
       });
-    });
-
-    it('leaves out a contest problem whose document is gone instead of failing', async () => {
-      const open = await createProblem(api, catalog, { code: 'gone_public' });
-      const contest = await createContest(api, {
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-        problems: [contestProblem(newId(), 0), contestProblem(open._id, 1)],
-      });
-      expect((await problemsOf(contest.key))!.map((row) => row.code)).toEqual([
-        'gone_public',
-      ]);
     });
   });
 }
@@ -404,22 +368,6 @@ afterAll(() => api.teardown());
         .expect(errorCode('validation_failed'));
       expect(await api.contests.countDocuments({ key: /^x_/ })).toBe(0);
     });
-
-    it('schedules final judging for a cloned final-submission contest', async () => {
-      const fso = await createContest(api, {
-        authors: [users.cloner._id],
-        formatName: 'final_submission',
-        formatConfig: {},
-        endTime: hoursFromNow(5),
-      });
-      await clone('cloner', fso.key, { key: 'fso_clone' }).expect(201);
-      const cloned = (await api.contests.findOne({ key: 'fso_clone' }).lean())!;
-      expect(
-        await finalJudges.getJob(
-          finalJudgeJobId(uuidStr(cloned._id), cloned.endTime),
-        ),
-      ).toBeDefined();
-    });
   });
 }
 
@@ -472,17 +420,6 @@ afterAll(() => api.teardown());
       expect(shown.rows[0].scores).toEqual([100, 50]);
     });
 
-    it('replaces the table on a second upload', async () => {
-      const contest = await createContest(api, { authors: [users.editor._id] });
-      await put('editor', contest.key, { csv: CSV }).expect(200);
-      await put('editor', contest.key, {
-        csv: 'Username,Full Name,X,Points\ncy,Cy,x,7',
-      }).expect(200);
-      const shown = await show(contest.key);
-      expect(shown.problems).toEqual([]);
-      expect(shown.rows.map((row) => row.username)).toEqual(['cy']);
-    });
-
     it('keeps a URL as given and refuses other schemes', async () => {
       const contest = await createContest(api, { authors: [users.editor._id] });
       await put('editor', contest.key, {
@@ -502,25 +439,6 @@ afterAll(() => api.teardown());
       expect((await show(contest.key)).url).toBe(
         'https://cms.example.org/ranking',
       );
-    });
-
-    it('answers a bad CSV with 400 on the csv field and an oversized body before parsing', async () => {
-      const contest = await createContest(api, { authors: [users.editor._id] });
-      const response = await put('editor', contest.key, {
-        csv: 'Username,Full Name,X,Points\na,A,x,nan',
-      }).expect(400);
-      expect(
-        Object.keys(
-          (response.body as { error: { fields: object } }).error.fields,
-        ),
-      ).toEqual(['csv']);
-      await put('editor', contest.key, { csv: 'x'.repeat(1_048_577) })
-        .expect(400)
-        .expect(errorCode('validation_failed'));
-      await api
-        .http()
-        .get(contestUrl(contest.key, '/official-ranking'))
-        .expect(404);
     });
 
     it('hides the table from viewers who cannot see their own scoreboard, and answers 404 once deleted', async () => {

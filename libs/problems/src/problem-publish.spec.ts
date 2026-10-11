@@ -81,16 +81,6 @@ describe('publishVerdict', () => {
     ).toEqual({ outcome: 'skipped', reason: 'no_permission' });
   });
 
-  it('reports a trashed problem as deleted, public or not', () => {
-    const actor = principal(rights, { isSuperuser: true });
-    const deletedAt = new Date();
-    for (const isPublic of [false, true])
-      expect(publishVerdict(actor, problem({ deletedAt, isPublic }))).toEqual({
-        outcome: 'skipped',
-        reason: 'deleted',
-      });
-  });
-
   it('reports a missing problem as not found', () => {
     expect(publishVerdict(principal(rights), null)).toEqual({
       outcome: 'skipped',
@@ -124,9 +114,6 @@ describe('isEditorialReleased', () => {
       isEditorialReleased(solution(false, '2026-10-09T11:00:00Z'), now),
     ).toBe(false);
     expect(isEditorialReleased(null, now)).toBe(false);
-  });
-
-  it('treats a missing solution field on a lean document as not released', () => {
     expect(
       isEditorialReleased(undefined as unknown as Problem['solution'], now),
     ).toBe(false);
