@@ -128,7 +128,6 @@ export class ScenarioRunner {
       name: identity,
       key: key ?? `${identity}-key`,
       answerPings: setup?.answers_pings !== false,
-      ownConnection: true,
     });
   }
 

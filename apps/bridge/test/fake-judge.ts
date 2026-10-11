@@ -40,8 +40,6 @@ export interface FakeJudgeOptions {
   inFlight?: InFlight[];
   /** PEM CA the bridge's certificate is signed by; plaintext without it. */
   ca?: Buffer;
-  /** A connection of its own; otherwise grpc-js shares one between clients with the same target. */
-  ownConnection?: boolean;
 }
 
 const keyOf = (ref: AssignmentRef) => `${ref.submissionId}.${ref.generation}`;
@@ -55,6 +53,8 @@ export class FakeJudge {
   readonly closed: Promise<StatusObject>;
   private readonly seqs = new Map<string, number>();
   private waiters: Array<() => void> = [];
+  /** Set by `endSession`: the channel outlives the session. */
+  private keepsChannel = false;
 
   private constructor(
     private readonly client: JudgeLinkClient,
@@ -69,20 +69,25 @@ export class FakeJudge {
     this.closed = new Promise((resolve) =>
       call.on('status', (ended: StatusObject) => {
         this.status = ended;
+        // a judge whose session ended leaves, so its idle socket does not count against the address's unauthenticated cap
+        if (!this.keepsChannel) client.close();
         this.wake();
         resolve(ended);
       }),
     );
   }
 
-  /** Opens a Session and sends nothing (credentials travel as metadata). */
+  /**
+   * Opens a Session on a connection of its own and sends nothing (credentials travel as metadata).
+   * Never on a socket grpc-js would share between clients: the bridge destroys a socket with no open session a handshake deadline later, so a session opened on a shared idle socket races that destroy and may end UNAVAILABLE.
+   */
   static open(port: number, options: FakeJudgeOptions): FakeJudge {
     const client = new JudgeLinkClient(
       `127.0.0.1:${port}`,
       FakeJudge.credentialsOf(options),
       {
         'grpc.ssl_target_name_override': 'localhost',
-        ...(options.ownConnection && { 'grpc.use_local_subchannel_pool': 1 }),
+        'grpc.use_local_subchannel_pool': 1,
       },
     );
     const metadata = new Metadata();
@@ -302,9 +307,9 @@ export class FakeJudge {
     );
   }
 
-  /** Cancels the session (the connection is lost from the bridge's view) and closes the channel. */
   /** Ends the stream but keeps the channel, like a judge between two sessions. */
   async endSession(): Promise<StatusObject> {
+    this.keepsChannel = true;
     this.call.cancel();
     return this.closed;
   }
@@ -325,6 +330,7 @@ export class FakeJudge {
     });
   }
 
+  /** Cancels the session (the connection is lost from the bridge's view) and closes the channel. */
   async close(): Promise<StatusObject> {
     this.call.cancel();
     const ended = await this.closed;

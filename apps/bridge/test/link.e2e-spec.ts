@@ -295,10 +295,7 @@ describe('Judge key changes whose command was lost', () => {
     async (_why, change) => {
       const name = `live-${Object.keys(change)[0]}`;
       await seedJudge(bridge, name, `${name}-key`);
-      const fake = await FakeJudge.online(
-        bridge.judgePort(),
-        judge(name, { ownConnection: true }),
-      );
+      const fake = await FakeJudge.online(bridge.judgePort(), judge(name));
       await bridge.judges.updateOne({ name }, { $set: change });
       expect((await fake.closed).code).toBe(status.PERMISSION_DENIED);
       expect(
