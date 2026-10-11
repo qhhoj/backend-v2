@@ -39,7 +39,10 @@ import {
   commentPageUrl,
   commentUrl,
 } from './community-fixtures';
-import { COMMENT_THREADS_PAGE_SIZE } from '@libs/community';
+import {
+  COMMENT_THREAD_REPLY_LIMIT,
+  COMMENT_THREADS_PAGE_SIZE,
+} from '@libs/community';
 import type { CommentPageType } from '@libs/community';
 import type { CommentPageResponse } from '../src/modules/comments/core/dto/comment.response';
 import type { PostListItemResponse } from '../src/modules/blog/core/dto/post.response';
@@ -1266,6 +1269,45 @@ afterAll(() => api.teardown());
         pageSize: COMMENT_THREADS_PAGE_SIZE,
         total: 2,
       });
+    });
+
+    it('lists at most COMMENT_THREAD_REPLY_LIMIT replies of a thread, in tree order, and names the cut threads', async () => {
+      const { user: author } = await person();
+      const post = await createPost(api);
+      const page = { type: 'blog' as const, id: post._id };
+      const crowded = await createComment(api, { page, author: author._id });
+      const first = await createComment(api, {
+        page,
+        author: author._id,
+        parent: crowded,
+      });
+      const nested = await createComment(api, {
+        page,
+        author: author._id,
+        parent: first,
+      });
+      for (let index = 2; index <= COMMENT_THREAD_REPLY_LIMIT; index++)
+        await createComment(api, {
+          page,
+          author: author._id,
+          parent: crowded,
+        });
+      const quiet = await createComment(api, { page, author: author._id });
+      const answer = await createComment(api, {
+        page,
+        author: author._id,
+        parent: quiet,
+      });
+      const view = await read('blog', post._id);
+      const ids = view.comments.map((comment) => comment.id);
+      expect(ids.slice(0, 2)).toEqual([quiet._id, answer._id]);
+      const crowdedRows = ids.slice(2);
+      expect(crowdedRows).toHaveLength(COMMENT_THREAD_REPLY_LIMIT + 1);
+      expect(crowdedRows[0]).toBe(crowded._id);
+      expect(crowdedRows.indexOf(nested._id)).toBe(
+        crowdedRows.indexOf(first._id) + 1,
+      );
+      expect(view.truncatedThreads).toEqual([crowded._id]);
     });
 
     it('pages roots by 20 and reads through the comment indexes', async () => {

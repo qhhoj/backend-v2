@@ -13,6 +13,8 @@ export const COMMENT_REPLY_WINDOW_MS = 365 * 86_400_000;
 /** Legacy `DMOJ_COMMENT_VOTE_HIDE_THRESHOLD`: collapsed, still returned. */
 export const COMMENT_COLLAPSE_SCORE = -5;
 export const COMMENT_THREADS_PAGE_SIZE = 20;
+/** New: replies listed per thread on a page, in tree order, so one crowded thread cannot make every page read huge. */
+export const COMMENT_THREAD_REPLY_LIMIT = 100;
 /** Stored `body` of a soft-deleted comment (the schema keeps `body` non-empty); the API sends `body: null` instead (the author's data export keeps it). */
 export const COMMENT_DELETED_BODY = '[deleted]';
 /** Legacy homepage `Comment.most_recent(user, 10)`. */

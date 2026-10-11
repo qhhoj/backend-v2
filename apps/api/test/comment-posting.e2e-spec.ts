@@ -218,6 +218,25 @@ describe('comment posting and editing', () => {
       .expect(errorCode('rate_limited'));
   });
 
+  it('limits a user to 20 comment edits in 5 minutes; a refused edit costs nothing', async () => {
+    const { user, session } = await person();
+    const page = await createPost(api);
+    const comment = await createComment(api, {
+      page: { type: 'blog', id: page._id },
+      author: user._id,
+    });
+    const conflict = jest
+      .spyOn(api.app.get(CommentsRepository), 'updateBodyIfRevision')
+      .mockResolvedValueOnce(false);
+    await edit(comment._id, session, 'conflict').expect(409);
+    conflict.mockRestore();
+    for (let index = 0; index < 20; index += 1)
+      await edit(comment._id, session, `edit ${index}`).expect(200);
+    await edit(comment._id, session, 'one too many')
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+  });
+
   it('edits with a revision row per accepted edit, for the author and change_comment only', async () => {
     const { user, session } = await person();
     const { session: other } = await person();

@@ -29,6 +29,8 @@ import type { CommentResponse } from '../core/dto/comment.response';
 import {
   COMMENT_LIMIT,
   COMMENT_WINDOW_SECONDS,
+  EDIT_LIMIT,
+  EDIT_WINDOW_SECONDS,
   PREVIEW_LIMIT,
   PREVIEW_WINDOW_SECONDS,
 } from '../core/rate-limits';
@@ -151,6 +153,38 @@ export class CommentPostingService {
         throw forbidden('Muted users cannot edit comments');
     }
     const bodyHtml = renderCommentBody(body);
+    const releaseHit = await this.rateLimits.reserve(
+      [`comment-edit:${principal.userId}`],
+      EDIT_LIMIT,
+      EDIT_WINDOW_SECONDS,
+    );
+    try {
+      await this.saveEdit(principal, { id, comment, body, bodyHtml });
+    } catch (error) {
+      await releaseHit();
+      throw error;
+    }
+    const [response] = await this.reads.respond(principal, [
+      (await this.comments.findById(id))!,
+    ]);
+    return response;
+  }
+
+  /** The body and its `edit` revision row in one transaction, against the revision count read (409 when an edit landed meanwhile). */
+  private async saveEdit(
+    principal: Principal,
+    {
+      id,
+      comment,
+      body,
+      bodyHtml,
+    }: {
+      id: string;
+      comment: CommentDocument;
+      body: string;
+      bodyHtml: string;
+    },
+  ): Promise<void> {
     await this.comments.inTransaction(async (session) => {
       if (
         !(await this.comments.updateBodyIfRevision(
@@ -177,10 +211,6 @@ export class CommentPostingService {
         session,
       );
     });
-    const [response] = await this.reads.respond(principal, [
-      (await this.comments.findById(id))!,
-    ]);
-    return response;
   }
 
   /** Soft delete (new; legacy had none): its author (muted too) or `change_comment`. The row stays as a placeholder so replies keep their context; votes stay but no longer count towards the author's contribution. A `delete` revision keeps the old text for moderators. */

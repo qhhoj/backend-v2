@@ -980,6 +980,13 @@
             "description": "Why the viewer cannot comment, by the same rule posting enforces; null when they can.",
             "nullable": true,
             "type": "object"
+          },
+          "truncatedThreads": {
+            "description": "Roots whose thread has more than `COMMENT_THREAD_REPLY_LIMIT` (100) replies: only the first 100 in tree order are listed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -989,6 +996,7 @@
           "canComment",
           "postBlock",
           "comments",
+          "truncatedThreads",
           "pagination"
         ],
         "type": "object"
