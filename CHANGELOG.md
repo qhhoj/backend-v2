@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.21.1
+
+### Patch Changes
+
+- a4232eb: chore: remove unused devDependencies (@eslint/eslintrc, source-map-support) and share one pino level list between env validation and nestLogLevels.
+
 ## 2.21.0
 
 ### Minor Changes
