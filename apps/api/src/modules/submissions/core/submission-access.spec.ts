@@ -4,10 +4,12 @@ import {
   batchSummaries,
   caseVisibility,
   detailAccess,
+  listCaseUnit,
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
 import type {
+  ListCaseFacts,
   SubmissionActionFacts,
   SubmissionProblemView,
 } from './submission-access';
@@ -418,5 +420,74 @@ describe('submissionActions', () => {
     })),
   ])('$label', ({ principal, facts, expected }) => {
     expect(submissionActions(principal, facts, NOW)).toEqual(expected);
+  });
+});
+
+describe('listCaseUnit', () => {
+  const facts = (
+    extra: Partial<ListCaseFacts> = {},
+    view = {},
+  ): ListCaseFacts => ({
+    ownerId: 'viewer',
+    inContest: false,
+    canEdit: false,
+    ...extra,
+    problem: {
+      ...problem({ submissionSourceVisibility: 'O' }),
+      testcaseResultVisibility: 'A',
+      testcaseVisibility: 'O',
+      allowViewFeedback: false,
+      isDeleted: false,
+      ...view,
+    },
+  });
+
+  it('gives the owner every case, the batches or nothing, as the problem shows them', () => {
+    expect(listCaseUnit(viewer(), facts())).toBe('case');
+    expect(
+      listCaseUnit(viewer(), facts({}, { testcaseResultVisibility: 'B' })),
+    ).toBe('batch');
+    expect(
+      listCaseUnit(viewer(), facts({}, { testcaseResultVisibility: 'S' })),
+    ).toBeNull();
+  });
+
+  it('shows nothing to a signed-out viewer or on a deleted problem', () => {
+    expect(listCaseUnit(null, facts())).toBeNull();
+    expect(listCaseUnit(viewer(), facts({}, { isDeleted: true }))).toBeNull();
+  });
+
+  it("follows the submission page for another user's practice row, with if-solved as denied", () => {
+    const other = { ownerId: 'someone' };
+    expect(listCaseUnit(viewer(), facts(other))).toBeNull();
+    expect(
+      listCaseUnit(viewer(), facts(other, { submissionSourceVisibility: 'A' })),
+    ).toBe('case');
+    expect(
+      listCaseUnit(viewer(), facts(other, { submissionSourceVisibility: 'S' })),
+    ).toBeNull();
+  });
+
+  it("hides another contestant's contest row from all but editors and view-all staff", () => {
+    const rival = { ownerId: 'someone', inContest: true };
+    const open = { submissionSourceVisibility: 'A' };
+    expect(listCaseUnit(viewer(), facts(rival, open))).toBeNull();
+    expect(
+      listCaseUnit(viewer(), facts({ ...rival, canEdit: true }, open)),
+    ).toBe('case');
+    const staff = viewer({
+      permissions: new Set(['judge.view_all_submission']),
+    });
+    expect(listCaseUnit(staff, facts(rival))).toBe('case');
+    expect(listCaseUnit(viewer(), facts({ inContest: true }))).toBe('case');
+  });
+
+  it('lets a superuser see the cases a problem hides', () => {
+    expect(
+      listCaseUnit(
+        viewer({ isSuperuser: true }),
+        facts({ ownerId: 'someone' }, { testcaseResultVisibility: 'S' }),
+      ),
+    ).toBe('case');
   });
 });

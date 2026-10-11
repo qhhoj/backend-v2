@@ -1,11 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { UserDocument } from '@libs/auth';
 import {
+  CASE_STATUSES,
   SUBMISSION_RESULTS,
   SUBMISSION_STATUSES,
   uuidStr,
 } from '@libs/database';
 import type {
+  CaseStatus,
   Language,
   Problem,
   Submission,
@@ -13,6 +15,7 @@ import type {
   SubmissionStatus,
 } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import type { TestSummary } from '../test-summary';
 
 export class SubmissionProblemResponse {
   /** Problem code. */
@@ -32,6 +35,25 @@ export class SubmissionLanguageResponse {
   key!: string;
   /** Display name. */
   name!: string;
+}
+
+export class SubmissionTestSummaryResponse {
+  /** `case`: one entry per test case in judging order; `batch`: one entry per batch (the problem shows only batch results). */
+  @ApiProperty({ enum: ['case', 'batch'] })
+  unit!: 'case' | 'batch';
+  /** Verdict of each entry, at most 100: `AC`, `WA`, `TLE`, `MLE`, `OLE`, `IR`, `RTE` or `SC`. For `batch`, the first non-accepted case of each batch among the first 100 cases. */
+  @ApiProperty({ enum: CASE_STATUSES, isArray: true })
+  statuses!: CaseStatus[];
+  /** Batch number of each entry, from 1; null for a case outside any batch. Same length as `statuses`. */
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'number', nullable: true },
+  })
+  batches!: (number | null)[];
+  /** Judged cases past the first 100, not in `statuses`. */
+  more!: number;
+  /** The problem's test case count for `case` (the rest are not judged yet); null for `batch`. */
+  total!: number | null;
 }
 
 /** The rows resolved for one submission; a missing one renders as null. */
@@ -72,10 +94,13 @@ export class SubmissionListItemResponse {
   time!: number | null;
   /** KiB (largest case). */
   memory!: number | null;
+  /** The first test results, only on the submission lists and only when the viewer could see them on the submission page (signed in; another user's contest submission only for the problem's editors and `judge.view_all_submission`); null otherwise. */
+  testSummary!: SubmissionTestSummaryResponse | null;
 
   static from(
     submission: Submission,
     { user, problem, language }: SubmissionRefs,
+    testSummary: TestSummary | null = null,
   ): SubmissionListItemResponse {
     return {
       id: uuidStr(submission._id),
@@ -99,6 +124,7 @@ export class SubmissionListItemResponse {
       caseTotal: submission.caseTotal,
       time: submission.time,
       memory: submission.memory,
+      testSummary,
     };
   }
 }

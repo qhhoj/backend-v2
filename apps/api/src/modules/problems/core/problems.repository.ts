@@ -43,6 +43,26 @@ const DELETED = { deletedAt: { $gt: new Date(0) } } as const;
 
 const RANDOM_ATTEMPTS = 2;
 
+/** `findSummariesIncludingDeleted`: what a submission row shows and what decides its test summary. */
+const SUMMARY_PROJECTION = {
+  code: 1,
+  name: 1,
+  points: 1,
+  deletedAt: 1,
+  purgedAt: 1,
+  isPublic: 1,
+  isOrganizationPrivate: 1,
+  organizations: 1,
+  authors: 1,
+  curators: 1,
+  testers: 1,
+  suggester: 1,
+  submissionSourceVisibility: 1,
+  testcaseVisibility: 1,
+  testcaseResultVisibility: 1,
+  allowViewFeedback: 1,
+} as const;
+
 @Injectable()
 export class ProblemsRepository {
   constructor(
@@ -63,22 +83,32 @@ export class ProblemsRepository {
 
   /** Test cases of a problem the caller already resolved (`C` rows: batch members included, `S`/`E` markers not), counted in the database so the 10000-row array never loads; it follows an id, so it does not filter. */
   async caseCount(problemId: string): Promise<number> {
-    const [row] = await this.problems.aggregate<{ count: number }>([
-      { $match: { _id: toUuid(problemId) } },
-      {
-        $project: {
-          count: {
-            $size: {
-              $filter: {
-                input: { $ifNull: ['$data.cases', []] },
-                cond: { $eq: ['$$this.type', 'C'] },
+    return (await this.caseCounts([problemId])).get(problemId) ?? 0;
+  }
+
+  /** `caseCount` for several problems in one read, keyed by problem id; a missing id has no entry. */
+  async caseCounts(
+    problemIds: readonly string[],
+  ): Promise<Map<string, number>> {
+    if (!problemIds.length) return new Map();
+    const rows = await this.problems.aggregate<{ _id: unknown; count: number }>(
+      [
+        { $match: { _id: { $in: problemIds.map(toUuid) } } },
+        {
+          $project: {
+            count: {
+              $size: {
+                $filter: {
+                  input: { $ifNull: ['$data.cases', []] },
+                  cond: { $eq: ['$$this.type', 'C'] },
+                },
               },
             },
           },
         },
-      },
-    ]);
-    return row?.count ?? 0;
+      ],
+    );
+    return new Map(rows.map((row) => [uuidStr(row._id), row.count]));
   }
 
   findById(id: string): Promise<ProblemDocument | null> {
@@ -282,14 +312,9 @@ export class ProblemsRepository {
       : Promise.resolve(null);
   }
 
-  /** Names and max points for submission rows, deleted problems included. */
+  /** Names and max points for submission rows, deleted problems included, with the access and test-visibility fields a row's test summary is checked against. */
   findSummariesIncludingDeleted(ids: string[]): Promise<ProblemDocument[]> {
-    return this.problems
-      .find(
-        { _id: { $in: ids } },
-        { code: 1, name: 1, points: 1, deletedAt: 1, purgedAt: 1 },
-      )
-      .exec();
+    return this.problems.find({ _id: { $in: ids } }, SUMMARY_PROJECTION).exec();
   }
 
   /** The deleted list: problems in their grace period or tombstoned that match `filter` (a `ProblemAccess.visibleFilter`), newest deletion first. */
@@ -373,6 +398,6 @@ export class ProblemsRepository {
         { $match: { _id: { $in: ids } } },
       ],
     );
-    return new Map(rows.map((row) => [uuidStr(row._id as string), row.bytes]));
+    return new Map(rows.map((row) => [uuidStr(row._id), row.bytes]));
   }
 }

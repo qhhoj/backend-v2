@@ -12,6 +12,7 @@ import {
   isUuid,
   newId,
   Submission,
+  toUuid,
   SubmissionSource,
   UNFINISHED_STATUSES,
   uuidStr,
@@ -19,6 +20,7 @@ import {
 import { effectsDue, JUDGE_COMMAND_BATCH, requeueUpdate } from '@libs/judging';
 import type { OverriddenScore } from '../actions/score-override';
 import { NOT_OVERRIDABLE_STATUSES } from './submission-access';
+import type { CaseHead } from './test-summary';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 const STATE_FIELDS = {
@@ -143,6 +145,35 @@ export class SubmissionsRepository {
       this.submissions.countDocuments(filter).exec(),
     ]);
     return { items, total };
+  }
+
+  /** The first `cap` cases (status and batch) and the stored case count of each submission, keyed by id, read in the database so the 10000-row arrays never load; a primary-key lookup. */
+  async caseHeads(
+    ids: readonly string[],
+    cap: number,
+  ): Promise<Map<string, { head: CaseHead[]; count: number }>> {
+    if (!ids.length) return new Map();
+    const rows = await this.submissions.aggregate<{
+      _id: unknown;
+      head: CaseHead[];
+      count: number;
+    }>([
+      { $match: { _id: { $in: ids.map(toUuid) } } },
+      {
+        $project: {
+          head: {
+            $map: {
+              input: { $slice: [{ $ifNull: ['$cases', []] }, cap] },
+              in: { status: '$$this.status', batch: '$$this.batch' },
+            },
+          },
+          count: { $size: { $ifNull: ['$cases', []] } },
+        },
+      },
+    ]);
+    return new Map(
+      rows.map(({ _id, head, count }) => [uuidStr(_id), { head, count }]),
+    );
   }
 
   /** Legacy SOLVED visibility: an AC worth the problem's full points. */
