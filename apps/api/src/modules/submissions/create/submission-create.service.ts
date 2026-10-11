@@ -81,6 +81,26 @@ function assertNotBanned(principal: Principal, problem: ProblemDocument): void {
     );
 }
 
+/** An externally judged problem has no judge to pin and takes typed source only. */
+function assertExternalAllowed(
+  problem: ProblemDocument,
+  { judgeId, isFileUpload }: { judgeId?: string; isFileUpload: boolean },
+): void {
+  if (!problem.externalJudge?.isActive) return;
+  if (judgeId !== undefined)
+    throw invalidField(
+      'judgeId',
+      'This problem is judged by an external judge: a judge cannot be chosen.',
+      'external_problem_no_judge_pin',
+    );
+  if (isFileUpload)
+    throw invalidField(
+      'file',
+      'This problem is judged by an external judge: file submissions are not accepted.',
+      'external_problem_no_file',
+    );
+}
+
 /** Legacy `ProblemSubmit.form_valid`; inside a current contest that lists the problem the submission is a contest submission (priority 0, lock, pretests, `maxSubmissions`, FSO pending). */
 @Injectable()
 export class SubmissionCreateService {
@@ -125,6 +145,7 @@ export class SubmissionCreateService {
   ): Promise<SubmitResponse> {
     const problem = await this.problems.visibleProblem(auth.principal, code);
     await this.reserveSubmit(auth.principal);
+    assertExternalAllowed(problem, { isFileUpload: true });
     const upload = await readMultipartForm(
       request,
       MAX_UPLOAD_BYTES,
@@ -162,6 +183,10 @@ export class SubmissionCreateService {
     draft: SubmissionDraft,
   ): Promise<SubmitResponse> {
     assertNotBanned(principal, draft.problem);
+    assertExternalAllowed(draft.problem, {
+      judgeId: draft.judgeId,
+      isFileUpload: false,
+    });
     if (draft.judgeId !== undefined)
       await this.assertJudge(
         principal,

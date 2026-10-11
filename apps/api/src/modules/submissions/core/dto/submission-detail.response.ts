@@ -72,6 +72,25 @@ export class SubmissionViewerResponse implements SubmissionActions {
   canOverrideScore!: boolean;
 }
 
+export class SubmissionExternalRunResponse {
+  /** The external judge's OJ. */
+  oj!: string;
+  /** The problem id on that OJ. */
+  problemId!: string;
+  /** The external judge's submission id; null until it accepted the submit. */
+  remoteId!: string | null;
+  /** The external judge's own status (`queued`, `done`, ...). */
+  systemStatus!: string;
+  /** The remote verdict (`AC`, `WA`, `PENDING`, ...). */
+  statusCanonical!: string;
+  /** The remote score, as text (`100/100`). */
+  scoreText!: string | null;
+  /** Link to the run on the remote OJ. */
+  remoteUrl!: string | null;
+  /** When the run was sent; null until then. */
+  submittedAt!: Date | null;
+}
+
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
   /** Compile log or compiler warnings; the judge's internal error message only for editors. */
   error!: string | null;
@@ -93,6 +112,8 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   cases!: SubmissionCaseResponse[] | null;
   /** Batch summaries when the problem shows only those (B). */
   batches!: SubmissionBatchResponse[] | null;
+  /** The run on the external judge; only for viewers who may rejudge, and only for the current judging generation. */
+  externalRun!: SubmissionExternalRunResponse | null;
   /** The problem's test case count; null whenever the viewer may not see case results. */
   totalCases!: number | null;
 
@@ -105,12 +126,14 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       totalCases,
       lockedAfter,
       actions,
+      externalRun,
     }: {
       visibility: CaseVisibility;
       showError: boolean;
       totalCases: number | null;
       lockedAfter: Date | null;
       actions: SubmissionActions;
+      externalRun: SubmissionExternalRunResponse | null;
     },
   ): SubmissionDetailResponse {
     return {
@@ -134,6 +157,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
         visibility.cases === 'batches'
           ? batchSummaries(submission.cases)
           : null,
+      externalRun,
       totalCases,
     };
   }
