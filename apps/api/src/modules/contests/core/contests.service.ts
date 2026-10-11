@@ -4,7 +4,7 @@ import type { UserDocument } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { escapeRegExp, Paginated } from '@libs/common';
 import { contestPhase, liveStatusOf } from '@libs/contests';
-import { uuidStr } from '@libs/database';
+import { narrowTo, uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
 import { ContestAccess } from './contest-access';
@@ -82,6 +82,10 @@ export class ContestsService {
     if (query.tag) clauses.push({ tags: query.tag });
     if (query.organization) clauses.push({ organizations: query.organization });
     if (query.rated !== undefined) clauses.push({ isRated: query.rated });
+    if (query.editable !== undefined)
+      clauses.push(
+        narrowTo(ContestAccess.editableFilter(principal), query.editable),
+      );
     for (const text of [query.search, query.q]) {
       const trimmed = text?.trim();
       if (!trimmed) continue;

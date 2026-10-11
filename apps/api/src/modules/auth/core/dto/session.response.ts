@@ -18,6 +18,12 @@ export class TwoFactorPendingResponse {
   methods!: SecondFactorMethod[];
 }
 
+/** Object rights the `permissions` list cannot tell, for deciding which admin screens to offer; the server still checks every object. */
+export class AdminCapabilitiesResponse {
+  /** Whether the user may administer at least one organization: an admin of one, or a holder of `judge.edit_all_organization`. */
+  organizations!: boolean;
+}
+
 export class UserResponse {
   /** Stable user id. */
   id!: string;
@@ -33,6 +39,8 @@ export class UserResponse {
   isSuperuser!: boolean;
   /** Permission codenames the user holds (directly or through groups), sorted. */
   permissions!: string[];
+  /** Object rights behind the admin screens, beside the permission codenames. */
+  adminCapabilities!: AdminCapabilitiesResponse;
   /** Whether an authenticator app (TOTP) is set up. */
   isTotpEnabled!: boolean;
   /** Whether at least one security key is registered. */
@@ -44,7 +52,11 @@ export class UserResponse {
   /** Default programming language id; null when none is chosen. */
   languageId!: string | null;
 
-  static from(user: UserDocument, principal: Principal): UserResponse {
+  static from(
+    user: UserDocument,
+    principal: Principal,
+    adminCapabilities: AdminCapabilitiesResponse,
+  ): UserResponse {
     return {
       id: user._id,
       username: user.username,
@@ -53,6 +65,7 @@ export class UserResponse {
       isStaff: user.isStaff,
       isSuperuser: user.isSuperuser,
       permissions: [...principal.permissions].sort(),
+      adminCapabilities,
       isTotpEnabled: user.isTotpEnabled,
       isWebauthnEnabled: user.isWebauthnEnabled,
       siteTheme: user.siteTheme,
@@ -80,10 +93,13 @@ export class SessionResponse {
     user: UserDocument,
     principal: Principal,
     session: SessionData | null,
+    adminCapabilities: AdminCapabilitiesResponse,
   ): SessionResponse {
     const twoFactorRequired = session ? !session.twoFaPassed : false;
     return {
-      user: twoFactorRequired ? null : UserResponse.from(user, principal),
+      user: twoFactorRequired
+        ? null
+        : UserResponse.from(user, principal, adminCapabilities),
       csrfToken: session?.csrf ?? null,
       twoFactorRequired,
       twoFactor: twoFactorRequired

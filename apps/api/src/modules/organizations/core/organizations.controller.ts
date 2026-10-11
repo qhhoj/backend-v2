@@ -30,8 +30,10 @@ export class OrganizationsController {
    * organizations appear only to their members, their admins and holders of
    * `judge.edit_all_organization`. `search` narrows by a case-insensitive
    * substring of name, short name or slug; `open` and `unlisted` (true or
-   * false) keep only organizations in that state. Paged with `page` and
-   * `pageSize` (default 100, at most 100). Anonymous callers may use it.
+   * false) keep only organizations in that state; `administered=true` keeps
+   * only the organizations the viewer may administer (the admin screen's
+   * list), `false` the others. Paged with `page` and `pageSize` (default 100,
+   * at most 100). Anonymous callers may use it.
    */
   @ApiPaginatedResponse(OrganizationListItemResponse)
   @Get()

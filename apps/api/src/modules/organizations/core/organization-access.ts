@@ -56,6 +56,14 @@ const listFilter = (principal: Principal | null): FilterQuery<Organization> =>
         ],
       };
 
+/** Mongo filter with `canAdminister`'s semantics; null administers nothing (anonymous), `{}` everything. */
+const administeredFilter = (
+  principal: Principal | null,
+): FilterQuery<Organization> | null => {
+  if (!principal) return null;
+  return editsAll(principal) ? {} : { adminIds: principal.userId };
+};
+
 export const OrganizationAccess = {
   accessView,
   isMember,
@@ -63,4 +71,5 @@ export const OrganizationAccess = {
   canAdminister,
   canList,
   listFilter,
+  administeredFilter,
 };

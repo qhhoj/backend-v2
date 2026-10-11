@@ -45,6 +45,8 @@ export class ContestListQueryDto {
   @IsOptional() @IsUUID('7') organization?: string;
   /** Only rated (true) or unrated (false) contests. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() rated?: boolean;
+  /** true: only contests the viewer may edit (the admin screen's index); false: only the others. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() editable?: boolean;
   /** Key or name substring, case-insensitive; at most 100 characters. ANDed with `search`, which stays. */
   @IsOptional()
   @IsString()

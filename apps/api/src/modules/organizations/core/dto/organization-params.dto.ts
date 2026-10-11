@@ -31,6 +31,8 @@ export class OrganizationListQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() open?: boolean;
   /** true: only unlisted organizations; false: only listed ones. Narrows what the viewer may already list. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() unlisted?: boolean;
+  /** true: only organizations the viewer may administer (their admin, or every one with `judge.edit_all_organization`); false: only the others. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() administered?: boolean;
   /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()

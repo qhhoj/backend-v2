@@ -24,6 +24,7 @@ export class ContestsController {
    * contests that are neither private nor organization-private. Filters are
    * `phase` (upcoming, running or ended), `tag`, `organization`, `rated`, and
    * `search` or `q` (case-insensitive key or name substring, ANDed together).
+   * `editable=true` keeps only the contests the viewer may edit.
    * Upcoming contests are sorted soonest first, all other views newest first.
    * Paged with `page` and `pageSize` (default 50, at most 100).
    */

@@ -5,6 +5,7 @@ import { CurrentAuth, SessionOnly, setSessionCookie } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
+import { SessionResponses } from '../core/session-responses.service';
 import { SessionResponse } from '../core/dto/session.response';
 import { ImpersonationService } from './impersonation.service';
 
@@ -13,6 +14,7 @@ import { ImpersonationService } from './impersonation.service';
 export class ImpersonationController {
   constructor(
     private readonly impersonation: ImpersonationService,
+    private readonly sessionResponses: SessionResponses,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -33,7 +35,7 @@ export class ImpersonationController {
     const { sessionId, session, user, principal } =
       await this.impersonation.stop(auth);
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
-    return SessionResponse.from(user, principal, session);
+    return this.sessionResponses.of(user, principal, session);
   }
 
   /**
@@ -55,6 +57,6 @@ export class ImpersonationController {
     const { sessionId, session, user, principal } =
       await this.impersonation.start(auth, userId);
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
-    return SessionResponse.from(user, principal, session);
+    return this.sessionResponses.of(user, principal, session);
   }
 }

@@ -51,6 +51,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Credential-minting routes (`/integration-clients`) are `@SessionOnly()` and `@NoImpersonation()`; new codenames reach migrated groups through the idempotent `grant-permissions` migrator command, run once after deploy — until then they are superuser-only.
 - The `judge.manage_integration` anchor is `judge.change_miscconfig` (whoever edits site settings); verify at rehearsal that the migrated admin groups hold the new codename after `grant-permissions`.
 - Failed `qhi_` lookups are counted per `request.ip`: 20 in 10 minutes, then 429 for every key from that address, valid ones included, until the window ends — the key is 256 bits, so this protects load, not secrecy; behind nginx `TRUST_PROXY` must list the proxy or all clients share one address and one sender of junk keys locks them all out (boot warning when active clients exist and it is off).
+- Admin access follows rights, not the staff flag (amends fe:293): the session user carries `adminCapabilities.organizations` (admin of an organization, or `edit_all_organization`) because a permission list cannot tell it; `GET /problems?editable`, `GET /contests?editable` and `GET /organizations?administered` narrow the admin indexes to what the viewer may change. Every editor endpoint already checks the object (`editableProblem`, `editableContest`, `administered`), so non-staff authors and organization admins need no backend gate change.
 
 ## Migrator
 

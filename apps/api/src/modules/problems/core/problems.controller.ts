@@ -64,7 +64,8 @@ export class ProblemsController {
    * @remarks
    * Public. Returns one page of the problems the viewer may see, a signed-in
    * viewer's own solved or attempted mark included. `visibility` narrows to
-   * public, private or all visible problems (default public). `search` splits on
+   * public, private or all visible problems (default public); `editable=true`
+   * keeps only the problems the viewer may edit. `search` splits on
    * spaces and needs every word inside the code or a title, ignoring case and
    * Vietnamese accents; `q` is a substring match on the code or any title; `sort`
    * takes `date`, `code`, `name`, `points`, `acRate` or `userCount`, with a

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
-import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
+import { narrowTo, PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
@@ -367,6 +367,10 @@ export class ProblemsService {
     ];
     if (query.visibility !== 'all')
       clauses.push({ isPublic: query.visibility === 'public' });
+    if (query.editable !== undefined)
+      clauses.push(
+        narrowTo(ProblemAccess.editableFilter(principal), query.editable),
+      );
     if (query.groupId) clauses.push({ groupId: query.groupId });
     if (query.typeIds?.length)
       clauses.push({ typeIds: { $in: query.typeIds } });
