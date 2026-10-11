@@ -17,6 +17,11 @@ import type { ApiTest } from './setup';
 
 import { profileQueries } from '@libs/database/testing';
 
+import type {
+  GroupResponse,
+  UserAccessResponse,
+} from '../src/modules/users/access/dto/access.response';
+
 import type { StaffUserResponse } from '../src/modules/users/admin/dto/staff-user.response';
 
 import type { TestSession } from './problem-fixtures';
@@ -27,7 +32,7 @@ import {
   clearBridgeCommands,
 } from './submission-fixtures';
 
-import { sha256, generateApiToken } from '@libs/auth';
+import { sha256, generateApiToken, PERMISSION_CATALOG } from '@libs/auth';
 
 import { getModelToken } from '@nestjs/mongoose';
 
@@ -971,6 +976,166 @@ afterAll(() => api.teardown());
       await authed(api.http().post(`${USER('henry')}/password-reset`), admin)
         .expect(409)
         .expect(issueCodes(['account_inactive']));
+    });
+  });
+}
+
+// roles and permissions
+{
+  const ADMIN = '/api/internal/admin';
+  const access = (name: string) => `${ADMIN}/users/${name}/access`;
+
+  describe('roles and permissions', () => {
+    beforeAll(() => api.reset());
+    let root: TestSession;
+    let holder: TestSession;
+    const change = (
+      name: string,
+      body: Record<string, unknown>,
+      session = root,
+    ) => authed(api.http().patch(access(name)), session).send(body);
+
+    beforeAll(async () => {
+      root = await loginAs(
+        api,
+        (await createUserWith(api, 'root', { isSuperuser: true }))._id,
+      );
+      holder = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'holder', {
+            isStaff: true,
+            permissions: Object.keys(PERMISSION_CATALOG),
+          })
+        )._id,
+      );
+    });
+
+    it('lets a non-superuser holding every other permission read but never grant', async () => {
+      const target = await createUserWith(api, 'target');
+      const role = await api.groups.create({ name: 'Mods', permissions: [] });
+      const read = await authed(
+        api.http().get(access('target')),
+        holder,
+      ).expect(200);
+      expect(dataOf<UserAccessResponse>(read)).toMatchObject({
+        canEdit: false,
+        permissions: [],
+      });
+      await authed(api.http().get(`${ADMIN}/permissions`), holder).expect(200);
+      await authed(api.http().get(`${ADMIN}/groups`), holder).expect(200);
+      await change(
+        'target',
+        { addPermissions: ['judge.ban_user'] },
+        holder,
+      ).expect(403);
+      await change('holder', { isSuperuser: true }, holder).expect(403);
+      await authed(api.http().post(`${ADMIN}/groups`), holder)
+        .send({ name: 'Mine', permissions: ['judge.ban_user'] })
+        .expect(403);
+      await authed(api.http().patch(`${ADMIN}/groups/${role._id}`), holder)
+        .send({ addPermissions: ['judge.ban_user'] })
+        .expect(403);
+      expect(await api.users.findById(target._id).lean()).toMatchObject({
+        permissions: [],
+        groups: [],
+        isSuperuser: false,
+      });
+      expect(
+        await api.groups.countDocuments({ permissions: { $ne: [] } }),
+      ).toBe(0);
+    });
+
+    it('applies a grant, a role and a role edit to the next request, and audits it', async () => {
+      const bob = await createUserWith(api, 'bob');
+      await createUserWith(api, 'carol');
+      const bobSession = await loginAs(api, bob._id);
+      const carolProfile = () =>
+        authed(api.http().get(`${ADMIN}/users/carol/profile`), bobSession);
+      await carolProfile().expect(403);
+
+      await change('bob', { addPermissions: ['judge.change_profile'] }).expect(
+        200,
+      );
+      await carolProfile().expect(200);
+
+      const role = dataOf<GroupResponse>(
+        await authed(api.http().post(`${ADMIN}/groups`), root)
+          .send({
+            name: 'Profile editors',
+            permissions: ['judge.change_profile'],
+          })
+          .expect(201),
+      );
+      const granted = await change('bob', {
+        addGroups: [role.id],
+        removePermissions: ['judge.change_profile'],
+      }).expect(200);
+      expect(dataOf<UserAccessResponse>(granted).effective).toEqual([
+        {
+          codename: 'judge.change_profile',
+          direct: false,
+          viaGroups: ['Profile editors'],
+        },
+      ]);
+      await carolProfile().expect(200);
+
+      await authed(api.http().patch(`${ADMIN}/groups/${role.id}`), root)
+        .send({ removePermissions: ['judge.change_profile'] })
+        .expect(200);
+      await carolProfile().expect(403);
+
+      await authed(api.http().post(`${ADMIN}/groups`), root)
+        .send({ name: 'profile EDITORS' })
+        .expect(409)
+        .expect(issueCodes(['group_name_taken']));
+      expect(
+        await api.revisions
+          .find({ entityId: bob._id, action: 'staff_set_access' })
+          .lean(),
+      ).toHaveLength(2);
+    });
+
+    it('keeps roles granted meanwhile, and a held legacy codename, but refuses unknown additions', async () => {
+      const orgAdmin = await api.groups.create({ name: 'Org Admin' });
+      await createUserWith(api, 'legacy', {
+        permissions: ['judge.retired_perm'],
+        groups: [orgAdmin._id],
+      });
+      const changed = await change('legacy', {
+        addPermissions: ['judge.ban_user'],
+      }).expect(200);
+      expect(dataOf<UserAccessResponse>(changed)).toMatchObject({
+        groups: [{ name: 'Org Admin' }],
+        permissions: ['judge.ban_user', 'judge.retired_perm'],
+      });
+      await change('legacy', { addPermissions: ['judge.made_up'] })
+        .expect(400)
+        .expect(issueCodes(['permission_unknown']));
+      await change('legacy', {
+        addGroups: ['01890000-0000-7000-8000-000000000000'],
+      })
+        .expect(400)
+        .expect(issueCodes(['group_unknown']));
+      await change('legacy', {
+        removePermissions: ['judge.retired_perm'],
+      }).expect(200);
+    });
+
+    it('never lets a superuser change their own access, and a demoted superuser loses it at once', async () => {
+      const second = await loginAs(
+        api,
+        (await createUserWith(api, 'second', { isSuperuser: true }))._id,
+      );
+      await change('root', { isSuperuser: false }).expect(403);
+      await change('second', { isSuperuser: false }).expect(200);
+      await change('root', { isSuperuser: false }, second).expect(403);
+      await authed(api.http().patch(`${ADMIN}/users/root/profile`), second)
+        .send({ isActive: false })
+        .expect(403);
+      expect(
+        await api.users.findOne({ username: 'root' }).lean(),
+      ).toMatchObject({ isSuperuser: true, isActive: true });
     });
   });
 }

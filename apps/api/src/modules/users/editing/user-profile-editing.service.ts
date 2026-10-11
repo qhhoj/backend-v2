@@ -15,6 +15,7 @@ import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { EMAIL_TAKEN, normaliseEmail } from '../core/dto/email';
 import type { UpdateUserByStaffDto } from './dto/user-edit.dto';
 import { UserEditResponse } from './dto/user-edit.response';
+import { asCurrentSuperuser } from '../access/superuser-lock';
 import { editableTarget } from './editable-target';
 import { UserCredentialsService } from './user-credentials.service';
 import { fieldChanges } from './user-field-changes';
@@ -80,7 +81,12 @@ export class UserProfileEditingService {
         Object.assign(changes, fieldChangeLog);
       }
       if (isActive !== undefined) {
-        await this.writeActivation(user, isActive);
+        // Deactivating a superuser removes superuser power: same lock and caller re-read as demoting one.
+        if (user.isSuperuser && !isActive)
+          await asCurrentSuperuser(this.redis, this.users, principal, () =>
+            this.writeActivation(user, isActive),
+          );
+        else await this.writeActivation(user, isActive);
         changes.isActive = { before: user.isActive, after: isActive };
       }
       if (membership) {
