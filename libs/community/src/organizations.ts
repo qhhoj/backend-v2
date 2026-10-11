@@ -9,9 +9,12 @@ export const ORGANIZATION_ADMIN_LIMIT = 3;
 export const ORGANIZATION_ADMIN_GROUP = 'Org Admin';
 /** Legacy `short_name = slug[:20]`, shown beside users in contests. */
 export const SHORT_NAME_LENGTH = 20;
-/** Legacy organization create form: an organization problem's code starts with the slug's lowercase letters and digits and `_` (`thpt-demo` → `thptdemo_`). */
+/** Letters and digits of a slug kept in the code prefix: codes are at most 32 characters, so 8 stay free after the `_`. */
+export const CODE_PREFIX_SLUG_LENGTH = 23;
+/** Legacy organization create form: an organization problem's code starts with the slug's lowercase letters and digits and `_` (`thpt-demo` → `thptdemo_`); a long slug keeps its first 23. */
 export function organizationCodePrefix(slug: string): string {
-  return `${slug.toLowerCase().replace(/[^a-z0-9]/g, '')}_`;
+  const letters = slug.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return `${letters.slice(0, CODE_PREFIX_SLUG_LENGTH)}_`;
 }
 
 /** Legacy `Organization.calculate_points`: members' performance points above 0, best first, the top 100 weighed by 0.95^rank. */

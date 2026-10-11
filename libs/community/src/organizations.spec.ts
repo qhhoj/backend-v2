@@ -31,4 +31,10 @@ describe('organizationCodePrefix', () => {
   ])('%s gives %s', (slug, prefix) =>
     expect(organizationCodePrefix(slug)).toBe(prefix),
   );
+
+  it('keeps room for a code after the prefix of a long slug', () => {
+    const prefix = organizationCodePrefix(`truong-${'a'.repeat(60)}`);
+    expect(prefix).toBe(`truong${'a'.repeat(17)}_`);
+    expect(32 - prefix.length).toBe(8);
+  });
 });

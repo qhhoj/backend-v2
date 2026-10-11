@@ -24,17 +24,23 @@ export class OrganizationProblemRules {
     const organizations = (fields.organizations ?? original.organizations).map(
       uuidStr,
     );
-    await this.assertPrefixOnChange(principal, original, fields, organizations);
     const isOrganizationPrivate =
       fields.isOrganizationPrivate ?? original.isOrganizationPrivate;
+    if (isOrganizationPrivate)
+      await this.assertPrefixOnChange(
+        principal,
+        original,
+        fields,
+        organizations,
+      );
     const mayPublishToMembers =
       fields.isPublic !== undefined &&
       isOrganizationPrivate &&
-      (await this.rights.createsProblemsInAny(principal, organizations));
+      (await this.rights.createsProblemsInAll(principal, organizations));
     return mayPublishToMembers ? MEMBERS_ONLY_VISIBILITY : [];
   }
 
-  /** Existing codes are never re-checked: only a new code, or a new organization list, of a problem that belongs to an organization. */
+  /** Existing codes are never re-checked: only a new code, or a new organization list, of an organization-private problem (a site problem merely listed under an organization keeps its code). */
   private async assertPrefixOnChange(
     principal: Principal,
     original: ProblemDocument,

@@ -18,7 +18,6 @@ export class TwoFactorPendingResponse {
   methods!: SecondFactorMethod[];
 }
 
-/** Object rights the `permissions` list cannot tell, for deciding which admin screens to offer; the server still checks every object. */
 /** Where the user may create one kind of object; the SPA shows a create button when either is true. */
 export class CreationScopeResponse {
   /** Site-wide: `judge.add_problem` for problems, `judge.add_contest` for contests. */
@@ -27,6 +26,7 @@ export class CreationScopeResponse {
   organizations!: boolean;
 }
 
+/** Object rights the `permissions` list cannot tell, for deciding which admin screens to offer; the server still checks every object. */
 export class AdminCapabilitiesResponse {
   /** Whether the user may administer at least one organization: an admin of one, or a holder of `judge.edit_all_organization`. */
   organizations!: boolean;

@@ -208,6 +208,43 @@ describe('creating problems and contests for an organization', () => {
         .send({ code: 'thptdemo_bai1' })
         .expect(200);
     });
+    it('publishes to members only with create rights in every listed organization', async () => {
+      await createProblemAs(
+        'teacher',
+        'thpt-demo',
+        problemBody('thptdemo_shared'),
+      ).expect(201);
+      const third = await createOrganization(api, { slug: 'thirdorg' });
+      await api.problems.updateOne(
+        { code: 'thptdemo_shared' },
+        { $push: { organizations: third._id } },
+      );
+      await authed(
+        api.http().patch('/api/internal/problems/thptdemo_shared'),
+        sessions.teacher,
+      )
+        .send({ isPublic: true })
+        .expect(403);
+      expect((await storedProblem('thptdemo_shared'))?.isPublic).toBe(false);
+    });
+
+    it('leaves the code of a problem that is not organization-private alone', async () => {
+      await createProblemAs(
+        'teacher',
+        'thpt-demo',
+        problemBody('thptdemo_site'),
+      ).expect(201);
+      await api.problems.updateOne(
+        { code: 'thptdemo_site' },
+        { $set: { isOrganizationPrivate: false } },
+      );
+      await authed(
+        api.http().patch('/api/internal/problems/thptdemo_site'),
+        sessions.teacher,
+      )
+        .send({ code: 'sitecode' })
+        .expect(200);
+    });
   });
 
   describe('contests', () => {

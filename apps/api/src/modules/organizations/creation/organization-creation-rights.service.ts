@@ -17,7 +17,6 @@ type CreateRule = (
 /** The organization a problem or contest is created for. */
 export interface CreationTarget {
   id: string;
-  slug: string;
   /** What an organization problem's code must start with (`organizationCodePrefix`). */
   codePrefix: string;
 }
@@ -29,6 +28,8 @@ export interface CreationScope {
 }
 
 const LIVE = { deletedAt: null };
+/** What `OrganizationAccess.accessView` reads. */
+const ACCESS_FIELDS = { _id: 1, isUnlisted: 1, adminIds: 1 };
 
 /**
  * The one place that decides who creates problems and contests for an organization (`OrganizationAccess.canCreate*`):
@@ -52,33 +53,39 @@ export class OrganizationCreationRights {
     return this.target(principal, slug, OrganizationAccess.canCreateContest);
   }
 
-  /** Whether the viewer may create problems for any of these organizations (publishing an organization-private problem to its members). */
-  async createsProblemsInAny(
+  /**
+   * Whether the viewer may create problems for every one of these live organizations (publishing an organization-private
+   * problem to their members): rights in one organization never publish to another's members.
+   */
+  async createsProblemsInAll(
     principal: Principal,
     organizationIds: readonly string[],
   ): Promise<boolean> {
-    if (!organizationIds.length) return false;
     const rows = await this.organizations
-      .find({ _id: { $in: organizationIds }, ...LIVE })
+      .find({ _id: { $in: organizationIds }, ...LIVE }, ACCESS_FIELDS)
       .lean<Organization[]>()
       .exec();
-    return rows.some((row) =>
-      OrganizationAccess.canCreateProblem(
-        principal,
-        OrganizationAccess.accessView(row),
-      ),
+    return (
+      rows.length > 0 &&
+      rows.every((row) =>
+        OrganizationAccess.canCreateProblem(
+          principal,
+          OrganizationAccess.accessView(row),
+        ),
+      )
     );
   }
 
-  /** The slug of the first listed live organization, whose prefix an organization problem's code carries; null for none. */
+  /** The slug of the first live organization in list order, whose prefix an organization problem's code carries; null for none. */
   async firstSlug(organizationIds: readonly string[]): Promise<string | null> {
-    const [first] = organizationIds;
-    if (first === undefined) return null;
-    const row = await this.organizations
-      .findOne({ _id: first, ...LIVE }, { slug: 1 })
-      .lean<Pick<Organization, 'slug'>>()
+    if (!organizationIds.length) return null;
+    const rows = await this.organizations
+      .find({ _id: { $in: organizationIds }, ...LIVE }, { slug: 1 })
+      .lean<Pick<Organization, '_id' | 'slug'>[]>()
       .exec();
-    return row?.slug ?? null;
+    const slugById = new Map(rows.map((row) => [uuidStr(row._id), row.slug]));
+    const first = organizationIds.find((id) => slugById.has(id));
+    return first === undefined ? null : (slugById.get(first) ?? null);
   }
 
   /** What the session reports, given whether the viewer administers any organization (`OrganizationsService.administersAny`): site-wide creation is the global permission, organization creation an administered organization plus the organization permission. */
@@ -121,7 +128,6 @@ export class OrganizationCreationRights {
       );
     return {
       id: uuidStr(organization._id),
-      slug: organization.slug,
       codePrefix: organizationCodePrefix(organization.slug),
     };
   }
