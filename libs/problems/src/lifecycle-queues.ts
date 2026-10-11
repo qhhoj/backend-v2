@@ -3,10 +3,10 @@ import type { Queue } from 'bullmq';
 import { JOB_RETENTION, JOB_RETRY, withinTimeout } from '@libs/judging';
 
 /** Longest a delete or restore waits for its follow-up job to reach Redis. */
-export const LIFECYCLE_ENQUEUE_TIMEOUT_MS = 1000;
+const LIFECYCLE_ENQUEUE_TIMEOUT_MS = 1000;
 
 export const PROBLEM_SOLVERS_QUEUE = 'problem-solvers-recompute';
-export const PROBLEM_SOLVERS_JOB = 'recompute';
+const PROBLEM_SOLVERS_JOB = 'recompute';
 export type SolversRecomputeReason = 'deleted' | 'restored';
 /** Recompute the points of every user with a submission to the problem, after it was deleted or restored (deleted problems do not count for points). */
 export interface ProblemSolversJob {
@@ -33,7 +33,7 @@ export async function notifySolversRecompute(
 }
 
 export const PROBLEM_PURGE_QUEUE = 'problem-purge';
-export const PROBLEM_PURGE_JOB = 'purge';
+const PROBLEM_PURGE_JOB = 'purge';
 export const PROBLEM_PURGE_SWEEP_JOB = 'sweep';
 export const PROBLEM_PURGE_SCHEDULER = 'problem-purge-daily';
 /** 03:30 every day, in the site time zone. */
@@ -70,7 +70,7 @@ export const PACKAGE_CACHE_MAX_BYTES = 8 * 1024 * 1024 * 1024;
 /** A cached package older than this is deleted by the daily sweep. */
 export const PACKAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** The failure reason of a build over the size cap; the api turns it into `409 package_too_large`. */
-export const PACKAGE_ERROR_PREFIX = 'problem-package: ';
+const PACKAGE_ERROR_PREFIX = 'problem-package: ';
 export const PACKAGE_TOO_LARGE_REASON = `${PACKAGE_ERROR_PREFIX}too_large`;
 /** `key` names the exact content the api saw (`<dataVersion>.<contentHash>`). */
 export interface ProblemPackageJob {

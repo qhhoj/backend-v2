@@ -12,7 +12,7 @@ import type {
   PolygonStatement,
 } from './polygon-types';
 
-export const POLYGON_API_URL = 'https://polygon.codeforces.com/api/';
+const POLYGON_API_URL = 'https://polygon.codeforces.com/api/';
 /** The `fetch` the client sends with; a test provides a fake Polygon here. */
 export const POLYGON_FETCH = Symbol('POLYGON_FETCH');
 export type PolygonFetch = typeof fetch;

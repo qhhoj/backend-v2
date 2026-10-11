@@ -3,7 +3,7 @@ import { Problem } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
 import { diacriticInsensitivePattern } from './vietnamese-fold';
 
-export const PROBLEM_SORT_FIELDS = [
+const PROBLEM_SORT_FIELDS = [
   'date',
   'code',
   'name',
