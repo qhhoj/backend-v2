@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.17.2
+
+### Patch Changes
+
+- deb3319: chore: remove unused exports from worker and similarity modules
+
 ## 2.17.1
 
 ### Patch Changes
