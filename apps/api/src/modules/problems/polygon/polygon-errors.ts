@@ -30,7 +30,7 @@ export const packageNotReady = (polygonId: number, reason: string) =>
   new AppError(
     'polygon_package_not_ready',
     409,
-    `Polygon problem ${polygonId} has no READY full package: ${reason}. Build a full package (with Linux tests) on Polygon first`,
+    `Polygon problem ${polygonId} has no READY package: ${reason}. Build a package on Polygon first`,
   );
 
 export const linkInvalid = () =>
@@ -53,7 +53,7 @@ export const noPackage = () =>
   new AppError(
     'polygon_no_package',
     409,
-    'The Polygon problem has no READY package to check the link against: build a full package (with Linux tests) on Polygon first',
+    'The Polygon problem has no READY package to check the link against: build a package on Polygon first',
   );
 
 /** `code` is shown only to a user who may edit that QHHOJ problem. */

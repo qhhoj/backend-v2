@@ -1,4 +1,4 @@
-import type { PolygonSyncTrigger } from '@libs/database';
+import type { PolygonPackageType, PolygonSyncTrigger } from '@libs/database';
 /** Repeatable worker job that queues a sync for linked problems whose Polygon package moved on. */
 export const POLYGON_AUTOSYNC_QUEUE = 'polygon-autosync';
 export const POLYGON_AUTOSYNC_JOB = 'polygon-autosync';
@@ -10,6 +10,7 @@ export const IMPORT_STEPS = [
   'queued',
   'downloading',
   'statements',
+  'generating',
   'tests',
   'done',
   'failed',
@@ -17,7 +18,10 @@ export const IMPORT_STEPS = [
 export type ImportStep = (typeof IMPORT_STEPS)[number];
 /** What the worker reports while a job runs; `done`/`total` count bytes while downloading and are null otherwise. */
 export interface ImportProgress {
-  step: Extract<ImportStep, 'downloading' | 'statements' | 'tests'>;
+  step: Extract<
+    ImportStep,
+    'downloading' | 'statements' | 'generating' | 'tests'
+  >;
   done: number | null;
   total: number | null;
 }
@@ -29,6 +33,8 @@ export interface PolygonSource {
   owner: string;
   revision: number;
   packageId: number;
+  /** Which variant to download: `full` (`linux`, tests included) or `standard` (tests generated on a judge); absent on jobs queued before standard packages, which are full. */
+  packageType?: PolygonPackageType;
   /** Polygon's build time of the package (ISO); absent on jobs queued before it was recorded. */
   packageCreatedAt?: string | null;
   /** `link`: a first import, which (re)writes the whole link; `sync`: refreshes the revision and sync fields of the existing link. */

@@ -29,6 +29,8 @@ export interface PolygonFixture {
   solution?: { path: string; type: string; code: string } | null;
   files?: Record<string, Buffer | string>;
   withProblemXml?: boolean;
+  /** Rewrites the generated problem.xml (standard packages add generated tests and executables). */
+  transformXml?: (xml: string) => string;
   /** Entry names left out of the package (non-full packages). */
   omitEntries?: string[];
 }
@@ -159,7 +161,14 @@ export function buildPolygonPackage(fixture: PolygonFixture): Buffer {
   const entries: ZipTestEntry[] = [
     ...(fixture.withProblemXml === false
       ? []
-      : [{ name: 'problem.xml', content: buildProblemXml(fixture) }]),
+      : [
+          {
+            name: 'problem.xml',
+            content: (fixture.transformXml ?? ((xml) => xml))(
+              buildProblemXml(fixture),
+            ),
+          },
+        ]),
     ...testEntries(fixture),
     ...checkerAndInteractorEntries(fixture),
     ...statementEntries(fixture),
