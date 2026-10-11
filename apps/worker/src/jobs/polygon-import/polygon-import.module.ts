@@ -7,6 +7,9 @@ import { PolygonImportProcessor } from './polygon-import.processor';
 import { PolygonImportRepository } from './polygon-import.repository';
 import { PolygonImportService } from './polygon-import.service';
 import { PolygonSyncRunsRepository } from './polygon-sync-runs.repository';
+import { StandardPackageTests } from './standard-package-tests';
+import { TestGenerationRepository } from './test-generation.repository';
+import { TestGenerationService } from './test-generation.service';
 
 @Module({
   imports: [
@@ -23,6 +26,9 @@ import { PolygonSyncRunsRepository } from './polygon-sync-runs.repository';
     PolygonImportRepository,
     PolygonSyncRunsRepository,
     PandocService,
+    StandardPackageTests,
+    TestGenerationService,
+    TestGenerationRepository,
   ],
 })
 export class PolygonImportModule {}

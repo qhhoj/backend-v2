@@ -113,8 +113,15 @@ function findTestset(root: XmlElement): XmlElement {
   return testset;
 }
 
+const testElementsOf = (testset: XmlElement): XmlElement[] =>
+  childrenOf(childOf(testset, 'tests') ?? testset, 'test');
+
+/** The `<test>` elements of the `tests` testset, in file order (test N of the plan is element N-1). */
+export const testNodesOf = (root: XmlElement): XmlElement[] =>
+  testElementsOf(findTestset(root));
+
 function readTestNodes(testset: XmlElement, maxCases: number): XmlElement[] {
-  const testNodes = childrenOf(childOf(testset, 'tests') ?? testset, 'test');
+  const testNodes = testElementsOf(testset);
   if (!testNodes.length) throw new PolygonImportError('no testcases found');
   if (testNodes.length > maxCases)
     throw new PolygonImportError('too many testcases');
