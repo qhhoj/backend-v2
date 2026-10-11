@@ -16,6 +16,9 @@ export const organizationSearchFilter = (
   };
 };
 
+/** Every read goes through this: a soft-deleted organization exists for nobody. */
+const LIVE = { deletedAt: null };
+
 @Injectable()
 export class OrganizationsRepository {
   constructor(
@@ -23,15 +26,29 @@ export class OrganizationsRepository {
     private readonly organizations: Model<Organization>,
   ) {}
 
-  /** Case-insensitive, like the unique index; a malformed slug simply matches nothing. */
-  findBySlug(slug: string): Promise<OrganizationDocument | null> {
+  /** Organization delete only: a deleted organization keeps its slug, so the delete can be repeated to finish an interrupted unlink. */
+  findBySlugIncludingDeleted(
+    slug: string,
+  ): Promise<OrganizationDocument | null> {
     return this.organizations.findOne({ slug }).collation(CI).exec();
   }
 
-  findByIds(ids: readonly string[]): Promise<Organization[]> {
+  /** Case-insensitive, like the unique index; a malformed slug simply matches nothing. */
+  findBySlug(slug: string): Promise<OrganizationDocument | null> {
+    return this.organizations
+      .findOne({ slug, ...LIVE })
+      .collation(CI)
+      .exec();
+  }
+
+  /** `includeDeleted`: for records that outlive the organization, such as decided join requests. */
+  findByIds(
+    ids: readonly string[],
+    { includeDeleted = false } = {},
+  ): Promise<Organization[]> {
     return ids.length
       ? this.organizations
-          .find({ _id: { $in: ids } })
+          .find({ _id: { $in: ids }, ...(includeDeleted ? {} : LIVE) })
           .lean<Organization[]>()
           .exec()
       : Promise.resolve([]);
@@ -44,13 +61,13 @@ export class OrganizationsRepository {
   ): Promise<{ items: Organization[]; total: number }> {
     const [items, total] = await Promise.all([
       this.organizations
-        .find(filter, { about: 0 })
+        .find({ $and: [filter, LIVE] }, { about: 0 })
         .sort({ name: 1, _id: 1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean<Organization[]>()
         .exec(),
-      this.organizations.countDocuments(filter).exec(),
+      this.organizations.countDocuments({ $and: [filter, LIVE] }).exec(),
     ]);
     return { items, total };
   }
@@ -58,14 +75,17 @@ export class OrganizationsRepository {
   /** Ids of the organizations `organizationSearchFilter` matches; a staff search over a small collection. */
   async idsMatching(search: string): Promise<string[]> {
     const rows = await this.organizations
-      .find(organizationSearchFilter(search), { _id: 1 })
+      .find({ ...organizationSearchFilter(search), ...LIVE }, { _id: 1 })
       .lean()
       .exec();
     return rows.map((row) => uuidStr(row._id));
   }
 
   async exists(filter: FilterQuery<Organization>): Promise<boolean> {
-    return (await this.organizations.exists(filter).exec()) !== null;
+    return (
+      (await this.organizations.exists({ $and: [filter, LIVE] }).exec()) !==
+      null
+    );
   }
 
   /** Ids of the organizations a user is an admin of; through `{adminIds}`. */
@@ -79,7 +99,9 @@ export class OrganizationsRepository {
 
   /** Through `{adminIds}`. */
   countAdminRoles(userId: string): Promise<number> {
-    return this.organizations.countDocuments({ adminIds: userId }).exec();
+    return this.organizations
+      .countDocuments({ adminIds: userId, ...LIVE })
+      .exec();
   }
 
   create(fields: Partial<Organization>): Promise<OrganizationDocument> {
@@ -87,6 +109,19 @@ export class OrganizationsRepository {
   }
 
   async update(id: string, changes: Partial<Organization>): Promise<void> {
-    await this.organizations.updateOne({ _id: id }, { $set: changes }).exec();
+    await this.organizations
+      .updateOne({ _id: id, ...LIVE }, { $set: changes })
+      .exec();
+  }
+
+  /** False when it was already deleted. */
+  async markDeleted(id: string, deletedBy: string): Promise<boolean> {
+    const { modifiedCount } = await this.organizations
+      .updateOne(
+        { _id: id, ...LIVE },
+        { $set: { deletedAt: new Date(), deletedBy } },
+      )
+      .exec();
+    return modifiedCount === 1;
   }
 }

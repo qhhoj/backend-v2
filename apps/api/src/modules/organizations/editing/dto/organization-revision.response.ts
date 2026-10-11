@@ -8,6 +8,7 @@ export const ORGANIZATION_REVISION_ACTIONS = [
   'create',
   'edit',
   'kick',
+  'delete',
 ] as const;
 export type OrganizationRevisionAction =
   (typeof ORGANIZATION_REVISION_ACTIONS)[number];
@@ -18,7 +19,7 @@ export class OrganizationRevisionResponse {
   id!: string;
   /** When the change was made. */
   at!: Date;
-  /** `create`, `edit`, or `kick` (a member removed; `changes.member.before` is their username). */
+  /** `create`, `edit`, `kick` (a member removed; `changes.member.before` is their username) or `delete` (`changes.deleted.after` is true). */
   @ApiProperty({
     enum: ORGANIZATION_REVISION_ACTIONS,
     enumName: 'OrganizationRevisionAction',

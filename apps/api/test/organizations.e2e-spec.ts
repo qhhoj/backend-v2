@@ -14,6 +14,7 @@ import {
 } from './problem-fixtures';
 import type { TestSession, Catalog } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
+import { postUrl } from './community-fixtures';
 import { setupApiTest, errorCode } from './setup';
 import type { ApiTest } from './setup';
 import { Logger } from '@nestjs/common';
@@ -667,6 +668,121 @@ afterAll(() => api.teardown());
       expect(
         await api.organizations.countDocuments({ adminIds: user._id }),
       ).toBe(3);
+    });
+  });
+}
+
+// from organization-delete.e2e-spec.ts
+{
+  describe('organization delete', () => {
+    let catalog: Catalog;
+    const users: Record<string, { _id: string }> = {};
+    const sessions: Record<string, TestSession> = {};
+    const remove = (slug: string, session: TestSession) =>
+      authed(api.http().delete(organizationUrl(slug)), session);
+    const get = (url: string, session: TestSession) =>
+      authed(api.http().get(url), session);
+
+    beforeAll(async () => {
+      await api.reset();
+      catalog = await seedCatalog(api);
+      const roles: Array<[string, Partial<User>]> = [
+        ['root', { isSuperuser: true }],
+        ['staff', { permissions: ['judge.edit_all_organization'] }],
+        ['member', {}],
+        ['admin', {}],
+      ];
+      for (const [name, extra] of roles) {
+        users[name] = await createUserWith(api, `del_${name}`, extra);
+        sessions[name] = await loginAs(api, users[name]._id);
+      }
+    });
+
+    it('is refused to staff who may edit every organization but are not superusers', async () => {
+      await createOrganization(api, { slug: 'kept' });
+      await remove('kept', sessions.staff)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await get(organizationUrl('kept'), sessions.staff).expect(200);
+    });
+
+    it('hides the organization, keeps its content unlinked and private, and releases its members', async () => {
+      const organization = await createOrganization(
+        api,
+        { slug: 'doomed', adminIds: [users.admin._id] },
+        [users.member._id],
+      );
+      const id = uuidStr(organization._id);
+      await createProblem(api, catalog, {
+        code: 'orgonly',
+        isOrganizationPrivate: true,
+        organizations: [id],
+      });
+      const contest = await api.contests.create({
+        key: 'orgcontest',
+        name: 'Org contest',
+        startTime: new Date(Date.now() - 3_600_000),
+        endTime: new Date(Date.now() + 3_600_000),
+        isVisible: true,
+        isOrganizationPrivate: true,
+        organizations: [id],
+      });
+      const post = await api.blogPosts.create({
+        title: 'Members only',
+        slug: 'doomed',
+        organization: id,
+        publishOn: new Date(Date.now() - 60_000),
+        visible: true,
+        content: 'Hello',
+        contentHtml: '<p>Hello</p>',
+      });
+      const outsider = await createUserWith(api, 'del_requester');
+      await api.organizationRequests.create({
+        organization: id,
+        user: outsider._id,
+        reason: 'Let me in',
+      });
+      await get('/api/internal/problems/orgonly', sessions.member).expect(200);
+
+      await remove('doomed', sessions.root).expect(204);
+
+      await get(organizationUrl('doomed'), sessions.root).expect(404);
+      await remove('doomed', sessions.root).expect(204);
+      await remove('never-was', sessions.root).expect(404);
+      const listed = dataOf<OrganizationListItemResponse[]>(
+        await get('/api/internal/organizations', sessions.root).expect(200),
+      ).map((item) => item.slug);
+      expect(listed).not.toContain('doomed');
+      expect(await api.organizations.countDocuments({ _id: id })).toBe(1);
+
+      const problem = await api.problems.findOne({ code: 'orgonly' }).lean();
+      expect(problem).toMatchObject({
+        isOrganizationPrivate: true,
+        organizations: [],
+      });
+      await get('/api/internal/problems/orgonly', sessions.member).expect(404);
+      expect(await api.contests.findById(contest._id).lean()).toMatchObject({
+        isOrganizationPrivate: true,
+        organizations: [],
+      });
+      expect(await api.blogPosts.findById(post._id).lean()).toMatchObject({
+        organization: null,
+        visible: false,
+      });
+      await api
+        .http()
+        .get(postUrl(uuidStr(post._id)))
+        .expect(404);
+
+      for (const userId of [users.member._id, users.admin._id])
+        expect(
+          (await api.users.findById(userId).lean())!.organizations.map(uuidStr),
+        ).not.toContain(id);
+      const request = await api.organizationRequests
+        .findOne({ organization: id })
+        .lean();
+      expect(request!.state).toBe('R');
+      expect(uuidStr(request!.decidedBy!)).toBe(uuidStr(users.root._id));
     });
   });
 }

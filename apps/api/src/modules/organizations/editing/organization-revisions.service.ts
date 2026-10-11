@@ -27,6 +27,7 @@ const REVISION_COMMENT = {
   create: 'Created on site',
   edit: 'Edited from site',
   kick: 'Member removed',
+  delete: 'Deleted',
 } as const;
 
 type OrganizationFields = Partial<
@@ -69,6 +70,12 @@ export class OrganizationRevisionsService {
   ): Promise<void> {
     return this.append(principal, organizationId, 'kick', {
       member: { before: username, after: null },
+    });
+  }
+
+  recordDelete(principal: Principal, organizationId: string): Promise<void> {
+    return this.append(principal, organizationId, 'delete', {
+      deleted: { before: null, after: true },
     });
   }
 

@@ -9,6 +9,8 @@ import {
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { OrganizationEditingController } from './editing/organization-editing.controller';
 import { OrganizationEditingService } from './editing/organization-editing.service';
+import { OrganizationDeletionService } from './editing/organization-deletion.service';
+import { OrganizationUnlinkRepository } from './editing/organization-unlink.repository';
 import { OrganizationRevisionsService } from './editing/organization-revisions.service';
 import { OrganizationToolsService } from './editing/organization-tools.service';
 import { OrganizationRequestQueueController } from './requests/organization-request-queue.controller';
@@ -62,6 +64,8 @@ import {
     OrganizationPointsService,
     OrganizationsService,
     OrganizationEditingService,
+    OrganizationDeletionService,
+    OrganizationUnlinkRepository,
     OrganizationRevisionsService,
     OrganizationToolsService,
     MembershipService,

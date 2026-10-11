@@ -2,6 +2,7 @@ import { ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -28,6 +29,7 @@ import {
   OrganizationAboutPreviewDto,
   OrganizationHistoryQueryDto,
 } from './dto/organization-tools.dto';
+import { OrganizationDeletionService } from './organization-deletion.service';
 import { OrganizationEditingService } from './organization-editing.service';
 import { OrganizationToolsService } from './organization-tools.service';
 
@@ -37,6 +39,7 @@ export class OrganizationEditingController {
   constructor(
     private readonly editing: OrganizationEditingService,
     private readonly tools: OrganizationToolsService,
+    private readonly deletion: OrganizationDeletionService,
   ) {}
 
   /**
@@ -80,6 +83,30 @@ export class OrganizationEditingController {
     @Body(new RefuseNullFieldsPipe(['slots'])) body: UpdateOrganizationDto,
   ): Promise<OrganizationDetailResponse> {
     return this.editing.update(auth.principal, slug, body);
+  }
+
+  /**
+   * Delete an organization
+   *
+   * @remarks
+   * Superusers only (403 `forbidden`; no permission grants it). A soft delete:
+   * the organization disappears from every read and its slug stays reserved.
+   * Its problems and contests are kept and unlinked, keeping their privacy
+   * flags (an organization-private one left with no organization is visible
+   * only to its editors). Its posts are kept, unlinked and hidden. Members
+   * lose the membership, pending join requests are rejected, and the
+   * organization's problem tags are removed. Recorded in the revision log
+   * (its history page is gone with it). Returns 204, also when repeated on
+   * a deleted slug (which finishes an interrupted delete); 404 `not_found`
+   * for an unknown slug.
+   */
+  @Delete(':slug')
+  @HttpCode(204)
+  remove(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { slug }: OrganizationSlugParamDto,
+  ): Promise<void> {
+    return this.deletion.delete(auth.principal, slug);
   }
 
   /**

@@ -34,7 +34,10 @@ export class RankingUsersRepository {
     const shortNames = new Map(
       (
         await this.organizations
-          .find({ _id: { $in: firstIds }, isUnlisted: false }, { shortName: 1 })
+          .find(
+            { _id: { $in: firstIds }, isUnlisted: false, deletedAt: null },
+            { shortName: 1 },
+          )
           .lean()
       ).map((organization) => [
         uuidStr(organization._id),

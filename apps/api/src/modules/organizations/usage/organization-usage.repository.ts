@@ -34,12 +34,13 @@ const OVERVIEW_SORTS: Record<UsageSort, Record<string, 1 | -1>> = {
   name: { name: 1 },
 };
 
-/** Every organization with its credits used in `month` (0 without a usage row), one sorted page. */
+/** Every live organization with its credits used in `month` (0 without a usage row), one sorted page. */
 function overviewPipeline(
   month: string,
   query: OverviewQuery,
 ): PipelineStage[] {
   return [
+    { $match: { deletedAt: null } },
     {
       $lookup: {
         from: 'organizationUsage',
@@ -104,7 +105,7 @@ export class OrganizationUsageRepository {
       this.organizations.aggregate<OverviewRow & { _id: unknown }>(
         overviewPipeline(month, query),
       ),
-      this.organizations.countDocuments({}).exec(),
+      this.organizations.countDocuments({ deletedAt: null }).exec(),
     ]);
     return {
       rows: rows.map((row) => ({ ...row, id: uuidStr(row._id as string) })),
