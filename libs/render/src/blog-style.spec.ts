@@ -297,6 +297,8 @@ describe('KaTeX in user-authored styles', () => {
     );
   });
 
+  // Normal run ~1s; with the formula limits removed the same input runs for minutes. The bound sits between, so a slow shared runner passes and a lost limit fails.
+  const CATASTROPHIC_MS = 20_000;
   it('renders a 200k-character field of worst-case formulas in bounded time', () => {
     const worst = [
       WIDE_DEF,
@@ -311,10 +313,10 @@ describe('KaTeX in user-authored styles', () => {
     for (const style of ['blog', 'user'] as const) {
       const started = performance.now();
       const html = renderMarkdown(field, style);
-      expect(performance.now() - started).toBeLessThan(2000);
+      expect(performance.now() - started).toBeLessThan(CATASTROPHIC_MS);
       expect(html).toMatch(/Formula (time )?limit exceeded/);
     }
-  });
+  }, 60_000);
 
   it.each(['blog', 'user'] as const)(
     'refuses dimensions beyond ±50em in the %s style, macros included',
