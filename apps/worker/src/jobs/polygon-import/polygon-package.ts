@@ -3,8 +3,8 @@ import type { Readable } from 'node:stream';
 import { ZipFile } from 'yazl';
 import { ZipArchive, ZipError } from '@libs/problems';
 import { PolygonImportError } from './polygon-import.error';
-import { parseXml, XML_LIMITS, XmlError } from './polygon-xml';
-import type { XmlElement } from './polygon-xml';
+import { parseXml, XML_LIMITS, XmlError } from '@libs/problems';
+import type { XmlElement } from '@libs/problems';
 import type { PlannedTest } from './polygon-tests';
 
 export const TESTS_ARCHIVE = 'tests.zip';

@@ -47,7 +47,7 @@ import { ProblemLifecycleController } from './lifecycle/problem-lifecycle.contro
 import { ProblemLifecycleService } from './lifecycle/problem-lifecycle.service';
 import { ProblemPackageController } from './package/problem-package.controller';
 import { ProblemPackageService } from './package/problem-package.service';
-import { PolygonCatalogService } from './polygon/polygon-catalog.service';
+import { PolygonLinkResolver } from './polygon/polygon-link-resolver.service';
 import { PolygonConnectionController } from './polygon/polygon-connection.controller';
 import { PolygonController } from './polygon/polygon.controller';
 import { PolygonLinkImportService } from './polygon/polygon-link-import.service';
@@ -136,7 +136,7 @@ const repositories = [
     ProblemStorageQuota,
     ProblemDataLifecycleService,
     ProblemImportsService,
-    PolygonCatalogService,
+    PolygonLinkResolver,
     PolygonLinkImportService,
     PolygonLinkService,
     PolygonLinksRepository,

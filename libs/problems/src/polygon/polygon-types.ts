@@ -77,6 +77,16 @@ export function latestPackageOf(packages: PolygonPackageInfo[]): LatestPackage {
   };
 }
 
+/** The newest READY package of any kind (standard or full): every package records the link in its problem.xml. */
+export function newestReadyPackageId(
+  packages: PolygonPackageInfo[],
+): number | null {
+  return (
+    packages.filter((row) => row.state === 'READY').sort(newestFirst)[0]?.id ??
+    null
+  );
+}
+
 /** Why `latestPackageOf` offers nothing READY, naming Polygon's newest package, its state and whether it is full. */
 export function packageNotReadyReason(packages: PolygonPackageInfo[]): string {
   const newest = [...packages].sort(newestFirst)[0];

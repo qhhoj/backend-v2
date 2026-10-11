@@ -9,18 +9,12 @@ export class PolygonLinksRepository {
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
   ) {}
 
-  /** Polygon problem id → code of the QHHOJ problem linked to it (deleted problems included: their code and link come back on restore). */
-  async codesByPolygonId(polygonIds: number[]): Promise<Map<number, string>> {
-    const rows = await this.problems
-      .find(
-        { 'polygonLink.problemId': { $in: polygonIds } },
-        { code: 1, 'polygonLink.problemId': 1 },
-      )
-      .lean()
+  /** The problem linked to a Polygon problem (deleted problems included: their code and link come back on restore), or null. */
+  linkedTo(polygonId: number): Promise<Problem | null> {
+    return this.problems
+      .findOne({ 'polygonLink.problemId': polygonId })
+      .lean<Problem>()
       .exec();
-    return new Map(
-      rows.map((row) => [row.polygonLink!.problemId, row.code] as const),
-    );
   }
 
   /** Writes the switch only while the problem is still linked to the same Polygon problem; false when it is not. */

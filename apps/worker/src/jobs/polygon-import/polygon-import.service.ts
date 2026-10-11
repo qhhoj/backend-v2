@@ -53,7 +53,7 @@ import {
 } from './polygon-statements';
 import { planTests } from './polygon-tests';
 import type { PlannedTest, TestPlan } from './polygon-tests';
-import type { XmlElement } from './polygon-xml';
+import type { XmlElement } from '@libs/problems';
 
 /** A data file written beside the final one and renamed into place only after the transaction matched. */
 interface StagedFile {

@@ -14,7 +14,8 @@ import {
   POLYGON_QUEUE,
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
-import { FakePolygon } from '@libs/problems/testing';
+import { buildZip, FakePolygon } from '@libs/problems/testing';
+import { POLYGON_LINK_LIMIT } from '../src/modules/problems/core/rate-limits';
 import {
   authed,
   createProblem,
@@ -61,6 +62,27 @@ const pkg = (id: number, revision: number, state: string, type = 'linux') => ({
   creationTimeSeconds: Date.parse(BUILT_AT) / 1000,
 });
 const API_KEY = 'polygon-key-7f3a';
+const SHARED = [
+  { id: 1, name: 'sum', owner: 'alice', revision: 3, latestPackage: 3 },
+  { id: 2, name: 'graph', owner: 'bob', revision: 5, modified: true },
+  { id: 3, name: 'none', owner: 'bob', revision: 1 },
+  { id: 4, name: 'gone', owner: 'bob', revision: 1, deleted: true },
+];
+/** The `p…` token each problem's packages record. */
+const TOKENS: Record<string, string> = { '1': 'p1Sum00', '2': 'p2Graph' };
+const linkTo = (owner: string, name: string, token: string) =>
+  `https://polygon.codeforces.com/${token}/${owner}/${name}`;
+const SUM_LINK = linkTo('alice', 'sum', TOKENS['1']);
+/** A package whose problem.xml records `token` in its url (no url when undefined). */
+const packageRecording = (token: string | undefined) =>
+  buildZip([
+    {
+      name: 'problem.xml',
+      content: token
+        ? `<problem revision="3" url="${linkTo('alice', 'sum', token)}"/>`
+        : '<problem revision="3"/>',
+    },
+  ]);
 const dataOf = <Data>({ body }: { body: unknown }) =>
   (body as { data: Data }).data;
 
@@ -74,23 +96,27 @@ describe('Polygon routes', () => {
   let importer: TestSession, admin: TestSession, plain: TestSession;
   let importerId: string;
 
+  /** Problem 1 `alice/sum` (full package READY), 2 `bob/graph` (newer build running), 3 `bob/none` (no package), 4 deleted. */
   const sharedProblems = () =>
     polygon
-      .reply('problems.list', ({ id }) => ({
-        result: [
-          { id: 1, name: 'sum', owner: 'alice', revision: 3, latestPackage: 3 },
-          { id: 2, name: 'graph', owner: 'bob', revision: 5, modified: true },
-          { id: 3, name: 'none', owner: 'bob', revision: 1 },
-          { id: 4, name: 'gone', owner: 'bob', revision: 1, deleted: true },
-        ].filter((problem) => !id || String(problem.id) === id),
+      .reply('problems.list', ({ id, owner, name }) => ({
+        result: SHARED.filter(
+          (problem) =>
+            (!id || String(problem.id) === id) &&
+            (!owner || problem.owner === owner) &&
+            (!name || problem.name === name),
+        ),
       }))
       .reply('problem.packages', ({ problemId }) => ({
         result:
           {
-            '1': [pkg(10, 3, 'READY')],
+            '1': [pkg(10, 3, 'READY'), pkg(10, 3, 'READY', 'standard')],
             '2': [pkg(20, 4, 'READY'), pkg(21, 5, 'PENDING')],
             '3': [],
           }[problemId] ?? [],
+      }))
+      .reply('problem.package', ({ problemId }) => ({
+        zip: packageRecording(TOKENS[problemId]),
       }))
       .reply('problem.statements', ({ problemId }) => ({
         result:
@@ -136,7 +162,11 @@ describe('Polygon routes', () => {
   });
   beforeEach(async () => {
     polygon.reset();
-    await redis.del('polygon:problems');
+    const cached = [
+      ...(await redis.keys('polygon:link-token:*')),
+      ...(await redis.keys('rate:polygon-link:*')),
+    ];
+    if (cached.length) await redis.del(...cached);
     await queue.drain(true);
     // Every test links the problems it needs.
     await api.problems.updateMany({}, { $set: { polygonLink: null } });
@@ -145,10 +175,12 @@ describe('Polygon routes', () => {
 
   it('refuses every route without the permission', async () => {
     await get(`${POLYGON}/status`, plain).expect(403);
-    await get(`${POLYGON}/problems`, plain).expect(403);
-    await post(`${POLYGON}/problems/1/import`, { code: 'x' }, plain).expect(
-      403,
-    );
+    await post(`${POLYGON}/resolve`, { link: SUM_LINK }, plain).expect(403);
+    await post(
+      `${POLYGON}/import`,
+      { link: SUM_LINK, code: 'x' },
+      plain,
+    ).expect(403);
     await post(`${POLYGON}/test`, {}, importer).expect(403);
     await post('/api/internal/problems/any/polygon/sync', {}, plain).expect(
       403,
@@ -207,21 +239,20 @@ describe('Polygon routes', () => {
       .expect(errorCode('polygon_unavailable'));
   });
 
-  it('lists shared problems with package state, title and linked code, and caches the list', async () => {
-    sharedProblems();
-    await createProblem(api, catalog, {
-      code: 'linked_sum',
-      polygonLink: linkOf(1) as never,
-    });
-    const listed = dataOf<Array<Record<string, unknown>>>(
-      await get(`${POLYGON}/problems`).expect(200),
-    );
-    expect(listed).toEqual([
-      {
+  describe('a pasted link', () => {
+    const resolve = (link: string, session = importer) =>
+      post(`${POLYGON}/resolve`, { link }, session);
+    const refusalOf = ({ body }: { body: unknown }) =>
+      (body as { error: Record<string, unknown> }).error;
+
+    it('previews the problem when the token matches its newest package, reading the package once', async () => {
+      sharedProblems();
+      const preview = dataOf(await resolve(SUM_LINK).expect(200));
+      expect(preview).toEqual({
         id: 1,
         name: 'sum',
-        title: 'Tổng',
         owner: 'alice',
+        title: 'Tổng',
         revision: 3,
         modified: false,
         latestPackage: {
@@ -230,43 +261,128 @@ describe('Polygon routes', () => {
           state: 'READY',
           createdAt: BUILT_AT,
         },
-        linkedProblemCode: 'linked_sum',
-      },
-      {
-        id: 2,
-        name: 'graph',
-        title: null,
-        owner: 'bob',
-        revision: 5,
-        modified: true,
-        latestPackage: {
-          id: 21,
-          revision: 5,
-          state: 'RUNNING',
-          createdAt: BUILT_AT,
+      });
+      expect(polygon.callsOf('problems.list')[0].params).toMatchObject({
+        owner: 'alice',
+        name: 'sum',
+      });
+      expect(polygon.callsOf('problem.package')).toEqual([
+        {
+          method: 'problem.package',
+          params: expect.objectContaining({
+            problemId: '1',
+            packageId: '10',
+            type: 'standard',
+          }) as unknown,
         },
-        linkedProblemCode: null,
-      },
-      expect.objectContaining({
-        id: 3,
-        latestPackage: {
-          id: null,
-          revision: null,
-          state: 'NONE',
-          createdAt: null,
-        },
-      }),
-    ]);
-    const callsAfterFirst = polygon.calls.length;
-    const filtered = dataOf<Array<{ id: number }>>(
-      await get(`${POLYGON}/problems?search=TỔNG&state=READY`).expect(200),
-    );
-    expect(filtered.map(({ id }) => id)).toEqual([1]);
-    expect(polygon.calls.length).toBe(callsAfterFirst);
-    await get(`${POLYGON}/problems?refresh=true`).expect(200);
-    expect(polygon.callsOf('problems.list')).toHaveLength(2);
-    // Titles are cached per revision, so the refresh does not ask for them again.
-    expect(polygon.callsOf('problem.statements')).toHaveLength(3);
+      ]);
+      await resolve(`${SUM_LINK}/`).expect(200);
+      expect(polygon.callsOf('problem.package')).toHaveLength(1);
+      expect(await redis.get('polygon:link-token:1')).not.toContain(
+        TOKENS['1'],
+      );
+    });
+
+    it('answers a wrong token and a problem not shared with the account with the same refusal', async () => {
+      sharedProblems();
+      const wrongToken = refusalOf(
+        await resolve(linkTo('alice', 'sum', 'pWrong1')).expect(404),
+      );
+      const unshared = refusalOf(
+        await resolve(linkTo('carol', 'secret', 'pWrong1')).expect(404),
+      );
+      expect(wrongToken).toMatchObject({ code: 'polygon_link_refused' });
+      expect(unshared).toEqual(wrongToken);
+      // The token read from the package is kept, so another guess downloads nothing.
+      await resolve(linkTo('alice', 'sum', 'pWrong2'))
+        .expect(404)
+        .expect(errorCode('polygon_link_refused'));
+      expect(polygon.callsOf('problem.package')).toHaveLength(1);
+      await resolve(SUM_LINK).expect(200);
+    });
+
+    it('refuses a link it cannot check: a problem.xml without a url', async () => {
+      sharedProblems().reply('problem.package', {
+        zip: packageRecording(undefined),
+      });
+      await resolve(SUM_LINK)
+        .expect(404)
+        .expect(errorCode('polygon_link_refused'));
+    });
+
+    it('refuses a malformed link before asking Polygon', async () => {
+      sharedProblems();
+      for (const link of [
+        'https://polygon.codeforces.com.evil.io/p1Sum00/alice/sum',
+        'http://polygon.codeforces.com/p1Sum00/alice/sum',
+        'https://polygon.codeforces.com/alice/sum',
+      ])
+        await resolve(link)
+          .expect(400)
+          .expect(errorCode('polygon_link_invalid'));
+      await post(`${POLYGON}/resolve`, {}).expect(400);
+      expect(polygon.calls).toEqual([]);
+    });
+
+    it('asks for a package when there is none, and for a full package when the newest is not one (be#47)', async () => {
+      sharedProblems();
+      await resolve(linkTo('bob', 'none', 'p3None0'))
+        .expect(409)
+        .expect(errorCode('polygon_no_package'));
+      await resolve(linkTo('bob', 'graph', TOKENS['2']))
+        .expect(409)
+        .expect(errorCode('polygon_package_not_ready'));
+      polygon.reply('problem.packages', {
+        result: [pkg(30, 3, 'READY', 'standard')],
+      });
+      expect(refusalOf(await resolve(SUM_LINK).expect(409))).toMatchObject({
+        code: 'polygon_package_not_ready',
+        message:
+          'Polygon problem 1 has no READY full package: its newest package 30 (revision 3) is a READY standard package, without the generated tests. Build a full package (with Linux tests) on Polygon first',
+      });
+    });
+
+    it('names the QHHOJ problem it is already linked to only to a user who may edit that problem', async () => {
+      sharedProblems();
+      await createProblem(api, catalog, {
+        code: 'taken_link',
+        authors: [importerId],
+        polygonLink: linkOf(1) as never,
+      });
+      expect(refusalOf(await resolve(SUM_LINK).expect(409))).toMatchObject({
+        code: 'polygon_already_linked',
+        message: 'Polygon problem 1 is already linked to taken_link',
+        linkedProblemCode: 'taken_link',
+      });
+      const outsider = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'outsider', {
+            permissions: [
+              'judge.import_polygon_package',
+              'judge.edit_own_problem',
+            ],
+          })
+        )._id,
+      );
+      const hidden = await resolve(SUM_LINK, outsider).expect(409);
+      expect(refusalOf(hidden)).toMatchObject({
+        code: 'polygon_already_linked',
+        message: 'Polygon problem 1 is already linked to a QHHOJ problem',
+      });
+      expect(JSON.stringify(hidden.body)).not.toContain('taken_link');
+    });
+
+    it('limits link checks per user', async () => {
+      sharedProblems();
+      for (let check = 0; check < POLYGON_LINK_LIMIT; check += 1)
+        await resolve(SUM_LINK).expect(200);
+      await resolve(SUM_LINK).expect(429).expect(errorCode('rate_limited'));
+      await post(`${POLYGON}/import`, { link: SUM_LINK, code: 'limited' })
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      expect(await queue.count()).toBe(0);
+    });
   });
 
   it('answers not connected without calling Polygon while the secret is unset', async () => {
@@ -275,7 +391,7 @@ describe('Polygon routes', () => {
       expect(dataOf(await get(`${POLYGON}/status`).expect(200))).toMatchObject({
         connected: false,
       });
-      await get(`${POLYGON}/problems`)
+      await post(`${POLYGON}/resolve`, { link: SUM_LINK })
         .expect(409)
         .expect(errorCode('polygon_not_connected'));
       expect(polygon.calls).toEqual([]);
@@ -284,9 +400,10 @@ describe('Polygon routes', () => {
     }
   });
 
-  it('queues an import of the newest READY package with the zip import options and the link', async () => {
+  it('queues a private import of the newest full package, owned by the importer, with the zip import options and the link', async () => {
     sharedProblems();
-    const response = await post(`${POLYGON}/problems/1/import`, {
+    const response = await post(`${POLYGON}/import`, {
+      link: SUM_LINK,
       code: 'from_polygon',
       points: 900,
       groupId: catalog.groups.voi,
@@ -299,6 +416,7 @@ describe('Polygon routes', () => {
       requesterId: importerId,
       code: 'from_polygon',
       mode: 'create',
+      curators: [importerId],
       points: 900,
       groupId: catalog.groups.voi,
       statementLanguages: { vietnamese: 'vi' },
@@ -314,6 +432,7 @@ describe('Polygon routes', () => {
         trigger: 'manual',
       },
     });
+    expect(JSON.stringify(job?.data)).not.toContain(TOKENS['1']);
     const status = dataOf<{ step: string; progress: unknown }>(
       await get(`/api/internal/problems/imports/${job!.id}`).expect(200),
     );
@@ -333,6 +452,17 @@ describe('Polygon routes', () => {
     });
   });
 
+  it('checks the link again on import and queues nothing for a wrong token', async () => {
+    sharedProblems();
+    await post(`${POLYGON}/import`, {
+      link: linkTo('alice', 'sum', 'pWrong1'),
+      code: 'guessed',
+    })
+      .expect(404)
+      .expect(errorCode('polygon_link_refused'));
+    expect(await queue.count()).toBe(0);
+  });
+
   it('answers where a failed import stopped, with the error written for the requester', async () => {
     const worker = new Worker<PolygonImportJob>(
       POLYGON_QUEUE,
@@ -345,7 +475,8 @@ describe('Polygon routes', () => {
     try {
       sharedProblems();
       const { jobId } = dataOf<{ jobId: string }>(
-        await post(`${POLYGON}/problems/1/import`, {
+        await post(`${POLYGON}/import`, {
+          link: SUM_LINK,
           code: 'fails_polygon',
         }).expect(202),
       );
@@ -366,39 +497,6 @@ describe('Polygon routes', () => {
     } finally {
       await worker.close();
     }
-  });
-
-  it('refuses an import whose newest package is not READY, an already linked problem and an unshared one', async () => {
-    sharedProblems();
-    await post(`${POLYGON}/problems/2/import`, { code: 'graph_one' })
-      .expect(409)
-      .expect(errorCode('polygon_package_not_ready'));
-    await post(`${POLYGON}/problems/3/import`, { code: 'none_one' })
-      .expect(409)
-      .expect(errorCode('polygon_package_not_ready'));
-    polygon.reply('problem.packages', {
-      result: [pkg(30, 3, 'READY', 'standard')],
-    });
-    const standardOnly = await post(`${POLYGON}/problems/1/import`, {
-      code: 'standard_one',
-    }).expect(409);
-    expect((standardOnly.body as { error: unknown }).error).toMatchObject({
-      code: 'polygon_package_not_ready',
-      message:
-        'Polygon problem 1 has no READY full package: its newest package 30 (revision 3) is a READY standard package, without the generated tests. Build a full package (with Linux tests) on Polygon first',
-    });
-    sharedProblems();
-    await createProblem(api, catalog, {
-      code: 'taken_link',
-      polygonLink: linkOf(1) as never,
-    });
-    await post(`${POLYGON}/problems/1/import`, { code: 'second_link' })
-      .expect(409)
-      .expect(errorCode('polygon_already_linked'));
-    await post(`${POLYGON}/problems/99/import`, { code: 'unshared' })
-      .expect(404)
-      .expect(errorCode('not_found'));
-    expect(await queue.count()).toBe(0);
   });
 
   it('lists the sync history per problem for its editors, and overall only with judge.edit_all_problem', async () => {

@@ -2,13 +2,14 @@ import { Controller, HttpCode, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '@libs/auth';
 import { PolygonTestResponse } from './dto/polygon-status.response';
-import { PolygonCatalogService } from './polygon-catalog.service';
+import { PolygonClient } from '@libs/problems';
+import { askPolygon } from './polygon-errors';
 
 @ApiTags('Admin: site & settings')
 @RequirePermission('judge.change_settings')
 @Controller('api/internal/polygon')
 export class PolygonConnectionController {
-  constructor(private readonly catalog: PolygonCatalogService) {}
+  constructor(private readonly polygon: PolygonClient) {}
 
   /**
    * Test the Polygon connection
@@ -22,7 +23,8 @@ export class PolygonConnectionController {
    */
   @Post('test')
   @HttpCode(200)
-  test(): Promise<PolygonTestResponse> {
-    return this.catalog.testConnection();
+  async test(): Promise<PolygonTestResponse> {
+    const problems = await askPolygon(() => this.polygon.problems());
+    return { ok: true, problemCount: problems.length };
   }
 }

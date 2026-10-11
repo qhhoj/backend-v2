@@ -2,8 +2,8 @@ import { EMPTY_TEST_CASE, PROBLEM_LIMITS } from '@libs/database';
 import type { JsonObject, ProblemTestCase } from '@libs/database';
 import { PolygonImportError } from './polygon-import.error';
 import { shown } from './polygon-package';
-import { childOf, childrenOf, childText, descendant } from './polygon-xml';
-import type { XmlElement } from './polygon-xml';
+import { childOf, childrenOf, childText, descendant } from '@libs/problems';
+import type { XmlElement } from '@libs/problems';
 
 export interface PlannedTest {
   index: number;

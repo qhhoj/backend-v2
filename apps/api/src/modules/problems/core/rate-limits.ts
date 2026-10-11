@@ -10,3 +10,6 @@ export const PDF_RENDER_LIMIT = 30;
 export const PDF_RENDER_WINDOW_SECONDS = 60;
 /** A failed render job is kept this long: requests get 503 + Retry-After meanwhile, then it is cleared and rendering is retried. */
 export const PDF_FAIL_WINDOW_SECONDS = 10 * 60;
+/** Per user, every Polygon link check (preview or import); one that is not cached downloads a package from Polygon. */
+export const POLYGON_LINK_LIMIT = 20;
+export const POLYGON_LINK_WINDOW_SECONDS = 10 * 60;

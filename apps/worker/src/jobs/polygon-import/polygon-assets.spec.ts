@@ -7,7 +7,7 @@ import { compileInitYaml } from '@libs/problems';
 import { buildProblemXml } from '../../../test/polygon-fixtures';
 import { parseAssets } from './polygon-assets';
 import { PolygonImportError } from './polygon-import.error';
-import { parseXml } from './polygon-xml';
+import { parseXml } from '@libs/problems';
 
 const assets = (fixture: Parameters<typeof buildProblemXml>[0]) =>
   parseAssets(parseXml(buildProblemXml(fixture)));
