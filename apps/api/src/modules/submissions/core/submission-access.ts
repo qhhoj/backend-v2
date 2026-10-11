@@ -155,6 +155,7 @@ export interface SubmissionActions {
   canAbort: boolean;
   canRejudge: boolean;
   canReject: boolean;
+  canLock: boolean;
 }
 
 /** Legacy `abort_submission`: `judge.abort_any_submission`, or the owner until an admin rejudges the submission. */
@@ -182,6 +183,13 @@ export const mayRejectSubmission = (
 ): boolean =>
   canEditProblem && hasPermission(principal, 'judge.reject_submission');
 
+/** Legacy `judge.lock_submission` on the submission form, with edit rights on the problem. */
+export const mayLockSubmission = (
+  principal: Principal,
+  canEditProblem: boolean,
+): boolean =>
+  canEditProblem && hasPermission(principal, 'judge.lock_submission');
+
 /** A rejudge is refused for pending final-submission rows and for submissions a judge holds. */
 const isRejudgeableStatus = (status: SubmissionStatus): boolean =>
   status !== 'PD' && !IN_FLIGHT_STATUSES.includes(status);
@@ -203,5 +211,6 @@ export function submissionActions(
     canReject:
       mayRejectSubmission(principal, facts.canEditProblem) &&
       !UNFINISHED_STATUSES.includes(facts.status),
+    canLock: mayLockSubmission(principal, facts.canEditProblem),
   };
 }

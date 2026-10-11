@@ -403,6 +403,8 @@ afterAll(() => api.teardown());
         api.http().patch(`${JUDGES}/judge-guarded`).send({ isBlocked: true }),
         api.http().post(`${JUDGES}/judge-guarded/key`),
         api.http().post(`${JUDGES}/judge-guarded/disconnect`).send({}),
+        api.http().delete(`${JUDGES}/judge-guarded`),
+        api.http().get(`${JUDGES}/queue`),
       ];
       await api.http().get(JUDGES).expect(401);
       for (const route of routes)
@@ -455,6 +457,20 @@ afterAll(() => api.teardown());
       expect(await bridgeCommands(api)).toEqual([
         { type: 'disconnect-judge', judgeName: 'judge-rot', force: true },
       ]);
+    });
+
+    it('deletes an offline judge and refuses an online one with 409', async () => {
+      await create('judge-old');
+      await create('judge-live');
+      await api.judges.updateOne({ name: 'judge-live' }, { online: true });
+      await authed(api.http().delete(`${JUDGES}/judge-live`), admin)
+        .expect(409)
+        .expect(errorCode('conflict'));
+      await authed(api.http().delete(`${JUDGES}/judge-old`), admin).expect(204);
+      await authed(api.http().delete(`${JUDGES}/judge-old`), admin)
+        .expect(404)
+        .expect(errorCode('not_found'));
+      expect(await api.judges.findOne({ name: 'judge-live' })).not.toBeNull();
     });
   });
 }

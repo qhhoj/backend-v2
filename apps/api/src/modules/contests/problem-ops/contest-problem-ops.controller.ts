@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { BulkRejudgeResponse } from '../../submissions/actions/dto/bulk-rejudge.dto';
+import { BulkRejudgeResponse } from '../../submissions/batch/dto/submission-batch.dto';
 import { QueuedResponse } from '../core/dto/queued.response';
 import { ContestProblemOpsService } from './contest-problem-ops.service';
 import {

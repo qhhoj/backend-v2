@@ -586,6 +586,18 @@
       },
       "BulkRejudgeDto": {
         "properties": {
+          "contest": {
+            "description": "Contest key: only that contest's submissions.",
+            "type": "string"
+          },
+          "dateFrom": {
+            "description": "Submitted at or after this time.",
+            "type": "string"
+          },
+          "dateTo": {
+            "description": "Submitted before this time.",
+            "type": "string"
+          },
           "dryRun": {
             "description": "Count what would be rejudged and change nothing.",
             "type": "boolean"
@@ -595,13 +607,25 @@
             "type": "boolean"
           },
           "idFrom": {
-            "description": "Inclusive id range (UUIDv7 ids sort by submission time).",
+            "description": "Lowest submission id (UUIDv7 ids sort by submission time).",
             "format": "uuid",
             "type": "string"
           },
           "idTo": {
-            "description": "Highest submission id to rejudge.",
+            "description": "Highest submission id.",
             "format": "uuid",
+            "type": "string"
+          },
+          "ids": {
+            "description": "Only these submissions (a selection from the list).",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "judgedOn": {
+            "description": "Only submissions last graded by this judge.",
             "type": "string"
           },
           "languages": {
@@ -614,7 +638,7 @@
             "type": "array"
           },
           "problem": {
-            "description": "Problem code; required.",
+            "description": "Problem code.",
             "type": "string"
           },
           "results": {
@@ -623,11 +647,13 @@
               "$ref": "#/components/schemas/SubmissionResult"
             },
             "type": "array"
+          },
+          "user": {
+            "description": "Username.",
+            "maxLength": 30,
+            "type": "string"
           }
         },
-        "required": [
-          "problem"
-        ],
         "type": "object"
       },
       "BulkRejudgeResponse": {
@@ -643,12 +669,115 @@
           "dryRun": {
             "description": "Whether nothing was changed.",
             "type": "boolean"
+          },
+          "sample": {
+            "description": "The newest few matches, on a dry run only; empty otherwise.",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionListItemResponse"
+            },
+            "type": "array"
           }
         },
         "required": [
           "count",
           "dryRun",
-          "allowed"
+          "allowed",
+          "sample"
+        ],
+        "type": "object"
+      },
+      "BulkRescoreDto": {
+        "properties": {
+          "contest": {
+            "description": "Contest key: only that contest's submissions.",
+            "type": "string"
+          },
+          "dateFrom": {
+            "description": "Submitted at or after this time.",
+            "type": "string"
+          },
+          "dateTo": {
+            "description": "Submitted before this time.",
+            "type": "string"
+          },
+          "dryRun": {
+            "description": "Count what would be rescored and queue nothing.",
+            "type": "boolean"
+          },
+          "idFrom": {
+            "description": "Lowest submission id (UUIDv7 ids sort by submission time).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "idTo": {
+            "description": "Highest submission id.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "ids": {
+            "description": "Only these submissions (a selection from the list).",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "judgedOn": {
+            "description": "Only submissions last graded by this judge.",
+            "type": "string"
+          },
+          "languages": {
+            "description": "Only submissions in these language ids.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "problem": {
+            "description": "Problem code.",
+            "type": "string"
+          },
+          "results": {
+            "description": "Only submissions with these verdicts.",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionResult"
+            },
+            "type": "array"
+          },
+          "user": {
+            "description": "Username.",
+            "maxLength": 30,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BulkRescoreResponse": {
+        "properties": {
+          "contests": {
+            "description": "Contests whose results are recomputed.",
+            "type": "number"
+          },
+          "count": {
+            "description": "Submissions matched.",
+            "type": "number"
+          },
+          "dryRun": {
+            "description": "Whether nothing was queued.",
+            "type": "boolean"
+          },
+          "problems": {
+            "description": "Problems whose submissions are recomputed (outside a contest scope).",
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "problems",
+          "contests",
+          "dryRun"
         ],
         "type": "object"
       },
@@ -4928,6 +5057,59 @@
         ],
         "type": "object"
       },
+      "JudgeQueueResponse": {
+        "properties": {
+          "byLanguage": {
+            "description": "Queued submissions per language, largest first.",
+            "items": {
+              "$ref": "#/components/schemas/QueueLanguageResponse"
+            },
+            "type": "array"
+          },
+          "byPriority": {
+            "description": "Queued submissions per priority, most urgent first.",
+            "items": {
+              "$ref": "#/components/schemas/QueuePriorityResponse"
+            },
+            "type": "array"
+          },
+          "grading": {
+            "description": "Being graded (G).",
+            "type": "number"
+          },
+          "oldestQueuedSince": {
+            "description": "When the longest-waiting queued submission was submitted or rejudged; null when none waits.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "pinned": {
+            "description": "Queued submissions pinned to one judge, largest first.",
+            "items": {
+              "$ref": "#/components/schemas/QueuePinnedResponse"
+            },
+            "type": "array"
+          },
+          "processing": {
+            "description": "Handed to a judge, not started (P).",
+            "type": "number"
+          },
+          "queued": {
+            "description": "Waiting for a judge (QU).",
+            "type": "number"
+          }
+        },
+        "required": [
+          "queued",
+          "processing",
+          "grading",
+          "oldestQueuedSince",
+          "byPriority",
+          "byLanguage",
+          "pinned"
+        ],
+        "type": "object"
+      },
       "JudgeResponse": {
         "properties": {
           "build": {
@@ -8537,6 +8719,85 @@
         ],
         "type": "object"
       },
+      "QueueLanguageResponse": {
+        "properties": {
+          "count": {
+            "description": "Queued submissions in this language.",
+            "type": "number"
+          },
+          "id": {
+            "description": "Language id.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Language key; null when the language is gone.",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name; null when the language is gone.",
+            "nullable": true,
+            "type": "string"
+          },
+          "onlineJudges": {
+            "description": "Connected, usable judges that run it; 0 means the queue cannot drain.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "count",
+          "onlineJudges"
+        ],
+        "type": "object"
+      },
+      "QueuePinnedResponse": {
+        "properties": {
+          "count": {
+            "description": "Queued submissions pinned to it.",
+            "type": "number"
+          },
+          "judge": {
+            "description": "Judge name the submissions wait for.",
+            "type": "string"
+          },
+          "online": {
+            "description": "Whether that judge is connected and takes work.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "judge",
+          "count",
+          "online"
+        ],
+        "type": "object"
+      },
+      "QueuePriorityResponse": {
+        "properties": {
+          "count": {
+            "description": "Queued submissions at this priority.",
+            "type": "number"
+          },
+          "oldestSince": {
+            "description": "When the longest-waiting one was submitted or rejudged.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "priority": {
+            "description": "0 contest, 1 normal, 2 rejudge, 3 batch rejudge.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "priority",
+          "count",
+          "oldestSince"
+        ],
+        "type": "object"
+      },
       "QueuedResponse": {
         "properties": {
           "queued": {
@@ -10420,6 +10681,130 @@
         ],
         "type": "string"
       },
+      "SubmissionBatchAction": {
+        "description": "What was run.",
+        "enum": [
+          "rejudge",
+          "rescore"
+        ],
+        "type": "string"
+      },
+      "SubmissionBatchFilterDto": {
+        "properties": {
+          "contest": {
+            "description": "Contest key: only that contest's submissions.",
+            "type": "string"
+          },
+          "dateFrom": {
+            "description": "Submitted at or after this time.",
+            "type": "string"
+          },
+          "dateTo": {
+            "description": "Submitted before this time.",
+            "type": "string"
+          },
+          "idFrom": {
+            "description": "Lowest submission id (UUIDv7 ids sort by submission time).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "idTo": {
+            "description": "Highest submission id.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "ids": {
+            "description": "Only these submissions (a selection from the list).",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "judgedOn": {
+            "description": "Only submissions last graded by this judge.",
+            "type": "string"
+          },
+          "languages": {
+            "description": "Only submissions in these language ids.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "problem": {
+            "description": "Problem code.",
+            "type": "string"
+          },
+          "results": {
+            "description": "Only submissions with these verdicts.",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionResult"
+            },
+            "type": "array"
+          },
+          "user": {
+            "description": "Username.",
+            "maxLength": 30,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SubmissionBatchLogResponse": {
+        "properties": {
+          "action": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionBatchAction"
+              }
+            ],
+            "description": "What was run."
+          },
+          "count": {
+            "description": "Submissions it touched.",
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "When it ran.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "filter": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionBatchFilterDto"
+              }
+            ],
+            "description": "The filter it ran with."
+          },
+          "id": {
+            "description": "Log entry id.",
+            "type": "string"
+          },
+          "user": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionBatchUserResponse"
+              }
+            ],
+            "description": "Who ran it.",
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "action",
+          "id",
+          "user",
+          "count",
+          "filter",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "SubmissionBatchResponse": {
         "properties": {
           "batch": {
@@ -10454,6 +10839,24 @@
           "status",
           "points",
           "total"
+        ],
+        "type": "object"
+      },
+      "SubmissionBatchUserResponse": {
+        "properties": {
+          "id": {
+            "description": "User id.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username; null when the user is gone.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username"
         ],
         "type": "object"
       },
@@ -10593,7 +10996,7 @@
             "type": "object"
           },
           "lockedAfter": {
-            "description": "Rejudging is refused after this time. Editors only (the contest's lock setting is staff data); null for everyone else and when the submission never locks.",
+            "description": "Rejudging is refused after this time (a lock). Editors only (the contest's lock setting is staff data); null for everyone else and when the submission never locks.",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -11171,6 +11574,10 @@
             "description": "Whether `POST /submissions/{id}/abort` is allowed.",
             "type": "boolean"
           },
+          "canLock": {
+            "description": "Whether `POST` and `DELETE /submissions/{id}/lock` are allowed.",
+            "type": "boolean"
+          },
           "canReject": {
             "description": "Whether `POST /submissions/{id}/reject` is allowed.",
             "type": "boolean"
@@ -11183,7 +11590,8 @@
         "required": [
           "canAbort",
           "canRejudge",
-          "canReject"
+          "canReject",
+          "canLock"
         ],
         "type": "object"
       },
@@ -23391,7 +23799,100 @@
         ]
       }
     },
+    "/api/internal/judges/queue": {
+      "get": {
+        "description": "Needs `judge.change_judge`. Counts queued (QU), handed-out (P) and grading\n(G) submissions; when the longest-waiting queued one was submitted or\nrejudged; queued counts per priority (0 contest, 1 normal, 2 rejudge, 3\nbatch rejudge), per language with how many usable online judges run it (0\nmeans that language cannot drain), and per judge they are pinned to.",
+        "operationId": "JudgesController_queueSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/JudgeQueueResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the judging queue's health",
+        "tags": [
+          "Admin: judges & languages"
+        ]
+      }
+    },
     "/api/internal/judges/{name}": {
+      "delete": {
+        "description": "Needs `judge.change_judge`. Only an offline judge can be deleted: 409\n`conflict` (issue `judge_online`) while it is connected, 404 `not_found` for\nan unknown name. Queued submissions pinned to it fall back to any judge.\nAnswers 204.",
+        "operationId": "JudgesController_remove",
+        "parameters": [
+          {
+            "description": "Judge name.",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a judge server",
+        "tags": [
+          "Admin: judges & languages"
+        ]
+      },
       "patch": {
         "description": "Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,\n`isDisabled` and `description`. Blocking disconnects the judge and refuses\nit until unblocked; disabling tells a connected judge to stop taking work,\nenabling lets it resume. Responds 404 `not_found` (issue `judge_not_found`)\nfor an unknown name.",
         "operationId": "JudgesController_update",
@@ -31124,10 +31625,63 @@
         "x-enveloped": true
       }
     },
+    "/api/internal/submissions/batches/recent": {
+      "get": {
+        "description": "Needs `judge.rejudge_submission`. The 20 newest runs, newest first, with who\nran them, the filter and how many submissions they touched. Only holders of\n`judge.edit_all_problem` see everyone's runs; others see their own.",
+        "operationId": "SubmissionBatchController_recent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/SubmissionBatchLogResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List recent bulk rejudges and rescores",
+        "tags": [
+          "Judging"
+        ]
+      }
+    },
     "/api/internal/submissions/rejudge": {
       "post": {
-        "description": "Needs `judge.rejudge_submission` and edit rights on the problem named by\n`problem` (code). Matches the problem's submissions by optional `idFrom` and\n`idTo`, `languages` and `results`; submissions a judge currently holds and\npending final-submission rows are skipped, and locked ones unless `force` is\nset. More than 10 matches also need `judge.rejudge_submission_lot` (403\n`forbidden`). With `dryRun` nothing changes and `count` and `allowed` report\nwhat would happen. Otherwise the matches are queued at batch priority and\n`count` is how many were reset.",
-        "operationId": "SubmissionActionsController_bulkRejudge",
+        "description": "Needs `judge.rejudge_submission` plus edit rights on the scope: the contest\nnamed by `contest` (its submissions only), else the problem named by\n`problem`, else `judge.edit_all_problem` for a site-wide batch (403\n`forbidden`). Narrow it with `user`, `ids`, `idFrom`/`idTo`,\n`dateFrom`/`dateTo`, `languages`, `results` and `judgedOn`. Submissions a\njudge currently holds and pending final-submission rows are skipped, and\nlocked ones unless `force` is set. More than 10 matches also need\n`judge.rejudge_submission_lot` (403 `forbidden`). With `dryRun` nothing\nchanges: `count`, `allowed` and a `sample` of the newest matches report what\nwould happen. Otherwise the matches are queued at batch priority, the run is\nlogged and `count` is how many were reset. 404 `not_found` for an unknown\ncontest or user or a problem the caller cannot see.",
+        "operationId": "SubmissionBatchController_rejudge",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -31178,7 +31732,67 @@
             }
           }
         },
-        "summary": "Rejudge many submissions of a problem",
+        "summary": "Rejudge many submissions",
+        "tags": [
+          "Judging"
+        ]
+      }
+    },
+    "/api/internal/submissions/rescore": {
+      "post": {
+        "description": "Same rights and filter as the bulk rejudge, over finished submissions. With\na `contest` the contest's results are recomputed; otherwise every matched\nproblem is rescored (each graded submission's points from its case totals\nand the problem's current points and partial flag, then its users, stats\nand contests). Use it after changing a problem's points or partial flag.\nWith `dryRun` nothing is queued. The run is logged.",
+        "operationId": "SubmissionBatchController_rescore",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRescoreDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BulkRescoreResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Recalculate the points of many submissions",
         "tags": [
           "Judging"
         ]
@@ -31334,6 +31948,94 @@
           }
         },
         "summary": "Abort a submission that is waiting or being judged",
+        "tags": [
+          "Judging"
+        ]
+      }
+    },
+    "/api/internal/submissions/{id}/lock": {
+      "delete": {
+        "description": "Same rights as locking. Clears the lock, including one a contest set, so the\nsubmission can be rejudged again. Answers 204.",
+        "operationId": "SubmissionActionsController_unlock",
+        "parameters": [
+          {
+            "description": "Submission id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Unlock a submission",
+        "tags": [
+          "Judging"
+        ]
+      },
+      "post": {
+        "description": "Needs `judge.lock_submission` and edit rights on the problem (403\n`forbidden`). A locked submission is refused by a single rejudge (409\n`conflict`) and skipped by bulk rejudges unless they force it. Logged as a\nsubmission revision. Answers 204.",
+        "operationId": "SubmissionActionsController_lock",
+        "parameters": [
+          {
+            "description": "Submission id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lock a submission",
         "tags": [
           "Judging"
         ]

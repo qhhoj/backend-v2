@@ -2,13 +2,22 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
-import { JudgingModule, SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import { CONTEST_RESCORE_QUEUE } from '@libs/contests';
+import {
+  JudgingModule,
+  PROBLEM_RESCORE_QUEUE,
+  SUBMISSION_GRADED_QUEUE,
+} from '@libs/judging';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { EventsModule } from '../events/events.module';
 import { JudgesApiModule } from '../judges/judges-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionActionsController } from './actions/submission-actions.controller';
 import { SubmissionActionsService } from './actions/submission-actions.service';
+import { BatchLogRepository } from './batch/batch-log.repository';
+import { BatchScopeService } from './batch/batch-scope.service';
+import { SubmissionBatchController } from './batch/submission-batch.controller';
+import { SubmissionBatchService } from './batch/submission-batch.service';
 import { BestSubmissionsController } from './best/best-submissions.controller';
 import { BestSubmissionsRepository } from './best/best-submissions.repository';
 import { BestSubmissionsService } from './best/best-submissions.service';
@@ -29,20 +38,21 @@ import { SubmissionsService } from './core/submissions.service';
     ProblemsApiModule,
     JudgesApiModule,
     JudgingModule,
-    BullModule.registerQueue({ name: SUBMISSION_GRADED_QUEUE }),
+    BullModule.registerQueue(
+      { name: SUBMISSION_GRADED_QUEUE },
+      { name: PROBLEM_RESCORE_QUEUE },
+      { name: CONTEST_RESCORE_QUEUE },
+    ),
   ],
   controllers: [
     SubmissionCreateController,
     SubmissionsController,
     SubmissionActionsController,
+    SubmissionBatchController,
     SubmissionStreamsController,
     BestSubmissionsController,
   ],
-  exports: [
-    SubmissionsService,
-    SubmissionsRepository,
-    SubmissionActionsService,
-  ],
+  exports: [SubmissionsService, SubmissionsRepository, SubmissionBatchService],
   providers: [
     SubmissionsRepository,
     SubmissionCreateService,
@@ -53,6 +63,9 @@ import { SubmissionsService } from './core/submissions.service';
     SubmissionStreamsService,
     BestSubmissionsRepository,
     BestSubmissionsService,
+    BatchScopeService,
+    BatchLogRepository,
+    SubmissionBatchService,
   ],
 })
 export class SubmissionsApiModule {}
