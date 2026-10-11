@@ -15,6 +15,8 @@ export interface BridgeTimings {
   runCaseBudget: number;
   /** A queued submission pinned to a judge that has not been connected this long after it was submitted falls back to any judge. */
   pinFallbackMs: number;
+  /** A test generation still held this long after its own `deadline_s` is cancelled and fails with JOB_TIME_LIMIT. */
+  generationGraceMs: number;
 }
 
 export const BRIDGE_TIMINGS = Symbol('BRIDGE_TIMINGS');
@@ -30,6 +32,7 @@ export const DEFAULT_BRIDGE_TIMINGS: BridgeTimings = {
   runMarginMs: 10 * 60_000,
   runCaseBudget: 100,
   pinFallbackMs: 5 * 60_000,
+  generationGraceMs: 60_000,
 };
 
 /** Deadline of one run from its Assign; `null` (no deadline) when the inputs are not finite. */

@@ -1,5 +1,5 @@
 import { newId } from '@libs/database';
-import type { AssignmentRef } from '@libs/judge-proto';
+import type { AssignmentRef, GenerateTests } from '@libs/judge-proto';
 import type { DispatchTarget } from '../src/dispatch/slots';
 import type { AssignRequest } from '../src/submissions/assign-request';
 
@@ -8,6 +8,8 @@ export class RecordingJudge implements DispatchTarget {
   readonly id = newId();
   readonly inFlight = new Map<string, number>();
   readonly winding = new Set<string>();
+  readonly generations = new Set<string>();
+  features: ReadonlySet<string> = new Set();
   isDisabled = false;
   isDraining = false;
   isClosed = false;
@@ -15,6 +17,8 @@ export class RecordingJudge implements DispatchTarget {
   executors: ReadonlySet<string> = new Set(['CPP17', 'PY3']);
   readonly received: AssignRequest[] = [];
   readonly aborts: AssignmentRef[] = [];
+  readonly generated: GenerateTests[] = [];
+  readonly cancelledGenerations: string[] = [];
   readonly disconnects: boolean[] = [];
   wasReplaced = false;
 
@@ -29,6 +33,14 @@ export class RecordingJudge implements DispatchTarget {
 
   abort(ref: AssignmentRef): void {
     this.aborts.push(ref);
+  }
+
+  generate(message: GenerateTests): void {
+    this.generated.push(message);
+  }
+
+  cancelGeneration(generationId: string): void {
+    this.cancelledGenerations.push(generationId);
   }
 
   disconnect({ isForced }: { isForced: boolean }): void {

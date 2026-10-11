@@ -166,6 +166,8 @@ export class CommandsService {
         return;
       case 'disable-judge':
         return this.dispatch.setDisabled(command.judgeName, command.isDisabled);
+      case 'generate':
+        return this.dispatch.enqueueGenerations([command.generationId]);
     }
   }
 }

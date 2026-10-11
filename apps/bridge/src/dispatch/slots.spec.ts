@@ -1,9 +1,11 @@
 import { newId } from '@libs/database';
+import { GENERATE_FEATURE } from '@libs/judging';
 import {
   canJudge,
   freeSlots,
   insertQueued,
   loadOf,
+  mayStartGeneration,
   nextFor,
   pickJudge,
   windingKey,
@@ -20,6 +22,8 @@ const judge = (name: string, extra: Partial<JudgeState> = {}): JudgeState => ({
   slots: 1,
   inFlight: new Map(),
   winding: new Set(),
+  features: new Set(),
+  generations: new Set(),
   ...extra,
 });
 const queued = (extra: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
@@ -175,5 +179,55 @@ describe('nextFor', () => {
     const queue: QueuedSubmission[] = [];
     for (const entry of [held, later]) insertQueued(queue, entry);
     expect(nextFor(free, queue, [free, busy])).toBe(later);
+  });
+});
+
+describe('generations in the slot count', () => {
+  const capable = (extra: Partial<JudgeState> = {}) =>
+    judge('gen', { features: new Set([GENERATE_FEATURE]), ...extra });
+  const holding = (count: number) =>
+    new Set(Array.from({ length: count }, () => newId()));
+
+  it('a held generation takes a slot', () => {
+    const busy = capable({ slots: 2, generations: holding(1) });
+    expect(freeSlots(busy)).toBe(1);
+    expect(loadOf(busy)).toBe(0.5);
+  });
+
+  it.each([
+    ['4 free of 4', { slots: 4 }, false, true],
+    ['2 free of 4', { slots: 4, inFlight: busyWith(2) }, false, true],
+    [
+      'its last free slot of 4',
+      { slots: 4, inFlight: busyWith(3) },
+      false,
+      false,
+    ],
+    [
+      'the third slot after two generations',
+      { slots: 4, generations: holding(2) },
+      false,
+      true,
+    ],
+    [
+      'the last slot after three generations',
+      { slots: 4, generations: holding(3) },
+      false,
+      false,
+    ],
+    ['the only slot of a 1-slot judge', { slots: 1 }, false, true],
+    ['a 1-slot judge with a waiting submission', { slots: 1 }, true, false],
+    ['a 4-slot judge with a waiting submission', { slots: 4 }, true, false],
+    ['no free slot', { slots: 1, inFlight: busyWith(1) }, false, false],
+    ['a disabled judge', { slots: 4, isDisabled: true }, false, false],
+    ['a draining judge', { slots: 4, isDraining: true }, false, false],
+    [
+      'a judge without the feature',
+      { slots: 4, features: new Set<string>() },
+      false,
+      false,
+    ],
+  ])('offers %s: %s', (_name, extra, isWaiting, expected) => {
+    expect(mayStartGeneration(capable(extra), isWaiting)).toBe(expected);
   });
 });

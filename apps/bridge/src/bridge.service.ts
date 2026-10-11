@@ -33,6 +33,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.judges.setAllOffline();
     const position = await this.commands.position();
     await this.dispatch.enqueue(await this.submissions.loadQueued());
+    await this.dispatch.enqueueGenerations();
     this.commands.start(position);
     this.resyncTimer = setInterval(
       () => void this.resync(),
@@ -59,6 +60,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
       await this.reconcileJudges();
       await this.requeueStranded();
       await this.unpinAbsent();
+      await this.dispatch.resyncGenerations();
       await this.dispatch.clearRetryBans();
       const rows = await this.submissions.loadQueued();
       // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it
