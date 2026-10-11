@@ -32,8 +32,6 @@ import { KNAPSACK, SIEVE, SIEVE_RENAMED } from './similarity-fixtures';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
-jest.setTimeout(120_000);
-
 /** A made-up engine result, for tests about what the service does with pairs rather than how they are found. */
 const fakePair = (
   left: EngineSubmission,
@@ -164,6 +162,11 @@ describe('similarity run', () => {
       .mockImplementation((request) =>
         Promise.resolve().then(() => answer(request)),
       );
+  /** Pairs every two submissions of a group: for tests about what reaches the engine and what the run does around it; the real engine (a Dolos child per group) is kept for the tests about how pairs are found. */
+  const pairEveryone = ({ submissions }: EngineRequest): EnginePair[] =>
+    submissions.flatMap((left, index) =>
+      submissions.slice(index + 1).map((right) => fakePair(left, right, 0.9)),
+    );
 
   beforeAll(async () => {
     worker = await setupWorkerTest();
@@ -215,6 +218,7 @@ describe('similarity run', () => {
   });
 
   it('leaves out sources that never ran: compile errors and unjudged submissions', async () => {
+    fakeEngine(pairEveryone);
     const [ann, bob, cat, dan] = await newUsers(4);
     const original = await submit(ann, SIEVE);
     const copy = await submit(bob, SIEVE_RENAMED);
@@ -259,6 +263,7 @@ describe('similarity run', () => {
   });
 
   it('skips empty and oversize sources and counts them without failing', async () => {
+    fakeEngine(pairEveryone);
     const [ann, bob, cat, dan] = await newUsers(4);
     await submit(ann, SIEVE);
     await submit(bob, SIEVE_RENAMED);
@@ -276,6 +281,7 @@ describe('similarity run', () => {
   });
 
   it('compares only the newest submissions past the cap and says it truncated', async () => {
+    fakeEngine(pairEveryone);
     const submissions = [];
     for (const userId of await newUsers(5))
       submissions.push(await submit(userId, SIEVE));
@@ -294,6 +300,7 @@ describe('similarity run', () => {
   });
 
   it('stores at most maxPairs pairs for the whole run', async () => {
+    fakeEngine(pairEveryone);
     for (const userId of await newUsers(4)) await submit(userId, SIEVE);
     const { run, pairs } = await runAndLoad({
       limits: { ...limits, maxPairs: 2 },
@@ -379,6 +386,7 @@ describe('similarity run', () => {
   });
 
   it('compares a contest per contest problem, live and spectating participations only', async () => {
+    fakeEngine(pairEveryone);
     const contest = await contestOf([
       { entry: problem, order: 0 },
       { entry: await seedProblem(worker), order: 1 },
@@ -419,6 +427,7 @@ describe('similarity run', () => {
   });
 
   it('records a failed run without touching the previous results, and the next success replaces them', async () => {
+    fakeEngine(pairEveryone);
     const [ann, bob] = await newUsers(2);
     await submit(ann, SIEVE);
     await submit(bob, SIEVE_RENAMED);
@@ -448,17 +457,17 @@ describe('similarity run', () => {
   });
 
   it('writes nothing for a run abandoned while it compared, and keeps the previous results', async () => {
+    fakeEngine(pairEveryone);
     await submit(await newUser(), SIEVE);
     await submit(await newUser(), SIEVE_RENAMED);
     const previous = await runAndLoad();
-    const realCompare = engine.compare.bind(engine);
     // What the api's stale-run release does to a run past its time.
     fakeEngine(async (request) => {
       await worker.similarityRuns.updateOne(
         { status: 'running' },
         { status: 'failed', active: false, error: 'abandoned' },
       );
-      return realCompare(request);
+      return pairEveryone(request);
     });
     const abandoned = await runAndLoad();
     expect(abandoned.run).toMatchObject({
@@ -484,10 +493,11 @@ describe('similarity run', () => {
   });
 
   it('ignores a finished run (a redelivered job) and an unknown run', async () => {
+    const spy = fakeEngine(pairEveryone);
     await submit(await newUser(), SIEVE);
     await submit(await newUser(), SIEVE_RENAMED);
     const first = await runAndLoad();
-    const spy = jest.spyOn(engine, 'compare');
+    spy.mockClear();
     await service.run(first.run._id);
     await service.run(newId());
     expect(spy).not.toHaveBeenCalled();
@@ -535,6 +545,7 @@ describe('similarity run', () => {
   });
 
   it('keeps the previous results when storing the new ones fails', async () => {
+    fakeEngine(pairEveryone);
     await submit(await newUser(), SIEVE);
     await submit(await newUser(), SIEVE_RENAMED);
     const previous = await runAndLoad();
@@ -571,6 +582,7 @@ describe('similarity run', () => {
   });
 
   it('fails the run on worker shutdown, starting no further group and keeping the previous results', async () => {
+    fakeEngine(pairEveryone);
     const users = await newUsers(4);
     await submit(users[0], SIEVE);
     await submit(users[1], SIEVE_RENAMED);
@@ -606,6 +618,7 @@ describe('similarity run', () => {
   });
 
   it('does not let markFailed overwrite a finished run', async () => {
+    fakeEngine(pairEveryone);
     await submit(await newUser(), SIEVE);
     await submit(await newUser(), SIEVE_RENAMED);
     const { run } = await runAndLoad();

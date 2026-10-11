@@ -3,8 +3,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseModule, Language } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import { Model } from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { LanguagesQuerier } from './languages.querier';
 
 const waitFor = async (check: () => boolean, timeoutMs = 5000) => {
@@ -26,7 +26,7 @@ const cpp = {
 };
 
 describe('LanguagesQuerier', () => {
-  let replSet: MongoMemoryReplSet,
+  let replSet: TestMongo,
     testingModule: TestingModule,
     languages: Model<Language>,
     querier: LanguagesQuerier;

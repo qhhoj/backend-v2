@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { ContestTagSchema } from './contest-tag.schema';
 
 describe('Contest tag schema', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Tags = mongoose.model('ContestTagSchemaSpec', ContestTagSchema);
 
   beforeAll(async () => {

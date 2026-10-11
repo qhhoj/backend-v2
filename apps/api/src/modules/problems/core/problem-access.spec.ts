@@ -14,8 +14,8 @@ import {
   uuidStr,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import type { Model } from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import {
   ProblemAccess,
   ProblemAccessView,
@@ -223,7 +223,7 @@ describe('ProblemAccess with a current contest (legacy is_accessible_by step 1)'
 });
 
 describe('ProblemAccess.visibleFilter', () => {
-  let replSet: MongoMemoryReplSet,
+  let replSet: TestMongo,
     testingModule: TestingModule,
     problems: Model<Problem>;
   const generated: Array<{ code: string; view: ProblemAccessView }> = [];

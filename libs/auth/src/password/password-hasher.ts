@@ -10,6 +10,14 @@ const MAX_ITERATIONS = 2_147_483_647;
 const MIN_SALT_LENGTH = 22;
 
 export const PASSWORD_ITERATIONS = 870_000;
+
+/** The cost of a new hash and the floor below which a login rehashes: `PASSWORD_ITERATIONS`, unless a jest run sets `TEST_PASSWORD_ITERATIONS` (ignored outside jest) so e2e logins skip the 870k rounds. */
+export function passwordIterations(): number {
+  const override = Number(process.env.TEST_PASSWORD_ITERATIONS);
+  return process.env.JEST_WORKER_ID && override > 0
+    ? override
+    : PASSWORD_ITERATIONS;
+}
 const DUMMY_SALT = 'dummysaltdummysaltdumm';
 /** Well-formed hash no password matches; verifying against it keeps unknown-user logins as slow as real ones. */
 export const DUMMY_PASSWORD_HASH = `pbkdf2_sha256$${PASSWORD_ITERATIONS}$${DUMMY_SALT}$${'A'.repeat(43)}=`;
@@ -32,7 +40,7 @@ export async function verifyPassword(
     !expectedText
   ) {
     // Unusable or malformed hash (e.g. Django "!..."): burn the same work as a real check so timing does not reveal it.
-    await pbkdf2Async(password, DUMMY_SALT, PASSWORD_ITERATIONS, 32, 'sha256');
+    await pbkdf2Async(password, DUMMY_SALT, passwordIterations(), 32, 'sha256');
     return false;
   }
   const expected = Buffer.from(expectedText, 'base64');
@@ -53,7 +61,7 @@ export async function verifyPassword(
 
 export async function hashPassword(
   password: string,
-  iterations = PASSWORD_ITERATIONS,
+  iterations = passwordIterations(),
 ): Promise<string> {
   const salt = randomBytes(32)
     .toString('base64')
@@ -67,7 +75,7 @@ export function needsRehash(encoded: string): boolean {
   const [algorithm, iterations, salt = ''] = encoded.split('$');
   return (
     algorithm !== 'pbkdf2_sha256' ||
-    Number(iterations) < PASSWORD_ITERATIONS ||
+    Number(iterations) < passwordIterations() ||
     salt.length < MIN_SALT_LENGTH
   );
 }

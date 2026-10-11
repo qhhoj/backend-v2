@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { ProblemSchema } from './problem.schema';
 
 describe('Problem soft-delete fields', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Problems = mongoose.model('ProblemSoftDeleteSpec', ProblemSchema);
   const fields = (code: string) => ({
     code,

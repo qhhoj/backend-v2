@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { ContestBalloonSchema } from './contest-balloon.schema';
 import { ContestFeedKeySchema } from './contest-feed-key.schema';
 
 describe('contest operations schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Balloons = mongoose.model(
     'ContestBalloonSchemaSpec',
     ContestBalloonSchema,

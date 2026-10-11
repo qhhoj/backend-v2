@@ -610,47 +610,18 @@ afterAll(() => api.teardown());
         await Promise.all(
           (await redis.keys('rate:*')).map((key) => redis.del(key)),
         );
-        await createProblem(api, catalog, {
-          code: 'flood',
-          authors: [editorId],
-        });
       });
 
-      it('rejects markdown that renders past 2 MiB on every statement path', async () => {
-        const rejected = (response: { body: unknown }, field: string) =>
-          expect(limitFieldsOf(response)).toHaveProperty(field);
-        rejected(
-          await authed(api.http().patch(`${PROBLEMS}/flood`), editor)
-            .send({ description: OVER_TWO_MIB })
-            .expect(400)
-            .expect(errorCode('validation_failed')),
-          'description',
-        );
-        rejected(
-          await authed(
-            api.http().put(`${PROBLEMS}/flood/translations/vi`),
-            editor,
-          )
-            .send({ name: 'x', description: OVER_TWO_MIB })
-            .expect(400),
-          'description',
-        );
-        rejected(
-          await authed(api.http().put(`${PROBLEMS}/flood/editorial`), editor)
-            .send({
-              isPublic: false,
-              publishOn: '2026-01-01T00:00:00Z',
-              content: OVER_TWO_MIB,
-            })
-            .expect(400),
-          'content',
-        );
-        rejected(
-          await authed(api.http().post(`${PROBLEMS}/render-preview`), editor)
-            .send({ style: 'problem', markdown: OVER_TWO_MIB })
-            .expect(400),
-          'markdown',
-        );
+      // The cap itself is unit-tested (problem-markup.spec.ts); this proves the 400 field mapping over HTTP.
+      it('rejects markdown that renders past 2 MiB with the field named', async () => {
+        const response = await authed(
+          api.http().post(`${PROBLEMS}/render-preview`),
+          editor,
+        )
+          .send({ style: 'problem', markdown: OVER_TWO_MIB })
+          .expect(400)
+          .expect(errorCode('validation_failed'));
+        expect(limitFieldsOf(response)).toHaveProperty('markdown');
       });
     });
   });

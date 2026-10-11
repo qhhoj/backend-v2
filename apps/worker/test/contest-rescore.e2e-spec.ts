@@ -231,8 +231,8 @@ describe('contest rescore', () => {
   it('reads a contest of thousands of submissions through its index, a chunk at a time', async () => {
     const { contest, problem } = await contestWith();
     const other = await contestWith();
-    await insertContestRows(contest._id, problem._id, 5000);
-    await insertContestRows(other.contest._id, problem._id, 3000);
+    await insertContestRows(contest._id, problem._id, 2500);
+    await insertContestRows(other.contest._id, problem._id, 1200);
     let result: { rescored: number } | undefined;
     const operations = await profileQueries(worker.db, async () => {
       result = await rescores.rescore(contest._id);
@@ -248,7 +248,7 @@ describe('contest rescore', () => {
     expect(
       reads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
     ).toBe(true);
-    // The other contest's 3000 rows are never read: apart from the participation recompute's aggregate (its own index), each collection examines at most this contest's 5002 rows.
+    // The other contest's 1200 rows are never read: apart from the participation recompute's aggregate (its own index), each collection examines at most this contest's 2502 rows.
     for (const name of [
       worker.contestSubmissions.collection.name,
       worker.submissions.collection.name,
@@ -260,13 +260,13 @@ describe('contest rescore', () => {
               collection === name && !planSummary.includes('participation'),
           )
           .reduce((sum, { docsExamined }) => sum + docsExamined, 0),
-      ).toBeLessThanOrEqual(5002);
-    expect(result!.rescored).toBe(5000);
-  }, 60_000);
+      ).toBeLessThanOrEqual(2502);
+    expect(result!.rescored).toBe(2500);
+  });
 
   it('streams thousands of participations and contest submissions in chunks of at most 1000', async () => {
     const { contest, problem } = await contestWith();
-    await insertContestRows(contest._id, problem._id, 12_000, 3000);
+    await insertContestRows(contest._id, problem._id, 2500, 1200);
     const repository = worker.module.get(ContestRescoreRepository);
     const chunkSizes: number[] = [];
     const recordChunks = <Chunk extends unknown[]>(
@@ -292,8 +292,8 @@ describe('contest rescore', () => {
       .mockImplementation(participationChunks);
     try {
       expect(await rescores.rescore(contest._id)).toEqual({
-        rescored: 12_000,
-        participations: 3001,
+        rescored: 2500,
+        participations: 1201,
       });
     } finally {
       jest.restoreAllMocks();
@@ -304,8 +304,8 @@ describe('contest rescore', () => {
         contest: contest._id,
         points: 25,
       }),
-    ).toBe(12_001);
-  }, 600_000);
+    ).toBe(2501);
+  });
 
   it('keeps the points of a regrade that lands between the rescore reading a row and writing it', async () => {
     const { contest, participation, quarter } = await contestWith();

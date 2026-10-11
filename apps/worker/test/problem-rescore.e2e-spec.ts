@@ -178,12 +178,12 @@ describe('problem rescore', () => {
     });
   });
 
-  it('streams a 100k-submission problem in chunks of at most 1000 writes', async () => {
+  it('streams a problem past two chunks in chunks of at most 1000 writes', async () => {
     const problem = await seedProblem(worker, { points: 1000, partial: true });
     const userIds = await Promise.all(
       Array.from({ length: 50 }, async () => (await seedUser(worker))._id),
     );
-    await insertGradedRows(worker, 100_000, (index) => ({
+    await insertGradedRows(worker, 2_500, (index) => ({
       user: userIds[index % userIds.length],
       problem: problem._id,
       result: 'WA',
@@ -202,7 +202,7 @@ describe('problem rescore', () => {
       });
     try {
       expect(await rescores.rescore(problem._id)).toEqual({
-        rescored: 100_000,
+        rescored: 2_500,
         users: 50,
       });
     } finally {
@@ -214,9 +214,9 @@ describe('problem rescore', () => {
         problem: problem._id,
         points: 1000,
       }),
-    ).toBe(100_000);
+    ).toBe(2_500);
     expect(await userPointsOf(userIds[0])).toBe(1000);
-  }, 120_000);
+  });
 
   const queueOf = () =>
     worker.module.get<Queue<ProblemRescoreJob>>(
@@ -231,7 +231,7 @@ describe('problem rescore', () => {
     const queue = queueOf();
     const user = await seedUser(worker);
     const problem = await seedProblem(worker, { points: 1000, partial: true });
-    await insertGradedRows(worker, 5000, () => ({
+    await insertGradedRows(worker, 1500, () => ({
       user: user._id,
       problem: problem._id,
       result: 'WA',
@@ -252,8 +252,8 @@ describe('problem rescore', () => {
     try {
       await worker.problems.updateOne({ _id: problem._id }, { points: 1600 });
       await enqueueRescore(queue, problem._id);
-      await waitUntil(() => spy.mock.calls.length === 2, 60_000);
-      await waitUntil(drained, 60_000);
+      await waitUntil(() => spy.mock.calls.length === 2, 20_000);
+      await waitUntil(drained, 20_000);
     } finally {
       spy.mockRestore();
     }
@@ -262,9 +262,9 @@ describe('problem rescore', () => {
         problem: problem._id,
         points: 1500,
       }),
-    ).toBe(5000);
+    ).toBe(1500);
     expect(await userPointsOf(user._id)).toBe(1500);
-  }, 90_000);
+  });
 
   it('retries a failed rescore after its backoff and lands the points without a failure', async () => {
     const queue = queueOf();

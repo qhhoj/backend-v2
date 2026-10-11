@@ -129,54 +129,72 @@ describe('auth session endpoints', () => {
     expect(sessionOf(mixed).twoFactor?.methods).toEqual(['totp']);
   });
 
-  it('upgrades weak password hashes on login', async () => {
-    await createUser(api.users, { username: 'bob', email: 'bob@example.com' });
-    const before = (await api.users.findOne({ username: 'bob' }))!.password;
-    expect(before).toMatch(/^pbkdf2_sha256\$1000\$/);
-    await api
-      .http()
-      .post(LOGIN)
-      .send({ username: 'bob', password: 'correct horse battery' })
-      .expect(200);
-    expect((await api.users.findOne({ username: 'bob' }))!.password).toMatch(
-      new RegExp(`^pbkdf2_sha256\\$${PASSWORD_ITERATIONS}\\$`),
-    );
-  });
-  it('refuses banned and inactive accounts before any rehash', async () => {
-    for (const username of ['carol', 'dave']) {
-      const before = (await api.users.findOne({ username }))!.password;
+  // The rehash runs at the production cost: under the e2e override (1000 rounds) the fixtures' hashes are not weak.
+  describe('at the production hash cost', () => {
+    let override: string | undefined;
+    beforeAll(() => {
+      override = process.env.TEST_PASSWORD_ITERATIONS;
+      delete process.env.TEST_PASSWORD_ITERATIONS;
+    });
+    afterAll(() => {
+      process.env.TEST_PASSWORD_ITERATIONS = override;
+    });
+
+    it('upgrades weak password hashes on login', async () => {
+      await createUser(api.users, {
+        username: 'bob',
+        email: 'bob@example.com',
+      });
+      const before = (await api.users.findOne({ username: 'bob' }))!.password;
       expect(before).toMatch(/^pbkdf2_sha256\$1000\$/);
       await api
         .http()
         .post(LOGIN)
-        .send({ username, password: 'correct horse battery' })
-        .expect(403);
-      expect((await api.users.findOne({ username }))!.password).toBe(before);
-    }
-  });
-  it('keeps a password changed between verify and rehash', async () => {
-    await createUser(api.users, { username: 'rex', email: 'rex@example.com' });
-    const repository = api.app.get(UsersRepository);
-    const original = repository.updatePasswordIfUnchanged.bind(repository);
-    const newer = await hashPassword('newer passphrase 42');
-    const spy = jest
-      .spyOn(repository, 'updatePasswordIfUnchanged')
-      .mockImplementationOnce(async (userId, expected, replacement) => {
-        await api.users.updateOne({ username: 'rex' }, { password: newer });
-        return original(userId, expected, replacement);
-      });
-    try {
-      await api
-        .http()
-        .post(LOGIN)
-        .send({ username: 'rex', password: 'correct horse battery' })
+        .send({ username: 'bob', password: 'correct horse battery' })
         .expect(200);
-    } finally {
-      spy.mockRestore();
-    }
-    expect((await api.users.findOne({ username: 'rex' }))!.password).toBe(
-      newer,
-    );
+      expect((await api.users.findOne({ username: 'bob' }))!.password).toMatch(
+        new RegExp(`^pbkdf2_sha256\\$${PASSWORD_ITERATIONS}\\$`),
+      );
+    });
+    it('refuses banned and inactive accounts before any rehash', async () => {
+      for (const username of ['carol', 'dave']) {
+        const before = (await api.users.findOne({ username }))!.password;
+        expect(before).toMatch(/^pbkdf2_sha256\$1000\$/);
+        await api
+          .http()
+          .post(LOGIN)
+          .send({ username, password: 'correct horse battery' })
+          .expect(403);
+        expect((await api.users.findOne({ username }))!.password).toBe(before);
+      }
+    });
+    it('keeps a password changed between verify and rehash', async () => {
+      await createUser(api.users, {
+        username: 'rex',
+        email: 'rex@example.com',
+      });
+      const repository = api.app.get(UsersRepository);
+      const original = repository.updatePasswordIfUnchanged.bind(repository);
+      const newer = await hashPassword('newer passphrase 42');
+      const spy = jest
+        .spyOn(repository, 'updatePasswordIfUnchanged')
+        .mockImplementationOnce(async (userId, expected, replacement) => {
+          await api.users.updateOne({ username: 'rex' }, { password: newer });
+          return original(userId, expected, replacement);
+        });
+      try {
+        await api
+          .http()
+          .post(LOGIN)
+          .send({ username: 'rex', password: 'correct horse battery' })
+          .expect(200);
+      } finally {
+        spy.mockRestore();
+      }
+      expect((await api.users.findOne({ username: 'rex' }))!.password).toBe(
+        newer,
+      );
+    });
   });
   it('explains banned and unactivated accounts only after a correct password', async () => {
     await api

@@ -1,11 +1,49 @@
+import { randomBytes } from 'node:crypto';
+import { MongoClient } from 'mongodb';
 import type { Db } from 'mongodb';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { SNAPSHOT_LOAD_COMMENT } from './snapshot-load';
 
-export const startMongo = () =>
+/** Set by `jest.global-setup.js`: the run's one replica set, with `__DB__` where the database name goes. */
+const SHARED_MONGO_URI = 'QHHOJ_TEST_MONGO_URI';
+
+export interface TestMongo {
+  /** A database of this handle's own: no other test file (or jest worker) ever sees it. */
+  getUri(database?: string): string;
+  stop(): Promise<unknown>;
+}
+
+const startOwnReplSet = () =>
   MongoMemoryReplSet.create({
     replSet: { count: 1, storageEngine: 'wiredTiger' },
   });
+
+/**
+ * Databases of their own on the run's shared replica set (one mongod per jest run instead of one per file); `stop()` drops them.
+ * Without the global setup (a config that skips it) it starts a replica set of its own, as before.
+ */
+export async function startMongo(): Promise<TestMongo> {
+  const template = process.env[SHARED_MONGO_URI];
+  if (!template) return startOwnReplSet();
+  const prefix = `w${process.env.JEST_WORKER_ID ?? '1'}_${randomBytes(4).toString('hex')}`;
+  const names = new Set<string>();
+  const getUri = (database = 'test') => {
+    const name = `${prefix}_${database}`;
+    names.add(name);
+    return template.replace('__DB__', name);
+  };
+  return {
+    getUri,
+    stop: async () => {
+      const client = await MongoClient.connect(template.replace('__DB__', ''));
+      try {
+        for (const name of names) await client.db(name).dropDatabase();
+      } finally {
+        await client.close();
+      }
+    },
+  };
+}
 
 export interface ProfiledOperation {
   collection: string;

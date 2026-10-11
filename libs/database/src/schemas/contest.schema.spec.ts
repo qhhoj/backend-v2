@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { ContestSchema, MAX_CONTEST_PROBLEMS } from './contest.schema';
 import { ContestParticipationSchema } from './contest-participation.schema';
 
 describe('Contest schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Contests = mongoose.model('ContestSchemaSpec', ContestSchema);
   const Participations = mongoose.model(
     'ContestParticipationSchemaSpec',

@@ -1,8 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { baseSchemaOptions, CI, ciIndex, IdProp } from './schema';
 import { startMongo } from './testing';
+import type { TestMongo } from './testing';
 
 @Schema({ ...baseSchemaOptions, collection: 'things' })
 class Thing {
@@ -13,7 +13,7 @@ const ThingSchema = SchemaFactory.createForClass(Thing);
 ciIndex(ThingSchema, 'name');
 
 describe('schema base', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Things = mongoose.model('Thing', ThingSchema);
   beforeAll(async () => {
     replSet = await startMongo();

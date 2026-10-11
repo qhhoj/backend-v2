@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { JudgeSchema } from './judge.schema';
 
 describe('Judge schema', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Judges = mongoose.model('JudgeSchemaSpec', JudgeSchema);
   beforeAll(async () => {
     replSet = await startMongo();

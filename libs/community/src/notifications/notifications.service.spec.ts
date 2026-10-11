@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import mongoose from 'mongoose';
 import type { Model } from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import type Redis from 'ioredis';
 import { newId, NotificationSchema, uuidStr } from '@libs/database';
 import type { Notification } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import {
   NOTIFY_RECIPIENT_LIMIT,
   notificationExpiry,
@@ -30,7 +30,7 @@ const draft = (
 });
 
 describe('NotificationsService', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   let rows: Model<Notification>;
   let service: NotificationsService;
   let published: Array<{ channel: string; message: string }>;

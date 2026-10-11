@@ -125,7 +125,13 @@ describe('FSO final judging', () => {
     const events: Array<{ submissionId: string; userId: string }> = [];
     subscriber.on('message', (_channel, message) => {
       const event = parseSubmissionEvent(message);
-      if (event?.type === 'queued' && event.status === 'QU') events.push(event);
+      // The channel is server-wide: another jest worker's submissions publish on it too.
+      if (
+        event?.type === 'queued' &&
+        event.status === 'QU' &&
+        ids.includes(event.submissionId)
+      )
+        events.push(event);
     });
     await subscriber.subscribe(SUBMISSION_EVENTS_CHANNEL);
     try {

@@ -293,7 +293,7 @@ export async function setupApiTest({
 
 export type ApiTest = Awaited<ReturnType<typeof setupApiTest>>;
 
-/** Fast hash (1000 iterations) unless a test needs real cost; `needsRehash` will upgrade it on login. */
+/** Hashed at 1000 iterations, the e2e cost (`TEST_PASSWORD_ITERATIONS`): a login verifies it fast and does not rehash it. */
 export const createUser = async (
   users: Model<User>,
   {

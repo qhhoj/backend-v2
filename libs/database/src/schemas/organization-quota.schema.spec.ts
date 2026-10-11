@@ -1,13 +1,13 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { OrganizationProblemSchema } from './organization-problem.schema';
 import { OrganizationProblemTagSchema } from './organization-problem-tag.schema';
 import { OrganizationUsageSchema } from './organization-usage.schema';
 
 describe('organization problem and quota schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Tags = mongoose.model('OrgTagSpec', OrganizationProblemTagSchema);
   const Links = mongoose.model('OrgLinkSpec', OrganizationProblemSchema);
   const Usages = mongoose.model('OrgUsageSpec', OrganizationUsageSchema);

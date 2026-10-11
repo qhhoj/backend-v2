@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { ContestPublicRankingLinkSchema } from './contest-public-ranking-link.schema';
 import { RatingSchema } from './rating.schema';
 
 describe('Contest extras schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Ratings = mongoose.model('RatingSchemaSpec', RatingSchema);
   const Links = mongoose.model(
     'ContestPublicRankingLinkSchemaSpec',

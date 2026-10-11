@@ -17,8 +17,6 @@ import {
 } from './similarity-engine';
 import type { EngineRequest, LineRange } from './similarity-engine';
 
-jest.setTimeout(60_000);
-
 const cpp = familyOf('C++')!;
 const pascal = familyOf('Pascal')!;
 const request = (

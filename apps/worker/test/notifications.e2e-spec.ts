@@ -453,7 +453,8 @@ afterAll(() => worker.teardown());
 
     it('writes every recipient of a large contest across chunks', async () => {
       const round = await contest();
-      const users = Array.from({ length: 1200 }, newId);
+      // One past a 500-user chunk.
+      const users = Array.from({ length: 501 }, newId);
       await worker.participations.insertMany(
         users.map((user) => ({
           contest: round._id,
@@ -467,7 +468,7 @@ afterAll(() => worker.teardown());
         await worker.notifications.countDocuments({
           groupKey: `contest-ann:${round._id}`,
         }),
-      ).toBe(1200);
+      ).toBe(501);
     });
 
     it('cuts the text to the column sizes (a bulk write skips validation)', async () => {

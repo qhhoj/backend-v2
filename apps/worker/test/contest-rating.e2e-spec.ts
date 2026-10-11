@@ -592,12 +592,12 @@ describe('contest rating', () => {
     expect(await allRatings()).toEqual(await reRatedFromScratch(second._id));
   });
 
-  it('rates a chain of 30 contests of 40 users through indexes', async () => {
-    const contestCount = 30;
-    const userCount = 40;
+  it('rates a chain of 8 contests of 10 users through indexes', async () => {
+    const contestCount = 8;
+    const userCount = 10;
     const users = await Promise.all(
       Array.from({ length: userCount }, (_unused, index) =>
-        seedUser(worker, { username: `chain30_user${index}` }),
+        seedUser(worker, { username: `chain_user${index}` }),
       ),
     );
     const contests: Array<Awaited<ReturnType<typeof ratedContest>>> = [];

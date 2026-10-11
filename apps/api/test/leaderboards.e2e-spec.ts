@@ -13,13 +13,17 @@ import { setupApiTest } from './setup';
 
 import type { ApiTest } from './setup';
 
+let api: ApiTest;
+beforeAll(async () => {
+  api = await setupApiTest();
+});
+afterAll(() => api.teardown());
+
 describe('leaderboards', () => {
-  let api: ApiTest;
   const board = async (url: string) =>
     dataOf<LeaderboardEntryResponse[]>(await api.http().get(url).expect(200));
 
   beforeAll(async () => {
-    api = await setupApiTest();
     const listed = await createOrganization(api, { slug: 'listed_org' });
     const unlisted = await createOrganization(api, {
       slug: 'unlisted_org',
@@ -62,7 +66,6 @@ describe('leaderboards', () => {
       isActive: false,
     });
   });
-  afterAll(() => api.teardown());
 
   it('ranks by rating like legacy ranker, ties sharing a rank, nulls last, hidden users left out', async () => {
     expect(
@@ -137,10 +140,8 @@ describe('leaderboards', () => {
 });
 
 describe('rank lookup across pages', () => {
-  let api: ApiTest;
-
   beforeAll(async () => {
-    api = await setupApiTest();
+    await api.reset();
     await api.users.insertMany(
       Array.from({ length: 150 }, (_unused, index) => ({
         username: `tied${String(index).padStart(3, '0')}`,
@@ -151,7 +152,6 @@ describe('rank lookup across pages', () => {
       })),
     );
   });
-  afterAll(() => api.teardown());
 
   it('sends every tied user to the board page that lists them, in id order', async () => {
     const boardPage = async (page: number) =>

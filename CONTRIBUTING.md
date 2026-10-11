@@ -532,10 +532,10 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 ## Testing
 
 - Unit: `<file>.spec.ts` next to the file under test; e2e: `apps/<app>/test/*.e2e-spec.ts` for apps, next to the file for libs
-- Mongo: `startMongo()` from `@libs/database/testing` (in-memory replica set)
+- Mongo: `startMongo()` from `@libs/database/testing`: databases of the caller's own on the run's one in-memory replica set (`jest.global-setup.js`), dropped by `stop()`; without the global setup it starts a replica set of its own
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
 - The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush): `podman compose up -d redis` (or `docker compose`)
-- Each jest worker flushes its own Redis db: `TEST_REDIS_URL`'s db plus `JEST_WORKER_ID - 1` (`redisUrlForWorker`, `@libs/common/testing`). A base db plus `--maxWorkers` must fit the server's `databases` (16 by default, 64 on the lane Redis); CI runs `--runInBand`, so it stays on db 15
+- Each jest worker flushes its own Redis db: `TEST_REDIS_URL`'s db plus `JEST_WORKER_ID - 1` (`redisUrlForWorker`, `@libs/common/testing`). A base db plus `--maxWorkers` must fit the server's `databases` (16 by default, 64 on the lane Redis); CI runs `--maxWorkers=2` on base db 14 (dbs 14 and 15)
 - Bridge e2e: `setupBridgeTest` (`apps/bridge/test/setup.ts`, millisecond `FAST_TIMINGS`, `restart()`), `FakeJudge` (real TCP), `RecordingJudge` (no socket); api specs read the command stream through `apps/api/test/submission-fixtures.ts`
 - Index use is asserted with `profileQueries` (`@libs/database/testing`): no `COLLSCAN`, documents examined bounded; worker effects fixtures in `apps/worker/test/effects-fixtures.ts`; SSE through `apps/api/test/sse-client.ts` (supertest cannot read streams); `recordSubmissionEvents` (`@libs/judging/testing`)
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`

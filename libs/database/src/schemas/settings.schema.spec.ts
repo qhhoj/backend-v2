@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { profileQueries, startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { SettingRevisionSchema } from './setting-revision.schema';
 
 describe('Settings schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Revisions = mongoose.model(
     'SettingRevisionSchemaSpec',
     SettingRevisionSchema,

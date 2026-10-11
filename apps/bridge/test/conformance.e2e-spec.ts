@@ -15,7 +15,7 @@ const forBridge = scenarios.filter((scenario) =>
   scenario.applies_to.includes('bridge'),
 );
 
-/** judge-v2's conformance scenarios (vendored in libs/judge-proto) played by a scripted judge against the real bridge, Mongo and Redis: one bridge for the file; before each scenario the old bridge stops (its timers die), Mongo is emptied and a bridge with the scenario's timings starts. */
+/** judge-v2's conformance scenarios (vendored in libs/judge-proto) played by a scripted judge against the real bridge, Mongo and Redis: one Mongo and Redis for the file; before each scenario the old bridge stops (its timers die), Mongo and Redis are emptied and one bridge with the scenario's timings starts. */
 describe('protocol conformance (judge-v2 proto/conformance)', () => {
   let bridge: BridgeTest;
   const redis = new Redis(TEST_REDIS_URL);
@@ -39,9 +39,9 @@ describe('protocol conformance (judge-v2 proto/conformance)', () => {
   )(
     '%s',
     async (_name, scenario) => {
-      await bridge.restart();
+      await bridge.stop();
       await bridge.reset();
-      await bridge.restart(timingsOf(scenario));
+      await bridge.start(timingsOf(scenario));
       const world = new ScenarioWorld(bridge, commands);
       const runner = new ScenarioRunner(bridge, world, scenario);
       try {

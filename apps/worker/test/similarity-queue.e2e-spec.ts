@@ -11,8 +11,6 @@ import { SIEVE, SIEVE_RENAMED } from './similarity-fixtures';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
-jest.setTimeout(60_000);
-
 describe('similarity queue', () => {
   let worker: WorkerTest;
   const queueOf = () =>

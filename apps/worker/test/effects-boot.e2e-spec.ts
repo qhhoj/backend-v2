@@ -18,7 +18,7 @@ describe('submission effects at boot', () => {
     const client = await MongoClient.connect(mongoUri);
     const submissionId = newId();
     await client
-      .db('qhhoj')
+      .db()
       .collection<{ _id: UUID } & Record<string, unknown>>('problems')
       .insertOne({
         _id: toUuid(problemId),
@@ -29,7 +29,7 @@ describe('submission effects at boot', () => {
         acRate: 0,
       });
     await client
-      .db('qhhoj')
+      .db()
       .collection<{ _id: UUID } & Record<string, unknown>>('submissions')
       .insertOne({
         _id: toUuid(submissionId),
