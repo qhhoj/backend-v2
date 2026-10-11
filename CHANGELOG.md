@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.16.1
+
+### Patch Changes
+
+- 8f13df9: Bridge quadlet mounts `/srv/qhhoj/media` read-only, so judges can fetch file-only (OUTPUT zip) submissions. Host step: re-run `install-host.sh` (or install the unit), `systemctl daemon-reload`, restart `qhhoj-bridge`.
+
 ## 2.16.0
 
 ### Minor Changes
