@@ -17,6 +17,8 @@ export class OrganizationListItemResponse {
   memberCount!: number;
   /** Combined performance points of the members. */
   performancePoints!: number;
+  /** Most members the organization may have; null for no limit. */
+  slots!: number | null;
 
   static from(organization: Organization): OrganizationListItemResponse {
     return {
@@ -28,6 +30,7 @@ export class OrganizationListItemResponse {
       isUnlisted: organization.isUnlisted,
       memberCount: organization.memberCount,
       performancePoints: organization.performancePoints,
+      slots: organization.slots,
     };
   }
 }
@@ -64,8 +67,6 @@ export class OrganizationDetailResponse extends OrganizationListItemResponse {
   aboutHtml!: string;
   /** Markdown source, for the edit form: administrators only. */
   about!: string | null;
-  /** Most members the organization may have; null for no limit. */
-  slots!: number | null;
   /** URL or site path of a custom logo; empty for the default. */
   logoOverrideImage!: string;
   /** When the organization was created, ISO 8601. */

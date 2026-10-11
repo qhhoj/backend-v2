@@ -5839,6 +5839,19 @@
         ],
         "type": "object"
       },
+      "OrganizationAboutPreviewDto": {
+        "properties": {
+          "markdown": {
+            "description": "Markdown about text to render.",
+            "maxLength": 65536,
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown"
+        ],
+        "type": "object"
+      },
       "OrganizationDetailResponse": {
         "properties": {
           "about": {
@@ -5921,9 +5934,9 @@
           "isUnlisted",
           "memberCount",
           "performancePoints",
+          "slots",
           "aboutHtml",
           "about",
-          "slots",
           "logoOverrideImage",
           "createdAt",
           "admins",
@@ -5959,6 +5972,11 @@
             "description": "Short name shown beside members, at most 20 characters.",
             "type": "string"
           },
+          "slots": {
+            "description": "Most members the organization may have; null for no limit.",
+            "nullable": true,
+            "type": "number"
+          },
           "slug": {
             "description": "Unique identifier used in URLs.",
             "type": "string"
@@ -5972,7 +5990,8 @@
           "isOpen",
           "isUnlisted",
           "memberCount",
-          "performancePoints"
+          "performancePoints",
+          "slots"
         ],
         "type": "object"
       },
@@ -6058,6 +6077,11 @@
             "nullable": true,
             "type": "string"
           },
+          "decidedByUsername": {
+            "description": "Username of the admin who decided; null while pending or when that account is gone.",
+            "nullable": true,
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -6095,6 +6119,7 @@
           "reason",
           "createdAt",
           "decidedBy",
+          "decidedByUsername",
           "decidedAt"
         ],
         "type": "object"
@@ -6107,6 +6132,61 @@
           "R"
         ],
         "type": "string"
+      },
+      "OrganizationRevisionAction": {
+        "description": "`create`, `edit`, or `kick` (a member removed; `changes.member.before` is their username).",
+        "enum": [
+          "create",
+          "edit",
+          "kick"
+        ],
+        "type": "string"
+      },
+      "OrganizationRevisionResponse": {
+        "properties": {
+          "action": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrganizationRevisionAction"
+              }
+            ],
+            "description": "`create`, `edit`, or `kick` (a member removed; `changes.member.before` is their username)."
+          },
+          "at": {
+            "description": "When the change was made.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "changes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldChangeResponse"
+            },
+            "description": "Per changed field, its value before and after; admins appear as `admins`, a sorted list of usernames.",
+            "type": "object"
+          },
+          "editor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "Who made the change; null when that account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "id": {
+            "description": "Revision id.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "changes",
+          "id",
+          "at",
+          "editor"
+        ],
+        "type": "object"
       },
       "OrganizationSummaryResponse": {
         "properties": {
@@ -13911,7 +13991,7 @@
     },
     "/api/internal/admin/organization-requests": {
       "get": {
-        "description": "Requires `judge.edit_all_organization`. Returns the staff queue of join\nrequests over all organizations, one `state` at a time (`P` by default),\nnewest first, 50 per page.",
+        "description": "Requires `judge.edit_all_organization`. Returns the staff queue of join\nrequests over all organizations, one `state` at a time (`P` by default),\nnewest first, 50 per page. `search` keeps requests whose requester\nusername, or whose organization name, short name or slug, contains the\ntext (any case).",
         "operationId": "OrganizationRequestQueueController_list",
         "parameters": [
           {
@@ -13933,6 +14013,17 @@
               "maximum": 10000,
               "minimum": 1,
               "type": "number"
+            }
+          },
+          {
+            "description": "Keeps requests whose requester username, or whose organization name, short name or slug, contains this text (any case).",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
             }
           }
         ],
@@ -23718,7 +23809,7 @@
     },
     "/api/internal/organizations": {
       "get": {
-        "description": "Returns one page of organizations the viewer may list. Unlisted\norganizations appear only to their members, their admins and holders of\n`judge.edit_all_organization`. `search` narrows by a case-insensitive\nsubstring of name, short name or slug. Paged with `page` and `pageSize`\n(default 100, at most 100). Anonymous callers may use it.",
+        "description": "Returns one page of organizations the viewer may list. Unlisted\norganizations appear only to their members, their admins and holders of\n`judge.edit_all_organization`. `search` narrows by a case-insensitive\nsubstring of name, short name or slug; `open` and `unlisted` (true or\nfalse) keep only organizations in that state. Paged with `page` and\n`pageSize` (default 100, at most 100). Anonymous callers may use it.",
         "operationId": "OrganizationsController_list",
         "parameters": [
           {
@@ -23754,6 +23845,24 @@
               "maxLength": 50,
               "minLength": 1,
               "type": "string"
+            }
+          },
+          {
+            "description": "true: only open organizations; false: only private ones.",
+            "in": "query",
+            "name": "open",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "true: only unlisted organizations; false: only listed ones. Narrows what the viewer may already list.",
+            "in": "query",
+            "name": "unlisted",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -23810,7 +23919,7 @@
         "x-enveloped": true
       },
       "post": {
-        "description": "Requires `judge.add_organization`. The creator is always an admin;\n`adminIds` adds more. New organizations are unlisted until staff lists\nthem, and the short name defaults to the first 20 characters of the slug.\n`isUnlisted`, `slots` and `shortName` need `judge.edit_all_organization`\n(403 `forbidden`). A taken slug is 400 `validation_failed`. A user may\nadminister at most three organizations unless the actor holds\n`judge.spam_organization`.",
+        "description": "Requires `judge.add_organization`. The creator is always an admin;\n`adminIds` adds more. New organizations are unlisted until staff lists\nthem, and the short name defaults to the first 20 characters of the slug.\n`isUnlisted`, `slots` and `shortName` need `judge.edit_all_organization`\n(403 `forbidden`). A taken slug is 400 `validation_failed`. A user may\nadminister at most three organizations unless the actor holds\n`judge.spam_organization`: issue code `admin_cap` on `adminIds`, a 403\nfor the creator and a 400 for another admin. Recorded in the history.",
         "operationId": "OrganizationEditingController_create",
         "parameters": [],
         "requestBody": {
@@ -23863,6 +23972,66 @@
           }
         },
         "summary": "Create an organization",
+        "tags": [
+          "Organizations"
+        ]
+      }
+    },
+    "/api/internal/organizations/render-preview": {
+      "post": {
+        "description": "Renders and sanitises the Markdown exactly as saving `about` would. For\nholders of `judge.add_organization` or `judge.edit_all_organization` and\nadministrators of any organization (403 `forbidden` otherwise). Limited\nto 60 previews per user per minute (429 `rate_limited`).",
+        "operationId": "OrganizationEditingController_preview",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationAboutPreviewDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RenderPreviewResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Preview an organization's about text",
         "tags": [
           "Organizations"
         ]
@@ -24020,7 +24189,7 @@
         ]
       },
       "patch": {
-        "description": "Organization administrators only. Changes the fields sent (null is refused\nfor `slots`); `about` is re-rendered, `adminIds` is the whole new admin\nlist and must not be empty, and new admins are subject to the three-\norganization cap. Staff fields `isUnlisted`, `slots` and `shortName` need\n`judge.edit_all_organization`. A slug that is taken is 400\n`validation_failed`.",
+        "description": "Organization administrators only. Changes the fields sent (null is refused\nfor `slots`); `about` is re-rendered, `adminIds` is the whole new admin\nlist and must not be empty, and new admins are subject to the three-\norganization cap. Staff fields `isUnlisted`, `slots` and `shortName` need\n`judge.edit_all_organization`. A slug that is taken is 400\n`validation_failed`; the admin cap is issue code `admin_cap`. Changed\nfields are recorded in the history.",
         "operationId": "OrganizationEditingController_update",
         "parameters": [
           {
@@ -24135,7 +24304,7 @@
     },
     "/api/internal/organizations/{slug}/kick": {
       "post": {
-        "description": "Organization administrators (and holders of `judge.edit_all_organization`)\nremove the member given by `userId`. Admins cannot be removed, and the\nuser must be a member (409 `conflict`). Returns 204; 403 `forbidden` for\nnon-administrators.",
+        "description": "Organization administrators (and holders of `judge.edit_all_organization`)\nremove the member given by `userId`. Admins cannot be removed (409\n`conflict`, issue code `admin_not_kickable`) and the user must be a member\n(`not_member`). Returns 204; 403 `forbidden` for non-administrators. The\nremoval is recorded in the organization's history.",
         "operationId": "MembershipController_kick",
         "parameters": [
           {
@@ -24235,7 +24404,7 @@
     },
     "/api/internal/organizations/{slug}/members": {
       "get": {
-        "description": "Returns the organization's members with their points, problem count and\nrating, ranked by the chosen `sort` (`performancePoints` by default,\n`points`, `problemCount` or `rating`; ties share a rank). Paged with\n`page` and `pageSize` (default 100). Fails with 404 `not_found` for an\nunknown slug.",
+        "description": "Returns the organization's members with their points, problem count and\nrating, ranked by the chosen `sort` (`performancePoints` by default,\n`points`, `problemCount` or `rating`; ties share a rank). `search` keeps\nmembers whose username contains the text, ranked among the matches only.\nPaged with `page` and `pageSize` (default 100). Fails with 404\n`not_found` for an unknown slug.",
         "operationId": "OrganizationsController_members",
         "parameters": [
           {
@@ -24285,6 +24454,17 @@
               "maximum": 100,
               "minimum": 1,
               "type": "number"
+            }
+          },
+          {
+            "description": "Keeps members whose username contains this text (any case); ranks then count matching members only.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
             }
           }
         ],
@@ -25158,6 +25338,51 @@
         ]
       }
     },
+    "/api/internal/organizations/{slug}/recalculate": {
+      "post": {
+        "description": "Requires `judge.edit_all_organization`. Queues the worker's recompute of\nthe organization's performance points and member count (they are\notherwise refreshed only after membership or points changes) and returns\n204. 404 `not_found` for an unknown slug.",
+        "operationId": "OrganizationEditingController_recalculate",
+        "parameters": [
+          {
+            "description": "Slug of the organization.",
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Recalculate an organization's points and member count",
+        "tags": [
+          "Organizations"
+        ]
+      }
+    },
     "/api/internal/organizations/{slug}/requests": {
       "get": {
         "description": "Organization administrators only. Returns one state at a time (`P` pending\nby default, `A` approved or `R` rejected), newest first, 50 per page. 403\n`forbidden` for non-administrators.",
@@ -25461,6 +25686,86 @@
         "tags": [
           "Organizations"
         ]
+      }
+    },
+    "/api/internal/organizations/{slug}/revisions": {
+      "get": {
+        "description": "Organization administrators only (403 `forbidden`). Returns the\nrecorded creates, edits and member removals, newest first, 20 per page,\neach with its editor and the fields before and after.",
+        "operationId": "OrganizationEditingController_history",
+        "parameters": [
+          {
+            "description": "Slug of the organization.",
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "1-based page number; 20 revisions per page.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/OrganizationRevisionResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List an organization's change history",
+        "tags": [
+          "Organizations"
+        ],
+        "x-enveloped": true
       }
     },
     "/api/internal/organizations/{slug}/usage": {

@@ -515,9 +515,38 @@ afterAll(() => api.teardown());
           username: thirdRequester.username,
           state: 'A',
           decidedBy: staffUser._id,
+          decidedByUsername: staffUser.username,
         },
       ]);
       expect(await queueRows('?state=R', staffSession)).toEqual([]);
+    });
+
+    it('narrows the queue to a requester username or an organization slug, literally and in any case', async () => {
+      const { session: staffSession } = await person({
+        permissions: ['judge.edit_all_organization'],
+      });
+      const { user: owner } = await person();
+      const target = await createOrganization(api, {
+        slug: 'needle_school',
+        isOpen: false,
+        adminIds: [owner._id],
+      });
+      const other = await createOrganization(api, {
+        isOpen: false,
+        adminIds: [owner._id],
+      });
+      const { user: needle, session: needleSession } = await person();
+      const { session: plainSession } = await person();
+      const byName = await request(other.slug, needleSession);
+      const bySlug = await request(target.slug, plainSession);
+      await request(other.slug, plainSession);
+      const ids = async (search: string) =>
+        (await queueRows(`?search=${encodeURIComponent(search)}`, staffSession))
+          .map((row) => row.id)
+          .sort();
+      expect(await ids(needle.username.toUpperCase())).toEqual([byName.id]);
+      expect(await ids('NEEDLE_')).toEqual([bySlug.id]);
+      expect(await ids('.*')).toEqual([]);
     });
 
     it('lets edit_all_organization decide a request in an organization it does not administer', async () => {

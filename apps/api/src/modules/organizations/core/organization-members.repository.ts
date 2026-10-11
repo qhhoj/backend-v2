@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { escapeRegExp } from '@libs/common';
 import { strictlyAbove } from '@libs/community';
 import { CI, Group, uuidStr, User } from '@libs/database';
 import type { Model } from 'mongoose';
@@ -22,6 +23,12 @@ export type MemberRow = Pick<
   | 'problemCount'
   | 'rating'
 >;
+export interface MemberPageQuery {
+  sort: MemberSort;
+  page: number;
+  pageSize: number;
+  search?: string;
+}
 /** Bounds every read by the organization's size: other sorts would otherwise pick a site-wide leaderboard index. */
 const MEMBERSHIP_INDEX = { organizations: 1, performancePoints: -1 };
 const MEMBER_PROJECTION = {
@@ -34,6 +41,15 @@ const MEMBER_PROJECTION = {
   rating: 1,
 };
 
+const usernamePattern = (fragment: string) =>
+  new RegExp(escapeRegExp(fragment), 'i');
+/** Listed members, narrowed to usernames containing `search` when one is given. */
+const listedMembers = (organizationId: string, search?: string) => ({
+  organizations: organizationId,
+  isUnlisted: false,
+  ...(search ? { username: usernamePattern(search) } : {}),
+});
+
 /** Every read and write of `users.organizations` (the membership). Lists go through `{organizations, performancePoints}`; other sorts sort the organization's members in memory. */
 @Injectable()
 export class OrganizationMembersRepository {
@@ -42,14 +58,12 @@ export class OrganizationMembersRepository {
     @InjectModel(Group.name) private readonly groups: Model<Group>,
   ) {}
 
-  /** Legacy `OrganizationUsers`: listed members, ties by id. */
+  /** Legacy `OrganizationUsers`: listed members, ties by id; `search` narrows by username. */
   async members(
     organizationId: string,
-    sort: MemberSort,
-    page: number,
-    pageSize: number,
+    { sort, page, pageSize, search }: MemberPageQuery,
   ): Promise<{ items: MemberRow[]; total: number }> {
-    const filter = { organizations: organizationId, isUnlisted: false };
+    const filter = listedMembers(organizationId, search);
     const [items, total] = await Promise.all([
       this.users
         .find(filter, MEMBER_PROJECTION)
@@ -64,22 +78,37 @@ export class OrganizationMembersRepository {
     return { items, total };
   }
 
-  /** Listed members ranked above `value`: the first row's rank minus one. */
+  /** Listed members (matching `search`) ranked above `value`: the first row's rank minus one. */
   countAbove(
     organizationId: string,
-    sort: MemberSort,
+    { sort, search }: Pick<MemberPageQuery, 'sort' | 'search'>,
     value: number | null,
   ): Promise<number> {
     return this.users
       .countDocuments(
         {
-          organizations: organizationId,
-          isUnlisted: false,
+          ...listedMembers(organizationId, search),
           ...strictlyAbove(sort, value),
         },
         { hint: MEMBERSHIP_INDEX },
       )
       .exec();
+  }
+
+  /** Those of `userIds` whose username contains `search` (any case); read through `_id`, so the cost is bounded by the ids, not the site. */
+  async idsWithUsername(
+    userIds: readonly string[],
+    search: string,
+  ): Promise<string[]> {
+    if (!userIds.length) return [];
+    const rows = await this.users
+      .find(
+        { _id: { $in: userIds }, username: usernamePattern(search) },
+        { _id: 1 },
+      )
+      .lean()
+      .exec();
+    return rows.map((row) => uuidStr(row._id));
   }
 
   /** Every member, listed or not: the live count approvals check `slots` against. */

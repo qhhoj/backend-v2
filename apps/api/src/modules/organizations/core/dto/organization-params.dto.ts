@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -9,7 +10,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { trim } from '../../../problems/core/dto/transforms';
+import { toBoolean, trim } from '../../../problems/core/dto/transforms';
 import { MEMBER_SORTS } from '../organization-members.repository';
 import type { MemberSort } from '../organization-members.repository';
 
@@ -26,6 +27,10 @@ export class OrganizationListQueryDto {
   @IsString()
   @Length(1, 50)
   search?: string;
+  /** true: only open organizations; false: only private ones. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() open?: boolean;
+  /** true: only unlisted organizations; false: only listed ones. Narrows what the viewer may already list. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() unlisted?: boolean;
   /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
@@ -45,6 +50,12 @@ export class OrganizationListQueryDto {
 }
 
 export class MemberListQueryDto {
+  /** Keeps members whose username contains this text (any case); ranks then count matching members only. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 64)
+  search?: string;
   /** Ranking column, best first. */
   @ApiPropertyOptional()
   @IsOptional()

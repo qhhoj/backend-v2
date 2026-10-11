@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { FilterQuery } from 'mongoose';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, escapeRegExp, Paginated, unique } from '@libs/common';
+import { AppError, Paginated, unique } from '@libs/common';
 import { competitionRanks } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
@@ -20,7 +20,10 @@ import { OrganizationAccess } from './organization-access';
 import { OrganizationMembersRepository } from './organization-members.repository';
 import { OrganizationRequestsRepository } from './organization-requests.repository';
 import { OrganizationsRepository } from './organizations.repository';
-import type { OrganizationDocument } from './organizations.repository';
+import {
+  organizationSearchFilter,
+  type OrganizationDocument,
+} from './organizations.repository';
 
 const notFound = () => new AppError('not_found', 404, 'No such organization');
 
@@ -59,14 +62,16 @@ export class OrganizationsService {
     return organization;
   }
 
-  /** Legacy `OrganizationList`, plus the viewer's own unlisted ones. A search only narrows what the viewer may already list. */
+  /** Legacy `OrganizationList`, plus the viewer's own unlisted ones. Search and flags only narrow what the viewer may already list. */
   async list(
     principal: Principal | null,
-    { search, page, pageSize }: OrganizationListQueryDto,
+    query: OrganizationListQueryDto,
   ): Promise<Paginated<OrganizationListItemResponse>> {
-    const listFilter = OrganizationAccess.listFilter(principal);
+    const { page, pageSize } = query;
     const { items, total } = await this.organizations.list(
-      search ? { $and: [listFilter, this.searchFilter(search)] } : listFilter,
+      {
+        $and: [OrganizationAccess.listFilter(principal), this.narrowing(query)],
+      },
       page,
       pageSize,
     );
@@ -78,13 +83,15 @@ export class OrganizationsService {
     );
   }
 
-  /** Case-insensitive substring over name, short name and slug; the text is literal, not a pattern. */
-  private searchFilter(search: string): FilterQuery<Organization> {
-    const pattern = new RegExp(escapeRegExp(search), 'i');
+  private narrowing({
+    search,
+    open,
+    unlisted,
+  }: OrganizationListQueryDto): FilterQuery<Organization> {
     return {
-      $or: ['name', 'shortName', 'slug'].map((field) => ({
-        [field]: pattern,
-      })),
+      ...(search ? organizationSearchFilter(search) : {}),
+      ...(open === undefined ? {} : { isOpen: open }),
+      ...(unlisted === undefined ? {} : { isUnlisted: unlisted }),
     };
   }
 
@@ -156,7 +163,6 @@ export class OrganizationsService {
       ...OrganizationListItemResponse.from(organization),
       aboutHtml: organization.aboutHtml,
       about: canAdminister ? organization.about : null,
-      slots: organization.slots,
       logoOverrideImage: organization.logoOverrideImage,
       createdAt: organization.createdAt,
       // Admins keep their stored order.
@@ -173,21 +179,20 @@ export class OrganizationsService {
     };
   }
 
-  /** Legacy `OrganizationUsers` with ranks over the chosen sort (legacy ranked by points from 1 on every page). */
+  /** Legacy `OrganizationUsers` with ranks over the chosen sort (legacy ranked by points from 1 on every page); with `search`, ranks count matching members only. */
   async membersOf(
     slug: string,
-    { sort, page, pageSize }: MemberListQueryDto,
+    query: MemberListQueryDto,
   ): Promise<Paginated<MemberResponse>> {
+    const { sort, page, pageSize } = query;
     const organization = await this.bySlug(slug);
     const { items, total } = await this.members.members(
       organization._id,
-      sort,
-      page,
-      pageSize,
+      query,
     );
     const values = items.map((row) => row[sort]);
     const firstRank = items.length
-      ? (await this.members.countAbove(organization._id, sort, values[0])) + 1
+      ? (await this.members.countAbove(organization._id, query, values[0])) + 1
       : 1;
     const ranks = competitionRanks(values, firstRank);
     return new Paginated(
