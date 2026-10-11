@@ -1122,6 +1122,44 @@ afterAll(() => api.teardown());
       }).expect(200);
     });
 
+    it('leaves one of two superusers active when they demote or deactivate each other at once', async () => {
+      const [alpha, beta] = await Promise.all(
+        ['alpha', 'beta'].map(async (name) => {
+          const user = await createUserWith(api, name, { isSuperuser: true });
+          return loginAs(api, user._id);
+        }),
+      );
+      // Each removes the other's superuser power; without one lock and a caller re-read, both would win.
+      const activeSuperusers = () =>
+        api.users.countDocuments({
+          username: { $in: ['alpha', 'beta'] },
+          isSuperuser: true,
+          isActive: true,
+        });
+      for (const [one, two] of [
+        [
+          change('beta', { isSuperuser: false }, alpha),
+          change('alpha', { isSuperuser: false }, beta),
+        ],
+        [
+          authed(api.http().patch(`${ADMIN}/users/beta/profile`), alpha).send({
+            isActive: false,
+          }),
+          change('alpha', { isSuperuser: false }, beta),
+        ],
+      ]) {
+        const statuses = (await Promise.all([one, two])).map(
+          (response) => response.status,
+        );
+        expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+        expect(await activeSuperusers()).toBe(1);
+        await api.users.updateMany(
+          { username: { $in: ['alpha', 'beta'] } },
+          { $set: { isSuperuser: true, isActive: true } },
+        );
+      }
+    });
+
     it('never lets a superuser change their own access, and a demoted superuser loses it at once', async () => {
       const second = await loginAs(
         api,
