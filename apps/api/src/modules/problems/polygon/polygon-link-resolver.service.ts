@@ -19,9 +19,9 @@ import {
   ZipError,
 } from '@libs/problems';
 import type {
-  LatestPackage,
   PolygonPackageInfo,
   PolygonProblem,
+  ReadyPackage,
 } from '@libs/problems';
 import { ProblemAccess } from '../core/problem-access';
 import {
@@ -39,8 +39,7 @@ import {
 } from './polygon-errors';
 import { PolygonLinksRepository } from './polygon-links.repository';
 
-export type ReadyPackage = LatestPackage & { id: number; revision: number };
-/** A pasted link that passed every check: the problem and the full package an import takes. */
+/** A pasted link that passed every check: the problem and the READY package (full or standard) an import takes. */
 export interface ResolvedLink {
   problem: PolygonProblem;
   latest: ReadyPackage;
@@ -88,7 +87,7 @@ export class PolygonLinkResolver {
 
   /**
    * Malformed (400) → per-user limit → shared with the account and token matches (one 404 for both) → not linked to
-   * another problem than `code` → newest full package READY. The link is never logged or stored.
+   * another problem than `code` → newest package READY. The link is never logged or stored.
    */
   async resolve(
     auth: AuthContext,
@@ -109,7 +108,7 @@ export class PolygonLinkResolver {
     const packages = await askPolygon(() => this.polygon.packages(problem.id));
     await this.verifyToken(problem.id, link.token, packages);
     await this.assertNotLinked(auth, problem.id, code);
-    return { problem, latest: readyFullPackage(problem.id, packages) };
+    return { problem, latest: readyPackage(problem.id, packages) };
   }
 
   /** The digest of the token read once per problem is cached, so a later check (or a wrong guess) downloads nothing. */
@@ -168,17 +167,13 @@ export class PolygonLinkResolver {
   }
 }
 
-/** The newest package must be a READY full one (be#47): a newer build still running or failed is never skipped. */
-export function readyFullPackage(
+/** The newest package must be READY, full or standard (be#47): a newer build still running or failed is never skipped. */
+export function readyPackage(
   polygonId: number,
   packages: PolygonPackageInfo[],
 ): ReadyPackage {
   const latest = latestPackageOf(packages);
-  if (
-    latest.state !== 'READY' ||
-    latest.id === null ||
-    latest.revision === null
-  )
+  if (latest.state !== 'READY' || latest.id === null || latest.type === null)
     throw packageNotReady(polygonId, packageNotReadyReason(packages));
   return latest as ReadyPackage;
 }

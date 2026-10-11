@@ -11,6 +11,7 @@ export const POLYGON_SYNC_STEPS = [
   'checking',
   'downloading',
   'statements',
+  'generating',
   'tests',
   'saving',
   'finishing',
@@ -19,6 +20,9 @@ export type PolygonSyncStep = (typeof POLYGON_SYNC_STEPS)[number];
 /** `link`: a first import that writes the link; `sync`: a later sync of a linked problem. */
 export const POLYGON_SYNC_PURPOSES = ['link', 'sync'] as const;
 export type PolygonSyncPurpose = (typeof POLYGON_SYNC_PURPOSES)[number];
+/** `full`: the `linux` package with every test and answer; `standard`: tests are generated on a judge. */
+export const POLYGON_PACKAGE_TYPES = ['full', 'standard'] as const;
+export type PolygonPackageType = (typeof POLYGON_PACKAGE_TYPES)[number];
 /** `manual`: started by a user; `auto`: queued by the auto-sync job (the requester is then the linking user). */
 export const POLYGON_SYNC_TRIGGERS = ['manual', 'auto'] as const;
 export type PolygonSyncTrigger = (typeof POLYGON_SYNC_TRIGGERS)[number];
@@ -35,6 +39,9 @@ export class PolygonSyncRun {
   @Prop({ required: true }) revision!: number;
   @Prop({ required: true }) packageId!: number;
   @Prop({ type: Date, default: null }) packageCreatedAt!: Date | null;
+  /** Which package variant the job took; `full` for runs recorded before standard packages. */
+  @Prop({ type: String, default: 'full', enum: POLYGON_PACKAGE_TYPES })
+  packageType!: PolygonPackageType;
   @Prop({ type: String, required: true, enum: POLYGON_SYNC_PURPOSES })
   purpose!: PolygonSyncPurpose;
   @Prop({ type: String, required: true, enum: POLYGON_SYNC_TRIGGERS })

@@ -1,3 +1,5 @@
+import type { PolygonPackageType } from '@libs/database';
+
 /** A problem as `problems.list` returns it. `latestPackage` is the newest revision that has a package, absent when none. */
 export interface PolygonProblem {
   id: number;
@@ -36,22 +38,35 @@ export interface LatestPackage {
   id: number | null;
   revision: number | null;
   state: PackageState;
+  /** `full` or `standard` once READY (what an import takes), null otherwise. */
+  type: PolygonPackageType | null;
   /** When Polygon started building it, as an ISO string (it travels through Redis and job data as JSON). */
   createdAt: string | null;
 }
+
+/** A package an import can take: READY, with its id, revision and type. */
+export type ReadyPackage = LatestPackage & {
+  id: number;
+  revision: number;
+  type: PolygonPackageType;
+};
 
 const NO_PACKAGE: LatestPackage = {
   id: null,
   revision: null,
   state: 'NONE',
+  type: null,
   createdAt: null,
 };
 
-/**
- * The variant the worker downloads. Only a full package has it, and only it holds every test with its answer: a
- * standard package's zip lacks the generated tests, and Polygon answers HTTP 500 when asked for its `linux` variant.
- */
+/** The Polygon variant that holds every test with its answer; only a full package has it, and Polygon answers HTTP 500 when asked for it on a standard one. */
 export const IMPORT_PACKAGE_TYPE = 'linux';
+/** The variant every package has: manual tests, sources and `doall.sh`, without the generated tests. */
+export const STANDARD_PACKAGE_VARIANT = 'standard';
+
+/** The variant the worker downloads for a package type. */
+export const variantOf = (type: PolygonPackageType): 'linux' | 'standard' =>
+  type === 'full' ? IMPORT_PACKAGE_TYPE : STANDARD_PACKAGE_VARIANT;
 
 const newestFirst = (left: PolygonPackageInfo, right: PolygonPackageInfo) =>
   right.revision - left.revision || right.id - left.id;
@@ -59,21 +74,46 @@ const newestFirst = (left: PolygonPackageInfo, right: PolygonPackageInfo) =>
 const isFull = (packages: PolygonPackageInfo[], id: number): boolean =>
   packages.some((row) => row.id === id && row.type === IMPORT_PACKAGE_TYPE);
 
+const typeOf = (
+  packages: PolygonPackageInfo[],
+  row: PolygonPackageInfo,
+): PolygonPackageType | null => {
+  if (row.state !== 'READY') return null;
+  return isFull(packages, row.id) ? 'full' : 'standard';
+};
+
+/** A READY full package of the revision wins over a standard one: it already holds the tests. */
+const readyFullOfRevision = (
+  packages: PolygonPackageInfo[],
+  revision: number,
+): PolygonPackageInfo | undefined =>
+  packages
+    .filter(
+      (row) =>
+        row.revision === revision &&
+        row.state === 'READY' &&
+        row.type === IMPORT_PACKAGE_TYPE,
+    )
+    .sort(newestFirst)[0];
+
 /**
- * The newest package an import can take (highest revision, then highest id). A READY package without the Linux
- * variant is skipped, as it cannot be imported; a newer build still running or failed is never skipped for an older
- * one, so an import takes the result only when it is READY.
+ * The newest package (highest revision, then highest id); a newer build still running or failed is never skipped for
+ * an older one, so an import takes the result only when it is READY. Within a READY revision a full package is
+ * preferred to a standard one, but an older revision's full package never beats a newer standard one (stale content).
  */
 export function latestPackageOf(packages: PolygonPackageInfo[]): LatestPackage {
-  const newest = packages
-    .filter((row) => row.state !== 'READY' || isFull(packages, row.id))
-    .sort(newestFirst)[0];
+  const newest = [...packages].sort(newestFirst)[0];
   if (!newest) return NO_PACKAGE;
+  const chosen =
+    newest.state === 'READY'
+      ? (readyFullOfRevision(packages, newest.revision) ?? newest)
+      : newest;
   return {
-    id: newest.id,
-    revision: newest.revision,
-    state: newest.state === 'PENDING' ? 'RUNNING' : newest.state,
-    createdAt: new Date(newest.creationTimeSeconds * 1000).toISOString(),
+    id: chosen.id,
+    revision: chosen.revision,
+    state: chosen.state === 'PENDING' ? 'RUNNING' : chosen.state,
+    type: typeOf(packages, chosen),
+    createdAt: new Date(chosen.creationTimeSeconds * 1000).toISOString(),
   };
 }
 
@@ -87,14 +127,11 @@ export function newestReadyPackageId(
   );
 }
 
-/** Why `latestPackageOf` offers nothing READY, naming Polygon's newest package, its state and whether it is full. */
+/** Why `latestPackageOf` offers nothing READY, naming Polygon's newest package and its state. */
 export function packageNotReadyReason(packages: PolygonPackageInfo[]): string {
   const newest = [...packages].sort(newestFirst)[0];
   if (!newest) return 'it has no package';
-  const name = `package ${newest.id} (revision ${newest.revision})`;
-  if (newest.state === 'READY' && !isFull(packages, newest.id))
-    return `its newest ${name} is a READY standard package, without the generated tests`;
-  return `its newest ${name} is ${newest.state}`;
+  return `its newest package ${newest.id} (revision ${newest.revision}) is ${newest.state}`;
 }
 /** Vietnamese first, then English, then any language; null when no statement has a name. */
 export function statementTitleOf(

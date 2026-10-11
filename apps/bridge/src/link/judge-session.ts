@@ -11,6 +11,7 @@ import {
 import type {
   AssignmentRef,
   Final,
+  GenerateTests,
   JudgeError,
   JudgeMessage,
   Pong,
@@ -104,12 +105,15 @@ export class JudgeSession implements DispatchTarget {
   readonly inFlight = new Map<string, number>();
   /** Runs the dispatcher let go of that the judge has not ended yet (`windingKey`s); they keep a slot until their `Final`. */
   readonly winding = new Set<string>();
+  /** Test generations it holds, by generation id. */
+  readonly generations = new Set<string>();
   readonly finished: Promise<void>;
   isDisabled: boolean;
   isDraining = false;
   isClosed = false;
   slots = 0;
   executors: ReadonlySet<string> = new Set<string>();
+  features: ReadonlySet<string> = new Set<string>();
   private readonly logger = new Logger(JudgeSession.name);
   private helloed = false;
   private readonly connectedAt = new Date();
@@ -169,6 +173,17 @@ export class JudgeSession implements DispatchTarget {
     remember(this.aborted, windingKey(ref));
     this.clearAcceptTimer(ref);
     this.send({ $case: 'abort', abort: { ref } });
+  }
+
+  generate(message: GenerateTests): void {
+    this.send({ $case: 'generate', generate: message });
+  }
+
+  cancelGeneration(generationId: string): void {
+    this.send({
+      $case: 'cancelGeneration',
+      cancelGeneration: { generationId },
+    });
   }
 
   disconnect({
@@ -270,6 +285,8 @@ export class JudgeSession implements DispatchTarget {
       case 'draining':
         this.isDraining = true;
         return;
+      case 'generationDone':
+        return this.services.dispatch.generationDone(this, body.generationDone);
       default:
         await this.onRunMessage(body);
     }
@@ -280,6 +297,7 @@ export class JudgeSession implements DispatchTarget {
     this.helloed = true;
     this.slots = info.slots;
     this.executors = new Set(info.runtimes.map((runtime) => runtime.language));
+    this.features = new Set(info.features);
     try {
       await this.welcome(info);
     } catch (error) {

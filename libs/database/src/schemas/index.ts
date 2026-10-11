@@ -85,6 +85,7 @@ import {
   PolygonSyncRun,
   PolygonSyncRunSchema,
 } from './polygon-sync-run.schema';
+import { TestGeneration, TestGenerationSchema } from './test-generation.schema';
 import { ProblemGroup, ProblemGroupSchema } from './problem-group.schema';
 import { Problem, ProblemSchema } from './problem.schema';
 import { ProblemType, ProblemTypeSchema } from './problem-type.schema';
@@ -155,6 +156,7 @@ export * from './polygon-link.schema';
 export * from './external-judge-link.schema';
 export * from './external-run.schema';
 export * from './polygon-sync-run.schema';
+export * from './test-generation.schema';
 export * from './problem-group.schema';
 export * from './problem-type.schema';
 export * from './problem.schema';
@@ -234,6 +236,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: Submission.name, schema: SubmissionSchema },
   { name: TagGroup.name, schema: TagGroupSchema },
   { name: TagProblem.name, schema: TagProblemSchema },
+  { name: TestGeneration.name, schema: TestGenerationSchema },
   { name: Tag.name, schema: TagSchema },
   { name: User.name, schema: UserSchema },
 ];

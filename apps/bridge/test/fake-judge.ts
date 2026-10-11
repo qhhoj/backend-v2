@@ -18,7 +18,12 @@ import {
   JudgeMessage,
   Outcome,
 } from '@libs/judge-proto';
-import type { Assign, AssignmentRef, InFlight } from '@libs/judge-proto';
+import type {
+  Assign,
+  AssignmentRef,
+  GenerationFailure,
+  InFlight,
+} from '@libs/judge-proto';
 
 export type BridgeBody = NonNullable<BridgeMessage['body']>;
 export type BridgeKind = BridgeBody['$case'];
@@ -36,6 +41,8 @@ export interface FakeJudgeOptions {
   languages?: string[];
   /** Answer the bridge's pings (default true). */
   answerPings?: boolean;
+  /** Features it advertises in Hello (`generate.polygon`). */
+  features?: string[];
   /** Runs it claims to still hold (`Hello.inFlight`), for resume. */
   inFlight?: InFlight[];
   /** PEM CA the bridge's certificate is signed by; plaintext without it. */
@@ -136,6 +143,7 @@ export class FakeJudge {
           version: '1',
         })),
         inFlight: this.options.inFlight ?? [],
+        features: this.options.features ?? [],
         ...extra,
       }),
     });
@@ -287,12 +295,9 @@ export class FakeJudge {
 
   /** FetchSource for `ref` over this judge's credentials. */
   fetchSource(ref: AssignmentRef): Promise<{ code: status; bytes: number }> {
-    const metadata = new Metadata();
-    metadata.set('x-judge-name', this.options.name);
-    metadata.set('x-judge-key', this.options.key);
     const stream = this.client.fetchSource(
       { ref, sessionId: this.sessionId },
-      metadata,
+      this.credentialsMetadata(),
     );
     let bytes = 0;
     stream.on(
@@ -305,6 +310,78 @@ export class FakeJudge {
         resolve({ code: ended.code, bytes }),
       ),
     );
+  }
+
+  /** FetchGenerationBundle over this judge's credentials: the status and every chunk received, with the biggest chunk's size. */
+  fetchGenerationBundle(
+    generationId: string,
+    sessionId = this.sessionId,
+  ): Promise<{ code: status; data: Buffer; biggestChunk: number }> {
+    const stream = this.client.fetchGenerationBundle(
+      { generationId, sessionId },
+      this.credentialsMetadata(),
+    );
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk: { data: Buffer }) => chunks.push(chunk.data));
+    stream.on('error', () => undefined);
+    return new Promise((resolve) =>
+      stream.on('status', (ended: StatusObject) =>
+        resolve({
+          code: ended.code,
+          data: Buffer.concat(chunks),
+          biggestChunk: Math.max(0, ...chunks.map((chunk) => chunk.length)),
+        }),
+      ),
+    );
+  }
+
+  /** UploadGeneratedTests: the first message names the generation and session, each chunk carries data. */
+  uploadGeneratedTests(
+    generationId: string,
+    chunks: Buffer[],
+    sessionId = this.sessionId,
+  ): Promise<{ code: status; bytes: number }> {
+    return new Promise((resolve) => {
+      const upload = this.client.uploadGeneratedTests(
+        this.credentialsMetadata(),
+        (error, receipt) =>
+          resolve({
+            code: error ? error.code : status.OK,
+            bytes: Number(receipt?.bytes ?? 0),
+          }),
+      );
+      upload.on('error', () => undefined);
+      chunks.forEach((data, index) =>
+        upload.write(
+          index === 0
+            ? { generationId, sessionId, data }
+            : { generationId: '', sessionId: '', data },
+        ),
+      );
+      upload.end();
+    });
+  }
+
+  /** GenerationDone for `generationId`: success, or the failure the judge reports. */
+  generationDone(
+    generationId: string,
+    failure?: Partial<GenerationFailure>,
+  ): void {
+    this.send({
+      $case: 'generationDone',
+      generationDone: {
+        generationId,
+        ok: !failure,
+        failure: failure && {
+          stage: 0,
+          kind: 0,
+          program: '',
+          testIndex: 0,
+          detail: '',
+          ...failure,
+        },
+      },
+    });
   }
 
   /** Ends the stream but keeps the channel, like a judge between two sessions. */
@@ -336,6 +413,13 @@ export class FakeJudge {
     const ended = await this.closed;
     this.client.close();
     return ended;
+  }
+
+  private credentialsMetadata(): Metadata {
+    const metadata = new Metadata();
+    metadata.set('x-judge-name', this.options.name);
+    metadata.set('x-judge-key', this.options.key);
+    return metadata;
   }
 
   private sendRun(

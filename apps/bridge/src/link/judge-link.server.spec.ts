@@ -50,6 +50,7 @@ function setup(authenticate: jest.Mock) {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const internals = server as unknown as {
     openSession(call: FakeCall): Promise<void>;

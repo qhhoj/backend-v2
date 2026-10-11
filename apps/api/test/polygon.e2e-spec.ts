@@ -259,6 +259,7 @@ describe('Polygon routes', () => {
           id: 10,
           revision: 3,
           state: 'READY',
+          type: 'full',
           createdAt: BUILT_AT,
         },
       });
@@ -324,7 +325,7 @@ describe('Polygon routes', () => {
       expect(polygon.calls).toEqual([]);
     });
 
-    it('asks for a package when there is none, and for a full package when the newest is not one (be#47)', async () => {
+    it('asks for a package when there is none or the newest is not READY (be#47), and offers a standard one', async () => {
       sharedProblems();
       await resolve(linkTo('bob', 'none', 'p3None0'))
         .expect(409)
@@ -335,10 +336,16 @@ describe('Polygon routes', () => {
       polygon.reply('problem.packages', {
         result: [pkg(30, 3, 'READY', 'standard')],
       });
+      expect(dataOf(await resolve(SUM_LINK).expect(200))).toMatchObject({
+        latestPackage: { id: 30, state: 'READY', type: 'standard' },
+      });
+      polygon.reply('problem.packages', {
+        result: [pkg(30, 3, 'READY'), pkg(31, 3, 'FAILED', 'standard')],
+      });
       expect(refusalOf(await resolve(SUM_LINK).expect(409))).toMatchObject({
         code: 'polygon_package_not_ready',
         message:
-          'Polygon problem 1 has no READY full package: its newest package 30 (revision 3) is a READY standard package, without the generated tests. Build a full package (with Linux tests) on Polygon first',
+          'Polygon problem 1 has no READY package: its newest package 31 (revision 3) is FAILED. Build a package on Polygon first',
       });
     });
 
@@ -426,6 +433,7 @@ describe('Polygon routes', () => {
         owner: 'alice',
         revision: 3,
         packageId: 10,
+        packageType: 'full',
         packageCreatedAt: BUILT_AT,
         purpose: 'link',
         autoSync: true,
@@ -608,7 +616,12 @@ describe('Polygon routes', () => {
         mainStatementLanguage: 'english',
         statementLanguages: { vietnamese: 'vi' },
         appendMainSolution: true,
-        polygon: { packageId: 11, revision: 4, purpose: 'sync' },
+        polygon: {
+          packageId: 11,
+          packageType: 'full',
+          revision: 4,
+          purpose: 'sync',
+        },
       });
       for (const field of [
         'points',
@@ -638,7 +651,7 @@ describe('Polygon routes', () => {
           autoSync: false,
           lastSyncResult: 'ok',
         },
-        latestPackage: { id: 11, revision: 4, state: 'READY' },
+        latestPackage: { id: 11, revision: 4, state: 'READY', type: 'full' },
       });
       expect(
         dataOf(

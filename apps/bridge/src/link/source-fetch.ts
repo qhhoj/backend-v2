@@ -2,6 +2,7 @@ import { status } from '@grpc/grpc-js';
 import type { ServerWritableStream } from '@grpc/grpc-js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { once } from 'node:events';
+import type { EventEmitter } from 'node:events';
 import { constants } from 'node:fs';
 import type { ReadStream } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
@@ -37,7 +38,7 @@ function heldRef(
 }
 
 /** Waits for the judge to drain the call; false when the call ends first (grpc-js emits only `close` on a cancel, which `once(call, 'drain')` would wait on forever). */
-async function drained(call: SourceCall): Promise<boolean> {
+export async function drained(call: EventEmitter): Promise<boolean> {
   const stop = new AbortController();
   const ended = ['cancelled', 'close', 'error'].map((event) =>
     once(call, event, { signal: stop.signal }).then(() => false),

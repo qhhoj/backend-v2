@@ -1,6 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
+import { createReadStream } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { StorageService, writeFileAtomically } from '@libs/common';
 import { emptyProblemData, newId, STATEMENT_LANGUAGES } from '@libs/database';
@@ -19,6 +20,7 @@ import {
   ProblemDataError,
   ProblemDataFilesService,
   SOURCE_MAX_BYTES,
+  variantOf,
 } from '@libs/problems';
 import type {
   PdfRenderJob,
@@ -53,6 +55,10 @@ import {
 } from './polygon-statements';
 import { planTests } from './polygon-tests';
 import type { PlannedTest, TestPlan } from './polygon-tests';
+import {
+  generatedTestsPathOf,
+  StandardPackageTests,
+} from './standard-package-tests';
 import type { XmlElement } from '@libs/problems';
 
 /** A data file written beside the final one and renamed into place only after the transaction matched. */
@@ -62,11 +68,17 @@ interface StagedFile {
 }
 
 interface ReadPackage {
+  /** problem.xml, for the plan of a standard package's generation. */
+  root: XmlElement;
+  plan: TestPlan;
   tests: PlannedTest[];
   assets: PolygonAssets;
   yaml: string | null;
   imported: ImportedProblem;
 }
+
+const isStandard = (job: PolygonImportJob): boolean =>
+  job.polygon?.packageType === 'standard';
 
 const dataOf = (assets: PolygonAssets, plan: TestPlan): ProblemData => ({
   ...emptyProblemData(),
@@ -91,6 +103,7 @@ export class PolygonImportService {
     private readonly pdfCache: PdfCacheService,
     private readonly repository: PolygonImportRepository,
     private readonly polygon: PolygonClient,
+    private readonly standardTests: StandardPackageTests,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
     @InjectQueue(PROBLEM_RESCORE_QUEUE)
     private readonly rescoreQueue: Queue<ProblemRescoreJob>,
@@ -111,6 +124,7 @@ export class PolygonImportService {
       return await this.importPackage(packagePath, job, target, tracker);
     } finally {
       await rm(packagePath, { force: true });
+      await rm(generatedTestsPathOf(packagePath), { force: true });
     }
   }
 
@@ -125,6 +139,7 @@ export class PolygonImportService {
     try {
       await this.polygon.downloadPackage(source, destination, {
         maxBytes: POLYGON_PACKAGE_MAX_BYTES,
+        type: variantOf(source.packageType ?? 'full'),
         onProgress: (done, total) =>
           void tracker.progress({ step: 'downloading', done, total }),
       });
@@ -152,9 +167,15 @@ export class PolygonImportService {
     try {
       await tracker.progress({ step: 'statements', done: null, total: null });
       const read = await this.readPackage(pkg, job, savedImages);
+      const generated = isStandard(job)
+        ? await this.generateStandardTests(packagePath, pkg, read, tracker)
+        : null;
       await tracker.progress({ step: 'tests', done: null, total: null });
+      const testsArchive = generated
+        ? createReadStream(generated)
+        : repackTests(pkg, read.tests);
       staged.push(
-        ...(await this.stageFiles(job.code, pkg, read.tests, read.assets)),
+        ...(await this.stageFiles(job.code, pkg, testsArchive, read.assets)),
       );
       tracker.enter('saving');
       const applied = await this.repository.apply(job, read.imported, target);
@@ -183,6 +204,7 @@ export class PolygonImportService {
     const assets = parseAssets(root);
     const plan = planTests(root, job);
     if (
+      !isStandard(job) &&
       !plan.tests.every(
         (test) => pkg.has(test.inputPath) && pkg.has(test.answerPath),
       )
@@ -197,6 +219,8 @@ export class PolygonImportService {
     const data = dataOf(assets, plan);
     const compiled = this.compile(data, plan.tests);
     return {
+      root,
+      plan,
       tests: plan.tests,
       assets,
       yaml: compiled.yaml,
@@ -209,6 +233,19 @@ export class PolygonImportService {
         data: { ...data, cases: compiled.cases },
       },
     };
+  }
+
+  /** A standard package has no generated tests: a judge makes them, and the result zip becomes `tests.zip`. */
+  private async generateStandardTests(
+    packagePath: string,
+    pkg: PolygonPackage,
+    read: ReadPackage,
+    tracker: ImportTracker,
+  ): Promise<string> {
+    await tracker.progress({ step: 'generating', done: null, total: null });
+    const destination = generatedTestsPathOf(packagePath);
+    await this.standardTests.generate(pkg, read, destination);
+    return destination;
   }
 
   private async readStatements(
@@ -373,7 +410,7 @@ export class PolygonImportService {
   private async stageFiles(
     code: string,
     pkg: PolygonPackage,
-    tests: PlannedTest[],
+    testsArchive: Readable,
     assets: PolygonAssets,
   ): Promise<StagedFile[]> {
     const staged: StagedFile[] = [];
@@ -383,7 +420,7 @@ export class PolygonImportService {
       await writeFileAtomically(stagedPath, content);
     };
     try {
-      await stage(TESTS_ARCHIVE, repackTests(pkg, tests));
+      await stage(TESTS_ARCHIVE, testsArchive);
       if (assets.checkerSource)
         await stage(
           CHECKER_FILE,

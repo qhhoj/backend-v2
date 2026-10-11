@@ -1,5 +1,6 @@
 import { SUBMISSION_PRIORITY } from '@libs/database';
-import type { AssignmentRef } from '@libs/judge-proto';
+import { GENERATE_FEATURE } from '@libs/judging';
+import type { AssignmentRef, GenerateTests } from '@libs/judge-proto';
 import type { AssignRequest } from '../submissions/assign-request';
 
 export interface QueuedSubmission {
@@ -29,15 +30,19 @@ export interface JudgeState {
   readonly inFlight: Map<string, number>;
   /** `windingKey`s of runs the bridge let go of (accept timeout, rejudge void, resume DROP) that the judge has not ended yet: judge-v2 frees the slot only when the run's process returns, so the bridge counts it until that run's `Final{ABORTED}` (or the session's end). */
   readonly winding: Set<string>;
+  /** Features from its Hello (`generate.polygon`, ...). */
+  readonly features: ReadonlySet<string>;
+  /** Ids of the test generations it holds (a claim in flight included); each takes one slot. */
+  readonly generations: Set<string>;
 }
 
 /** `"<submissionId>.<generation>"`, the key of a winding run. */
 export const windingKey = (ref: AssignmentRef): string =>
   `${ref.submissionId}.${ref.generation}`;
 
-/** Runs that occupy a slot on the judge: held ones and winding ones. */
+/** Runs that occupy a slot on the judge: held ones, winding ones and generations. */
 const busySlots = (judge: JudgeState): number =>
-  judge.inFlight.size + judge.winding.size;
+  judge.inFlight.size + judge.winding.size + judge.generations.size;
 
 /** What the dispatcher needs from a connected judge (`JudgeSession`). */
 export interface DispatchTarget extends JudgeState {
@@ -49,6 +54,8 @@ export interface DispatchTarget extends JudgeState {
   readonly authKeyHash: string;
   assign(request: AssignRequest): void;
   abort(ref: AssignmentRef): void;
+  generate(message: GenerateTests): void;
+  cancelGeneration(generationId: string): void;
   disconnect(options: { isForced: boolean; reason: string }): void;
   /** A newer session of the same judge took over. */
   replaced(): void;
@@ -61,6 +68,20 @@ export const freeSlots = (judge: JudgeState): number =>
 /** Busy share of its slots (winding runs included). */
 export const loadOf = (judge: JudgeState): number =>
   judge.slots > 0 ? busySlots(judge) / judge.slots : 1;
+
+/** Spec §2 Scheduling: a generation goes only to an enabled judge that advertises the feature, when no queued submission waits for it and it would not take the judge's last free slot (a 1-slot judge has no other). */
+export const mayStartGeneration = (
+  judge: JudgeState,
+  isSubmissionWaiting: boolean,
+): boolean => {
+  const free = freeSlots(judge);
+  return (
+    judge.features.has(GENERATE_FEATURE) &&
+    !judge.isDisabled &&
+    !isSubmissionWaiting &&
+    (free > 1 || (free === 1 && judge.slots === 1))
+  );
+};
 
 /** Runs the language, is not banned, and is enabled (or asked for by name). */
 export const canJudge = (
@@ -79,7 +100,9 @@ const sum = (values: number[]): number =>
 
 /** Slots no live run holds: free ones and winding ones, which open at the judge's `Final{ABORTED}`; none while draining. */
 const openingSlots = (judge: JudgeState): number =>
-  judge.isDraining ? 0 : Math.max(0, judge.slots - judge.inFlight.size);
+  judge.isDraining
+    ? 0
+    : Math.max(0, judge.slots - judge.inFlight.size - judge.generations.size);
 
 /** Rejudges (priority ≥ 2) leave the last slot no live run holds to new submissions whenever the candidates have more than one slot in all. A winding slot counts as opening, so a rejudge that voided its own run still takes the spare slot (conformance 21). */
 const heldBack = (

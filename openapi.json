@@ -6092,11 +6092,12 @@
             "type": "string"
           },
           "step": {
-            "description": "Step for a progress display: queued, then downloading (Polygon imports only), statements, tests, and done or failed.",
+            "description": "Step for a progress display: queued, then downloading (Polygon imports only), statements, generating (the tests of a Polygon standard package, on a judge), tests, and done or failed.",
             "enum": [
               "done",
               "downloading",
               "failed",
+              "generating",
               "queued",
               "statements",
               "tests"
@@ -6136,6 +6137,7 @@
           "step": {
             "enum": [
               "downloading",
+              "generating",
               "statements",
               "tests"
             ],
@@ -8124,10 +8126,20 @@
                 "$ref": "#/components/schemas/PolygonPackageState"
               }
             ]
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonPackageType"
+              }
+            ],
+            "description": "`full`: every test with its answer is in the package; `standard`: the tests are generated on a judge during the import. Null unless READY.",
+            "nullable": true
           }
         },
         "required": [
           "state",
+          "type",
           "createdAt",
           "id",
           "revision"
@@ -8336,6 +8348,14 @@
         ],
         "type": "string"
       },
+      "PolygonPackageType": {
+        "description": "`full`: every test with its answer is in the package; `standard`: the tests are generated on a judge during the import. Null unless READY.",
+        "enum": [
+          "full",
+          "standard"
+        ],
+        "type": "string"
+      },
       "PolygonProblemLinkDto": {
         "properties": {
           "link": {
@@ -8361,7 +8381,7 @@
                 "$ref": "#/components/schemas/PolygonLatestPackageResponse"
               }
             ],
-            "description": "The newest full package, READY: the one an import takes."
+            "description": "The newest package, READY (full, or standard with generated tests): the one an import takes."
           },
           "modified": {
             "description": "The working copy has uncommitted changes.",
@@ -8463,6 +8483,14 @@
           "packageId": {
             "type": "number"
           },
+          "packageType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonPackageType"
+              }
+            ],
+            "description": "The package variant taken: `full`, or `standard` (tests generated on a judge)."
+          },
           "polygonName": {
             "description": "Polygon short name.",
             "type": "string"
@@ -8512,6 +8540,7 @@
           }
         },
         "required": [
+          "packageType",
           "purpose",
           "trigger",
           "result",
@@ -8536,6 +8565,7 @@
           "checking",
           "downloading",
           "finishing",
+          "generating",
           "saving",
           "statements",
           "tests"
@@ -31334,7 +31364,7 @@
     },
     "/api/internal/polygon/resolve": {
       "post": {
-        "description": "Needs `judge.import_polygon_package`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest full\npackage. Each check, here or on import, counts towards 20 per 10 minutes\nper user. Errors: 400 `polygon_link_invalid` (not a problem link), 404\n`polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not a READY\nfull package), `polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it) or\n`polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "description": "Needs `judge.import_polygon_package`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not READY),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it) or\n`polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
         "operationId": "PolygonController_resolve",
         "parameters": [],
         "requestBody": {

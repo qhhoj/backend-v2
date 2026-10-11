@@ -56,4 +56,9 @@ export class BridgeCommandsService {
         bannedJudges: [],
       });
   }
+
+  /** The queued `TestGeneration` row is ready: the bridge dispatches it (its resync also finds queued rows). */
+  async generate(generationId: string): Promise<void> {
+    await this.publish({ type: 'generate', generationId });
+  }
 }

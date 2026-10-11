@@ -1,6 +1,7 @@
 import { Server, status } from '@grpc/grpc-js';
 import type {
   ConnectionInjector,
+  sendUnaryData,
   ServerOptions,
   StatusObject,
 } from '@grpc/grpc-js';
@@ -10,6 +11,7 @@ import type { AddressInfo, Server as NetServer, Socket } from 'node:net';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { JudgeLinkService } from '@libs/judge-proto';
+import type { UploadReceipt } from '@libs/judge-proto';
 import { BRIDGE_TIMINGS } from '../bridge-timings';
 import type { BridgeTimings } from '../bridge-timings';
 import { DispatcherService } from '../dispatch/dispatcher.service';
@@ -36,14 +38,16 @@ import {
 } from './link-limits';
 import { decodeJudgeMessage } from './messages';
 import { serverCredentials } from './server-credentials';
+import { GenerationTransfer } from './generation-transfer';
+import type { BundleCall, UploadCall } from './generation-transfer';
 import { SourceFetch } from './source-fetch';
 import type { SourceCall } from './source-fetch';
 
 const SERVER_OPTIONS: ServerOptions = {
   'grpc.max_receive_message_length': MAX_MESSAGE_BYTES,
   'grpc.max_send_message_length': MAX_MESSAGE_BYTES,
-  /** One Session plus a FetchSource per slot. */
-  'grpc.max_concurrent_streams': 1 + MAX_SLOTS,
+  /** One Session, plus per slot a FetchSource, a FetchGenerationBundle or an UploadGeneratedTests. */
+  'grpc.max_concurrent_streams': 1 + 2 * MAX_SLOTS,
   'grpc.keepalive_time_ms': 30_000,
   'grpc.keepalive_timeout_ms': 10_000,
   /** judge-v2 pings every 10 s (core Task 26); without these grpc-js answers GOAWAY `too_many_pings` (preflight M3). */
@@ -101,6 +105,7 @@ export class JudgeLinkServer {
     private readonly dispatch: DispatcherService,
     runs: RunsService,
     private readonly sources: SourceFetch,
+    private readonly transfers: GenerationTransfer,
   ) {
     this.services = { dispatch, runs, judges, timings };
     this.guard = new ConnectionGuard(
@@ -119,6 +124,12 @@ export class JudgeLinkServer {
     this.grpc.addService(LINK_SERVICE, {
       session: (call: SessionCall) => void this.openSession(call),
       fetchSource: (call: SourceCall) => void this.fetchSource(call),
+      fetchGenerationBundle: (call: BundleCall) =>
+        void this.fetchGenerationBundle(call),
+      uploadGeneratedTests: (
+        call: UploadCall,
+        reply: sendUnaryData<UploadReceipt>,
+      ) => void this.uploadGeneratedTests(call, reply),
     });
     this.injector = this.grpc.createConnectionInjector(credentials);
     const tcp = createServer((socket) => this.onSocket(socket));
@@ -214,6 +225,28 @@ export class JudgeLinkServer {
     const identity = await this.identify(call, peerOfCall(call.getPeer()));
     if (identity)
       await this.sources.serve(call, this.dispatch.sessionOf(identity.name));
+  }
+
+  private async fetchGenerationBundle(call: BundleCall): Promise<void> {
+    const identity = await this.identify(call, peerOfCall(call.getPeer()));
+    if (identity)
+      await this.transfers.serveBundle(
+        call,
+        this.dispatch.sessionOf(identity.name),
+      );
+  }
+
+  private async uploadGeneratedTests(
+    call: UploadCall,
+    reply: sendUnaryData<UploadReceipt>,
+  ): Promise<void> {
+    const identity = await this.identify(call, peerOfCall(call.getPeer()));
+    if (identity)
+      await this.transfers.receiveUpload(
+        call,
+        this.dispatch.sessionOf(identity.name),
+        reply,
+      );
   }
 
   /** Null after refusing the call: UNAVAILABLE while the bridge stops, UNAUTHENTICATED for bad credentials, PERMISSION_DENIED when the judge was revoked during the check. */

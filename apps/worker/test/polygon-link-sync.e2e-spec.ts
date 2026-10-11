@@ -201,6 +201,7 @@ describe('Polygon link, sync and auto-sync', () => {
     });
     expect(steps[0]).toBe('downloading');
     expect(steps.slice(-2)).toEqual(['statements', 'tests']);
+    expect(steps).not.toContain('generating');
     const problem = (await worker.problems.findOne({
       code: 'linked',
     }))!.toObject({
@@ -226,6 +227,7 @@ describe('Polygon link, sync and auto-sync', () => {
         revision: 3,
         packageId: 10,
         packageCreatedAt: new Date(BUILT_AT),
+        packageType: 'full',
         purpose: 'link',
         trigger: 'manual',
         result: 'ok',

@@ -14,8 +14,10 @@ export class ImportResultResponse {
 
 /** Where a running job is; `done`/`total` count downloaded bytes while `downloading` (`total` null when Polygon sent no size) and are null for the other steps. */
 export class ImportProgressResponse {
-  @ApiProperty({ enum: ['downloading', 'statements', 'tests'] })
-  step!: 'downloading' | 'statements' | 'tests';
+  @ApiProperty({
+    enum: ['downloading', 'statements', 'generating', 'tests'],
+  })
+  step!: 'downloading' | 'statements' | 'generating' | 'tests';
   done!: number | null;
   total!: number | null;
 }
@@ -25,7 +27,7 @@ export class ImportJobResponse {
   id!: string;
   /** BullMQ state: waiting | active | completed | failed | delayed | prioritized. */
   state!: string;
-  /** Step for a progress display: queued, then downloading (Polygon imports only), statements, tests, and done or failed. */
+  /** Step for a progress display: queued, then downloading (Polygon imports only), statements, generating (the tests of a Polygon standard package, on a judge), tests, and done or failed. */
   @ApiProperty({ enum: IMPORT_STEPS })
   step!: ImportStep;
   /** Progress of the running step; null while queued and once finished. */

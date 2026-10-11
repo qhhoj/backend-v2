@@ -1,11 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { unique } from '@libs/common';
 import { Resume_Action } from '@libs/judge-proto';
-import type { AssignmentRef, Resume } from '@libs/judge-proto';
+import type { AssignmentRef, GenerationDone, Resume } from '@libs/judge-proto';
 import { BRIDGE_TIMINGS, runDeadlineMs } from '../bridge-timings';
 import type { BridgeTimings } from '../bridge-timings';
 import type { JudgeAccess } from '../judges/judges.repository';
 import type { ResumeCandidate } from '../link/messages';
+import { GenerationsService } from '../generations/generations.service';
 import { RunsService } from '../submissions/runs.service';
 import type { Claimed, GraceOutcome } from '../submissions/runs.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
@@ -14,6 +15,7 @@ import type { GraceEntry } from './grace';
 import {
   freeSlots,
   insertQueued,
+  mayStartGeneration,
   nextFor,
   pickJudge,
   windingKey,
@@ -71,6 +73,7 @@ export class DispatcherService {
   constructor(
     private readonly submissions: SubmissionsRepository,
     private readonly runs: RunsService,
+    private readonly generations: GenerationsService,
     @Inject(BRIDGE_TIMINGS) private readonly timings: BridgeTimings,
   ) {
     this.grace = new GraceRegistry(
@@ -118,10 +121,50 @@ export class DispatcherService {
   async offerWork(judge: DispatchTarget): Promise<void> {
     while (this.takesWork(judge)) {
       const next = nextFor(judge, this.queue, this.connected());
-      if (!next) return;
+      if (!next) break;
       this.removeQueued(next.id);
       await this.dispatch(judge, next);
     }
+    await this.offerGenerations(judge);
+  }
+
+  /** Submissions come first: a generation starts only when none waits for this judge and it keeps a free slot (`mayStartGeneration`). */
+  private async offerGenerations(judge: DispatchTarget): Promise<void> {
+    while (
+      this.takesWork(judge) &&
+      this.generations.hasQueued() &&
+      mayStartGeneration(
+        judge,
+        nextFor(judge, this.queue, this.connected()) !== null,
+      )
+    )
+      await this.generations.startFor(judge);
+  }
+
+  /** Queued generation rows (all of them, or the ids a command named) join the queue and are offered to every judge. */
+  async enqueueGenerations(ids?: string[]): Promise<void> {
+    await this.generations.enqueueQueued(ids);
+    for (const judge of this.connected()) await this.offerWork(judge);
+  }
+
+  /** Resync tick: queued generations no command announced are picked up, running ones no live session holds fail, and rows past their retention go with their files. */
+  async resyncGenerations(): Promise<void> {
+    await this.generations.resync(this.heldGenerationIds());
+    await this.enqueueGenerations();
+  }
+
+  /** The judge's GenerationDone: the row is marked and the slot is free for the next work. */
+  async generationDone(
+    judge: DispatchTarget,
+    message: GenerationDone,
+  ): Promise<void> {
+    await this.generations.done(judge, message);
+    await this.offerWork(judge);
+  }
+
+  /** Generation ids a registered or handshaking session holds; the resync fails running rows outside this set. */
+  heldGenerationIds(): Set<string> {
+    return GenerationsService.heldIds(this.sessions());
   }
 
   /** The run ended (its Final was stored, or the row moved on): the slot is free. After a RETRY the judge may not take the row again until the next resync tick. */
@@ -229,6 +272,7 @@ export class DispatcherService {
     if (this.judges.get(judge.name) === judge) this.judges.delete(judge.name);
     this.endHandshake(judge);
     this.holdInGrace(judge);
+    await this.generations.judgeLost(judge);
     for (const other of this.connected()) await this.offerWork(other);
   }
 
@@ -321,6 +365,7 @@ export class DispatcherService {
     this.grace.clear();
     for (const timer of this.deadlines.values()) clearTimeout(timer);
     this.deadlines.clear();
+    this.generations.stop();
   }
 
   isStopped(): boolean {

@@ -13,6 +13,8 @@ class Target implements DispatchTarget {
   readonly id = newId();
   readonly inFlight = new Map<string, number>();
   readonly winding = new Set<string>();
+  readonly generations = new Set<string>();
+  features: ReadonlySet<string> = new Set();
   executors: ReadonlySet<string> = new Set(['CPP17']);
   isDisabled = false;
   isDraining = false;
@@ -31,6 +33,8 @@ class Target implements DispatchTarget {
   abort(ref: AssignmentRef): void {
     this.aborted.push(ref);
   }
+  generate(): void {}
+  cancelGeneration(): void {}
   disconnect(): void {
     this.isClosed = true;
   }
@@ -40,6 +44,13 @@ class Target implements DispatchTarget {
     this.isClosed = true;
   }
 }
+
+/** The generation queue is empty and holds nothing here; its own spec covers it. */
+const NO_GENERATIONS = {
+  hasQueued: () => false,
+  judgeLost: () => Promise.resolve(),
+  stop: () => undefined,
+} as never;
 
 const TIMINGS = {
   resumeGraceMs: 30_000,
@@ -140,7 +151,12 @@ describe('DispatcherService', () => {
     tracked = new Set();
     published = [];
     expired = [];
-    dispatcher = new DispatcherService(submissions, runs, TIMINGS);
+    dispatcher = new DispatcherService(
+      submissions,
+      runs,
+      NO_GENERATIONS,
+      TIMINGS,
+    );
   });
   afterEach(() => {
     dispatcher.stop();

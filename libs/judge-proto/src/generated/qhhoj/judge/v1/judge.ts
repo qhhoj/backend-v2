@@ -10,10 +10,13 @@ import {
   type ClientDuplexStream,
   type ClientOptions,
   type ClientReadableStream,
+  type ClientWritableStream,
   type handleBidiStreamingCall,
+  type handleClientStreamingCall,
   type handleServerStreamingCall,
   makeGenericClientConstructor,
   type Metadata,
+  type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 
@@ -302,6 +305,7 @@ export interface JudgeMessage {
     | { $case: "final"; final: Final }
     | { $case: "error"; error: JudgeError }
     | { $case: "draining"; draining: Draining }
+    | { $case: "generationDone"; generationDone: GenerationDone }
     | undefined;
 }
 
@@ -314,6 +318,8 @@ export interface BridgeMessage {
     | { $case: "ack"; ack: ResultAck }
     | { $case: "disconnect"; disconnect: Disconnect }
     | { $case: "error"; error: BridgeError }
+    | { $case: "generate"; generate: GenerateTests }
+    | { $case: "cancelGeneration"; cancelGeneration: CancelGeneration }
     | undefined;
 }
 
@@ -538,6 +544,298 @@ export interface Chunk {
   data: Buffer;
 }
 
+export interface GenerationProgram {
+  /** Unique in the generation; generators are named as in a test's command. */
+  name: string;
+  role: GenerationProgram_Role;
+  languageKey: string;
+  /**
+   * Path of the source inside the bundle; every file in the same bundle
+   * directory is copied beside it when compiling (headers).
+   */
+  sourcePath: string;
+}
+
+export enum GenerationProgram_Role {
+  ROLE_UNSPECIFIED = 0,
+  ROLE_GENERATOR = 1,
+  ROLE_VALIDATOR = 2,
+  ROLE_SOLUTION = 3,
+  UNRECOGNIZED = -1,
+}
+
+export function generationProgram_RoleFromJSON(object: any): GenerationProgram_Role {
+  switch (object) {
+    case 0:
+    case "ROLE_UNSPECIFIED":
+      return GenerationProgram_Role.ROLE_UNSPECIFIED;
+    case 1:
+    case "ROLE_GENERATOR":
+      return GenerationProgram_Role.ROLE_GENERATOR;
+    case 2:
+    case "ROLE_VALIDATOR":
+      return GenerationProgram_Role.ROLE_VALIDATOR;
+    case 3:
+    case "ROLE_SOLUTION":
+      return GenerationProgram_Role.ROLE_SOLUTION;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return GenerationProgram_Role.UNRECOGNIZED;
+  }
+}
+
+export function generationProgram_RoleToJSON(object: GenerationProgram_Role): string {
+  switch (object) {
+    case GenerationProgram_Role.ROLE_UNSPECIFIED:
+      return "ROLE_UNSPECIFIED";
+    case GenerationProgram_Role.ROLE_GENERATOR:
+      return "ROLE_GENERATOR";
+    case GenerationProgram_Role.ROLE_VALIDATOR:
+      return "ROLE_VALIDATOR";
+    case GenerationProgram_Role.ROLE_SOLUTION:
+      return "ROLE_SOLUTION";
+    case GenerationProgram_Role.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export interface GenerationTest {
+  /** 1-based, as Polygon numbers tests. */
+  index: number;
+  /** Names of the input and answer entries in the result zip. */
+  inputName: string;
+  answerName: string;
+  /** Polygon group, passed to the validator as --group; empty when none. */
+  group: string;
+  /** Exactly one: a manual test's input inside the bundle, or a generator run. */
+  manualPath: string;
+  generator: string;
+  args: string[];
+}
+
+export interface ProgramLimits {
+  timeS: number;
+  wallS: number;
+  memoryKib: number;
+}
+
+export interface GenerationLimits {
+  generator: ProgramLimits | undefined;
+  validator: ProgramLimits | undefined;
+  solution:
+    | ProgramLimits
+    | undefined;
+  /** Cap of each generated input and answer. */
+  maxFileBytes: number;
+  /** Cap of all inputs and answers together, uncompressed. */
+  maxTotalBytes: number;
+  /** Cap of the uploaded zip. */
+  maxUploadBytes: number;
+}
+
+export interface GenerateTests {
+  generationId: string;
+  bundleSize: number;
+  /** Overall cap, from when the judge receives the message. */
+  deadlineS: number;
+  limits: GenerationLimits | undefined;
+  programs: GenerationProgram[];
+  tests: GenerationTest[];
+  /**
+   * The solution reads and writes these files instead of stdin and stdout
+   * when both are set (problem.xml input-file / output-file).
+   */
+  inputFile: string;
+  outputFile: string;
+}
+
+export interface CancelGeneration {
+  generationId: string;
+}
+
+export interface GenerationRequest {
+  generationId: string;
+  sessionId: string;
+}
+
+export interface UploadChunk {
+  /** Read from the first message only. */
+  generationId: string;
+  sessionId: string;
+  data: Buffer;
+}
+
+export interface UploadReceipt {
+  bytes: number;
+}
+
+export interface GenerationFailure {
+  stage: GenerationFailure_Stage;
+  kind: GenerationFailure_Kind;
+  /** The program's name, empty for job-level failures. */
+  program: string;
+  /** GenerationTest.index, 0 when not about one test. */
+  testIndex: number;
+  /** Compile log, validator stderr, exit code or signal; clipped to max_log_bytes. */
+  detail: string;
+}
+
+export enum GenerationFailure_Stage {
+  STAGE_UNSPECIFIED = 0,
+  STAGE_COMPILE = 1,
+  STAGE_GENERATE = 2,
+  STAGE_VALIDATE = 3,
+  STAGE_SOLVE = 4,
+  /** STAGE_JOB - The job as a whole: fetch, deadline, caps, upload, cancel. */
+  STAGE_JOB = 5,
+  UNRECOGNIZED = -1,
+}
+
+export function generationFailure_StageFromJSON(object: any): GenerationFailure_Stage {
+  switch (object) {
+    case 0:
+    case "STAGE_UNSPECIFIED":
+      return GenerationFailure_Stage.STAGE_UNSPECIFIED;
+    case 1:
+    case "STAGE_COMPILE":
+      return GenerationFailure_Stage.STAGE_COMPILE;
+    case 2:
+    case "STAGE_GENERATE":
+      return GenerationFailure_Stage.STAGE_GENERATE;
+    case 3:
+    case "STAGE_VALIDATE":
+      return GenerationFailure_Stage.STAGE_VALIDATE;
+    case 4:
+    case "STAGE_SOLVE":
+      return GenerationFailure_Stage.STAGE_SOLVE;
+    case 5:
+    case "STAGE_JOB":
+      return GenerationFailure_Stage.STAGE_JOB;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return GenerationFailure_Stage.UNRECOGNIZED;
+  }
+}
+
+export function generationFailure_StageToJSON(object: GenerationFailure_Stage): string {
+  switch (object) {
+    case GenerationFailure_Stage.STAGE_UNSPECIFIED:
+      return "STAGE_UNSPECIFIED";
+    case GenerationFailure_Stage.STAGE_COMPILE:
+      return "STAGE_COMPILE";
+    case GenerationFailure_Stage.STAGE_GENERATE:
+      return "STAGE_GENERATE";
+    case GenerationFailure_Stage.STAGE_VALIDATE:
+      return "STAGE_VALIDATE";
+    case GenerationFailure_Stage.STAGE_SOLVE:
+      return "STAGE_SOLVE";
+    case GenerationFailure_Stage.STAGE_JOB:
+      return "STAGE_JOB";
+    case GenerationFailure_Stage.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export enum GenerationFailure_Kind {
+  KIND_UNSPECIFIED = 0,
+  KIND_COMPILE_ERROR = 1,
+  /** KIND_CRASHED - Non-zero exit or a signal; detail says which. */
+  KIND_CRASHED = 2,
+  KIND_TIME_LIMIT = 3,
+  KIND_MEMORY_LIMIT = 4,
+  KIND_OUTPUT_LIMIT = 5,
+  /** KIND_REJECTED - The validator exited non-zero; detail is its stderr. */
+  KIND_REJECTED = 6,
+  KIND_MISSING_FILE = 7,
+  KIND_UNSUPPORTED_LANGUAGE = 8,
+  KIND_JOB_TIME_LIMIT = 9,
+  KIND_INTERNAL = 10,
+  UNRECOGNIZED = -1,
+}
+
+export function generationFailure_KindFromJSON(object: any): GenerationFailure_Kind {
+  switch (object) {
+    case 0:
+    case "KIND_UNSPECIFIED":
+      return GenerationFailure_Kind.KIND_UNSPECIFIED;
+    case 1:
+    case "KIND_COMPILE_ERROR":
+      return GenerationFailure_Kind.KIND_COMPILE_ERROR;
+    case 2:
+    case "KIND_CRASHED":
+      return GenerationFailure_Kind.KIND_CRASHED;
+    case 3:
+    case "KIND_TIME_LIMIT":
+      return GenerationFailure_Kind.KIND_TIME_LIMIT;
+    case 4:
+    case "KIND_MEMORY_LIMIT":
+      return GenerationFailure_Kind.KIND_MEMORY_LIMIT;
+    case 5:
+    case "KIND_OUTPUT_LIMIT":
+      return GenerationFailure_Kind.KIND_OUTPUT_LIMIT;
+    case 6:
+    case "KIND_REJECTED":
+      return GenerationFailure_Kind.KIND_REJECTED;
+    case 7:
+    case "KIND_MISSING_FILE":
+      return GenerationFailure_Kind.KIND_MISSING_FILE;
+    case 8:
+    case "KIND_UNSUPPORTED_LANGUAGE":
+      return GenerationFailure_Kind.KIND_UNSUPPORTED_LANGUAGE;
+    case 9:
+    case "KIND_JOB_TIME_LIMIT":
+      return GenerationFailure_Kind.KIND_JOB_TIME_LIMIT;
+    case 10:
+    case "KIND_INTERNAL":
+      return GenerationFailure_Kind.KIND_INTERNAL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return GenerationFailure_Kind.UNRECOGNIZED;
+  }
+}
+
+export function generationFailure_KindToJSON(object: GenerationFailure_Kind): string {
+  switch (object) {
+    case GenerationFailure_Kind.KIND_UNSPECIFIED:
+      return "KIND_UNSPECIFIED";
+    case GenerationFailure_Kind.KIND_COMPILE_ERROR:
+      return "KIND_COMPILE_ERROR";
+    case GenerationFailure_Kind.KIND_CRASHED:
+      return "KIND_CRASHED";
+    case GenerationFailure_Kind.KIND_TIME_LIMIT:
+      return "KIND_TIME_LIMIT";
+    case GenerationFailure_Kind.KIND_MEMORY_LIMIT:
+      return "KIND_MEMORY_LIMIT";
+    case GenerationFailure_Kind.KIND_OUTPUT_LIMIT:
+      return "KIND_OUTPUT_LIMIT";
+    case GenerationFailure_Kind.KIND_REJECTED:
+      return "KIND_REJECTED";
+    case GenerationFailure_Kind.KIND_MISSING_FILE:
+      return "KIND_MISSING_FILE";
+    case GenerationFailure_Kind.KIND_UNSUPPORTED_LANGUAGE:
+      return "KIND_UNSUPPORTED_LANGUAGE";
+    case GenerationFailure_Kind.KIND_JOB_TIME_LIMIT:
+      return "KIND_JOB_TIME_LIMIT";
+    case GenerationFailure_Kind.KIND_INTERNAL:
+      return "KIND_INTERNAL";
+    case GenerationFailure_Kind.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+/** Sent after the upload completed (ok) or instead of it (failure). */
+export interface GenerationDone {
+  generationId: string;
+  ok: boolean;
+  failure: GenerationFailure | undefined;
+}
+
 function createBaseAssignmentRef(): AssignmentRef {
   return { submissionId: "", generation: 0 };
 }
@@ -661,6 +959,9 @@ export const JudgeMessage: MessageFns<JudgeMessage> = {
       case "draining":
         Draining.encode(message.body.draining, writer.uint32(74).fork()).join();
         break;
+      case "generationDone":
+        GenerationDone.encode(message.body.generationDone, writer.uint32(82).fork()).join();
+        break;
     }
     return writer;
   },
@@ -750,6 +1051,14 @@ export const JudgeMessage: MessageFns<JudgeMessage> = {
             message.body = { $case: "draining", draining: Draining.decode(reader, reader.uint32()) };
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.body = { $case: "generationDone", generationDone: GenerationDone.decode(reader, reader.uint32()) };
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -782,6 +1091,10 @@ export const JudgeMessage: MessageFns<JudgeMessage> = {
         ? { $case: "error", error: JudgeError.fromJSON(object.error) }
         : isSet(object.draining)
         ? { $case: "draining", draining: Draining.fromJSON(object.draining) }
+        : isSet(object.generationDone)
+        ? { $case: "generationDone", generationDone: GenerationDone.fromJSON(object.generationDone) }
+        : isSet(object.generation_done)
+        ? { $case: "generationDone", generationDone: GenerationDone.fromJSON(object.generation_done) }
         : undefined,
     };
   },
@@ -806,6 +1119,8 @@ export const JudgeMessage: MessageFns<JudgeMessage> = {
       obj.error = JudgeError.toJSON(message.body.error);
     } else if (message.body?.$case === "draining") {
       obj.draining = Draining.toJSON(message.body.draining);
+    } else if (message.body?.$case === "generationDone") {
+      obj.generationDone = GenerationDone.toJSON(message.body.generationDone);
     }
     return obj;
   },
@@ -870,6 +1185,15 @@ export const JudgeMessage: MessageFns<JudgeMessage> = {
         }
         break;
       }
+      case "generationDone": {
+        if (object.body?.generationDone !== undefined && object.body?.generationDone !== null) {
+          message.body = {
+            $case: "generationDone",
+            generationDone: GenerationDone.fromPartial(object.body.generationDone),
+          };
+        }
+        break;
+      }
     }
     return message;
   },
@@ -902,6 +1226,12 @@ export const BridgeMessage: MessageFns<BridgeMessage> = {
         break;
       case "error":
         BridgeError.encode(message.body.error, writer.uint32(58).fork()).join();
+        break;
+      case "generate":
+        GenerateTests.encode(message.body.generate, writer.uint32(66).fork()).join();
+        break;
+      case "cancelGeneration":
+        CancelGeneration.encode(message.body.cancelGeneration, writer.uint32(74).fork()).join();
         break;
     }
     return writer;
@@ -976,6 +1306,25 @@ export const BridgeMessage: MessageFns<BridgeMessage> = {
             message.body = { $case: "error", error: BridgeError.decode(reader, reader.uint32()) };
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.body = { $case: "generate", generate: GenerateTests.decode(reader, reader.uint32()) };
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.body = {
+              $case: "cancelGeneration",
+              cancelGeneration: CancelGeneration.decode(reader, reader.uint32()),
+            };
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1004,6 +1353,12 @@ export const BridgeMessage: MessageFns<BridgeMessage> = {
         ? { $case: "disconnect", disconnect: Disconnect.fromJSON(object.disconnect) }
         : isSet(object.error)
         ? { $case: "error", error: BridgeError.fromJSON(object.error) }
+        : isSet(object.generate)
+        ? { $case: "generate", generate: GenerateTests.fromJSON(object.generate) }
+        : isSet(object.cancelGeneration)
+        ? { $case: "cancelGeneration", cancelGeneration: CancelGeneration.fromJSON(object.cancelGeneration) }
+        : isSet(object.cancel_generation)
+        ? { $case: "cancelGeneration", cancelGeneration: CancelGeneration.fromJSON(object.cancel_generation) }
         : undefined,
     };
   },
@@ -1024,6 +1379,10 @@ export const BridgeMessage: MessageFns<BridgeMessage> = {
       obj.disconnect = Disconnect.toJSON(message.body.disconnect);
     } else if (message.body?.$case === "error") {
       obj.error = BridgeError.toJSON(message.body.error);
+    } else if (message.body?.$case === "generate") {
+      obj.generate = GenerateTests.toJSON(message.body.generate);
+    } else if (message.body?.$case === "cancelGeneration") {
+      obj.cancelGeneration = CancelGeneration.toJSON(message.body.cancelGeneration);
     }
     return obj;
   },
@@ -1073,6 +1432,21 @@ export const BridgeMessage: MessageFns<BridgeMessage> = {
       case "error": {
         if (object.body?.error !== undefined && object.body?.error !== null) {
           message.body = { $case: "error", error: BridgeError.fromPartial(object.body.error) };
+        }
+        break;
+      }
+      case "generate": {
+        if (object.body?.generate !== undefined && object.body?.generate !== null) {
+          message.body = { $case: "generate", generate: GenerateTests.fromPartial(object.body.generate) };
+        }
+        break;
+      }
+      case "cancelGeneration": {
+        if (object.body?.cancelGeneration !== undefined && object.body?.cancelGeneration !== null) {
+          message.body = {
+            $case: "cancelGeneration",
+            cancelGeneration: CancelGeneration.fromPartial(object.body.cancelGeneration),
+          };
         }
         break;
       }
@@ -3934,6 +4308,1399 @@ export const Chunk: MessageFns<Chunk> = {
   },
 };
 
+function createBaseGenerationProgram(): GenerationProgram {
+  return { name: "", role: 0, languageKey: "", sourcePath: "" };
+}
+
+export const GenerationProgram: MessageFns<GenerationProgram> = {
+  encode(message: GenerationProgram, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.role !== 0) {
+      writer.uint32(16).int32(message.role);
+    }
+    if (message.languageKey !== "") {
+      writer.uint32(26).string(message.languageKey);
+    }
+    if (message.sourcePath !== "") {
+      writer.uint32(34).string(message.sourcePath);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GenerationProgram {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGenerationProgram();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.role = reader.int32() as any;
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.languageKey = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.sourcePath = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GenerationProgram {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      role: isSet(object.role) ? generationProgram_RoleFromJSON(object.role) : 0,
+      languageKey: isSet(object.languageKey)
+        ? globalThis.String(object.languageKey)
+        : isSet(object.language_key)
+        ? globalThis.String(object.language_key)
+        : "",
+      sourcePath: isSet(object.sourcePath)
+        ? globalThis.String(object.sourcePath)
+        : isSet(object.source_path)
+        ? globalThis.String(object.source_path)
+        : "",
+    };
+  },
+
+  toJSON(message: GenerationProgram): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.role !== 0) {
+      obj.role = generationProgram_RoleToJSON(message.role);
+    }
+    if (message.languageKey !== "") {
+      obj.languageKey = message.languageKey;
+    }
+    if (message.sourcePath !== "") {
+      obj.sourcePath = message.sourcePath;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GenerationProgram>, I>>(base?: I): GenerationProgram {
+    return GenerationProgram.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GenerationProgram>, I>>(object: I): GenerationProgram {
+    const message = createBaseGenerationProgram();
+    message.name = object.name ?? "";
+    message.role = object.role ?? 0;
+    message.languageKey = object.languageKey ?? "";
+    message.sourcePath = object.sourcePath ?? "";
+    return message;
+  },
+};
+
+function createBaseGenerationTest(): GenerationTest {
+  return { index: 0, inputName: "", answerName: "", group: "", manualPath: "", generator: "", args: [] };
+}
+
+export const GenerationTest: MessageFns<GenerationTest> = {
+  encode(message: GenerationTest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.index !== 0) {
+      writer.uint32(8).uint32(message.index);
+    }
+    if (message.inputName !== "") {
+      writer.uint32(18).string(message.inputName);
+    }
+    if (message.answerName !== "") {
+      writer.uint32(26).string(message.answerName);
+    }
+    if (message.group !== "") {
+      writer.uint32(34).string(message.group);
+    }
+    if (message.manualPath !== "") {
+      writer.uint32(42).string(message.manualPath);
+    }
+    if (message.generator !== "") {
+      writer.uint32(50).string(message.generator);
+    }
+    for (const v of message.args) {
+      writer.uint32(58).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GenerationTest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGenerationTest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.index = reader.uint32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.inputName = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.answerName = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.group = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.manualPath = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.generator = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.args.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GenerationTest {
+    return {
+      index: isSet(object.index) ? globalThis.Number(object.index) : 0,
+      inputName: isSet(object.inputName)
+        ? globalThis.String(object.inputName)
+        : isSet(object.input_name)
+        ? globalThis.String(object.input_name)
+        : "",
+      answerName: isSet(object.answerName)
+        ? globalThis.String(object.answerName)
+        : isSet(object.answer_name)
+        ? globalThis.String(object.answer_name)
+        : "",
+      group: isSet(object.group) ? globalThis.String(object.group) : "",
+      manualPath: isSet(object.manualPath)
+        ? globalThis.String(object.manualPath)
+        : isSet(object.manual_path)
+        ? globalThis.String(object.manual_path)
+        : "",
+      generator: isSet(object.generator) ? globalThis.String(object.generator) : "",
+      args: globalThis.Array.isArray(object?.args)
+        ? object.args.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GenerationTest): unknown {
+    const obj: any = {};
+    if (message.index !== 0) {
+      obj.index = Math.round(message.index);
+    }
+    if (message.inputName !== "") {
+      obj.inputName = message.inputName;
+    }
+    if (message.answerName !== "") {
+      obj.answerName = message.answerName;
+    }
+    if (message.group !== "") {
+      obj.group = message.group;
+    }
+    if (message.manualPath !== "") {
+      obj.manualPath = message.manualPath;
+    }
+    if (message.generator !== "") {
+      obj.generator = message.generator;
+    }
+    if (message.args?.length) {
+      obj.args = message.args;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GenerationTest>, I>>(base?: I): GenerationTest {
+    return GenerationTest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GenerationTest>, I>>(object: I): GenerationTest {
+    const message = createBaseGenerationTest();
+    message.index = object.index ?? 0;
+    message.inputName = object.inputName ?? "";
+    message.answerName = object.answerName ?? "";
+    message.group = object.group ?? "";
+    message.manualPath = object.manualPath ?? "";
+    message.generator = object.generator ?? "";
+    message.args = object.args?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseProgramLimits(): ProgramLimits {
+  return { timeS: 0, wallS: 0, memoryKib: 0 };
+}
+
+export const ProgramLimits: MessageFns<ProgramLimits> = {
+  encode(message: ProgramLimits, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.timeS !== 0) {
+      writer.uint32(9).double(message.timeS);
+    }
+    if (message.wallS !== 0) {
+      writer.uint32(17).double(message.wallS);
+    }
+    if (message.memoryKib !== 0) {
+      writer.uint32(24).uint64(message.memoryKib);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProgramLimits {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProgramLimits();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 9) {
+              break;
+            }
+
+            message.timeS = reader.double();
+            continue;
+          }
+          case 2: {
+            if (tag !== 17) {
+              break;
+            }
+
+            message.wallS = reader.double();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.memoryKib = longToNumber(reader.uint64());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProgramLimits {
+    return {
+      timeS: isSet(object.timeS)
+        ? globalThis.Number(object.timeS)
+        : isSet(object.time_s)
+        ? globalThis.Number(object.time_s)
+        : 0,
+      wallS: isSet(object.wallS)
+        ? globalThis.Number(object.wallS)
+        : isSet(object.wall_s)
+        ? globalThis.Number(object.wall_s)
+        : 0,
+      memoryKib: isSet(object.memoryKib)
+        ? globalThis.Number(object.memoryKib)
+        : isSet(object.memory_kib)
+        ? globalThis.Number(object.memory_kib)
+        : 0,
+    };
+  },
+
+  toJSON(message: ProgramLimits): unknown {
+    const obj: any = {};
+    if (message.timeS !== 0) {
+      obj.timeS = message.timeS;
+    }
+    if (message.wallS !== 0) {
+      obj.wallS = message.wallS;
+    }
+    if (message.memoryKib !== 0) {
+      obj.memoryKib = Math.round(message.memoryKib);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ProgramLimits>, I>>(base?: I): ProgramLimits {
+    return ProgramLimits.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProgramLimits>, I>>(object: I): ProgramLimits {
+    const message = createBaseProgramLimits();
+    message.timeS = object.timeS ?? 0;
+    message.wallS = object.wallS ?? 0;
+    message.memoryKib = object.memoryKib ?? 0;
+    return message;
+  },
+};
+
+function createBaseGenerationLimits(): GenerationLimits {
+  return {
+    generator: undefined,
+    validator: undefined,
+    solution: undefined,
+    maxFileBytes: 0,
+    maxTotalBytes: 0,
+    maxUploadBytes: 0,
+  };
+}
+
+export const GenerationLimits: MessageFns<GenerationLimits> = {
+  encode(message: GenerationLimits, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.generator !== undefined) {
+      ProgramLimits.encode(message.generator, writer.uint32(10).fork()).join();
+    }
+    if (message.validator !== undefined) {
+      ProgramLimits.encode(message.validator, writer.uint32(18).fork()).join();
+    }
+    if (message.solution !== undefined) {
+      ProgramLimits.encode(message.solution, writer.uint32(26).fork()).join();
+    }
+    if (message.maxFileBytes !== 0) {
+      writer.uint32(32).uint64(message.maxFileBytes);
+    }
+    if (message.maxTotalBytes !== 0) {
+      writer.uint32(40).uint64(message.maxTotalBytes);
+    }
+    if (message.maxUploadBytes !== 0) {
+      writer.uint32(48).uint64(message.maxUploadBytes);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GenerationLimits {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGenerationLimits();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.generator = ProgramLimits.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.validator = ProgramLimits.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.solution = ProgramLimits.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.maxFileBytes = longToNumber(reader.uint64());
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.maxTotalBytes = longToNumber(reader.uint64());
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.maxUploadBytes = longToNumber(reader.uint64());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GenerationLimits {
+    return {
+      generator: isSet(object.generator) ? ProgramLimits.fromJSON(object.generator) : undefined,
+      validator: isSet(object.validator) ? ProgramLimits.fromJSON(object.validator) : undefined,
+      solution: isSet(object.solution) ? ProgramLimits.fromJSON(object.solution) : undefined,
+      maxFileBytes: isSet(object.maxFileBytes)
+        ? globalThis.Number(object.maxFileBytes)
+        : isSet(object.max_file_bytes)
+        ? globalThis.Number(object.max_file_bytes)
+        : 0,
+      maxTotalBytes: isSet(object.maxTotalBytes)
+        ? globalThis.Number(object.maxTotalBytes)
+        : isSet(object.max_total_bytes)
+        ? globalThis.Number(object.max_total_bytes)
+        : 0,
+      maxUploadBytes: isSet(object.maxUploadBytes)
+        ? globalThis.Number(object.maxUploadBytes)
+        : isSet(object.max_upload_bytes)
+        ? globalThis.Number(object.max_upload_bytes)
+        : 0,
+    };
+  },
+
+  toJSON(message: GenerationLimits): unknown {
+    const obj: any = {};
+    if (message.generator !== undefined) {
+      obj.generator = ProgramLimits.toJSON(message.generator);
+    }
+    if (message.validator !== undefined) {
+      obj.validator = ProgramLimits.toJSON(message.validator);
+    }
+    if (message.solution !== undefined) {
+      obj.solution = ProgramLimits.toJSON(message.solution);
+    }
+    if (message.maxFileBytes !== 0) {
+      obj.maxFileBytes = Math.round(message.maxFileBytes);
+    }
+    if (message.maxTotalBytes !== 0) {
+      obj.maxTotalBytes = Math.round(message.maxTotalBytes);
+    }
+    if (message.maxUploadBytes !== 0) {
+      obj.maxUploadBytes = Math.round(message.maxUploadBytes);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GenerationLimits>, I>>(base?: I): GenerationLimits {
+    return GenerationLimits.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GenerationLimits>, I>>(object: I): GenerationLimits {
+    const message = createBaseGenerationLimits();
+    message.generator = (object.generator !== undefined && object.generator !== null)
+      ? ProgramLimits.fromPartial(object.generator)
+      : undefined;
+    message.validator = (object.validator !== undefined && object.validator !== null)
+      ? ProgramLimits.fromPartial(object.validator)
+      : undefined;
+    message.solution = (object.solution !== undefined && object.solution !== null)
+      ? ProgramLimits.fromPartial(object.solution)
+      : undefined;
+    message.maxFileBytes = object.maxFileBytes ?? 0;
+    message.maxTotalBytes = object.maxTotalBytes ?? 0;
+    message.maxUploadBytes = object.maxUploadBytes ?? 0;
+    return message;
+  },
+};
+
+function createBaseGenerateTests(): GenerateTests {
+  return {
+    generationId: "",
+    bundleSize: 0,
+    deadlineS: 0,
+    limits: undefined,
+    programs: [],
+    tests: [],
+    inputFile: "",
+    outputFile: "",
+  };
+}
+
+export const GenerateTests: MessageFns<GenerateTests> = {
+  encode(message: GenerateTests, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.generationId !== "") {
+      writer.uint32(10).string(message.generationId);
+    }
+    if (message.bundleSize !== 0) {
+      writer.uint32(16).uint64(message.bundleSize);
+    }
+    if (message.deadlineS !== 0) {
+      writer.uint32(24).uint32(message.deadlineS);
+    }
+    if (message.limits !== undefined) {
+      GenerationLimits.encode(message.limits, writer.uint32(34).fork()).join();
+    }
+    for (const v of message.programs) {
+      GenerationProgram.encode(v!, writer.uint32(42).fork()).join();
+    }
+    for (const v of message.tests) {
+      GenerationTest.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.inputFile !== "") {
+      writer.uint32(58).string(message.inputFile);
+    }
+    if (message.outputFile !== "") {
+      writer.uint32(66).string(message.outputFile);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GenerateTests {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGenerateTests();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.generationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.bundleSize = longToNumber(reader.uint64());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.deadlineS = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.limits = GenerationLimits.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.programs.push(GenerationProgram.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.tests.push(GenerationTest.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.inputFile = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.outputFile = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GenerateTests {
+    return {
+      generationId: isSet(object.generationId)
+        ? globalThis.String(object.generationId)
+        : isSet(object.generation_id)
+        ? globalThis.String(object.generation_id)
+        : "",
+      bundleSize: isSet(object.bundleSize)
+        ? globalThis.Number(object.bundleSize)
+        : isSet(object.bundle_size)
+        ? globalThis.Number(object.bundle_size)
+        : 0,
+      deadlineS: isSet(object.deadlineS)
+        ? globalThis.Number(object.deadlineS)
+        : isSet(object.deadline_s)
+        ? globalThis.Number(object.deadline_s)
+        : 0,
+      limits: isSet(object.limits) ? GenerationLimits.fromJSON(object.limits) : undefined,
+      programs: globalThis.Array.isArray(object?.programs)
+        ? object.programs.map((e: any) => GenerationProgram.fromJSON(e))
+        : [],
+      tests: globalThis.Array.isArray(object?.tests)
+        ? object.tests.map((e: any) => GenerationTest.fromJSON(e))
+        : [],
+      inputFile: isSet(object.inputFile)
+        ? globalThis.String(object.inputFile)
+        : isSet(object.input_file)
+        ? globalThis.String(object.input_file)
+        : "",
+      outputFile: isSet(object.outputFile)
+        ? globalThis.String(object.outputFile)
+        : isSet(object.output_file)
+        ? globalThis.String(object.output_file)
+        : "",
+    };
+  },
+
+  toJSON(message: GenerateTests): unknown {
+    const obj: any = {};
+    if (message.generationId !== "") {
+      obj.generationId = message.generationId;
+    }
+    if (message.bundleSize !== 0) {
+      obj.bundleSize = Math.round(message.bundleSize);
+    }
+    if (message.deadlineS !== 0) {
+      obj.deadlineS = Math.round(message.deadlineS);
+    }
+    if (message.limits !== undefined) {
+      obj.limits = GenerationLimits.toJSON(message.limits);
+    }
+    if (message.programs?.length) {
+      obj.programs = message.programs.map((e) => GenerationProgram.toJSON(e));
+    }
+    if (message.tests?.length) {
+      obj.tests = message.tests.map((e) => GenerationTest.toJSON(e));
+    }
+    if (message.inputFile !== "") {
+      obj.inputFile = message.inputFile;
+    }
+    if (message.outputFile !== "") {
+      obj.outputFile = message.outputFile;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GenerateTests>, I>>(base?: I): GenerateTests {
+    return GenerateTests.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GenerateTests>, I>>(object: I): GenerateTests {
+    const message = createBaseGenerateTests();
+    message.generationId = object.generationId ?? "";
+    message.bundleSize = object.bundleSize ?? 0;
+    message.deadlineS = object.deadlineS ?? 0;
+    message.limits = (object.limits !== undefined && object.limits !== null)
+      ? GenerationLimits.fromPartial(object.limits)
+      : undefined;
+    message.programs = object.programs?.map((e) => GenerationProgram.fromPartial(e)) || [];
+    message.tests = object.tests?.map((e) => GenerationTest.fromPartial(e)) || [];
+    message.inputFile = object.inputFile ?? "";
+    message.outputFile = object.outputFile ?? "";
+    return message;
+  },
+};
+
+function createBaseCancelGeneration(): CancelGeneration {
+  return { generationId: "" };
+}
+
+export const CancelGeneration: MessageFns<CancelGeneration> = {
+  encode(message: CancelGeneration, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.generationId !== "") {
+      writer.uint32(10).string(message.generationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelGeneration {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelGeneration();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.generationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelGeneration {
+    return {
+      generationId: isSet(object.generationId)
+        ? globalThis.String(object.generationId)
+        : isSet(object.generation_id)
+        ? globalThis.String(object.generation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: CancelGeneration): unknown {
+    const obj: any = {};
+    if (message.generationId !== "") {
+      obj.generationId = message.generationId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CancelGeneration>, I>>(base?: I): CancelGeneration {
+    return CancelGeneration.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CancelGeneration>, I>>(object: I): CancelGeneration {
+    const message = createBaseCancelGeneration();
+    message.generationId = object.generationId ?? "";
+    return message;
+  },
+};
+
+function createBaseGenerationRequest(): GenerationRequest {
+  return { generationId: "", sessionId: "" };
+}
+
+export const GenerationRequest: MessageFns<GenerationRequest> = {
+  encode(message: GenerationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.generationId !== "") {
+      writer.uint32(10).string(message.generationId);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(18).string(message.sessionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GenerationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGenerationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.generationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.sessionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GenerationRequest {
+    return {
+      generationId: isSet(object.generationId)
+        ? globalThis.String(object.generationId)
+        : isSet(object.generation_id)
+        ? globalThis.String(object.generation_id)
+        : "",
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GenerationRequest): unknown {
+    const obj: any = {};
+    if (message.generationId !== "") {
+      obj.generationId = message.generationId;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GenerationRequest>, I>>(base?: I): GenerationRequest {
+    return GenerationRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GenerationRequest>, I>>(object: I): GenerationRequest {
+    const message = createBaseGenerationRequest();
+    message.generationId = object.generationId ?? "";
+    message.sessionId = object.sessionId ?? "";
+    return message;
+  },
+};
+
+function createBaseUploadChunk(): UploadChunk {
+  return { generationId: "", sessionId: "", data: Buffer.alloc(0) };
+}
+
+export const UploadChunk: MessageFns<UploadChunk> = {
+  encode(message: UploadChunk, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.generationId !== "") {
+      writer.uint32(10).string(message.generationId);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(18).string(message.sessionId);
+    }
+    if (message.data.length !== 0) {
+      writer.uint32(26).bytes(message.data);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UploadChunk {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUploadChunk();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.generationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.sessionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.data = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UploadChunk {
+    return {
+      generationId: isSet(object.generationId)
+        ? globalThis.String(object.generationId)
+        : isSet(object.generation_id)
+        ? globalThis.String(object.generation_id)
+        : "",
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
+      data: isSet(object.data) ? Buffer.from(bytesFromBase64(object.data)) : Buffer.alloc(0),
+    };
+  },
+
+  toJSON(message: UploadChunk): unknown {
+    const obj: any = {};
+    if (message.generationId !== "") {
+      obj.generationId = message.generationId;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    if (message.data.length !== 0) {
+      obj.data = base64FromBytes(message.data);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UploadChunk>, I>>(base?: I): UploadChunk {
+    return UploadChunk.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UploadChunk>, I>>(object: I): UploadChunk {
+    const message = createBaseUploadChunk();
+    message.generationId = object.generationId ?? "";
+    message.sessionId = object.sessionId ?? "";
+    message.data = object.data ?? Buffer.alloc(0);
+    return message;
+  },
+};
+
+function createBaseUploadReceipt(): UploadReceipt {
+  return { bytes: 0 };
+}
+
+export const UploadReceipt: MessageFns<UploadReceipt> = {
+  encode(message: UploadReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.bytes !== 0) {
+      writer.uint32(8).uint64(message.bytes);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UploadReceipt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUploadReceipt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.bytes = longToNumber(reader.uint64());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UploadReceipt {
+    return { bytes: isSet(object.bytes) ? globalThis.Number(object.bytes) : 0 };
+  },
+
+  toJSON(message: UploadReceipt): unknown {
+    const obj: any = {};
+    if (message.bytes !== 0) {
+      obj.bytes = Math.round(message.bytes);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UploadReceipt>, I>>(base?: I): UploadReceipt {
+    return UploadReceipt.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UploadReceipt>, I>>(object: I): UploadReceipt {
+    const message = createBaseUploadReceipt();
+    message.bytes = object.bytes ?? 0;
+    return message;
+  },
+};
+
+function createBaseGenerationFailure(): GenerationFailure {
+  return { stage: 0, kind: 0, program: "", testIndex: 0, detail: "" };
+}
+
+export const GenerationFailure: MessageFns<GenerationFailure> = {
+  encode(message: GenerationFailure, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.stage !== 0) {
+      writer.uint32(8).int32(message.stage);
+    }
+    if (message.kind !== 0) {
+      writer.uint32(16).int32(message.kind);
+    }
+    if (message.program !== "") {
+      writer.uint32(26).string(message.program);
+    }
+    if (message.testIndex !== 0) {
+      writer.uint32(32).uint32(message.testIndex);
+    }
+    if (message.detail !== "") {
+      writer.uint32(42).string(message.detail);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GenerationFailure {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGenerationFailure();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.stage = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.kind = reader.int32() as any;
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.program = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.testIndex = reader.uint32();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.detail = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GenerationFailure {
+    return {
+      stage: isSet(object.stage) ? generationFailure_StageFromJSON(object.stage) : 0,
+      kind: isSet(object.kind) ? generationFailure_KindFromJSON(object.kind) : 0,
+      program: isSet(object.program) ? globalThis.String(object.program) : "",
+      testIndex: isSet(object.testIndex)
+        ? globalThis.Number(object.testIndex)
+        : isSet(object.test_index)
+        ? globalThis.Number(object.test_index)
+        : 0,
+      detail: isSet(object.detail) ? globalThis.String(object.detail) : "",
+    };
+  },
+
+  toJSON(message: GenerationFailure): unknown {
+    const obj: any = {};
+    if (message.stage !== 0) {
+      obj.stage = generationFailure_StageToJSON(message.stage);
+    }
+    if (message.kind !== 0) {
+      obj.kind = generationFailure_KindToJSON(message.kind);
+    }
+    if (message.program !== "") {
+      obj.program = message.program;
+    }
+    if (message.testIndex !== 0) {
+      obj.testIndex = Math.round(message.testIndex);
+    }
+    if (message.detail !== "") {
+      obj.detail = message.detail;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GenerationFailure>, I>>(base?: I): GenerationFailure {
+    return GenerationFailure.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GenerationFailure>, I>>(object: I): GenerationFailure {
+    const message = createBaseGenerationFailure();
+    message.stage = object.stage ?? 0;
+    message.kind = object.kind ?? 0;
+    message.program = object.program ?? "";
+    message.testIndex = object.testIndex ?? 0;
+    message.detail = object.detail ?? "";
+    return message;
+  },
+};
+
+function createBaseGenerationDone(): GenerationDone {
+  return { generationId: "", ok: false, failure: undefined };
+}
+
+export const GenerationDone: MessageFns<GenerationDone> = {
+  encode(message: GenerationDone, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.generationId !== "") {
+      writer.uint32(10).string(message.generationId);
+    }
+    if (message.ok !== false) {
+      writer.uint32(16).bool(message.ok);
+    }
+    if (message.failure !== undefined) {
+      GenerationFailure.encode(message.failure, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GenerationDone {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGenerationDone();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.generationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.ok = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.failure = GenerationFailure.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GenerationDone {
+    return {
+      generationId: isSet(object.generationId)
+        ? globalThis.String(object.generationId)
+        : isSet(object.generation_id)
+        ? globalThis.String(object.generation_id)
+        : "",
+      ok: isSet(object.ok) ? globalThis.Boolean(object.ok) : false,
+      failure: isSet(object.failure) ? GenerationFailure.fromJSON(object.failure) : undefined,
+    };
+  },
+
+  toJSON(message: GenerationDone): unknown {
+    const obj: any = {};
+    if (message.generationId !== "") {
+      obj.generationId = message.generationId;
+    }
+    if (message.ok !== false) {
+      obj.ok = message.ok;
+    }
+    if (message.failure !== undefined) {
+      obj.failure = GenerationFailure.toJSON(message.failure);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GenerationDone>, I>>(base?: I): GenerationDone {
+    return GenerationDone.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GenerationDone>, I>>(object: I): GenerationDone {
+    const message = createBaseGenerationDone();
+    message.generationId = object.generationId ?? "";
+    message.ok = object.ok ?? false;
+    message.failure = (object.failure !== undefined && object.failure !== null)
+      ? GenerationFailure.fromPartial(object.failure)
+      : undefined;
+    return message;
+  },
+};
+
 /**
  * The judge dials the bridge. Credentials travel as metadata
  * `x-judge-name` and `x-judge-key`; nothing is read before they check out.
@@ -3963,6 +5730,34 @@ export const JudgeLinkService = {
     responseSerialize: (value: Chunk): Buffer => Buffer.from(Chunk.encode(value).finish()),
     responseDeserialize: (value: Buffer): Chunk => Chunk.decode(value),
   },
+  /**
+   * Minor 2. The bundle of a generation (a zip of sources, headers and manual
+   * inputs) in chunks of at most 1 MiB, only for a generation the calling
+   * judge's live session holds.
+   */
+  fetchGenerationBundle: {
+    path: "/qhhoj.judge.v1.JudgeLink/FetchGenerationBundle" as const,
+    requestStream: false as const,
+    responseStream: true as const,
+    requestSerialize: (value: GenerationRequest): Buffer => Buffer.from(GenerationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GenerationRequest => GenerationRequest.decode(value),
+    responseSerialize: (value: Chunk): Buffer => Buffer.from(Chunk.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Chunk => Chunk.decode(value),
+  },
+  /**
+   * Minor 2. The result zip of a generation; the first message names the
+   * generation and the session, every message carries data. Accepted only for a
+   * generation the calling judge's live session holds, at most once.
+   */
+  uploadGeneratedTests: {
+    path: "/qhhoj.judge.v1.JudgeLink/UploadGeneratedTests" as const,
+    requestStream: true as const,
+    responseStream: false as const,
+    requestSerialize: (value: UploadChunk): Buffer => Buffer.from(UploadChunk.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UploadChunk => UploadChunk.decode(value),
+    responseSerialize: (value: UploadReceipt): Buffer => Buffer.from(UploadReceipt.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UploadReceipt => UploadReceipt.decode(value),
+  },
 } as const;
 
 export interface JudgeLinkServer extends UntypedServiceImplementation {
@@ -3973,6 +5768,18 @@ export interface JudgeLinkServer extends UntypedServiceImplementation {
    * only for a ref the calling judge's live session holds.
    */
   fetchSource: handleServerStreamingCall<FetchSourceRequest, Chunk>;
+  /**
+   * Minor 2. The bundle of a generation (a zip of sources, headers and manual
+   * inputs) in chunks of at most 1 MiB, only for a generation the calling
+   * judge's live session holds.
+   */
+  fetchGenerationBundle: handleServerStreamingCall<GenerationRequest, Chunk>;
+  /**
+   * Minor 2. The result zip of a generation; the first message names the
+   * generation and the session, every message carries data. Accepted only for a
+   * generation the calling judge's live session holds, at most once.
+   */
+  uploadGeneratedTests: handleClientStreamingCall<UploadChunk, UploadReceipt>;
 }
 
 export interface JudgeLinkClient extends Client {
@@ -3990,6 +5797,38 @@ export interface JudgeLinkClient extends Client {
     metadata?: Metadata,
     options?: Partial<CallOptions>,
   ): ClientReadableStream<Chunk>;
+  /**
+   * Minor 2. The bundle of a generation (a zip of sources, headers and manual
+   * inputs) in chunks of at most 1 MiB, only for a generation the calling
+   * judge's live session holds.
+   */
+  fetchGenerationBundle(request: GenerationRequest, options?: Partial<CallOptions>): ClientReadableStream<Chunk>;
+  fetchGenerationBundle(
+    request: GenerationRequest,
+    metadata?: Metadata,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<Chunk>;
+  /**
+   * Minor 2. The result zip of a generation; the first message names the
+   * generation and the session, every message carries data. Accepted only for a
+   * generation the calling judge's live session holds, at most once.
+   */
+  uploadGeneratedTests(
+    callback: (error: ServiceError | null, response: UploadReceipt) => void,
+  ): ClientWritableStream<UploadChunk>;
+  uploadGeneratedTests(
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UploadReceipt) => void,
+  ): ClientWritableStream<UploadChunk>;
+  uploadGeneratedTests(
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UploadReceipt) => void,
+  ): ClientWritableStream<UploadChunk>;
+  uploadGeneratedTests(
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UploadReceipt) => void,
+  ): ClientWritableStream<UploadChunk>;
 }
 
 export const JudgeLinkClient = makeGenericClientConstructor(

@@ -17,6 +17,7 @@ import {
   Problem,
   Submission,
   SubmissionSource,
+  TestGeneration,
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
@@ -41,6 +42,7 @@ export const FAST_TIMINGS: BridgeTimings = {
   externalTickMs: 50,
   externalPollMs: 20,
   externalSubmitGapMs: 0,
+  generationGraceMs: 60_000,
 };
 
 export async function setupBridgeTest({
@@ -118,6 +120,9 @@ export async function setupBridgeTest({
     },
     get sources() {
       return model<SubmissionSource>(SubmissionSource.name);
+    },
+    get generations() {
+      return model<TestGeneration>(TestGeneration.name);
     },
     get judges() {
       return model<Judge>(Judge.name);

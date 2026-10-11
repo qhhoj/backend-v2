@@ -110,10 +110,17 @@ export class PolygonPackage {
   }
 }
 
-/** Legacy repackaging: `tests/01` and `tests/01.a` become `01.inp` and `01.out`; members are opened only when yazl reaches them, so memory stays at one entry. Every failure (missing member, lying size, corrupt data, closed package) destroys the output with a `PolygonImportError`; abandoning the output closes the member in flight. */
-export function repackTests(
+/** A member of the package and the name it gets in a repacked zip. */
+export interface RepackMember {
+  from: string;
+  to: string;
+}
+
+/** Copies package members into a new zip under new names; members are opened only when yazl reaches them, so memory stays at one entry. Every failure (missing member, lying size, corrupt data, closed package) destroys the output with a `PolygonImportError`; abandoning the output closes the member in flight. `missingMessage` words the error for a member the package lacks. */
+export function repackMembers(
   pkg: PolygonPackage,
-  tests: PlannedTest[],
+  members: RepackMember[],
+  missingMessage: (path: string) => string,
 ): Readable {
   const zip = new ZipFile();
   /** yazl's typings say `NodeJS.ReadableStream`; at runtime it is a PassThrough. */
@@ -124,17 +131,9 @@ export function repackTests(
   zip.on('error', fail);
   let inFlight: Readable | null = null;
   output.on('close', () => inFlight?.destroy());
-  const members = tests.flatMap((test) => [
-    { from: test.inputPath, to: test.inputName },
-    { from: test.answerPath, to: test.outputName },
-  ]);
   const missing = members.find(({ from }) => !pkg.has(from));
   if (missing) {
-    fail(
-      new PolygonImportError(
-        `not full package: ${shown(missing.from)} is missing`,
-      ),
-    );
+    fail(new PolygonImportError(missingMessage(missing.from)));
     return output;
   }
   for (const { from, to } of members)
@@ -157,3 +156,17 @@ export function repackTests(
   zip.end();
   return output;
 }
+
+/** Legacy repackaging: `tests/01` and `tests/01.a` become `01.inp` and `01.out`. */
+export const repackTests = (
+  pkg: PolygonPackage,
+  tests: PlannedTest[],
+): Readable =>
+  repackMembers(
+    pkg,
+    tests.flatMap((test) => [
+      { from: test.inputPath, to: test.inputName },
+      { from: test.answerPath, to: test.outputName },
+    ]),
+    (path) => `not full package: ${shown(path)} is missing`,
+  );

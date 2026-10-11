@@ -73,6 +73,7 @@ const runView = (
   revision: run.revision,
   packageId: run.packageId,
   packageCreatedAt: run.packageCreatedAt,
+  packageType: run.packageType ?? 'full',
   purpose: run.purpose,
   trigger: run.trigger,
   requestedBy: users.get(uuidStr(run.requestedBy)) ?? null,

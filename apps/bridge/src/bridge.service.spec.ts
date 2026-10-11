@@ -29,6 +29,8 @@ function setup() {
     dispatch: {
       enqueue: record('enqueue', undefined),
       clearRetryBans: record('clearRetryBans', undefined),
+      enqueueGenerations: record('enqueueGenerations', undefined),
+      resyncGenerations: record('resyncGenerations', undefined),
       hasQueued: () => false,
       heldIds,
       connectedNames: () => [] as string[],
@@ -98,6 +100,7 @@ describe('BridgeService', () => {
       'position',
       'loadQueued',
       'enqueue',
+      'enqueueGenerations',
       'commands.start',
       'external.start',
       'acceptJudges',

@@ -2,6 +2,7 @@ import {
   latestPackageOf,
   packageNotReadyReason,
   statementTitleOf,
+  variantOf,
 } from './polygon-types';
 import type { PolygonPackageInfo } from './polygon-types';
 
@@ -25,6 +26,7 @@ describe('latestPackageOf', () => {
       id: null,
       revision: null,
       state: 'NONE',
+      type: null,
       createdAt: null,
     });
   });
@@ -59,21 +61,40 @@ describe('latestPackageOf', () => {
 });
 
 describe('latestPackageOf and standard packages', () => {
-  it('never offers a READY standard package, whose zip lacks the generated tests', () => {
-    const onlyStandard = [
-      ...standard(1500552, 3, 'READY'),
-      ...standard(1500539, 2, 'READY'),
-    ];
-    expect(latestPackageOf(onlyStandard).state).toBe('NONE');
-    expect(packageNotReadyReason(onlyStandard)).toBe(
-      'its newest package 1500552 (revision 3) is a READY standard package, without the generated tests',
-    );
+  it('is full for a package with a linux row, standard for one without', () => {
+    expect(latestPackageOf(rows(3, 2, 'READY'))).toMatchObject({
+      id: 3,
+      type: 'full',
+    });
+    expect(latestPackageOf(standard(4, 2, 'READY'))).toMatchObject({
+      id: 4,
+      state: 'READY',
+      type: 'standard',
+    });
   });
 
-  it('takes the newest READY full package over a newer READY standard one', () => {
+  it('takes a full package of the same revision over a standard one, whichever id is newer', () => {
+    expect(
+      latestPackageOf([...standard(12, 5, 'READY'), ...rows(11, 5, 'READY')]),
+    ).toMatchObject({ id: 11, type: 'full' });
+    expect(
+      latestPackageOf([...rows(12, 5, 'READY'), ...standard(11, 5, 'READY')]),
+    ).toMatchObject({ id: 12, type: 'full' });
+  });
+
+  it('takes a newer standard package over an older full one: that would import stale content', () => {
     expect(
       latestPackageOf([...standard(12, 5, 'READY'), ...rows(11, 4, 'READY')]),
-    ).toMatchObject({ id: 11, revision: 4, state: 'READY' });
+    ).toMatchObject({ id: 12, revision: 5, type: 'standard' });
+  });
+
+  it('never skips a newer build that is not READY, and has no type for it', () => {
+    expect(
+      latestPackageOf([...rows(11, 4, 'READY'), ...standard(12, 5, 'PENDING')]),
+    ).toMatchObject({ id: 12, state: 'RUNNING', type: null });
+    expect(
+      latestPackageOf([...rows(11, 4, 'READY'), ...standard(12, 5, 'FAILED')]),
+    ).toMatchObject({ id: 12, state: 'FAILED', type: null });
   });
 
   it('names the newest package and its state when it is not READY', () => {
@@ -84,6 +105,13 @@ describe('latestPackageOf and standard packages', () => {
       ]),
     ).toBe('its newest package 12 (revision 5) is FAILED');
     expect(packageNotReadyReason([])).toBe('it has no package');
+  });
+});
+
+describe('variantOf', () => {
+  it('downloads linux for a full package and standard for a standard one', () => {
+    expect(variantOf('full')).toBe('linux');
+    expect(variantOf('standard')).toBe('standard');
   });
 });
 
