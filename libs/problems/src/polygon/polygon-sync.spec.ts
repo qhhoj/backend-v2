@@ -32,11 +32,15 @@ const latest = (
   id: number | null,
   revision: number | null,
   state: LatestPackage['state'],
-): LatestPackage => ({ id, revision, state, createdAt: null });
+  type: LatestPackage['type'] = state === 'READY' ? 'full' : null,
+): LatestPackage => ({ id, revision, state, type, createdAt: null });
 
 describe('hasNewReadyPackage', () => {
   it('wants a READY package other than the synced one', () => {
     expect(hasNewReadyPackage(link, latest(11, 4, 'READY'))).toBe(true);
+    expect(hasNewReadyPackage(link, latest(11, 4, 'READY', 'standard'))).toBe(
+      true,
+    );
     expect(hasNewReadyPackage(link, latest(10, 3, 'READY'))).toBe(false);
     expect(hasNewReadyPackage(link, latest(11, 4, 'RUNNING'))).toBe(false);
     expect(hasNewReadyPackage(link, latest(null, null, 'NONE'))).toBe(false);
@@ -57,7 +61,12 @@ describe('syncJobOf', () => {
   it('is an update naming no catalog field, with the link options and the given package', () => {
     const job = syncJobOf(
       { code: 'sum', isFullMarkup: false, dataVersion: 7, polygonLink: link },
-      { id: 11, revision: 4, createdAt: '2026-10-01T00:00:00.000Z' },
+      {
+        id: 11,
+        revision: 4,
+        type: 'standard',
+        createdAt: '2026-10-01T00:00:00.000Z',
+      },
       { userId: 'requester', maxCases: 9999, trigger: 'auto' },
     );
     expect(job).toEqual({
@@ -79,6 +88,7 @@ describe('syncJobOf', () => {
         owner: 'setter',
         revision: 4,
         packageId: 11,
+        packageType: 'standard',
         packageCreatedAt: '2026-10-01T00:00:00.000Z',
         purpose: 'sync',
         autoSync: true,

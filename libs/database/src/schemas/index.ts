@@ -85,10 +85,7 @@ import {
   PolygonSyncRun,
   PolygonSyncRunSchema,
 } from './polygon-sync-run.schema';
-import {
-  TestGeneration,
-  TestGenerationSchema,
-} from './test-generation.schema';
+import { TestGeneration, TestGenerationSchema } from './test-generation.schema';
 import { ProblemGroup, ProblemGroupSchema } from './problem-group.schema';
 import { Problem, ProblemSchema } from './problem.schema';
 import { ProblemType, ProblemTypeSchema } from './problem-type.schema';

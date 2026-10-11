@@ -1,6 +1,6 @@
 import type { PolygonLink, PolygonSyncTrigger } from '@libs/database';
 import type { PolygonImportJob } from '../queues';
-import type { LatestPackage } from './polygon-types';
+import type { LatestPackage, ReadyPackage } from './polygon-types';
 
 /** The problem fields a sync job is built from. */
 export interface LinkedProblem {
@@ -14,10 +14,11 @@ export interface LinkedProblem {
 export function hasNewReadyPackage(
   link: PolygonLink,
   latest: LatestPackage,
-): latest is LatestPackage & { id: number; revision: number } {
+): latest is ReadyPackage {
   return (
     latest.state === 'READY' &&
     latest.id !== null &&
+    latest.type !== null &&
     latest.id !== link.packageId &&
     !(link.lastSyncResult === 'failed' && link.lastSyncPackageId === latest.id)
   );
@@ -29,7 +30,7 @@ export function hasNewReadyPackage(
  */
 export function syncJobOf(
   problem: LinkedProblem,
-  latest: { id: number; revision: number; createdAt: string | null },
+  latest: Pick<ReadyPackage, 'id' | 'revision' | 'type' | 'createdAt'>,
   requester: { userId: string; maxCases: number; trigger: PolygonSyncTrigger },
 ): PolygonImportJob {
   const link = problem.polygonLink;
@@ -47,6 +48,7 @@ export function syncJobOf(
       owner: link.owner,
       revision: latest.revision,
       packageId: latest.id,
+      packageType: latest.type,
       packageCreatedAt: latest.createdAt,
       purpose: 'sync',
       autoSync: link.autoSync,

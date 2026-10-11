@@ -1,10 +1,12 @@
 import {
+  POLYGON_PACKAGE_TYPES,
   POLYGON_SYNC_PURPOSES,
   POLYGON_SYNC_RESULTS,
   POLYGON_SYNC_STEPS,
   POLYGON_SYNC_TRIGGERS,
 } from '@libs/database';
 import type {
+  PolygonPackageType,
   PolygonSyncPurpose,
   PolygonSyncResult,
   PolygonSyncStep,
@@ -29,6 +31,9 @@ export class PolygonSyncRunResponse {
   packageId!: number;
   /** Polygon's build time of the package; null for jobs queued before it was recorded. */
   packageCreatedAt!: Date | null;
+  /** The package variant taken: `full`, or `standard` (tests generated on a judge). */
+  @ApiProperty({ enum: POLYGON_PACKAGE_TYPES, enumName: 'PolygonPackageType' })
+  packageType!: PolygonPackageType;
   @ApiProperty({ enum: POLYGON_SYNC_PURPOSES, enumName: 'PolygonSyncPurpose' })
   purpose!: PolygonSyncPurpose;
   @ApiProperty({ enum: POLYGON_SYNC_TRIGGERS, enumName: 'PolygonSyncTrigger' })

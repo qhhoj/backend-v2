@@ -31,6 +31,7 @@ export function syncRunOf(
     packageCreatedAt: source.packageCreatedAt
       ? new Date(source.packageCreatedAt)
       : null,
+    packageType: source.packageType ?? 'full',
     purpose: source.purpose,
     trigger: source.trigger ?? 'manual',
     requestedBy: job.requesterId,
