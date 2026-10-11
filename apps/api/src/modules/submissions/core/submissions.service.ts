@@ -102,6 +102,13 @@ export class SubmissionsService {
       query.page,
       query.pageSize,
     );
+    return new Paginated(await this.listItems(items), { ...meta, total });
+  }
+
+  /** List rows with their user, problem (deleted ones too) and language resolved in one read each. */
+  async listItems(
+    items: readonly Submission[],
+  ): Promise<SubmissionListItemResponse[]> {
     const [users, problems] = await Promise.all([
       this.users.findByIds(
         unique(items.map((submission) => uuidStr(submission.user))),
@@ -114,15 +121,12 @@ export class SubmissionsService {
     const problemOf = new Map(
       problems.map((problem) => [problem._id, problem]),
     );
-    return new Paginated(
-      items.map((submission) =>
-        SubmissionListItemResponse.from(submission, {
-          user: userOf.get(uuidStr(submission.user)),
-          problem: problemOf.get(uuidStr(submission.problem)),
-          language: this.languages.byId(uuidStr(submission.language)),
-        }),
-      ),
-      { ...meta, total },
+    return items.map((submission) =>
+      SubmissionListItemResponse.from(submission, {
+        user: userOf.get(uuidStr(submission.user)),
+        problem: problemOf.get(uuidStr(submission.problem)),
+        language: this.languages.byId(uuidStr(submission.language)),
+      }),
     );
   }
 
