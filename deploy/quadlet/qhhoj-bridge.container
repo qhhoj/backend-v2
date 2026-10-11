@@ -28,6 +28,9 @@ LogDriver=journald
 Restart=always
 RestartSec=3
 TimeoutStopSec=30
+# Shared host: see docs/decisions.md.
+MemoryHigh=384M
+MemoryMax=512M
 
 [Install]
 WantedBy=qhhoj.target

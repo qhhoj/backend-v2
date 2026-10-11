@@ -1,3 +1,4 @@
 # /etc/sudoers.d/qhhoj-deploy (0440): the CD user may run only the deploy helper as root.
 Defaults:deploy !requiretty, env_reset
+Defaults:deploy secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 deploy ALL=(root) NOPASSWD: /usr/local/sbin/qhhoj-deploy

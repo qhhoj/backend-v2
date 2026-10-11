@@ -27,6 +27,9 @@ LogDriver=journald
 Restart=always
 RestartSec=3
 TimeoutStopSec=30
+# Shared host: a leak OOM-kills this unit, not the old site. Reasoning in docs/decisions.md.
+MemoryHigh=1536M
+MemoryMax=2G
 
 [Install]
 WantedBy=qhhoj.target
