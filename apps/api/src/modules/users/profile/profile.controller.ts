@@ -16,7 +16,7 @@ export class ProfileController {
    * Get my profile
    *
    * @remarks
-   * Signed-in callers only. Returns the editable profile of the caller: about text (source and rendered HTML), display name, time zone, default programming language, editor and site themes, appearance, math engine, user script, owned badges with the displayed one, and the organizations the caller belongs to in display order.
+   * Signed-in callers only. Returns the editable profile of the caller: about text (source and rendered HTML), display name, time zone, default programming language, site theme, appearance, and the organizations the caller belongs to in display order.
    */
   @Get()
   get(@CurrentAuth() auth: AuthContext): Promise<ProfileResponse> {
@@ -27,8 +27,8 @@ export class ProfileController {
    * Update my profile
    *
    * @remarks
-   * Signed-in callers only. Partial update: send only the fields to change and read the full profile back. `null` is accepted only for `displayBadgeId` (no badge) and `appearance` (the site look); `appearance` replaces the stored look as a whole.
-   * `organizations` may only reorder or shorten the current memberships (join from the organization page). Errors: 400 `unknown_language`, 400 `not_your_badge`, 400 `organizations_not_editable`; 403 `forbidden` when editing `about` or `firstName` during the official contest (superusers excepted) or when editing `about` while muted or before solving 5 problems (staff excepted); 409 `conflict` when leaving an organization the caller administers or when memberships changed meanwhile. The badge and organization order are also frozen in official contest mode.
+   * Signed-in callers only. Partial update: send only the fields to change and read the full profile back. `null` is accepted only for `appearance` (the site look); `appearance` replaces the stored look as a whole.
+   * `organizations` may only reorder or shorten the current memberships (join from the organization page). Errors: 400 `unknown_language`, 400 `organizations_not_editable`; 403 `forbidden` when editing `about` or `firstName` during the official contest (superusers excepted) or when editing `about` while muted or before solving 5 problems (staff excepted); 409 `conflict` when leaving an organization the caller administers or when memberships changed meanwhile. The organization order is also frozen in official contest mode.
    */
   @Patch()
   update(

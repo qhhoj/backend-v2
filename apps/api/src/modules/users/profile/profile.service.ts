@@ -113,38 +113,22 @@ export class ProfileService {
     return { about, aboutHtml: renderField(about, 'user', 'about') };
   }
 
-  /** The display badge and the order of organizations are part of how a user appears on the boards, so they freeze with `about` and the name. Resending the stored value is not a change. */
+  /** The order of organizations is part of how a user appears on the boards, so it freezes with `about` and the name. Resending the stored value is not a change. */
   private assertAppearanceUnlocked(
     principal: Principal,
     user: UserDocument,
     dto: UpdateProfileDto,
   ): void {
-    const storedBadge = user.displayBadgeId
-      ? uuidStr(user.displayBadgeId)
-      : null;
-    const isBadgeChanged =
-      dto.displayBadgeId !== undefined &&
-      (dto.displayBadgeId ?? null) !== storedBadge;
     const isOrderChanged =
       dto.organizations !== undefined &&
       dto.organizations.join() !== user.organizations.map(uuidStr).join();
-    if (isBadgeChanged || isOrderChanged)
-      assertNotLockedByOfficialMode(this.settings, principal);
+    if (isOrderChanged) assertNotLockedByOfficialMode(this.settings, principal);
   }
 
-  /** Throws a 400 for an unknown language or a display badge the user does not hold. */
+  /** Throws a 400 for an unknown language. */
   private assertReferences(user: UserDocument, dto: UpdateProfileDto): void {
     if (dto.languageId !== undefined && !this.languages.has(dto.languageId))
       throw invalidField('languageId', 'Unknown language.', 'unknown_language');
-    if (
-      dto.displayBadgeId &&
-      !user.badges.map(uuidStr).includes(dto.displayBadgeId)
-    )
-      throw invalidField(
-        'displayBadgeId',
-        'Not one of your badges.',
-        'not_your_badge',
-      );
   }
 
   /** Legacy removed `about` and `first_name` from the form in official contest mode; superusers still edit. */
@@ -207,13 +191,8 @@ export class ProfileService {
       firstName: user.firstName,
       timezone: user.timezone,
       languageId: user.languageId && uuidStr(user.languageId),
-      aceTheme: user.aceTheme,
       siteTheme: user.siteTheme,
       appearance: user.appearance ?? null,
-      mathEngine: user.mathEngine,
-      userScript: user.userScript,
-      badges: user.badges.map(uuidStr),
-      displayBadgeId: user.displayBadgeId && uuidStr(user.displayBadgeId),
       organizations: organizations.map((organization) => ({
         ...OrganizationSummaryResponse.from(organization),
         isOpen: organization.isOpen,

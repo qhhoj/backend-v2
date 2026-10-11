@@ -19,47 +19,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ABOUT_MAX_LENGTH } from '@libs/community';
 import { IsTimeZone } from '../../core/dto/is-time-zone';
 
-/** Legacy `judge/models/choices.py`. */
-export const ACE_THEMES = [
-  'auto',
-  'ambiance',
-  'chaos',
-  'chrome',
-  'clouds',
-  'clouds_midnight',
-  'cobalt',
-  'crimson_editor',
-  'dawn',
-  'dreamweaver',
-  'eclipse',
-  'github',
-  'idle_fingers',
-  'katzenmilch',
-  'kr_theme',
-  'kuroir',
-  'merbivore',
-  'merbivore_soft',
-  'mono_industrial',
-  'monokai',
-  'pastel_on_dark',
-  'solarized_dark',
-  'solarized_light',
-  'terminal',
-  'textmate',
-  'tomorrow',
-  'tomorrow_night',
-  'tomorrow_night_blue',
-  'tomorrow_night_bright',
-  'tomorrow_night_eighties',
-  'twilight',
-  'vibrant_ink',
-  'xcode',
-] as const;
 /** Theme ids are owned by the SPA's registry (unknown ids fall back to the OS scheme), so the API checks the shape only. */
 export const SITE_THEME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
-export const MATH_ENGINES = ['tex', 'svg', 'mml', 'jax', 'auto'] as const;
-/** Legacy `user_script` max_length. */
-export const USER_SCRIPT_MAX_LENGTH = 65_536;
 /** Legacy `first_name` max_length. */
 export const FIRST_NAME_MAX_LENGTH = 30;
 /** The frontend's accent presets (frontend `src/theme/appearance.ts`); mode stays in `siteTheme`. */
@@ -73,8 +34,8 @@ export const APPEARANCE_ACCENTS = [
   'mono',
 ] as const;
 export type AppearanceAccent = (typeof APPEARANCE_ACCENTS)[number];
-/** The only profile fields a PATCH may set to `null`: no badge, the site's look. */
-export const NULLABLE_PROFILE_FIELDS = ['displayBadgeId', 'appearance'];
+/** The only profile field a PATCH may set to `null`: the site's look. */
+export const NULLABLE_PROFILE_FIELDS = ['appearance'];
 
 /** Whole numbers 0-100: the plugin would type them as `number`. */
 export const PERCENT_SCHEMA = {
@@ -105,19 +66,8 @@ export class UpdateProfileDto {
   @IsOptional() @IsTimeZone() timezone?: string;
   /** Id of the default programming language. */
   @IsOptional() @IsUUID('7') languageId?: string;
-  /** Code editor theme. */
-  @IsOptional() @IsIn(ACE_THEMES) aceTheme?: string;
   /** Site theme id; unknown ids fall back to the operating system scheme. */
   @IsOptional() @Matches(SITE_THEME_PATTERN) siteTheme?: string;
-  /** How math is rendered. */
-  @IsOptional() @IsIn(MATH_ENGINES) mathEngine?: string;
-  /** Custom JavaScript run on the site for this user, up to 65536 characters. */
-  @IsOptional()
-  @IsString()
-  @MaxLength(USER_SCRIPT_MAX_LENGTH)
-  userScript?: string;
-  /** Id of one of the user's badges to display; `null` shows none. */
-  @IsOptional() @IsUUID('7') displayBadgeId?: string | null;
   /** The whole look replaces the stored one; `null` clears it (the site's look). */
   @IsOptional()
   @IsObject()

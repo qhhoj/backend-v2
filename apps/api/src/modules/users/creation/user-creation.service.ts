@@ -48,10 +48,7 @@ const INVITE_FAILED: FieldIssue = {
 };
 
 /** Twelve characters without look-alikes (legacy `batchadduser` printed eight), retried until it passes the policy for this account. */
-export function generatePassword(owner: {
-  username: string;
-  email: string;
-}): string {
+function generatePassword(owner: { username: string; email: string }): string {
   for (;;) {
     const password = Array.from(
       { length: GENERATED_LENGTH },
@@ -62,7 +59,7 @@ export function generatePassword(owner: {
 }
 
 /** Per row, the issues of a name or an e-mail an earlier row of the same request uses (case-insensitive), whether or not that row is created. Pure. */
-export function repeatIssues(rows: readonly NewUserDto[]): FieldIssue[][] {
+function repeatIssues(rows: readonly NewUserDto[]): FieldIssue[][] {
   const seen = new Set<string>();
   return rows.map((row) => {
     const name = `name:${row.username.toLowerCase()}`;

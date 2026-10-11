@@ -9905,10 +9905,6 @@
             "description": "Rendered, sanitised HTML of `about`.",
             "type": "string"
           },
-          "aceTheme": {
-            "description": "Code editor theme.",
-            "type": "string"
-          },
           "appearance": {
             "allOf": [
               {
@@ -9919,18 +9915,6 @@
             "nullable": true,
             "type": "object"
           },
-          "badges": {
-            "description": "Ids of the badges the user owns.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "displayBadgeId": {
-            "description": "Id of the displayed badge; null for none.",
-            "nullable": true,
-            "type": "string"
-          },
           "firstName": {
             "description": "Display first name.",
             "type": "string"
@@ -9938,10 +9922,6 @@
           "languageId": {
             "description": "Default programming language id; null when none.",
             "nullable": true,
-            "type": "string"
-          },
-          "mathEngine": {
-            "description": "How math is rendered.",
             "type": "string"
           },
           "organizations": {
@@ -9958,10 +9938,6 @@
           "timezone": {
             "description": "IANA time zone name used to show dates.",
             "type": "string"
-          },
-          "userScript": {
-            "description": "Custom JavaScript run on the site for this user.",
-            "type": "string"
           }
         },
         "required": [
@@ -9970,13 +9946,8 @@
           "firstName",
           "timezone",
           "languageId",
-          "aceTheme",
           "siteTheme",
           "appearance",
-          "mathEngine",
-          "userScript",
-          "badges",
-          "displayBadgeId",
           "organizations"
         ],
         "type": "object"
@@ -15597,45 +15568,6 @@
             "maxLength": 65536,
             "type": "string"
           },
-          "aceTheme": {
-            "description": "Code editor theme.",
-            "enum": [
-              "ambiance",
-              "auto",
-              "chaos",
-              "chrome",
-              "clouds",
-              "clouds_midnight",
-              "cobalt",
-              "crimson_editor",
-              "dawn",
-              "dreamweaver",
-              "eclipse",
-              "github",
-              "idle_fingers",
-              "katzenmilch",
-              "kr_theme",
-              "kuroir",
-              "merbivore",
-              "merbivore_soft",
-              "mono_industrial",
-              "monokai",
-              "pastel_on_dark",
-              "solarized_dark",
-              "solarized_light",
-              "terminal",
-              "textmate",
-              "tomorrow",
-              "tomorrow_night",
-              "tomorrow_night_blue",
-              "tomorrow_night_bright",
-              "tomorrow_night_eighties",
-              "twilight",
-              "vibrant_ink",
-              "xcode"
-            ],
-            "type": "string"
-          },
           "appearance": {
             "allOf": [
               {
@@ -15646,12 +15578,6 @@
             "nullable": true,
             "type": "object"
           },
-          "displayBadgeId": {
-            "description": "Id of one of the user's badges to display; `null` shows none.",
-            "format": "uuid",
-            "nullable": true,
-            "type": "string"
-          },
           "firstName": {
             "description": "Display first name, up to 30 characters.",
             "maxLength": 30,
@@ -15660,17 +15586,6 @@
           "languageId": {
             "description": "Id of the default programming language.",
             "format": "uuid",
-            "type": "string"
-          },
-          "mathEngine": {
-            "description": "How math is rendered.",
-            "enum": [
-              "auto",
-              "jax",
-              "mml",
-              "svg",
-              "tex"
-            ],
             "type": "string"
           },
           "organizations": {
@@ -15689,11 +15604,6 @@
           },
           "timezone": {
             "description": "IANA time zone name used to show dates, for example `Asia/Ho_Chi_Minh`.",
-            "type": "string"
-          },
-          "userScript": {
-            "description": "Custom JavaScript run on the site for this user, up to 65536 characters.",
-            "maxLength": 65536,
             "type": "string"
           }
         },
@@ -36107,7 +36017,7 @@
     },
     "/api/internal/profile": {
       "get": {
-        "description": "Signed-in callers only. Returns the editable profile of the caller: about text (source and rendered HTML), display name, time zone, default programming language, editor and site themes, appearance, math engine, user script, owned badges with the displayed one, and the organizations the caller belongs to in display order.",
+        "description": "Signed-in callers only. Returns the editable profile of the caller: about text (source and rendered HTML), display name, time zone, default programming language, site theme, appearance, and the organizations the caller belongs to in display order.",
         "operationId": "ProfileController_get",
         "parameters": [],
         "responses": {
@@ -36155,7 +36065,7 @@
         ]
       },
       "patch": {
-        "description": "Signed-in callers only. Partial update: send only the fields to change and read the full profile back. `null` is accepted only for `displayBadgeId` (no badge) and `appearance` (the site look); `appearance` replaces the stored look as a whole.\n`organizations` may only reorder or shorten the current memberships (join from the organization page). Errors: 400 `unknown_language`, 400 `not_your_badge`, 400 `organizations_not_editable`; 403 `forbidden` when editing `about` or `firstName` during the official contest (superusers excepted) or when editing `about` while muted or before solving 5 problems (staff excepted); 409 `conflict` when leaving an organization the caller administers or when memberships changed meanwhile. The badge and organization order are also frozen in official contest mode.",
+        "description": "Signed-in callers only. Partial update: send only the fields to change and read the full profile back. `null` is accepted only for `appearance` (the site look); `appearance` replaces the stored look as a whole.\n`organizations` may only reorder or shorten the current memberships (join from the organization page). Errors: 400 `unknown_language`, 400 `organizations_not_editable`; 403 `forbidden` when editing `about` or `firstName` during the official contest (superusers excepted) or when editing `about` while muted or before solving 5 problems (staff excepted); 409 `conflict` when leaving an organization the caller administers or when memberships changed meanwhile. The organization order is also frozen in official contest mode.",
         "operationId": "ProfileController_update",
         "parameters": [],
         "requestBody": {

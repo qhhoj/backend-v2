@@ -35,13 +35,13 @@ interface PendingLogin {
 }
 
 /** Where to send the browser; `sessionId` is set when the login succeeded, `pendingToken` when signup must be completed. */
-export interface CallbackResult {
+interface CallbackResult {
   location: string;
   sessionId?: string;
   pendingToken?: string;
 }
 
-export interface CallbackInput {
+interface CallbackInput {
   code?: string;
   state?: string;
   error?: string;
