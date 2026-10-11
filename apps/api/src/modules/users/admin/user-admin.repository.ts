@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { CI, User } from '@libs/database';
 import type { FilterQuery, Model } from 'mongoose';
+import { usernamePrefixFilter } from '../core/username-prefix';
 import type { StaffUserSort } from './dto/user-admin.dto';
 
 export type StaffUserRow = Pick<
@@ -33,9 +34,6 @@ const PROJECTION = {
   lastAccess: 1,
 };
 
-/** Sorts after every username that starts with the search, so the range `[search, search + PREFIX_END)` covers the prefix. */
-const PREFIX_END = '￿';
-
 export interface StaffUserFilter {
   search?: string;
   /** Unset: everyone. True: banned only. False: not banned only. */
@@ -44,7 +42,7 @@ export interface StaffUserFilter {
 }
 
 const searchFilter = (search?: string): FilterQuery<User> =>
-  search ? { username: { $gte: search, $lt: `${search}${PREFIX_END}` } } : {};
+  search ? usernamePrefixFilter(search) : {};
 
 const bannedFilter = (banned?: boolean): FilterQuery<User> => {
   if (banned === undefined) return {};

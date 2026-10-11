@@ -15220,6 +15220,23 @@
         ],
         "type": "object"
       },
+      "UserSuggestionResponse": {
+        "properties": {
+          "id": {
+            "description": "User id.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Login name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username"
+        ],
+        "type": "object"
+      },
       "UserSummaryResponse": {
         "properties": {
           "id": {
@@ -36427,6 +36444,70 @@
         "summary": "Reply to a ticket",
         "tags": [
           "Tickets"
+        ]
+      }
+    },
+    "/api/internal/user-suggestions": {
+      "get": {
+        "description": "Signed-in callers only (the admin username pickers). Returns up to 10 users whose username starts with `prefix`, ignoring case, in username order, with only their id and username. Banned and unlisted users are included, as their profile pages are. 60 requests per user per minute, then 429 `rate_limited` with `Retry-After`.",
+        "operationId": "UserSuggestionsController_suggest",
+        "parameters": [
+          {
+            "description": "Case-insensitive username prefix (letters, digits, underscores; 1-30 characters); surrounding spaces are dropped.",
+            "in": "query",
+            "name": "prefix",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/UserSuggestionResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Suggest users by username prefix",
+        "tags": [
+          "Users"
         ]
       }
     },
