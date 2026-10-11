@@ -9065,12 +9065,17 @@
             "description": "Problem-wide checker.",
             "enum": [
               "bridged",
+              "easy",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
               "linecount",
-              "standard"
+              "linematches",
+              "rstripped",
+              "sorted",
+              "standard",
+              "unordered"
             ],
             "type": "string"
           },
@@ -10226,22 +10231,27 @@
             "type": "array"
           },
           "checker": {
-            "description": "Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical` or `linecount`.",
+            "description": "Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical`, `linecount`, `rstripped`, `sorted`, `unordered`, `easy` or `linematches`.",
             "enum": [
               "bridged",
+              "easy",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
               "linecount",
-              "standard"
+              "linematches",
+              "rstripped",
+              "sorted",
+              "standard",
+              "unordered"
             ],
             "type": "string"
           },
           "checkerArgs": {
             "additionalProperties": true,
             "default": null,
-            "description": "Arguments of the checker; null for none.",
+            "description": "Arguments of the checker; null for none. floats*: `precision` (0-20), `error_mode`; identical: `pe_allowed`; rstripped: `filter_new_line`; sorted: `split_on` (`lines`/`whitespace`); linematches: `point_distribution`, `filler_lines_required`; bridged: `type` (`testlib`, `themis`, `default`), `treat_checker_points_as_percentage` (testlib). Others take none; anything else is 400.",
             "nullable": true,
             "type": "object"
           },
@@ -10258,7 +10268,7 @@
           "graderArgs": {
             "additionalProperties": true,
             "default": null,
-            "description": "Arguments of the grader; null for none.",
+            "description": "Arguments of the grader; null for none. standard: `io_method` (`standard`/`file`), `io_input_file`, `io_output_file`; signature: `allow_main`. Others take none; anything else is 400.",
             "nullable": true,
             "type": "object"
           },
@@ -14043,12 +14053,17 @@
             "description": "Never `bridged`: a custom checker is problem-wide only.",
             "enum": [
               "",
+              "easy",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
               "linecount",
-              "standard"
+              "linematches",
+              "rstripped",
+              "sorted",
+              "standard",
+              "unordered"
             ],
             "type": "string"
           },
@@ -14119,12 +14134,17 @@
             "description": "Per-case checker override; empty for the problem-wide checker.",
             "enum": [
               "",
+              "easy",
               "floats",
               "floatsabs",
               "floatsrel",
               "identical",
               "linecount",
-              "standard"
+              "linematches",
+              "rstripped",
+              "sorted",
+              "standard",
+              "unordered"
             ],
             "type": "string"
           },

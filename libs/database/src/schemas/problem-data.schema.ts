@@ -9,6 +9,11 @@ export const CHECKERS = [
   'floatsrel',
   'identical',
   'linecount',
+  'rstripped',
+  'sorted',
+  'unordered',
+  'easy',
+  'linematches',
 ] as const;
 export type Checker = (typeof CHECKERS)[number];
 export const GRADERS = [
@@ -45,6 +50,11 @@ export const CASE_CHECKERS = [
   'floatsrel',
   'identical',
   'linecount',
+  'rstripped',
+  'sorted',
+  'unordered',
+  'easy',
+  'linematches',
 ] as const;
 export type CaseChecker = (typeof CASE_CHECKERS)[number];
 export type DataFileKind = (typeof DATA_FILE_KINDS)[number];
