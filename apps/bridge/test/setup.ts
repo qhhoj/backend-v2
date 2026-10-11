@@ -39,6 +39,9 @@ export const FAST_TIMINGS: BridgeTimings = {
   runMarginMs: 600_000,
   runCaseBudget: 100,
   pinFallbackMs: 600_000,
+  externalTickMs: 50,
+  externalPollMs: 20,
+  externalSubmitGapMs: 0,
   generationGraceMs: 60_000,
 };
 

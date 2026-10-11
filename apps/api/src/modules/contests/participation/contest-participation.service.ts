@@ -4,7 +4,13 @@ import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { constantTimeEqual, sha256, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, Paginated, RateLimitService, REDIS } from '@libs/common';
+import {
+  AppError,
+  Paginated,
+  RateLimitService,
+  REDIS,
+  unique,
+} from '@libs/common';
 import {
   CONTEST_RESCORE_QUEUE,
   contestPhase,
@@ -28,12 +34,20 @@ import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import { CurrentContestService } from '../core/current-contest.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
-import type { ParticipationListQueryDto } from './dto/participation.dto';
+import type {
+  BulkDisqualifyDto,
+  ParticipationListQueryDto,
+} from './dto/participation.dto';
 import { refusal, rulesNotAccepted } from './participation-refusals';
 import {
   CurrentParticipationResponse,
   ParticipationResponse,
 } from './dto/participation.response';
+import type {
+  BulkDisqualifyResponse,
+  BulkDisqualifyResultResponse,
+} from './dto/participation.response';
+import type { BulkVisibilityOutcome } from '../../problems/bulk/dto/bulk-visibility.response';
 import { ParticipationsRepository } from '../core/participations.repository';
 import type {
   ParticipationDocument,
@@ -64,6 +78,10 @@ const FROZEN_SCORE_ORDER = {
   frozenTiebreaker: 1,
   _id: 1,
 } as const;
+
+/** Per user: each bulk run may disqualify up to 100 rows. */
+const BULK_DISQUALIFY_LIMIT = 20;
+const BULK_DISQUALIFY_WINDOW_SECONDS = 60 * 60;
 
 const forbidden = (message: string) => new AppError('forbidden', 403, message);
 
@@ -283,6 +301,76 @@ export class ContestParticipationService {
     isDisqualified: boolean,
   ): Promise<ParticipationSummaryResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
+    const { updated, userId } = await this.applyDisqualified(
+      contest,
+      participationId,
+      isDisqualified,
+    );
+    await this.afterDisqualifying(contest);
+    await this.checkCheatingBans(contest, [userId]);
+    return ParticipationSummaryResponse.from(updated, contest);
+  }
+
+  /** `disqualify` for many rows of one contest, one after another; an id not in the contest is reported and the rest still apply. The ranking is purged and rescored once, even when a later row fails unexpectedly, then each changed user's cheating ban is checked. */
+  async disqualifyMany(
+    principal: Principal,
+    key: string,
+    { ids, disqualified }: BulkDisqualifyDto,
+  ): Promise<BulkDisqualifyResponse> {
+    const contest = await this.contestsService.editableContest(principal, key);
+    await this.rateLimit.reserve(
+      [`participations-bulk-disqualify:user:${principal.userId}`],
+      BULK_DISQUALIFY_LIMIT,
+      BULK_DISQUALIFY_WINDOW_SECONDS,
+    );
+    const results: BulkDisqualifyResultResponse[] = [];
+    const changedUsers: string[] = [];
+    try {
+      for (const id of ids)
+        results.push(
+          await this.disqualifyOne(contest, id, disqualified, changedUsers),
+        );
+    } finally {
+      if (changedUsers.length > 0) await this.afterDisqualifying(contest);
+    }
+    await this.checkCheatingBans(contest, unique(changedUsers));
+    const count = (outcome: BulkVisibilityOutcome) =>
+      results.filter((result) => result.outcome === outcome).length;
+    return { results, done: count('done'), failed: count('failed') };
+  }
+
+  /** Records the user of a changed row in `changedUsers`. */
+  private async disqualifyOne(
+    contest: ContestDocument,
+    id: string,
+    isDisqualified: boolean,
+    changedUsers: string[],
+  ): Promise<BulkDisqualifyResultResponse> {
+    try {
+      const { wasSet, userId } = await this.applyDisqualified(
+        contest,
+        id,
+        isDisqualified,
+      );
+      if (wasSet) return { id, outcome: 'unchanged' };
+      changedUsers.push(userId);
+      return { id, outcome: 'done' };
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      return { id, outcome: 'failed', reason: error.code };
+    }
+  }
+
+  /** Writes the flag and the contest ban and clears the user's current contest when disqualified; `wasSet` tells the flag already had the value. */
+  private async applyDisqualified(
+    contest: ContestDocument,
+    participationId: string,
+    isDisqualified: boolean,
+  ): Promise<{
+    updated: ParticipationDocument;
+    wasSet: boolean;
+    userId: string;
+  }> {
     const participation =
       await this.participationRows.findById(participationId);
     if (!participation || uuidStr(participation.contest) !== contest._id)
@@ -304,10 +392,22 @@ export class ContestParticipationService {
     }
     if (updated.isDisqualified)
       await this.participationRows.clearCurrent(userId, participation._id);
+    const wasSet = participation.isDisqualified === isDisqualified;
+    return { updated, wasSet, userId };
+  }
+
+  /** Organization-private contests never count towards the cheating ban. */
+  private async checkCheatingBans(
+    contest: ContestDocument,
+    userIds: string[],
+  ): Promise<void> {
+    if (contest.isOrganizationPrivate) return;
+    for (const userId of userIds) await this.checkCheatingBan(userId);
+  }
+
+  private async afterDisqualifying(contest: ContestDocument): Promise<void> {
     await purgeRankingCache(this.redis, contest._id);
     void notifyContestRescore(this.rescores, contest._id, this.logger);
-    if (!contest.isOrganizationPrivate) await this.checkCheatingBan(userId);
-    return ParticipationSummaryResponse.from(updated, contest);
   }
 
   /** Legacy `check_ban`, off unless the `contest.banAfterDisqualifications` setting is above 0: at the threshold the account is banned (and unlisted, and signed out: `isActive` is what the session guard checks); below it, only this ban is lifted. */
@@ -429,6 +529,15 @@ export class ContestParticipationService {
       filter.user = user._id;
     } else if (!canEdit || query.user !== undefined)
       filter.user = principal.userId;
+    const search = query.search?.trim();
+    if (search) {
+      if (!canEdit) throw forbidden('Only contest editors may search.');
+      const ids = await this.participationRows.userIdsMatching(
+        contest._id,
+        search,
+      );
+      filter.$and = [{ user: { $in: ids } }];
+    }
     return filter;
   }
 

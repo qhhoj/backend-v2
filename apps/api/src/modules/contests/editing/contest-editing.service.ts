@@ -313,7 +313,7 @@ export class ContestEditingService {
     return { queued: true };
   }
 
-  /** Legacy admin "judge final submissions": an ended FSO contest only (judging pending rows of a running one would end the format's point). */
+  /** Legacy admin "judge final submissions" for an FSO contest that has started: like the old admin (which only warned), a running contest may be judged early, and what is submitted later waits for the end. */
   async judgeFinal(
     principal: Principal,
     key: string,
@@ -326,8 +326,8 @@ export class ContestEditingService {
         409,
         'Only final-submission contests are judged at the end',
       );
-    if (contestPhase(contest, now) !== 'ended')
-      throw new AppError('conflict', 409, 'The contest has not ended');
+    if (contestPhase(contest, now) === 'upcoming')
+      throw new AppError('conflict', 409, 'The contest has not started');
     await requestFinalJudge(this.finalJudges, contest._id);
     return { queued: true };
   }

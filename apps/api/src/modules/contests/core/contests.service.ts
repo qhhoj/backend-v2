@@ -25,8 +25,76 @@ import {
   ContestViewerResponse,
   ParticipationSummaryResponse,
 } from './dto/contest-detail.response';
-import type { ContestListQueryDto } from './dto/contest-list.dto';
+import type {
+  ContestListQueryDto,
+  ContestListSort,
+} from './dto/contest-list.dto';
 import { ContestListItemResponse } from './dto/contest-list.response';
+import type { ContestListEditorResponse } from './dto/contest-list.response';
+
+const SORTS: Record<ContestListSort, Record<string, SortOrder>> = {
+  newest: { startTime: -1, key: 1 },
+  oldest: { startTime: 1, key: 1 },
+  name: { name: 1, key: 1 },
+  users: { userCount: -1, key: 1 },
+};
+
+function listSortOf(query: ContestListQueryDto): Record<string, SortOrder> {
+  if (query.sort) return SORTS[query.sort];
+  return query.phase === 'upcoming' ? SORTS.oldest : SORTS.newest;
+}
+
+function phaseClauses(
+  query: ContestListQueryDto,
+  now: Date,
+): FilterQuery<Contest>[] {
+  const clauses: FilterQuery<Contest>[] = [];
+  if (query.phase === 'upcoming') clauses.push({ startTime: { $gt: now } });
+  if (query.phase === 'running')
+    clauses.push({ startTime: { $lte: now }, endTime: { $gte: now } });
+  if (query.phase === 'ended') clauses.push({ endTime: { $lt: now } });
+  if (query.startFrom)
+    clauses.push({ startTime: { $gte: new Date(query.startFrom) } });
+  if (query.startBefore)
+    clauses.push({ startTime: { $lt: new Date(query.startBefore) } });
+  return clauses;
+}
+
+/** The admin index's filters; `visible=false` adds nothing a viewer could not already list, since `visibleFilter` shows hidden contests only to their insiders. */
+function staffClauses(
+  principal: Principal | null,
+  query: ContestListQueryDto,
+): FilterQuery<Contest>[] {
+  const clauses: FilterQuery<Contest>[] = [];
+  if (query.editable !== undefined)
+    clauses.push(
+      narrowTo(ContestAccess.editableFilter(principal), query.editable),
+    );
+  if (query.visible !== undefined) clauses.push({ isVisible: query.visible });
+  if (query.mine !== undefined) {
+    const mine = principal && {
+      $or: [
+        { authors: principal.userId },
+        { curators: principal.userId },
+        { testers: principal.userId },
+      ],
+    };
+    clauses.push(narrowTo(mine, query.mine));
+  }
+  return clauses;
+}
+
+const editorRowOf = (
+  contest: Contest,
+  pending: Map<string, number>,
+): ContestListEditorResponse => ({
+  isVisible: contest.isVisible,
+  lockedAfter: contest.lockedAfter,
+  pendingCount:
+    contest.formatName === 'final_submission'
+      ? (pending.get(uuidStr(contest._id)) ?? 0)
+      : null,
+});
 
 @Injectable()
 export class ContestsService {
@@ -38,36 +106,43 @@ export class ContestsService {
     private readonly users: UsersRepository,
   ) {}
 
-  /** Legacy `ContestList` over `get_visible_contests`; upcoming soonest first, the rest newest first; each row carries the signed-in viewer's own state. */
+  /** Legacy `ContestList` over `get_visible_contests`; upcoming soonest first, the rest newest first unless `sort` says otherwise; each row carries the signed-in viewer's own state, and the editor block for contests they may edit. */
   async list(
     principal: Principal | null,
     query: ContestListQueryDto,
     now = new Date(),
   ): Promise<Paginated<ContestListItemResponse>> {
-    const sort: Record<string, SortOrder> =
-      query.phase === 'upcoming'
-        ? { startTime: 1, key: 1 }
-        : { startTime: -1, key: 1 };
     const { items, total } = await this.contests.list(
       this.listFilter(principal, query, now),
-      sort,
+      listSortOf(query),
       query.page,
       query.pageSize,
     );
-    const [viewers, organizations] = await Promise.all([
+    const editable = items.filter((contest) =>
+      ContestAccess.canEdit(principal, ContestAccess.accessView(contest)),
+    );
+    const [viewers, organizations, pending] = await Promise.all([
       this.viewers.listViewersOf(principal, items, now),
       this.organizations.forContests(principal, items),
-    ]);
-    return new Paginated(
-      items.map((contest) =>
-        ContestListItemResponse.withViewer(
-          contest,
-          now,
-          // `viewers` is empty for a signed-out visitor, so the row has no viewer.
-          viewers.get(uuidStr(contest._id)) ?? null,
-          organizations.get(uuidStr(contest._id)) ?? [],
-        ),
+      this.contests.pendingCountsOf(
+        editable
+          .filter((contest) => contest.formatName === 'final_submission')
+          .map((contest) => uuidStr(contest._id)),
       ),
+    ]);
+    const editableIds = new Set(
+      editable.map((contest) => uuidStr(contest._id)),
+    );
+    return new Paginated(
+      items.map((contest) => {
+        const id = uuidStr(contest._id);
+        return ContestListItemResponse.withViewer(contest, now, {
+          // `viewers` is empty for a signed-out visitor, so the row has no viewer.
+          viewer: viewers.get(id) ?? null,
+          organizations: organizations.get(id) ?? [],
+          editor: editableIds.has(id) ? editorRowOf(contest, pending) : null,
+        });
+      }),
       { page: query.page, pageSize: query.pageSize, total },
     );
   }
@@ -79,18 +154,12 @@ export class ContestsService {
   ): FilterQuery<Contest> {
     const clauses: FilterQuery<Contest>[] = [
       ContestAccess.visibleFilter(principal),
+      ...phaseClauses(query, now),
+      ...staffClauses(principal, query),
     ];
-    if (query.phase === 'upcoming') clauses.push({ startTime: { $gt: now } });
-    if (query.phase === 'running')
-      clauses.push({ startTime: { $lte: now }, endTime: { $gte: now } });
-    if (query.phase === 'ended') clauses.push({ endTime: { $lt: now } });
     if (query.tag) clauses.push({ tags: query.tag });
     if (query.organization) clauses.push({ organizations: query.organization });
     if (query.rated !== undefined) clauses.push({ isRated: query.rated });
-    if (query.editable !== undefined)
-      clauses.push(
-        narrowTo(ContestAccess.editableFilter(principal), query.editable),
-      );
     for (const text of [query.search, query.q]) {
       const trimmed = text?.trim();
       if (!trimmed) continue;

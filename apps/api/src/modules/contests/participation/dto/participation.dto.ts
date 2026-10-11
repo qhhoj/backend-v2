@@ -1,6 +1,10 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -45,6 +49,8 @@ export class ParticipationListQueryDto {
   pageSize: number = 50;
   /** Username; others than the viewer need edit rights. */
   @IsOptional() @IsString() @MaxLength(30) user?: string;
+  /** Usernames containing this text, case-insensitive; contest editors only. */
+  @IsOptional() @IsString() @MaxLength(30) search?: string;
   /** Only live, virtual or spectating rows; default live and virtual. */
   @ApiPropertyOptional({ enum: PARTICIPATION_KINDS })
   @IsOptional()
@@ -62,6 +68,19 @@ export class ParticipationListQueryDto {
 export class DisqualifyDto {
   /** True to disqualify the participation, false to reinstate it. */
   @IsBoolean() disqualified!: boolean;
+}
+
+export const MAX_BULK_PARTICIPATIONS = 100;
+
+export class BulkDisqualifyDto extends DisqualifyDto {
+  /** Participation ids, 1 to 100, no repeats. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_BULK_PARTICIPATIONS)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(36, { each: true })
+  ids!: string[];
 }
 
 /** Unvalidated shape: a malformed id is a 404. */

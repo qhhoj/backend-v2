@@ -10,10 +10,19 @@ type Treatment = 'F' | 'S' | 'F+S';
  * Readers that go through `ProblemsRepository` (tags, comments, tickets, contests, judges, ...) inherit its filter and are not listed.
  */
 const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
+  'apps/api/src/modules/audit/audit-labels.repository.ts': [
+    'S',
+    'the change feed names every audited problem; a soft-deleted one keeps its code and reads as deleted',
+  ],
   'apps/api/src/modules/home/home.repository.ts': [
     'F',
     'the newest list and the problem count show live problems only',
   ],
+  'apps/api/src/modules/organizations/editing/organization-unlink.repository.ts':
+    [
+      'S',
+      'deleting an organization pulls it from every linked problem, deleted ones too, so a restored problem never names a deleted organization',
+    ],
   'apps/api/src/modules/problems/core/problems.repository.ts': [
     'F+S',
     'every finder filters; the explicit *IncludingDeleted and *Deleted* methods are the only deliberate exceptions',
@@ -37,6 +46,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
   'apps/bridge/src/submissions/submissions.repository.ts': [
     'S',
     'a submission queued before the delete must still be dispatched with the problem limits',
+  ],
+  'apps/bridge/src/external/external-runs.repository.ts': [
+    'S',
+    'like the dispatch: a submission queued before the delete is still sent to the external judge and scored',
   ],
   'apps/bridge/src/submissions/run-writes.repository.ts': [
     'S',
@@ -116,6 +129,8 @@ const READ_PATTERNS = [
   /InjectModel\(\s*Problem\.name\s*\)/,
   /getModelToken\(\s*Problem\b/,
   /\bmodel\(\s*(?:Problem\.name|['"]Problem['"])/,
+  // A table of model names read later through `connection.model(...)`.
+  /\bmodel\s*:\s*Problem\.name\b/,
   /Model<Problem>/,
   /\bProblem\.collection\b/,
   // The collection by name: a `$lookup`/reference (`from:`, `foreign:`) or any call that takes it first, e.g. `connection.collection('problems')`, `lookup('problems', ...)`, `each('problems', ...)`.
@@ -168,6 +183,7 @@ describe('direct readers of the problems collection', () => {
     "{ field: 'problem', foreign: 'problems' }",
     '@InjectModel(Problem.name) private readonly problems: Model<Problem>',
     "connection.model('Problem')",
+    "{ model: Problem.name, field: 'code' }",
   ])('recognises a read written as %s', (source) => {
     expect(readsProblems(source)).toBe(true);
   });

@@ -97,19 +97,35 @@ export class ContestListViewerResponse {
   isCurrent!: boolean;
 }
 
+/** What only the contest's editors see on a list row. */
+export class ContestListEditorResponse {
+  /** Whether the contest is shown to users who may see it. */
+  isVisible!: boolean;
+  /** Live submissions are not rejudged after this time; null for no lock. */
+  lockedAfter!: Date | null;
+  /** Submissions still waiting for the final judge; null unless the format is `final_submission`. */
+  pendingCount!: number | null;
+}
+
 export class ContestListItemResponse extends ContestSummaryResponse {
   /** Null for a signed-out visitor. */
   viewer!: ContestListViewerResponse | null;
+  /** Null unless the viewer may edit the contest. */
+  editor!: ContestListEditorResponse | null;
 
   static withViewer(
     contest: Contest,
     now: Date,
-    viewer: ContestListViewerResponse | null,
-    organizations: ContestOrganizationResponse[],
+    extras: {
+      viewer: ContestListViewerResponse | null;
+      organizations: ContestOrganizationResponse[];
+      editor: ContestListEditorResponse | null;
+    },
   ): ContestListItemResponse {
     return {
-      ...ContestSummaryResponse.from(contest, now, organizations),
-      viewer,
+      ...ContestSummaryResponse.from(contest, now, extras.organizations),
+      viewer: extras.viewer,
+      editor: extras.editor,
     };
   }
 }

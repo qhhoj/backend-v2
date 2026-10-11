@@ -1,5 +1,29 @@
 # qhhoj-backend
 
+## 2.13.0
+
+### Minor Changes
+
+- c5b4965: Contests admin: `GET /contests` gains `visible`, `mine`, `startFrom`, `startBefore` and `sort` (`newest`, `oldest`, `name`, `users`), and an `editor` block per row (`isVisible`, `lockedAfter`, FSO `pendingCount`) for contests the viewer may edit; `POST /contests/bulk/visibility` and `POST /contests/bulk/tag` apply the PATCH per key with per-key `done`/`unchanged`/`failed`; `POST /contests/{key}/participations/disqualify` disqualifies or reinstates up to 100 rows with one rescore; the participation list takes `search` (username contains, editors only); contests store `ogImage` (link previews) and `logoOverrideImage`; editors may run final judging once an FSO contest has started; contest tags carry `contestCount` among the contests the viewer may see.
+
+## 2.12.0
+
+### Minor Changes
+
+- 5c00975: Blog: `GET /posts/drafts` (my drafts and scheduled posts) and `GET /posts/compose-options` (personal and organization posting rights); organization post lists hide other admins' scheduled posts.
+- b33289d: External judge core: `externalJudge.*` settings (sealed token), `Problem.externalJudge`, `externalRuns` collection, PCD VJudge client and result mapping.
+- d96e09f: Add `DELETE /organizations/{slug}`: a superuser-only soft delete. Problems and contests are unlinked and keep their privacy flags, posts are unlinked and hidden, members are released and pending join requests rejected. Deleted organizations disappear from every read.
+- c10d1d6: Add `GET /organizations/:slug/submissions`: the listed members' submissions under the site list's visibility rules, for members, administrators and `judge.view_all_submission`.
+- 4c69fb5: Public `GET /runtimes` (judges with slots, ping and uptime; languages with per-judge compiler versions; no keys, addresses or builds). `GET /submissions/:id/source/raw` (inline) and `/source/download` (attachment, `<id>.<ext>`, `Main.java` for Java) as `text/plain` with `nosniff`, under the source's existing access rules.
+- 328b719: Add `PUT /submissions/{id}/score`: a manual verdict and score (`judge.change_submission` plus edit rights on the problem) on a finished submission, stored on the problem's scale so contest results (bar ioi16 batches), solved state and rescores agree; optional `lock`, logged as a revision. The submission viewer gains `canOverrideScore`.
+- 5969708: Add `GET /user-suggestions?prefix=`: signed-in, rate-limited username prefix search returning up to 10 `{ id, username }` for the admin pickers.
+
+### Patch Changes
+
+- 35f4a02: Bridge: the judge message cap (1000/s) counts a sliding second, so a burst straddling a window edge is caught; a failed read when re-dispatching a requeued run after grace is logged instead of escaping as an unhandled rejection.
+- 2fa8249: Bulk problem visibility reports an unexpected failure on one problem as `failed` (`internal_error`) instead of a 500, so the changes already applied are still reported.
+- c2ac6ed: The problems-reader registry classifies the organization unlink repository.
+
 ## 2.11.0
 
 ### Minor Changes

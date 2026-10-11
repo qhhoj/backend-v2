@@ -177,6 +177,8 @@ export class ContestSettingsResponse {
   publishAfterEnd!: boolean;
   /** The editor whose rights the automatic publish re-checks at the end. */
   publishAfterEndBy!: string | null;
+  /** Image for link previews; empty for the site image. */
+  ogImage!: string;
   /** Whether a ranking access code is set; the code itself is never returned. */
   hasRankingAccessCode!: boolean;
   problemOutputPrefixes!: ContestProblemOutputPrefixResponse[];
@@ -228,6 +230,7 @@ export class ContestSettingsResponse {
         contest.publishAfterEndBy === null
           ? null
           : uuidStr(contest.publishAfterEndBy),
+      ogImage: contest.ogImage ?? '',
       hasRankingAccessCode: contest.rankingAccessCodeHash !== null,
       problemOutputPrefixes: [...contest.problems]
         .sort((left, right) => left.order - right.order)
@@ -296,6 +299,8 @@ export class ContestDetailResponse extends ContestSummaryResponse {
   rulesHtml!: string;
   /** Increases whenever the rules text changes. */
   rulesRevision!: number;
+  /** Shown instead of the site logo inside the contest; empty for none. */
+  logoOverrideImage!: string;
   /** The contest's authors. */
   authors!: UserSummaryResponse[];
   /**
@@ -355,6 +360,7 @@ export class ContestDetailResponse extends ContestSummaryResponse {
       rules: contest.rules,
       rulesHtml: contest.rulesHtml,
       rulesRevision: contest.rulesRevision,
+      logoOverrideImage: contest.logoOverrideImage ?? '',
       authors: extras.authors.map((author) => UserSummaryResponse.from(author)),
       frozenLastMinutes: contest.frozenLastMinutes,
       scoreboardVisibility: contest.scoreboardVisibility,

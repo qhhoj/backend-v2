@@ -1,3 +1,6 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { BULK_VISIBILITY_OUTCOMES } from '../../../problems/bulk/dto/bulk-visibility.response';
+import type { BulkVisibilityOutcome } from '../../../problems/bulk/dto/bulk-visibility.response';
 import { standingOf } from '@libs/contests';
 import type { ProblemCell } from '@libs/contests';
 import type { Contest, ContestParticipation } from '@libs/database';
@@ -51,4 +54,26 @@ export class CurrentContestResponse {
 export class CurrentParticipationResponse {
   contest!: CurrentContestResponse;
   participation!: ParticipationSummaryResponse;
+}
+
+export class BulkDisqualifyResultResponse {
+  /** The participation id from the request. */
+  id!: string;
+  /** `done` when the flag changed, `unchanged` when it already had that value, `failed` when the participation is not in the contest. */
+  @ApiProperty({
+    enum: BULK_VISIBILITY_OUTCOMES,
+    enumName: 'BulkVisibilityOutcome',
+  })
+  outcome!: BulkVisibilityOutcome;
+  /** Set when failed: the error code (`not_found`). */
+  reason?: string;
+}
+
+export class BulkDisqualifyResponse {
+  /** One entry per requested id, in request order. */
+  results!: BulkDisqualifyResultResponse[];
+  /** Number of participations changed. */
+  done!: number;
+  /** Number of ids refused. */
+  failed!: number;
 }
