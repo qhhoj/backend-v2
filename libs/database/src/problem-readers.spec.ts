@@ -39,6 +39,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'F',
     'the sitemap and link previews list signed-out-visible problems only: public, not organization-private, not deleted',
   ],
+  'apps/api/src/modules/settings/audit/audit-feed.repository.ts': [
+    'S',
+    'the audit feed names the problem a change was made to, also once it is deleted',
+  ],
   'apps/api/src/modules/similarity/core/similarity-runs.repository.ts': [
     'F+S',
     'starting and opening runs filters; problemCodes is S so evidence that survives keeps its names',

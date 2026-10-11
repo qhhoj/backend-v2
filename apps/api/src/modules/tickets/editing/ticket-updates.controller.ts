@@ -21,7 +21,10 @@ export class TicketUpdatesController {
    * (assignees and staff), `isContributive` (staff only, never on their own
    * ticket, counts toward the creator's contribution points) and `assignees`
    * (staff only, usernames of active users, replaces the list; 400
-   * `assignee_unknown` otherwise). Everything is checked before one write, so
+   * `assignee_unknown` otherwise), `title` and `problem` (staff only: retitle,
+   * or link the ticket to the problem with that code instead; 400
+   * `problem_unknown` for no such problem). Everything is checked before one
+   * write, so
    * a refused request changes nothing. Fails with 409 `conflict` if the ticket
    * changed meanwhile.
    */

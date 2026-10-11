@@ -24,15 +24,27 @@ const WITHOUT_MESSAGES = { messages: 0, events: 0 } as const;
 const LIST_PROJECTION = { messages: 0, events: 0, notes: 0 } as const;
 
 export type TicketChanges = Partial<
-  Pick<Ticket, 'isOpen' | 'isContributive' | 'notes' | 'assignees'>
+  Pick<
+    Ticket,
+    'isOpen' | 'isContributive' | 'notes' | 'assignees' | 'title' | 'linkedItem'
+  >
 >;
+
+/** What an update read before writing: the state fields, and the title and link a retitle or relink compares against. */
+export type TicketReadState = TicketStateSnapshot &
+  Partial<Pick<Ticket, 'title' | 'linkedItem'>>;
 
 /** The guard of a compare-and-set: each field the update changes must still hold the value that was read. */
 function unchangedSince(
   changes: TicketChanges,
-  read: TicketStateSnapshot,
+  read: TicketReadState,
 ): FilterQuery<Ticket> {
   const guard: FilterQuery<Ticket> = {};
+  if (changes.title !== undefined) guard.title = read.title;
+  if (changes.linkedItem !== undefined && read.linkedItem) {
+    guard['linkedItem.type'] = read.linkedItem.type;
+    guard['linkedItem.id'] = read.linkedItem.id;
+  }
   if (changes.isOpen !== undefined) guard.isOpen = read.isOpen;
   if (changes.isContributive !== undefined)
     guard.isContributive = read.isContributive;
@@ -45,6 +57,12 @@ function unchangedSince(
 
 @Injectable()
 export class TicketsRepository {
+  /** Open tickets whose newest message was not written by staff. `null` matches a document without the field (tickets from the migrator's raw bulkWrite, and tickets that predate the flag), so they count as waiting. Through `{isOpen, lastMessageByStaff}`. */
+  static readonly AWAITING_STAFF: FilterQuery<Ticket> = {
+    isOpen: true,
+    lastMessageByStaff: { $in: [false, null] },
+  };
+
   constructor(
     @InjectModel(Ticket.name) private readonly tickets: Model<Ticket>,
     @InjectModel(GeneralIssue.name)
@@ -126,7 +144,7 @@ export class TicketsRepository {
   async update(
     ticketId: string,
     changes: TicketChanges,
-    read: TicketStateSnapshot,
+    read: TicketReadState,
     events: readonly TicketTimelineDraft[] = [],
   ): Promise<boolean> {
     if (!Object.keys(changes).length) return true;
@@ -181,13 +199,8 @@ export class TicketsRepository {
       .exec();
   }
 
-  /** Open tickets whose newest message was not written by staff. `null` matches a document without the field (tickets from the migrator's raw bulkWrite, and tickets that predate the flag), so they count as waiting. Through `{isOpen, lastMessageByStaff}`. */
+  /** See `AWAITING_STAFF`. */
   countAwaitingStaff(): Promise<number> {
-    return this.tickets
-      .countDocuments({
-        isOpen: true,
-        lastMessageByStaff: { $in: [false, null] },
-      })
-      .exec();
+    return this.tickets.countDocuments(TicketsRepository.AWAITING_STAFF).exec();
   }
 }

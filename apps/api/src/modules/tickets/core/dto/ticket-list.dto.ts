@@ -27,6 +27,8 @@ export class TicketPageQueryDto {
 export class TicketListQueryDto extends TicketPageQueryDto {
   /** true for open tickets only, false for closed only, absent for both. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() open?: boolean;
+  /** true keeps open tickets whose newest message is not from staff (what the staff badge counts). */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() awaiting?: boolean;
   /** true limits the list to tickets the caller filed or is assigned to. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() own?: boolean;
   /** Usernames of ticket creators; repeat the parameter, at most 10. */

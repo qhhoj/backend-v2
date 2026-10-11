@@ -338,6 +338,12 @@ afterAll(() => api.teardown());
           }),
         },
         {
+          name: 'GET config/:key/revisions',
+          permission: 'judge.change_miscconfig',
+          status: 200,
+          prepare: () => ({ method: 'get', path: '/config/any/revisions' }),
+        },
+        {
           name: 'DELETE config/:key',
           permission: 'judge.change_miscconfig',
           status: 204,
@@ -539,6 +545,52 @@ afterAll(() => api.teardown());
         ]);
         expect(results.map(({ status }) => status)).toEqual([200, 200]);
         expect(await api.miscConfigs.countDocuments({ key: 'race' })).toBe(1);
+      });
+
+      it('records each real change of a key, keeps the history past a delete, and feeds the audit list without values', async () => {
+        const key = unique('notice');
+        await put(key, { value: 'first' }).expect(200);
+        await put(key, { value: 'first' }).expect(200);
+        await put(key, { value: 'second' }).expect(200);
+        await send('delete', `/config/${key}`, configEditor).expect(204);
+        const history = dataOf<
+          Array<{ action: string; changes: Record<string, unknown> }>
+        >(
+          await send('get', `/config/${key}/revisions`, configEditor).expect(
+            200,
+          ),
+        );
+        expect(history.map((row) => row.action)).toEqual([
+          'delete',
+          'edit',
+          'create',
+        ]);
+        expect(history[1].changes.value).toEqual({
+          before: 'first',
+          after: 'second',
+        });
+
+        const auditor = await staff('judge.change_settings');
+        const feed = (query: string) =>
+          authed(api.http().get(`/api/internal/admin/audit${query}`), auditor);
+        await authed(
+          api.http().get('/api/internal/admin/audit'),
+          configEditor,
+        ).expect(403);
+        const response = await feed('?entity=miscConfig').expect(200);
+        expect(JSON.stringify(response.body)).not.toContain('second');
+        const entries = dataOf<
+          Array<{ label: string; action: string; fields: string[] }>
+        >(response).filter((entry) => entry.label === key);
+        expect(entries.map((entry) => entry.action)).toEqual([
+          'delete',
+          'edit',
+          'create',
+        ]);
+        expect(entries[0].fields).toEqual(['value']);
+        expect(
+          dataOf<unknown[]>(await feed('?actor=nobody').expect(200)),
+        ).toEqual([]);
       });
     });
   });

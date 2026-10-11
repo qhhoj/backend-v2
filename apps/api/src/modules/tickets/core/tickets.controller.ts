@@ -26,7 +26,8 @@ export class TicketsController {
    * @remarks
    * Returns tickets the caller may read: their own and those assigned to them,
    * tickets of problems they can edit, and every ticket for holders of
-   * `judge.change_ticket`. Filter with `open`, `own` (only tickets they filed
+   * `judge.change_ticket`. Filter with `open`, `awaiting` (open tickets whose
+   * newest message is not from staff), `own` (only tickets they filed
    * or are assigned to), and repeated `user` and `assignee` usernames (at most
    * 10 each; unknown names match nothing). Paged with `page`.
    */

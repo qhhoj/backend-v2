@@ -8,13 +8,18 @@ import {
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse } from '@libs/common';
+import type { Paginated } from '@libs/common';
 import {
   CommentIdParamDto,
   CommentPageParamsDto,
+  CommentPageQueryDto,
 } from '../core/dto/comment-params.dto';
+import { CommentPageLinkResponse } from '../core/dto/comment.response';
 import type { CommentDetailResponse } from '../core/dto/comment.response';
 import { CommentModerationService } from './comment-moderation.service';
 import type { CommentVoteEntryResponse } from './dto/comment-vote-entry.response';
@@ -59,6 +64,23 @@ export class CommentModerationController {
     @Param() { id }: CommentIdParamDto,
   ): Promise<CommentVoteEntryResponse[]> {
     return this.moderation.votesOf(auth.principal, id);
+  }
+
+  /**
+   * List the pages with locked comments
+   *
+   * @remarks
+   * Requires `judge.change_comment`. The pages whose comments are locked, the
+   * newest lock first, 50 per page. Pages the moderator cannot read are left
+   * out of the page (still counted in `total`).
+   */
+  @ApiPaginatedResponse(CommentPageLinkResponse)
+  @Get('locks')
+  lockedPages(
+    @CurrentAuth() auth: AuthContext,
+    @Query() { page }: CommentPageQueryDto,
+  ): Promise<Paginated<CommentPageLinkResponse>> {
+    return this.moderation.lockedPages(auth.principal, page);
   }
 
   /**

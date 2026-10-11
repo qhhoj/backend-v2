@@ -3,8 +3,10 @@ import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { escapeRegExp } from '@libs/common';
 import type { Paginated } from '@libs/common';
+import { uuidStr } from '@libs/database';
 import type { BlogPost } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
+import { OrganizationsRepository } from '../../organizations/core/organizations.repository';
 import { BlogPostsService } from '../core/blog-posts.service';
 import type { PostListItemResponse } from '../core/dto/post.response';
 import type {
@@ -36,22 +38,33 @@ export class BlogModerationService {
   constructor(
     private readonly posts: BlogPostsService,
     private readonly users: UsersRepository,
+    private readonly organizations: OrganizationsRepository,
   ) {}
 
   async list(
     principal: Principal,
-    { state, search, page }: PostModerationQueryDto,
+    { state, search, organization, page }: PostModerationQueryDto,
     now = new Date(),
   ): Promise<Paginated<PostListItemResponse>> {
     const filter = filterFor(state, now);
     const text = search?.trim();
     const textFilter = text ? await this.searchFilter(text) : {};
+    const slug = organization?.trim();
+    const organizationFilter = slug ? await this.organizationFilter(slug) : {};
     return this.posts.pageOf(
       principal,
-      { $and: [filter, textFilter] },
+      { $and: [filter, textFilter, organizationFilter] },
       NEWEST,
       page,
     );
+  }
+
+  /** The organization's posts; an unknown slug matches nothing. */
+  private async organizationFilter(
+    slug: string,
+  ): Promise<FilterQuery<BlogPost>> {
+    const found = await this.organizations.findBySlug(slug);
+    return { organization: found ? uuidStr(found._id) : { $in: [] } };
   }
 
   /** The title contains `text`, or `text` is the username of one of the authors. */
