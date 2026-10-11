@@ -469,6 +469,22 @@ afterAll(() => api.teardown());
         expect(await totalFor('root')).toBe(1);
       });
 
+      it('withholds the judged-case position with the case results', async () => {
+        const positionFor = async (who: string, code: string) => {
+          await api.submissions.updateOne(
+            { _id: owned[code] },
+            { currentTestcase: 3 },
+          );
+          return dataOf<{ currentTestcase: number | null }>(
+            await as(who, `${SUBMISSIONS}/${owned[code]}`).expect(200),
+          ).currentTestcase;
+        };
+        expect(await positionFor('owner', 'res_s')).toBeNull();
+        expect(await positionFor('owner', 'res_b')).toBeNull();
+        expect(await positionFor('root', 'res_s')).toBe(3);
+        expect(await positionFor('owner', 'vis_a')).toBe(3);
+      });
+
       it('needs a login and answers 404 for unknown and malformed ids', async () => {
         await as('anonymous', `${SUBMISSIONS}/${owned['vis_a']}`).expect(401);
         await as(

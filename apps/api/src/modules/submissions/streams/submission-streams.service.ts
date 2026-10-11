@@ -82,6 +82,9 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
   private readonly feedContests = new Map<string, string | null>();
   /** Feed deliveries run one after another, so a cache miss never reorders events. */
   private feedQueue: Promise<void> = Promise.resolve();
+  private feedPending = 0;
+  /** Feed events were dropped since the queue last drained: the feed gets one `resync` when it does. */
+  private feedDropped = false;
 
   constructor(
     private readonly hub: EventStreamHubService,
@@ -171,8 +174,7 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     for (const entry of this.bySubmission.get(event.submissionId) ?? [])
       if (event.type !== 'test-case' || entry.caseEvents)
         entry.stream.send(frame);
-    if (this.feed.size && event.type !== 'test-case')
-      this.feedQueue = this.feedQueue.then(() => this.deliverToFeed(event));
+    if (this.feed.size && event.type !== 'test-case') this.queueForFeed(event);
   }
 
   forget(entry: SubmissionStream): void {
@@ -207,6 +209,30 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
       this.bySubmission.set(entry.submissionId, listeners);
     }
     return entry;
+  }
+
+  /** Bounded like the ticket channel: lookups stalled behind a slow database drop events instead of piling them up in memory. */
+  private queueForFeed(event: SubmissionEvent): void {
+    if (this.feedPending >= this.limits.feedBacklog) {
+      if (!this.feedDropped)
+        this.logger.warn('Public feed events dropped: delivery is backed up');
+      this.feedDropped = true;
+      return;
+    }
+    this.feedPending += 1;
+    this.feedQueue = this.feedQueue
+      .then(() => this.deliverToFeed(event))
+      .finally(() => {
+        this.feedPending -= 1;
+        if (this.feedPending === 0 && this.feedDropped) this.resyncFeed();
+      });
+  }
+
+  /** Feed clients refetch the list: events were lost. */
+  private resyncFeed(): void {
+    this.feedDropped = false;
+    const frame = sseFrame('resync', {});
+    for (const entry of this.feed) entry.stream.send(frame);
   }
 
   private async deliverToFeed(event: SubmissionEvent): Promise<void> {
