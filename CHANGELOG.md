@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.20.0
+
+### Minor Changes
+
+- ccca5b3: feat(problems): compile an uploaded checker or interactor on a judge (`generate.compile`, proto 1.3) and show the result as `sourceChecks` on the problem data
+
 ## 2.19.1
 
 ### Patch Changes
