@@ -370,3 +370,169 @@ afterAll(() => api.teardown());
     });
   });
 }
+
+// A problem migrated from the old site: Mongo holds the legacy rows, the data directory holds the legacy init.yml.
+{
+  const PROBLEMS = '/api/internal/problems';
+  /** The old site's init.yml for the rows below: pretest, a batch, a case-level checker and a custom checker. */
+  const LEGACY_INIT = [
+    'archive: tests.zip',
+    'pretest_test_cases:',
+    '- in: pre/1.in',
+    '  out: pre/1.out',
+    '  points: 0',
+    'test_cases:',
+    '- batched:',
+    '  - in: sub1/1.in',
+    '    out: sub1/1.out',
+    '  - in: sub1/2.in',
+    '    out: sub1/2.out',
+    '  points: 40',
+    '- in: sub2/1.in',
+    '  out: sub2/1.out',
+    '  points: 60',
+    '  checker:',
+    '    name: floats',
+    '    args:',
+    '      precision: 6',
+    'checker:',
+    '  name: bridged',
+    '  args:',
+    '    files: chk.cpp',
+    '    lang: CPP17',
+    '    type: testlib',
+    '',
+  ].join('\n');
+  const MIGRATED_CASES = [
+    testCase({
+      input: 'pre/1.in',
+      output: 'pre/1.out',
+      points: 0,
+      isPretest: true,
+    }),
+    testCase({ type: 'S', points: 40 }),
+    testCase({ input: 'sub1/1.in', output: 'sub1/1.out' }),
+    testCase({ input: 'sub1/2.in', output: 'sub1/2.out' }),
+    testCase({ type: 'E' }),
+    testCase({
+      input: 'sub2/1.in',
+      output: 'sub2/1.out',
+      points: 60,
+      checker: 'floats',
+      checkerArgs: { precision: 6 },
+    }),
+  ];
+  const ARCHIVE_NAMES = [
+    'pre/1.in',
+    'pre/1.out',
+    'sub1/1.in',
+    'sub1/1.out',
+    'sub1/2.in',
+    'sub1/2.out',
+    'sub2/1.in',
+    'sub2/1.out',
+  ];
+  /** The fields the editor sends back: everything it was given except the read-only ones. */
+  const editorBody = (data: ProblemDataResponse) => ({
+    checker: data.checker,
+    checkerArgs: data.checkerArgs,
+    grader: data.grader,
+    graderArgs: data.graderArgs,
+    outputPrefix: data.outputPrefix,
+    outputLimit: data.outputLimit,
+    unicode: data.unicode,
+    nobigmath: data.nobigmath,
+    cases: data.cases,
+  });
+
+  describe('a migrated problem in the data editor', () => {
+    beforeAll(() => api.reset());
+    let editor: TestSession;
+    const dir = (code: string) => join(api.problemDataRoot, code);
+    const fileOf = (code: string, name: string) =>
+      readFileSync(join(dir(code), name));
+
+    /** As the migration left it: legacy rows (graderArgs `{}`, dataVersion 0), the legacy files and init.yml. */
+    async function seedMigrated(
+      code: string,
+      authors: string[],
+      catalog: Catalog,
+    ) {
+      await createProblem(api, catalog, {
+        code,
+        authors,
+        data: dataFixture({
+          archive: 'tests.zip',
+          customChecker: 'chk.cpp',
+          checker: 'bridged',
+          checkerArgs: { files: 'chk.cpp', lang: 'CPP17', type: 'testlib' },
+          graderArgs: {},
+          cases: MIGRATED_CASES,
+        }),
+      });
+      writeDataArchive(
+        api,
+        code,
+        ARCHIVE_NAMES.map((name) => ({ name, content: name })),
+      );
+      writeFileSync(join(dir(code), 'chk.cpp'), 'int main() {}\n');
+      writeFileSync(join(dir(code), 'init.yml'), LEGACY_INIT);
+    }
+    const get = (code: string) =>
+      authed(api.http().get(`${PROBLEMS}/${code}/data`), editor).expect(200);
+    const put = (code: string, body: object) =>
+      authed(api.http().put(`${PROBLEMS}/${code}/data`), editor)
+        .send(body)
+        .expect(200);
+
+    beforeAll(async () => {
+      const catalog = await seedCatalog(api);
+      const user = await createUserWith(api, 'editor', {
+        permissions: ['judge.edit_own_problem'],
+      });
+      editor = await loginAs(api, user._id);
+      for (const code of ['legacy', 'edited'])
+        await seedMigrated(code, [user._id], catalog);
+    });
+
+    it('shows the migrated cases, checker and archive', async () => {
+      const response = await get('legacy');
+      const data = (response.body as { data: ProblemDataResponse }).data;
+      expect(data).toMatchObject({
+        archive: 'tests.zip',
+        customChecker: 'chk.cpp',
+        checker: 'bridged',
+        feedback: '',
+        hasInit: true,
+      });
+      expect(data.cases).toEqual(MIGRATED_CASES);
+      expect([...data.archiveFiles].sort()).toEqual([...ARCHIVE_NAMES].sort());
+    });
+
+    it('saved unchanged, judges the same: same init.yml, same files, same rows', async () => {
+      const archive = fileOf('legacy', 'tests.zip');
+      const checker = fileOf('legacy', 'chk.cpp');
+      const shown = (await get('legacy')).body as { data: ProblemDataResponse };
+      const saved = (await put('legacy', editorBody(shown.data))).body as {
+        data: ProblemDataResponse;
+      };
+      expect(saved.data.feedback).toBe('');
+      expect(saved.data.cases).toEqual(MIGRATED_CASES);
+      expect(parse(fileOf('legacy', 'init.yml').toString())).toEqual(
+        parse(LEGACY_INIT),
+      );
+      expect(fileOf('legacy', 'tests.zip').equals(archive)).toBe(true);
+      expect(fileOf('legacy', 'chk.cpp').equals(checker)).toBe(true);
+      expect(fileOf('legacy', '.data-version').toString()).toBe('1\n');
+    });
+
+    it('one edit changes only that setting in init.yml', async () => {
+      const shown = (await get('edited')).body as { data: ProblemDataResponse };
+      await put('edited', { ...editorBody(shown.data), unicode: true });
+      expect(parse(fileOf('edited', 'init.yml').toString())).toEqual({
+        ...(parse(LEGACY_INIT) as object),
+        hints: ['unicode'],
+      });
+    });
+  });
+}

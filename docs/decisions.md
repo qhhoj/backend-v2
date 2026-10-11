@@ -90,6 +90,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Uploaded file type is decided from the bytes; SVG is sanitized; nginx serves `/media` with `nosniff`, `attachment` for materials and a CSP sandbox — uploads cannot run script in the site origin.
 - Test data stays on a shared volume, `PROBLEM_DATA_ROOT/<code>/`, as the judge contract; `init.yml` is generated from the embedded case list — the judges are unchanged, the DB is the source of truth.
 - `init.yml` is written atomically (temp + rename); compile errors go to `data.feedback` and remove `init.yml` — a judge never reads a half-written or invalid config.
+- A migrated problem saved unchanged must regenerate its legacy `init.yml` (checked against all 1372 migrated problems with cases on 2026-10-11, pinned by `problems-data.e2e-spec.ts`) — a save that drops or rewrites judging config would break a working problem.
 - `<code>/.data-version` (the problem's `dataVersion`) is written last by every data writer (api data routes, Polygon import, seed); judges cache problem data by `(code, dataVersion)` and the bridge stores `judgedDataVersion`; existing directories are stamped once before the switch (`migrator stamp-data-versions`, cutover plan).
 - Per-case bridged checkers are rejected (only the global custom checker is valid) — a legacy bug fixed.
 - Zip uploads are bounded (entries, total size, per-entry size, ratio) and reject symlinks and path tricks — zip bombs and traversal.
