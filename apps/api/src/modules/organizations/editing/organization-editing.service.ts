@@ -3,6 +3,7 @@ import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
   AppError,
+  invalidField,
   isDuplicateKey,
   REDIS,
   unique,
@@ -27,10 +28,25 @@ import type {
   CreateOrganizationDto,
   UpdateOrganizationDto,
 } from './dto/organization-edit.dto';
+import { OrganizationRevisionsService } from './organization-revisions.service';
 
 const STAFF_FIELDS = ['isUnlisted', 'slots', 'shortName'] as const;
 const invalid = (field: string, message: string) =>
   new AppError('validation_failed', 400, message, { [field]: [message] });
+/** Issue code of both admin-cap refusals: the actor's own (403) and another user's (400 on `adminIds`). */
+const ADMIN_CAP = 'admin_cap';
+const ownAdminCap = () => {
+  const message = `You may administer at most ${ORGANIZATION_ADMIN_LIMIT} organizations`;
+  return new AppError('forbidden', 403, message, undefined, undefined, {
+    issues: [{ field: 'adminIds', code: ADMIN_CAP, message }],
+  });
+};
+const otherAdminCap = () =>
+  invalidField(
+    'adminIds',
+    `A user may administer at most ${ORGANIZATION_ADMIN_LIMIT} organizations.`,
+    ADMIN_CAP,
+  );
 
 async function withSlugTaken<Result>(
   write: () => Promise<Result>,
@@ -52,6 +68,7 @@ export class OrganizationEditingService {
     private readonly members: OrganizationMembersRepository,
     private readonly users: UsersRepository,
     private readonly points: OrganizationPointsService,
+    private readonly history: OrganizationRevisionsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -81,6 +98,11 @@ export class OrganizationEditingService {
       ),
     );
     await this.admitAdmins(adminIds, organization._id);
+    await this.history.recordChange(principal, organization._id, {
+      action: 'create',
+      before: {},
+      after: organization,
+    });
     // The principal was built before the creator became a member.
     return this.organizationsService.detail(
       {
@@ -123,6 +145,12 @@ export class OrganizationEditingService {
     if (added.length) await this.withAdminCap(principal, added, write);
     else await write();
     await this.admitAdmins(added, organization._id);
+    // Only the sent fields can differ, so a concurrent edit to another field is never attributed to this one.
+    await this.history.recordChange(principal, organization._id, {
+      action: 'edit',
+      before: organization,
+      after: { ...organization.toObject(), ...changes },
+    });
     return this.organizationsService.detail(principal, dto.slug ?? slug);
   }
 
@@ -174,16 +202,7 @@ export class OrganizationEditingService {
         (await this.organizations.countAdminRoles(adminId)) >=
         ORGANIZATION_ADMIN_LIMIT
       )
-        throw adminId === principal.userId
-          ? new AppError(
-              'forbidden',
-              403,
-              `You may administer at most ${ORGANIZATION_ADMIN_LIMIT} organizations`,
-            )
-          : invalid(
-              'adminIds',
-              `A user may administer at most ${ORGANIZATION_ADMIN_LIMIT} organizations.`,
-            );
+        throw adminId === principal.userId ? ownAdminCap() : otherAdminCap();
   }
 
   private async admitAdmins(

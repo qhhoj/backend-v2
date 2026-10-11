@@ -29,8 +29,9 @@ export class OrganizationsController {
    * Returns one page of organizations the viewer may list. Unlisted
    * organizations appear only to their members, their admins and holders of
    * `judge.edit_all_organization`. `search` narrows by a case-insensitive
-   * substring of name, short name or slug. Paged with `page` and `pageSize`
-   * (default 100, at most 100). Anonymous callers may use it.
+   * substring of name, short name or slug; `open` and `unlisted` (true or
+   * false) keep only organizations in that state. Paged with `page` and
+   * `pageSize` (default 100, at most 100). Anonymous callers may use it.
    */
   @ApiPaginatedResponse(OrganizationListItemResponse)
   @Get()
@@ -65,9 +66,10 @@ export class OrganizationsController {
    * @remarks
    * Returns the organization's members with their points, problem count and
    * rating, ranked by the chosen `sort` (`performancePoints` by default,
-   * `points`, `problemCount` or `rating`; ties share a rank). Paged with
-   * `page` and `pageSize` (default 100). Fails with 404 `not_found` for an
-   * unknown slug.
+   * `points`, `problemCount` or `rating`; ties share a rank). `search` keeps
+   * members whose username contains the text, ranked among the matches only.
+   * Paged with `page` and `pageSize` (default 100). Fails with 404
+   * `not_found` for an unknown slug.
    */
   @ApiPaginatedResponse(MemberResponse)
   @Get(':slug/members')

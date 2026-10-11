@@ -3,6 +3,7 @@ import type {
   OrganizationDetailResponse,
   OrganizationListItemResponse,
 } from '../src/modules/organizations/core/dto/organization.response';
+import type { OrganizationRevisionResponse } from '../src/modules/organizations/editing/dto/organization-revision.response';
 import { createOrganization, organizationUrl } from './organization-fixtures';
 import {
   authed,
@@ -340,6 +341,8 @@ afterAll(() => api.teardown());
       authed(api.http().post(url), session).send(body);
     const patch = (url: string, session: TestSession, body: object) =>
       authed(api.http().patch(url), session).send(body);
+    const get = (url: string, session: TestSession) =>
+      authed(api.http().get(url), session);
     const person = async (extra: Partial<User> = {}) => {
       userCount += 1;
       const user = await createUserWith(api, `member${userCount}`, extra);
@@ -352,6 +355,10 @@ afterAll(() => api.teardown());
       ).map(uuidStr);
     const queuedFor = async () =>
       (await queue.getJobs(['waiting'])).map((job) => job.data.organizationId);
+    const issueCode =
+      (code: string) =>
+      ({ body }: { body: { error: { issues?: { code: string }[] } } }) =>
+        expect(body.error.issues?.map((issue) => issue.code)).toContain(code);
 
     beforeAll(() => {
       queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
@@ -403,7 +410,9 @@ afterAll(() => api.teardown());
       await post('/api/internal/organizations', session, {
         name: 'Fourth',
         slug: 'fourth',
-      }).expect(403);
+      })
+        .expect(403)
+        .expect(issueCode('admin_cap'));
       await api.users.updateOne(
         { _id: user._id },
         { $push: { permissions: 'judge.spam_organization' } },
@@ -421,7 +430,9 @@ afterAll(() => api.teardown());
       });
       await patch(organizationUrl(organization.slug), ownerSession, {
         adminIds: [owner._id, busy._id],
-      }).expect(400);
+      })
+        .expect(400)
+        .expect(issueCode('admin_cap'));
     });
 
     it('lets only staff change isUnlisted, slots and shortName; admins may change isOpen', async () => {
@@ -542,6 +553,94 @@ afterAll(() => api.teardown());
         userId: fourth._id,
       }).expect(204);
       expect(await queuedFor()).toEqual([organization._id, organization._id]);
+    });
+
+    it('records edits, with admins by username, and kicks in a history only administrators read', async () => {
+      const { user: owner, session: ownerSession } = await person();
+      const { user: helper } = await person();
+      const { user: member } = await person();
+      const { session: outsider } = await person();
+      const organization = await createOrganization(
+        api,
+        { adminIds: [owner._id] },
+        [member._id],
+      );
+      const url = organizationUrl(organization.slug);
+      await patch(url, ownerSession, {
+        name: 'Renamed',
+        adminIds: [owner._id, helper._id],
+      }).expect(200);
+      await patch(url, ownerSession, { name: 'Renamed' }).expect(200);
+      await post(organizationUrl(organization.slug, '/kick'), ownerSession, {
+        userId: member._id,
+      }).expect(204);
+      await get(`${url}/revisions`, outsider).expect(403);
+      const history = dataOf<OrganizationRevisionResponse[]>(
+        await get(`${url}/revisions`, ownerSession).expect(200),
+      );
+      expect(history.map((row) => row.action)).toEqual(['kick', 'edit']);
+      expect(history[0]).toMatchObject({
+        editor: { username: owner.username },
+        changes: { member: { before: member.username, after: null } },
+      });
+      expect(history[1].changes).toEqual({
+        name: { before: organization.name, after: 'Renamed' },
+        admins: {
+          before: [owner.username],
+          after: [owner.username, helper.username].sort(),
+        },
+      });
+    });
+
+    it('lets only edit_all_organization queue a points recalculation', async () => {
+      const { user: owner, session: ownerSession } = await person();
+      const { session: staff } = await person({
+        permissions: ['judge.edit_all_organization'],
+      });
+      const organization = await createOrganization(api, {
+        adminIds: [owner._id],
+      });
+      const url = organizationUrl(organization.slug, '/recalculate');
+      await post(url, ownerSession).expect(403);
+      await post(organizationUrl('missing', '/recalculate'), staff).expect(404);
+      await post(url, staff).expect(204);
+      expect(await queuedFor()).toEqual([organization._id]);
+    });
+
+    it('previews about text, escaped like a save, only for creators and administrators', async () => {
+      const { user: owner, session: ownerSession } = await person();
+      const { session: outsider } = await person();
+      await createOrganization(api, { adminIds: [owner._id] });
+      const url = '/api/internal/organizations/render-preview';
+      await post(url, outsider, { markdown: 'hi' }).expect(403);
+      const { html } = dataOf<{ html: string }>(
+        await post(url, ownerSession, { markdown: '<b>hi</b>' }).expect(200),
+      );
+      expect(html).toContain('&lt;b&gt;hi&lt;/b&gt;');
+    });
+
+    it('searches members by username and ranks only the matches', async () => {
+      const { user: best } = await person({ performancePoints: 30 });
+      const { user: middle } = await person({ performancePoints: 20 });
+      const { user: worst } = await person({ performancePoints: 10 });
+      await api.users.updateMany({ _id: { $in: [best._id, worst._id] } }, [
+        { $set: { username: { $concat: ['findme_', '$username'] } } },
+      ]);
+      const organization = await createOrganization(api, {}, [
+        best._id,
+        middle._id,
+        worst._id,
+      ]);
+      const rows = dataOf<{ id: string; rank: number }[]>(
+        await api
+          .http()
+          .get(organizationUrl(organization.slug, '/members?search=FINDME'))
+          .expect(200),
+      );
+      expect(rows.map(({ id, rank }) => [id, rank])).toEqual([
+        [best._id, 1],
+        [worst._id, 2],
+      ]);
     });
 
     it('gives exactly one of eight parallel creates the last admin role', async () => {

@@ -25,23 +25,27 @@ export class OrganizationRequestResponse {
   createdAt!: Date;
   /** Id of the admin who decided; null while pending. */
   decidedBy!: string | null;
+  /** Username of the admin who decided; null while pending or when that account is gone. */
+  decidedByUsername!: string | null;
   /** When the request was decided, ISO 8601; null while pending. */
   decidedAt!: Date | null;
 
   static from(
     request: OrganizationRequest,
     organizationSlug: string,
-    username: string,
+    usernames: ReadonlyMap<string, string>,
   ): OrganizationRequestResponse {
+    const decidedBy = request.decidedBy && uuidStr(request.decidedBy);
     return {
       id: uuidStr(request._id),
       organizationSlug,
       userId: uuidStr(request.user),
-      username,
+      username: usernames.get(uuidStr(request.user)) ?? '',
       state: request.state,
       reason: request.reason,
       createdAt: request.createdAt,
-      decidedBy: request.decidedBy && uuidStr(request.decidedBy),
+      decidedBy,
+      decidedByUsername: (decidedBy && usernames.get(decidedBy)) ?? null,
       decidedAt: request.decidedAt,
     };
   }

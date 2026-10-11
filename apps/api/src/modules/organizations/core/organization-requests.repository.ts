@@ -8,6 +8,12 @@ export type OrganizationRequestDocument = HydratedDocument<OrganizationRequest>;
 
 export const ORGANIZATION_REQUEST_PAGE_SIZE = 50;
 
+/** Requests filed by these users or sent to these organizations. */
+export interface RequestQueueMatch {
+  userIds: readonly string[];
+  organizationIds: readonly string[];
+}
+
 @Injectable()
 export class OrganizationRequestsRepository {
   constructor(
@@ -58,13 +64,29 @@ export class OrganizationRequestsRepository {
     return this.page({ organization: organizationId, state }, page, pageSize);
   }
 
-  /** The staff queue across organizations, newest first, through `{state, _id}`. */
+  /** The staff queue across organizations, newest first, through `{state, _id}`; `among` keeps the requests of those users or organizations. */
   listAll(
     state: OrganizationRequestState,
     page: number,
     pageSize: number,
+    among?: RequestQueueMatch,
   ): Promise<{ items: OrganizationRequest[]; total: number }> {
-    return this.page({ state }, page, pageSize);
+    const filter: FilterQuery<OrganizationRequest> = among
+      ? {
+          state,
+          $or: [
+            { user: { $in: among.userIds } },
+            { organization: { $in: among.organizationIds } },
+          ],
+        }
+      : { state };
+    return this.page(filter, page, pageSize);
+  }
+
+  /** Everyone with a request in `state`: bounded by the requests, never the whole user base. */
+  async requesterIds(state: OrganizationRequestState): Promise<string[]> {
+    const ids = await this.requests.distinct('user', { state }).exec();
+    return ids.map((id) => uuidStr(id));
   }
 
   private async page(

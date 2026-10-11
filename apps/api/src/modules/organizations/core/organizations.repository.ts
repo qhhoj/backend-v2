@@ -1,9 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { CI, Organization } from '@libs/database';
+import { escapeRegExp } from '@libs/common';
+import { CI, Organization, uuidStr } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
 export type OrganizationDocument = HydratedDocument<Organization>;
+
+/** Case-insensitive literal substring over name, short name and slug: the one organization text search. */
+export const organizationSearchFilter = (
+  search: string,
+): FilterQuery<Organization> => {
+  const pattern = new RegExp(escapeRegExp(search), 'i');
+  return {
+    $or: ['name', 'shortName', 'slug'].map((field) => ({ [field]: pattern })),
+  };
+};
 
 @Injectable()
 export class OrganizationsRepository {
@@ -42,6 +53,15 @@ export class OrganizationsRepository {
       this.organizations.countDocuments(filter).exec(),
     ]);
     return { items, total };
+  }
+
+  /** Ids of the organizations `organizationSearchFilter` matches; a staff search over a small collection. */
+  async idsMatching(search: string): Promise<string[]> {
+    const rows = await this.organizations
+      .find(organizationSearchFilter(search), { _id: 1 })
+      .lean()
+      .exec();
+    return rows.map((row) => uuidStr(row._id));
   }
 
   /** Through `{adminIds}`. */

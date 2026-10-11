@@ -1,4 +1,5 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { trim } from '../../../problems/core/dto/transforms';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
@@ -41,6 +42,15 @@ export class OrganizationRequestListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+}
+
+export class OrganizationRequestQueueQueryDto extends OrganizationRequestListQueryDto {
+  /** Keeps requests whose requester username, or whose organization name, short name or slug, contains this text (any case). */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 64)
+  search?: string;
 }
 
 export class DecideOrganizationRequestDto {

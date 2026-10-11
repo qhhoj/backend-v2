@@ -38,7 +38,7 @@ import {
   OrganizationRequestListQueryDto,
 } from './dto/organization-request.dto';
 import { OrganizationRequestResponse } from './dto/organization-request.response';
-import { usernamesById } from './request-usernames';
+import { requestUsernames } from './request-usernames';
 
 /** A 409 with a stable issue code (documented in docs/decisions.md). */
 const conflict = (message: string, field: string, code: string) =>
@@ -106,7 +106,7 @@ export class OrganizationRequestsService {
       return OrganizationRequestResponse.from(
         request,
         organization.slug,
-        principal.username,
+        new Map([[principal.userId, principal.username]]),
       );
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
@@ -131,17 +131,10 @@ export class OrganizationRequestsService {
       page,
       ORGANIZATION_REQUEST_PAGE_SIZE,
     );
-    const usernames = await usernamesById(
-      this.users,
-      items.map((row) => uuidStr(row.user)),
-    );
+    const usernames = await requestUsernames(this.users, items);
     return new Paginated(
       items.map((row) =>
-        OrganizationRequestResponse.from(
-          row,
-          organization.slug,
-          usernames.get(uuidStr(row.user)) ?? '',
-        ),
+        OrganizationRequestResponse.from(row, organization.slug, usernames),
       ),
       { page, pageSize: ORGANIZATION_REQUEST_PAGE_SIZE, total },
     );
@@ -275,11 +268,10 @@ export class OrganizationRequestsService {
     request: OrganizationRequest,
     slug: string,
   ): Promise<OrganizationRequestResponse> {
-    const user = await this.users.findById(uuidStr(request.user));
     return OrganizationRequestResponse.from(
       request,
       slug,
-      user?.username ?? '',
+      await requestUsernames(this.users, [request]),
     );
   }
 }

@@ -53,9 +53,10 @@ export class MembershipController {
    *
    * @remarks
    * Organization administrators (and holders of `judge.edit_all_organization`)
-   * remove the member given by `userId`. Admins cannot be removed, and the
-   * user must be a member (409 `conflict`). Returns 204; 403 `forbidden` for
-   * non-administrators.
+   * remove the member given by `userId`. Admins cannot be removed (409
+   * `conflict`, issue code `admin_not_kickable`) and the user must be a member
+   * (`not_member`). Returns 204; 403 `forbidden` for non-administrators. The
+   * removal is recorded in the organization's history.
    */
   @Post(':slug/kick')
   @HttpCode(204)

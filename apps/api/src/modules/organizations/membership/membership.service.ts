@@ -13,6 +13,7 @@ import { OrganizationMembersRepository } from '../core/organization-members.repo
 import { OrganizationPointsService } from '../core/organization-points.service';
 import { OrganizationsRepository } from '../core/organizations.repository';
 import { OrganizationsService } from '../core/organizations.service';
+import { OrganizationRevisionsService } from '../editing/organization-revisions.service';
 
 const conflict = (message: string) => new AppError('conflict', 409, message);
 
@@ -25,6 +26,7 @@ export class MembershipService {
     private readonly users: UsersRepository,
     private readonly points: OrganizationPointsService,
     private readonly settings: SettingsService,
+    private readonly history: OrganizationRevisionsService,
   ) {}
 
   /** Legacy `JoinOrganization`: open organizations only, at most three open ones per user (private ones do not count). */
@@ -89,9 +91,23 @@ export class MembershipService {
       slug,
     );
     if (OrganizationAccess.accessView(organization).adminIds.includes(userId))
-      throw conflict('Admins cannot be kicked');
+      throw conflictIssue(
+        'user',
+        'admin_not_kickable',
+        'Admins cannot be kicked',
+      );
     if (!(await this.members.remove(userId, organization._id)))
-      throw conflict('That user is not in this organization');
+      throw conflictIssue(
+        'user',
+        'not_member',
+        'That user is not in this organization',
+      );
     await this.points.refresh([organization._id]);
+    const kicked = await this.users.findById(userId);
+    await this.history.recordKick(
+      principal,
+      organization._id,
+      kicked?.username ?? userId,
+    );
   }
 }
