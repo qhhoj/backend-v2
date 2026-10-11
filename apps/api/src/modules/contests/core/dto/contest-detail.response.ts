@@ -117,6 +117,10 @@ export class ContestViewerResponse extends ContestListViewerResponse {
   liveParticipation!: ParticipationSummaryResponse | null;
   /** The balloon screen is on for this contest and the viewer may use it (editors, listed volunteers). */
   canViewBalloons!: boolean;
+  /** The viewer may see the full ranking (legacy `can_see_full_scoreboard`); false while it is hidden from them. */
+  canSeeFullScoreboard!: boolean;
+  /** When the ranking froze for this viewer; null when it has not, never does, or the viewer edits the contest (editors see it live). */
+  boardFrozenAt!: Date | null;
 }
 
 /** One contest problem's output-prefix override (null: the judge default). */

@@ -3,7 +3,12 @@ import { UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { escapeRegExp, Paginated } from '@libs/common';
-import { contestPhase, liveStatusOf } from '@libs/contests';
+import {
+  contestPhase,
+  frozenTime,
+  isFrozenFor,
+  liveStatusOf,
+} from '@libs/contests';
 import { narrowTo, uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
@@ -134,7 +139,7 @@ export class ContestsService {
   }
 
   /** Problems show to whoever is in the contest, edits or tests it, and to everyone once it ended. */
-  private isProblemListOpen(
+  isProblemListOpen(
     contest: Contest,
     viewer: ContestViewerResponse,
     now: Date,
@@ -148,19 +153,29 @@ export class ContestsService {
     );
   }
 
-  private viewerResponseOf(
+  viewerResponseOf(
     principal: Principal | null,
     contest: ContestDocument,
     viewer: ContestViewer,
     now: Date,
   ): ContestViewerResponse {
     const view = ContestAccess.accessView(contest);
+    const canEdit = ContestAccess.canEdit(principal, view);
     return {
-      canEdit: ContestAccess.canEdit(principal, view),
+      canEdit,
       isEditor: ContestAccess.isEditor(principal, view),
       isTester: ContestAccess.isTester(principal, view),
       canViewBalloons:
         contest.balloons && ContestAccess.canViewBalloons(principal, view),
+      canSeeFullScoreboard: ContestAccess.canSeeFullScoreboard(
+        principal,
+        view,
+        now,
+        viewer,
+      ),
+      boardFrozenAt: isFrozenFor(contest, now, canEdit)
+        ? frozenTime(contest)
+        : null,
       inContest: viewer.inContest,
       liveParticipation:
         viewer.live && ParticipationSummaryResponse.from(viewer.live, contest),

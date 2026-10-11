@@ -27,6 +27,8 @@ import { ReplayModule } from './replay/replay.module';
 import { AnnouncementsRepository } from './announcements/announcements.repository';
 import { ContestAnnouncementsController } from './announcements/contest-announcements.controller';
 import { ContestAnnouncementsService } from './announcements/contest-announcements.service';
+import { ContestBestSubmissionsController } from './best/contest-best-submissions.controller';
+import { ContestBestSubmissionsService } from './best/contest-best-submissions.service';
 import { ContestDataController } from './data/contest-data.controller';
 import { ContestDataService } from './data/contest-data.service';
 import { ContestActionsService } from './editing/contest-actions.service';
@@ -98,6 +100,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
   // Fastify matches a static segment (Task 7's `current`) before `:key`, whatever the controller order.
   controllers: [
     ContestAnnouncementsController,
+    ContestBestSubmissionsController,
     ContestDataController,
     ContestEditingController,
     ContestParticipationController,
@@ -116,6 +119,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
   providers: [
     AnnouncementsRepository,
     ContestActionsService,
+    ContestBestSubmissionsService,
     ContestAnnouncementsService,
     ContestDataService,
     ContestEventsService,

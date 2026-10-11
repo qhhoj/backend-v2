@@ -3000,8 +3000,18 @@
       },
       "ContestViewerResponse": {
         "properties": {
+          "boardFrozenAt": {
+            "description": "When the ranking froze for this viewer; null when it has not, never does, or the viewer edits the contest (editors see it live).",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
           "canEdit": {
             "description": "The viewer may edit the contest.",
+            "type": "boolean"
+          },
+          "canSeeFullScoreboard": {
+            "description": "The viewer may see the full ranking (legacy `can_see_full_scoreboard`); false while it is hidden from them.",
             "type": "boolean"
           },
           "canViewBalloons": {
@@ -3053,6 +3063,8 @@
           "inContest",
           "liveParticipation",
           "canViewBalloons",
+          "canSeeFullScoreboard",
+          "boardFrozenAt",
           "isCurrent"
         ],
         "type": "object"
@@ -24546,6 +24558,107 @@
         "tags": [
           "Contest editing"
         ]
+      }
+    },
+    "/api/internal/contests/{key}/problems/{code}/best-submissions": {
+      "get": {
+        "description": "Public for visible contests. Same rows and order as the problem's best\nsubmissions (most points, then less time, less memory, the earlier\nsubmission; `page` from 1, `pageSize` 1-100, default 50), but only\nsubmissions made in the contest. While the ranking is frozen for the\nviewer, submissions made at or after the freeze are left out. 403\n`forbidden` unless the viewer may see the full ranking and the problem\nlist; 404 `not_found` for a problem the contest does not have.",
+        "operationId": "ContestBestSubmissionsController_list",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Code of the problem.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number, from 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Items per page, 1 to 100.",
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/SubmissionListItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the best submission of each user on a contest problem",
+        "tags": [
+          "Contests"
+        ],
+        "x-enveloped": true
       }
     },
     "/api/internal/contests/{key}/problems/{code}/rejudge": {
