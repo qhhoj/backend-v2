@@ -4,7 +4,10 @@ import {
   BridgeMessage,
   Chunk,
   FetchSourceRequest,
+  GenerationRequest,
   JudgeMessage,
+  UploadChunk,
+  UploadReceipt,
 } from './index';
 import { PROTO_ROOT } from './proto-root';
 
@@ -14,6 +17,9 @@ const CODECS = {
   BridgeMessage,
   FetchSourceRequest,
   Chunk,
+  GenerationRequest,
+  UploadChunk,
+  UploadReceipt,
 } as const;
 type CodecName = keyof typeof CODECS;
 
