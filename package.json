@@ -20,8 +20,11 @@
     "start:bridge": "nest start bridge",
     "start:prod:bridge": "node dist/apps/bridge/main",
     "lint": "eslint \"{apps,libs}/**/*.ts\"",
-    "test": "jest --runInBand",
+    "test": "npm run test:unit && npm run test:openapi && npm run test:db && npm run test:openapi:db",
+    "test:unit": "jest",
+    "test:db": "jest --config jest.db.config.js --runInBand",
     "test:openapi": "jest --config jest.openapi.config.js --runInBand",
+    "test:openapi:db": "jest --config jest.openapi-db.config.js --runInBand",
     "openapi:emit": "OPENAPI_OUT=${OPENAPI_OUT:-openapi.json} jest --config jest.openapi-emit.config.js --runInBand --forceExit --silent",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "judge-proto:sync": "bash scripts/judge-proto/sync.sh",
@@ -111,43 +114,5 @@
     "mongodbMemoryServer": {
       "version": "8.0.4"
     }
-  },
-  "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": ".",
-    "testRegex": ".*\\.(spec|e2e-spec)\\.ts$",
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/openapi\\.e2e-spec\\.ts$"
-    ],
-    "transform": {
-      "^.+\\.(t|j)s$": [
-        "ts-jest",
-        {
-          "tsconfig": {
-            "allowJs": true
-          }
-        }
-      ]
-    },
-    "testEnvironment": "node",
-    "globalSetup": "<rootDir>/jest.global-setup.js",
-    "globalTeardown": "<rootDir>/jest.global-teardown.js",
-    "roots": [
-      "<rootDir>/apps/",
-      "<rootDir>/libs/",
-      "<rootDir>/scripts/release/"
-    ],
-    "moduleNameMapper": {
-      "^@libs/(common|database|auth|render|problems|judging|judge-proto|contests|community|settings)(|/.*)$": "<rootDir>/libs/$1/src$2"
-    },
-    "testTimeout": 30000,
-    "transformIgnorePatterns": [
-      "/node_modules/(?!@scalar/|github-slugger/)"
-    ]
   }
 }
