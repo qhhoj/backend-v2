@@ -107,6 +107,7 @@ users/
   admin/           staff user list (`judge.ban_user`): username prefix search, `banned` filter, never e-mail
   editing/         staff edit of one user: profile and moderation fields (`judge.change_profile`), e-mail, active flag, password set, reset link, rename (`auth.change_user`)
   creation/        staff account creation, single and batch (`auth.add_user`)
+  access/          roles and permissions: catalog, role list/create/edit, a user's groups, direct permissions and flags (read with `judge.change_profile`, write superuser only)
 blog/
   blog-api.module.ts
   core/            BlogAccess (blog-access.ts), BlogAccessModule (posts repository + visibility, imported by comments), lists, detail, organization posts, dto

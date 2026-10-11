@@ -17,6 +17,10 @@ import { LeaderboardsService } from './leaderboards/leaderboards.service';
 import { UserAdminController } from './admin/user-admin.controller';
 import { UserAdminRepository } from './admin/user-admin.repository';
 import { UserAdminService } from './admin/user-admin.service';
+import { AccessController } from './access/access.controller';
+import { AccessRepository } from './access/access.repository';
+import { GroupsAdminService } from './access/groups-admin.service';
+import { UserAccessService } from './access/user-access.service';
 import { UserCreationController } from './creation/user-creation.controller';
 import { UserCreationService } from './creation/user-creation.service';
 import { UserRenameService } from './editing/user-rename.service';
@@ -52,6 +56,7 @@ import { UserPagesService } from './pages/user-pages.service';
     UserAdminController,
     UserEditingController,
     UserCreationController,
+    AccessController,
   ],
   providers: [
     LeaderboardsRepository,
@@ -68,6 +73,9 @@ import { UserPagesService } from './pages/user-pages.service';
     UserRenameService,
     UserCreationService,
     UserCredentialsService,
+    AccessRepository,
+    GroupsAdminService,
+    UserAccessService,
     RateLimitService,
   ],
   exports: [LeaderboardsRepository, UserPagesRepository],

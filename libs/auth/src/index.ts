@@ -17,6 +17,7 @@ export * from './session/session-cookie';
 export * from './users/users.repository';
 export * from './users/active-superuser';
 export * from './principal/permissions';
+export * from './principal/permission-catalog';
 export * from './principal/build-principal';
 export * from './principal/permissions-of';
 export * from './principal/principal';

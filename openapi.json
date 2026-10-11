@@ -1079,6 +1079,45 @@
         ],
         "type": "object"
       },
+      "ChangeUserAccessDto": {
+        "properties": {
+          "addGroups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "addPermissions": {
+            "description": "Codenames to grant; one the catalog lacks is refused.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "isStaff": {
+            "description": "Opens the staff screens; what they allow still comes from the permissions.",
+            "type": "boolean"
+          },
+          "isSuperuser": {
+            "description": "Holds every permission.",
+            "type": "boolean"
+          },
+          "removeGroups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "removePermissions": {
+            "description": "Codenames to take away, legacy ones included.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "CloneContestDto": {
         "properties": {
           "key": {
@@ -3415,6 +3454,26 @@
         ],
         "type": "object"
       },
+      "CreateGroupDto": {
+        "properties": {
+          "name": {
+            "maxLength": 150,
+            "minLength": 1,
+            "type": "string"
+          },
+          "permissions": {
+            "description": "Codenames from the catalog; none when absent.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "CreateIntegrationClientDto": {
         "properties": {
           "actsAs": {
@@ -4486,6 +4545,30 @@
         ],
         "type": "object"
       },
+      "EffectivePermissionResponse": {
+        "properties": {
+          "codename": {
+            "type": "string"
+          },
+          "direct": {
+            "description": "True when held directly.",
+            "type": "boolean"
+          },
+          "viaGroups": {
+            "description": "Names of the groups granting it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "codename",
+          "direct",
+          "viaGroups"
+        ],
+        "type": "object"
+      },
       "ErrorBodyResponse": {
         "additionalProperties": true,
         "properties": {
@@ -4960,6 +5043,49 @@
           "caption",
           "isUnranked",
           "cells"
+        ],
+        "type": "object"
+      },
+      "GroupResponse": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberCount": {
+            "description": "Users in the group.",
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "description": "Codenames, including legacy ones the catalog no longer lists.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "permissions",
+          "memberCount"
+        ],
+        "type": "object"
+      },
+      "GroupSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
         ],
         "type": "object"
       },
@@ -7178,6 +7304,44 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "PermissionCategory": {
+        "enum": [
+          "community",
+          "contests",
+          "judging",
+          "organizations",
+          "problems",
+          "site",
+          "submissions",
+          "users"
+        ],
+        "type": "string"
+      },
+      "PermissionResponse": {
+        "properties": {
+          "category": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PermissionCategory"
+              }
+            ]
+          },
+          "codename": {
+            "description": "Legacy Django codename such as `judge.edit_all_problem`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "English label; the frontend may translate by codename.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "codename",
+          "label"
         ],
         "type": "object"
       },
@@ -13605,6 +13769,30 @@
         },
         "type": "object"
       },
+      "UpdateGroupDto": {
+        "properties": {
+          "addPermissions": {
+            "description": "Codenames to grant; one the catalog lacks is refused.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 150,
+            "minLength": 1,
+            "type": "string"
+          },
+          "removePermissions": {
+            "description": "Codenames to take away, legacy ones included.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "UpdateJudgeDto": {
         "properties": {
           "description": {
@@ -14454,6 +14642,50 @@
         "required": [
           "monthlyCredits",
           "storageBytes"
+        ],
+        "type": "object"
+      },
+      "UserAccessResponse": {
+        "properties": {
+          "canEdit": {
+            "description": "Whether you may change this access: only a superuser grants or revokes, and never on their own account.",
+            "type": "boolean"
+          },
+          "effective": {
+            "description": "Every codename held directly or through a group, by codename.",
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermissionResponse"
+            },
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSummaryResponse"
+            },
+            "type": "array"
+          },
+          "isStaff": {
+            "type": "boolean"
+          },
+          "isSuperuser": {
+            "description": "A superuser holds every permission whatever the lists say.",
+            "type": "boolean"
+          },
+          "permissions": {
+            "description": "Codenames held directly.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "isStaff",
+          "isSuperuser",
+          "groups",
+          "permissions",
+          "effective",
+          "canEdit"
         ],
         "type": "object"
       },
@@ -15416,6 +15648,188 @@
         ]
       }
     },
+    "/api/internal/admin/groups": {
+      "get": {
+        "description": "Requires `judge.change_profile`. Roles (legacy groups) by name, with their permissions and member count.",
+        "operationId": "AccessController_listGroups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/GroupResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List roles",
+        "tags": [
+          "Admin: users"
+        ]
+      },
+      "post": {
+        "description": "Superuser only. Members gain its permissions on their next request. Errors: 400 `validation_failed` with issue `permission_unknown`; 403 `forbidden` unless you are a superuser; 409 `conflict` with issue `group_name_taken`, or `busy` while another access change is saved.",
+        "operationId": "AccessController_createGroup",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GroupResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a role",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
+    "/api/internal/admin/groups/{id}": {
+      "patch": {
+        "description": "Superuser only. Renames the role, adds and removes permissions; members see the change on their next request. Errors: 400 `validation_failed` with issues `permission_unknown`, `added_and_removed`; 403 `forbidden` unless you are a superuser; 404 `not_found`; 409 `conflict` with issue `group_name_taken`.",
+        "operationId": "AccessController_updateGroup",
+        "parameters": [
+          {
+            "description": "Id of the role.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGroupDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GroupResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Edit a role",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
     "/api/internal/admin/languages": {
       "get": {
         "description": "Needs `judge.change_language`. Returns every programming language of the\nsite, sorted by name, including editor, highlighting and file-size settings\nthat the public catalog omits.",
@@ -15869,6 +16283,59 @@
           "Organizations"
         ],
         "x-enveloped": true
+      }
+    },
+    "/api/internal/admin/permissions": {
+      "get": {
+        "description": "Requires `judge.change_profile`. Every permission the site checks, with a category and an English label, in catalog order.",
+        "operationId": "AccessController_permissions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/PermissionResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List grantable permissions",
+        "tags": [
+          "Admin: users"
+        ]
       }
     },
     "/api/internal/admin/posts": {
@@ -17952,6 +18419,134 @@
           }
         },
         "summary": "Create user accounts",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
+    "/api/internal/admin/users/{username}/access": {
+      "get": {
+        "description": "Requires `judge.change_profile`. The flags, roles, direct permissions and every effective permission with its source; `canEdit` says whether you may change them. Errors: 403 `forbidden` for a superuser unless you are one; 404 `not_found`.",
+        "operationId": "AccessController_getAccess",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserAccessResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a user's roles and permissions",
+        "tags": [
+          "Admin: users"
+        ]
+      },
+      "patch": {
+        "description": "Superuser only, never on your own account. Adds and removes roles and direct permissions and sets the staff and superuser flags; absent fields stay, and a role granted meanwhile elsewhere is kept. Applies on the user's next request. Errors: 400 `validation_failed` with issues `permission_unknown` (a codename outside the catalog the user does not already hold), `group_unknown`, `added_and_removed`; 403 `forbidden` unless you are still a superuser, or for yourself; 404 `not_found`; 409 `conflict` with issue `busy` while another access change is saved.",
+        "operationId": "AccessController_changeAccess",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUserAccessDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserAccessResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Change a user's roles and permissions",
         "tags": [
           "Admin: users"
         ]
