@@ -83,7 +83,10 @@ export class OrganizationsService {
     ];
     if (administered !== undefined)
       clauses.push(
-        narrowTo(OrganizationAccess.administeredFilter(principal), administered),
+        narrowTo(
+          OrganizationAccess.administeredFilter(principal),
+          administered,
+        ),
       );
     const { items, total } = await this.organizations.list(
       { $and: clauses },
