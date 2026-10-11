@@ -22,7 +22,9 @@ ensure_users() {
 
 ensure_dirs() {
   install -d -m 2750 "$ROOT/srv/qhhoj"
-  for dir in media problem-data pdf-cache contest-data user-data; do install -d -m 2750 "$ROOT/srv/qhhoj/$dir"; done
+  # nginx (group qhhoj) serves only media; every other tree stays owner-only so a web-server compromise cannot read hidden test data.
+  install -d -m 2750 "$ROOT/srv/qhhoj/media"
+  for dir in problem-data pdf-cache contest-data user-data; do install -d -m 2700 "$ROOT/srv/qhhoj/$dir"; done
   chown -R "$ID:$ID" "$ROOT/srv/qhhoj"
   install -d -m 700 "$ROOT/backup"
   # qhhoj-deploy (root) keeps its history here: root-owned; only incoming/ is writable by the deploy user

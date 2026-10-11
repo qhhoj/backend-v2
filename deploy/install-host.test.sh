@@ -24,6 +24,8 @@ done
 [ "$(stat -c %a "$root/etc/sudoers.d/qhhoj-deploy")" = 440 ] || fail "sudoers mode"
 [ "$(stat -c %a "$root/var/www/qhhoj-maintenance/maintenance.html")" = 644 ] || fail "maintenance page mode"
 [ "$(stat -c %a "$root/srv/qhhoj")" = 2750 ] || fail "data root mode"
+[ "$(stat -c %a "$root/srv/qhhoj/media")" = 2750 ] || fail "media must be group-readable for nginx"
+for d in problem-data pdf-cache contest-data user-data; do [ "$(stat -c %a "$root/srv/qhhoj/$d")" = 2700 ] || fail "$d must not be group-readable"; done
 for d in media problem-data pdf-cache contest-data user-data; do [ -d "$root/srv/qhhoj/$d" ] || fail "missing $d"; done
 grep -q "useradd .*--home-dir /home/deploy" "$calls" || fail "deploy home outside the root-owned state dir"
 grep -q "chown root:root $root/var/lib/qhhoj-deploy\$" "$calls" || fail "state dir root-owned"

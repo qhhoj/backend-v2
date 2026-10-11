@@ -10,6 +10,8 @@
 set -euo pipefail
 
 ROOT="${QHHOJ_DEPLOY_ROOT:-}"
+# Root runs bare tool names (podman, systemctl, curl): never trust the caller's PATH. Tests set ROOT and stub tools.
+[ -n "$ROOT" ] || export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 FORCE=0 TOKEN_STDIN=0 TMP=""
 IMAGE=ghcr.io/qhhoj/backend-v2
 STATE="$ROOT/var/lib/qhhoj-deploy"
