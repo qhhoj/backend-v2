@@ -27,6 +27,21 @@ const ROW_FIELDS = {
   memory: 1,
 } as const;
 
+/** A contest submission's points are its `contestSubmissions` row's (case ratio × the contest problem's points, 0 for a partial result on a problem without partial scores): what the ranking counts. Rows without one score 0 and are left out. */
+const CONTEST_POINTS_STAGES = [
+  {
+    $lookup: {
+      from: 'contestSubmissions',
+      localField: '_id',
+      foreignField: '_id',
+      as: 'contestRow',
+    },
+  },
+  { $set: { points: { $ifNull: [{ $first: '$contestRow.points' }, 0] } } },
+  { $match: { points: { $gt: 0 } } },
+  { $unset: 'contestRow' },
+];
+
 @Injectable()
 export class BestSubmissionsRepository {
   constructor(
@@ -36,6 +51,7 @@ export class BestSubmissionsRepository {
   ) {}
 
   /**
+   * With `byContestPoints` the points are the contest's (see `CONTEST_POINTS_STAGES`) and replace the raw ones in the rows.
    * One row per listed user, their best graded submission with points among `filter`, best first.
    * Unlisted (and banned) users are left out by `$nin` of their ids, as problem stats do: they are few.
    * The match reads `{problem, status, _id}`; the per-user pick needs no index of its own.
@@ -44,6 +60,7 @@ export class BestSubmissionsRepository {
     filter: FilterQuery<Submission>,
     page: number,
     pageSize: number,
+    { byContestPoints = false } = {},
   ): Promise<{ items: Submission[]; total: number }> {
     const unlisted = (
       await this.users.distinct('_id', { isUnlisted: true }).exec()
@@ -52,12 +69,18 @@ export class BestSubmissionsRepository {
     const match = this.submissions.find().cast(this.submissions, {
       $and: [
         filter,
-        { status: 'D', points: { $gt: 0 }, user: { $nin: unlisted } },
+        {
+          status: 'D',
+          user: { $nin: unlisted },
+          // Contest rows score through their `contestSubmissions` row below.
+          ...(byContestPoints ? {} : { points: { $gt: 0 } }),
+        },
       ],
     }) as FilterQuery<Submission>;
     const [result] = await this.submissions
       .aggregate<{ items: Submission[]; total: Array<{ count: number }> }>([
         { $match: match },
+        ...(byContestPoints ? CONTEST_POINTS_STAGES : []),
         { $project: ROW_FIELDS },
         {
           $group: {

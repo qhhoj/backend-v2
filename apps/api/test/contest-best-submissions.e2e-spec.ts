@@ -60,8 +60,20 @@ describe('best submissions per contest problem', () => {
       problems: [contestProblem(problem._id, 0)],
       ...contestExtra,
     });
-    const submit = (who: string, fields: Record<string, unknown>) =>
-      seedSubmission(api, {
+    const participations = new Map<string, string>();
+    const participationOf = async (who: string) => {
+      const known = participations.get(who);
+      if (known) return known;
+      const row = await joinParticipation(api, contest._id, users[who]._id);
+      participations.set(who, row._id);
+      return row._id;
+    };
+    /** A graded submission and its contest row; `contestPoints` defaults to the raw `points`. */
+    const submit = async (
+      who: string,
+      { contestPoints, ...fields }: Record<string, unknown>,
+    ) => {
+      const row = await seedSubmission(api, {
         user: users[who]._id,
         problem: problem._id,
         language: catalog.languages.cpp,
@@ -71,7 +83,16 @@ describe('best submissions per contest problem', () => {
         memory: 1000,
         date: hoursFromNow(-3),
         ...fields,
-      }).then((row) => row._id);
+      });
+      await api.contestSubmissions.create({
+        _id: row._id,
+        participation: await participationOf(who),
+        contest: contest._id,
+        problem: problem._id,
+        points: (contestPoints ?? fields.points ?? 100) as number,
+      });
+      return row._id;
+    };
     return { contest, problem, submit };
   };
 
@@ -155,6 +176,28 @@ describe('best submissions per contest problem', () => {
     expect(await flag('author')).toBe(true);
   });
 
+  it("ranks by the contest's points: a partial result on a problem without partial scores scores 0", async () => {
+    const { contest, problem, submit } = await endedScene('best_partial_p', {
+      problems: [],
+    });
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { problems: [contestProblem(problem._id, 0, { partial: false })] },
+    );
+    // Raw 100 but the contest scored it 0: left out, and never ahead of a real score.
+    const zero = await submit('alice', {
+      points: 100,
+      contestPoints: 0,
+      time: 0.1,
+    });
+    const scored = await submit('bob', { points: 60, contestPoints: 60 });
+    const rows = rowsOf(
+      await get(bestUrl(contest.key, problem.code)).expect(200),
+    );
+    expect(rows).toEqual([scored]);
+    expect(rows).not.toContain(zero);
+  });
+
   it('answers 404 for a problem the contest does not have', async () => {
     const { contest } = await endedScene('best_member_p');
     await createProblem(api, catalog, { code: 'best_stranger_p' });
@@ -170,12 +213,11 @@ describe('best submissions per contest problem', () => {
     });
     const mine = await submit('alice', { date: hoursFromNow(-0.5) });
     await submit('bob', { date: hoursFromNow(-0.5) });
-    const participation = await joinParticipation(
-      api,
-      contest._id,
-      users.alice._id,
-    );
-    await makeCurrent(api, users.alice._id, participation._id);
+    const participation = await api.participations.findOne({
+      contest: contest._id,
+      user: users.alice._id,
+    });
+    await makeCurrent(api, users.alice._id, participation!._id);
     const url = bestUrl(contest.key, problem.code);
     expect(rowsOf(await get(url, 'alice').expect(200))).toEqual([mine]);
     expect(rowsOf(await get(url, 'author').expect(200))).toHaveLength(2);
