@@ -806,6 +806,96 @@
         ],
         "type": "object"
       },
+      "BulkVisibilityDto": {
+        "properties": {
+          "changeMessage": {
+            "description": "Why, kept as the comment of each revision written. Up to 500 characters.",
+            "maxLength": 500,
+            "type": "string"
+          },
+          "codes": {
+            "description": "Problem codes to change, 1 to 100, no repeats.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "isPublic": {
+            "description": "true publishes every listed problem, false makes it private.",
+            "type": "boolean"
+          },
+          "setDateToNow": {
+            "description": "When publishing, also set the publication date to now so the problems sort as new. Needs `judge.edit_all_problem`. Ignored when making private.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "codes",
+          "isPublic"
+        ],
+        "type": "object"
+      },
+      "BulkVisibilityOutcome": {
+        "description": "`done` when the problem changed, `unchanged` when it already had that visibility (and date), `failed` when the edit was refused.",
+        "enum": [
+          "done",
+          "failed",
+          "unchanged"
+        ],
+        "type": "string"
+      },
+      "BulkVisibilityResponse": {
+        "properties": {
+          "done": {
+            "description": "Number of problems changed.",
+            "type": "number"
+          },
+          "failed": {
+            "description": "Number of problems refused.",
+            "type": "number"
+          },
+          "results": {
+            "description": "One entry per requested code, in request order.",
+            "items": {
+              "$ref": "#/components/schemas/BulkVisibilityResultResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "done",
+          "failed"
+        ],
+        "type": "object"
+      },
+      "BulkVisibilityResultResponse": {
+        "properties": {
+          "code": {
+            "description": "The problem code from the request.",
+            "type": "string"
+          },
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BulkVisibilityOutcome"
+              }
+            ],
+            "description": "`done` when the problem changed, `unchanged` when it already had that visibility (and date), `failed` when the edit was refused."
+          },
+          "reason": {
+            "description": "Set when failed: the error code the single-problem PATCH would answer (`not_found`, `forbidden`, ...).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "code"
+        ],
+        "type": "object"
+      },
       "CannedReplyResponse": {
         "properties": {
           "body": {
@@ -3367,6 +3457,45 @@
         ],
         "type": "object"
       },
+      "CreateLicenseDto": {
+        "properties": {
+          "display": {
+            "description": "Short text shown beside problems under this license.",
+            "maxLength": 256,
+            "type": "string"
+          },
+          "icon": {
+            "description": "URL of the license icon: http(s), or empty for none.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "key": {
+            "description": "Unique key, ignoring case: letters, digits, `.`, `_` and `-`, up to 20 characters.",
+            "type": "string"
+          },
+          "link": {
+            "description": "URL of the full license text: http(s), or empty for none.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "name": {
+            "description": "License name, up to 256 characters.",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "text": {
+            "description": "License text in markdown.",
+            "maxLength": 65536,
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "type": "object"
+      },
       "CreateOrganizationDto": {
         "properties": {
           "about": {
@@ -3751,6 +3880,27 @@
         "required": [
           "link",
           "name"
+        ],
+        "type": "object"
+      },
+      "CreateTaxonDto": {
+        "properties": {
+          "fullName": {
+            "description": "Full display name, up to 100 characters.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "Short name, unique ignoring case, up to 20 characters.",
+            "maxLength": 20,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "fullName"
         ],
         "type": "object"
       },
@@ -5503,6 +5653,48 @@
           "rating",
           "contributionPoints",
           "organization"
+        ],
+        "type": "object"
+      },
+      "LicenseAdminResponse": {
+        "properties": {
+          "display": {
+            "description": "Text shown beside problems under this license.",
+            "type": "string"
+          },
+          "icon": {
+            "description": "URL of the license icon.",
+            "type": "string"
+          },
+          "id": {
+            "description": "License id.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Unique key.",
+            "type": "string"
+          },
+          "link": {
+            "description": "URL of the license text.",
+            "type": "string"
+          },
+          "name": {
+            "description": "License name.",
+            "type": "string"
+          },
+          "text": {
+            "description": "License text in markdown.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "link",
+          "display",
+          "icon",
+          "text"
         ],
         "type": "object"
       },
@@ -7953,6 +8145,10 @@
             "nullable": true,
             "type": "string"
           },
+          "ogImage": {
+            "description": "Image URL used for link previews; empty when none.",
+            "type": "string"
+          },
           "organizations": {
             "description": "Ids of the organizations the problem is private to.",
             "items": {
@@ -8015,7 +8211,8 @@
           "groupId",
           "licenseId",
           "allowedLanguageIds",
-          "organizations"
+          "organizations",
+          "ogImage"
         ],
         "type": "object"
       },
@@ -8054,6 +8251,13 @@
           "acRate": {
             "description": "Percentage of accepted submissions, 0 to 100.",
             "type": "number"
+          },
+          "authors": {
+            "description": "Credited authors, in stored order; deleted accounts are left out.",
+            "items": {
+              "$ref": "#/components/schemas/UserSummaryResponse"
+            },
+            "type": "array"
           },
           "code": {
             "description": "Problem code, unique and used in URLs.",
@@ -8142,7 +8346,8 @@
           "isPublic",
           "isOrganizationPrivate",
           "hasPublicEditorial",
-          "hasPdfStatement"
+          "hasPdfStatement",
+          "authors"
         ],
         "type": "object"
       },
@@ -13156,6 +13361,41 @@
         },
         "type": "object"
       },
+      "UpdateLicenseDto": {
+        "properties": {
+          "display": {
+            "description": "Short text shown beside problems under this license.",
+            "maxLength": 256,
+            "type": "string"
+          },
+          "icon": {
+            "description": "URL of the license icon: http(s), or empty for none.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "key": {
+            "description": "Unique key, ignoring case: letters, digits, `.`, `_` and `-`, up to 20 characters.",
+            "type": "string"
+          },
+          "link": {
+            "description": "URL of the full license text: http(s), or empty for none.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "name": {
+            "description": "License name, up to 256 characters.",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "text": {
+            "description": "License text in markdown.",
+            "maxLength": 65536,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "UpdateOrganizationDto": {
         "properties": {
           "about": {
@@ -13319,6 +13559,11 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "changeMessage": {
+            "description": "Why the change was made, kept as the comment of the revision this edit writes; never stored on the problem. Up to 500 characters.",
+            "maxLength": 500,
+            "type": "string"
           },
           "code": {
             "description": "Unique code: lowercase letters, digits and underscores, 1 to 32 characters; a few words used by routes are reserved.",
@@ -13670,6 +13915,23 @@
         "required": [
           "value"
         ],
+        "type": "object"
+      },
+      "UpdateTaxonDto": {
+        "properties": {
+          "fullName": {
+            "description": "Full display name, up to 100 characters.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "Short name, unique ignoring case, up to 20 characters.",
+            "maxLength": 20,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "UpdateTicketDto": {
@@ -14397,6 +14659,188 @@
         ]
       }
     },
+    "/api/internal/admin/licenses": {
+      "get": {
+        "description": "Needs `judge.change_license`. Returns every license, sorted by key\nignoring case, with the markdown text the public catalog omits.",
+        "operationId": "LicensesAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/LicenseAdminResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List problem licenses",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "post": {
+        "description": "Needs `judge.add_license`. Responds 409 `conflict` when the key is\ntaken (ignoring case). Writes a revision; the change takes effect on this\nserver at once and on others through the change stream.",
+        "operationId": "LicensesAdminController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLicenseDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/LicenseAdminResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Add a license",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/admin/licenses/{id}": {
+      "patch": {
+        "description": "Needs `judge.change_license`. Send only the fields to change; none accepts\nnull. Responds 404 `not_found` for an unknown id and 409 `conflict` when\nthe new key is taken. There is no delete: problems reference the\nrow.",
+        "operationId": "LicensesAdminController_update",
+        "parameters": [
+          {
+            "description": "Catalog row id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLicenseDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/LicenseAdminResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update a license",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
     "/api/internal/admin/organization-requests": {
       "get": {
         "description": "Requires `judge.edit_all_organization`. Returns the staff queue of join\nrequests over all organizations, one `state` at a time (`P` by default),\nnewest first, 50 per page. `search` keeps requests whose requester\nusername, or whose organization name, short name or slug, contains the\ntext (any case).",
@@ -14569,6 +15013,370 @@
           "Blog"
         ],
         "x-enveloped": true
+      }
+    },
+    "/api/internal/admin/problem-groups": {
+      "get": {
+        "description": "Needs `judge.change_problemgroup`. Returns every problem group, sorted by name\nignoring case.",
+        "operationId": "ProblemGroupsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/CatalogItemResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List problem groups",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "post": {
+        "description": "Needs `judge.add_problemgroup`. Responds 409 `conflict` when the name is\ntaken (ignoring case). Writes a revision; the change takes effect on this\nserver at once and on others through the change stream.",
+        "operationId": "ProblemGroupsAdminController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxonDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CatalogItemResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Add a problem group",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/admin/problem-groups/{id}": {
+      "patch": {
+        "description": "Needs `judge.change_problemgroup`. Send only the fields to change; none accepts\nnull. Responds 404 `not_found` for an unknown id and 409 `conflict` when\nthe new name is taken. There is no delete: problems reference the\nrow.",
+        "operationId": "ProblemGroupsAdminController_update",
+        "parameters": [
+          {
+            "description": "Catalog row id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaxonDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CatalogItemResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update a problem group",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/admin/problem-types": {
+      "get": {
+        "description": "Needs `judge.change_problemtype`. Returns every problem type, sorted by name\nignoring case.",
+        "operationId": "ProblemTypesAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/CatalogItemResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List problem types",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "post": {
+        "description": "Needs `judge.add_problemtype`. Responds 409 `conflict` when the name is\ntaken (ignoring case). Writes a revision; the change takes effect on this\nserver at once and on others through the change stream.",
+        "operationId": "ProblemTypesAdminController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxonDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CatalogItemResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Add a problem type",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/admin/problem-types/{id}": {
+      "patch": {
+        "description": "Needs `judge.change_problemtype`. Send only the fields to change; none accepts\nnull. Responds 404 `not_found` for an unknown id and 409 `conflict` when\nthe new name is taken. There is no delete: problems reference the\nrow.",
+        "operationId": "ProblemTypesAdminController_update",
+        "parameters": [
+          {
+            "description": "Catalog row id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaxonDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CatalogItemResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update a problem type",
+        "tags": [
+          "Problem editing"
+        ]
       }
     },
     "/api/internal/admin/settings": {
@@ -27245,6 +28053,25 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "description": "Only problems this user authored; viewers with `judge.edit_all_problem` also get the problems the user curates.",
+            "in": "query",
+            "name": "authorId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "true: only suggested problems still awaiting review (a suggester set, not public, so pair it with `visibility=private` or `all`); false: only the rest.",
+            "in": "query",
+            "name": "suggested",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -27353,6 +28180,66 @@
           }
         },
         "summary": "Create a problem",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/bulk/visibility": {
+      "post": {
+        "description": "Needs `judge.change_public_visibility`. Applies `isPublic` to each listed\nproblem exactly as `PATCH /problems/{code}` would: the caller needs edit\nrights on each, every change writes a revision and rescores. With\n`setDateToNow` a publish also sets the publication date to now (needs\n`judge.edit_all_problem`). A refused problem is reported as `failed` with\nthe PATCH's error code and does not stop the others. Limited to 20 runs per\nhour per user (429 `rate_limited`).",
+        "operationId": "ProblemBulkVisibilityController_visibility",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkVisibilityDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BulkVisibilityResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Publish or unpublish problems in bulk",
         "tags": [
           "Problem editing"
         ]
@@ -27873,6 +28760,25 @@
             "description": "`false`: only problems the viewer has not solved; `true`: only solved ones (an AC with every case point). Anonymous viewers have solved nothing.",
             "in": "query",
             "name": "solved",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only problems this user authored; viewers with `judge.edit_all_problem` also get the problems the user curates.",
+            "in": "query",
+            "name": "authorId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "true: only suggested problems still awaiting review (a suggester set, not public, so pair it with `visibility=private` or `all`); false: only the rest.",
+            "in": "query",
+            "name": "suggested",
             "required": false,
             "schema": {
               "type": "boolean"

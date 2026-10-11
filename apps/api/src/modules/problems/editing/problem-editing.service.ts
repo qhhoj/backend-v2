@@ -28,11 +28,18 @@ import { RevisionsRepository } from '../core/revisions.repository';
 
 /** What a submission or a user's points are worth depends on these (legacy rescored on each). */
 const RESCORE_FIELDS = ['points', 'partial', 'isOrganizationPrivate'] as const;
+/** Revision comment when the edit carries no `changeMessage`. */
+const DEFAULT_EDIT_COMMENT = 'Edited from site';
 /** Besides the statement text, the rendered PDF shows these. */
 const PDF_INPUT_FIELDS = ['name', 'timeLimit', 'memoryLimit', 'languageLimits'];
 
 type ProblemFields = ReturnType<typeof toFields>;
 type ProblemChanges = ReturnType<typeof fieldDiff>;
+/** What `applyEdit` wrote: the stored problem, and whether any field changed (no change writes no revision). */
+export interface EditOutcome {
+  updated: ProblemDocument;
+  isChanged: boolean;
+}
 interface ProblemEdit {
   original: ProblemDocument;
   updated: ProblemDocument;
@@ -175,14 +182,29 @@ export class ProblemEditingService {
     dto: UpdateProblemDto,
   ): Promise<ProblemDetailResponse> {
     const { principal } = auth;
+    const { updated } = await this.applyEdit(principal, code, dto);
+    return this.problems.detail(
+      principal,
+      updated.code,
+      BASE_STATEMENT_LANGUAGE,
+    );
+  }
+
+  /** The whole PATCH except the response: gates, write, revision (`changeMessage` as its comment) and change events. */
+  async applyEdit(
+    principal: Principal,
+    code: string,
+    dto: UpdateProblemDto,
+  ): Promise<EditOutcome> {
+    const { changeMessage, ...problemDto } = dto;
     const original = await this.policy.editableProblem(principal, code);
     const originalJson = original.toJSON() as unknown as Record<
       string,
       unknown
     >;
-    const fields = toFields(dto);
-    this.policy.assertFieldGates(principal, dto, fields, originalJson);
-    await this.policy.assertReferences(dto);
+    const fields = toFields(problemDto);
+    this.policy.assertFieldGates(principal, problemDto, fields, originalJson);
+    await this.policy.assertReferences(problemDto);
     await this.assertDataDirectoryFree(fields, original);
     const isStatementRerendered = renderStatementsInto(
       fields,
@@ -196,18 +218,14 @@ export class ProblemEditingService {
       withoutRenderedHtml(originalJson),
       withoutRenderedHtml(updated.toJSON()),
     );
-    if (Object.keys(changes).length)
-      await this.recordRevisionAndEmitEvents(principal, {
-        original,
-        updated,
-        changes,
-        isStatementRerendered,
-      });
-    return this.problems.detail(
-      principal,
-      updated.code,
-      BASE_STATEMENT_LANGUAGE,
-    );
+    const isChanged = Object.keys(changes).length > 0;
+    if (isChanged)
+      await this.recordRevisionAndEmitEvents(
+        principal,
+        { original, updated, changes, isStatementRerendered },
+        changeMessage?.trim() || DEFAULT_EDIT_COMMENT,
+      );
+    return { updated, isChanged };
   }
 
   /** A rename must not adopt the leftover test data directory of a deleted problem. */
@@ -230,6 +248,7 @@ export class ProblemEditingService {
   private async recordRevisionAndEmitEvents(
     principal: Principal,
     edit: ProblemEdit,
+    comment: string,
   ): Promise<void> {
     await this.revisions.append({
       entity: 'problem',
@@ -237,7 +256,7 @@ export class ProblemEditingService {
       action: 'edit',
       userId: principal.userId,
       changes: edit.changes,
-      comment: 'Edited from site',
+      comment,
     });
     this.emitChangeEvents(edit);
   }
