@@ -9527,6 +9527,10 @@
             "description": "The base (default-language) name, whatever `lang` the detail was read in; the detail's own `name` follows `lang`.",
             "type": "string"
           },
+          "canPublishToMembers": {
+            "description": "The viewer may set `isPublic` without `judge.change_public_visibility`: the problem is organization-private and they may create problems for every one of its organizations (it then only reaches members).",
+            "type": "boolean"
+          },
           "curators": {
             "description": "Users who can edit the problem.",
             "items": {
@@ -9614,7 +9618,8 @@
           "licenseId",
           "allowedLanguageIds",
           "organizations",
-          "ogImage"
+          "ogImage",
+          "canPublishToMembers"
         ],
         "type": "object"
       },
