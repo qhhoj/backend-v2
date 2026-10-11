@@ -18,7 +18,9 @@ export type BridgeCommand =
     }
   | { type: 'abort'; submissionId: string }
   | { type: 'disconnect-judge'; judgeName: string; force: boolean }
-  | { type: 'disable-judge'; judgeName: string; isDisabled: boolean };
+  | { type: 'disable-judge'; judgeName: string; isDisabled: boolean }
+  /** A queued `TestGeneration` row for the bridge to dispatch to a judge with feature `generate.polygon`. */
+  | { type: 'generate'; generationId: string };
 
 const isJudgeName = (value: unknown): value is string =>
   typeof value === 'string' && JUDGE_NAME_PATTERN.test(value);
@@ -28,7 +30,7 @@ const isIdList = (value: unknown, maxLength: number): value is string[] =>
   value.every((item) => typeof item === 'string' && isUuid(item));
 
 /** Stream entries come from our own api but are still checked before the bridge casts ids into queries; null = ignore. */
-// eslint-disable-next-line complexity -- essential: one switch over the four bridge commands, each validated in place
+// eslint-disable-next-line complexity -- essential: one switch over the bridge commands, each validated in place
 export function parseBridgeCommand(raw: string): BridgeCommand | null {
   let value: unknown;
   try {
@@ -59,6 +61,11 @@ export function parseBridgeCommand(raw: string): BridgeCommand | null {
     case 'disable-judge':
       return isJudgeName(command.judgeName) &&
         typeof command.isDisabled === 'boolean'
+        ? (command as BridgeCommand)
+        : null;
+    case 'generate':
+      return typeof command.generationId === 'string' &&
+        isUuid(command.generationId)
         ? (command as BridgeCommand)
         : null;
     default:

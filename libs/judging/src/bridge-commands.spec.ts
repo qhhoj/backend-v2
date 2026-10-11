@@ -19,6 +19,7 @@ describe('parseBridgeCommand', () => {
     { type: 'abort', submissionId: newId() },
     { type: 'disconnect-judge', judgeName: 'judge-01', force: true },
     { type: 'disable-judge', judgeName: 'judge-01', isDisabled: false },
+    { type: 'generate', generationId: newId() },
   ])('round-trips %j', (command) =>
     expect(parseBridgeCommand(JSON.stringify(command))).toEqual(command),
   );
@@ -49,5 +50,6 @@ describe('parseBridgeCommand', () => {
     JSON.stringify({ type: 'judge', submissionIds: [newId()] }),
     JSON.stringify({ type: 'disconnect-judge', judgeName: 'a b', force: true }),
     JSON.stringify({ type: 'disable-judge', judgeName: 'judge-01' }),
+    JSON.stringify({ type: 'generate', generationId: 'not-a-uuid' }),
   ])('ignores %s', (raw) => expect(parseBridgeCommand(raw)).toBeNull());
 });
