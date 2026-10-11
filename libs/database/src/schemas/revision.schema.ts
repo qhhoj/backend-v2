@@ -26,3 +26,6 @@ RevisionSchema.index(
   { entity: 1, createdAt: -1, _id: -1 },
   { partialFilterExpression: { action: 'delete' } },
 );
+// The global change log (`/admin/audit`), newest first, by actor or by kind.
+RevisionSchema.index({ userId: 1, _id: -1 });
+RevisionSchema.index({ entity: 1, _id: -1 });

@@ -467,6 +467,129 @@
         ],
         "type": "object"
       },
+      "AuditActorResponse": {
+        "properties": {
+          "id": {
+            "description": "User id.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username; null when the account no longer exists.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username"
+        ],
+        "type": "object"
+      },
+      "AuditEntryResponse": {
+        "properties": {
+          "action": {
+            "description": "What was done: `create`, `edit`, `delete`, `hide`, `lock`, ... as the writer recorded it.",
+            "type": "string"
+          },
+          "actor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuditActorResponse"
+              }
+            ],
+            "description": "Who made it; null for system writes (workers, imports).",
+            "nullable": true,
+            "type": "object"
+          },
+          "at": {
+            "description": "When the change was made.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "changedFields": {
+            "description": "Names of the changed fields. Values are never returned: some records hold sensitive before/after values.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "comment": {
+            "description": "The writer's free-text note, often empty.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Record id (UUIDv7, sorts by time).",
+            "type": "string"
+          },
+          "object": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuditObjectResponse"
+              }
+            ],
+            "description": "The object changed."
+          },
+          "type": {
+            "description": "Object kind: a `revisions` entity such as `problem`, or `setting`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "type",
+          "action",
+          "object",
+          "changedFields",
+          "comment"
+        ],
+        "type": "object"
+      },
+      "AuditFeedResponse": {
+        "properties": {
+          "items": {
+            "description": "Newest first, at most `limit`.",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryResponse"
+            },
+            "type": "array"
+          },
+          "nextBefore": {
+            "description": "Pass as `before` to read the next (older) page; null on the last page.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "nextBefore"
+        ],
+        "type": "object"
+      },
+      "AuditObjectResponse": {
+        "properties": {
+          "deleted": {
+            "description": "The object no longer exists (or is soft-deleted); clients show the label without a link.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Object id, or the key for a setting.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What to call the object: problem code, contest key, username, organization slug, page url, post title, setting key, catalog name. Null when the kind has no name (comment, submission) or the object is gone.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "deleted"
+        ],
+        "type": "object"
+      },
       "BalloonPageMetaResponse": {
         "properties": {
           "deliveredTotal": {
@@ -15735,6 +15858,134 @@
   },
   "openapi": "3.0.0",
   "paths": {
+    "/api/internal/admin/audit": {
+      "get": {
+        "description": "Requires `judge.change_settings`. The global change log: every write that already leaves a record (the `revisions` rows of problems, contests, users, organizations, posts, comments, pages, catalogs, submission locks and batch rejudges, and setting changes), newest first, 50 per page (`limit` 1-50). Each entry names the actor, the action, the object (with a label and whether it still exists) and the changed field names; values are never returned. Filters: `actor` (exact username; unknown gives an empty page), `type`, and a `from`/`to` time range. Page with `before` = the previous page's `nextBefore`. Reads are not logged.",
+        "operationId": "AuditController_list",
+        "parameters": [
+          {
+            "description": "Only changes to this kind of object.",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "enum": [
+                "blogPost",
+                "comment",
+                "contest",
+                "contestParticipation",
+                "flatpage",
+                "group",
+                "license",
+                "organization",
+                "problem",
+                "problemGroup",
+                "problemType",
+                "setting",
+                "submission",
+                "submission_batch",
+                "tagProblem",
+                "user"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size, 1-50; default 50.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Only changes made by this user (exact username, case-insensitive). An unknown username gives an empty feed.",
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "maxLength": 150,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Changes at or after this time (ISO 8601 with offset).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Changes before this time (ISO 8601 with offset).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The `nextBefore` of the previous page: only changes older than that entry.",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AuditFeedResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List recorded changes across the site",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      }
+    },
     "/api/internal/admin/comments": {
       "get": {
         "description": "Requires `judge.change_comment`. Lists the comments of the whole site,\nnewest first, 30 per page, hidden ones included unless `state` narrows\nit: filter by body text `search` (deleted comments left out), the\nauthor's exact `author` username and the `pageType`. Comments on pages the moderator\ncannot read are left out of the page. A body search that runs too long\nfails with 422 `search_too_broad`.",

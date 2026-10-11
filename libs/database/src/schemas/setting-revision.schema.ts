@@ -19,3 +19,5 @@ export const SettingRevisionSchema =
   SchemaFactory.createForClass(SettingRevision);
 // One setting's history, newest first (UUIDv7 ids sort by time).
 SettingRevisionSchema.index({ key: 1, _id: -1 });
+// The global change log filtered by actor.
+SettingRevisionSchema.index({ actor: 1, _id: -1 });
