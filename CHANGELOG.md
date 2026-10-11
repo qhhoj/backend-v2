@@ -1,5 +1,18 @@
 # qhhoj-backend
 
+## 2.5.0
+
+### Minor Changes
+
+- 5c84fa7: Add `GET /api/internal/problems/{code}/best-submissions`: each user's best submission on a problem, ranked by points, time, memory and date.
+- 119b776: Contest list rows and the contest detail now carry `organizations` (slug and name) for the organizations an organization-private contest is restricted to.
+- dac4ed3: Submission stats: `verdictsToday`, today's judged submissions counted by result (one aggregate over the `judgedDate` index, cached with the other figures).
+
+### Patch Changes
+
+- b3af799: Test: a moderator's hide on a problem page answers the hidden comment with `hiddenBy`, and the page listing still returns it to them flagged hidden.
+- 89978b2: Deploy hardening: memory caps on the api and bridge units, nginx cannot read problem/user/contest data or the PDF cache, port 80 no longer redirects to the client-supplied Host, the CSP script hash matches index.html, and qhhoj-deploy pins PATH.
+
 ## 2.4.0
 
 ### Minor Changes
