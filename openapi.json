@@ -6894,10 +6894,9 @@
         "type": "string"
       },
       "OrganizationRevisionAction": {
-        "description": "`create`, `edit`, `kick` (a member removed; `changes.member.before` is their username) or `delete` (`changes.deleted.after` is true).",
+        "description": "`create`, `edit`, or `kick` (a member removed; `changes.member.before` is their username).",
         "enum": [
           "create",
-          "delete",
           "edit",
           "kick"
         ],
@@ -6911,7 +6910,7 @@
                 "$ref": "#/components/schemas/OrganizationRevisionAction"
               }
             ],
-            "description": "`create`, `edit`, `kick` (a member removed; `changes.member.before` is their username) or `delete` (`changes.deleted.after` is true)."
+            "description": "`create`, `edit`, or `kick` (a member removed; `changes.member.before` is their username)."
           },
           "at": {
             "description": "When the change was made.",
@@ -7818,31 +7817,6 @@
         "required": [
           "ok",
           "problemCount"
-        ],
-        "type": "object"
-      },
-      "PostComposeOptionsResponse": {
-        "properties": {
-          "canWritePersonal": {
-            "description": "The viewer may write a personal post: not muted, and enough solved problems (superusers need none).",
-            "type": "boolean"
-          },
-          "minSolvedProblems": {
-            "description": "Solved problems a personal post needs.",
-            "type": "number"
-          },
-          "organizations": {
-            "description": "Organizations the viewer may post for: an admin of each, unmuted, with judge.edit_organization_post.",
-            "items": {
-              "$ref": "#/components/schemas/OrganizationSummaryResponse"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "canWritePersonal",
-          "minSolvedProblems",
-          "organizations"
         ],
         "type": "object"
       },
@@ -10347,131 +10321,6 @@
         ],
         "type": "object"
       },
-      "RuntimeJudgeResponse": {
-        "properties": {
-          "busy": {
-            "description": "Slots in use at its last pong; 0 while offline.",
-            "type": "number"
-          },
-          "name": {
-            "description": "Judge name.",
-            "type": "string"
-          },
-          "online": {
-            "description": "Whether the judge is connected now.",
-            "type": "boolean"
-          },
-          "pingMs": {
-            "description": "Milliseconds, mean of the last 6 pings; null while offline or unmeasured.",
-            "nullable": true,
-            "type": "number"
-          },
-          "slots": {
-            "description": "Assignments it runs at once.",
-            "type": "number"
-          },
-          "startedAt": {
-            "description": "When the judge process last started; null if it never connected. Meaningful while online.",
-            "format": "date-time",
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "online",
-          "slots",
-          "busy",
-          "pingMs",
-          "startedAt"
-        ],
-        "type": "object"
-      },
-      "RuntimeLanguageResponse": {
-        "properties": {
-          "commonName": {
-            "description": "Generic family name, shared by versions.",
-            "type": "string"
-          },
-          "extension": {
-            "description": "File extension without the dot.",
-            "type": "string"
-          },
-          "fileOnly": {
-            "description": "Whether solutions are uploaded as a file instead of typed.",
-            "type": "boolean"
-          },
-          "key": {
-            "description": "Language key judges report.",
-            "type": "string"
-          },
-          "name": {
-            "description": "Display name.",
-            "type": "string"
-          },
-          "versions": {
-            "description": "One entry per listed judge, online or not, that has the language.",
-            "items": {
-              "$ref": "#/components/schemas/RuntimeVersionResponse"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "key",
-          "name",
-          "commonName",
-          "extension",
-          "fileOnly",
-          "versions"
-        ],
-        "type": "object"
-      },
-      "RuntimeVersionResponse": {
-        "properties": {
-          "compiler": {
-            "description": "Compiler or interpreter name.",
-            "type": "string"
-          },
-          "judge": {
-            "description": "Name of the judge that has this runtime.",
-            "type": "string"
-          },
-          "version": {
-            "description": "Runtime version.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "judge",
-          "compiler",
-          "version"
-        ],
-        "type": "object"
-      },
-      "RuntimesResponse": {
-        "properties": {
-          "judges": {
-            "description": "Judges that may connect, by name.",
-            "items": {
-              "$ref": "#/components/schemas/RuntimeJudgeResponse"
-            },
-            "type": "array"
-          },
-          "languages": {
-            "description": "Every programming language, by name.",
-            "items": {
-              "$ref": "#/components/schemas/RuntimeLanguageResponse"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "judges",
-          "languages"
-        ],
-        "type": "object"
-      },
       "ScopeQueryDto": {
         "properties": {
           "contest": {
@@ -10653,6 +10502,10 @@
           "contest.officialMode",
           "contest.officialModeEndsAt",
           "discord.webhooks",
+          "externalJudge.apiToken",
+          "externalJudge.baseUrl",
+          "externalJudge.maxInFlight",
+          "externalJudge.maxWaitMinutes",
           "mail.from",
           "mail.smtpUrl",
           "pdf.maxBytes",
@@ -12275,11 +12128,6 @@
       },
       "SubmissionSourceResponse": {
         "properties": {
-          "filename": {
-            "description": "Name the raw and download links give the file (`<id>.<extension>`, `Main.java` for Java); null for a file-only language.",
-            "nullable": true,
-            "type": "string"
-          },
           "id": {
             "description": "Submission id.",
             "type": "string"
@@ -12291,8 +12139,7 @@
         },
         "required": [
           "id",
-          "source",
-          "filename"
+          "source"
         ],
         "type": "object"
       },
@@ -15243,23 +15090,6 @@
           "field",
           "code",
           "message"
-        ],
-        "type": "object"
-      },
-      "UserSuggestionResponse": {
-        "properties": {
-          "id": {
-            "description": "User id.",
-            "type": "string"
-          },
-          "username": {
-            "description": "Login name.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "username"
         ],
         "type": "object"
       },
@@ -27647,49 +27477,6 @@
       }
     },
     "/api/internal/organizations/{slug}": {
-      "delete": {
-        "description": "Superusers only (403 `forbidden`; no permission grants it). A soft delete:\nthe organization disappears from every read and its slug stays reserved.\nIts problems and contests are kept and unlinked, keeping their privacy\nflags (an organization-private one left with no organization is visible\nonly to its editors). Its posts are kept, unlinked and hidden. Members\nlose the membership, pending join requests are rejected, and the\norganization's problem tags are removed. Recorded in the revision log\n(its history page is gone with it). Returns 204, also when repeated on\na deleted slug (which finishes an interrupted delete); 404 `not_found`\nfor an unknown slug.",
-        "operationId": "OrganizationEditingController_remove",
-        "parameters": [
-          {
-            "description": "Slug of the organization.",
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Delete an organization",
-        "tags": [
-          "Organizations"
-        ]
-      },
       "get": {
         "description": "Returns the organization's profile: name, rendered about text, admins,\nmember slots, and the viewer's own state (member, may administer, pending\njoin request). The raw `about` text is only returned to administrators.\nUnlisted organizations are reachable by slug for anyone. Fails with 404\n`not_found` for an unknown slug.",
         "operationId": "OrganizationsController_detail",
@@ -29889,127 +29676,6 @@
         ]
       }
     },
-    "/api/internal/posts/compose-options": {
-      "get": {
-        "description": "Whether the caller may write a personal post (unmuted, with\n`minSolvedProblems` solved problems) and the organizations they may post\nfor (their admin, unmuted, with `judge.edit_organization_post`). Creating\na post applies the same rules.",
-        "operationId": "BlogDraftsController_composeOptions",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/PostComposeOptionsResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Get where I may post",
-        "tags": [
-          "Blog"
-        ]
-      }
-    },
-    "/api/internal/posts/drafts": {
-      "get": {
-        "description": "The caller's own posts that are not public yet: drafts and posts\nscheduled for later, personal and organization ones, limited to those the\ncaller may still edit. Newest publish time first. Paged with `page`.",
-        "operationId": "BlogDraftsController_list",
-        "parameters": [
-          {
-            "description": "1-based page number.",
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "maximum": 10000,
-              "minimum": 1,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/PostListItemResponse"
-                      },
-                      "type": "array"
-                    },
-                    "meta": {
-                      "$ref": "#/components/schemas/PageMetaResponse"
-                    }
-                  },
-                  "required": [
-                    "data",
-                    "meta"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "List my drafts",
-        "tags": [
-          "Blog"
-        ],
-        "x-enveloped": true
-      }
-    },
     "/api/internal/posts/{id}": {
       "delete": {
         "description": "Requires edit rights plus `judge.delete_blogpost`. Deletes the post with\nits discussion, writes a revision and recomputes the contribution points\nof the authors and commenters. Returns 204; 403 `forbidden` otherwise.",
@@ -30536,7 +30202,7 @@
     },
     "/api/internal/problems/bulk/visibility": {
       "post": {
-        "description": "Needs `judge.change_public_visibility`. Applies `isPublic` to each listed\nproblem exactly as `PATCH /problems/{code}` would: the caller needs edit\nrights on each, every change writes a revision and rescores. With\n`setDateToNow` a publish also sets the publication date to now (needs\n`judge.edit_all_problem`). A refused problem is reported as `failed` with\nthe PATCH's error code (`internal_error` for an unexpected failure) and does not stop the others. Limited to 20 runs per\nhour per user (429 `rate_limited`).",
+        "description": "Needs `judge.change_public_visibility`. Applies `isPublic` to each listed\nproblem exactly as `PATCH /problems/{code}` would: the caller needs edit\nrights on each, every change writes a revision and rescores. With\n`setDateToNow` a publish also sets the publication date to now (needs\n`judge.edit_all_problem`). A refused problem is reported as `failed` with\nthe PATCH's error code and does not stop the others. Limited to 20 runs per\nhour per user (429 `rate_limited`).",
         "operationId": "ProblemBulkVisibilityController_visibility",
         "parameters": [],
         "requestBody": {
@@ -33920,56 +33586,6 @@
         ]
       }
     },
-    "/api/internal/runtimes": {
-      "get": {
-        "description": "Public. Returns the judges that may connect (blocked and disabled ones are\nleft out) with online state, slots, slots in use, mean ping in milliseconds\nand when they started, and every programming language with the compiler\nversion each judge has for it. Keys, addresses, builds and notes are never\nreturned. Cached for 3 seconds, shared by all callers.",
-        "operationId": "RuntimesController_overview",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/RuntimesResponse"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Get the judges and the languages they run",
-        "tags": [
-          "Submissions"
-        ]
-      }
-    },
     "/api/internal/seo/preview": {
       "get": {
         "description": "Public. Returns a small HTML document with `og:` and `twitter:` tags for a problem, contest, blog post or user page, for link-preview bots that do not run the SPA. A page that does not exist or is not public gets the site's generic tags.",
@@ -35505,112 +35121,6 @@
         ]
       }
     },
-    "/api/internal/submissions/{id}/source/download": {
-      "get": {
-        "description": "Same access rules, errors and body as the raw endpoint, but answers\n`Content-Disposition: attachment` with the filename `<submission id>.<language\nextension>` (`Main.java` for Java).",
-        "operationId": "SubmissionSourceFileController_download",
-        "parameters": [
-          {
-            "description": "Submission id.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "The source text, as an attachment."
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Download the source code as a file",
-        "tags": [
-          "Submissions"
-        ],
-        "x-raw": true
-      }
-    },
-    "/api/internal/submissions/{id}/source/raw": {
-      "get": {
-        "description": "Needs a signed-in user and follows the same access rules and errors as the\nsource endpoint. Answers `text/plain; charset=utf-8` with\n`Content-Disposition: inline`, `X-Content-Type-Options: nosniff` and\n`Cache-Control: private, no-store`. 404\n`not_found` for a file-only language, which has no source text.",
-        "operationId": "SubmissionSourceFileController_raw",
-        "parameters": [
-          {
-            "description": "Submission id.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "The source text, shown inline."
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Show the source code as plain text",
-        "tags": [
-          "Submissions"
-        ],
-        "x-raw": true
-      }
-    },
     "/api/internal/tags": {
       "get": {
         "description": "Public. Returns one page (`page` from 1, `pageSize` 1-100) of external\nproblems that users have tagged. Filter by `tag` (tag code), `search`\n(substring of the code or name) and `judges` (`Atcoder`, `Codeforces`,\n`CodeforcesGym`, `Kattis`, `VNOJ`; repeat the parameter).",
@@ -36634,70 +36144,6 @@
         "summary": "Reply to a ticket",
         "tags": [
           "Tickets"
-        ]
-      }
-    },
-    "/api/internal/user-suggestions": {
-      "get": {
-        "description": "Signed-in callers only (the admin username pickers). Returns up to 10 users whose username starts with `prefix`, ignoring case, in username order, with only their id and username. Banned and unlisted users are included, as their profile pages are. 60 requests per user per minute, then 429 `rate_limited` with `Retry-After`.",
-        "operationId": "UserSuggestionsController_suggest",
-        "parameters": [
-          {
-            "description": "Case-insensitive username prefix (letters, digits, underscores; 1-30 characters); surrounding spaces are dropped.",
-            "in": "query",
-            "name": "prefix",
-            "required": true,
-            "schema": {
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/UserSuggestionResponse"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Suggest users by username prefix",
-        "tags": [
-          "Users"
         ]
       }
     },
