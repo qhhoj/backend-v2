@@ -3,9 +3,8 @@ import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, unique, ValidationFailedError } from '@libs/common';
 import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
-import { excerpt } from '@libs/community';
 import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
-import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
+import { DiscordWebhooksService } from '@libs/community';
 import { chargedOrganization } from '../../organizations/quota/quota-charge';
 import { QuotaService } from '../../organizations/quota/quota.service';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
@@ -133,7 +132,7 @@ export class ProblemEditingService {
       comment: 'Created on site',
     });
     if (mode === 'suggest' || problem.isOrganizationPrivate)
-      await this.announce(problem, mode, principal.username);
+      await this.discord.announceNewProblem(problem, mode, principal.username);
     return this.problems.detail(
       principal,
       problem.code,
@@ -164,30 +163,6 @@ export class ProblemEditingService {
               curators: unique([...(fields.curators ?? []), principal.userId]),
             }),
       }),
-    );
-  }
-
-  /** Legacy `on_new_problem` (organization problems) and `on_new_suggested_problem`. The author is the creator: the suggester in suggest mode, a curator otherwise (legacy: `suggester or authors.first()`). Legacy's trailing `Organizations:` line is omitted on purpose (less exposure). */
-  private announce(
-    problem: Problem,
-    mode: 'create' | 'suggest',
-    username: string,
-  ): Promise<void> {
-    const suggested = mode === 'suggest';
-    const url = this.discord.link(`/problem/${problem.code}`);
-    return this.discord.notify(
-      suggested ? 'on_new_suggested_problem' : 'on_new_problem',
-      {
-        title: `New ${suggested ? 'suggested' : 'organization'} problem ${url}`,
-        description: [
-          `Title: ${problem.name}`,
-          `Statement: ${excerpt(problem.description ?? '', 100)}...\n`,
-          `Time limit: ${problem.timeLimit}`,
-          `Memory limit (MB): ${problem.memoryLimit / 1024}`,
-          `Points: ${problem.points}`,
-        ].join('\n'),
-        author: this.discord.author(username),
-      },
     );
   }
 

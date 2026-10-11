@@ -391,6 +391,58 @@ afterAll(() => api.teardown());
         expect(storedPackages()).toHaveLength(before);
       });
 
+      describe('without judge.import_polygon_package', () => {
+        let orgOnly: TestSession;
+
+        beforeAll(async () => {
+          const orgOnlyId = (
+            await createUserWith(api, 'orgonly', {
+              permissions: [
+                'judge.create_organization_problem',
+                'judge.edit_own_problem',
+              ],
+            })
+          )._id;
+          orgOnly = await loginAs(api, orgOnlyId);
+          await createOrganization(api, {
+            slug: 'thpt-only',
+            adminIds: [orgOnlyId],
+          });
+          await createProblem(api, catalog, {
+            code: 'orgonly_own',
+            authors: [orgOnlyId],
+          });
+        });
+
+        it('imports a new problem into an administered organization and reads its own job', async () => {
+          const jobId = jobIdOf(
+            await upload(
+              'code=thptonly_sum&organization=thpt-only',
+              orgOnly,
+            ).expect(202),
+          );
+          await statusOf(jobId, orgOnly).expect(200);
+        });
+
+        it('may not import a site problem, update a problem or import into another organization', async () => {
+          const before = storedPackages().length;
+          await upload('code=orgonly_site', orgOnly)
+            .expect(403)
+            .expect(errorCode('forbidden'));
+          await upload('code=orgonly_own&mode=update', orgOnly)
+            .expect(403)
+            .expect(errorCode('forbidden'));
+          await upload(
+            'code=orgonly_own&mode=update&organization=thpt-only',
+            orgOnly,
+          ).expect(403);
+          await upload('code=thptdemo_x&organization=thpt-demo', orgOnly)
+            .expect(403)
+            .expect(errorCode('forbidden'));
+          expect(storedPackages()).toHaveLength(before);
+        });
+      });
+
       it('ignores the organization of an update', async () => {
         await createProblem(api, catalog, {
           code: 'teachers',

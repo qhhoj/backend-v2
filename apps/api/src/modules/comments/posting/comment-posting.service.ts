@@ -14,7 +14,7 @@ import {
 } from '@libs/community';
 import type { CommentPageType } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
-import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
+import { DiscordWebhooksService } from '@libs/community';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';

@@ -8,6 +8,8 @@ import type {
   PolygonImportResult,
 } from '@libs/problems';
 import type { PolygonSyncStep } from '@libs/database';
+import { DiscordWebhooksService } from '@libs/community';
+import { ImportQuota } from './import-quota.service';
 import { ImportTracker } from './import-tracker';
 import { PolygonImportError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
@@ -27,11 +29,13 @@ export class PolygonImportProcessor extends WorkerHost {
     private readonly imports: PolygonImportService,
     private readonly repository: PolygonImportRepository,
     private readonly runs: PolygonSyncRunsRepository,
+    private readonly quota: ImportQuota,
+    private readonly discord: DiscordWebhooksService,
   ) {
     super();
   }
 
-  /** A `PolygonImportError` is shown to the requester, so it is stored with the prefix the api looks for. Every Polygon job is recorded in the sync history; a failure also stores its step on the job and, for a sync, on the problem's link. */
+  /** A `PolygonImportError` is shown to the requester, so it is stored with the prefix the api looks for. Every Polygon job is recorded in the sync history; a failure also stores its step on the job and, for a sync, on the problem's link, and gives back the credits of a create. A created organization problem is announced like one made on the site. */
   async process(job: Job<PolygonImportJob>): Promise<PolygonImportResult> {
     const tracker = new ImportTracker((progress) => this.report(job, progress));
     const jobId = job.id ?? '';
@@ -44,6 +48,10 @@ export class PolygonImportProcessor extends WorkerHost {
           problemId: result.problemId,
         }),
       );
+      if (job.data.mode === 'create' && job.data.organizationId)
+        await this.bestEffort('Announcement', () =>
+          this.announce(job.data, result.problemId),
+        );
       return result;
     } catch (error) {
       const shown = error instanceof PolygonImportError;
@@ -65,6 +73,9 @@ export class PolygonImportProcessor extends WorkerHost {
     await this.bestEffort('Failed step', () =>
       job.updateData({ ...job.data, failedStep: step }),
     );
+    await this.bestEffort('Credit refund', () =>
+      this.quota.refundFailed(job.id ?? '', job.data, step),
+    );
     await this.bestEffort('Sync failure', () =>
       this.repository.recordSyncFailure(job.data, reason),
     );
@@ -75,6 +86,22 @@ export class PolygonImportProcessor extends WorkerHost {
         error: reason,
       }),
     );
+  }
+
+  private async announce(
+    job: PolygonImportJob,
+    problemId: string,
+  ): Promise<void> {
+    const announcement = await this.repository.announcementOf(
+      problemId,
+      job.requesterId,
+    );
+    if (announcement)
+      await this.discord.announceNewProblem(
+        announcement.problem,
+        'create',
+        announcement.username,
+      );
   }
 
   private async bestEffort(

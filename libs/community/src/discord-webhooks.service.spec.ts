@@ -1,6 +1,6 @@
 import type { Queue } from 'bullmq';
 import type { Env } from '@libs/common';
-import type { DiscordWebhookJob } from '@libs/community';
+import type { DiscordWebhookJob } from './queues';
 import type { SettingsService } from '@libs/settings';
 import { fakeSettings } from '@libs/settings/testing';
 import { DiscordWebhooksService } from './discord-webhooks.service';

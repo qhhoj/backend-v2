@@ -3,12 +3,16 @@ import type { OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
-import { AppError, isDuplicateKey, monthKeyIn, REDIS } from '@libs/common';
-import {
-  Organization,
-  OrganizationCreditEntry,
-  OrganizationUsage,
-} from '@libs/database';
+import { AppError, isDuplicateKey, REDIS } from '@libs/common';
+import { OrganizationUsage } from '@libs/database';
+import { QuotaLedger, quotaExceeded } from '@libs/problems';
+import type {
+  ChargeRequest,
+  EffectiveLimits,
+  PricedCharge,
+  SpentCharge,
+  UsageKey,
+} from '@libs/problems';
 import { SettingsService } from '@libs/settings';
 import { meterOf } from './quota-meter';
 import { QuotaWarningNotifier } from './quota-warning.notifier';
@@ -16,35 +20,18 @@ import {
   BYTES_PER_COST_UNIT,
   QUOTA_BACKFILL_DONE_KEY,
 } from './quota.constants';
-import type { ChargeRequest, QuotaRefusal, QuotaSnapshot } from './quota.types';
+import type { QuotaSnapshot } from './quota.types';
 
-interface UsageKey {
-  organizationId: string;
-  month: string;
-}
-
-/** `unlimited`: the limits are reported but never applied. */
-interface EffectiveLimits {
-  credits: number;
-  storageBytes: number;
-  unlimited: boolean;
-}
-
-type PricedCharge = ChargeRequest & { amount: number };
-
-/** Monthly credits (atomic, refundable) and the storage meter of an organization. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
+/** Monthly credits (atomic, refundable) and the storage meter of an organization; the primitives the worker shares live in `QuotaLedger`. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
 @Injectable()
 export class QuotaService implements OnApplicationBootstrap {
   private readonly logger = new Logger(QuotaService.name);
 
   constructor(
     private readonly settings: SettingsService,
-    @InjectModel(Organization.name)
-    private readonly organizations: Model<Organization>,
+    private readonly ledger: QuotaLedger,
     @InjectModel(OrganizationUsage.name)
     private readonly usage: Model<OrganizationUsage>,
-    @InjectModel(OrganizationCreditEntry.name)
-    private readonly ledger: Model<OrganizationCreditEntry>,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly warnings: QuotaWarningNotifier,
   ) {}
@@ -58,47 +45,20 @@ export class QuotaService implements OnApplicationBootstrap {
       );
   }
 
-  /** `enforce` blocks only after the `dataBytes` backfill has finished; until then the site stays in warn mode whatever the setting says. */
-  async isEnforcing(): Promise<boolean> {
-    return (
-      this.settings.get('quota.enforce') === 'enforce' &&
-      (await this.redis.get(QUOTA_BACKFILL_DONE_KEY)) === '1'
-    );
+  isEnforcing(): Promise<boolean> {
+    return this.ledger.isEnforcing();
   }
 
   monthKeyOf(now: Date): string {
-    return monthKeyIn(this.settings.get('site.timeZone'), now);
+    return this.ledger.monthKeyOf(now);
   }
 
-  /** The effective limits of an organization row: its own caps, else the site defaults. */
-  limitsFrom(
-    row: {
-      quotaMonthlyCredits?: number | null;
-      quotaStorageBytes?: number | null;
-      quotaUnlimited?: boolean;
-    } | null,
-  ): EffectiveLimits {
-    return {
-      unlimited: row?.quotaUnlimited ?? false,
-      credits:
-        row?.quotaMonthlyCredits ??
-        this.settings.get('quota.defaultMonthlyCredits'),
-      storageBytes:
-        row?.quotaStorageBytes ??
-        this.settings.get('quota.defaultStorageBytes'),
-    };
+  limitsFrom(row: Parameters<QuotaLedger['limitsFrom']>[0]): EffectiveLimits {
+    return this.ledger.limitsFrom(row);
   }
 
-  async limitsOf(organizationId: string): Promise<EffectiveLimits> {
-    const row = await this.organizations
-      .findById(organizationId, {
-        quotaMonthlyCredits: 1,
-        quotaStorageBytes: 1,
-        quotaUnlimited: 1,
-      })
-      .lean()
-      .exec();
-    return this.limitsFrom(row);
+  limitsOf(organizationId: string): Promise<EffectiveLimits> {
+    return this.ledger.limitsOf(organizationId);
   }
 
   priceOf(request: ChargeRequest): number {
@@ -112,23 +72,23 @@ export class QuotaService implements OnApplicationBootstrap {
     );
   }
 
-  /** Spends first, runs `work`, refunds when `work` throws. Call it AFTER the request is validated so a bad request costs nothing. A null organization (superuser, nothing to charge) and a zero price run `work` free. */
+  /** Spends first, runs `work` (given what was spent, null when free), refunds when `work` throws. Call it AFTER the request is validated so a bad request costs nothing. A null organization (superuser, nothing to charge) and a zero price run `work` free. */
   async charged<Result>(
     organizationId: string | null,
     request: ChargeRequest,
-    work: () => Promise<Result>,
+    work: (spent: SpentCharge | null) => Promise<Result>,
     now = new Date(),
   ): Promise<Result> {
     const amount = organizationId === null ? 0 : this.priceOf(request);
-    if (organizationId === null || amount === 0) return work();
+    if (organizationId === null || amount === 0) return work(null);
     const key = { organizationId, month: this.monthKeyOf(now) };
     const charge = { ...request, amount };
     await this.spend(key, charge);
     let result: Result;
     try {
-      result = await work();
+      result = await work({ ...key, ...charge });
     } catch (error) {
-      await this.refund(key, charge);
+      await this.ledger.refund(key, charge);
       throw error;
     }
     await this.warnIfCreditsNear(key);
@@ -199,9 +159,9 @@ export class QuotaService implements OnApplicationBootstrap {
     charge: PricedCharge,
   ): Promise<void> {
     try {
-      await this.record(key, charge.kind, charge);
+      await this.ledger.record(key, charge.kind, charge);
     } catch (error) {
-      await this.giveBack(key, charge.amount);
+      await this.ledger.giveBack(key, charge.amount);
       throw error;
     }
   }
@@ -242,48 +202,6 @@ export class QuotaService implements OnApplicationBootstrap {
     return row?.creditsUsed ?? null;
   }
 
-  private async record(
-    key: UsageKey,
-    reason: OrganizationCreditEntry['reason'],
-    charge: PricedCharge,
-  ): Promise<void> {
-    await this.ledger.create({
-      organization: key.organizationId,
-      month: key.month,
-      reason,
-      amount: charge.amount,
-      user: charge.userId,
-      ref: charge.ref,
-    });
-  }
-
-  /** Lowers the counter by `amount` unless it is already lower (the guard); true when it did. */
-  private async giveBack(key: UsageKey, amount: number): Promise<boolean> {
-    const { matchedCount } = await this.usage
-      .updateOne(
-        {
-          organization: key.organizationId,
-          month: key.month,
-          creditsUsed: { $gte: amount },
-        },
-        { $inc: { creditsUsed: -amount } },
-      )
-      .exec();
-    return matchedCount === 1;
-  }
-
-  /** Gives the credits back when the guarded write failed and logs a `refund` row only if the counter really moved; never masks the write's own error. */
-  private async refund(key: UsageKey, charge: PricedCharge): Promise<void> {
-    try {
-      if (await this.giveBack(key, charge.amount))
-        await this.record(key, 'refund', { ...charge, amount: -charge.amount });
-    } catch (error) {
-      this.logger.error(
-        `Refund of ${charge.amount} credits to ${key.organizationId} failed: ${(error as Error).message}`,
-      );
-    }
-  }
-
   async creditsUsed(key: UsageKey): Promise<number> {
     const row = await this.usage
       .findOne(
@@ -308,26 +226,12 @@ export class QuotaService implements OnApplicationBootstrap {
     });
   }
 
-  /** The storage meter. `usedBytes` is the organization's current total (the caller sums it from the problems it owns, see `ProblemsRepository.sumDataBytes`), `addedBytes` what this write adds (negative or zero always fits). Enforce refuses; warn logs. */
-  async assertStorage(
+  /** The storage meter (see `QuotaLedger.assertStorage`); the caller sums `usedBytes` from the problems it owns (`ProblemsRepository.sumDataBytes`). */
+  assertStorage(
     organizationId: string,
     bytes: { usedBytes: number; addedBytes: number },
   ): Promise<void> {
-    const { usedBytes, addedBytes } = bytes;
-    if (addedBytes <= 0) return;
-    const { storageBytes: limit, unlimited } =
-      await this.limitsOf(organizationId);
-    if (unlimited || usedBytes + addedBytes <= limit) return;
-    if (await this.isEnforcing())
-      throw quotaExceeded({
-        meter: 'storage',
-        limit,
-        used: usedBytes,
-        needed: addedBytes,
-      });
-    this.logger.warn(
-      `Organization ${organizationId} is over its storage limit: ${usedBytes}+${addedBytes}/${limit}`,
-    );
+    return this.ledger.assertStorage(organizationId, bytes);
   }
 
   async snapshot(
@@ -350,12 +254,3 @@ export class QuotaService implements OnApplicationBootstrap {
     };
   }
 }
-
-/** 403 with an `issues[]` entry on the exhausted meter (`credits` or `storage`), so clients read it like a field error. */
-const quotaExceeded = (details: QuotaRefusal): AppError => {
-  const message = `The organization has no ${details.meter} left`;
-  return new AppError('quota_exceeded', 403, message, undefined, undefined, {
-    details,
-    issues: [{ field: details.meter, code: 'quota_exceeded', message }],
-  });
-};

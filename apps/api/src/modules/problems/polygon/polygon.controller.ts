@@ -5,6 +5,7 @@ import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, Paginated } from '@libs/common';
 import { PolygonClient } from '@libs/problems';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
+import { ProblemImportsService } from '../imports/problem-imports.service';
 import { PolygonProblemResponse } from './dto/polygon-problem.response';
 import {
   PolygonLinkImportDto,
@@ -17,8 +18,8 @@ import { PolygonLinkImportService } from './polygon-link-import.service';
 import { PolygonLinkResolver } from './polygon-link-resolver.service';
 import { PolygonSyncHistoryService } from './polygon-sync-history.service';
 
+/** Status, resolve and import also serve organization problem creators (see `ProblemImportsService.assertMayImport`); every other route needs `judge.import_polygon_package`. */
 @ApiTags('Problem editing')
-@RequirePermission('judge.import_polygon_package')
 @Controller('api/internal/polygon')
 export class PolygonController {
   constructor(
@@ -26,19 +27,23 @@ export class PolygonController {
     private readonly resolver: PolygonLinkResolver,
     private readonly linkImports: PolygonLinkImportService,
     private readonly history: PolygonSyncHistoryService,
+    private readonly imports: ProblemImportsService,
   ) {}
 
   /**
    * Get whether the Polygon account is connected
    *
    * @remarks
-   * Needs `judge.import_polygon_package`. `connected` is true when both the API
+   * Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). `connected` is true when both the API
    * key and secret are set in the admin settings; `accountName` is the Polygon
    * login setters add as a READ co-author (empty when unset). No call to Polygon
    * is made. The secret is never returned.
    */
   @Get('status')
-  status(): PolygonStatusResponse {
+  async status(
+    @CurrentAuth() auth: AuthContext,
+  ): Promise<PolygonStatusResponse> {
+    await this.imports.assertMayImport(auth.principal);
     return {
       connected: this.polygon.isConnected(),
       accountName: this.polygon.accountName(),
@@ -49,7 +54,7 @@ export class PolygonController {
    * Check a Polygon problem link and preview the problem
    *
    * @remarks
-   * Needs `judge.import_polygon_package`. The body takes the problem page
+   * Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). The body takes the problem page
    * address, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is
    * the permission: the server finds `owner/name` among the problems shared
    * with the QHHOJ account and compares the token with the `<problem url>` of
@@ -66,10 +71,11 @@ export class PolygonController {
    */
   @Post('resolve')
   @HttpCode(200)
-  resolve(
+  async resolve(
     @CurrentAuth() auth: AuthContext,
     @Body() { link }: PolygonProblemLinkDto,
   ): Promise<PolygonProblemResponse> {
+    await this.imports.assertMayImport(auth.principal);
     return this.resolver.preview(auth, link);
   }
 
@@ -85,6 +91,7 @@ export class PolygonController {
    * Paged, default 20 per page (max 100). Errors: 403 `forbidden`.
    */
   @ApiPaginatedResponse(PolygonSyncRunResponse)
+  @RequirePermission('judge.import_polygon_package')
   @Get('syncs')
   syncs(
     @CurrentAuth() auth: AuthContext,
@@ -97,8 +104,10 @@ export class PolygonController {
    * Import a Polygon problem and link it
    *
    * @remarks
-   * Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a
-   * problem or write access to the problem to update it. The body takes the
+   * The rights of the zip import (`POST /problems/imports`): an organization
+   * problem creator without `judge.import_polygon_package` may only create
+   * for an organization, and may not turn on `autoSync` (403 `forbidden`; a
+   * sync needs that permission). The body takes the
    * problem `link` (checked again as on `POST /polygon/resolve`, with the same
    * errors), the zip import's options (`code`, `mode`, `organization`,
    * authors, curators, group, types, points, statement languages, zero-point

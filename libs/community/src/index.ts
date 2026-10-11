@@ -4,6 +4,8 @@ export * from './interaction';
 export * from './user-data';
 export * from './queues';
 export * from './discord';
+export * from './discord-webhooks.service';
+export * from './discord-webhooks.module';
 export * from './comments';
 export * from './blog-posts';
 export * from './contribution';

@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
 import { CommentsApiModule } from '../comments/comments-api.module';
-import { DiscordModule } from '../discord/discord.module';
+import { DiscordWebhooksModule } from '@libs/community';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
@@ -26,7 +26,7 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
     CommentsApiModule,
     OrganizationsApiModule,
     ContributionsModule,
-    DiscordModule,
+    DiscordWebhooksModule,
     ProblemsApiModule,
   ],
   controllers: [

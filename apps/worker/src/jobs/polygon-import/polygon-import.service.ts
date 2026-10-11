@@ -33,6 +33,7 @@ import { ImportTracker } from './import-tracker';
 import { PandocService } from './pandoc.service';
 import { parseAssets } from './polygon-assets';
 import type { PolygonAssets } from './polygon-assets';
+import { ImportQuota } from './import-quota.service';
 import { PolygonImportError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
 import type {
@@ -104,6 +105,7 @@ export class PolygonImportService {
     private readonly repository: PolygonImportRepository,
     private readonly polygon: PolygonClient,
     private readonly standardTests: StandardPackageTests,
+    private readonly quota: ImportQuota,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
     @InjectQueue(PROBLEM_RESCORE_QUEUE)
     private readonly rescoreQueue: Queue<ProblemRescoreJob>,
@@ -120,7 +122,10 @@ export class PolygonImportService {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
       await this.repository.assertFullMarkupWriter(job);
-      if (job.polygon) await this.download(jobId, job.polygon, tracker);
+      if (job.polygon) {
+        await this.download(jobId, job.polygon, tracker);
+        await this.quota.assertPackageFits(job, packagePath);
+      }
       return await this.importPackage(packagePath, job, target, tracker);
     } finally {
       await rm(packagePath, { force: true });

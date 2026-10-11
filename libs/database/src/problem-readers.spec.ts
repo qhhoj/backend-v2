@@ -128,6 +128,14 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     "a user's data export still lists their submissions with the problem code",
   ],
+  'libs/problems/src/quota/organization-storage.ts': [
+    'S',
+    'the storage meter counts deleted-but-not-purged problems: their data is still on disk',
+  ],
+  'libs/problems/src/quota/quota-ledger.service.ts': [
+    'S',
+    'reads only through organization-storage.ts for the storage meter, deleted problems included',
+  ],
 };
 
 /** Calls that take `'problems'` first but name a field, a feed type or a route, not the collection. */

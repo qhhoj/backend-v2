@@ -4,7 +4,7 @@ import { AppError, RateLimitService } from '@libs/common';
 import { newTicketDescription, problemPath, ticketPath } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
-import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
+import { DiscordWebhooksService } from '@libs/community';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { renderField } from '../../problems/editing/problem-markup';

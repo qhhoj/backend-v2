@@ -88,7 +88,25 @@ export class OrganizationCreationRights {
     return first === undefined ? null : (slugById.get(first) ?? null);
   }
 
-  /** What the session reports, given whether the viewer administers any organization (`OrganizationsService.administersAny`): site-wide creation is the global permission, organization creation an administered organization plus the organization permission. */
+  /** Whether the viewer may administer at least one live organization (an admin of one, or `judge.edit_all_organization`). */
+  async administersAny(principal: Principal): Promise<boolean> {
+    const filter = OrganizationAccess.administeredFilter(principal);
+    if (filter === null) return false;
+    if (Object.keys(filter).length === 0) return true;
+    return (
+      (await this.organizations.exists({ $and: [filter, LIVE] }).exec()) !==
+      null
+    );
+  }
+
+  /** Whether the viewer may create problems for at least one organization: the session's `problemCreation.organizations`. */
+  async createsOrganizationProblems(principal: Principal): Promise<boolean> {
+    if (!hasPermission(principal, 'judge.create_organization_problem'))
+      return false;
+    return this.administersAny(principal);
+  }
+
+  /** What the session reports, given whether the viewer administers any organization (`administersAny`): site-wide creation is the global permission, organization creation an administered organization plus the organization permission. */
   scopes(
     principal: Principal,
     administers: boolean,

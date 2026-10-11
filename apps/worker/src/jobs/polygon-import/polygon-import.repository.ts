@@ -1,3 +1,4 @@
+import type { AnnouncedProblem } from '@libs/community';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { buildPrincipal, hasPermission, permissionsOf } from '@libs/auth';
@@ -59,6 +60,15 @@ const definedOnly = <Fields extends object>(fields: Fields): Fields =>
   Object.fromEntries(
     Object.entries(fields).filter(([, value]) => value !== undefined),
   ) as Fields;
+
+const ANNOUNCED_FIELDS = {
+  code: 1,
+  name: 1,
+  description: 1,
+  timeLimit: 1,
+  memoryLimit: 1,
+  points: 1,
+};
 
 /** The revision's view of a problem: editable source only, never rendered HTML. */
 const summaryOf = (problem: Partial<Problem>) => ({
@@ -194,6 +204,23 @@ export class PolygonImportRepository {
       throw new PolygonImportError(
         'the linking user may no longer sync this problem',
       );
+  }
+
+  /** What the new-problem announcement shows, and the creator's username; null when either is gone. */
+  async announcementOf(
+    problemId: string,
+    requesterId: string,
+  ): Promise<{ problem: AnnouncedProblem; username: string } | null> {
+    const [problem, requester] = await Promise.all([
+      this.problems
+        .findById(problemId, ANNOUNCED_FIELDS)
+        .lean<AnnouncedProblem>()
+        .exec(),
+      this.users.findById(requesterId, { username: 1 }).lean().exec(),
+    ]);
+    return problem && requester
+      ? { problem, username: requester.username }
+      : null;
   }
 
   /** The editor's rule: statement text on a full-markup problem needs `judge.problem_full_markup` from the person who started the import. */

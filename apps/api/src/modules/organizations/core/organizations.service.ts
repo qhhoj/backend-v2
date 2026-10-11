@@ -62,15 +62,6 @@ export class OrganizationsService {
     return organization;
   }
 
-  /** Whether the viewer may administer at least one organization (an admin of one, or `edit_all_organization`). */
-  async administersAny(principal: Principal): Promise<boolean> {
-    const filter = OrganizationAccess.administeredFilter(principal);
-    if (filter === null) return false;
-    return (
-      Object.keys(filter).length === 0 || this.organizations.exists(filter)
-    );
-  }
-
   /** Legacy `OrganizationList`, plus the viewer's own unlisted ones. Search and flags only narrow what the viewer may already list. */
   async list(
     principal: Principal | null,
