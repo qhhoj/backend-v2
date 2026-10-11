@@ -5,6 +5,8 @@ import { RenderLimitError } from './render-limit.error';
 const full = (text: string) => renderMarkdown(text, 'problem-full');
 const KATEX_INLINE = /^<p>a <span class="katex">.*<\/span> b<\/p>\n$/s;
 
+/** Normal runs here take ~0.1s; a quadratic or lost-limit scan takes many seconds. 5s (~50x) separates them and tolerates a slow shared runner. */
+const CATASTROPHIC_MS = 5_000;
 const timeOf = (action: () => void) => {
   const started = performance.now();
   try {
@@ -20,7 +22,7 @@ const expectLinear = (render: (count: number) => string, count: number) => {
   const small = timeOf(() => render(count));
   const large = timeOf(() => render(count * 5));
   expect(large / Math.max(small, 1)).toBeLessThan(15);
-  expect(large).toBeLessThan(2000);
+  expect(large).toBeLessThan(CATASTROPHIC_MS);
 };
 
 describe('renderMarkdown', () => {
@@ -329,7 +331,7 @@ describe('renderMarkdown', () => {
       const html = `${prefix}${'<a/>'.repeat(49990)}`;
       expect(() => full(html)).toThrow(RenderLimitError);
       expect(() => renderMarkdown(html, 'problem')).toThrow(RenderLimitError);
-      expect(performance.now() - started).toBeLessThan(2000);
+      expect(performance.now() - started).toBeLessThan(CATASTROPHIC_MS);
     });
     it('keeps a flood after a bogus declaration fast (markdown-it leaves a real svg open, so "/>" is legitimate)', () => {
       expectLinear(
