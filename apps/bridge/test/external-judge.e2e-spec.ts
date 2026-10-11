@@ -13,13 +13,17 @@ import {
   seedCatalog,
   seedProblem,
   seedSubmission,
-  waitUntil,
+  waitUntil as waitWithin,
 } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
 import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 const BASE_URL = 'https://pcd.test';
+/** CI runs several suites against one Mongo: a claim or poll can take seconds there. */
+const SETTLE_MS = 15_000;
+const waitUntil = (condition: () => Promise<boolean>) =>
+  waitWithin(condition, SETTLE_MS);
 const TOKEN = 'pcd-token';
 const PROCESSING = { systemStatus: 'polling', processing: true };
 const done = (fields: Record<string, unknown>) => ({
@@ -31,6 +35,8 @@ const done = (fields: Record<string, unknown>) => ({
 /** A PCD VJudge: numbered remote ids, and per remote id the status answers to give in turn (the last one repeats). */
 class FakePcd {
   submits: Record<string, unknown>[] = [];
+  /** Remote ids never repeat across tests, so a late poll of an earlier run never reads a later run's answers. */
+  private remoteIds = 0;
   answers = new Map<string, Response[]>();
   /** Status answers for the next remote id, as HTTP status + body. */
   script: [number, unknown][] = [[200, done({ statusCanonical: 'AC' })]];
@@ -59,7 +65,7 @@ class FakePcd {
     this.submits.push(
       JSON.parse(init.body as string) as Record<string, unknown>,
     );
-    const remoteId = `r-${this.submits.length}`;
+    const remoteId = `r-${(this.remoteIds += 1)}`;
     this.answers.set(
       remoteId,
       this.script.map(([status, body]) => json(status, body)),
@@ -129,7 +135,6 @@ describe('External judge adapter (bridge)', () => {
     pcd.script = [[200, done({ statusCanonical: 'AC' })]];
     pcd.submitStatus = 200;
     await settings().set('externalJudge.maxInFlight', 5, null);
-    await bridge.graded.obliterate({ force: true });
   });
   afterAll(async () => {
     await bridge.teardown();
@@ -317,6 +322,7 @@ describe('External judge adapter (bridge)', () => {
     pcd.script = [[200, PROCESSING]];
     const id = await submitTo(await externalProblem());
     await waitUntil(async () => (await stored(id)).status === 'G');
+    const firstRemoteId = (await externalRuns().findById(id).lean())?.remoteId;
     pcd.script = [[200, done({ statusCanonical: 'WA' })]];
     // what a rejudge writes, then its command
     await bridge.submissions.updateOne(
@@ -338,9 +344,9 @@ describe('External judge adapter (bridge)', () => {
       judgeGeneration: 2,
     });
     expect(pcd.submits).toHaveLength(2);
-    expect((await externalRuns().findById(id).lean())?.remoteId).toBe(
-      `r-${pcd.submits.length}`,
-    );
+    const run = await externalRuns().findById(id).lean();
+    expect(run).toMatchObject({ generation: 2 });
+    expect(run?.remoteId).not.toBe(firstRemoteId);
   });
 
   it('ends an aborted run as AB and stops polling it', async () => {
