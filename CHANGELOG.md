@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.6.1
+
+### Patch Changes
+
+- 7181efa: Polygon import and sync take only full packages (with the Linux variant); a standard-only package is refused with its id, revision and state instead of failing the download with HTTP 500.
+
 ## 2.6.0
 
 ### Minor Changes
