@@ -4,7 +4,7 @@ import { RateLimitService } from '@libs/common';
 import { BlogAccessModule } from '../blog/core/blog-access.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ContributionsModule } from '../contributions/contributions.module';
-import { DiscordModule } from '../discord/discord.module';
+import { DiscordWebhooksModule } from '@libs/community';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { TagsApiModule } from '../tags/tags-api.module';
 import { CommentLocksRepository } from './core/comment-locks.repository';
@@ -33,7 +33,7 @@ import { CommentVotesService } from './votes/comment-votes.service';
     ProblemsApiModule,
     TagsApiModule,
     ContributionsModule,
-    DiscordModule,
+    DiscordWebhooksModule,
   ],
   controllers: [
     CommentsController,

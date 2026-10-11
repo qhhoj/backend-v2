@@ -1,5 +1,6 @@
 import type { PolygonSyncStep, StatementLanguage } from '@libs/database';
 import type { PolygonSource } from './polygon/polygon-link';
+import type { SpentCharge } from './quota/quota.types';
 
 export const PDF_QUEUE = 'pdf-render';
 export const POLYGON_QUEUE = 'polygon-import';
@@ -39,6 +40,10 @@ export interface PolygonImportJob {
   points?: number;
   /** Create only: the organization the new problem is private to (api checked the creator's rights, code prefix and quota). */
   organizationId?: string;
+  /** Create only: the organization whose quota meters the import (`organizationId` unless the requester is a superuser). The worker checks a downloaded package against its storage. */
+  meteredOrganizationId?: string;
+  /** The credits the api spent when it queued the create; the worker gives them back if the import fails before its write committed. */
+  charge?: SpentCharge;
   /** Render style of the target problem (an update keeps the problem's flag). */
   isFullMarkup: boolean;
   /** Polygon statement language of the main statement; null = the only one. */

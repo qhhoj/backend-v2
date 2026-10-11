@@ -6,7 +6,7 @@ import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
-import { newId, PolygonSyncRun } from '@libs/database';
+import { newId, PolygonSyncRun, uuidStr } from '@libs/database';
 import type { PolygonLink } from '@libs/database';
 import {
   POLYGON_ERROR_PREFIX,
@@ -24,6 +24,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
+import { createOrganization } from './organization-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -695,6 +696,75 @@ describe('Polygon routes', () => {
       expect(dataOf(await get(links()).expect(200))).toMatchObject({
         latestPackage: null,
       });
+    });
+  });
+
+  describe('an organization problem creator without the import permission', () => {
+    let teacher: TestSession;
+    let organizationId: string;
+
+    beforeAll(async () => {
+      const teacherId = (
+        await createUserWith(api, 'polyteacher', {
+          permissions: [
+            'judge.create_organization_problem',
+            'judge.edit_own_problem',
+          ],
+        })
+      )._id;
+      teacher = await loginAs(api, teacherId);
+      organizationId = uuidStr(
+        (
+          await createOrganization(api, {
+            slug: 'thpt-poly',
+            adminIds: [teacherId],
+          })
+        )._id,
+      );
+    });
+
+    it('checks a link and imports it into the organization only', async () => {
+      sharedProblems();
+      await get(`${POLYGON}/status`, teacher).expect(200);
+      await post(`${POLYGON}/resolve`, { link: SUM_LINK }, teacher).expect(200);
+      await post(
+        `${POLYGON}/import`,
+        { link: SUM_LINK, code: 'site_sum' },
+        teacher,
+      )
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      const response = await post(
+        `${POLYGON}/import`,
+        { link: SUM_LINK, code: 'thptpoly_sum', organization: 'thpt-poly' },
+        teacher,
+      ).expect(202);
+      const job = await queue.getJob(dataOf<{ jobId: string }>(response).jobId);
+      expect(job?.data).toMatchObject({
+        code: 'thptpoly_sum',
+        mode: 'create',
+        organizationId,
+      });
+    });
+
+    it('may not turn on auto-sync or use the sync routes, which need judge.import_polygon_package', async () => {
+      sharedProblems();
+      await post(
+        `${POLYGON}/import`,
+        {
+          link: SUM_LINK,
+          code: 'thptpoly_auto',
+          organization: 'thpt-poly',
+          autoSync: true,
+        },
+        teacher,
+      )
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await get(`${POLYGON}/syncs`, teacher).expect(403);
+      await post('/api/internal/problems/any/polygon/sync', {}, teacher).expect(
+        403,
+      );
     });
   });
 });

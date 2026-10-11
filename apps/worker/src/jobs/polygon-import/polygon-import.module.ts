@@ -1,7 +1,14 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { JudgingModule, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
-import { PDF_QUEUE, POLYGON_QUEUE, ProblemFilesModule } from '@libs/problems';
+import { DiscordWebhooksModule } from '@libs/community';
+import {
+  PDF_QUEUE,
+  POLYGON_QUEUE,
+  ProblemFilesModule,
+  QuotaLedgerModule,
+} from '@libs/problems';
+import { ImportQuota } from './import-quota.service';
 import { PandocService } from './pandoc.service';
 import { PolygonImportProcessor } from './polygon-import.processor';
 import { PolygonImportRepository } from './polygon-import.repository';
@@ -15,6 +22,8 @@ import { TestGenerationService } from './test-generation.service';
   imports: [
     JudgingModule,
     ProblemFilesModule,
+    QuotaLedgerModule,
+    DiscordWebhooksModule,
     BullModule.registerQueue(
       { name: POLYGON_QUEUE },
       { name: PDF_QUEUE },
@@ -23,6 +32,7 @@ import { TestGenerationService } from './test-generation.service';
   ],
   providers: [
     PolygonImportProcessor,
+    ImportQuota,
     PolygonImportService,
     PolygonImportRepository,
     PolygonSyncRunsRepository,

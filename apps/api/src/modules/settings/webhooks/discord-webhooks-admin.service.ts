@@ -3,7 +3,7 @@ import { AppError, invalidField } from '@libs/common';
 import { discordWebhookUrl } from '@libs/community';
 import type { DiscordEvent } from '@libs/community';
 import { SettingError, SettingsService } from '@libs/settings';
-import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
+import { DiscordWebhooksService } from '@libs/community';
 import { WEBHOOK_SLOTS } from './dto/discord-webhook.dto';
 import type {
   DiscordWebhookResponse,

@@ -1,15 +1,14 @@
 import type { Principal } from '@libs/auth';
-import type { PolygonImportJob } from '@libs/problems';
 import { chargedOrganization } from '../../organizations/quota/quota-charge';
 
-/** The organization a Polygon import is charged to: the one a create names; null for an update, a site problem or a superuser. */
-export const chargedOrganizationOf = (
+/** The organization whose quota meters an import that creates a problem for `organizationId`: none for a site problem (null) or a superuser. */
+export const meteredOrganizationOf = (
   principal: Pick<Principal, 'isSuperuser'>,
-  job: Pick<PolygonImportJob, 'mode' | 'organizationId'>,
+  organizationId: string | null,
 ): string | null =>
-  job.mode === 'create' && job.organizationId
-    ? chargedOrganization(principal, {
+  organizationId === null
+    ? null
+    : chargedOrganization(principal, {
         isOrganizationPrivate: true,
-        organizations: [job.organizationId],
-      })
-    : null;
+        organizations: [organizationId],
+      });

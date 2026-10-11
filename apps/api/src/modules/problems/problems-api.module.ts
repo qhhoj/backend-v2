@@ -16,7 +16,7 @@ import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { OrganizationCreationModule } from '../organizations/creation/organization-creation.module';
 import { OrganizationQuotaModule } from '../organizations/quota/organization-quota.module';
-import { DiscordModule } from '../discord/discord.module';
+import { DiscordWebhooksModule } from '@libs/community';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
 import { LanguagesAdminService } from './catalog/languages-admin.service';
 import { LanguageUsageRepository } from './catalog/language-usage.repository';
@@ -96,7 +96,7 @@ const repositories = [
 @Module({
   imports: [
     ContestAccessModule,
-    DiscordModule,
+    DiscordWebhooksModule,
     OrganizationQuotaModule,
     OrganizationCreationModule,
     AuthModule,

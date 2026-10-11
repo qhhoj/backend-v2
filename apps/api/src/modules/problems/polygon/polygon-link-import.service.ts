@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { AppError } from '@libs/common';
 import { newId } from '@libs/database';
 import { PolygonClient, syncJobOf } from '@libs/problems';
 import type { ReadyPackage } from '@libs/problems';
@@ -28,6 +30,7 @@ export class PolygonLinkImportService {
     auth: AuthContext,
     { link, ...body }: PolygonLinkImportDto,
   ): Promise<ImportJobStartedResponse> {
+    assertMaySync(auth, body.autoSync);
     const job = await this.imports.prepare(auth, body);
     const { problem, latest } = await this.resolver.resolve(
       auth,
@@ -83,4 +86,17 @@ export class PolygonLinkImportService {
       await askPolygon(() => this.polygon.packages(polygonId)),
     );
   }
+}
+
+/** Auto-sync runs as the linking user and needs `judge.import_polygon_package` on every run (the worker re-checks it), so an organization creator without it may not turn it on. */
+function assertMaySync(auth: AuthContext, autoSync: boolean): void {
+  if (
+    autoSync &&
+    !hasPermission(auth.principal, 'judge.import_polygon_package')
+  )
+    throw new AppError(
+      'forbidden',
+      403,
+      'Auto-sync requires judge.import_polygon_package',
+    );
 }

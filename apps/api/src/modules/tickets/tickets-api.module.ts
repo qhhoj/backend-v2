@@ -4,7 +4,7 @@ import { RateLimitService } from '@libs/common';
 import { NotificationsModule } from '@libs/community';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
-import { DiscordModule } from '../discord/discord.module';
+import { DiscordWebhooksModule } from '@libs/community';
 import { EventsModule } from '../events/events.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { CannedRepliesController } from './canned/canned-replies.controller';
@@ -35,7 +35,7 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     AuthModule,
     ContestAccessModule,
     ContributionsModule,
-    DiscordModule,
+    DiscordWebhooksModule,
     EventsModule,
     NotificationsModule,
     ProblemsApiModule,

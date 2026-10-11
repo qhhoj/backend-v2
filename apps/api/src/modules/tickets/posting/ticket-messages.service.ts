@@ -4,7 +4,7 @@ import { AppError, RateLimitService } from '@libs/common';
 import { ticketMessageDescription, ticketPath } from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
 import type { TicketMessage } from '@libs/database';
-import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
+import { DiscordWebhooksService } from '@libs/community';
 import { renderField } from '../../problems/editing/problem-markup';
 import { TicketNotificationsService } from '../alerts/ticket-notifications.service';
 import type { TicketMessageResponse } from '../core/dto/ticket.response';

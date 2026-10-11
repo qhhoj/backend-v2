@@ -16,6 +16,7 @@ import type {
   SourceChecks,
 } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
+import { sumDataBytesByOrganization } from '@libs/problems';
 
 export type ProblemDocument = HydratedDocument<Problem>;
 
@@ -400,29 +401,10 @@ export class ProblemsRepository {
     return sums.get(organizationId) ?? 0;
   }
 
-  /** Bytes per organization over its private problems, grouped by the FIRST listed organization (the one charged). Deleted-but-not-purged problems count (the data is still on disk); a purged tombstone holds none. Organizations with nothing are absent from the map. */
-  async sumDataBytesByOrganization(
+  /** See `sumDataBytesByOrganization`: bytes per organization over its private problems, by the charged (first) organization. */
+  sumDataBytesByOrganization(
     organizationIds: readonly string[],
   ): Promise<Map<string, number>> {
-    const ids = organizationIds.map(toUuid);
-    const rows = await this.problems.aggregate<{ _id: unknown; bytes: number }>(
-      [
-        {
-          $match: {
-            isOrganizationPrivate: true,
-            purgedAt: null,
-            organizations: { $in: ids },
-          },
-        },
-        {
-          $group: {
-            _id: { $arrayElemAt: ['$organizations', 0] },
-            bytes: { $sum: '$dataBytes' },
-          },
-        },
-        { $match: { _id: { $in: ids } } },
-      ],
-    );
-    return new Map(rows.map((row) => [uuidStr(row._id), row.bytes]));
+    return sumDataBytesByOrganization(this.problems, organizationIds);
   }
 }

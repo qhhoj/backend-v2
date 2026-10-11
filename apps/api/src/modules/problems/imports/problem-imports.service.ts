@@ -28,7 +28,7 @@ import { QuotaService } from '../../organizations/quota/quota.service';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { assertOrganizationCodePrefix } from '../editing/organization-code-prefix';
 import { ImportJobResponse } from './dto/import-job.response';
-import { chargedOrganizationOf } from './import-charge';
+import { meteredOrganizationOf } from './import-charge';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { codeTakenError } from '../editing/problem-edit-fields';
 import { rejectFile, saveMultipartFile } from '../core/multipart';
@@ -38,6 +38,8 @@ import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from '../core/rate-limits';
+
+const IMPORT_PERMISSION = 'judge.import_polygon_package';
 
 /** A finished import job stays readable for a day, so the staff member can see its outcome. */
 const IMPORT_JOB_KEEP_SECONDS = 24 * 60 * 60;
@@ -88,9 +90,20 @@ export class ProblemImportsService {
     auth: AuthContext,
     query: PolygonImportQueryDto,
   ): Promise<PolygonImportJob> {
+    assertImportScope(auth.principal, query);
     const job = await this.resolveJob(auth, query);
     await this.policy.assertReferences(query);
     return job;
+  }
+
+  /** Who may use the import routes at all: `judge.import_polygon_package` holders, and organization problem creators (who may only create for an organization, see `assertImportScope`). */
+  async assertMayImport(principal: AuthContext['principal']): Promise<void> {
+    if (
+      hasPermission(principal, IMPORT_PERMISSION) ||
+      (await this.rights.createsOrganizationProblems(principal))
+    )
+      return;
+    throw new AppError('forbidden', 403, 'Permission denied');
   }
 
   /** One import of the user's hourly budget; a Polygon sync spends it too. */
@@ -102,17 +115,17 @@ export class ProblemImportsService {
     );
   }
 
-  /** A create for an organization spends the problem's credits here, refunded only when queueing fails: the worker has no quota service, so a job that fails later keeps them spent. */
+  /** A create for an organization spends the problem's credits here: refunded here when queueing fails, by the worker (`charge` in the job) when the import fails before it committed. */
   async enqueue(
     auth: AuthContext,
     jobId: string,
     job: PolygonImportJob,
   ): Promise<void> {
     await this.quota.charged(
-      chargedOrganizationOf(auth.principal, job),
+      job.meteredOrganizationId ?? null,
       { kind: 'problem', userId: auth.principal.userId, ref: job.code },
-      () =>
-        this.queue.add('import', job, {
+      (spent) =>
+        this.queue.add('import', spent ? { ...job, charge: spent } : job, {
           jobId,
           removeOnComplete: IMPORT_JOB_KEEP,
           removeOnFail: IMPORT_JOB_KEEP,
@@ -160,9 +173,11 @@ export class ProblemImportsService {
     }
     const organizationId = await this.creationTarget(principal, query);
     if (await this.isCodeTaken(query.code)) throw codeTakenError();
+    const metered = meteredOrganizationOf(principal, organizationId);
     return {
       ...options,
       ...(organizationId && { organizationId }),
+      ...(metered && { meteredOrganizationId: metered }),
       curators: unique([...(query.curators ?? []), principal.userId]),
       isFullMarkup: false,
     };
@@ -225,12 +240,9 @@ export class ProblemImportsService {
   ): Promise<void> {
     const packageBytes = (await stat(packagePath)).size;
     if (job.mode === 'create') {
-      await this.storage.assertFits(
-        chargedOrganizationOf(auth.principal, job),
-        {
-          addedBytes: packageBytes,
-        },
-      );
+      await this.storage.assertFits(job.meteredOrganizationId ?? null, {
+        addedBytes: packageBytes,
+      });
       return;
     }
     const problem = await this.store.writableProblem(auth.principal, job.code);
@@ -253,6 +265,20 @@ export class ProblemImportsService {
         : error;
     }
   }
+}
+
+/** Without `judge.import_polygon_package` an import may only create a problem for an organization; the organization's own rights are checked in `creationTarget`. */
+function assertImportScope(
+  principal: AuthContext['principal'],
+  query: PolygonImportQueryDto,
+): void {
+  if (hasPermission(principal, IMPORT_PERMISSION)) return;
+  if (query.mode === 'create' && query.organization !== undefined) return;
+  throw new AppError(
+    'forbidden',
+    403,
+    'Without judge.import_polygon_package an import can only create a problem for an organization',
+  );
 }
 
 /** The options every import job carries, as the user gave them. */

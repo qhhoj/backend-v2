@@ -14,7 +14,7 @@ import type { BlogPost } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { fieldDiff } from '@libs/problems';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
-import { DiscordWebhooksService } from '../../discord/discord-webhooks.service';
+import { DiscordWebhooksService } from '@libs/community';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
 import type { OrganizationDocument } from '../../organizations/core/organizations.repository';
 import { OrganizationsService } from '../../organizations/core/organizations.service';

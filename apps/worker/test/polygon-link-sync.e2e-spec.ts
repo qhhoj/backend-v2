@@ -2,15 +2,21 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Job, Queue } from 'bullmq';
 import type { Model } from 'mongoose';
-import { newId, PolygonSyncRun } from '@libs/database';
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
+import { DiscordWebhooksService } from '@libs/community';
+import { newId, OrganizationUsage, PolygonSyncRun } from '@libs/database';
 import {
   autoSyncJobId,
   POLYGON_ERROR_PREFIX,
   POLYGON_FETCH,
   POLYGON_QUEUE,
+  QUOTA_BACKFILL_DONE_KEY,
+  QuotaLedger,
 } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
 import { FakePolygon } from '@libs/problems/testing';
+import { ImportQuota } from '../src/jobs/polygon-import/import-quota.service';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { PolygonAutoSyncService } from '../src/jobs/polygon-autosync/polygon-autosync.service';
@@ -470,6 +476,104 @@ describe('Polygon link, sync and auto-sync', () => {
       } finally {
         await worker.setSetting('polygon.apiSecret', 'SECRET');
       }
+    });
+  });
+
+  describe('a create for an organization', () => {
+    let usage: Model<OrganizationUsage>;
+    let ledger: QuotaLedger;
+    let organizationId: string;
+    const announce = jest.fn(() => Promise.resolve());
+    const creditsUsed = async () =>
+      (await usage.findOne({ organization: organizationId }).lean())
+        ?.creditsUsed;
+    /** The api spent 10 credits when it queued the job. */
+    const chargedJob = async (code: string): Promise<PolygonImportJob> => {
+      const month = ledger.monthKeyOf(new Date());
+      await usage.updateOne(
+        { organization: organizationId, month },
+        { $inc: { creditsUsed: 10 } },
+        { upsert: true },
+      );
+      return {
+        ...linkJob(code, 10),
+        organizationId,
+        meteredOrganizationId: organizationId,
+        charge: {
+          organizationId,
+          month,
+          kind: 'problem',
+          amount: 10,
+          userId: requesterId,
+          ref: code,
+        },
+      };
+    };
+
+    beforeAll(async () => {
+      usage = worker.module.get(getModelToken(OrganizationUsage.name));
+      ledger = worker.module.get(QuotaLedger);
+      jest
+        .spyOn(worker.module.get(DiscordWebhooksService), 'announceNewProblem')
+        .mockImplementation(announce);
+      organizationId = (
+        await worker.organizations.create({
+          name: 'THPT A',
+          slug: 'thpt-a',
+          shortName: 'A',
+          quotaStorageBytes: 100,
+        })
+      )._id;
+      await worker.setSetting('quota.enforce', 'enforce');
+      await worker.module.get<Redis>(REDIS).set(QUOTA_BACKFILL_DONE_KEY, '1');
+    });
+    beforeEach(async () => {
+      announce.mockClear();
+      await usage.deleteMany({});
+    });
+    afterAll(() => jest.restoreAllMocks());
+
+    it('refuses a downloaded package over the storage limit, names the numbers and gives the credits back', async () => {
+      polygon.reply('problem.package', {
+        zip: buildPolygonPackage(fixtureNamed('Big')),
+      });
+      const { error, failedStep } = await runJob(await chargedJob('org_big'));
+      expect(error).toMatch(
+        /^polygon-import: the organization's storage is full: 0 of 100 bytes used, the package needs \d+ more$/,
+      );
+      expect(failedStep).toBe('downloading');
+      expect(await worker.problems.findOne({ code: 'org_big' })).toBeNull();
+      expect(await creditsUsed()).toBe(0);
+      expect(announce).not.toHaveBeenCalled();
+    });
+
+    it('creates the problem, keeps the credits spent and announces it as a new organization problem', async () => {
+      await worker.organizations.updateOne(
+        { _id: organizationId },
+        { quotaStorageBytes: null },
+      );
+      polygon.reply('problem.package', {
+        zip: buildPolygonPackage(fixtureNamed('Sum')),
+      });
+      const { error } = await runJob(await chargedJob('org_sum'));
+      expect(error).toBeNull();
+      expect(await creditsUsed()).toBe(10);
+      expect(announce).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'org_sum', name: 'Sum' }),
+        'create',
+        'setter',
+      );
+    });
+
+    it('gives the credits of one job back once, and none after the write committed', async () => {
+      const quota = worker.module.get(ImportQuota);
+      const job = await chargedJob('org_once');
+      await quota.refundFailed('job-a', job, 'tests');
+      await quota.refundFailed('job-a', job, 'tests');
+      expect(await creditsUsed()).toBe(0);
+      await chargedJob('org_once');
+      await quota.refundFailed('job-b', job, 'finishing');
+      expect(await creditsUsed()).toBe(10);
     });
   });
 });
