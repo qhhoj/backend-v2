@@ -15,6 +15,8 @@ export interface PreviewSource {
   title: string;
   /** HTML or plain text; the caller turns it into an excerpt. */
   text: string;
+  /** The page's own preview image (URL or site path); absent or empty for the site image. */
+  image?: string;
 }
 
 export interface UrlSource {
@@ -104,11 +106,22 @@ export class SeoRepository {
     const doc = await this.contestModel
       .findOne(
         { ...ContestAccess.visibleFilter(null), key },
-        { name: 1, summary: 1, descriptionHtml: 1 },
+        { name: 1, summary: 1, descriptionHtml: 1, ogImage: 1 },
       )
-      .lean<{ name: string; summary: string; descriptionHtml: string }>()
+      .lean<{
+        name: string;
+        summary: string;
+        descriptionHtml: string;
+        ogImage?: string;
+      }>()
       .exec();
-    return doc && { title: doc.name, text: doc.summary || doc.descriptionHtml };
+    return (
+      doc && {
+        title: doc.name,
+        text: doc.summary || doc.descriptionHtml,
+        image: doc.ogImage,
+      }
+    );
   }
 
   async post(id: string): Promise<PreviewSource | null> {

@@ -151,17 +151,21 @@ describe('FSO final judging', () => {
   it("waits for the end and honours autoJudge, except on an editor's request", async () => {
     const running = await fsoContest({ endTime: hours(1) });
     const live = await pending(running, 2);
+    const upcoming = await fsoContest({
+      startTime: hours(1),
+      endTime: hours(2),
+    });
+    const early = await pending(upcoming, 1);
     expect(await service.judgeFinal(running._id, { isManual: false })).toBe(0);
-    expect(await service.judgeFinal(running._id, { isManual: true })).toBe(0);
+    expect(await service.judgeFinal(upcoming._id, { isManual: true })).toBe(0);
     const manualOnly = await fsoContest({ formatConfig: { autoJudge: false } });
     const waiting = await pending(manualOnly, 2);
     await service.sweep();
-    expect(await statusesOf([...live.ids, ...waiting.ids])).toEqual([
-      'PD',
-      'PD',
-      'PD',
-      'PD',
-    ]);
+    expect(
+      await statusesOf([...live.ids, ...early.ids, ...waiting.ids]),
+    ).toEqual(['PD', 'PD', 'PD', 'PD', 'PD']);
+    expect(await service.judgeFinal(running._id, { isManual: true })).toBe(2);
+    expect(await statusesOf(live.ids)).toEqual(['QU', 'QU']);
     expect(await service.judgeFinal(manualOnly._id, { isManual: true })).toBe(
       2,
     );

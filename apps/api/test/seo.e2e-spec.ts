@@ -36,6 +36,7 @@ describe('sitemap and link previews', () => {
     });
     await createContest(api, { key: 'opencontest', name: 'Open Cup' });
     await createContest(api, { key: 'privcontest', isPrivate: true });
+    await createContest(api, { key: 'ogcontest', ogImage: '/media/og.png' });
     await createContest(api, { key: 'draftcontest', isVisible: false });
     const author = await createUserWith(api, 'author');
     await createUserWith(api, 'ghostuser', { isUnlisted: true });
@@ -111,6 +112,13 @@ describe('sitemap and link previews', () => {
     const post = await preview(`/blog/${posts[0]._id}`);
     expect(post).toContain('Public &lt;post&gt; - QHHOJ');
     expect(post).not.toContain('<post>');
+  });
+
+  it("uses a contest's own preview image, made absolute, instead of the site image", async () => {
+    const page = await preview('/contests/ogcontest');
+    expect(page).toMatch(/property="og:image" content="[^"]+\/media\/og\.png"/);
+    expect(page).not.toContain('/og-image.png');
+    expect(await preview('/contests/opencontest')).toContain('/og-image.png');
   });
 
   it('gives a private or unknown page the same generic tags as no page', async () => {

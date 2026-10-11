@@ -16,9 +16,12 @@ export class ContestTagResponse {
   description!: string;
   /** Sort position; lower comes first. */
   order!: number;
+  /** Contests carrying the tag, among those the viewer may see. */
+  contestCount!: number;
 
   static from(
     tag: Pick<ContestTag, 'slug' | 'name' | 'color' | 'description' | 'order'>,
+    contestCount = 0,
   ): ContestTagResponse {
     return {
       slug: tag.slug,
@@ -26,6 +29,7 @@ export class ContestTagResponse {
       color: tag.color,
       description: tag.description,
       order: tag.order,
+      contestCount,
     };
   }
 }

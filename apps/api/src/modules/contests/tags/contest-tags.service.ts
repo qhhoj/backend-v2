@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
+import { ContestAccess } from '../core/contest-access';
 import { ContestTagsQuerier } from './contest-tags.querier';
 import { ContestTagsRepository } from './contest-tags.repository';
 import { MAX_CONTEST_TAGS } from './dto/contest-tag.dto';
@@ -22,14 +23,18 @@ export class ContestTagsService {
     private readonly querier: ContestTagsQuerier,
   ) {}
 
-  list({
-    page,
-    pageSize,
-  }: ContestTagListQueryDto): Paginated<ContestTagResponse> {
+  /** Each tag counts only the contests the viewer may see, so a count never reveals a hidden contest. */
+  async list(
+    principal: Principal | null,
+    { page, pageSize }: ContestTagListQueryDto,
+  ): Promise<Paginated<ContestTagResponse>> {
     const ordered = this.querier.ordered();
+    const counts = await this.tags.countsBySlug(
+      ContestAccess.visibleFilter(principal),
+    );
     const items = ordered
       .slice((page - 1) * pageSize, page * pageSize)
-      .map((tag) => ContestTagResponse.from(tag));
+      .map((tag) => ContestTagResponse.from(tag, counts.get(tag.slug) ?? 0));
     return new Paginated(items, { page, pageSize, total: ordered.length });
   }
 
@@ -42,13 +47,17 @@ export class ContestTagsService {
   }
 
   async update(
+    principal: Principal,
     slug: string,
     dto: UpdateContestTagDto,
   ): Promise<ContestTagResponse> {
     const tag = await this.tags.updateBySlug(slug, dto);
     if (!tag) throw noSuchTag();
     await this.querier.resync();
-    return ContestTagResponse.from(tag);
+    const contestCount = await this.tags.countMatching({
+      $and: [ContestAccess.visibleFilter(principal), { tags: slug }],
+    });
+    return ContestTagResponse.from(tag, contestCount);
   }
 
   /** Contests keep the slug and show a neutral chip; the log line records who deleted what. */

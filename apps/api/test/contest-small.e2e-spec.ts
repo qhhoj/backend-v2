@@ -101,7 +101,13 @@ afterAll(() => api.teardown());
       expect(await jobIds()).toEqual([]);
     });
 
-    it("judges on an editor's request once an FSO contest ended", async () => {
+    it("judges on an editor's request once an FSO contest started", async () => {
+      const upcoming = await createContest(api, {
+        formatName: 'final_submission',
+        authors: [editorId],
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+      });
       const running = await createContest(api, {
         formatName: 'final_submission',
         authors: [editorId],
@@ -119,13 +125,15 @@ afterAll(() => api.teardown());
       });
       const request = (key: string, session: TestSession) =>
         authed(api.http().post(contestUrl(key, '/judge-final')), session);
-      await request(running.key, editor).expect(409);
+      await request(upcoming.key, editor).expect(409);
       await request(other.key, editor).expect(409);
       await request(ended.key, plain).expect(403);
+      await request(running.key, editor).expect(202);
       await request(ended.key, editor).expect(202);
-      expect((await queue.getJobs(['waiting'])).map((job) => job.data)).toEqual(
-        [{ contestId: ended._id, manual: true }],
-      );
+      expect(
+        (await queue.getJobs(['waiting'])).map((job) => job.data.contestId),
+      ).toEqual(expect.arrayContaining([running._id, ended._id]));
+      expect(await queue.getJobs(['waiting'])).toHaveLength(2);
     });
   });
 }

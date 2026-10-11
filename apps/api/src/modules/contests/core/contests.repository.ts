@@ -9,6 +9,7 @@ import {
   ContestSubmission,
   isUuid,
   Submission,
+  toUuid,
   uuidStr,
 } from '@libs/database';
 import { JUDGEABLE_PENDING } from '@libs/judging';
@@ -221,7 +222,26 @@ export class ContestsRepository {
       .exec();
   }
 
-  /** Legacy `set_locked_after`: the lock is copied onto every live submission of the contest, a chunk at a time. */
+  /** Per contest id, the submissions final judging would still requeue; contests with none are left out. One aggregate for a whole list page. */
+  async pendingCountsOf(
+    contestIds: readonly string[],
+  ): Promise<Map<string, number>> {
+    if (contestIds.length === 0) return new Map();
+    const rows = await this.submissions
+      .aggregate<{ _id: unknown; count: number }>([
+        {
+          $match: {
+            contest: { $in: contestIds.map(toUuid) },
+            ...JUDGEABLE_PENDING,
+          },
+        },
+        { $group: { _id: '$contest', count: { $sum: 1 } } },
+      ])
+      .exec();
+    return new Map(rows.map((row) => [uuidStr(row._id), row.count]));
+  }
+
+  /** Legacy `set_locked_after`:the lock is copied onto every live submission of the contest, a chunk at a time. */
   async propagateLock(
     contestId: string,
     lockedAfter: Date | null,
