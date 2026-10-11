@@ -35,7 +35,7 @@ export class ContestSubmissionsService {
         viewer,
       )
     )
-      return this.submissions.list(principal, query, contestId);
+      return this.submissions.list(principal, query, { contestId });
     if (
       !principal ||
       (query.user !== undefined && query.user !== principal.username)
@@ -48,7 +48,7 @@ export class ContestSubmissionsService {
     return this.submissions.list(
       principal,
       { ...query, user: principal.username },
-      contestId,
+      { contestId },
     );
   }
 }

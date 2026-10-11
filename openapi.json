@@ -29328,6 +29328,156 @@
         "x-enveloped": true
       }
     },
+    "/api/internal/organizations/{slug}/submissions": {
+      "get": {
+        "description": "Members, administrators and holders of `judge.view_all_submission` only\n(403 `forbidden`). Returns the members' submissions newest first, with\nthe filters and visibility rules of the site's submission list: only\nproblems the viewer may see, and other users' submissions of a contest\nwhose list is closed to the viewer are left out.",
+        "operationId": "OrganizationSubmissionsController_list",
+        "parameters": [
+          {
+            "description": "Slug of the organization.",
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number, from 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Items per page, 1 to 100.",
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Only submissions with these verdicts (`AC`, `WA`, `TLE`, ...); repeat the parameter. `IE`, `SC` are staff only.",
+            "in": "query",
+            "name": "result",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SubmissionResult"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Only submissions in these judging states (`QU`, `P`, `G`, `D`, `IE`, `CE`, `AB`, `PD`); repeat the parameter. `IE`, `QU`, `P`, `G`, `D` are staff only.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SubmissionStatus"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Username.",
+            "in": "query",
+            "name": "user",
+            "required": false,
+            "schema": {
+              "maxLength": 30,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Problem code.",
+            "in": "query",
+            "name": "problem",
+            "required": false,
+            "schema": {
+              "maxLength": 32,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Language ids; repeat the parameter.",
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 50,
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/SubmissionListItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the submissions of an organization's members",
+        "tags": [
+          "Organizations"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/organizations/{slug}/usage": {
       "get": {
         "description": "Organization administrators only. Returns the current month's credits and\nstorage against the organization's limits, whether quotas are enforced,\nand the most recent credit entries with the users who spent them.",

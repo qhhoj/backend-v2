@@ -43,6 +43,12 @@ export type SubmissionFilters = Pick<
   'user' | 'problem' | 'language'
 > & { result?: readonly string[]; status?: readonly string[] };
 
+/** What a list is narrowed to beyond the viewer's filters: one contest's submissions, or those of a set of users (an organization's members). */
+export interface ListScope {
+  contestId?: string;
+  userIds?: readonly string[];
+}
+
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
 
 /** What a deleted problem's submission shows of its cases: nothing. */
@@ -80,11 +86,11 @@ export class SubmissionsService {
     return this.currentContest.scopeOf(principal);
   }
 
-  /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see; with `contestId`, only that contest's submissions, on any of its problems (legacy `ForceContestMixin` skips the problem filter, the contest's access check stands in for it). */
+  /** Legacy `SubmissionsListBase`: only submissions on problems the viewer can see; with `scope.contestId`, only that contest's submissions, on any of its problems (legacy `ForceContestMixin` skips the problem filter, the contest's access check stands in for it); with `scope.userIds`, only those users' submissions, under the same visibility rules. */
   async list(
     principal: Principal | null,
     query: SubmissionListQueryDto,
-    contestId?: string,
+    scope: ListScope = {},
   ): Promise<Paginated<SubmissionListItemResponse>> {
     const staffOnly = staffOnlyFilter(principal, query);
     if (staffOnly)
@@ -95,8 +101,8 @@ export class SubmissionsService {
     const filter = await this.filterFor(
       principal,
       query,
-      contestId === undefined ? await this.viewerScope(principal) : null,
-      contestId,
+      scope.contestId === undefined ? await this.viewerScope(principal) : null,
+      scope,
     );
     if (!filter) return new Paginated([], { ...meta, total: 0 });
     const { items, total } = await this.submissions.list(
@@ -398,7 +404,7 @@ export class SubmissionsService {
     principal: Principal | null,
     filters: SubmissionFilters,
     scope: ContestScope | null,
-    contestId?: string,
+    { contestId, userIds }: ListScope = {},
   ): Promise<FilterQuery<Submission> | null> {
     const problemClauses = await this.problemClauses(
       principal,
@@ -411,6 +417,7 @@ export class SubmissionsService {
     if (!userClauses) return null;
     const clauses: FilterQuery<Submission>[] = [
       ...(contestId === undefined ? [] : [{ contest: contestId }]),
+      ...(userIds === undefined ? [] : [{ user: { $in: userIds } }]),
       ...problemClauses,
       ...userClauses,
       ...valueClauses(filters),
