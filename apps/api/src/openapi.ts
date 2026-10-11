@@ -66,7 +66,7 @@ export const API_SECTIONS: ReadonlyArray<
   ],
   [
     'Admin: site & settings',
-    'Staff tools for site settings, navigation, public config and static pages.',
+    'Staff tools for site settings, public config and static pages.',
   ],
   [
     'Admin: judges & languages',

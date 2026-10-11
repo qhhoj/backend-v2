@@ -19,7 +19,7 @@ export class SiteController {
    * Get the site shell data
    *
    * @remarks
-   * Public. Returns what the web app needs on every load: the navigation bar entries (hidden ones included, flagged), the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.
+   * Public. Returns what the web app needs on every load: the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.
    */
   @Header('Cache-Control', 'private, max-age=60')
   @Get()

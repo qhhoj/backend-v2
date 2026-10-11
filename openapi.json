@@ -37245,7 +37245,7 @@
     },
     "/api/internal/site": {
       "get": {
-        "description": "Public. Returns what the web app needs on every load: the navigation bar entries (hidden ones included, flagged), the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.",
+        "description": "Public. Returns what the web app needs on every load: the public misc config key/values, and whether official contest mode is on with its end time. Cached privately for 60 seconds.",
         "operationId": "SiteController_site",
         "parameters": [],
         "responses": {
@@ -40571,7 +40571,7 @@
       "name": "Admin: users"
     },
     {
-      "description": "Staff tools for site settings, navigation, public config and static pages.",
+      "description": "Staff tools for site settings, public config and static pages.",
       "name": "Admin: site & settings"
     },
     {

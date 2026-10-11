@@ -2,14 +2,14 @@ import type { OutgoingHttpHeaders } from 'node:http';
 import type { FastifyReply } from 'fastify';
 
 /** `X-Accel-Buffering: no` keeps nginx from holding events back. */
-export const SSE_HEADERS = {
+const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',
   'Cache-Control': 'no-cache, no-transform',
   Connection: 'keep-alive',
   'X-Accel-Buffering': 'no',
 } as const;
 /** EventSource waits this long before reconnecting. */
-export const RECONNECT_DELAY_MS = 3000;
+const RECONNECT_DELAY_MS = 3000;
 /** A comment line: keeps proxies from closing an idle stream and finds dead sockets. */
 export const HEARTBEAT_FRAME = ': ping\n\n';
 

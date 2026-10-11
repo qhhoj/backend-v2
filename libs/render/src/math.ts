@@ -31,9 +31,9 @@ export type MathBudget = {
   outputBytes: number;
   limitReported: boolean;
 };
-export const MAX_FORMULAS = 2000;
-export const MAX_FORMULA_LENGTH = 1000;
-export const MAX_MATH_OUTPUT_BYTES = 1.5 * 1024 * 1024;
+const MAX_FORMULAS = 2000;
+const MAX_FORMULA_LENGTH = 1000;
+const MAX_MATH_OUTPUT_BYTES = 1.5 * 1024 * 1024;
 /** Total KaTeX time one user-authored render may spend; the first formula past it is a `math-error`, later ones show as source. */
 export const MAX_USER_MATH_MILLISECONDS = 500;
 const USER_MAX_EXPAND = 50;
@@ -100,7 +100,7 @@ const emsOf = ({ number, unit }: Measurement) =>
  * a `\def`'d 20-cell array used 48 times 5761; just under the cap `x` × 19k is ~250 ms (550 ms cold), `\sqrt{x}` × 5000 ~350 ms and a 6 MB string (then refused by the output cap);
  * `x` × 38k–43k objects (48 expansions of an 800–900-letter `\def`) took 1.4–2.7 s.
  */
-export const MAX_USER_FORMULA_NODES = 20_000;
+const MAX_USER_FORMULA_NODES = 20_000;
 type TreeWalk = { nodes: number };
 /** Why a user formula's parse tree is refused (too many objects, a dimension or `\arraystretch` beyond ±`USER_MAX_SIZE`), or undefined; stops at the first breach. */
 const refusalIn = (node: unknown, walk: TreeWalk): string | undefined => {

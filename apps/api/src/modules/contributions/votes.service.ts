@@ -10,7 +10,7 @@ import { VOTE_LIMIT, VOTE_WINDOW_SECONDS } from './rate-limits';
 import { VotesRepository } from './votes.repository';
 import type { VoteTarget } from './votes.repository';
 
-export interface VoteRequest {
+interface VoteRequest {
   target: VoteTarget;
   targetId: string;
   /** Authors of the target: they cannot vote on it, and their contribution follows its score. */

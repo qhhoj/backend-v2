@@ -16,11 +16,11 @@ import type { HomeResponse, HomeUserResponse } from './dto/home.response';
 import { HomeRepository } from './home.repository';
 
 /** Legacy `DMOJ_BLOG_NEW_PROBLEM_COUNT` and `VNOJ_HOMEPAGE_TOP_USERS_COUNT`. */
-export const HOME_NEW_PROBLEMS = 7;
-export const HOME_TOP_USERS = 5;
+const HOME_NEW_PROBLEMS = 7;
+const HOME_TOP_USERS = 5;
 /** Only the signed-out slice is shared; a signed-in viewer's depends on what they may read. */
-export const ANONYMOUS_RECENT_COMMENTS_KEY = 'home:recent-comments';
-export const ANONYMOUS_RECENT_COMMENTS_SECONDS = 60;
+const ANONYMOUS_RECENT_COMMENTS_KEY = 'home:recent-comments';
+const ANONYMOUS_RECENT_COMMENTS_SECONDS = 60;
 
 @Injectable()
 export class HomeService {

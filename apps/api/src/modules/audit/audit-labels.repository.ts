@@ -17,7 +17,7 @@ import {
   uuidStr,
 } from '@libs/database';
 
-export interface ObjectLabel {
+interface ObjectLabel {
   label: string | null;
   deleted: boolean;
 }

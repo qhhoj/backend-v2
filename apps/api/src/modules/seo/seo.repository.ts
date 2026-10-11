@@ -19,7 +19,7 @@ export interface PreviewSource {
   image?: string;
 }
 
-export interface UrlSource {
+interface UrlSource {
   path: string;
 }
 
