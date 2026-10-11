@@ -1,5 +1,11 @@
 import type { User } from '@libs/database';
-import { createContest, contestUrl } from './contest-fixtures';
+import {
+  contestUrl,
+  createContest,
+  hoursFromNow,
+  joinParticipation,
+  makeCurrent,
+} from './contest-fixtures';
 import { createOrganization, organizationUrl } from './organization-fixtures';
 import {
   authed,
@@ -116,6 +122,32 @@ describe('admin access for authors who are not staff', () => {
         'others_public',
       ]);
       expect(listed(await list('nobody', true), 'code')).toEqual([]);
+    });
+
+    it('the editable index ignores a contest the author is waiting in', async () => {
+      const waiting = await createContest(api, {
+        key: 'not_started',
+        startTime: hoursFromNow(1),
+        endTime: hoursFromNow(3),
+      });
+      const participation = await joinParticipation(
+        api,
+        waiting._id,
+        ids.author,
+      );
+      await makeCurrent(api, ids.author, participation._id);
+      try {
+        const response = await authed(
+          api
+            .http()
+            .get(PROBLEMS)
+            .query({ visibility: 'all', editable: 'true' }),
+          sessions.author,
+        ).expect(200);
+        expect(listed(response, 'code')).toEqual(['own_private']);
+      } finally {
+        await makeCurrent(api, ids.author, null);
+      }
     });
   });
 

@@ -359,11 +359,12 @@ export class ProblemsService {
     principal: Principal | null,
     query: ProblemFilterQueryDto,
   ): Promise<FilterQuery<Problem>> {
+    // An editor edits outside any contest (`editableProblem`), so the editable index ignores the current contest's scope.
+    const scope = query.editable
+      ? null
+      : await this.currentContest.scopeOf(principal);
     const clauses: FilterQuery<Problem>[] = [
-      ProblemAccess.visibleFilter(
-        principal,
-        await this.currentContest.scopeOf(principal),
-      ),
+      ProblemAccess.visibleFilter(principal, scope),
     ];
     if (query.visibility !== 'all')
       clauses.push({ isPublic: query.visibility === 'public' });
