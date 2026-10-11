@@ -12,6 +12,9 @@ import { validationPipe } from './pipes/validation.pipe';
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/** Legacy `SUBMISSION_FILE_UPLOAD_MEDIA_DIR`: file-only submissions live at `<dir>/<problem code>/<user id>/<random>.<extension>` under the media root; the api writes them, the bridge reads them. */
+export const SUBMISSION_FILE_DIR = 'submission_file';
+
 /** Nest's ValidationPipe recurses over the body and overflows the stack on hostile nesting; no endpoint needs this depth. */
 const MAX_BODY_DEPTH = 32;
 

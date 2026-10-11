@@ -8,7 +8,7 @@ import type { ReadStream } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { ENV, MAX_UPLOAD_BYTES } from '@libs/common';
+import { ENV, MAX_UPLOAD_BYTES, SUBMISSION_FILE_DIR } from '@libs/common';
 import type { Env } from '@libs/common';
 import { isUuid } from '@libs/database';
 import type {
@@ -113,7 +113,7 @@ export class SourceFetch {
   ): Promise<{ handle: FileHandle; size: number } | null> {
     const missing = () => null;
     const root = await realpath(
-      join(this.env.mediaRoot, 'submission_file'),
+      join(this.env.mediaRoot, SUBMISSION_FILE_DIR),
     ).catch(missing);
     const parent = await realpath(dirname(path)).catch(missing);
     if (!root || !parent?.startsWith(`${root}/`)) return null;

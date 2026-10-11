@@ -11,6 +11,7 @@ import {
   RateLimitService,
   REDIS,
   StorageService,
+  SUBMISSION_FILE_DIR,
   validationPipe,
   withRedisLock,
 } from '@libs/common';
@@ -34,7 +35,7 @@ import { readMultipartForm } from '../../problems/core/multipart';
 import { SUBMIT_FILE_FIELDS, SubmitFileDto } from './dto/submit-file.dto';
 import type { SubmitDto } from './dto/submit.dto';
 import type { SubmitResponse } from './dto/submit.response';
-import { SUBMISSION_FILE_DIR, submittedFile } from './submission-file';
+import { submittedFile } from './submission-file';
 import {
   SUBMIT_LIMIT,
   SUBMIT_WINDOW_SECONDS,
