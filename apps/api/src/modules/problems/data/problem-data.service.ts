@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
 import { AppError, invalidField } from '@libs/common';
 import type { DataFileKind } from '@libs/database';
-import { ProblemDataFilesService } from '@libs/problems';
+import {
+  checkerArgsProblem,
+  graderArgsProblem,
+  ProblemDataFilesService,
+} from '@libs/problems';
 import { PutProblemDataDto } from './dto/problem-data.dto';
 import { ProblemDataResponse } from './dto/problem-data.response';
 import { MAX_CASE_ARGS_BYTES, maxTestcasesFor } from '../core/dto/limits';
@@ -43,6 +47,7 @@ export class ProblemDataService {
         `Too many testcases, number of testcases must not exceed ${limit}`,
       );
     this.assertArgsSize(dto);
+    this.assertArgsFit(dto);
     const { data: previous, version } = await this.store.loadData(problem);
     const { stored, archiveFiles } = await this.store.withDataWrite(
       problem,
@@ -122,6 +127,24 @@ export class ProblemDataService {
     }
     if (!(await this.dataFiles.exists(problem.code, name))) throw missing;
     return { path, filename: name };
+  }
+
+  /** Each checker and grader gets only the arguments it reads, of the right kind (`checker-args.ts`). */
+  private assertArgsFit(dto: PutProblemDataDto): void {
+    const checker = checkerArgsProblem(dto.checker, dto.checkerArgs);
+    if (checker) throw invalidField('checkerArgs', checker);
+    const grader = graderArgsProblem(dto.grader, dto.graderArgs);
+    if (grader) throw invalidField('graderArgs', grader);
+    dto.cases.forEach((row, index) => {
+      const problem = row.checker
+        ? checkerArgsProblem(row.checker, row.checkerArgs)
+        : null;
+      if (problem)
+        throw invalidField(
+          `cases.${index}.checkerArgs`,
+          `Case #${index + 1}: ${problem}`,
+        );
+    });
   }
 
   /** All per-case arguments together stay bounded, however the cases split them. */

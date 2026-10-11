@@ -97,15 +97,15 @@ export class TestCaseDto {
 
 /** The whole configuration at once (legacy form + formset); file names are set by the upload routes and kept as they are. */
 export class PutProblemDataDto {
-  /** Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical` or `linecount`. */
+  /** Problem-wide checker: `standard`, `bridged` (the uploaded custom checker), `floats`, `floatsabs`, `floatsrel`, `identical`, `linecount`, `rstripped`, `sorted`, `unordered`, `easy` or `linematches`. */
   @IsIn(CHECKERS) checker!: Checker;
-  /** Arguments of the checker; null for none. */
+  /** Arguments of the checker; null for none. floats*: `precision` (0-20), `error_mode`; identical: `pe_allowed`; rstripped: `filter_new_line`; sorted: `split_on` (`lines`/`whitespace`); linematches: `point_distribution`, `filler_lines_required`; bridged: `type` (`testlib`, `themis`, `default`), `treat_checker_points_as_percentage` (testlib). Others take none; anything else is 400. */
   @ApiPropertyOptional()
   @JsonArgs()
   checkerArgs: JsonObject | null = null;
   /** Grader: `standard`, `interactive`, `signature` or `output_only`. */
   @IsIn(GRADERS) grader!: Grader;
-  /** Arguments of the grader; null for none. */
+  /** Arguments of the grader; null for none. standard: `io_method` (`standard`/`file`), `io_input_file`, `io_output_file`; signature: `allow_main`. Others take none; anything else is 400. */
   @ApiPropertyOptional()
   @JsonArgs()
   graderArgs: JsonObject | null = null;

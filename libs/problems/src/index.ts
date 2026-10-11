@@ -6,6 +6,7 @@ export * from './pdf-cache.service';
 export * from './problem-files.module';
 export * from './problem-data.error';
 export * from './init-yaml';
+export * from './checker-args';
 export * from './zip-archive';
 export * from './file-names';
 export * from './queues';
