@@ -2,7 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { forwardRef, Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
-import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { ExternalJudgeApiModule, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import {
   PACKAGE_QUEUE,
   PolygonApiModule,
@@ -47,6 +47,12 @@ import { ProblemLifecycleController } from './lifecycle/problem-lifecycle.contro
 import { ProblemLifecycleService } from './lifecycle/problem-lifecycle.service';
 import { ProblemPackageController } from './package/problem-package.controller';
 import { ProblemPackageService } from './package/problem-package.service';
+import { ExternalJudgeConnectionController } from './external-judge/external-judge-connection.controller';
+import { ExternalJudgeLookupService } from './external-judge/external-judge-lookup.service';
+import { ExternalJudgeStatusController } from './external-judge/external-judge-status.controller';
+import { ExternalJudgeStatusService } from './external-judge/external-judge-status.service';
+import { ProblemExternalJudgeController } from './external-judge/problem-external-judge.controller';
+import { ProblemExternalJudgeService } from './external-judge/problem-external-judge.service';
 import { PolygonLinkResolver } from './polygon/polygon-link-resolver.service';
 import { PolygonConnectionController } from './polygon/polygon-connection.controller';
 import { PolygonController } from './polygon/polygon.controller';
@@ -88,6 +94,7 @@ const repositories = [
     OrganizationQuotaModule,
     AuthModule,
     PolygonApiModule,
+    ExternalJudgeApiModule,
     forwardRef(() => ContributionsModule),
     BullModule.registerQueue(
       { name: PDF_QUEUE },
@@ -115,6 +122,9 @@ const repositories = [
     PolygonController,
     PolygonConnectionController,
     ProblemPolygonLinkController,
+    ExternalJudgeConnectionController,
+    ExternalJudgeStatusController,
+    ProblemExternalJudgeController,
   ],
   providers: [
     ...queriers,
@@ -142,6 +152,9 @@ const repositories = [
     PolygonLinksRepository,
     PolygonSyncRunsRepository,
     PolygonSyncHistoryService,
+    ExternalJudgeStatusService,
+    ExternalJudgeLookupService,
+    ProblemExternalJudgeService,
     ProblemPdfService,
     ProblemLifecycleService,
     ProblemPackageService,

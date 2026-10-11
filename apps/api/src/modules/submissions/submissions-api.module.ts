@@ -25,6 +25,7 @@ import { SubmissionCreateController } from './create/submission-create.controlle
 import { SubmissionCreateService } from './create/submission-create.service';
 import { SubmissionStreamsController } from './streams/submission-streams.controller';
 import { SubmissionStreamsService } from './streams/submission-streams.service';
+import { ExternalRunsRepository } from './core/external-runs.repository';
 import { SubmissionStatsService } from './core/submission-stats.service';
 import { SubmissionsController } from './core/submissions.controller';
 import { SubmissionsRepository } from './core/submissions.repository';
@@ -55,6 +56,7 @@ import { SubmissionsService } from './core/submissions.service';
   exports: [SubmissionsService, SubmissionsRepository, SubmissionBatchService],
   providers: [
     SubmissionsRepository,
+    ExternalRunsRepository,
     SubmissionCreateService,
     SubmissionsService,
     SubmissionStatsService,
