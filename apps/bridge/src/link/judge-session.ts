@@ -24,6 +24,7 @@ import type { AssignRequest } from '../submissions/assign-request';
 import type { RunsService } from '../submissions/runs.service';
 import type { RunKey, WriteOutcome } from '../submissions/write-outcome';
 import { MAX_LOG_BYTES, MAX_MESSAGES_PER_SECOND } from './link-limits';
+import { MessageRate } from './message-rate';
 import {
   caseRowsOf,
   clipBytes,
@@ -114,8 +115,7 @@ export class JudgeSession implements DispatchTarget {
   private readonly connectedAt = new Date();
   private lastReceivedAt = Date.now();
   private isHandling = false;
-  private windowStartedAt = Date.now();
-  private messagesInWindow = 0;
+  private readonly rate = new MessageRate(MAX_MESSAGES_PER_SECOND);
   private nonce = 0;
   private readonly pingsSent = new Map<number, number>();
   private readonly roundTrips: number[] = [];
@@ -230,13 +230,7 @@ export class JudgeSession implements DispatchTarget {
 
   /** Counted on arrival, before any is handled, so the bound does not depend on Mongo latency. */
   private withinRate(): boolean {
-    const now = Date.now();
-    if (now - this.windowStartedAt >= 1000) {
-      this.windowStartedAt = now;
-      this.messagesInWindow = 0;
-    }
-    this.messagesInWindow += 1;
-    if (this.messagesInWindow <= MAX_MESSAGES_PER_SECOND) return true;
+    if (this.rate.admit()) return true;
     const error = flood();
     this.end(error.grpcStatus, error.message, error.code);
     return false;

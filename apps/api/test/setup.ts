@@ -54,7 +54,7 @@ import {
   User,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
-import { SettingsService } from '@libs/settings';
+import { SettingsQuerier, SettingsService } from '@libs/settings';
 import type { SettingKey } from '@libs/settings';
 import Redis from 'ioredis';
 import type { Connection, Model } from 'mongoose';
@@ -72,6 +72,10 @@ import { setupApiDocs } from '../src/api-docs';
 import { setupOpenApi } from '../src/openapi';
 
 export { TEST_ENV };
+
+/** The settings every spec starts from: no breach lookups over the network. */
+const applyTestSettings = (app: NestFastifyApplication) =>
+  app.get(SettingsService).set('auth.pwnedApiUrl', '', null);
 
 export async function setupApiTest({
   controllers = [],
@@ -121,7 +125,7 @@ export async function setupApiTest({
     );
     await app.listen(0, '127.0.0.1');
     await app.get<Redis>(REDIS).flushdb();
-    await app.get(SettingsService).set('auth.pwnedApiUrl', '', null);
+    await applyTestSettings(app);
     // Queries that `.hint()` an index fail until its build finishes.
     const connection = app.get<Connection>(getConnectionToken());
     await Promise.all(
@@ -264,7 +268,7 @@ export async function setupApiTest({
     /** Writes through the real service, so readers see it at once. */
     setSetting: (key: SettingKey, value: unknown) =>
       readyApp.get(SettingsService).set(key, value, null),
-    /** Empties every model, Redis, the mailer and the data roots, so specs merged into one app start clean. */
+    /** Empties every model, Redis, the mailer and the data roots and restores the test settings, so specs merged into one app start clean. */
     reset: async () => {
       mailer.sent.length = 0;
       await readyApp.get<Redis>(REDIS).flushdb();
@@ -272,6 +276,9 @@ export async function setupApiTest({
       await Promise.all(
         Object.values(models).map((model) => model.deleteMany({})),
       );
+      // the emptied settings collection reaches the snapshot now, not at its next one-minute resync mid-spec
+      await readyApp.get(SettingsQuerier).resync();
+      await applyTestSettings(readyApp);
       for (const root of [
         mediaRoot,
         problemDataRoot,
