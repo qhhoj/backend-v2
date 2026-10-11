@@ -21,7 +21,7 @@ export interface ActivityLogRow {
   referer: string;
 }
 
-export interface DeletedCounts {
+interface DeletedCounts {
   rows: number;
   sessions: number;
 }

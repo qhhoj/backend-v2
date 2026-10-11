@@ -14,7 +14,7 @@ export const SITEMAP_KINDS = [
   'users',
 ] as const;
 export type SitemapKind = (typeof SITEMAP_KINDS)[number];
-export const SITEMAP_CACHE_SECONDS = 3600;
+const SITEMAP_CACHE_SECONDS = 3600;
 
 /** Static top-level pages; the rest come from the database. */
 const STATIC_PATHS = [

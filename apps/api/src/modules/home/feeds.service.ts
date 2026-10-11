@@ -12,8 +12,8 @@ import { atomFeed, rssFeed, textExcerpt } from './feed-xml';
 import type { FeedChannel, FeedItem } from './feed-xml';
 import { HomeRepository } from './home.repository';
 
-export const FEED_ITEMS = 25;
-export const FEED_CACHE_SECONDS = 300;
+const FEED_ITEMS = 25;
+const FEED_CACHE_SECONDS = 300;
 const SITE_NAME = 'QHHOJ';
 const DESCRIPTIONS: Record<FeedKind, string> = {
   blog: `Latest ${SITE_NAME} blog posts`,
