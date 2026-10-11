@@ -13,7 +13,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { TestSession, Catalog } from './problem-fixtures';
-import { dataOf } from './submission-fixtures';
+import { dataOf, seedSubmission } from './submission-fixtures';
 import { postUrl } from './community-fixtures';
 import { setupApiTest, errorCode } from './setup';
 import type { ApiTest } from './setup';
@@ -30,6 +30,8 @@ import type { Model } from 'mongoose';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
 import { QuotaService } from '../src/modules/organizations/quota/quota.service';
 import { seedOrganizationWorld } from './organization-problem-fixtures';
+import type { OrganizationWorld } from './organization-problem-fixtures';
+import { contestProblem, createContest } from './contest-fixtures';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import {
@@ -668,6 +670,141 @@ afterAll(() => api.teardown());
       expect(
         await api.organizations.countDocuments({ adminIds: user._id }),
       ).toBe(3);
+    });
+  });
+
+  describe('organization submissions', () => {
+    beforeAll(() => api.reset());
+    let catalog: Catalog;
+    let world: OrganizationWorld;
+    let viewAll: TestSession;
+    /** Submission id -> a label, so a failure names the rows. */
+    const labels = new Map<string, string>();
+    const listAs = async (session: TestSession, query = '') =>
+      dataOf<Array<{ id: string }>>(
+        await authed(
+          api
+            .http()
+            .get(
+              organizationUrl(world.organization.slug, `/submissions${query}`),
+            ),
+          session,
+        ).expect(200),
+      )
+        .map(({ id }) => labels.get(id))
+        .sort();
+    const submit = async (
+      label: string,
+      userId: string,
+      problemId: string,
+      contest?: string,
+    ) => {
+      const submission = await seedSubmission(api, {
+        user: userId,
+        problem: problemId,
+        language: catalog.languages.cpp,
+        ...(contest ? { contest } : {}),
+      });
+      labels.set(uuidStr(submission._id), label);
+    };
+
+    beforeAll(async () => {
+      catalog = await seedCatalog(api);
+      world = await seedOrganizationWorld(api);
+      const other = await createOrganization(api);
+      const viewer = await createUserWith(api, 'subviewall', {
+        permissions: ['judge.view_all_submission'],
+      });
+      viewAll = await loginAs(api, viewer._id);
+      const organizationId = world.organization._id;
+      const [open, hidden, own, foreign, inContest] = await Promise.all([
+        createProblem(api, catalog, { code: 'osub_open' }),
+        createProblem(api, catalog, { code: 'osub_hidden', isPublic: false }),
+        createProblem(api, catalog, {
+          code: 'osub_own',
+          isOrganizationPrivate: true,
+          organizations: [organizationId],
+        }),
+        createProblem(api, catalog, {
+          code: 'osub_foreign',
+          isOrganizationPrivate: true,
+          organizations: [other._id],
+        }),
+        createProblem(api, catalog, { code: 'osub_contest' }),
+      ]);
+      const contest = await createContest(api, {
+        problems: [contestProblem(inContest._id, 1)],
+      });
+      const member = world.member.user._id;
+      await submit('member-open', member, open._id);
+      await submit('member-hidden', member, hidden._id);
+      await submit('member-own', member, own._id);
+      await submit('member-foreign', member, foreign._id);
+      await submit(
+        'member-running-contest',
+        member,
+        inContest._id,
+        contest._id,
+      );
+      await submit('admin-open', world.admin.user._id, open._id);
+      await submit('outsider-open', world.outsider.user._id, open._id);
+      const hiddenMember = await createUserWith(api, 'subunlisted', {
+        isUnlisted: true,
+        organizations: [organizationId],
+      });
+      await submit('unlisted-open', hiddenMember._id, open._id);
+    });
+
+    it('lists only listed members, on problems the viewer may see, never a running contest of another user', async () => {
+      expect(await listAs(world.admin.session)).toEqual([
+        'admin-open',
+        'member-open',
+        'member-own',
+      ]);
+    });
+
+    it("keeps the viewer's own running-contest submission and hides problems the organization cannot reveal", async () => {
+      expect(await listAs(world.member.session)).toEqual([
+        'admin-open',
+        'member-open',
+        'member-own',
+        'member-running-contest',
+      ]);
+    });
+
+    it('lets view_all_submission in without membership, still under problem visibility', async () => {
+      expect(await listAs(viewAll)).toEqual([
+        'admin-open',
+        'member-open',
+        'member-running-contest',
+      ]);
+    });
+
+    it('lets edit_all_organization in without membership', async () => {
+      const staff = await createUserWith(api, 'suborgstaff', {
+        permissions: ['judge.edit_all_organization'],
+      });
+      expect(await listAs(await loginAs(api, staff._id))).toEqual([
+        'admin-open',
+        'member-open',
+      ]);
+    });
+
+    it('refuses outsiders and anonymous viewers', async () => {
+      const url = organizationUrl(world.organization.slug, '/submissions');
+      await authed(api.http().get(url), world.outsider.session).expect(403);
+      await api.http().get(url).expect(401);
+    });
+
+    it('keeps the staff-only status filter for staff', async () => {
+      await authed(
+        api
+          .http()
+          .get(
+            organizationUrl(world.organization.slug, '/submissions?status=QU'),
+          ),
+        world.admin.session,
+      ).expect(400);
     });
   });
 }

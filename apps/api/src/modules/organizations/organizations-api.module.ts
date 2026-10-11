@@ -7,6 +7,7 @@ import {
   ORGANIZATION_POINTS_QUEUE,
 } from '@libs/community';
 import { ProblemsApiModule } from '../problems/problems-api.module';
+import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { OrganizationEditingController } from './editing/organization-editing.controller';
 import { OrganizationEditingService } from './editing/organization-editing.service';
 import { OrganizationDeletionService } from './editing/organization-deletion.service';
@@ -35,6 +36,10 @@ import {
   PROBLEM_TAG_PROVIDERS,
 } from './problem-tags/wiring';
 import {
+  ORGANIZATION_SUBMISSION_CONTROLLERS,
+  ORGANIZATION_SUBMISSION_PROVIDERS,
+} from './submissions/wiring';
+import {
   ORGANIZATION_USAGE_CONTROLLERS,
   ORGANIZATION_USAGE_PROVIDERS,
 } from './usage/wiring';
@@ -44,6 +49,7 @@ import {
     AuthModule,
     NotificationsModule,
     ProblemsApiModule,
+    SubmissionsApiModule,
     OrganizationQuotaModule,
     BullModule.registerQueue({ name: ORGANIZATION_POINTS_QUEUE }),
   ],
@@ -56,6 +62,7 @@ import {
     ...PROBLEM_TAG_CONTROLLERS,
     ...ORGANIZATION_PROBLEM_CONTROLLERS,
     ...ORGANIZATION_USAGE_CONTROLLERS,
+    ...ORGANIZATION_SUBMISSION_CONTROLLERS,
   ],
   providers: [
     OrganizationsRepository,
@@ -75,6 +82,7 @@ import {
     ...PROBLEM_TAG_PROVIDERS,
     ...ORGANIZATION_PROBLEM_PROVIDERS,
     ...ORGANIZATION_USAGE_PROVIDERS,
+    ...ORGANIZATION_SUBMISSION_PROVIDERS,
   ],
   exports: [
     OrganizationsRepository,

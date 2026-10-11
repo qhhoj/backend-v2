@@ -111,6 +111,15 @@ export class OrganizationMembersRepository {
     return rows.map((row) => uuidStr(row._id));
   }
 
+  /** The listed members' ids: an unlisted user stays out of everything grouped by organization. */
+  async listedMemberIds(organizationId: string): Promise<string[]> {
+    const rows = await this.users
+      .find(listedMembers(organizationId), { _id: 1 })
+      .lean()
+      .exec();
+    return rows.map((row) => uuidStr(row._id));
+  }
+
   /** Every member, listed or not: the live count approvals check `slots` against. */
   countMembers(organizationId: string): Promise<number> {
     return this.users.countDocuments({ organizations: organizationId }).exec();
