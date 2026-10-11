@@ -33,11 +33,13 @@ export class PreviewService {
       description: SITE_DESCRIPTION,
       path: '/',
     };
-    return previewHtml(
-      preview,
-      this.env.siteUrl,
-      `${this.env.siteUrl}${IMAGE_PATH}`,
-    );
+    return previewHtml(preview, this.env.siteUrl, this.imageUrl(preview.image));
+  }
+
+  /** A site path becomes absolute, since bots fetch the image from elsewhere. */
+  private imageUrl(image: string | undefined): string {
+    if (!image) return `${this.env.siteUrl}${IMAGE_PATH}`;
+    return image.startsWith('/') ? `${this.env.siteUrl}${image}` : image;
   }
 
   private async resolve(path: string): Promise<Preview | null> {
@@ -51,6 +53,7 @@ export class PreviewService {
         description:
           textExcerpt(source.text, DESCRIPTION_LENGTH) || SITE_DESCRIPTION,
         path: `${prefix}/${encodeURIComponent(key)}`,
+        image: source.image,
       };
     }
     return null;

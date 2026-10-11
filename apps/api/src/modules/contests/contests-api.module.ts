@@ -29,6 +29,8 @@ import { ContestAnnouncementsController } from './announcements/contest-announce
 import { ContestAnnouncementsService } from './announcements/contest-announcements.service';
 import { ContestBestSubmissionsController } from './best/contest-best-submissions.controller';
 import { ContestBestSubmissionsService } from './best/contest-best-submissions.service';
+import { ContestBulkController } from './bulk/contest-bulk.controller';
+import { ContestBulkService } from './bulk/contest-bulk.service';
 import { ContestDataController } from './data/contest-data.controller';
 import { ContestDataService } from './data/contest-data.service';
 import { ContestActionsService } from './editing/contest-actions.service';
@@ -101,6 +103,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
   controllers: [
     ContestAnnouncementsController,
     ContestBestSubmissionsController,
+    ContestBulkController,
     ContestDataController,
     ContestEditingController,
     ContestParticipationController,
@@ -120,6 +123,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     AnnouncementsRepository,
     ContestActionsService,
     ContestBestSubmissionsService,
+    ContestBulkService,
     ContestAnnouncementsService,
     ContestDataService,
     ContestEventsService,

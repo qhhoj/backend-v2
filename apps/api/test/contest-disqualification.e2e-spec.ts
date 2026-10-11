@@ -16,6 +16,11 @@ import {
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
+import { dataOf } from './submission-fixtures';
+import type {
+  BulkDisqualifyResponse,
+  ParticipationResponse,
+} from '../src/modules/contests/participation/dto/participation.response';
 import type { ApiTest } from './setup';
 
 describe('disqualification', () => {
@@ -211,5 +216,68 @@ describe('disqualification', () => {
         .lean())!.bannedUsers.map(uuidStr);
       expect(banned.includes(user._id)).toBe(row.isDisqualified);
     }
+  });
+
+  it('disqualifies many rows at once, reports a row of another contest, and rescores once', async () => {
+    const contest = await createContest(api, { authors: [editorId] });
+    const other = await createContest(api, { authors: [editorId] });
+    const first = await createUserWith(api, 'bulk_a');
+    const second = await createUserWith(api, 'bulk_b');
+    const live = await joinParticipation(api, contest._id, first._id);
+    const already = await joinParticipation(api, contest._id, second._id, {
+      isDisqualified: true,
+    });
+    const stranger = await joinParticipation(api, other._id, first._id);
+    const response = await authed(
+      api.http().post(contestUrl(contest.key, '/participations/disqualify')),
+      editor,
+    )
+      .send({
+        ids: [live._id, already._id, stranger._id, 'not-an-id'],
+        disqualified: true,
+      })
+      .expect(200);
+    expect(dataOf<BulkDisqualifyResponse>(response)).toEqual({
+      results: [
+        { id: live._id, outcome: 'done' },
+        { id: already._id, outcome: 'unchanged' },
+        { id: stranger._id, outcome: 'failed', reason: 'not_found' },
+        { id: 'not-an-id', outcome: 'failed', reason: 'not_found' },
+      ],
+      done: 1,
+      failed: 2,
+    });
+    const stored = await api.contests.findById(contest._id).lean();
+    expect(stored?.bannedUsers.map(uuidStr).sort()).toEqual(
+      [first._id, second._id].sort(),
+    );
+    const untouched = await api.participations.findById(stranger._id).lean();
+    expect(untouched?.isDisqualified).toBe(false);
+    expect(
+      (await rescores.getJobs(['waiting'])).map((job) => job.data.contestId),
+    ).toEqual([contest._id]);
+  });
+
+  it('searches participants by part of the username, for editors only', async () => {
+    const contest = await createContest(api, { authors: [editorId] });
+    for (const name of ['search_Alice', 'search_malin', 'search_bob'])
+      await joinParticipation(
+        api,
+        contest._id,
+        (await createUserWith(api, name))._id,
+      );
+    await createUserWith(api, 'search_alina_outside');
+    const usernames = async (search: string) => {
+      const url = contestUrl(
+        contest.key,
+        `/participations?search=${encodeURIComponent(search)}`,
+      );
+      const rows = dataOf<ParticipationResponse[]>(
+        await authed(api.http().get(url), editor).expect(200),
+      );
+      return rows.map((row) => row.user.username).sort();
+    };
+    expect(await usernames('ALI')).toEqual(['search_Alice', 'search_malin']);
+    expect(await usernames('.*')).toEqual([]);
   });
 });

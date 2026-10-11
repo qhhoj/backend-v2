@@ -3,6 +3,8 @@ export interface Preview {
   description: string;
   /** Site path of the page, e.g. `/problems/aplusb`. */
   path: string;
+  /** The page's own image (URL or site path); the site image when absent or empty. */
+  image?: string;
 }
 
 export const SITE_NAME = 'QHHOJ';

@@ -70,6 +70,10 @@ export class Contest {
   @Prop({ default: '' }) description!: string;
   @Prop({ default: '' }) descriptionHtml!: string;
   @Prop({ default: '' }) summary!: string;
+  /** Link-preview image (URL or site path); empty for the site image. */
+  @Prop({ default: '', maxlength: 150 }) ogImage!: string;
+  /** Replaces the site logo inside the contest (URL or site path); empty for none. */
+  @Prop({ default: '', maxlength: 150 }) logoOverrideImage!: string;
   @Prop({
     type: [String],
     default: [],

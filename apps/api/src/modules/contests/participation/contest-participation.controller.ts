@@ -23,12 +23,14 @@ import { ContestParticipationService } from './contest-participation.service';
 import { ParticipationSummaryResponse } from '../core/dto/contest-detail.response';
 import { ContestKeyParamDto } from '../core/dto/contest-params.dto';
 import {
+  BulkDisqualifyDto,
   JoinBodyDto,
   DisqualifyDto,
   ParticipationListQueryDto,
   ParticipationParamsDto,
 } from './dto/participation.dto';
 import {
+  BulkDisqualifyResponse,
   CurrentParticipationResponse,
   ParticipationResponse,
 } from './dto/participation.response';
@@ -154,11 +156,34 @@ export class ContestParticipationController {
   }
 
   /**
+   * Disqualify or reinstate many participants
+   *
+   * @remarks
+   * Contest editors only. Applies `disqualified` to each listed participation
+   * of the contest as the single route does (contest ban, current contest,
+   * cheating ban), then purges the ranking cache and queues one rescore. An
+   * id that is not a participation of this contest is reported as `failed`
+   * (`not_found`) and does not stop the others; a row that already had the
+   * value is `unchanged`. Limited to 20 runs per hour per user (429
+   * `rate_limited`).
+   */
+  @Post(':key/participations/disqualify')
+  @HttpCode(200)
+  disqualifyMany(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key }: ContestKeyParamDto,
+    @Body() body: BulkDisqualifyDto,
+  ): Promise<BulkDisqualifyResponse> {
+    return this.participation.disqualifyMany(auth.principal, key, body);
+  }
+
+  /**
    * List participations in a contest
    *
    * @remarks
    * Returns the viewer's own participations in the contest, or anyone's for
-   * contest editors (filter by `user`; other users are refused with 403 for
+   * contest editors (filter by the exact `user`, or by `search` for usernames
+   * containing the text; other users and `search` are refused with 403 for
    * non-editors). Live and virtual participations are included (not spectator
    * rows). Results are frozen for non-editors while the ranking is frozen.
    * Paged with `page` and `pageSize`.

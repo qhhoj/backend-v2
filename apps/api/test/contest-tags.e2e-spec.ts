@@ -52,7 +52,7 @@ afterAll(() => api.teardown());
       await api.http().post(url).send(body).expect(401);
       await create(body, plain).expect(403);
       await create(body).expect(201);
-      expect(await list()).toEqual([{ ...body, order: 0 }]);
+      expect(await list()).toEqual([{ ...body, order: 0, contestCount: 0 }]);
       await authed(api.http().patch(`${url}/olp`), plain)
         .send({ name: 'No' })
         .expect(403);
@@ -60,7 +60,13 @@ afterAll(() => api.teardown());
         .send({ name: 'Olympiad 2', color: 'tag-5' })
         .expect(200);
       expect(await list()).toEqual([
-        { ...body, name: 'Olympiad 2', color: 'tag-5', order: 0 },
+        {
+          ...body,
+          name: 'Olympiad 2',
+          color: 'tag-5',
+          order: 0,
+          contestCount: 0,
+        },
       ]);
       await authed(api.http().delete(`${url}/olp`), plain).expect(403);
       await authed(api.http().delete(`${url}/olp`), admin).expect(204);

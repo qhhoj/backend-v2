@@ -140,8 +140,10 @@ export class ContestEditingController {
    *
    * @remarks
    * Contest editors only. Queues judging of the pending final submissions of
-   * an ended final-submission contest; returns 202. Fails with 409 `conflict`
-   * for any other format or while the contest is still running.
+   * a final-submission contest that has started; returns 202. A running
+   * contest is judged early (results become visible) and what is submitted
+   * afterwards waits for the end. Fails with 409 `conflict` for any other
+   * format or before the start.
    */
   @Post(':key/judge-final')
   @HttpCode(202)

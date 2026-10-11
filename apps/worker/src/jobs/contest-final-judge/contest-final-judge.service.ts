@@ -19,18 +19,15 @@ export class ContestFinalJudgeService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** Legacy `judge_final_submissions` for an ended FSO contest, for pending rows only: back to the queue, announced as `queued` and commanded to the bridge a batch at a time. Serialised per contest across processes; a row leaves PD once, so racing triggers requeue each submission exactly once. Automatic runs skip `autoJudge: false`. Returns how many this call requeued. */
+  /** Legacy `judge_final_submissions` for an ended FSO contest (a started one on an editor's request), for pending rows only: back to the queue, announced as `queued` and commanded to the bridge a batch at a time. Serialised per contest across processes; a row leaves PD once, so racing triggers requeue each submission exactly once. Automatic runs skip `autoJudge: false`. Returns how many this call requeued. */
   async judgeFinal(
     contestId: string,
     { isManual, now = new Date() }: { isManual: boolean; now?: Date },
   ): Promise<number> {
     const contest = await this.repository.findContest(contestId);
-    if (
-      !contest ||
-      contest.formatName !== 'final_submission' ||
-      contestPhase(contest, now) !== 'ended'
-    )
-      return 0;
+    if (!contest || contest.formatName !== 'final_submission') return 0;
+    const phase = contestPhase(contest, now);
+    if (isManual ? phase === 'upcoming' : phase !== 'ended') return 0;
     if (
       !isManual &&
       !finalSubmissionFormat.parseConfig(contest.formatConfig).autoJudge

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
-import { AppError, isDuplicateKey } from '@libs/common';
+import { AppError, escapeRegExp, isDuplicateKey } from '@libs/common';
 import { LIVE } from '@libs/contests';
 import {
   Contest,
@@ -404,5 +404,29 @@ export class ParticipationsRepository {
         return [id, { id, username: row.username, rating: row.rating }];
       }),
     );
+  }
+
+  /** Users with a participation in the contest whose username contains `text`, case-insensitive: one aggregate over the contest's own rows, never a scan of every user. */
+  async userIdsMatching(contestId: string, text: string): Promise<string[]> {
+    const rows = await this.participations
+      .aggregate<{ _id: unknown }>([
+        { $match: { contest: toUuid(contestId) } },
+        { $group: { _id: '$user' } },
+        {
+          $lookup: {
+            from: this.users.collection.collectionName,
+            localField: '_id',
+            foreignField: '_id',
+            as: 'match',
+            pipeline: [
+              { $match: { username: new RegExp(escapeRegExp(text), 'i') } },
+              { $project: { _id: 1 } },
+            ],
+          },
+        },
+        { $match: { 'match.0': { $exists: true } } },
+      ])
+      .exec();
+    return rows.map((row) => uuidStr(row._id));
   }
 }

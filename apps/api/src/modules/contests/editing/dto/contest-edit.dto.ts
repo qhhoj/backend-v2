@@ -56,6 +56,12 @@ export class ContestProblemDto {
   @IsOptional() @IsInt() @Min(1) maxSubmissions?: number | null;
 }
 
+/** Empty, an http(s) URL or a site path (the blog's rule, minus protocol-relative `//host`); never `javascript:` or `data:`. */
+const IMAGE_URL_PATTERN = /^(|https?:\/\/[^\s"'<>]+|\/(?!\/)[^\s"'<>]*)$/;
+
+/** Tags one contest may carry. */
+export const MAX_TAGS_PER_CONTEST = 20;
+
 /** No property initializers (see `CreateProblemDto`); defaults come from the schema. `problems` order is the contest order. */
 export class CreateContestDto {
   /**
@@ -75,11 +81,25 @@ export class CreateContestDto {
   description?: string;
   /** Short plain-text description for lists, at most 1000 characters. */
   @IsOptional() @IsString() @MaxLength(1000) summary?: string;
+  /** Image for link previews: an http(s) URL or a site path, up to 150 characters; empty for the site image. */
+  @IsOptional()
+  @MaxLength(150)
+  @Matches(IMAGE_URL_PATTERN, {
+    message: 'An http(s) URL or a path starting with /.',
+  })
+  ogImage?: string;
+  /** Replaces the site logo inside the contest: an http(s) URL or a site path, up to 150 characters; empty for none. */
+  @IsOptional()
+  @MaxLength(150)
+  @Matches(IMAGE_URL_PATTERN, {
+    message: 'An http(s) URL or a path starting with /.',
+  })
+  logoOverrideImage?: string;
   /** Markdown, trimmed at save; empty or whitespace: no rules. */
   @IsOptional() @IsString() @MaxLength(CONTEST_RULES_MAX) rules?: string;
   /** Contest tag slugs, at most 20; unknown tags are refused. */
   @IsOptional()
-  @ArrayMaxSize(20)
+  @ArrayMaxSize(MAX_TAGS_PER_CONTEST)
   @Matches(CONTEST_TAG_PATTERN, { each: true })
   tags?: string[];
   /** User ids of the authors. */

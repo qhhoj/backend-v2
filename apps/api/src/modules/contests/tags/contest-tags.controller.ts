@@ -10,7 +10,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentAuth, Public, RequirePermission } from '@libs/auth';
+import {
+  CurrentAuth,
+  optionalPrincipal,
+  Public,
+  RequirePermission,
+} from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, RefuseNullFieldsPipe } from '@libs/common';
 import type { Paginated } from '@libs/common';
@@ -32,14 +37,18 @@ export class ContestTagsController {
    * List contest tags
    *
    * @remarks
-   * Returns the contest tag catalogue, public. Paged with `page` and
+   * Returns the contest tag catalogue, public, each tag with the number of
+   * contests the viewer may see that carry it. Paged with `page` and
    * `pageSize`.
    */
   @Public()
   @ApiPaginatedResponse(ContestTagResponse)
   @Get()
-  list(@Query() query: ContestTagListQueryDto): Paginated<ContestTagResponse> {
-    return this.tags.list(query);
+  list(
+    @CurrentAuth() auth: AuthContext | undefined,
+    @Query() query: ContestTagListQueryDto,
+  ): Promise<Paginated<ContestTagResponse>> {
+    return this.tags.list(optionalPrincipal(auth), query);
   }
 
   /**
@@ -65,10 +74,11 @@ export class ContestTagsController {
   @RequirePermission('judge.change_contest_tag')
   @Patch(':slug')
   update(
+    @CurrentAuth() auth: AuthContext,
     @Param() { slug }: ContestTagSlugParamDto,
     @Body(new RefuseNullFieldsPipe()) body: UpdateContestTagDto,
   ): Promise<ContestTagResponse> {
-    return this.tags.update(slug, body);
+    return this.tags.update(auth.principal, slug, body);
   }
 
   /**

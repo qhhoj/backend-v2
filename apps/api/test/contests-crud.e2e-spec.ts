@@ -598,6 +598,24 @@ describe('contest CRUD', () => {
       expect((await detail(contest.key)).name).toBe('Renamed');
     });
 
+    it('takes preview and logo images as a URL or site path only', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      for (const image of ['javascript:alert(1)', '//evil.test/a.png', 'a b'])
+        await patch('creator', contest.key, {
+          logoOverrideImage: image,
+        }).expect(400);
+      await patch('creator', contest.key, {
+        ogImage: 'https://cdn.test/og.png',
+        logoOverrideImage: '/media/logo.png',
+      }).expect(200);
+      const shown = await detail(contest.key);
+      expect(shown.logoOverrideImage).toBe('/media/logo.png');
+      // The preview image is an editor setting; the logo shows to everyone in the contest.
+      expect(shown.settings).toBeNull();
+    });
+
     it('refuses null on non-nullable fields and keeps the contest unchanged', async () => {
       const contest = await createContest(api, {
         authors: [users.creator._id],
