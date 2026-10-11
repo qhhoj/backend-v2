@@ -27,6 +27,10 @@ const GATED_FIELDS: ReadonlyArray<[keyof CreateProblemDto, Permission]> = [
   ['isManuallyManaged', 'judge.change_manually_managed'],
   ['isFullMarkup', 'judge.problem_full_markup'],
 ];
+/** On an organization-private problem `isPublic` only reaches the organization's members: its organization problem creators may set it (legacy organization form). */
+export const MEMBERS_ONLY_VISIBILITY: ReadonlyArray<keyof CreateProblemDto> = [
+  'isPublic',
+];
 /** Django-admin-only in legacy. */
 const STAFF_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
   'authors',
@@ -89,27 +93,47 @@ export class ProblemEditPolicyService {
     return problem;
   }
 
+  /** On an organization create the server sets the organization fields, so they are part of the baseline and open no gate. */
   assertCreateGates(
     principal: Principal,
     dto: CreateProblemDto,
     fields: Partial<Problem>,
+    organizationId: string | null = null,
   ): void {
-    this.assertFieldGates(principal, dto, fields, CREATE_BASELINE);
+    const baseline = organizationId
+      ? {
+          ...CREATE_BASELINE,
+          organizations: [organizationId],
+          isOrganizationPrivate: true,
+        }
+      : CREATE_BASELINE;
+    const waived = organizationId ? MEMBERS_ONLY_VISIBILITY : [];
+    this.assertFieldGates(principal, dto, fields, { baseline, waived });
   }
 
-  /** A gate fires only when the request changes the value (compared with the stored document, or the defaults on create). */
+  /** A gate fires only when the request changes the value (compared with the stored document, or the defaults on create); `waived` permission gates are skipped. */
   assertFieldGates(
     principal: Principal,
     dto: UpdateProblemDto,
     fields: Partial<Problem>,
-    baseline: Record<string, unknown>,
+    {
+      baseline,
+      waived = [],
+    }: {
+      baseline: Record<string, unknown>;
+      waived?: ReadonlyArray<keyof CreateProblemDto>;
+    },
   ): void {
     const normalized = fields as Record<string, unknown>;
     const changes = (field: keyof CreateProblemDto) =>
       normalized[field] !== undefined &&
       !sameJson(comparable(normalized[field]), comparable(baseline[field]));
     for (const [field, permission] of GATED_FIELDS)
-      if (changes(field) && !hasPermission(principal, permission))
+      if (
+        changes(field) &&
+        !waived.includes(field) &&
+        !hasPermission(principal, permission)
+      )
         throw new AppError(
           'forbidden',
           403,

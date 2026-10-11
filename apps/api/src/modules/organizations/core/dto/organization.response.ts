@@ -1,3 +1,4 @@
+import { organizationCodePrefix } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
@@ -19,6 +20,8 @@ export class OrganizationListItemResponse {
   performancePoints!: number;
   /** Most members the organization may have; null for no limit. */
   slots!: number | null;
+  /** What the code of a problem created for the organization must start with (`thpt-demo` → `thptdemo_`). */
+  problemCodePrefix!: string;
 
   static from(organization: Organization): OrganizationListItemResponse {
     return {
@@ -31,6 +34,7 @@ export class OrganizationListItemResponse {
       memberCount: organization.memberCount,
       performancePoints: organization.performancePoints,
       slots: organization.slots,
+      problemCodePrefix: organizationCodePrefix(organization.slug),
     };
   }
 }
@@ -58,6 +62,10 @@ export class OrganizationViewerResponse {
   isMember!: boolean;
   /** The viewer is an admin or holds judge.edit_all_organization. */
   canAdminister!: boolean;
+  /** The viewer may create problems for the organization (`POST /organizations/{slug}/problems`): an administrator holding `judge.create_organization_problem`. */
+  canCreateProblem!: boolean;
+  /** The viewer may create contests for the organization (`POST /organizations/{slug}/contests`): an administrator holding `judge.create_private_contest`. */
+  canCreateContest!: boolean;
   /** The viewer's pending join request (Task 6), else null. */
   pendingRequestId!: string | null;
 }

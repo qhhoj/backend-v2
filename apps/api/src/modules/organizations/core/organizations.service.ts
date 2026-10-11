@@ -192,6 +192,8 @@ export class OrganizationsService {
       viewer: principal && {
         isMember: OrganizationAccess.isMember(principal, view.id),
         canAdminister,
+        canCreateProblem: OrganizationAccess.canCreateProblem(principal, view),
+        canCreateContest: OrganizationAccess.canCreateContest(principal, view),
         pendingRequestId,
       },
     };

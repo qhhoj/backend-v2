@@ -68,15 +68,21 @@ describe('admin access for authors who are not staff', () => {
 
   describe('the session tells which object rights stand behind the admin screens', () => {
     it('an organization admin, or a holder of edit_all_organization, administers organizations', async () => {
-      expect(await capabilitiesOf('orgAdmin')).toEqual({ organizations: true });
-      expect(await capabilitiesOf('orgEditor')).toEqual({
+      expect(await capabilitiesOf('orgAdmin')).toMatchObject({
+        organizations: true,
+      });
+      expect(await capabilitiesOf('orgEditor')).toMatchObject({
         organizations: true,
       });
     });
 
     it('anyone else administers none', async () => {
-      expect(await capabilitiesOf('nobody')).toEqual({ organizations: false });
-      expect(await capabilitiesOf('author')).toEqual({ organizations: false });
+      expect(await capabilitiesOf('nobody')).toMatchObject({
+        organizations: false,
+      });
+      expect(await capabilitiesOf('author')).toMatchObject({
+        organizations: false,
+      });
     });
   });
 

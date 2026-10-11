@@ -1,17 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal, SessionData, UserDocument } from '@libs/auth';
 import { OrganizationsService } from '../../organizations/core/organizations.service';
+import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 import {
   AdminCapabilitiesResponse,
   SessionResponse,
 } from './dto/session.response';
 
-const NO_CAPABILITIES: AdminCapabilitiesResponse = { organizations: false };
+const NO_SCOPE = { site: false, organizations: false };
+const NO_CAPABILITIES: AdminCapabilitiesResponse = {
+  organizations: false,
+  problemCreation: NO_SCOPE,
+  contestCreation: NO_SCOPE,
+};
 
 /** Builds the session body every sign-in route returns, with the object rights a permission list cannot tell. */
 @Injectable()
 export class SessionResponses {
-  constructor(private readonly organizations: OrganizationsService) {}
+  constructor(
+    private readonly organizations: OrganizationsService,
+    private readonly creation: OrganizationCreationRights,
+  ) {}
 
   async of(
     user: UserDocument,
@@ -31,8 +40,12 @@ export class SessionResponses {
   private async capabilitiesOf(
     principal: Principal,
   ): Promise<AdminCapabilitiesResponse> {
+    const administers = await this.organizations.administersAny(principal);
+    const scopes = this.creation.scopes(principal, administers);
     return {
-      organizations: await this.organizations.administersAny(principal),
+      organizations: administers,
+      problemCreation: scopes.problems,
+      contestCreation: scopes.contests,
     };
   }
 }

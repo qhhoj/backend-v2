@@ -56,4 +56,64 @@ describe('OrganizationAccess', () => {
         expected,
       ),
   );
+
+  describe('creating for the organization', () => {
+    const withRights = (fields: Partial<Principal> = {}) =>
+      principal({
+        permissions: new Set([
+          'judge.create_organization_problem',
+          'judge.create_private_contest',
+        ]),
+        ...fields,
+      });
+    const teacher = withRights();
+    const ownOrganization = { ...listed, adminIds: [teacher.userId] };
+
+    it.each([
+      ['anonymous', null, false],
+      ['an admin holding the permissions', teacher, true],
+      ['an admin without them', admin, false],
+      [
+        'a member holding them',
+        withRights({ organizationIds: [listed.id] }),
+        false,
+      ],
+      [
+        'edit_all_organization holding them',
+        withRights({
+          permissions: new Set([
+            'judge.edit_all_organization',
+            'judge.create_organization_problem',
+            'judge.create_private_contest',
+          ]),
+        }),
+        true,
+      ],
+      ['a superuser', superuser, true],
+    ])('%s may create problems and contests: %#', (_who, viewer, expected) => {
+      const organization =
+        viewer === admin
+          ? { ...listed, adminIds: [admin.userId] }
+          : ownOrganization;
+      expect(OrganizationAccess.canCreateProblem(viewer, organization)).toBe(
+        expected,
+      );
+      expect(OrganizationAccess.canCreateContest(viewer, organization)).toBe(
+        expected,
+      );
+    });
+
+    it('needs each kind of permission for its own kind', () => {
+      const problemsOnly = principal({
+        permissions: new Set(['judge.create_organization_problem']),
+      });
+      const organization = { ...listed, adminIds: [problemsOnly.userId] };
+      expect(
+        OrganizationAccess.canCreateProblem(problemsOnly, organization),
+      ).toBe(true);
+      expect(
+        OrganizationAccess.canCreateContest(problemsOnly, organization),
+      ).toBe(false);
+    });
+  });
 });

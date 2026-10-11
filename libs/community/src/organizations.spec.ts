@@ -1,4 +1,4 @@
-import { organizationPoints } from './organizations';
+import { organizationCodePrefix, organizationPoints } from './organizations';
 
 describe('organizationPoints', () => {
   it('weighs members best first by 0.95^i', () => {
@@ -20,5 +20,21 @@ describe('organizationPoints', () => {
       (1 - 0.95 ** 100) / 0.05,
       9,
     );
+  });
+});
+
+describe('organizationCodePrefix', () => {
+  it.each([
+    ['ctqh2429', 'ctqh2429_'],
+    ['thpt-demo', 'thptdemo_'],
+    ['THPT_Demo.2', 'thptdemo2_'],
+  ])('%s gives %s', (slug, prefix) =>
+    expect(organizationCodePrefix(slug)).toBe(prefix),
+  );
+
+  it('keeps room for a code after the prefix of a long slug', () => {
+    const prefix = organizationCodePrefix(`truong-${'a'.repeat(60)}`);
+    expect(prefix).toBe(`truong${'a'.repeat(17)}_`);
+    expect(32 - prefix.length).toBe(8);
   });
 });
