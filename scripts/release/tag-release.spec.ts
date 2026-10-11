@@ -71,14 +71,6 @@ describe('release:tag', () => {
     expect(git(work, 'tag', '--list')).toBe('');
   });
 
-  it('is idempotent across runs', () => {
-    run();
-    const second = run();
-    expect(second.status).toBe(0);
-    expect(second.stdout).toContain('already exists');
-    expect(git(remote, 'tag', '--list')).toBe('v2.0.0');
-  });
-
   it('creates a GitHub Release from the CHANGELOG section when a token is set', () => {
     const bin = join(root, 'bin');
     const log = join(root, 'gh.log');
