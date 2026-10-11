@@ -124,6 +124,31 @@ const KATEX_ATTRIBUTES: Record<string, string[]> = {
 export const STYLE_VALUE =
   /^(?![\s\S]*(expression|url\s*\(|image-set\s*\(|src\s*\(|javascript|behavior|@import|\\))[^;{}\n\r]*$/i;
 
+/** Video players an embed may come from (path-checked, not just host-checked). */
+export const EMBED_SOURCE =
+  /^https:\/\/(www\.youtube\.com\/embed|www\.youtube-nocookie\.com\/embed|player\.vimeo\.com\/video)\/[\w-]+(\?[\w=&.%-]*)?$/;
+/** Players keep their own origin (they need it); any other page runs in an opaque origin, so even a same-site URL cannot reach the page around it. Neither may navigate the top window or open popups. */
+const PLAYER_SANDBOX = 'allow-scripts allow-same-origin allow-presentation';
+const PAGE_SANDBOX = 'allow-scripts allow-presentation';
+
+/** The attributes the sanitizer forces on every iframe: a sandbox, lazy loading, and of the author's `allow` features only `fullscreen` (no camera, microphone or the like). */
+export function iframeAttributes(
+  attributes: sanitizeHtml.Attributes,
+): sanitizeHtml.Attributes {
+  const { allow, ...rest } = attributes;
+  const fullscreen = allow
+    ?.split(';')
+    .some((feature) => feature.trim() === 'fullscreen');
+  return {
+    ...rest,
+    sandbox: EMBED_SOURCE.test(attributes.src ?? '')
+      ? PLAYER_SANDBOX
+      : PAGE_SANDBOX,
+    loading: 'lazy',
+    ...(fullscreen ? { allow: 'fullscreen' } : {}),
+  };
+}
+
 export const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [...LEGACY_TAGS, ...MATHML_TAGS, ...KATEX_TAGS],
   allowedAttributes: {
@@ -132,6 +157,7 @@ export const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
     ...KATEX_ATTRIBUTES,
     '*': [...LEGACY_ATTRIBUTES['*'], 'aria-hidden'],
     span: [...MATHML_ATTRIBUTES.span, 'title'],
+    iframe: [...LEGACY_ATTRIBUTES.iframe, 'sandbox', 'loading'],
   },
   allowedStyles: {
     '*': Object.fromEntries(
@@ -150,6 +176,12 @@ export const STATEMENT_OPTIONS: sanitizeHtml.IOptions = {
     'data-src',
   ],
   parser: { lowerCaseAttributeNames: false },
+  transformTags: {
+    iframe: (tagName, attributes) => ({
+      tagName,
+      attribs: iframeAttributes(attributes),
+    }),
+  },
 };
 
 /** Statement/editorial HTML for the sanitized styles: the legacy bleach allow-list plus KaTeX output. */
