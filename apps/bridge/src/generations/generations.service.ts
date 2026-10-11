@@ -4,14 +4,24 @@ import type { BridgeTimings } from '../bridge-timings';
 import type { DispatchTarget } from '../dispatch/slots';
 import { failureOf, generateOf, jobFailure } from './generation-messages';
 import type { GenerationDone } from '@libs/judge-proto';
+import type { GenerationFeature } from '@libs/judging';
 import { GenerationsRepository } from './generations.repository';
+
+/** The oldest queued generation a judge with `features` can run; a compile check never goes to a judge that only generates tests. */
+export function pickGeneration(
+  queue: ReadonlyMap<string, GenerationFeature>,
+  features: ReadonlySet<string>,
+): string | undefined {
+  for (const [id, feature] of queue) if (features.has(feature)) return id;
+  return undefined;
+}
 
 /** The in-memory generation queue and the life of a generation on a judge: claim (queued -> running), send, deadline, done or failed. Judge admission is the dispatcher's call (`mayStartGeneration`); Mongo stays the truth. */
 @Injectable()
 export class GenerationsService {
   private readonly logger = new Logger(GenerationsService.name);
-  /** Queued generation ids, oldest first (a Set keeps insertion order and drops duplicates). */
-  private readonly queue = new Set<string>();
+  /** Queued generation ids with the feature each needs, oldest first (a Map keeps insertion order and drops duplicates). */
+  private readonly queue = new Map<string, GenerationFeature>();
   private readonly deadlines = new Map<string, NodeJS.Timeout>();
 
   constructor(
@@ -21,11 +31,13 @@ export class GenerationsService {
 
   /** Queued rows named by `ids` (a command) or all of them (start, resync) that are not queued here yet. */
   async enqueueQueued(ids?: string[]): Promise<void> {
-    for (const id of await this.rows.queuedIds(ids)) this.queue.add(id);
+    for (const { id, feature } of await this.rows.queued(ids))
+      if (!this.queue.has(id)) this.queue.set(id, feature);
   }
 
-  hasQueued(): boolean {
-    return this.queue.size > 0;
+  /** A queued generation `judge` can run. */
+  hasQueuedFor(judge: DispatchTarget): boolean {
+    return pickGeneration(this.queue, judge.features) !== undefined;
   }
 
   isQueued(id: string): boolean {
@@ -37,14 +49,15 @@ export class GenerationsService {
     return new Set([...judges].flatMap((judge) => [...judge.generations]));
   }
 
-  /** Takes the oldest queued id: reserves the slot, claims the row, sends it. A row no longer queued frees the slot; a session that ended during the claim gives the row back. */
+  /** Takes the oldest queued id the judge can run: reserves the slot, claims the row, sends it. A row no longer queued frees the slot; a session that ended during the claim gives the row back. */
   async startFor(judge: DispatchTarget): Promise<void> {
-    const [id] = this.queue;
+    const id = pickGeneration(this.queue, judge.features);
     if (!id) return;
+    const feature = this.queue.get(id)!;
     this.queue.delete(id);
     judge.generations.add(id);
     try {
-      await this.claimAndSend(judge, id);
+      await this.claimAndSend(judge, id, feature);
     } catch (error) {
       judge.generations.delete(id);
       throw error;
@@ -99,13 +112,17 @@ export class GenerationsService {
     this.deadlines.clear();
   }
 
-  private async claimAndSend(judge: DispatchTarget, id: string): Promise<void> {
+  private async claimAndSend(
+    judge: DispatchTarget,
+    id: string,
+    feature: GenerationFeature,
+  ): Promise<void> {
     const claimed = await this.rows.claim(id, judge.name, judge.id);
     if (!claimed) return void judge.generations.delete(id);
     if (judge.isClosed) {
       judge.generations.delete(id);
       await this.rows.release(id, judge.id);
-      return void this.queue.add(id);
+      return void this.queue.set(id, feature);
     }
     try {
       judge.generate(generateOf(claimed));

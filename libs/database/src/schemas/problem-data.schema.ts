@@ -103,6 +103,39 @@ export class ProblemData {
 }
 export const ProblemDataSchema = SchemaFactory.createForClass(ProblemData);
 
+/** `pending` until the worker compiled the file on a judge; `unavailable` when no judge could (none online with `generate.compile`, or the run was lost). */
+export const SOURCE_CHECK_STATUSES = [
+  'pending',
+  'ok',
+  'error',
+  'unavailable',
+] as const;
+export type SourceCheckStatus = (typeof SOURCE_CHECK_STATUSES)[number];
+/** Uploads compiled on a judge right after the upload: the checker, and the interactor of an interactive problem. */
+export const CHECKED_SOURCE_KINDS = ['customChecker', 'customGrader'] as const;
+export type CheckedSourceKind = (typeof CHECKED_SOURCE_KINDS)[number];
+
+/** The compile check of one uploaded source, for the file named `file`. */
+@Schema({ _id: false })
+export class SourceCheck {
+  @Prop({ required: true }) file!: string;
+  @Prop({ type: String, required: true, enum: SOURCE_CHECK_STATUSES })
+  status!: SourceCheckStatus;
+  /** Compile log of an `error`, reason of an `unavailable`; empty otherwise. */
+  @Prop({ default: '' }) log!: string;
+  @Prop({ type: Date, default: null }) checkedAt!: Date | null;
+}
+export const SourceCheckSchema = SchemaFactory.createForClass(SourceCheck);
+
+@Schema({ _id: false })
+export class SourceChecks {
+  @Prop({ type: SourceCheckSchema, default: null })
+  customChecker!: SourceCheck | null;
+  @Prop({ type: SourceCheckSchema, default: null })
+  customGrader!: SourceCheck | null;
+}
+export const SourceChecksSchema = SchemaFactory.createForClass(SourceChecks);
+
 /** A plain case row; batch markers and real cases override its fields. */
 export const EMPTY_TEST_CASE: Readonly<ProblemTestCase> = Object.freeze({
   type: 'C',

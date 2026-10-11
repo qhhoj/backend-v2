@@ -1,8 +1,10 @@
 /**
- * The work of one test generation, built by the worker from a Polygon standard package and sent by the bridge
- * as the proto `GenerateTests` (field for field, camelCase). Stored as `TestGeneration.plan`.
+ * The work of one test generation, built by the worker from a Polygon standard package (or, with no tests, a compile
+ * check of an uploaded checker or interactor) and sent by the bridge as the proto `GenerateTests` (field for field,
+ * camelCase). Stored as `TestGeneration.plan`.
  */
-export type GenerationRole = 'GENERATOR' | 'VALIDATOR' | 'SOLUTION';
+export type GenerationRole =
+  'GENERATOR' | 'VALIDATOR' | 'SOLUTION' | 'CHECKER' | 'INTERACTOR';
 
 export interface GenerationProgram {
   /** Unique in the plan; a generator's name is the first token of its tests' commands. */
@@ -52,3 +54,13 @@ export interface GenerationPlan {
 
 /** The judge feature a judge advertises in Hello when it runs generations. */
 export const GENERATE_FEATURE = 'generate.polygon';
+/** The judge feature for compile checks: a plan with no tests whose programs are only compiled (proto minor 3). */
+export const COMPILE_FEATURE = 'generate.compile';
+export type GenerationFeature =
+  typeof GENERATE_FEATURE | typeof COMPILE_FEATURE;
+
+/** The feature a judge needs to run `plan`: a plan without tests is a compile check. */
+export const featureOf = (
+  plan: Pick<GenerationPlan, 'tests'>,
+): GenerationFeature =>
+  plan.tests.length ? GENERATE_FEATURE : COMPILE_FEATURE;

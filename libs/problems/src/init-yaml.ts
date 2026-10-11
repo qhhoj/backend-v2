@@ -15,7 +15,8 @@ export interface CompiledInit {
   cases: ProblemTestCase[];
 }
 
-const CHECKER_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+/** Judge language of an uploaded checker or interactor, by extension. */
+export const CHECKER_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   cpp: 'CPP17',
   pas: 'PAS',
   java: 'JAVA8',

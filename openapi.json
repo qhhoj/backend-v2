@@ -9206,6 +9206,14 @@
             "nullable": true,
             "type": "number"
           },
+          "sourceChecks": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SourceChecksResponse"
+              }
+            ],
+            "description": "Compile checks of the uploaded checker and interactor, run on a judge after each upload."
+          },
           "unicode": {
             "description": "Judge `unicode` flag: output is read as Unicode text.",
             "type": "boolean"
@@ -9229,7 +9237,8 @@
           "cases",
           "archiveFiles",
           "hasInit",
-          "limits"
+          "limits",
+          "sourceChecks"
         ],
         "type": "object"
       },
@@ -12475,6 +12484,70 @@
         },
         "required": [
           "groups"
+        ],
+        "type": "object"
+      },
+      "SourceCheckResponse": {
+        "properties": {
+          "checkedAt": {
+            "description": "When the judge answered; null while pending.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "file": {
+            "description": "The uploaded file this check is about.",
+            "type": "string"
+          },
+          "log": {
+            "description": "Compile log of an `error`, reason of an `unavailable`; empty otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "description": "`pending` (queued or compiling on a judge), `ok`, `error` (see `log`) or `unavailable` (no judge with `generate.compile` could compile it; `log` says why).",
+            "enum": [
+              "error",
+              "ok",
+              "pending",
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "status",
+          "log",
+          "checkedAt"
+        ],
+        "type": "object"
+      },
+      "SourceChecksResponse": {
+        "properties": {
+          "customChecker": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheckResponse"
+              }
+            ],
+            "description": "Compile check of the uploaded checker; null when there is none.",
+            "nullable": true,
+            "type": "object"
+          },
+          "customGrader": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SourceCheckResponse"
+              }
+            ],
+            "description": "Compile check of the uploaded interactor (interactive grader only); null otherwise.",
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "customChecker",
+          "customGrader"
         ],
         "type": "object"
       },

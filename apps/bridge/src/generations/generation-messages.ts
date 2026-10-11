@@ -14,6 +14,8 @@ const ROLE: Record<GenerationRole, GenerationProgram_Role> = {
   GENERATOR: GenerationProgram_Role.ROLE_GENERATOR,
   VALIDATOR: GenerationProgram_Role.ROLE_VALIDATOR,
   SOLUTION: GenerationProgram_Role.ROLE_SOLUTION,
+  CHECKER: GenerationProgram_Role.ROLE_CHECKER,
+  INTERACTOR: GenerationProgram_Role.ROLE_INTERACTOR,
 };
 
 /** `STAGE_COMPILE` -> `COMPILE`; null for UNSPECIFIED and values this build does not know. */

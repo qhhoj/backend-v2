@@ -8,7 +8,13 @@ import {
   toUuid,
   uuidStr,
 } from '@libs/database';
-import type { ProblemData, ProblemTranslation } from '@libs/database';
+import type {
+  CheckedSourceKind,
+  ProblemData,
+  ProblemTranslation,
+  SourceCheck,
+  SourceChecks,
+} from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 
 export type ProblemDocument = HydratedDocument<Problem>;
@@ -192,6 +198,25 @@ export class ProblemsRepository {
 
   create(fields: Partial<Problem>): Promise<ProblemDocument> {
     return this.problems.create(fields);
+  }
+
+  /** The compile check of one uploaded source; null drops it. */
+  async setSourceCheck(
+    id: string,
+    kind: CheckedSourceKind,
+    check: SourceCheck | null,
+  ): Promise<void> {
+    await this.problems
+      .updateOne({ _id: id }, { $set: { [`sourceChecks.${kind}`]: check } })
+      .exec();
+  }
+
+  async sourceChecksOf(id: string): Promise<SourceChecks | null> {
+    const row = await this.problems
+      .findById(id, { sourceChecks: 1 })
+      .lean<{ sourceChecks?: SourceChecks | null }>()
+      .exec();
+    return row?.sourceChecks ?? null;
   }
 
   async update(id: string, changes: Partial<Problem>): Promise<void> {

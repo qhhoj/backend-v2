@@ -26,9 +26,16 @@ export interface TestGenerationFailure {
   detail: string;
 }
 
+/** Judge features a generation can need: test generation, or a compile check (a plan without tests). */
+export const TEST_GENERATION_FEATURES = [
+  'generate.polygon',
+  'generate.compile',
+] as const;
+
 /**
- * One "generate tests" job for a Polygon standard package: the worker inserts it with the plan and the GridFS
- * bundle, the bridge runs it on a judge with feature `generate.polygon` and stores the result zip in GridFS.
+ * One "generate tests" job for a Polygon standard package, or a compile check of an uploaded checker or interactor: the
+ * worker inserts it with the plan and the GridFS bundle, the bridge runs it on a judge with its `feature` and stores the
+ * result zip in GridFS.
  * Bundle and result live in the `testGenerations` GridFS bucket and are removed with the row.
  */
 @Schema({ ...baseSchemaOptions, collection: 'testGenerations' })
@@ -39,6 +46,13 @@ export class TestGeneration {
   /** `GenerationPlan` from `@libs/judging`: programs, tests, limits, file I/O, deadline. */
   @Prop({ type: Mixed, required: true, validate: PLAIN_OBJECT })
   plan!: Record<string, unknown>;
+  /** The judge feature it needs; rows from before compile checks read as test generation. */
+  @Prop({
+    type: String,
+    enum: TEST_GENERATION_FEATURES,
+    default: 'generate.polygon',
+  })
+  feature!: (typeof TEST_GENERATION_FEATURES)[number];
   @Prop({ type: ObjectId, required: true }) bundleFileId!: unknown;
   @Prop({ required: true }) bundleSize!: number;
   @Prop({ type: ObjectId, default: null }) resultFileId!: unknown;

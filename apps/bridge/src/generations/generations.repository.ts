@@ -4,7 +4,7 @@ import type { Connection, Model } from 'mongoose';
 import { TestGeneration, uuidStr } from '@libs/database';
 import type { TestGenerationFailure } from '@libs/database';
 import { generationBucket } from '@libs/judging';
-import type { GenerationPlan } from '@libs/judging';
+import type { GenerationFeature, GenerationPlan } from '@libs/judging';
 
 /** Rows and their files older than this are removed by the resync, whatever state they ended in (the worker normally cleans up). */
 export const GENERATION_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -40,13 +40,21 @@ export class GenerationsRepository {
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
-  /** Ids of queued rows, among `ids` when given. */
-  async queuedIds(ids?: string[]): Promise<string[]> {
+  /** Queued rows (among `ids` when given), oldest first, with the judge feature each needs. */
+  async queued(
+    ids?: string[],
+  ): Promise<{ id: string; feature: GenerationFeature }[]> {
     const rows = await this.generations
-      .find({ status: 'queued', ...(ids && { _id: { $in: ids } }) }, { _id: 1 })
+      .find(
+        { status: 'queued', ...(ids && { _id: { $in: ids } }) },
+        { _id: 1, feature: 1 },
+      )
       .sort({ _id: 1 })
       .lean();
-    return rows.map((row) => uuidStr(row._id));
+    return rows.map((row) => ({
+      id: uuidStr(row._id),
+      feature: row.feature ?? 'generate.polygon',
+    }));
   }
 
   /** queued -> running on `judge`'s session; null when the row is gone or no longer queued. */

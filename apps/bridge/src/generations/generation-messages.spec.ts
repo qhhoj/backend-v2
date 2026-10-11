@@ -185,10 +185,10 @@ describe('generateOf', () => {
   it('refuses a role the worker never writes', () => {
     const plan = {
       ...PLAN,
-      programs: [{ ...PLAN.programs[0], role: 'CHECKER' }],
+      programs: [{ ...PLAN.programs[0], role: 'VERIFIER' }],
     };
     expect(() =>
       generateOf({ id: 'g', bundleSize: 1, plan: plan as never }),
-    ).toThrow(/CHECKER/);
+    ).toThrow(/VERIFIER/);
   });
 });

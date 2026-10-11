@@ -47,7 +47,7 @@ class Target implements DispatchTarget {
 
 /** The generation queue is empty and holds nothing here; its own spec covers it. */
 const NO_GENERATIONS = {
-  hasQueued: () => false,
+  hasQueuedFor: () => false,
   judgeLost: () => Promise.resolve(),
   stop: () => undefined,
 } as never;

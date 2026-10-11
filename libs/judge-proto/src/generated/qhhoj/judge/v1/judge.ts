@@ -561,6 +561,10 @@ export enum GenerationProgram_Role {
   ROLE_GENERATOR = 1,
   ROLE_VALIDATOR = 2,
   ROLE_SOLUTION = 3,
+  /** ROLE_CHECKER - Minor 3. Compiled only (compile check), never run. */
+  ROLE_CHECKER = 4,
+  /** ROLE_INTERACTOR - Minor 3. Compiled only (compile check), never run. */
+  ROLE_INTERACTOR = 5,
   UNRECOGNIZED = -1,
 }
 
@@ -578,6 +582,12 @@ export function generationProgram_RoleFromJSON(object: any): GenerationProgram_R
     case 3:
     case "ROLE_SOLUTION":
       return GenerationProgram_Role.ROLE_SOLUTION;
+    case 4:
+    case "ROLE_CHECKER":
+      return GenerationProgram_Role.ROLE_CHECKER;
+    case 5:
+    case "ROLE_INTERACTOR":
+      return GenerationProgram_Role.ROLE_INTERACTOR;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -595,6 +605,10 @@ export function generationProgram_RoleToJSON(object: GenerationProgram_Role): st
       return "ROLE_VALIDATOR";
     case GenerationProgram_Role.ROLE_SOLUTION:
       return "ROLE_SOLUTION";
+    case GenerationProgram_Role.ROLE_CHECKER:
+      return "ROLE_CHECKER";
+    case GenerationProgram_Role.ROLE_INTERACTOR:
+      return "ROLE_INTERACTOR";
     case GenerationProgram_Role.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -635,6 +649,15 @@ export interface GenerationLimits {
   maxUploadBytes: number;
 }
 
+/**
+ * A GenerateTests with no tests is a compile check (minor 3, feature
+ * "generate.compile"): every program must be a checker or an interactor and no
+ * solution is needed. The judge compiles them in order (testlib.h on the include
+ * path), stops at the first compile error (GenerationFailure with stage
+ * COMPILE, kind COMPILE_ERROR, the program's name and the compile log), and on
+ * success uploads an empty result zip and sends GenerationDone ok. With tests,
+ * checker and interactor programs are refused.
+ */
 export interface GenerateTests {
   generationId: string;
   bundleSize: number;

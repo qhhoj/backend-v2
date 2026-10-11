@@ -1,9 +1,9 @@
 {
   "source": "judge-v2",
-  "tag": "proto-v1.2",
-  "commit": "0f1b1c3692c22273c486f163e84966ddb703227d",
+  "tag": "proto-v1.3",
+  "commit": "8d86079c5b7a8ba9a766eb34f216b77f31aa0918",
   "files": {
-    "compat/v1.shape.json": "c38deeff0afc202edb556c53feb8327a561ccba4516cafdfe32fb70d0aea8d33",
+    "compat/v1.shape.json": "02f21aecbcf8556e034e32423b4e00908f0edaa01c067240fa2f5758f0548ac6",
     "conformance/matcher-cases.json": "328c8a084d23185ba634c5223becb48edc3a5a3dab277489612548d6d5d19eea",
     "conformance/scenarios/01-hello-first.yaml": "99e5a7c0de109da57ded61bdb2bca5ec061914f4deba727769a97964bf241c62",
     "conformance/scenarios/02-bad-key.yaml": "1e765d4887e7adf872a01f0ac79a33fd10a30c357f1dee0f0771d1d4cf5af76f",
@@ -106,7 +106,7 @@
     "golden/upload-chunk.json": "4da9d2efc41d4681fb55bddb8225616808efc9d207ec12af1a3a571edc92add4",
     "golden/upload-receipt.bin": "58c789bfd002eb5f27601d89c0371e8e1890c79e5ff0aa64be8423d422596d83",
     "golden/upload-receipt.json": "4a2973da7005c13a376e71eb5ae3c150ced60c9b03f4e0d50d06cf93d9ea97ea",
-    "qhhoj/judge/v1/judge.proto": "c37ac13cc41bde72f51340fe6dc9cdd9cb34a6980b5cae3a94403de63681b086",
-    "version.json": "a17047ea2845ab8d5b907bac092b0149ecf9656425ce810a24e912e6028499fa"
+    "qhhoj/judge/v1/judge.proto": "8624296e53ad4da5496f5870c6aaf2f95ce7f715c2def10ee74c87f874056026",
+    "version.json": "0b58d9d24b33eaeb1c3838f6a0550d79a672432a63349ec2e84123dcc9c7789e"
   }
 }

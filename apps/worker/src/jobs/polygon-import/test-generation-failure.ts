@@ -18,6 +18,8 @@ const ROLE_LABELS: Record<GenerationProgram['role'], string> = {
   GENERATOR: 'generator',
   VALIDATOR: 'validator',
   SOLUTION: 'main solution',
+  CHECKER: 'checker',
+  INTERACTOR: 'interactor',
 };
 
 /** "generator gen-random", "main solution sol-main"; just the name when the plan does not know the program. */

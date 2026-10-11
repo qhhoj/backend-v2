@@ -1,5 +1,5 @@
 import { newId } from '@libs/database';
-import { GENERATE_FEATURE } from '@libs/judging';
+import { COMPILE_FEATURE, GENERATE_FEATURE } from '@libs/judging';
 import {
   canJudge,
   freeSlots,
@@ -221,6 +221,12 @@ describe('generations in the slot count', () => {
     ['no free slot', { slots: 1, inFlight: busyWith(1) }, false, false],
     ['a disabled judge', { slots: 4, isDisabled: true }, false, false],
     ['a draining judge', { slots: 4, isDraining: true }, false, false],
+    [
+      'a judge with compile checks only',
+      { slots: 4, features: new Set([COMPILE_FEATURE]) },
+      false,
+      true,
+    ],
     [
       'a judge without the feature',
       { slots: 4, features: new Set<string>() },
