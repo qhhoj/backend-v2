@@ -21,6 +21,7 @@ for unit in qhhoj-api qhhoj-bridge qhhoj-worker; do
 done
 expect qhhoj-bridge '/srv/qhhoj/problem-data:/srv/qhhoj/problem-data:ro'
 expect qhhoj-bridge '/etc/qhhoj/bridge-tls:/etc/qhhoj/bridge-tls:ro'
+expect qhhoj-bridge '/srv/qhhoj/media:/srv/qhhoj/media:ro'
 expect qhhoj-api '/srv/qhhoj:/srv/qhhoj'
 expect qhhoj-worker '^MemoryMax=5G'
 expect qhhoj-worker '--shm-size=1g'

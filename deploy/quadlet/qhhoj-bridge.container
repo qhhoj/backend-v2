@@ -21,6 +21,8 @@ DropCapability=all
 EnvironmentFile=/etc/qhhoj/env
 Environment=APP=bridge NODE_ENV=production
 Volume=/srv/qhhoj/problem-data:/srv/qhhoj/problem-data:ro
+# FetchSource streams file-only (OUTPUT zip) submissions from MEDIA_ROOT/submission_file
+Volume=/srv/qhhoj/media:/srv/qhhoj/media:ro
 Volume=/etc/qhhoj/bridge-tls:/etc/qhhoj/bridge-tls:ro
 LogDriver=journald
 
