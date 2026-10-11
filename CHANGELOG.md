@@ -1,5 +1,18 @@
 # qhhoj-backend
 
+## 2.14.0
+
+### Minor Changes
+
+- a50bcd9: Add `GET /admin/audit`: the global change log over `revisions` and `settingRevisions`, newest first, with actor, object label and changed field names, filtered by actor, type and time range.
+- 1afe3f1: Admin content: settled comment reports and bulk settle, locked comment pages list, ticket retitle/relink and `awaiting` filter, misc config history, post filter by organization slug, flatpage search.
+- 61cdbcb: External judge API: settings connection test, per-problem link (get/put/delete/search/verify with language suggestions), public status, submit checks, external run on submission detail.
+- bffa38d: Bridge: external judge adapter (`@external`) submits external problems' submissions to the PCD VJudge, polls them and writes results through the normal run writes.
+
+### Patch Changes
+
+- b9f1d0b: CI runs only the unit and static OpenAPI specs, with no MongoDB or Redis; specs that need them are `*.db.spec.ts` or `*.e2e-spec.ts` and run locally with `npm run test:db`.
+
 ## 2.13.0
 
 ### Minor Changes
