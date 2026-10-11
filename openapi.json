@@ -4990,6 +4990,280 @@
         ],
         "type": "object"
       },
+      "ExternalJudgeLanguageResponse": {
+        "properties": {
+          "languageId": {
+            "description": "Site language id.",
+            "type": "string"
+          },
+          "remoteId": {
+            "description": "The remote OJ's language id.",
+            "type": "string"
+          },
+          "remoteName": {
+            "description": "The remote OJ's language name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "languageId",
+          "remoteId",
+          "remoteName"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeLinkResponse": {
+        "properties": {
+          "isActive": {
+            "description": "Whether submissions go to the external judge.",
+            "type": "boolean"
+          },
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalJudgeLanguageResponse"
+            },
+            "type": "array"
+          },
+          "oj": {
+            "type": "string"
+          },
+          "problemId": {
+            "type": "string"
+          },
+          "title": {
+            "description": "Remote title from the last verify.",
+            "type": "string"
+          },
+          "verifiedAt": {
+            "description": "When the link was last verified; null if never.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "isActive",
+          "oj",
+          "problemId",
+          "title",
+          "languages",
+          "verifiedAt"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeSearchDto": {
+        "properties": {
+          "oj": {
+            "description": "OJ id to search in.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "page": {
+            "description": "Page, from 1.",
+            "minimum": 1,
+            "type": "number"
+          },
+          "problemId": {
+            "description": "Problem id (or part of it) to search for.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ExternalJudgeSearchItemResponse": {
+        "properties": {
+          "oj": {
+            "type": "string"
+          },
+          "problemId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "oj",
+          "problemId",
+          "title",
+          "source"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalJudgeSearchItemResponse"
+            },
+            "type": "array"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeStatusResponse": {
+        "properties": {
+          "checkedAt": {
+            "description": "When the last check ran (ISO 8601); null when not configured.",
+            "nullable": true,
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Whether an external judge is configured.",
+            "type": "boolean"
+          },
+          "ojs": {
+            "description": "OJ ids it serves; empty when unreachable.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reachable": {
+            "description": "Whether the last check reached it; null when not configured.",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "reachable",
+          "checkedAt",
+          "ojs"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeTestResponse": {
+        "properties": {
+          "ojs": {
+            "description": "OJ ids the external judge serves.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "ojs"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeVerifyDto": {
+        "properties": {
+          "oj": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "problemId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "oj",
+          "problemId"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeVerifyLanguageResponse": {
+        "properties": {
+          "remoteId": {
+            "type": "string"
+          },
+          "remoteName": {
+            "type": "string"
+          },
+          "suggestedLanguageId": {
+            "description": "The site language this one most likely is; null when no good match.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "remoteId",
+          "remoteName",
+          "suggestedLanguageId"
+        ],
+        "type": "object"
+      },
+      "ExternalJudgeVerifyResponse": {
+        "properties": {
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalJudgeVerifyLanguageResponse"
+            },
+            "type": "array"
+          },
+          "oj": {
+            "type": "string"
+          },
+          "problemId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "oj",
+          "problemId",
+          "title",
+          "languages"
+        ],
+        "type": "object"
+      },
+      "ExternalLanguageDto": {
+        "properties": {
+          "languageId": {
+            "description": "Site language id.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "remoteId": {
+            "description": "The remote OJ's language id.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "remoteName": {
+            "description": "The remote OJ's language name, for display.",
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "languageId",
+          "remoteId"
+        ],
+        "type": "object"
+      },
       "FeedKeyMode": {
         "description": "Mode of the active key; null if none.",
         "enum": [
@@ -8755,6 +9029,16 @@
             "nullable": true,
             "type": "object"
           },
+          "externalJudge": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProblemExternalJudgeBadgeResponse"
+              }
+            ],
+            "description": "Where the problem is judged when an external judge does it; null for judge-v2.",
+            "nullable": true,
+            "type": "object"
+          },
           "group": {
             "allOf": [
               {
@@ -8946,6 +9230,7 @@
           "acRate",
           "canEdit",
           "contest",
+          "externalJudge",
           "editor"
         ],
         "type": "object"
@@ -9088,6 +9373,41 @@
           "publishOn",
           "authors",
           "content"
+        ],
+        "type": "object"
+      },
+      "ProblemExternalJudgeBadgeResponse": {
+        "properties": {
+          "oj": {
+            "description": "The external judge's OJ the problem is judged on (`CodeForces`, `QOJ`, ...).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "oj"
+        ],
+        "type": "object"
+      },
+      "ProblemExternalJudgeResponse": {
+        "properties": {
+          "connected": {
+            "description": "Whether the site has an external judge connection configured.",
+            "type": "boolean"
+          },
+          "link": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExternalJudgeLinkResponse"
+              }
+            ],
+            "description": "The problem's link; null when none.",
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "connected",
+          "link"
         ],
         "type": "object"
       },
@@ -9657,6 +9977,46 @@
           "isPublic",
           "publishOn",
           "content"
+        ],
+        "type": "object"
+      },
+      "PutExternalJudgeDto": {
+        "properties": {
+          "isActive": {
+            "description": "Whether the problem is judged by the external judge.",
+            "type": "boolean"
+          },
+          "languages": {
+            "description": "Site languages and the remote language each is sent as; at most one entry per site language.",
+            "items": {
+              "$ref": "#/components/schemas/ExternalLanguageDto"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "oj": {
+            "description": "The external judge's OJ id (`CodeForces`, `QOJ`, ...).",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "problemId": {
+            "description": "The problem id on that OJ.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "description": "The remote title from a verify; stamps the link as verified.",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "required": [
+          "isActive",
+          "oj",
+          "problemId",
+          "languages"
         ],
         "type": "object"
       },
@@ -12243,6 +12603,16 @@
             "nullable": true,
             "type": "string"
           },
+          "externalRun": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionExternalRunResponse"
+              }
+            ],
+            "description": "The run on the external judge; only for viewers who may rejudge, and only for the current judging generation.",
+            "nullable": true,
+            "type": "object"
+          },
           "id": {
             "description": "Submission id; ids sort by submission time.",
             "type": "string"
@@ -12373,7 +12743,60 @@
           "viewer",
           "cases",
           "batches",
+          "externalRun",
           "totalCases"
+        ],
+        "type": "object"
+      },
+      "SubmissionExternalRunResponse": {
+        "properties": {
+          "oj": {
+            "description": "The external judge's OJ.",
+            "type": "string"
+          },
+          "problemId": {
+            "description": "The problem id on that OJ.",
+            "type": "string"
+          },
+          "remoteId": {
+            "description": "The external judge's submission id; null until it accepted the submit.",
+            "nullable": true,
+            "type": "string"
+          },
+          "remoteUrl": {
+            "description": "Link to the run on the remote OJ.",
+            "nullable": true,
+            "type": "string"
+          },
+          "scoreText": {
+            "description": "The remote score, as text (`100/100`).",
+            "nullable": true,
+            "type": "string"
+          },
+          "statusCanonical": {
+            "description": "The remote verdict (`AC`, `WA`, `PENDING`, ...).",
+            "type": "string"
+          },
+          "submittedAt": {
+            "description": "When the run was sent; null until then.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "systemStatus": {
+            "description": "The external judge's own status (`queued`, `done`, ...).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "oj",
+          "problemId",
+          "remoteId",
+          "systemStatus",
+          "statusCanonical",
+          "scoreText",
+          "remoteUrl",
+          "submittedAt"
         ],
         "type": "object"
       },
@@ -27184,6 +27607,106 @@
         ]
       }
     },
+    "/api/internal/external-judge/status": {
+      "get": {
+        "description": "Public. Whether an external judge is configured and whether its OJ list\ncould be read, with the OJ ids. The check runs at most once a minute per\nserver process; the base URL and the token are never shown.",
+        "operationId": "ExternalJudgeStatusController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ExternalJudgeStatusResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "External judge status",
+        "tags": [
+          "Judging"
+        ]
+      }
+    },
+    "/api/internal/external-judge/test": {
+      "post": {
+        "description": "Needs `judge.change_settings`. Calls the external judge's OJ list with the\nsaved base URL and token and answers the OJ ids it serves. Errors: 409\n`external_judge_not_configured`, 502 `external_judge_unauthorized`, 404\n`external_judge_not_found`, 502 `external_judge_rejected`, 503\n`external_judge_unavailable`. Messages never carry the URL or the token.",
+        "operationId": "ExternalJudgeConnectionController_test",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ExternalJudgeTestResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Test the external judge connection",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      }
+    },
     "/api/internal/feeds/{kind}/{format}": {
       "get": {
         "description": "Public. Returns the 25 newest items of `kind` (`blog`, `comments` or `problems`) as `rss` (`application/rss+xml`) or `atom` (`application/atom+xml`). Feeds show only what a signed-out visitor may read and are cached for 5 minutes. The legacy `/feed/<kind>/<rss|atom>/` URLs map here.",
@@ -33349,6 +33872,332 @@
           }
         },
         "summary": "Create or replace the editorial of a problem",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/external-judge": {
+      "delete": {
+        "description": "Needs edit rights on the problem. The problem is judged by judge-v2 again;\nits allowed languages are left as they are.",
+        "operationId": "ProblemExternalJudgeController_remove",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProblemExternalJudgeResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove a problem's external judge link",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "get": {
+        "description": "Needs edit rights on the problem (404 `not_found` when invisible, 403\n`forbidden` when not editable). `connected` tells whether the site has an\nexternal judge configured; `link` is null when the problem has none.",
+        "operationId": "ProblemExternalJudgeController_get",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProblemExternalJudgeResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a problem's external judge link",
+        "tags": [
+          "Problem editing"
+        ]
+      },
+      "put": {
+        "description": "Needs edit rights on the problem. Replaces the link: the remote OJ and\nproblem and the site-to-remote language mapping. Every language must exist\nand take typed source (400 `validation_failed`). While `isActive`, the\nproblem's allowed languages become exactly the mapped ones and its\nsubmissions are judged by the external judge. Writes a revision.",
+        "operationId": "ProblemExternalJudgeController_put",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutExternalJudgeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProblemExternalJudgeResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Set a problem's external judge link",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/external-judge/search": {
+      "post": {
+        "description": "Needs edit rights on the problem. Give an OJ, a problem id or both (400\n`validation_failed` otherwise). Limited to 30 lookups a minute per user\n(429 `rate_limited`). External judge errors: 409\n`external_judge_not_configured`, 502 `external_judge_unauthorized`, 502\n`external_judge_rejected`, 503 `external_judge_unavailable`.",
+        "operationId": "ProblemExternalJudgeController_search",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalJudgeSearchDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ExternalJudgeSearchResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search the external judge's problems",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/problems/{code}/external-judge/verify": {
+      "post": {
+        "description": "Needs edit rights on the problem. Reads the remote problem's title and\nlanguages, each with the site language it most likely maps to (null when\nno good match). Same limit and errors as search; 404\n`external_judge_not_found` when the remote problem does not exist.",
+        "operationId": "ProblemExternalJudgeController_verify",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalJudgeVerifyDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ExternalJudgeVerifyResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Verify a remote problem",
         "tags": [
           "Problem editing"
         ]
