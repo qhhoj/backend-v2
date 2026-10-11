@@ -9,12 +9,22 @@ const NEST_LEVELS: Array<[LogLevel, string]> = [
   ['debug', 'debug'],
   ['verbose', 'trace'],
 ];
-const SEVERITY = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'];
+/** Every accepted `LOG_LEVEL` (pino vocabulary), most to least severe; `silent` prints nothing. */
+export const PINO_LEVELS = [
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'silent',
+];
 
 /** Apps without pino (worker, bridge): `LOG_LEVEL` selects which Nest logger levels are printed. */
 export function nestLogLevels(logLevel: string): LogLevel[] {
-  const enabledUpTo = SEVERITY.indexOf(logLevel);
+  if (logLevel === 'silent') return [];
+  const enabledUpTo = PINO_LEVELS.indexOf(logLevel);
   return NEST_LEVELS.filter(
-    ([, threshold]) => SEVERITY.indexOf(threshold) <= enabledUpTo,
+    ([, threshold]) => PINO_LEVELS.indexOf(threshold) <= enabledUpTo,
   ).map(([level]) => level);
 }

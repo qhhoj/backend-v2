@@ -1,3 +1,4 @@
+import { PINO_LEVELS } from '../log-levels';
 import { checkDataRoots } from './data-roots';
 import { parseIpList } from './ip-allowlist';
 
@@ -38,16 +39,6 @@ export interface Env {
   /** Exported user data zips, shared by the api (serves) and the worker (writes); null disables the export. Not under MEDIA_ROOT (served publicly). */
   userDataRoot: string | null;
 }
-
-const LOG_LEVELS = [
-  'fatal',
-  'error',
-  'warn',
-  'info',
-  'debug',
-  'trace',
-  'silent',
-];
 
 export const ENV = Symbol('ENV');
 
@@ -159,8 +150,8 @@ function checkValues(env: Env): string[] {
     problems.push('ENCRYPTION_KEY must be 64 hex chars');
   if (env.tokenSecret.length < 32)
     problems.push('TOKEN_SECRET must be at least 32 chars');
-  if (!LOG_LEVELS.includes(env.logLevel))
-    problems.push(`LOG_LEVEL must be one of ${LOG_LEVELS.join('|')}`);
+  if (!PINO_LEVELS.includes(env.logLevel))
+    problems.push(`LOG_LEVEL must be one of ${PINO_LEVELS.join('|')}`);
   if ((env.judgeBridgeTlsCert === null) !== (env.judgeBridgeTlsKey === null))
     problems.push('JUDGE_BRIDGE_TLS_CERT and JUDGE_BRIDGE_TLS_KEY go together');
   return problems;
