@@ -110,10 +110,13 @@ describe('PandocService process handling', () => {
     expect(Date.now() - started).toBeLessThan(10_000);
   });
   it('settles at the timeout even when a grandchild outside the group keeps the pipes', async () => {
-    const orphan = fakePandoc('setsid sleep 3 &\nsleep 30', { timeoutMs: 300 });
+    // Settling takes ~0.3s; waiting for the orphan's pipes would take its full 30s, so 10s separates the two on any runner.
+    const orphan = fakePandoc('setsid sleep 30 &\nsleep 30', {
+      timeoutMs: 300,
+    });
     const started = Date.now();
     await expect(orphan.texToMarkdown('x')).rejects.toThrow('pandoc timed out');
-    expect(Date.now() - started).toBeLessThan(2000);
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
   it('limits the address space and reports exhaustion as an import error', async () => {
     const greedy = fakePandoc(
