@@ -77,7 +77,7 @@ export interface FinalJudgeTarget {
 }
 
 /** FSO contests judged automatically when they end. */
-export const judgesAtEnd = (contest: FinalJudgeTarget): boolean =>
+const judgesAtEnd = (contest: FinalJudgeTarget): boolean =>
   contest.formatName === 'final_submission' &&
   finalSubmissionFormat.parseConfig(contest.formatConfig).autoJudge;
 
