@@ -25,6 +25,7 @@ import {
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { dataOf, seedSubmission } from './submission-fixtures';
+import { createOrganization } from './organization-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -273,6 +274,47 @@ describe('contest CRUD', () => {
   });
 
   describe('list and detail', () => {
+    it('names the organizations an organization-private contest is restricted to, hiding unlisted ones from non-members', async () => {
+      const listed = await createOrganization(api, { slug: 'tagged_open' }, [
+        users.dave._id,
+      ]);
+      const unlisted = await createOrganization(
+        api,
+        { slug: 'tagged_hidden', isUnlisted: true },
+        [users.dave._id],
+      );
+      const restricted = await createContest(api, {
+        isOrganizationPrivate: true,
+        organizations: [listed._id, unlisted._id],
+        authors: [users.author._id],
+      });
+      const unrestricted = await createContest(api, {
+        organizations: [listed._id],
+      });
+      const slugsOf = async (key: string, who: string) => {
+        const [row] = dataOf<ContestListItemResponse[]>(
+          await authed(
+            api.http().get(`${CONTESTS}?search=${key}`),
+            sessions[who],
+          ).expect(200),
+        ).filter((item) => item.key === key);
+        const fromDetail = (await detail(key, who)).organizations;
+        expect(row.organizations).toEqual(fromDetail);
+        return fromDetail.map((organization) => organization.slug);
+      };
+
+      expect(await slugsOf(restricted.key, 'dave')).toEqual([
+        'tagged_open',
+        'tagged_hidden',
+      ]);
+      expect(await slugsOf(restricted.key, 'author')).toEqual(['tagged_open']);
+      expect((await detail(restricted.key, 'dave')).organizations[0]).toEqual({
+        slug: 'tagged_open',
+        name: listed.name,
+      });
+      expect(await slugsOf(unrestricted.key, 'dave')).toEqual([]);
+    });
+
     it('lists visible contests by phase, tag, rating and search, newest first', async () => {
       const tag = `t${Date.now() % 100000}`;
       const past = await createContest(api, {

@@ -1643,6 +1643,13 @@
           "name": {
             "type": "string"
           },
+          "organizations": {
+            "description": "The organizations the contest is restricted to, empty unless it is organization-private; unlisted ones show only to viewers who may list them.",
+            "items": {
+              "$ref": "#/components/schemas/ContestOrganizationResponse"
+            },
+            "type": "array"
+          },
           "phase": {
             "allOf": [
               {
@@ -1795,6 +1802,7 @@
           "virtualCount",
           "isPrivate",
           "isOrganizationPrivate",
+          "organizations",
           "requiresAccessCode",
           "requiresRankingAccessCode",
           "disallowVirtual",
@@ -1929,6 +1937,13 @@
           "name": {
             "type": "string"
           },
+          "organizations": {
+            "description": "The organizations the contest is restricted to, empty unless it is organization-private; unlisted ones show only to viewers who may list them.",
+            "items": {
+              "$ref": "#/components/schemas/ContestOrganizationResponse"
+            },
+            "type": "array"
+          },
           "phase": {
             "allOf": [
               {
@@ -2012,6 +2027,7 @@
           "virtualCount",
           "isPrivate",
           "isOrganizationPrivate",
+          "organizations",
           "requiresAccessCode",
           "requiresRankingAccessCode",
           "disallowVirtual",
@@ -2040,6 +2056,22 @@
         "required": [
           "liveStatus",
           "isCurrent"
+        ],
+        "type": "object"
+      },
+      "ContestOrganizationResponse": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "description": "Unique identifier used in the organization's URL.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name"
         ],
         "type": "object"
       },

@@ -2,7 +2,18 @@ import { ApiProperty } from '@nestjs/swagger';
 import { CONTEST_PHASES, contestPhase, LIVE_STATUSES } from '@libs/contests';
 import type { ContestPhase, LiveStatus } from '@libs/contests';
 import { CONTEST_FORMAT_NAMES } from '@libs/database';
-import type { Contest, ContestFormatName } from '@libs/database';
+import type { Contest, ContestFormatName, Organization } from '@libs/database';
+
+/** An organization a contest is restricted to. */
+export class ContestOrganizationResponse {
+  /** Unique identifier used in the organization's URL. */
+  slug!: string;
+  name!: string;
+
+  static from(organization: Organization): ContestOrganizationResponse {
+    return { slug: organization.slug, name: organization.name };
+  }
+}
 
 /** What every contest view shows of the contest itself. */
 export class ContestSummaryResponse {
@@ -35,6 +46,8 @@ export class ContestSummaryResponse {
   isPrivate!: boolean;
   /** Only members of its organizations may see it. */
   isOrganizationPrivate!: boolean;
+  /** The organizations the contest is restricted to, empty unless it is organization-private; unlisted ones show only to viewers who may list them. */
+  organizations!: ContestOrganizationResponse[];
   /** Registering and joining (live or virtual) ask for the access code; editors skip it. */
   requiresAccessCode!: boolean;
   /** The public ranking links ask for a ranking access code. */
@@ -45,7 +58,11 @@ export class ContestSummaryResponse {
   registrationStart!: Date | null;
   registrationEnd!: Date | null;
 
-  static from(contest: Contest, now: Date): ContestSummaryResponse {
+  static from(
+    contest: Contest,
+    now: Date,
+    organizations: ContestOrganizationResponse[],
+  ): ContestSummaryResponse {
     return {
       key: contest.key,
       name: contest.name,
@@ -61,6 +78,7 @@ export class ContestSummaryResponse {
       virtualCount: contest.virtualCount,
       isPrivate: contest.isPrivate,
       isOrganizationPrivate: contest.isOrganizationPrivate,
+      organizations,
       requiresAccessCode: contest.accessCodeHash !== null,
       requiresRankingAccessCode: contest.rankingAccessCodeHash !== null,
       disallowVirtual: contest.disallowVirtual,
@@ -87,7 +105,11 @@ export class ContestListItemResponse extends ContestSummaryResponse {
     contest: Contest,
     now: Date,
     viewer: ContestListViewerResponse | null,
+    organizations: ContestOrganizationResponse[],
   ): ContestListItemResponse {
-    return { ...ContestSummaryResponse.from(contest, now), viewer };
+    return {
+      ...ContestSummaryResponse.from(contest, now, organizations),
+      viewer,
+    };
   }
 }

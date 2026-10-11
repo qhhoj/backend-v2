@@ -13,6 +13,7 @@ import {
   CONTEST_RESCORE_QUEUE,
 } from '@libs/contests';
 import { EventsModule } from '../events/events.module';
+import { OrganizationsApiModule } from '../organizations/organizations-api.module';
 import { OrganizationQuotaModule } from '../organizations/quota/organization-quota.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
@@ -48,6 +49,7 @@ import { ContestStatsRepository } from './stats/contest-stats.repository';
 import { ContestStatsService } from './stats/contest-stats.service';
 import { ContestSubmissionsController } from './submissions/contest-submissions.controller';
 import { ContestSubmissionsService } from './submissions/contest-submissions.service';
+import { ContestOrganizationsService } from './core/contest-organizations.service';
 import { ContestProblemFactsService } from './core/contest-problem-facts.service';
 import { ContestsController } from './core/contests.controller';
 import { ContestsService } from './core/contests.service';
@@ -71,6 +73,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     GhostsModule,
     ReplayModule,
     EventsModule,
+    OrganizationsApiModule,
     OrganizationQuotaModule,
     ProblemsApiModule,
     SubmissionsApiModule,
@@ -109,6 +112,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestEventsService,
     ContestStreamsService,
     ContestsService,
+    ContestOrganizationsService,
     ContestProblemFactsService,
     ContestEditFieldsService,
     ContestEditingService,
