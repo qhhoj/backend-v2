@@ -23,7 +23,7 @@ export type MemberRow = Pick<
   | 'problemCount'
   | 'rating'
 >;
-export interface MemberPageQuery {
+interface MemberPageQuery {
   sort: MemberSort;
   page: number;
   pageSize: number;

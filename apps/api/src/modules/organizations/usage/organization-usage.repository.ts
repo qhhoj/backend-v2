@@ -4,7 +4,7 @@ import { Organization, OrganizationCreditEntry, uuidStr } from '@libs/database';
 import type { Model, PipelineStage } from 'mongoose';
 import type { UsageSort } from './dto/usage.dto';
 
-export interface OverviewRow {
+interface OverviewRow {
   id: string;
   slug: string;
   name: string;

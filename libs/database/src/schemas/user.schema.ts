@@ -49,7 +49,6 @@ export class User {
   @Prop({ default: 0 }) points!: number;
   @Prop({ default: 0 }) performancePoints!: number;
   @Prop({ default: 0 }) contributionPoints!: number;
-  @Prop({ default: 0 }) vnojPoints!: number;
   @Prop({ default: 0 }) problemCount!: number;
   @Prop({ default: 'auto' }) aceTheme!: string;
   @Prop({ default: 'auto' }) siteTheme!: string;
@@ -58,8 +57,6 @@ export class User {
   appearance!: { accent: string; glass: number; glow: number } | null;
   @Prop({ type: Date, default: null }) lastAccess!: Date | null;
   @Prop({ type: String, default: null }) ip!: string | null;
-  @Prop({ type: [UUID], default: [] }) badges!: string[];
-  @Prop({ type: UUID, default: null }) displayBadgeId!: string | null;
   @Prop({ type: [UUID], default: [] }) organizations!: string[];
   @Prop({ default: 'user' }) displayRank!: string;
   @Prop({ default: false }) mute!: boolean;

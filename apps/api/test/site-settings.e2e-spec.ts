@@ -1,6 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { SettingsService } from '@libs/settings';
-import { Setting, SettingRevision, newId } from '@libs/database';
+import { Setting, SettingRevision } from '@libs/database';
 import type { Model } from 'mongoose';
 import {
   authed,
@@ -707,19 +707,6 @@ afterAll(() => api.teardown());
           }),
       },
       {
-        name: 'profile display badge',
-        lockedCode: 'locked_in_official_contest',
-        okStatus: 200,
-        prepare: async (person) => {
-          const badge = newId();
-          await api.users.updateOne(
-            { _id: person.id },
-            { $set: { badges: [badge] } },
-          );
-          return patchProfile({ displayBadgeId: badge });
-        },
-      },
-      {
         name: 'profile organization order',
         lockedCode: 'locked_in_official_contest',
         okStatus: 200,
@@ -807,15 +794,5 @@ afterAll(() => api.teardown());
         await attempt(row, { on: false }, 'open');
       },
     );
-
-    it('answers a locked badge change with 403 even when the badge is not the user own', async () => {
-      const person = await newPerson();
-      await clearRateLimits(api);
-      await setMode(true);
-      await authed(api.http().patch('/api/internal/profile'), person.session)
-        .send({ displayBadgeId: newId() })
-        .expect(403)
-        .expect(errorCode('locked_in_official_contest'));
-    });
   });
 }

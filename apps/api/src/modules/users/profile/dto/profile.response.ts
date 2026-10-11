@@ -37,20 +37,10 @@ export class ProfileResponse {
   timezone!: string;
   /** Default programming language id; null when none. */
   languageId!: string | null;
-  /** Code editor theme. */
-  aceTheme!: string;
   /** Site theme id. */
   siteTheme!: string;
   /** Custom accent and glass settings; null for the site look. */
   appearance!: AppearanceResponse | null;
-  /** How math is rendered. */
-  mathEngine!: string;
-  /** Custom JavaScript run on the site for this user. */
-  userScript!: string;
-  /** Ids of the badges the user owns. */
-  badges!: string[];
-  /** Id of the displayed badge; null for none. */
-  displayBadgeId!: string | null;
   /** Organizations the user belongs to, in display order. */
   organizations!: ProfileOrganizationResponse[];
 }
