@@ -3,6 +3,7 @@ import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { BRIDGE_TIMINGS } from './bridge-timings';
 import type { BridgeTimings } from './bridge-timings';
 import { CommandsService } from './dispatch/commands.service';
+import { ExternalRunnerService } from './external/external-runner.service';
 import { DispatcherService } from './dispatch/dispatcher.service';
 import { JudgesRepository } from './judges/judges.repository';
 import { JudgeLinkServer } from './link/judge-link.server';
@@ -25,15 +26,17 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly judges: JudgesRepository,
     private readonly submissions: SubmissionsRepository,
     private readonly runs: RunsService,
+    private readonly external: ExternalRunnerService,
   ) {}
 
-  /** The port is bound first, so a second process dies on EADDRINUSE before touching Mongo; connecting judges wait. Judges are marked offline before any is served, so the sweep never clobbers one that resumes. P/G rows are left alone: their judges resume them, and the resync requeues the rest after two ticks without spending a requeue. The stream position is read before the queue is rebuilt, so a command published meanwhile is not missed; judges are served last. */
+  /** The port is bound first, so a second process dies on EADDRINUSE before touching Mongo; connecting judges wait. Judges are marked offline before any is served, so the sweep never clobbers one that resumes. P/G rows are left alone: their judges resume them, and the resync requeues the rest after two ticks without spending a requeue. The stream position is read before the queue is rebuilt, so a command published meanwhile is not missed; judges are served last. The external adapter starts after the queue is rebuilt and stops first. */
   async onApplicationBootstrap(): Promise<void> {
     const port = await this.server.listen();
     await this.judges.setAllOffline();
     const position = await this.commands.position();
     await this.dispatch.enqueue(await this.submissions.loadQueued());
     this.commands.start(position);
+    this.external.start();
     this.resyncTimer = setInterval(
       () => void this.resync(),
       this.timings.resyncMs,
@@ -45,6 +48,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
   /** Dispatching stops first, so sessions ended by the shutdown leave their rows P/G (no grace, no requeue spent) for a resume or the next start; judges are marked offline once their sessions are gone. */
   async onModuleDestroy(): Promise<void> {
     clearInterval(this.resyncTimer);
+    await this.external.stop();
     this.dispatch.stop();
     await this.commands.stop();
     await this.server.close();

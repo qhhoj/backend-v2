@@ -1,3 +1,4 @@
+export * from './external-judge-name';
 export * from './external-judge.error';
 export * from './external-judge-types';
 export * from './external-judge-client';
