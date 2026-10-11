@@ -41,7 +41,8 @@ export class ContestRescoreProcessor
   process(
     job: Job<ContestRescoreJob>,
   ): Promise<{ rescored: number; participations: number }> {
-    return this.rescores.rescore(job.data.contestId);
+    const { contestId, problemId, participationId } = job.data;
+    return this.rescores.rescore(contestId, { problemId, participationId });
   }
 
   @OnWorkerEvent('failed')

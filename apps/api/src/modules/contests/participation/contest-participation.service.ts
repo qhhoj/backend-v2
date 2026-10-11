@@ -49,6 +49,22 @@ import {
 export const CONTEST_CHEATING_BAN_REASON =
   'Banned for multiple cheating offenses during contests';
 
+/** `virtual` per listed kind; spectators are listed only on request. */
+const VIRTUAL_OF_KIND = {
+  any: { $gte: LIVE },
+  live: LIVE,
+  virtual: { $gt: LIVE },
+  spectate: SPECTATE,
+} as const;
+/** Best first, like the ranking; the frozen fields while the viewer sees a frozen board. */
+const SCORE_ORDER = { score: -1, cumtime: 1, tiebreaker: 1, _id: 1 } as const;
+const FROZEN_SCORE_ORDER = {
+  frozenScore: -1,
+  frozenCumtime: 1,
+  frozenTiebreaker: 1,
+  _id: 1,
+} as const;
+
 const forbidden = (message: string) => new AppError('forbidden', 403, message);
 
 /** What a register or join request brings besides the contest: the access code it typed and its address (rate limits). */
@@ -363,32 +379,20 @@ export class ContestParticipationService {
       principal,
       ContestAccess.accessView(contest),
     );
-    const filter: FilterQuery<ContestParticipation> = {
-      contest: contest._id,
-      virtual: { $gte: LIVE },
-    };
-    if (query.user !== undefined && query.user !== principal.username) {
-      if (!canEdit)
-        throw forbidden('You can only see your own participations.');
-      const user = await this.users.findByUsername(query.user);
-      if (!user)
-        return new Paginated([], {
-          page: query.page,
-          pageSize: query.pageSize,
-          total: 0,
-        });
-      filter.user = user._id;
-    } else if (!canEdit || query.user !== undefined)
-      filter.user = principal.userId;
+    const meta = { page: query.page, pageSize: query.pageSize };
+    const filter = await this.listFilter(principal, contest, query, canEdit);
+    if (!filter) return new Paginated([], { ...meta, total: 0 });
+    const frozen = isFrozenFor(contest, now, canEdit);
+    const scoreOrder = frozen ? FROZEN_SCORE_ORDER : SCORE_ORDER;
     const { items, total } = await this.participationRows.list(
       filter,
       query.page,
       query.pageSize,
+      query.sort === 'score' ? scoreOrder : undefined,
     );
     const summaries = await this.participationRows.summariesOf(
       items.map((item) => uuidStr(item.user)),
     );
-    const frozen = isFrozenFor(contest, now, canEdit);
     return new Paginated(
       items.map((item) => {
         const userId = uuidStr(item.user);
@@ -399,8 +403,33 @@ export class ContestParticipationService {
           frozen,
         );
       }),
-      { page: query.page, pageSize: query.pageSize, total },
+      { ...meta, total },
     );
+  }
+
+  /** The list's filter; null when the named user does not exist. Other users than the viewer need edit rights. */
+  private async listFilter(
+    principal: Principal,
+    contest: ContestDocument,
+    query: ParticipationListQueryDto,
+    canEdit: boolean,
+  ): Promise<FilterQuery<ContestParticipation> | null> {
+    const filter: FilterQuery<ContestParticipation> = {
+      contest: contest._id,
+      virtual: VIRTUAL_OF_KIND[query.kind ?? 'any'],
+      ...(query.disqualified === undefined
+        ? {}
+        : { isDisqualified: query.disqualified }),
+    };
+    if (query.user !== undefined && query.user !== principal.username) {
+      if (!canEdit)
+        throw forbidden('You can only see your own participations.');
+      const user = await this.users.findByUsername(query.user);
+      if (!user) return null;
+      filter.user = user._id;
+    } else if (!canEdit || query.user !== undefined)
+      filter.user = principal.userId;
+    return filter;
   }
 
   private assertNotBanned(

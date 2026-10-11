@@ -38,7 +38,11 @@ import { SubmissionsService } from './core/submissions.service';
     SubmissionStreamsController,
     BestSubmissionsController,
   ],
-  exports: [SubmissionsService, SubmissionsRepository],
+  exports: [
+    SubmissionsService,
+    SubmissionsRepository,
+    SubmissionActionsService,
+  ],
   providers: [
     SubmissionsRepository,
     SubmissionCreateService,

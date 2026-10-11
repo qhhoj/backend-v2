@@ -20,6 +20,16 @@ export class CreateAnnouncementDto {
   @IsString() @MaxLength(MAX_MARKDOWN_LENGTH) description!: string;
 }
 
+export class AnnouncementPreviewDto {
+  /** Markdown to render, as the announcement body would be. */
+  @IsString() @MaxLength(MAX_MARKDOWN_LENGTH) description!: string;
+}
+
+export class AnnouncementPreviewResponse {
+  /** The Markdown rendered to HTML. */
+  html!: string;
+}
+
 export class AnnouncementListQueryDto {
   /** 1-based page number. */
   @ApiPropertyOptional()

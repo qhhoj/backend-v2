@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -17,6 +18,8 @@ import { ContestAnnouncementsService } from './contest-announcements.service';
 import {
   AnnouncementIdParamDto,
   AnnouncementListQueryDto,
+  AnnouncementPreviewDto,
+  AnnouncementPreviewResponse,
   CreateAnnouncementDto,
 } from './dto/announcement.dto';
 import { AnnouncementResponse } from './dto/announcement.response';
@@ -62,6 +65,42 @@ export class ContestAnnouncementsController {
     @CurrentAuth() auth: AuthContext,
   ): Promise<AnnouncementResponse> {
     return this.announcements.create(auth.principal, key, dto);
+  }
+
+  /**
+   * Preview an announcement
+   *
+   * @remarks
+   * Contest editors only. Renders the Markdown exactly as posting would and
+   * returns the HTML; nothing is stored. Fails with 400 `validation_failed`
+   * when the text cannot be rendered.
+   */
+  @Post('preview')
+  @HttpCode(200)
+  preview(
+    @Param() { key }: ContestKeyParamDto,
+    @Body() { description }: AnnouncementPreviewDto,
+    @CurrentAuth() auth: AuthContext,
+  ): Promise<AnnouncementPreviewResponse> {
+    return this.announcements.preview(auth.principal, key, description);
+  }
+
+  /**
+   * Edit a contest announcement
+   *
+   * @remarks
+   * Contest editors only. Replaces the title and Markdown body (re-rendered)
+   * and keeps the original post time; the edit is not pushed again (resend
+   * does that). Fails with 404 `not_found` for an unknown announcement and 400
+   * `validation_failed` when the text cannot be rendered.
+   */
+  @Patch(':id')
+  update(
+    @Param() { key, id }: AnnouncementIdParamDto,
+    @Body() dto: CreateAnnouncementDto,
+    @CurrentAuth() auth: AuthContext,
+  ): Promise<AnnouncementResponse> {
+    return this.announcements.update(auth.principal, key, id, dto);
   }
 
   /**

@@ -36,4 +36,6 @@ export class ContestActionsResponse {
   @ApiProperty(ACTION_STATE) replay!: ContestActionState;
   @ApiProperty(ACTION_STATE) export!: ContestActionState;
   autoPublish!: ContestAutoPublishResponse | null;
+  /** Pending final submissions still to be judged (final-submission contests; 0 otherwise). */
+  pendingCount!: number;
 }

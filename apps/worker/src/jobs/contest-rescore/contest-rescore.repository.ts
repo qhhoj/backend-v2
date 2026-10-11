@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import type { ContestRescoreScope } from '@libs/contests';
 import {
   ContestParticipation,
   ContestSubmission,
@@ -46,11 +47,23 @@ export class ContestRescoreRepository {
     return (await this.ratings.exists({ contest: contestId })) !== null;
   }
 
-  /** The contest's rows through a cursor (`{contest, problem}` index). */
-  submissionChunks(contestId: string): AsyncGenerator<ContestSubmissionRow[]> {
+  /** The contest's rows, or the scope's, through a cursor (`{contest, problem}` or `{participation, problem}` index). */
+  submissionChunks(
+    contestId: string,
+    scope: ContestRescoreScope = {},
+  ): AsyncGenerator<ContestSubmissionRow[]> {
     return inChunks(
       this.contestSubmissions
-        .find({ contest: contestId }, { problem: 1, points: 1 })
+        .find(
+          {
+            contest: contestId,
+            ...(scope.problemId ? { problem: scope.problemId } : {}),
+            ...(scope.participationId
+              ? { participation: scope.participationId }
+              : {}),
+          },
+          { problem: 1, points: 1 },
+        )
         .lean<ContestSubmissionRow>()
         .cursor(),
     );
@@ -65,6 +78,24 @@ export class ContestRescoreRepository {
         .cursor()
         .map((row) => uuidStr(row._id)),
     );
+  }
+
+  /** The participations that sent the problem a submission, through a cursor (`{contest, problem}` index), each id once. */
+  async *participationsOfProblem(
+    contestId: string,
+    problemId: string,
+  ): AsyncGenerator<string[]> {
+    const seen = new Set<string>();
+    const rows = this.contestSubmissions
+      .find({ contest: contestId, problem: problemId }, { participation: 1 })
+      .lean<{ participation: unknown }>()
+      .cursor();
+    for await (const chunk of inChunks(rows)) {
+      const fresh = chunk
+        .map((row) => uuidStr(row.participation))
+        .filter((id) => !seen.has(id) && seen.add(id));
+      if (fresh.length) yield fresh;
+    }
   }
 
   /** Each write requires the points the row was read with, so a regrade that landed meanwhile keeps its own (its graded job recomputes the participation). */

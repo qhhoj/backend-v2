@@ -1,7 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -9,6 +10,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { toBoolean } from '../../../problems/core/dto/transforms';
+
+export const PARTICIPATION_KINDS = ['live', 'virtual', 'spectate'] as const;
+export type ParticipationKind = (typeof PARTICIPATION_KINDS)[number];
+export const PARTICIPATION_SORTS = ['score'] as const;
+export type ParticipationSort = (typeof PARTICIPATION_SORTS)[number];
 
 export class AccessCodeDto {
   @IsOptional() @IsString() @MaxLength(255) accessCode?: string;
@@ -38,6 +45,18 @@ export class ParticipationListQueryDto {
   pageSize: number = 50;
   /** Username; others than the viewer need edit rights. */
   @IsOptional() @IsString() @MaxLength(30) user?: string;
+  /** Only live, virtual or spectating rows; default live and virtual. */
+  @ApiPropertyOptional({ enum: PARTICIPATION_KINDS })
+  @IsOptional()
+  @IsIn(PARTICIPATION_KINDS)
+  kind?: ParticipationKind;
+  /** Only disqualified (true) or only valid (false) rows. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() disqualified?: boolean;
+  /** `score`: best first (score, then time, then tiebreaker); default: live before virtual, oldest first. */
+  @ApiPropertyOptional({ enum: PARTICIPATION_SORTS })
+  @IsOptional()
+  @IsIn(PARTICIPATION_SORTS)
+  sort?: ParticipationSort;
 }
 
 export class DisqualifyDto {

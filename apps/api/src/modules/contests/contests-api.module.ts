@@ -33,11 +33,18 @@ import { ContestActionsService } from './editing/contest-actions.service';
 import { ContestEditingController } from './editing/contest-editing.controller';
 import { ContestEditFieldsService } from './editing/contest-edit-fields.service';
 import { ContestEditingService } from './editing/contest-editing.service';
+import { ContestRemovalRepository } from './editing/contest-removal.repository';
+import { ContestRemovalService } from './editing/contest-removal.service';
 import { ContestEventsService } from './announcements/contest-events.service';
 import { ContestStreamsController } from './announcements/contest-streams.controller';
 import { ContestStreamsService } from './announcements/contest-streams.service';
 import { ContestParticipationController } from './participation/contest-participation.controller';
 import { ContestParticipationService } from './participation/contest-participation.service';
+import { ParticipationAdminController } from './participation/participation-admin.controller';
+import { ParticipationAdminRepository } from './participation/participation-admin.repository';
+import { ParticipationAdminService } from './participation/participation-admin.service';
+import { ContestProblemOpsController } from './problem-ops/contest-problem-ops.controller';
+import { ContestProblemOpsService } from './problem-ops/contest-problem-ops.service';
 import { ContestPublishController } from './publish/contest-publish.controller';
 import { ContestPublishService } from './publish/contest-publish.service';
 import { ContestRatingController } from './rating/contest-rating.controller';
@@ -94,6 +101,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestDataController,
     ContestEditingController,
     ContestParticipationController,
+    ContestProblemOpsController,
     ContestPublishController,
     ContestRankingController,
     ContestRatingController,
@@ -102,6 +110,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestSubmissionsController,
     ContestsController,
     OfficialRankingController,
+    ParticipationAdminController,
     RankingLinksController,
   ],
   providers: [
@@ -117,7 +126,10 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestEditFieldsService,
     ContestEditingService,
     ContestParticipationService,
+    ContestProblemOpsService,
     ContestPublishService,
+    ContestRemovalRepository,
+    ContestRemovalService,
     ContestRankingService,
     ContestRatingService,
     ContestStatsRepository,
@@ -125,6 +137,8 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestSubmissionsService,
     OfficialRankingService,
     OfficialRankingsRepository,
+    ParticipationAdminRepository,
+    ParticipationAdminService,
     RankingLinksRepository,
     RankingUsersRepository,
     RankingLinksService,

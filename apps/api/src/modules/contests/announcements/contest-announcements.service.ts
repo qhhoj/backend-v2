@@ -85,6 +85,33 @@ export class ContestAnnouncementsService {
     await this.push(contest, id);
   }
 
+  /** Fixes the text in place: the post keeps its time and is not pushed again (resend does that). */
+  async update(
+    principal: Principal,
+    key: string,
+    id: string,
+    dto: CreateAnnouncementDto,
+  ): Promise<AnnouncementResponse> {
+    const contest = await this.contestsService.editableContest(principal, key);
+    const updated = await this.announcements.updateInContest(contest._id, id, {
+      title: dto.title,
+      description: dto.description,
+      descriptionHtml: this.render(dto.description),
+    });
+    if (!updated) throw new AppError('not_found', 404, 'No such announcement');
+    return AnnouncementResponse.from(updated);
+  }
+
+  /** The composer's preview, rendered as `create` would store it; contest editors only. */
+  async preview(
+    principal: Principal,
+    key: string,
+    description: string,
+  ): Promise<{ html: string }> {
+    await this.contestsService.editableContest(principal, key);
+    return { html: this.render(description) };
+  }
+
   async remove(principal: Principal, key: string, id: string): Promise<void> {
     const contest = await this.contestsService.editableContest(principal, key);
     if (!(await this.announcements.deleteInContest(contest._id, id)))

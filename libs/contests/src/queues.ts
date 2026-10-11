@@ -7,9 +7,14 @@ import type { FormatName } from './formats/format';
 
 export const CONTEST_RESCORE_QUEUE = 'contest-rescore';
 export const CONTEST_RESCORE_JOB = 'rescore';
-/** Recompute every contest submission's points and every participation of the contest. Enqueued by contest edits that change scoring (format, config, start and end times, freeze, precision, problems), disqualifications and problem rescores. */
-export interface ContestRescoreJob {
+/** Recompute every contest submission's points and every participation of the contest. Enqueued by contest edits that change scoring (format, config, start and end times, freeze, precision, problems), disqualifications and problem rescores. An editor may narrow it to one problem or one participation (`ContestRescoreScope`). */
+export interface ContestRescoreJob extends ContestRescoreScope {
   contestId: string;
+}
+/** At most one of the two: only that problem's submissions and the participations that sent one, or only that participation. */
+export interface ContestRescoreScope {
+  problemId?: string;
+  participationId?: string;
 }
 /** Longest an edit waits for its job to reach Redis. */
 export const CONTEST_ENQUEUE_TIMEOUT_MS = 1000;
@@ -18,10 +23,11 @@ export const CONTEST_ENQUEUE_TIMEOUT_MS = 1000;
 export const enqueueContestRescore = async (
   queue: Queue<ContestRescoreJob>,
   contestId: string,
+  scope: ContestRescoreScope = {},
 ): Promise<void> => {
   await queue.add(
     CONTEST_RESCORE_JOB,
-    { contestId },
+    { contestId, ...scope },
     {
       ...JOB_RETRY,
       ...JOB_RETENTION,

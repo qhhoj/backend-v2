@@ -19,6 +19,7 @@ import type {
   ContestReplayJob,
   ContestRescoreJob,
 } from '@libs/contests';
+import { ContestsRepository } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import type { ContestActionsResponse } from './dto/contest-actions.response';
 
@@ -26,6 +27,7 @@ import type { ContestActionsResponse } from './dto/contest-actions.response';
 export class ContestActionsService {
   constructor(
     private readonly contestsService: ContestsService,
+    private readonly contests: ContestsRepository,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
     @InjectQueue(CONTEST_FINAL_JUDGE_QUEUE)
@@ -46,7 +48,7 @@ export class ContestActionsService {
     key: string,
   ): Promise<ContestActionsResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
-    const [rescore, judgeFinal, rate, publish, replay, dataExport] =
+    const [rescore, judgeFinal, rate, publish, replay, dataExport, pending] =
       await Promise.all([
         contestActionState(this.rescores, contest._id),
         contestActionState(
@@ -58,6 +60,9 @@ export class ContestActionsService {
         contestActionState(this.publishes, contest._id),
         contestActionState(this.replays, contest._id),
         contestActionState(this.exports, contest._id),
+        contest.formatName === 'final_submission'
+          ? this.contests.countPendingSubmissions(contest._id)
+          : 0,
       ]);
     const outcome = contest.autoPublishOutcome;
     return {
@@ -74,6 +79,7 @@ export class ContestActionsService {
         published: outcome.published,
         skipped: outcome.skipped,
       },
+      pendingCount: pending,
     };
   }
 }
