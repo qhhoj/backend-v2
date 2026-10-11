@@ -61,7 +61,7 @@ Per judge machine, against the review stack (`qhhoj.target` running, bridge on 9
 - `TRUST_PROXY` must be set behind nginx: each client's CIDR check and the failed-key lockout (20 bad `qhi_` keys in 10 minutes from one address answer 429 for every key from it) use `request.ip`; without it all clients share the proxy's address (the api logs a boot warning when active clients exist).
 - Staff reach the integration-client admin through `judge.manage_integration`; superusers bypass it.
 - A client's acting user must not be a superuser and must hold `judge.add_contest` and `judge.create_private_contest`; it may hold more than the key's creator, so use a dedicated account. Keys may carry `expiresAt`; each client gets 60 requests per minute.
-- nginx needs the `/s/` and `/api/sync/` locations from `deploy/nginx/qhhoj.conf`.
+- nginx needs the `/s/` and `/api/sync/` locations from `deploy/nginx/qhhoj.conf`, plus its `robots.txt`, sitemap, legacy PDF/`/url/` redirects and the preview-bot `map`/`if` (the two `map` blocks sit in the http context above `server`).
 
 ## Polygon account
 

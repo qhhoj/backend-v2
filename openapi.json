@@ -8073,6 +8073,27 @@
             "description": "When the contest ends, ISO 8601.",
             "type": "string"
           },
+          "formatConfig": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Format-specific options, as in the contest detail.",
+            "type": "object"
+          },
+          "formatName": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContestFormatName"
+              }
+            ]
+          },
           "key": {
             "description": "Key of the contest.",
             "type": "string"
@@ -8081,16 +8102,23 @@
             "description": "Name of the contest.",
             "type": "string"
           },
+          "pointsPrecision": {
+            "description": "Decimal places shown in scores.",
+            "type": "number"
+          },
           "startTime": {
             "description": "When the contest starts, ISO 8601.",
             "type": "string"
           }
         },
         "required": [
+          "formatName",
+          "formatConfig",
           "key",
           "name",
           "startTime",
-          "endTime"
+          "endTime",
+          "pointsPrecision"
         ],
         "type": "object"
       },
@@ -29085,6 +29113,217 @@
         "tags": [
           "Contest editing"
         ]
+      }
+    },
+    "/api/internal/seo/preview": {
+      "get": {
+        "description": "Public. Returns a small HTML document with `og:` and `twitter:` tags for a problem, contest, blog post or user page, for link-preview bots that do not run the SPA. A page that does not exist or is not public gets the site's generic tags.",
+        "operationId": "SeoController_preview",
+        "parameters": [
+          {
+            "description": "Site path of the page, e.g. `/problems/aplusb`.",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read the link-preview tags of a page",
+        "tags": [
+          "Home & site"
+        ],
+        "x-raw": true
+      }
+    },
+    "/api/internal/seo/robots.txt": {
+      "get": {
+        "description": "Public. Allows the public pages, disallows the admin area, the API and account pages, and points to the sitemap.",
+        "operationId": "SeoController_robots",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read robots.txt",
+        "tags": [
+          "Home & site"
+        ],
+        "x-raw": true
+      }
+    },
+    "/api/internal/seo/sitemap.xml": {
+      "get": {
+        "description": "Public. Lists one sitemap per part of the site (static pages, problems, contests, posts, users) and per 10000 URLs. Only what a signed-out visitor may read is listed; cached for an hour.",
+        "operationId": "SeoController_sitemapIndex",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read the sitemap index",
+        "tags": [
+          "Home & site"
+        ],
+        "x-raw": true
+      }
+    },
+    "/api/internal/seo/sitemaps/{kind}/{page}": {
+      "get": {
+        "description": "Public. Returns the URLs of page `page` of `kind`. 404 `not_found` past the last page.",
+        "operationId": "SeoController_sitemap",
+        "parameters": [
+          {
+            "description": "Which part of the site: `pages`, `problems`, `contests`, `posts` or `users`.",
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "contests",
+                "pages",
+                "posts",
+                "problems",
+                "users"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number, starting at 1.",
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read one sitemap",
+        "tags": [
+          "Home & site"
+        ],
+        "x-raw": true
       }
     },
     "/api/internal/short-links": {

@@ -25,6 +25,7 @@ import { SettingsApiModule } from './modules/settings/settings-api.module';
 import { TicketsApiModule } from './modules/tickets/tickets-api.module';
 import { NotificationsApiModule } from './modules/notifications/notifications-api.module';
 import { NotificationStreamsModule } from './modules/notifications/streams/notification-streams.module';
+import { SeoApiModule } from './modules/seo/seo-api.module';
 import { SiteApiModule } from './modules/site/site-api.module';
 import { TagsApiModule } from './modules/tags/tags-api.module';
 import { UsersApiModule } from './modules/users/users-api.module';
@@ -62,6 +63,7 @@ import { HealthController } from './health.controller';
     HomeApiModule,
     SettingsApiModule,
     SiteApiModule,
+    SeoApiModule,
     UserActivityModule,
     ShortLinksModule,
     SyncModule,
