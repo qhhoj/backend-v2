@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.23.1
+
+### Patch Changes
+
+- 4925821: chore: remove duplicate submission_file dir constant
+
 ## 2.23.0
 
 ### Minor Changes
