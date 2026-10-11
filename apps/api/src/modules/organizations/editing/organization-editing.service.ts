@@ -9,12 +9,9 @@ import {
   unique,
   withRedisLock,
 } from '@libs/common';
-import {
-  ORGANIZATION_ADMIN_GROUP,
-  ORGANIZATION_ADMIN_LIMIT,
-  SHORT_NAME_LENGTH,
-} from '@libs/community';
+import { ORGANIZATION_ADMIN_LIMIT, SHORT_NAME_LENGTH } from '@libs/community';
 import type { Organization } from '@libs/database';
+import { SettingsService } from '@libs/settings';
 import type Redis from 'ioredis';
 import { renderField } from '../../problems/editing/problem-markup';
 import { OrganizationAccess } from '../core/organization-access';
@@ -69,6 +66,7 @@ export class OrganizationEditingService {
     private readonly users: UsersRepository,
     private readonly points: OrganizationPointsService,
     private readonly history: OrganizationRevisionsService,
+    private readonly settings: SettingsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -211,7 +209,15 @@ export class OrganizationEditingService {
   ): Promise<void> {
     if (!adminIds.length) return;
     await this.members.addMembers(adminIds, organizationId);
-    await this.members.grantGroup(adminIds, ORGANIZATION_ADMIN_GROUP);
+    await this.grantAdminRole(adminIds);
     await this.points.refresh([organizationId]);
+  }
+
+  /** New admins get the admin role (skipped when it does not exist); losing admin rights keeps it. */
+  private async grantAdminRole(adminIds: readonly string[]): Promise<void> {
+    const roleId = await this.members.findAdminRoleId(
+      this.settings.get('organization.adminRoleId'),
+    );
+    if (roleId) await this.members.grantGroup(adminIds, roleId);
   }
 }

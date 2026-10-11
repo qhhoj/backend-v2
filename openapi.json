@@ -11703,6 +11703,7 @@
           "externalJudge.maxWaitMinutes",
           "mail.from",
           "mail.smtpUrl",
+          "organization.adminRoleId",
           "pdf.maxBytes",
           "pdf.renderTimeoutMs",
           "polygon.accountName",

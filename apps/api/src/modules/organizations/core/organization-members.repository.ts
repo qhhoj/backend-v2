@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { escapeRegExp } from '@libs/common';
-import { strictlyAbove } from '@libs/community';
+import { ORGANIZATION_ADMIN_GROUP, strictlyAbove } from '@libs/community';
 import { CI, Group, uuidStr, User } from '@libs/database';
 import type { Model } from 'mongoose';
 
@@ -203,22 +203,30 @@ export class OrganizationMembersRepository {
     return matchedCount === 1;
   }
 
-  /** Legacy `CreateOrganization` put admins in the `Org Admin` group; skipped when no such group exists. */
-  async grantGroup(
-    userIds: readonly string[],
-    groupName: string,
-  ): Promise<void> {
+  /** The role organization admins get (`adminRoleFilter`); null when it does not exist. */
+  async findAdminRoleId(configuredId: string): Promise<string | null> {
     const group = await this.groups
-      .findOne({ name: groupName }, { _id: 1 })
+      .findOne(adminRoleFilter(configuredId), { _id: 1 })
       .collation(CI)
       .lean()
       .exec();
-    if (group && userIds.length)
+    return group && uuidStr(group._id);
+  }
+
+  /** Adds the role to each user that lacks it; never removes one. */
+  async grantGroup(userIds: readonly string[], groupId: string): Promise<void> {
+    if (userIds.length)
       await this.users
         .updateMany(
           { _id: { $in: userIds } },
-          { $addToSet: { groups: uuidStr(group._id) } },
+          { $addToSet: { groups: groupId } },
         )
         .exec();
   }
 }
+
+/** The `organization.adminRoleId` setting when set, else the role named `Org Admin` (legacy `CreateOrganization`'s group). Pure. */
+export const adminRoleFilter = (
+  configuredId: string,
+): { _id: string } | { name: string } =>
+  configuredId ? { _id: configuredId } : { name: ORGANIZATION_ADMIN_GROUP };
