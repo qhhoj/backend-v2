@@ -262,6 +262,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -277,6 +278,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -289,6 +291,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -301,6 +304,7 @@ describe('submissionActions', () => {
         canRejudge: true,
         canReject: true,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -316,6 +320,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: true,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -327,6 +332,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: true,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -338,6 +344,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -350,6 +357,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -361,6 +369,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: false,
+        canOverrideScore: false,
       },
     },
     {
@@ -372,6 +381,7 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: true,
+        canOverrideScore: false,
       },
     },
     {
@@ -383,8 +393,29 @@ describe('submissionActions', () => {
         canRejudge: false,
         canReject: false,
         canLock: false,
+        canOverrideScore: false,
       },
     },
+    ...(
+      [
+        ['D', true, true],
+        ['CE', true, true],
+        ['PD', true, false],
+        ['G', true, false],
+        ['D', false, false],
+      ] as const
+    ).map(([status, canEditProblem, canOverrideScore]) => ({
+      label: `judge.change_submission overrides the score of a ${status} submission ${canEditProblem ? 'with' : 'without'} edit rights: ${canOverrideScore}`,
+      principal: withPermissions('judge.change_submission'),
+      facts: actionFacts({ canEditProblem, status }),
+      expected: {
+        canAbort: false,
+        canRejudge: false,
+        canReject: false,
+        canLock: false,
+        canOverrideScore,
+      },
+    })),
   ])('$label', ({ principal, facts, expected }) => {
     expect(submissionActions(principal, facts, NOW)).toEqual(expected);
   });

@@ -2,6 +2,9 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
 import type { SubmissionGradedJob } from '@libs/judging';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { Revision } from '@libs/database';
 import type { Submission } from '@libs/database';
 import {
   createContest,
@@ -23,7 +26,7 @@ import {
   dataOf,
   seedSubmission,
 } from './submission-fixtures';
-import { errorCode, setupApiTest } from './setup';
+import { errorCode, issueCodes, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 const SUBMISSIONS = '/api/internal/submissions';
@@ -33,6 +36,7 @@ describe('submission actions', () => {
   let catalog: Catalog;
   let graded: Queue<SubmissionGradedJob>;
   let problemId: string;
+  let partialProblemId: string;
   const sessions: Record<string, TestSession> = {};
   const ids: Record<string, string> = {};
   const post = (who: string, path: string, body: object = {}) =>
@@ -81,6 +85,12 @@ describe('submission actions', () => {
       ],
       ['editor', { permissions: ['judge.edit_own_problem'] }],
       [
+        'scorer',
+        {
+          permissions: ['judge.edit_own_problem', 'judge.change_submission'],
+        },
+      ],
+      [
         'outsider',
         {
           permissions: [
@@ -98,7 +108,15 @@ describe('submission actions', () => {
     problemId = (
       await createProblem(api, catalog, {
         code: 'acts',
-        authors: [ids.manager, ids.lot, ids.editor],
+        authors: [ids.manager, ids.lot, ids.editor, ids.scorer],
+      })
+    )._id;
+    partialProblemId = (
+      await createProblem(api, catalog, {
+        code: 'actspartial',
+        partial: true,
+        points: 1600,
+        authors: [ids.scorer],
       })
     )._id;
     await createProblem(api, catalog, {
@@ -286,6 +304,90 @@ describe('submission actions', () => {
           ),
         ).toEqual({ count: 1, dryRun: false, allowed: true, sample: [] });
       });
+    });
+  });
+
+  describe('score override', () => {
+    const override = (who: string, id: string, body: object) =>
+      authed(api.http().put(`${SUBMISSIONS}/${id}/score`), sessions[who]).send({
+        comment: 'checker bug',
+        ...body,
+      });
+
+    it('stores the points on the problem scale so contest and solved reads agree, makes effects due and logs it', async () => {
+      const id = await seed({
+        problem: partialProblemId,
+        result: 'WA',
+        points: 10,
+        casePoints: 1,
+        caseTotal: 4,
+      });
+      await override('scorer', id, { result: 'WA', points: 1200 }).expect(204);
+      expect(await row(id)).toMatchObject({
+        status: 'D',
+        result: 'WA',
+        points: 1200,
+        casePoints: 1200,
+        caseTotal: 1600,
+        lockedAfter: null,
+        effectsDueAt: expect.any(Date) as Date,
+      });
+      expect(await gradedIds()).toEqual([id]);
+      const [revision] = await api.app
+        .get<Model<Revision>>(getModelToken(Revision.name))
+        .find({ entity: 'submission', entityId: id })
+        .lean();
+      expect(revision).toMatchObject({
+        action: 'override_score',
+        comment: 'checker bug',
+        changes: {
+          result: { before: 'WA', after: 'WA' },
+          points: { before: 10, after: 1200 },
+        },
+      });
+      // a compile error can be scored too: it reads as graded, and `lock` keeps a rejudge off it
+      const compileError = await seed({
+        problem: partialProblemId,
+        status: 'CE',
+        result: 'CE',
+        points: 0,
+      });
+      await override('scorer', compileError, {
+        result: 'AC',
+        points: 1600,
+        lock: true,
+      }).expect(204);
+      expect(await row(compileError)).toMatchObject({
+        status: 'D',
+        result: 'AC',
+        casePoints: 1600,
+        caseTotal: 1600,
+        lockedAfter: expect.any(Date) as Date,
+      });
+    });
+
+    it('refuses scores the problem cannot give, unfinished rows and callers without the permission or edit rights', async () => {
+      const id = await seed({ result: 'WA', points: 0 });
+      const refusals: Array<[object, string]> = [
+        [{ result: 'WA', points: 1001 }, 'points_above_problem'],
+        [{ result: 'WA', points: 500 }, 'points_not_partial'],
+        [{ result: 'AC', points: 0 }, 'accepted_needs_full_points'],
+      ];
+      for (const [body, code] of refusals)
+        await override('scorer', id, body)
+          .expect(400)
+          .expect(issueCodes([code]));
+      for (const status of ['QU', 'G', 'PD'] as const) {
+        const unfinished = await seed({ status, result: null });
+        await override('scorer', unfinished, { result: 'AC', points: 1000 })
+          .expect(409)
+          .expect(errorCode('conflict'));
+        expect((await row(unfinished)).status).toBe(status);
+      }
+      await override('manager', id, { result: 'AC', points: 1000 }).expect(403);
+      await override('owner', id, { result: 'AC', points: 1000 }).expect(403);
+      expect(await row(id)).toMatchObject({ result: 'WA', points: 0 });
+      expect(await gradedIds()).toEqual([]);
     });
   });
 

@@ -45,6 +45,7 @@ afterAll(() => api.teardown());
       canRejudge: boolean;
       canReject: boolean;
       canLock: boolean;
+      canOverrideScore: boolean;
     };
   }
 
@@ -53,6 +54,7 @@ afterAll(() => api.teardown());
     canRejudge: false,
     canReject: false,
     canLock: false,
+    canOverrideScore: false,
   };
 
   describe('submission detail action flags', () => {
@@ -148,6 +150,7 @@ afterAll(() => api.teardown());
         canRejudge: true,
         canReject: true,
         canLock: true,
+        canOverrideScore: false,
       });
       expect(body.lockedAfter).toBeNull();
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
@@ -180,6 +183,7 @@ afterAll(() => api.teardown());
         canRejudge: false,
         canReject: true,
         canLock: true,
+        canOverrideScore: false,
       });
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`)
         .expect(409)
@@ -412,9 +416,10 @@ afterAll(() => api.teardown());
         });
       await clearCache();
       const day = await stats();
-      expect(day.verdictsToday.slice(0, 1)).toEqual([
-        { result: 'TLE', count: 4 },
-      ]);
+      // earlier tests' rows may count as today too (it depends on the hour), so the order is checked, not the leader
+      expect(day.verdictsToday).toContainEqual({ result: 'TLE', count: 4 });
+      const counts = day.verdictsToday.map(({ count }) => count);
+      expect(counts).toEqual([...counts].sort((left, right) => right - left));
       expect(day.verdictsToday).toContainEqual({ result: 'CE', count: 1 });
       const counted = day.verdictsToday.reduce(
         (sum, { count }) => sum + count,

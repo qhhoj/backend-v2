@@ -179,6 +179,10 @@ export const PERMISSION_CATALOG: Record<
     category: 'submissions',
     label: 'Lock submissions',
   },
+  'judge.change_submission': {
+    category: 'submissions',
+    label: 'Override submission scores',
+  },
   'judge.organization_admin': {
     category: 'organizations',
     label: 'Administer organizations',

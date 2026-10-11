@@ -25,11 +25,14 @@ import {
   isSubmissionLocked,
   mayAbortSubmission,
   mayLockSubmission,
+  mayOverrideSubmissionScore,
   mayRejectSubmission,
   mayRejudgeSubmission,
 } from '../core/submission-access';
 import { SubmissionsRepository } from '../core/submissions.repository';
 import { SubmissionsService } from '../core/submissions.service';
+import type { ScoreOverrideDto } from './dto/score-override.dto';
+import { overriddenScore } from './score-override';
 
 /** `ProblemAccess.canEdit` on the problem, the edit half of every manage check. */
 const editsProblem = (principal: Principal, problem: Problem): boolean =>
@@ -141,6 +144,66 @@ export class SubmissionActionsService {
     await this.notifyGraded(submission);
     await this.events.publish(
       submissionEvent(gradedJobOf(submission), 'done', submission.status),
+    );
+  }
+
+  /** Legacy submission admin's score fields (`judge.change_submission` on an editable problem), once judging is over. The row reads as graded with the given verdict and points; the case results stay as judged. `lock` also locks it so a rejudge cannot discard the override. Logged as a `submission` revision with the comment. */
+  async overrideScore(
+    principal: Principal,
+    id: string,
+    dto: ScoreOverrideDto,
+  ): Promise<void> {
+    const { submission, problem } = await this.visibility.visible(
+      principal,
+      id,
+      null,
+    );
+    if (
+      !mayOverrideSubmissionScore(principal, editsProblem(principal, problem))
+    )
+      throw cannotManageProblem();
+    assertProblemLive(problem);
+    const score = overriddenScore(dto, problem);
+    const lockedAfter =
+      dto.lock && !isSubmissionLocked(submission.lockedAfter)
+        ? new Date()
+        : undefined;
+    const isUnchanged =
+      submission.status === 'D' &&
+      submission.result === score.result &&
+      submission.points === score.points &&
+      submission.casePoints === score.casePoints &&
+      submission.caseTotal === score.caseTotal &&
+      !lockedAfter;
+    if (isUnchanged) return;
+    if (
+      !(await this.submissions.overrideScore(id, submission.judgeGeneration, {
+        ...score,
+        ...(lockedAfter && { lockedAfter }),
+      }))
+    )
+      throw new AppError(
+        'conflict',
+        409,
+        'The submission is still being judged or waits for its contest to end',
+      );
+    await this.revisions.append({
+      entity: 'submission',
+      entityId: id,
+      action: 'override_score',
+      userId: principal.userId,
+      changes: {
+        result: { before: submission.result, after: score.result },
+        points: { before: submission.points, after: score.points },
+        ...(lockedAfter && {
+          lockedAfter: { before: submission.lockedAfter, after: lockedAfter },
+        }),
+      },
+      comment: dto.comment,
+    });
+    await this.notifyGraded(submission);
+    await this.events.publish(
+      submissionEvent(gradedJobOf(submission), 'done', 'D'),
     );
   }
 

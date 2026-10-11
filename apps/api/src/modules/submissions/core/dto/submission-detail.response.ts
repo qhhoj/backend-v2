@@ -68,6 +68,8 @@ export class SubmissionViewerResponse implements SubmissionActions {
   canReject!: boolean;
   /** Whether `POST` and `DELETE /submissions/{id}/lock` are allowed. */
   canLock!: boolean;
+  /** Whether `PUT /submissions/{id}/score` is allowed. */
+  canOverrideScore!: boolean;
 }
 
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
