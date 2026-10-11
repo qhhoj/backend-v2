@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
-import { unique } from '@libs/common';
 import { AuditFeedRepository } from './audit-feed.repository';
 import type { AuditFilter, AuditRecord } from './audit-feed.repository';
 import { AuditLabelsRepository } from './audit-labels.repository';
+import { usernamesById } from '../organizations/requests/request-usernames';
 import type { AuditQueryDto } from './dto/audit-query.dto';
 import type {
   AuditEntryResponse,
@@ -38,7 +38,7 @@ export class AuditFeedService {
       type: query.type,
       from: query.from ? new Date(query.from) : undefined,
       to: query.to ? new Date(query.to) : undefined,
-      before: query.before,
+      before: query.before?.toLowerCase(),
     };
     if (!query.actor) return filter;
     const actor = await this.users.findByUsername(query.actor, { _id: 1 });
@@ -46,13 +46,13 @@ export class AuditFeedService {
   }
 
   private async respond(records: AuditRecord[]): Promise<AuditEntryResponse[]> {
-    const [labels, actors] = await Promise.all([
+    const [labels, usernames] = await Promise.all([
       this.labels.labels(records),
-      this.users.findByIds(
-        unique(records.flatMap((record) => record.actorId ?? [])),
+      usernamesById(
+        this.users,
+        records.flatMap((record) => record.actorId ?? []),
       ),
     ]);
-    const usernames = new Map(actors.map((user) => [user._id, user.username]));
     return records.map((record) => ({
       id: record.id,
       at: record.at,

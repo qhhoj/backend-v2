@@ -12,6 +12,7 @@ import {
   Problem,
   ProblemGroup,
   ProblemType,
+  Submission,
   User,
   uuidStr,
 } from '@libs/database';
@@ -21,8 +22,11 @@ export interface ObjectLabel {
   deleted: boolean;
 }
 
-/** Where a kind's name lives: the model and the one field shown. Soft-deleted problems keep their code but read as deleted. */
-const LABEL_FIELDS: Record<string, { model: string; field: string }> = {
+/**
+ * Where a kind's name lives: the model and the one field shown (`null`: no name, only whether it still exists).
+ * Soft-deleted problems keep their code but read as deleted. Kinds not listed (comment, submission_batch) are never looked up.
+ */
+const LABEL_FIELDS: Record<string, { model: string; field: string | null }> = {
   problem: { model: Problem.name, field: 'code' },
   tagProblem: { model: Problem.name, field: 'code' },
   contest: { model: Contest.name, field: 'key' },
@@ -34,6 +38,7 @@ const LABEL_FIELDS: Record<string, { model: string; field: string }> = {
   problemGroup: { model: ProblemGroup.name, field: 'name' },
   license: { model: License.name, field: 'key' },
   group: { model: Group.name, field: 'name' },
+  submission: { model: Submission.name, field: null },
 };
 
 /** Kinds with no name of their own: the id is the reference. */
@@ -82,18 +87,24 @@ export class AuditLabelsRepository {
 
   private async fieldLabels(
     model: string,
-    field: string,
+    field: string | null,
     ids: string[],
   ): Promise<Map<string, ObjectLabel>> {
     const rows = await this.connection
       .model(model)
-      .find({ _id: { $in: ids } }, { [field]: 1, deletedAt: 1 })
+      .find(
+        { _id: { $in: ids } },
+        { deletedAt: 1, ...(field && { [field]: 1 }) },
+      )
       .lean<LabelRow[]>()
       .exec();
     return new Map(
       rows.map((row) => [
         uuidStr(row._id),
-        { label: String(row[field]), deleted: Boolean(row.deletedAt) },
+        {
+          label: field ? String(row[field]) : null,
+          deleted: Boolean(row.deletedAt),
+        },
       ]),
     );
   }

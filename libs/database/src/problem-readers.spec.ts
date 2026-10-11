@@ -179,6 +179,7 @@ describe('direct readers of the problems collection', () => {
     "{ field: 'problem', foreign: 'problems' }",
     '@InjectModel(Problem.name) private readonly problems: Model<Problem>',
     "connection.model('Problem')",
+    "{ model: Problem.name, field: 'code' }",
   ])('recognises a read written as %s', (source) => {
     expect(readsProblems(source)).toBe(true);
   });

@@ -31,10 +31,25 @@ const NEWEST_FIRST = { _id: -1 } as const;
 const byNewest = (left: AuditRecord, right: AuditRecord) =>
   left.id < right.id ? 1 : left.id > right.id ? -1 : 0;
 
-const timeRange = ({ from, to }: AuditFilter) =>
-  from || to
-    ? { createdAt: { ...(from && { $gte: from }), ...(to && { $lt: to }) } }
-    : {};
+/** The smallest UUIDv7 of a millisecond: ids at or after `date` compare `>=` to it. */
+export function firstIdAt(date: Date): string {
+  const hex = date.getTime().toString(16).padStart(12, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7000-8000-000000000000`;
+}
+
+/** The time range and the page cursor as one `_id` range, so every read is an index range scan. */
+export function idRange({ from, to, before }: AuditFilter) {
+  const upper = [to && firstIdAt(to), before]
+    .filter((bound): bound is string => Boolean(bound))
+    .sort()[0];
+  if (!from && !upper) return {};
+  return {
+    _id: {
+      ...(from && { $gte: firstIdAt(from) }),
+      ...(upper && { $lt: upper }),
+    },
+  };
+}
 
 /**
  * The global change feed reads the two existing audit collections, `revisions` and `settingRevisions`, newest first.
@@ -65,17 +80,11 @@ export class AuditFeedRepository {
     limit: number,
   ): Promise<AuditRecord[]> {
     const query: FilterQuery<Revision> = {
-      ...timeRange(filter),
+      ...idRange(filter),
       ...(filter.type && { entity: filter.type }),
       ...(filter.actorId && { userId: filter.actorId }),
-      ...(filter.before && { _id: { $lt: filter.before } }),
     };
-    const rows = await this.revisions
-      .find(query)
-      .sort(NEWEST_FIRST)
-      .limit(limit)
-      .lean<Revision[]>()
-      .exec();
+    const rows = await newestRows(this.revisions, query, limit);
     return rows.map((row) => ({
       id: uuidStr(row._id),
       at: row.createdAt,
@@ -88,21 +97,16 @@ export class AuditFeedRepository {
     }));
   }
 
+  /** A setting revision has no action or note: each is an edit (a restore writes one too). */
   private async settingRecords(
     filter: AuditFilter,
     limit: number,
   ): Promise<AuditRecord[]> {
     const query: FilterQuery<SettingRevision> = {
-      ...timeRange(filter),
+      ...idRange(filter),
       ...(filter.actorId && { actor: filter.actorId }),
-      ...(filter.before && { _id: { $lt: filter.before } }),
     };
-    const rows = await this.settingRevisions
-      .find(query)
-      .sort(NEWEST_FIRST)
-      .limit(limit)
-      .lean<SettingRevision[]>()
-      .exec();
+    const rows = await newestRows(this.settingRevisions, query, limit);
     return rows.map((row) => ({
       id: uuidStr(row._id),
       at: row.createdAt,
@@ -114,4 +118,12 @@ export class AuditFeedRepository {
       comment: '',
     }));
   }
+}
+
+function newestRows<Row>(
+  model: Model<Row>,
+  query: FilterQuery<Row>,
+  limit: number,
+): Promise<Row[]> {
+  return model.find(query).sort(NEWEST_FIRST).limit(limit).lean<Row[]>().exec();
 }
