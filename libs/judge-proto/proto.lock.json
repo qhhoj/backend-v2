@@ -1,7 +1,7 @@
 {
   "source": "judge-v2",
-  "tag": "db6a6892aa354383c380c454472cbadb86ea3a3b",
-  "commit": "db6a6892aa354383c380c454472cbadb86ea3a3b",
+  "tag": "proto-v1.3",
+  "commit": "8d86079c5b7a8ba9a766eb34f216b77f31aa0918",
   "files": {
     "compat/v1.shape.json": "02f21aecbcf8556e034e32423b4e00908f0edaa01c067240fa2f5758f0548ac6",
     "conformance/matcher-cases.json": "328c8a084d23185ba634c5223becb48edc3a5a3dab277489612548d6d5d19eea",
