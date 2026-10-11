@@ -32,6 +32,8 @@ import type {
   DetailAccess,
   SubmissionActions,
 } from './submission-access';
+import { sourceFilename } from './source-file';
+import type { SourceFile } from './source-file';
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
@@ -208,6 +210,7 @@ export class SubmissionsService {
     };
   }
 
+  /** `filename` is what the raw and download links name the file; null for a file-only language, whose `source` is a URL rather than text. */
   async source(
     principal: Principal,
     id: string,
@@ -217,10 +220,27 @@ export class SubmissionsService {
       id,
       await this.viewerScope(principal),
     );
+    const language = this.languages.byId(uuidStr(submission.language));
+    const submissionId = uuidStr(submission._id);
     return {
-      id: uuidStr(submission._id),
+      id: submissionId,
       source: (await this.submissions.findSource(submission._id)) ?? '',
+      filename: language?.fileOnly
+        ? null
+        : sourceFilename(submissionId, language?.extension),
     };
+  }
+
+  /** `source` as a file: same access rules and errors; 404 for a file-only language, which has no source text. */
+  async sourceFile(principal: Principal, id: string): Promise<SourceFile> {
+    const { filename, source } = await this.source(principal, id);
+    if (filename === null)
+      throw new AppError(
+        'not_found',
+        404,
+        'This submission has no source text',
+      );
+    return { filename, text: source };
   }
 
   /** 404 for an unknown or malformed id or a problem the viewer cannot see, whoever owns the submission; a deleted problem's history is the exception for the owner and for `judge.view_all_submission`. */

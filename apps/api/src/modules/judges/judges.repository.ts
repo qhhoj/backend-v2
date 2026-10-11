@@ -6,6 +6,11 @@ import { Judge } from '@libs/database';
 export type JudgeDocument = HydratedDocument<Judge>;
 /** A judge without its key hash. */
 export type JudgeListRow = Omit<Judge, 'authKeyHash'>;
+/** The fields the public runtimes page may show: no key, address, build or notes. */
+export type PublicJudgeRow = Pick<
+  Judge,
+  'name' | 'online' | 'slots' | 'busy' | 'ping' | 'startTime' | 'runtimes'
+>;
 export type JudgeChanges = Partial<
   Pick<Judge, 'authKeyHash' | 'isBlocked' | 'isDisabled' | 'description'>
 >;
@@ -33,6 +38,27 @@ export class JudgesRepository {
         { $project: { authKeyHash: 0, problems: 0 } },
         { $sort: { name: 1 } },
       ])
+      .exec();
+  }
+
+  /** Judges that may connect (neither blocked nor disabled), by name. */
+  listPublic(): Promise<PublicJudgeRow[]> {
+    return this.judges
+      .find(
+        { isBlocked: { $ne: true }, isDisabled: { $ne: true } },
+        {
+          _id: 0,
+          name: 1,
+          online: 1,
+          slots: 1,
+          busy: 1,
+          ping: 1,
+          startTime: 1,
+          runtimes: 1,
+        },
+      )
+      .sort({ name: 1 })
+      .lean<PublicJudgeRow[]>()
       .exec();
   }
 

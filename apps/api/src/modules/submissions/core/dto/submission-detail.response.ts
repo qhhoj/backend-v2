@@ -142,4 +142,6 @@ export class SubmissionSourceResponse {
   id!: string;
   /** Submitted source text; for a file-only language, the URL of the uploaded file. */
   source!: string;
+  /** Name the raw and download links give the file (`<id>.<extension>`, `Main.java` for Java); null for a file-only language. */
+  filename!: string | null;
 }
