@@ -37,6 +37,8 @@ export interface PolygonImportJob {
   groupId?: string;
   typeIds?: string[];
   points?: number;
+  /** Create only: the organization the new problem is private to (api checked the creator's rights, code prefix and quota). */
+  organizationId?: string;
   /** Render style of the target problem (an update keeps the problem's flag). */
   isFullMarkup: boolean;
   /** Polygon statement language of the main statement; null = the only one. */

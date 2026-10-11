@@ -100,10 +100,12 @@ export class PolygonController {
    * Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a
    * problem or write access to the problem to update it. The body takes the
    * problem `link` (checked again as on `POST /polygon/resolve`, with the same
-   * errors), the zip import's options (`code`, `mode`, authors, curators,
-   * group, types, points, statement languages, zero-point and main-solution
-   * switches) and `autoSync`. A created problem is private, with the importer
-   * as a curator. The server downloads the newest full package itself and the
+   * errors), the zip import's options (`code`, `mode`, `organization`,
+   * authors, curators, group, types, points, statement languages, zero-point
+   * and main-solution switches) and `autoSync`. A created problem is private,
+   * with the importer as a curator; with `organization` it belongs to that
+   * organization as in the zip import (its creation rights replace
+   * `judge.add_problem`, code prefix, credits). The server downloads the newest full package itself and the
    * same background job as the zip import applies it, then links the problem
    * to Polygon and records the import in the sync history. Answers 202 with a
    * `jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes queued,

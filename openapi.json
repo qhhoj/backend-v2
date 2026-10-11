@@ -8356,6 +8356,10 @@
             ],
             "type": "string"
           },
+          "organization": {
+            "description": "Slug of the organization a created problem belongs to: private to it, code with its prefix, charged to its quota; needs the rights of `POST /organizations/{slug}/problems` instead of `judge.add_problem`. Ignored by `update`.",
+            "type": "string"
+          },
           "points": {
             "description": "Points the problem is worth, 800 to 3500.",
             "maximum": 3500,
@@ -31821,7 +31825,7 @@
     },
     "/api/internal/polygon/import": {
       "post": {
-        "description": "Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a\nproblem or write access to the problem to update it. The body takes the\nproblem `link` (checked again as on `POST /polygon/resolve`, with the same\nerrors), the zip import's options (`code`, `mode`, authors, curators,\ngroup, types, points, statement languages, zero-point and main-solution\nswitches) and `autoSync`. A created problem is private, with the importer\nas a curator. The server downloads the newest full package itself and the\nsame background job as the zip import applies it, then links the problem\nto Polygon and records the import in the sync history. Answers 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes queued,\ndownloading, statements, tests, done or failed). Counts towards the 10\nimports an hour per user. Errors: 400 `code_taken`, the link errors of\n`POST /polygon/resolve`, 429 `rate_limited`.",
+        "description": "Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a\nproblem or write access to the problem to update it. The body takes the\nproblem `link` (checked again as on `POST /polygon/resolve`, with the same\nerrors), the zip import's options (`code`, `mode`, `organization`,\nauthors, curators, group, types, points, statement languages, zero-point\nand main-solution switches) and `autoSync`. A created problem is private,\nwith the importer as a curator; with `organization` it belongs to that\norganization as in the zip import (its creation rights replace\n`judge.add_problem`, code prefix, credits). The server downloads the newest full package itself and the\nsame background job as the zip import applies it, then links the problem\nto Polygon and records the import in the sync history. Answers 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes queued,\ndownloading, statements, tests, done or failed). Counts towards the 10\nimports an hour per user. Errors: 400 `code_taken`, the link errors of\n`POST /polygon/resolve`, 429 `rate_limited`.",
         "operationId": "PolygonController_importProblem",
         "parameters": [],
         "requestBody": {
@@ -33050,7 +33054,7 @@
     },
     "/api/internal/problems/imports": {
       "post": {
-        "description": "Needs `judge.import_polygon_package`; creating a problem also needs\n`judge.add_problem`, updating needs write access to the problem's test data.\nSend the Polygon package as a multipart `file` (a zip with `problem.xml` at\nits root, up to 512 MiB) and the options in the query string: `code`, `mode`\n(`create` or `update`), authors, curators, group, types, points, statement\nlanguage mapping and the zero-point and main-solution switches. The package\nis checked, then imported by a background job; the answer is 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}`. Limited to 10 imports\nper hour per user. Errors: 400 `code_taken`, 400 for a bad package\n(`no_problem_xml` or a zip error code), 403 `quota_exceeded`, 413\n`file_too_large`, 429 `rate_limited`.",
+        "description": "Needs `judge.import_polygon_package`; creating a problem also needs\n`judge.add_problem`, updating needs write access to the problem's test data.\nSend the Polygon package as a multipart `file` (a zip with `problem.xml` at\nits root, up to 512 MiB) and the options in the query string: `code`, `mode`\n(`create` or `update`), `organization`, authors, curators, group, types,\npoints, statement language mapping and the zero-point and main-solution\nswitches. A create with `organization` (a slug) makes the problem private\nto that organization under the rules of\n`POST /organizations/{slug}/problems` instead of `judge.add_problem`: its\nrights (404 unknown organization, 403 `forbidden`), the code prefix (400\n`organization_code_prefix`), its credits (spent when the job is queued,\nkept if the job fails later) and its storage. The package\nis checked, then imported by a background job; the answer is 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}`. Limited to 10 imports\nper hour per user. Errors: 400 `code_taken`, 400 for a bad package\n(`no_problem_xml` or a zip error code), 403 `quota_exceeded`, 413\n`file_too_large`, 429 `rate_limited`.",
         "operationId": "ProblemImportsController_start",
         "parameters": [
           {
@@ -33105,6 +33109,15 @@
             "schema": {
               "default": false,
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Slug of the organization a created problem belongs to: private to it, code with its prefix, charged to its quota; needs the rights of `POST /organizations/{slug}/problems` instead of `judge.add_problem`. Ignored by `update`.",
+            "in": "query",
+            "name": "organization",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           },
           {

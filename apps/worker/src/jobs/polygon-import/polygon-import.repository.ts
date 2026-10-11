@@ -329,6 +329,10 @@ export class PolygonImportRepository {
         ? newLink(job, job.polygon, { title: statement.name, now: new Date() })
         : null,
       ...(await this.createCatalog(job, session)),
+      ...(job.organizationId && {
+        organizations: [job.organizationId],
+        isOrganizationPrivate: true,
+      }),
     };
     // `create` with a session takes an array.
     const [{ _id: problemId }] = await this.problems.create([created], {

@@ -23,8 +23,12 @@ import type {
   PolygonImportJob,
   PolygonImportResult,
 } from '@libs/problems';
+import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
+import { QuotaService } from '../../organizations/quota/quota.service';
 import { maxTestcasesFor } from '../core/dto/limits';
+import { assertOrganizationCodePrefix } from '../editing/organization-code-prefix';
 import { ImportJobResponse } from './dto/import-job.response';
+import { chargedOrganizationOf } from './import-charge';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { codeTakenError } from '../editing/problem-edit-fields';
 import { rejectFile, saveMultipartFile } from '../core/multipart';
@@ -51,6 +55,8 @@ export class ProblemImportsService {
     private readonly dataFiles: ProblemDataFilesService,
     private readonly rateLimit: RateLimitService,
     private readonly storage: ProblemStorageQuota,
+    private readonly quota: QuotaService,
+    private readonly rights: OrganizationCreationRights,
     @InjectQueue(POLYGON_QUEUE)
     private readonly queue: Queue<PolygonImportJob, PolygonImportResult>,
   ) {}
@@ -68,8 +74,8 @@ export class ProblemImportsService {
     try {
       await saveMultipartFile(request, POLYGON_PACKAGE_MAX_BYTES, packagePath);
       await this.assertPackage(packagePath);
-      await this.assertStorage(auth, query, packagePath);
-      await this.enqueue(jobId, job);
+      await this.assertStorage(auth, job, packagePath);
+      await this.enqueue(auth, jobId, job);
     } catch (error) {
       await rm(packagePath, { force: true });
       throw error;
@@ -77,7 +83,7 @@ export class ProblemImportsService {
     return { jobId };
   }
 
-  /** The checks every import shares (permission, free code or writable problem, references) and the job they resolve; also used by the Polygon import. The caller reserves the rate limit once its own checks passed. */
+  /** The checks every import shares (permission, organization target, free code or writable problem, references) and the job they resolve; also used by the Polygon import. The caller reserves the rate limit once its own checks passed. */
   async prepare(
     auth: AuthContext,
     query: PolygonImportQueryDto,
@@ -96,12 +102,22 @@ export class ProblemImportsService {
     );
   }
 
-  async enqueue(jobId: string, job: PolygonImportJob): Promise<void> {
-    await this.queue.add('import', job, {
-      jobId,
-      removeOnComplete: IMPORT_JOB_KEEP,
-      removeOnFail: IMPORT_JOB_KEEP,
-    });
+  /** A create for an organization spends the problem's credits here, refunded only when queueing fails: the worker has no quota service, so a job that fails later keeps them spent. */
+  async enqueue(
+    auth: AuthContext,
+    jobId: string,
+    job: PolygonImportJob,
+  ): Promise<void> {
+    await this.quota.charged(
+      chargedOrganizationOf(auth.principal, job),
+      { kind: 'problem', userId: auth.principal.userId, ref: job.code },
+      () =>
+        this.queue.add('import', job, {
+          jobId,
+          removeOnComplete: IMPORT_JOB_KEEP,
+          removeOnFail: IMPORT_JOB_KEEP,
+        }),
+    );
   }
 
   /** Only the requester (or a superuser) can see a job; anyone else gets the same 404 as an unknown id. */
@@ -142,18 +158,36 @@ export class ProblemImportsService {
         expectedDataVersion: problem.dataVersion ?? 0,
       };
     }
+    const organizationId = await this.creationTarget(principal, query);
+    if (await this.isCodeTaken(query.code)) throw codeTakenError();
+    return {
+      ...options,
+      ...(organizationId && { organizationId }),
+      curators: unique([...(query.curators ?? []), principal.userId]),
+      isFullMarkup: false,
+    };
+  }
+
+  /** Who may create, as `POST /problems` or `POST /organizations/{slug}/problems`: the organization's id (its rights and code prefix checked), or null for a site problem (`judge.add_problem`). */
+  private async creationTarget(
+    principal: AuthContext['principal'],
+    query: PolygonImportQueryDto,
+  ): Promise<string | null> {
+    if (query.organization !== undefined) {
+      const target = await this.rights.problemTarget(
+        principal,
+        query.organization,
+      );
+      assertOrganizationCodePrefix(principal, query.code, target.codePrefix);
+      return target.id;
+    }
     if (!hasPermission(principal, 'judge.add_problem'))
       throw new AppError(
         'forbidden',
         403,
         'Creating a problem requires judge.add_problem',
       );
-    if (await this.isCodeTaken(query.code)) throw codeTakenError();
-    return {
-      ...options,
-      curators: unique([...(query.curators ?? []), principal.userId]),
-      isFullMarkup: false,
-    };
+    return null;
   }
 
   /** An existing problem an import may overwrite: writable test data, and statement text on a full-markup problem needs `judge.problem_full_markup`. */
@@ -183,20 +217,26 @@ export class ProblemImportsService {
     );
   }
 
-  /** An update of an organization problem must fit its organization's storage: the package size against what the problem holds now. The zip is compressed, so its size is a lower bound of the extracted data and the check can under-count. A create has no organization yet; the update path is free of credits (only this storage check applies) because the job's outcome is unknown here. No storage warning follows an import either: the worker has no quota service, and the next API upload warns. */
+  /** An import into an organization problem must fit its organization's storage: the package size against what the problem holds now (nothing for a create). The zip is compressed, so its size is a lower bound of the extracted data and the check can under-count. Data costs no credits here (a create pays the problem price in `enqueue`) because the job's outcome is unknown. No storage warning follows an import either: the worker has no quota service, and the next API upload warns. */
   private async assertStorage(
     auth: AuthContext,
-    query: PolygonImportQueryDto,
+    job: PolygonImportJob,
     packagePath: string,
   ): Promise<void> {
-    if (query.mode !== 'update') return;
-    const problem = await this.store.writableProblem(
-      auth.principal,
-      query.code,
-    );
+    const packageBytes = (await stat(packagePath)).size;
+    if (job.mode === 'create') {
+      await this.storage.assertFits(
+        chargedOrganizationOf(auth.principal, job),
+        {
+          addedBytes: packageBytes,
+        },
+      );
+      return;
+    }
+    const problem = await this.store.writableProblem(auth.principal, job.code);
     await this.storage.assertFits(
       this.storage.organizationOf(auth.principal, problem),
-      { addedBytes: (await stat(packagePath)).size - problem.dataBytes },
+      { addedBytes: packageBytes - problem.dataBytes },
     );
   }
 

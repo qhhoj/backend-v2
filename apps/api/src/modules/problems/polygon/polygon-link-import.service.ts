@@ -23,7 +23,7 @@ export class PolygonLinkImportService {
     private readonly resolver: PolygonLinkResolver,
   ) {}
 
-  /** The zip import's checks first (permission, code, references), then the link's (see `PolygonLinkResolver.resolve`). The problem is created private, with the importer as curator. */
+  /** The zip import's checks first (permission, code, references), then the link's (see `PolygonLinkResolver.resolve`). The problem is created private, with the importer as curator (and private to the organization the body names). */
   async importProblem(
     auth: AuthContext,
     { link, ...body }: PolygonLinkImportDto,
@@ -36,7 +36,7 @@ export class PolygonLinkImportService {
     );
     await this.imports.reserveImport(auth);
     const jobId = newId();
-    await this.imports.enqueue(jobId, {
+    await this.imports.enqueue(auth, jobId, {
       ...job,
       polygon: {
         problemId: problem.id,
@@ -66,6 +66,7 @@ export class PolygonLinkImportService {
     await this.imports.reserveImport(auth);
     const jobId = newId();
     await this.imports.enqueue(
+      auth,
       jobId,
       syncJobOf(problem, latest, {
         userId: auth.principal.userId,

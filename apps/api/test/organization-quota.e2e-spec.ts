@@ -626,7 +626,11 @@ describe('problem data quota', () => {
     polygon = api.app.get(getQueueToken(POLYGON_QUEUE));
     authorId = (
       await createUserWith(api, 'dqauthor', {
-        permissions: ['judge.edit_own_problem', 'judge.import_polygon_package'],
+        permissions: [
+          'judge.edit_own_problem',
+          'judge.import_polygon_package',
+          'judge.create_organization_problem',
+        ],
       })
     )._id;
     author = await loginAs(api, authorId);
@@ -775,6 +779,63 @@ describe('problem data quota', () => {
       .expect(errorCode('quota_exceeded'));
     expect((await polygon.getJobs(['waiting', 'active'])).length).toBe(before);
     expect(readdirSync(join(api.problemDataRoot, '.imports'))).toEqual([]);
+  });
+
+  describe('a Polygon import that creates an organization problem', () => {
+    const IMPORT_PACKAGE = buildZip([
+      { name: 'problem.xml', content: '<problem/>' },
+      { name: 'tests/01', content: '1'.repeat(200) },
+    ]);
+    const importInto = (slug: string, code: string) =>
+      authed(
+        api
+          .http()
+          .post(`${PROBLEMS}/imports?code=${code}&organization=${slug}`),
+        author,
+      ).attach('file', IMPORT_PACKAGE, {
+        filename: 'package.zip',
+        contentType: 'application/zip',
+      });
+    const storedPackages = () =>
+      readdirSync(join(api.problemDataRoot, '.imports'));
+    const waitingJobs = async () =>
+      (await polygon.getJobs(['waiting', 'active'])).length;
+    const administered = (quota: Record<string, unknown>) => {
+      counter += 1;
+      return createOrganization(api, {
+        slug: `imp${counter}`,
+        adminIds: [authorId],
+        ...quota,
+      });
+    };
+
+    beforeEach(() => api.setSetting('quota.cost.problem', 10));
+
+    it('spends the problem price when the job is queued', async () => {
+      const organization = await administered({ quotaMonthlyCredits: 30 });
+      await importInto(organization.slug, `${organization.slug}_a`).expect(202);
+      expect(await creditsOf(organization._id)).toBe(10);
+    });
+
+    it('refuses at the credit limit, queuing no job, keeping no package and leaving the counter alone', async () => {
+      const organization = await administered({ quotaMonthlyCredits: 5 });
+      const before = await waitingJobs();
+      const packages = storedPackages().length;
+      await importInto(organization.slug, `${organization.slug}_a`)
+        .expect(403)
+        .expect(errorCode('quota_exceeded'));
+      expect(await waitingJobs()).toBe(before);
+      expect(storedPackages()).toHaveLength(packages);
+      expect(await creditsOf(organization._id)).toBe(0);
+    });
+
+    it('refuses a package over the storage limit before spending credits', async () => {
+      const organization = await administered({ quotaStorageBytes: 20 });
+      await importInto(organization.slug, `${organization.slug}_a`)
+        .expect(403)
+        .expect(errorCode('quota_exceeded'));
+      expect(await creditsOf(organization._id)).toBe(0);
+    });
   });
 });
 
