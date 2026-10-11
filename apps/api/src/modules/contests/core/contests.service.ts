@@ -8,6 +8,7 @@ import { uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
 import { ContestAccess } from './contest-access';
+import { ContestOrganizationsService } from './contest-organizations.service';
 import { ContestProblemFactsService } from './contest-problem-facts.service';
 import { ContestViewerService } from './contest-viewer.service';
 import type { ContestViewer } from './contest-viewer.service';
@@ -28,6 +29,7 @@ export class ContestsService {
     private readonly contests: ContestsRepository,
     private readonly viewers: ContestViewerService,
     private readonly problemFacts: ContestProblemFactsService,
+    private readonly organizations: ContestOrganizationsService,
     private readonly users: UsersRepository,
   ) {}
 
@@ -47,7 +49,10 @@ export class ContestsService {
       query.page,
       query.pageSize,
     );
-    const viewers = await this.viewers.listViewersOf(principal, items, now);
+    const [viewers, organizations] = await Promise.all([
+      this.viewers.listViewersOf(principal, items, now),
+      this.organizations.forContests(principal, items),
+    ]);
     return new Paginated(
       items.map((contest) =>
         ContestListItemResponse.withViewer(
@@ -55,6 +60,7 @@ export class ContestsService {
           now,
           // `viewers` is empty for a signed-out visitor, so the row has no viewer.
           viewers.get(uuidStr(contest._id)) ?? null,
+          organizations.get(uuidStr(contest._id)) ?? [],
         ),
       ),
       { page: query.page, pageSize: query.pageSize, total },
@@ -93,15 +99,19 @@ export class ContestsService {
     const contest = await this.visibleContest(principal, key);
     const viewerFacts = await this.viewers.viewerOf(principal, contest, now);
     const viewer = this.viewerResponseOf(principal, contest, viewerFacts, now);
-    const [authors, settingsUsers, problems] = await Promise.all([
-      this.users.findByIds(ContestAccess.accessView(contest).authors),
-      this.settingsUsers(contest, viewer),
-      this.isProblemListOpen(contest, viewer, now)
-        ? this.problemFacts.factsFor(principal, contest, viewerFacts, now)
-        : null,
-    ]);
+    const [authors, settingsUsers, problems, organizations] = await Promise.all(
+      [
+        this.users.findByIds(ContestAccess.accessView(contest).authors),
+        this.settingsUsers(contest, viewer),
+        this.isProblemListOpen(contest, viewer, now)
+          ? this.problemFacts.factsFor(principal, contest, viewerFacts, now)
+          : null,
+        this.organizations.forContests(principal, [contest]),
+      ],
+    );
     return ContestDetailResponse.fromDetail(contest, {
       now,
+      organizations: organizations.get(uuidStr(contest._id)) ?? [],
       authors,
       problems,
       viewer,

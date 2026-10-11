@@ -15,6 +15,7 @@ import type { ProblemLimits } from '../contest-problem-limits';
 import { ApiProblemCell } from './api-problem-cells';
 import {
   ContestListViewerResponse,
+  type ContestOrganizationResponse,
   ContestSummaryResponse,
 } from './contest-list.response';
 
@@ -336,6 +337,7 @@ export class ContestDetailResponse extends ContestSummaryResponse {
     contest: Contest,
     extras: {
       now: Date;
+      organizations: ContestOrganizationResponse[];
       authors: UserDocument[];
       problems: ContestProblemFacts | null;
       viewer: ContestViewerResponse;
@@ -343,7 +345,7 @@ export class ContestDetailResponse extends ContestSummaryResponse {
     },
   ): ContestDetailResponse {
     return {
-      ...ContestSummaryResponse.from(contest, extras.now),
+      ...ContestSummaryResponse.from(contest, extras.now, extras.organizations),
       description: contest.description,
       descriptionHtml: contest.descriptionHtml,
       rules: contest.rules,
