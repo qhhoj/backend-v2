@@ -1,6 +1,7 @@
 # Opens or updates the "Version Packages" PR from the pending .changeset/*.md files on every push to main.
 # Merging that PR leaves no changesets, so the next run takes the publish branch: release:tag tags v<version>
-# (no npm publish; the app is private). Third-party actions are pinned by commit SHA; bump them deliberately.
+# through the REST API (git push of a tag is refused when the tagged commit's workflow files differ from main's; no npm
+# publish, the app is private). Third-party actions are pinned by commit SHA; bump them deliberately.
 # commitMode github-api: GitHub signs the version commit (Verified), as the protected main requires. A PR made with
 # GITHUB_TOKEN starts no pull_request workflow, so the job dispatches ci and changeset on the version branch; their
 # check runs attach to its head commit under the names the branch protection requires.
