@@ -47,7 +47,7 @@ export class Comment {
   @Prop({ type: Date, default: null }) deletedAt!: Date | null;
   /** Who deleted it: the author or a moderator. */
   @Prop({ type: UUID, default: null }) deletedBy!: string | null;
-  /** 1-based position on its page in posting order, from `commentPageCounters`; null until the `comment-numbers` backfill numbered a row posted before numbering existed. */
+  /** 1-based position on its page in posting order, from `commentPageCounters`. */
   @Prop({ type: Number, default: null }) number!: number | null;
   /** Edits so far; the compare-and-set token of an edit. */
   @Prop({ default: 0, min: 0 }) revisions!: number;
