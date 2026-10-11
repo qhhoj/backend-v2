@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.21.0
+
+### Minor Changes
+
+- 6dd4737: Setting `organization.adminRoleId`: the role every new organization admin gets (on create and on `adminIds` edits; never removed on demotion). Empty falls back to the role named "Org Admin".
+
 ## 2.20.0
 
 ### Minor Changes
