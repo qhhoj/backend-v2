@@ -61,3 +61,5 @@ BlogPostSchema.index({
   publishOn: -1,
   _id: -1,
 });
+// A writer's drafts and scheduled posts, newest publish time first.
+BlogPostSchema.index({ authors: 1, publishOn: -1, _id: -1 });

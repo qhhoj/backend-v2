@@ -8,6 +8,8 @@ import { OrganizationsApiModule } from '../organizations/organizations-api.modul
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { BlogAccessModule } from './core/blog-access.module';
 import { BlogPostsController } from './core/blog-posts.controller';
+import { BlogDraftsController } from './drafts/blog-drafts.controller';
+import { BlogDraftsService } from './drafts/blog-drafts.service';
 import { BlogPostsService } from './core/blog-posts.service';
 import { BlogEditingController } from './editing/blog-editing.controller';
 import { BlogEditingService } from './editing/blog-editing.service';
@@ -29,6 +31,7 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
   ],
   controllers: [
     BlogPostsController,
+    BlogDraftsController,
     OrganizationPostsController,
     BlogEditingController,
     BlogVotesController,
@@ -37,6 +40,7 @@ import { OrganizationPostsController } from './core/organization-posts.controlle
   providers: [
     BlogPostsService,
     BlogEditingService,
+    BlogDraftsService,
     BlogVotesService,
     BlogModerationService,
     RateLimitService,

@@ -101,22 +101,11 @@ describe('BlogAccess', () => {
     ).toBe(false);
   });
 
-  it('gives organization lists to members, admins and edit_all_post only', () => {
+  it('gives no organization list to outsiders and every post to edit_all_post', () => {
     const organization = { id: 'org', isUnlisted: false, adminIds: ['boss'] };
     expect(
       BlogAccess.organizationFilter(stranger, organization, now),
     ).toBeNull();
-    expect(BlogAccess.organizationFilter(member, organization, now)).toEqual({
-      organization: 'org',
-      visible: true,
-      publishOn: { $lte: now },
-    });
-    expect(
-      BlogAccess.organizationFilter(principal('boss'), organization, now),
-    ).toEqual({
-      organization: 'org',
-      $or: [{ visible: true }, { authors: 'boss' }],
-    });
     expect(BlogAccess.organizationFilter(editorAll, organization, now)).toEqual(
       {
         organization: 'org',

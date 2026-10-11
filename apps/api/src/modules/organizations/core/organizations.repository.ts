@@ -68,6 +68,15 @@ export class OrganizationsRepository {
     return (await this.organizations.exists(filter).exec()) !== null;
   }
 
+  /** Ids of the organizations a user is an admin of; through `{adminIds}`. */
+  async idsAdministeredBy(userId: string): Promise<string[]> {
+    const rows = await this.organizations
+      .find({ adminIds: userId }, { _id: 1 })
+      .lean()
+      .exec();
+    return rows.map((row) => uuidStr(row._id));
+  }
+
   /** Through `{adminIds}`. */
   countAdminRoles(userId: string): Promise<number> {
     return this.organizations.countDocuments({ adminIds: userId }).exec();

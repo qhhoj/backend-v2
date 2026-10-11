@@ -7820,6 +7820,31 @@
         ],
         "type": "object"
       },
+      "PostComposeOptionsResponse": {
+        "properties": {
+          "canWritePersonal": {
+            "description": "The viewer may write a personal post: not muted, and enough solved problems (superusers need none).",
+            "type": "boolean"
+          },
+          "minSolvedProblems": {
+            "description": "Solved problems a personal post needs.",
+            "type": "number"
+          },
+          "organizations": {
+            "description": "Organizations the viewer may post for: an admin of each, unmuted, with judge.edit_organization_post.",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationSummaryResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "canWritePersonal",
+          "minSolvedProblems",
+          "organizations"
+        ],
+        "type": "object"
+      },
       "PostDetailResponse": {
         "properties": {
           "authors": {
@@ -29818,6 +29843,127 @@
         "tags": [
           "Blog"
         ]
+      }
+    },
+    "/api/internal/posts/compose-options": {
+      "get": {
+        "description": "Whether the caller may write a personal post (unmuted, with\n`minSolvedProblems` solved problems) and the organizations they may post\nfor (their admin, unmuted, with `judge.edit_organization_post`). Creating\na post applies the same rules.",
+        "operationId": "BlogDraftsController_composeOptions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PostComposeOptionsResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get where I may post",
+        "tags": [
+          "Blog"
+        ]
+      }
+    },
+    "/api/internal/posts/drafts": {
+      "get": {
+        "description": "The caller's own posts that are not public yet: drafts and posts\nscheduled for later, personal and organization ones, limited to those the\ncaller may still edit. Newest publish time first. Paged with `page`.",
+        "operationId": "BlogDraftsController_list",
+        "parameters": [
+          {
+            "description": "1-based page number.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/PostListItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List my drafts",
+        "tags": [
+          "Blog"
+        ],
+        "x-enveloped": true
       }
     },
     "/api/internal/posts/{id}": {

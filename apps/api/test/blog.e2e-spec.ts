@@ -366,7 +366,9 @@ afterAll(() => api.teardown());
     });
 
     it('lists organization posts to members, admins and edit_all_post', async () => {
-      const { user: boss, session: bossSession } = await person();
+      const { user: boss, session: bossSession } = await person({
+        permissions: ['judge.edit_organization_post'],
+      });
       const { user: member, session: memberSession } = await person();
       const { session: stranger } = await person();
       const { session: staff } = await person({
@@ -396,6 +398,12 @@ afterAll(() => api.teardown());
         visible: false,
         publishOn: hourAgo(3),
       });
+      await createPost(api, {
+        title: 'other scheduled',
+        organization: organization._id,
+        authors: [member._id],
+        publishOn: new Date(Date.now() + 3_600_000),
+      });
       const url = organizationUrl(organization.slug, '/posts');
       expect(await titles(url, stranger)).toEqual([]);
       expect(await titles(url)).toEqual([]);
@@ -405,6 +413,7 @@ afterAll(() => api.teardown());
         'boss draft',
       ]);
       expect(await titles(url, staff)).toEqual([
+        'other scheduled',
         'published',
         'boss draft',
         'other draft',

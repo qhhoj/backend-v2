@@ -190,6 +190,70 @@ describe('blog editing', () => {
     expect(await discord.getJobCounts('waiting')).toMatchObject({ waiting: 0 });
   });
 
+  it('lists my drafts and scheduled posts to me only, and where I may post', async () => {
+    const admin = await person({
+      problemCount: 3,
+      permissions: ['judge.edit_organization_post'],
+    });
+    const other = await person();
+    const organization = await createOrganization(api, {
+      adminIds: [admin.user._id],
+    });
+    const later = new Date(Date.now() + 3_600_000).toISOString();
+    const titled = async (session: TestSession, body: object) =>
+      dataOf<PostDetailResponse>(await create(session, body).expect(201));
+    const orgDraft = await titled(admin.session, {
+      organization: organization.slug,
+      visible: false,
+    });
+    const scheduled = await titled(admin.session, {
+      organization: organization.slug,
+      visible: true,
+      publishOn: later,
+    });
+    await titled(admin.session, {
+      organization: organization.slug,
+      visible: true,
+    });
+    await titled(other.session, { visible: false });
+    const drafts = (session: TestSession) =>
+      authed(api.http().get('/api/internal/posts/drafts'), session).expect(200);
+    const mine = dataOf<{ id: string }[]>(await drafts(admin.session)).map(
+      (post) => post.id,
+    );
+    expect(mine.sort()).toEqual([orgDraft.id, scheduled.id].sort());
+    const theirs = dataOf<{ id: string }[]>(await drafts(other.session)).map(
+      (post) => post.id,
+    );
+    expect(theirs).not.toContain(orgDraft.id);
+    await api.http().get('/api/internal/posts/drafts').expect(401);
+
+    const options = (session: TestSession) =>
+      authed(
+        api.http().get('/api/internal/posts/compose-options'),
+        session,
+      ).expect(200);
+    expect(dataOf(await options(admin.session))).toMatchObject({
+      canWritePersonal: false,
+      minSolvedProblems: 10,
+      organizations: [{ slug: organization.slug }],
+    });
+    expect(dataOf(await options(other.session))).toMatchObject({
+      canWritePersonal: true,
+      organizations: [],
+    });
+    const mutedAdmin = await person({
+      mute: true,
+      permissions: ['judge.edit_organization_post'],
+    });
+    await createOrganization(api, { adminIds: [mutedAdmin.user._id] });
+    expect(dataOf(await options(mutedAdmin.session))).toMatchObject({
+      canWritePersonal: false,
+      organizations: [],
+    });
+    await api.http().get('/api/internal/posts/compose-options').expect(401);
+  });
+
   it('answers 401 when the user vanished between the session check and the write', async () => {
     const { user } = await person();
     const post = await createPost(api, { authors: [user._id] });
