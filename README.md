@@ -52,7 +52,7 @@ Run each from the repo root (the worker needs `node_modules` for KaTeX's CSS).
 | worker                                 | `npm run start:worker`    | `npx nest build worker && npm run start:prod:worker` |
 | bridge (`:9999`, exactly one instance) | `npm run start:bridge`    | `npx nest build bridge && npm run start:prod:bridge` |
 
-API reference: `GET /api/docs` ([Scalar](https://scalar.com), https://qhhoj.com/api/docs and https://api-v2.qhhoj.com/api/docs) renders the live OpenAPI document, so it cannot drift from the code; the bundle is served by the api itself (no third-party script or font).
+API reference: `GET /api/docs` ([Scalar](https://scalar.com), https://qhhoj.com/api/docs) renders the live OpenAPI document, so it cannot drift from the code; the bundle is served by the api itself (no third-party script or font).
 
 OpenAPI JSON: `GET /api/internal/openapi.json` (request and response schemas of every route); the committed copy is `openapi.json` (`npm run openapi:emit` rewrites it offline); the frontend generates its types from it. After a DTO or route change run `npm run openapi:emit` and commit `openapi.json` (CI fails on a stale copy). `npm run test:openapi` checks the schemas.
 
