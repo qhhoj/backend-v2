@@ -42,12 +42,11 @@ export class AuthService {
     previousSessionId: string | null,
   ) {
     const user = await this.users.findByUsername(username);
-    const failureKeys = [
-      `login:ip:${ip}`,
-      user
-        ? `login:user:${user._id}`
-        : `login:name:${username.normalize('NFKC').toLowerCase()}`,
-    ];
+    // The account budget is per address too: failures from elsewhere never lock the owner out; the address budget brakes spraying.
+    const account = user
+      ? `user:${user._id}`
+      : `name:${username.normalize('NFKC').toLowerCase()}`;
+    const failureKeys = [`login:ip:${ip}`, `login:${account}:ip:${ip}`];
     // Reserve the attempt before verifying so concurrent bursts cannot exceed the limit.
     const release = await this.rateLimit.reserve(
       failureKeys,
@@ -182,7 +181,6 @@ export class AuthService {
         'Password rejected',
         problems.map((problem) => ({ field: 'newPassword', ...problem })),
       );
-    // The API token intentionally stays valid across a password change.
     const changed = await this.users.updatePasswordIfUnchanged(
       userId,
       auth.user.password,
@@ -194,12 +192,25 @@ export class AuthService {
         409,
         'Password was changed by another request',
       );
+    await this.users.update(userId, { apiTokenHash: null });
     await this.sessions.destroyAllForUser(userId, auth.sessionId ?? undefined);
     if (auth.sessionId)
       await this.sessions.update(auth.sessionId, { passwordPwned: false });
   }
 
-  async regenerateApiToken(userId: string): Promise<{ token: string }> {
+  /** Every session of the user, the current one included, and the API token. */
+  async logoutAll(userId: string): Promise<void> {
+    await this.users.update(userId, { apiTokenHash: null });
+    await this.sessions.destroyAllForUser(userId);
+  }
+
+  /** A stolen session cookie alone must not mint a credential that outlives the session, so the password is re-entered. */
+  async regenerateApiToken(
+    auth: AuthContext,
+    currentPassword: string,
+  ): Promise<{ token: string }> {
+    await this.confirmPassword(auth, currentPassword);
+    const { userId } = auth.principal;
     const { token, hash } = generateApiToken(userId, this.env.tokenSecret);
     await this.users.update(userId, { apiTokenHash: hash });
     return { token };

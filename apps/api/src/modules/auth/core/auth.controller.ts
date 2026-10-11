@@ -26,6 +26,7 @@ import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { CurrentPasswordDto } from './dto/current-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegenerateTokenResponse } from './dto/token.response';
 import { SessionResponse } from './dto/session.response';
@@ -45,7 +46,7 @@ export class AuthController {
    * @remarks
    * Public. Verifies the credentials and opens a browser session: the `qhhoj_session` cookie is set and any session the browser already held is replaced. Send the returned `csrfToken` in the `X-CSRF-Token` header on every later non-GET request.
    * When the account has TOTP or a security key, `twoFactorRequired` is true and `user` is null until the second factor is passed. When the password appears in a known breach, `passwordChangeRequired` is true and only the password change works.
-   * Failed attempts are limited per IP and per account (10 in 15 minutes, then 429 `rate_limited`). Errors: 401 `invalid_credentials`, 403 `banned` (carries the ban reason), 403 `account_not_activated`.
+   * Failed attempts are limited per IP and per account from that IP (10 in 15 minutes, then 429 `rate_limited`), so failures from elsewhere never lock the owner out. Errors: 401 `invalid_credentials`, 403 `banned` (carries the ban reason), 403 `account_not_activated`.
    */
   @Public()
   @Post('login')
@@ -101,7 +102,7 @@ export class AuthController {
    * Sign out of every session
    *
    * @remarks
-   * Browser session only (API tokens get 403) and not while impersonating. Destroys all sessions of the user, including the current one, and clears the cookie. Returns 204.
+   * Browser session only (API tokens get 403) and not while impersonating. Destroys all sessions of the user, including the current one, revokes the API token and clears the cookie. Returns 204.
    */
   @SessionOnly()
   @NoImpersonation()
@@ -111,7 +112,7 @@ export class AuthController {
     @CurrentAuth() auth: AuthContext,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    await this.sessions.destroyAllForUser(auth.principal.userId);
+    await this.auth.logoutAll(auth.principal.userId);
     clearSessionCookie(reply);
   }
 
@@ -120,7 +121,7 @@ export class AuthController {
    *
    * @remarks
    * Browser session only, not while impersonating; reachable while the password is flagged as breached. Requires the current password; wrong attempts share the 10 in 15 minutes budget with other password confirmations (400 `invalid_credentials`, then 429 `rate_limited`).
-   * The new password must pass the password policy, differ from the current one and not appear in a known breach, otherwise 400 `validation_failed` with per-field issues on `newPassword`. All other sessions are signed out; the API token stays valid. A concurrent change gives 409 `conflict`. Returns 204.
+   * The new password must pass the password policy, differ from the current one and not appear in a known breach, otherwise 400 `validation_failed` with per-field issues on `newPassword`. All other sessions are signed out and the API token is revoked. A concurrent change gives 409 `conflict`. Returns 204.
    */
   @SessionOnly()
   @NoImpersonation()
@@ -142,14 +143,16 @@ export class AuthController {
    * Create a new API token
    *
    * @remarks
-   * Browser session only, not while impersonating. Issues a new personal API token for `Authorization: Bearer`, replacing the previous one, which stops working at once. The token is shown only in this response.
+   * Browser session only, not while impersonating. Requires the current password; wrong attempts share the 10 in 15 minutes budget with other password confirmations (400 `invalid_credentials`, then 429 `rate_limited`).
+   * Issues a new personal API token for `Authorization: Bearer`, replacing the previous one, which stops working at once. The token is shown only in this response. A password change, a password reset and signing out everywhere revoke it.
    */
   @SessionOnly()
   @NoImpersonation()
   @Post('token/regenerate')
   regenerateToken(
     @CurrentAuth() auth: AuthContext,
+    @Body() body: CurrentPasswordDto,
   ): Promise<RegenerateTokenResponse> {
-    return this.auth.regenerateApiToken(auth.principal.userId);
+    return this.auth.regenerateApiToken(auth, body.currentPassword);
   }
 }
