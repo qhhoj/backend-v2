@@ -22,7 +22,8 @@ export class BlogModerationController {
    * draft, personal or organization), `scheduled` (visible posts whose
    * publish time is still ahead), `organization` (every organization post) or
    * `any` (every post), newest first. `search` keeps posts whose title contains it
-   * or with an author of that exact username. Paged with `page`.
+   * or with an author of that exact username; `organization` (a slug) keeps
+   * that organization's posts. Paged with `page`.
    */
   @ApiPaginatedResponse(PostListItemResponse)
   @Get()

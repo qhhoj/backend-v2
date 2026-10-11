@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { escapeRegExp } from '@libs/common';
 import { Flatpage, isUuid } from '@libs/database';
-import type { Model } from 'mongoose';
+import type { FilterQuery, Model } from 'mongoose';
 
 export type FlatpageFields = Pick<
   Flatpage,
@@ -55,19 +56,27 @@ export class FlatpagesRepository {
   }
 
   /** By url, through the unique index; the Markdown source is not loaded. */
+  /** `search`: the url or the title contains it, any case. */
   async list(
     page: number,
     pageSize: number,
+    search = '',
   ): Promise<{ items: Flatpage[]; total: number }> {
+    const pattern = { $regex: escapeRegExp(search), $options: 'i' };
+    const filter: FilterQuery<Flatpage> = search
+      ? { $or: [{ url: pattern }, { title: pattern }] }
+      : {};
     const [items, total] = await Promise.all([
       this.flatpages
-        .find({}, { content: 0, contentHtml: 0 })
+        .find(filter, { content: 0, contentHtml: 0 })
         .sort({ url: 1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean<Flatpage[]>()
         .exec(),
-      this.flatpages.estimatedDocumentCount(),
+      search
+        ? this.flatpages.countDocuments(filter)
+        : this.flatpages.estimatedDocumentCount(),
     ]);
     return { items, total };
   }

@@ -25,6 +25,9 @@ export class PostModerationQueryDto {
   /** Text the title contains (case-insensitive), or an author's exact username. */
   @IsOptional() @IsString() @MaxLength(100) search?: string;
 
+  /** Slug of one organization: keeps only its posts. An unknown slug matches nothing. */
+  @IsOptional() @IsString() @MaxLength(128) organization?: string;
+
   /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()

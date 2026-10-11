@@ -1202,6 +1202,49 @@
         ],
         "type": "object"
       },
+      "BulkSettleOutcomeResponse": {
+        "properties": {
+          "code": {
+            "description": "Null when its open reports were settled; otherwise the error code that refused it (`not_found`).",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "Id of the comment.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ],
+        "type": "object"
+      },
+      "BulkSettleReportsDto": {
+        "properties": {
+          "ids": {
+            "description": "Ids of the reported comments, at most 50; duplicates count once.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentReportOutcome"
+              }
+            ],
+            "description": "`resolved` when the reports led to action, `dismissed` when they did not."
+          }
+        },
+        "required": [
+          "outcome",
+          "ids"
+        ],
+        "type": "object"
+      },
       "BulkVisibilityDto": {
         "properties": {
           "changeMessage": {
@@ -1819,13 +1862,40 @@
             "description": "Who reported; null when the account is gone.",
             "nullable": true,
             "type": "object"
+          },
+          "settledAt": {
+            "description": "When it was settled, ISO 8601; null while open.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "settledBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The moderator who settled it; null while open or when the account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentReportStatus"
+              }
+            ],
+            "description": "`open`, or how a moderator settled it."
           }
         },
         "required": [
           "reason",
+          "status",
           "reporter",
           "note",
-          "createdAt"
+          "createdAt",
+          "settledBy",
+          "settledAt"
         ],
         "type": "object"
       },
@@ -1834,6 +1904,13 @@
         "enum": [
           "dismissed",
           "resolved"
+        ],
+        "type": "string"
+      },
+      "CommentReportQueue": {
+        "enum": [
+          "open",
+          "settled"
         ],
         "type": "string"
       },
@@ -1848,8 +1925,14 @@
             "description": "The reported comment."
           },
           "lastReportedAt": {
-            "description": "When the newest open report came in, ISO 8601.",
+            "description": "When the newest of those reports came in, ISO 8601.",
             "format": "date-time",
+            "type": "string"
+          },
+          "lastSettledAt": {
+            "description": "In the settled list, when the newest of its reports was settled, ISO 8601; null in the open list.",
+            "format": "date-time",
+            "nullable": true,
             "type": "string"
           },
           "page": {
@@ -1861,11 +1944,11 @@
             "description": "The page it belongs to."
           },
           "reporterCount": {
-            "description": "Users with an open report on it.",
+            "description": "Users with a report on it in this list (open, or settled).",
             "type": "number"
           },
           "reports": {
-            "description": "Its open reports, oldest first.",
+            "description": "Its reports in this list, oldest first.",
             "items": {
               "$ref": "#/components/schemas/CommentReportEntryResponse"
             },
@@ -1877,7 +1960,8 @@
           "page",
           "reporterCount",
           "reports",
-          "lastReportedAt"
+          "lastReportedAt",
+          "lastSettledAt"
         ],
         "type": "object"
       },
@@ -1889,6 +1973,15 @@
           "other",
           "spam",
           "spoiler"
+        ],
+        "type": "string"
+      },
+      "CommentReportStatus": {
+        "description": "`open`, or how a moderator settled it.",
+        "enum": [
+          "dismissed",
+          "open",
+          "resolved"
         ],
         "type": "string"
       },
@@ -15493,6 +15586,17 @@
             "description": "Assignees and `change_ticket` only; `''` clears.",
             "maxLength": 8192,
             "type": "string"
+          },
+          "problem": {
+            "description": "Code of the problem to link the ticket to instead (legacy admin relink); `change_ticket` only.",
+            "maxLength": 32,
+            "type": "string"
+          },
+          "title": {
+            "description": "New title; `change_ticket` only.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
           }
         },
         "type": "object"
@@ -17505,7 +17609,7 @@
     },
     "/api/internal/admin/posts": {
       "get": {
-        "description": "Requires `judge.edit_all_post`. Returns posts by `state`: `hidden` (every\ndraft, personal or organization), `scheduled` (visible posts whose\npublish time is still ahead), `organization` (every organization post) or\n`any` (every post), newest first. `search` keeps posts whose title contains it\nor with an author of that exact username. Paged with `page`.",
+        "description": "Requires `judge.edit_all_post`. Returns posts by `state`: `hidden` (every\ndraft, personal or organization), `scheduled` (visible posts whose\npublish time is still ahead), `organization` (every organization post) or\n`any` (every post), newest first. `search` keeps posts whose title contains it\nor with an author of that exact username; `organization` (a slug) keeps\nthat organization's posts. Paged with `page`.",
         "operationId": "BlogModerationController_list",
         "parameters": [
           {
@@ -17541,6 +17645,16 @@
             "required": false,
             "schema": {
               "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Slug of one organization: keeps only its posts. An unknown slug matches nothing.",
+            "in": "query",
+            "name": "organization",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
               "type": "string"
             }
           }
@@ -18252,7 +18366,7 @@
     },
     "/api/internal/admin/site/config/{key}": {
       "delete": {
-        "description": "Requires `judge.change_miscconfig`. Removes the key. 404 `not_found` if it does not exist. Returns 204.",
+        "description": "Requires `judge.change_miscconfig`. Removes the key and records a revision. 404 `not_found` if it does not exist. Returns 204.",
         "operationId": "MiscConfigAdminController_delete",
         "parameters": [
           {
@@ -18298,7 +18412,7 @@
         ]
       },
       "put": {
-        "description": "Requires `judge.change_miscconfig`. Creates or replaces a free-form key/value text served to everyone by `GET /site`, so it must never hold a secret. The empty string is a valid value.",
+        "description": "Requires `judge.change_miscconfig`. Creates or replaces a free-form key/value text served to everyone by `GET /site`, so it must never hold a secret. The empty string is a valid value. A changed value records a revision.",
         "operationId": "MiscConfigAdminController_put",
         "parameters": [
           {
@@ -18369,9 +18483,92 @@
         ]
       }
     },
+    "/api/internal/admin/site/config/{key}/revisions": {
+      "get": {
+        "description": "Requires `judge.change_miscconfig`. The key's changes (creation, edits, deletion), newest first, 20 per page, with the editor and the value before and after. Still readable after the key is deleted; an unknown key has an empty history.",
+        "operationId": "MiscConfigAdminController_revisions",
+        "parameters": [
+          {
+            "description": "Config key, 1-64 characters without control characters.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "maxLength": 30,
+              "minLength": 1,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number, starting at 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/FlatpageRevisionResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Show the history of a config key",
+        "tags": [
+          "Admin: site & settings"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/admin/site/pages": {
       "get": {
-        "description": "Requires `flatpages.change_flatpage`. Returns a page of 50 pages with their URL, title and last update.",
+        "description": "Requires `flatpages.change_flatpage`. Returns a page of 50 pages with their URL, title and last update, by URL; `search` keeps pages whose URL or title contains it.",
         "operationId": "FlatpagesAdminController_list",
         "parameters": [
           {
@@ -18384,6 +18581,16 @@
               "maximum": 10000,
               "minimum": 1,
               "type": "number"
+            }
+          },
+          {
+            "description": "Keeps pages whose url or title contains this text, any case.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
             }
           }
         ],
@@ -21539,6 +21746,77 @@
         ]
       }
     },
+    "/api/internal/comments/locks": {
+      "get": {
+        "description": "Requires `judge.change_comment`. The pages whose comments are locked, the\nnewest lock first, 50 per page. Pages the moderator cannot read are left\nout of the page (still counted in `total`).",
+        "operationId": "CommentModerationController_lockedPages",
+        "parameters": [
+          {
+            "description": "1-based page number of threads.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/CommentPageLinkResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the pages with locked comments",
+        "tags": [
+          "Comments"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/comments/pages/{type}/{key}": {
       "get": {
         "description": "Public. Returns one page of threads (20 top-level comments with all their\nreplies) of a commentable page, addressed by `type` (problem, editorial,\ncontest, blog or tagProblem) and its natural `key` (problem code, contest\nkey, post id). Also reports the page's lock (`pageLocked`), whether it is\nlocked for the viewer (`locked`), and whether the viewer can comment\n(`canComment`) or why not (`postBlock`: `signed_out`, `contest`,\n`locked`, `muted`, or `needs_solved` with `solved` and `required`).\nHidden comments are returned only to holders of `judge.change_comment`,\nflagged `hidden` with the moderator in `hiddenBy`; deleted comments stay\nas placeholders (`deleted`, empty `bodyHtml`). Fails with 404\n`not_found` when the page is unknown or unreadable, and 403 `forbidden`\nwhile an official contest closes comments. Contest problem threads are\nempty for contestants who are in the contest.",
@@ -21865,11 +22143,11 @@
     },
     "/api/internal/comments/reports": {
       "get": {
-        "description": "Requires `judge.change_comment`. Returns the comments with open reports,\nthe most recently reported first, 20 per page: an excerpt, the page link,\nhow many users reported it, and each open report with its reason and\nnote. Comments on pages the moderator cannot read are left out of the\npage.",
+        "description": "Requires `judge.change_comment`. With `status=open` (the default),\nreturns the comments with open reports, the most recently reported\nfirst; with `status=settled`, the comments whose reports were resolved or\ndismissed, the most recently settled first. 20 per page: an excerpt, the\npage link, how many users reported it, and each report with its reason,\nnote and, once settled, outcome and moderator. Comments on pages the\nmoderator cannot read are left out of the page.",
         "operationId": "CommentReportsController_queue",
         "parameters": [
           {
-            "description": "1-based page number of threads.",
+            "description": "1-based page number.",
             "in": "query",
             "name": "page",
             "required": false,
@@ -21878,6 +22156,15 @@
               "maximum": 10000,
               "minimum": 1,
               "type": "number"
+            }
+          },
+          {
+            "description": "`open` (the default): comments with open reports. `settled`: comments whose reports were resolved or dismissed, newest settlement first.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CommentReportQueue"
             }
           }
         ],
@@ -21932,6 +22219,69 @@
           "Comments"
         ],
         "x-enveloped": true
+      }
+    },
+    "/api/internal/comments/reports/settle": {
+      "post": {
+        "description": "Requires `judge.change_comment`. Settles the open reports of up to 50\ncomments with one `outcome`, each like the single settle. Returns one\nentry per distinct id: `code` is null when settled, or the error code\nthat refused it (`not_found`: unreadable, or no open reports). A refusal\nnever stops the rest.",
+        "operationId": "CommentReportsController_settleMany",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSettleReportsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/BulkSettleOutcomeResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Settle the reports of several comments",
+        "tags": [
+          "Comments"
+        ]
       }
     },
     "/api/internal/comments/{id}": {
@@ -38071,7 +38421,7 @@
     },
     "/api/internal/tickets": {
       "get": {
-        "description": "Returns tickets the caller may read: their own and those assigned to them,\ntickets of problems they can edit, and every ticket for holders of\n`judge.change_ticket`. Filter with `open`, `own` (only tickets they filed\nor are assigned to), and repeated `user` and `assignee` usernames (at most\n10 each; unknown names match nothing). Paged with `page`.",
+        "description": "Returns tickets the caller may read: their own and those assigned to them,\ntickets of problems they can edit, and every ticket for holders of\n`judge.change_ticket`. Filter with `open`, `awaiting` (open tickets whose\nnewest message is not from staff), `own` (only tickets they filed\nor are assigned to), and repeated `user` and `assignee` usernames (at most\n10 each; unknown names match nothing). Paged with `page`.",
         "operationId": "TicketsController_list",
         "parameters": [
           {
@@ -38090,6 +38440,15 @@
             "description": "true for open tickets only, false for closed only, absent for both.",
             "in": "query",
             "name": "open",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "true keeps open tickets whose newest message is not from staff (what the staff badge counts).",
+            "in": "query",
+            "name": "awaiting",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -38354,7 +38713,7 @@
         ]
       },
       "patch": {
-        "description": "Changes only the fields sent: `isOpen` (close or reopen), `notes`\n(assignees and staff), `isContributive` (staff only, never on their own\nticket, counts toward the creator's contribution points) and `assignees`\n(staff only, usernames of active users, replaces the list; 400\n`assignee_unknown` otherwise). Everything is checked before one write, so\na refused request changes nothing. Fails with 409 `conflict` if the ticket\nchanged meanwhile.",
+        "description": "Changes only the fields sent: `isOpen` (close or reopen), `notes`\n(assignees and staff), `isContributive` (staff only, never on their own\nticket, counts toward the creator's contribution points) and `assignees`\n(staff only, usernames of active users, replaces the list; 400\n`assignee_unknown` otherwise), `title` and `problem` (staff only: retitle,\nor link the ticket to the problem with that code instead; 400\n`problem_unknown` for no such problem). Everything is checked before one\nwrite, so\na refused request changes nothing. Fails with 409 `conflict` if the ticket\nchanged meanwhile.",
         "operationId": "TicketUpdatesController_update",
         "parameters": [
           {

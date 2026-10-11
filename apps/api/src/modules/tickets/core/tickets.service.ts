@@ -49,6 +49,7 @@ export class TicketsService {
         : await this.visibleTo(principal),
     ];
     if (query.open !== undefined) clauses.push({ isOpen: query.open });
+    if (query.awaiting) clauses.push(TicketsRepository.AWAITING_STAFF);
     if (query.user)
       clauses.push({ user: { $in: await this.idsOf(query.user) } });
     if (query.assignee)

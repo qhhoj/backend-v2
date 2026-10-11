@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, unique } from '@libs/common';
+import { AppError, Paginated, unique } from '@libs/common';
+import { pageRef } from '@libs/community';
 import type { CommentPageType } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
@@ -12,9 +13,12 @@ import { CommentLocksRepository } from '../core/comment-locks.repository';
 import { CommentPagesService } from '../core/comment-pages.service';
 import { CommentsRepository } from '../core/comments.repository';
 import { CommentsService } from '../core/comments.service';
+import { CommentPageLinkResponse } from '../core/dto/comment.response';
 import type { CommentDetailResponse } from '../core/dto/comment.response';
 import type { BulkHideOutcomeResponse } from './dto/bulk-hide-comments.dto';
 import type { CommentVoteEntryResponse } from './dto/comment-vote-entry.response';
+
+export const LOCKS_PAGE_SIZE = 50;
 
 /** `judge.change_comment` tools; every route still needs page access (404 otherwise) and is closed in official contest mode. */
 @Injectable()
@@ -139,5 +143,22 @@ export class CommentModerationService {
     this.comments.assertOpen(principal);
     const { page } = await this.pages.resolve(principal, type, key);
     await (isLocked ? this.locks.lock(page) : this.locks.unlock(page));
+  }
+
+  /** Legacy `CommentLockAdmin` list: the locked pages, newest lock first; pages the moderator cannot read are left out (still counted in `total`). */
+  async lockedPages(
+    principal: Principal,
+    page: number,
+  ): Promise<Paginated<CommentPageLinkResponse>> {
+    this.comments.assertOpen(principal);
+    const { items, total } = await this.locks.page(page, LOCKS_PAGE_SIZE);
+    const readable = await this.pages.accessible(principal, items);
+    return new Paginated(
+      items.flatMap((item) => {
+        const pageInfo = readable.get(pageRef(item));
+        return pageInfo ? [CommentPageLinkResponse.from(pageInfo)] : [];
+      }),
+      { page, pageSize: LOCKS_PAGE_SIZE, total },
+    );
   }
 }

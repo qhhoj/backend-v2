@@ -12,7 +12,7 @@ import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import type { TicketDetailResponse } from '../src/modules/tickets/core/dto/ticket.response';
 import { clearContributionQueue } from './community-fixtures';
-import { authed } from './problem-fixtures';
+import { authed, createProblem, seedCatalog } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -201,5 +201,64 @@ describe('ticket updates', () => {
     await patch('creator', ticket._id, { assignees: [] }).expect(403);
     await patch('staff', ticket._id, { assignees: [] }).expect(200);
     expect((await stored(ticket._id))!.assignees.map(uuidStr)).toEqual([]);
+  });
+
+  it('lets only staff retitle a ticket or relink it to a live problem', async () => {
+    const catalog = await seedCatalog(api);
+    const [from, to] = await Promise.all([
+      createProblem(api, catalog, { code: 'relinkfrom' }),
+      createProblem(api, catalog, { code: 'relinkto' }),
+    ]);
+    const ticket = await createTicket(api, {
+      creator: people.creator.id,
+      problem: from._id,
+    });
+    await patch('creator', ticket._id, { title: 'Mine now' }).expect(403);
+    await patch('creator', ticket._id, { problem: 'relinkto' }).expect(403);
+    const bad = await patch('staff', ticket._id, {
+      title: 'Never stored',
+      problem: 'nosuchproblem',
+    }).expect(400);
+    expect(JSON.stringify(bad.body)).toContain('problem_unknown');
+    expect((await stored(ticket._id))!.title).toBe(ticket.title);
+
+    const saved = dataOf<TicketDetailResponse>(
+      await patch('staff', ticket._id, {
+        title: '  Wrong output on n = 1  ',
+        problem: 'relinkto',
+      }).expect(200),
+    );
+    expect(saved.title).toBe('Wrong output on n = 1');
+    const row = (await stored(ticket._id))!;
+    expect(row.linkedItem.type).toBe('problem');
+    expect(uuidStr(row.linkedItem.id)).toBe(to._id);
+    const revision = await api.revisions
+      .findOne({ entity: 'ticket', entityId: ticket._id })
+      .lean();
+    expect(revision?.userId && uuidStr(revision.userId)).toBe(people.staff.id);
+    expect(revision?.changes.linkedItem.before).toEqual({
+      type: 'problem',
+      id: from._id,
+    });
+  });
+
+  it('lists only open tickets that wait for staff with `awaiting`', async () => {
+    const [waiting, answered, closed] = await Promise.all([
+      createTicket(api, { creator: people.outsider.id }),
+      createTicket(api, {
+        creator: people.outsider.id,
+        lastMessageByStaff: true,
+      }),
+      createTicket(api, { creator: people.outsider.id, isOpen: false }),
+    ]);
+    const listed = dataOf<Array<{ id: string }>>(
+      await authed(
+        api.http().get('/api/internal/tickets?awaiting=true&user=outsider'),
+        people.staff.session,
+      ).expect(200),
+    ).map((item) => item.id);
+    expect(listed).toContain(waiting._id);
+    expect(listed).not.toContain(answered._id);
+    expect(listed).not.toContain(closed._id);
   });
 });
