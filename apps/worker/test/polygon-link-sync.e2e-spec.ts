@@ -155,7 +155,16 @@ describe('Polygon link, sync and auto-sync', () => {
     await language('CPP17');
     otherLanguageId = (await language('CPP20'))._id;
     requesterId = (
-      await worker.users.create({ username: 'setter', password: '!' })
+      await worker.users.create({
+        username: 'setter',
+        password: '!',
+        isActive: true,
+        permissions: [
+          'judge.import_polygon_package',
+          'judge.edit_own_problem',
+          'judge.add_problem',
+        ],
+      })
     )._id;
   });
   beforeEach(() => polygon.reset());
@@ -278,6 +287,45 @@ describe('Polygon link, sync and auto-sync', () => {
     );
     expect(polygon.calls).toEqual([]);
   });
+
+  it.each([
+    ['is deactivated', { isActive: false }, null],
+    [
+      'loses the import permission',
+      { permissions: ['judge.edit_own_problem'] },
+      null,
+    ],
+    [
+      'is no longer an editor of the problem',
+      {},
+      { authors: [], curators: [] },
+    ],
+  ])(
+    'refuses a sync, before downloading, once the linking user %s',
+    async (_case, userChange, problemChange) => {
+      const code = `lost_${newId().slice(-8)}`;
+      const before = await linked(code);
+      const restore = await worker.users.findById(requesterId).lean();
+      await worker.users.updateOne({ _id: requesterId }, userChange);
+      if (problemChange)
+        await worker.problems.updateOne({ code }, problemChange);
+      polygon.reset();
+      try {
+        const { error } = await runJob(
+          syncJob(code, { packageId: 11, revision: 4 }, before.dataVersion),
+        );
+        expect(error).toBe(
+          `${POLYGON_ERROR_PREFIX}the linking user may no longer sync this problem`,
+        );
+        expect(polygon.calls).toEqual([]);
+      } finally {
+        await worker.users.updateOne(
+          { _id: requesterId },
+          { isActive: restore!.isActive, permissions: restore!.permissions },
+        );
+      }
+    },
+  );
 
   describe('auto-sync', () => {
     beforeAll(() => imports.pause());

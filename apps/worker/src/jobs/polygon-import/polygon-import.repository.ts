@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { permissionsOf } from '@libs/auth';
+import { buildPrincipal, hasPermission, permissionsOf } from '@libs/auth';
 import type { Permission } from '@libs/auth';
 import { isDocumentTooLarge, isDuplicateKey } from '@libs/common';
 import {
@@ -18,7 +18,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import type { ProblemData, ProblemTranslation } from '@libs/database';
-import { dataChanges, fieldDiff } from '@libs/problems';
+import { dataChanges, fieldDiff, ProblemAccess } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import type { ClientSession, Connection, Model } from 'mongoose';
 import { PolygonImportError } from './polygon-import.error';
@@ -53,6 +53,7 @@ export interface AppliedImport {
 }
 
 const FULL_MARKUP_PERMISSION: Permission = 'judge.problem_full_markup';
+const IMPORT_PERMISSION: Permission = 'judge.import_polygon_package';
 
 const definedOnly = <Fields extends object>(fields: Fields): Fields =>
   Object.fromEntries(
@@ -160,6 +161,8 @@ export class PolygonImportRepository {
     const existing = await this.problems.findOne({ code: job.code }).exec();
     this.checkTarget(job, existing);
     this.checkLink(job, existing);
+    if (existing && job.polygon?.purpose === 'sync')
+      await this.assertSyncRequester(job.requesterId, existing);
     if (
       existing &&
       job.expectedDataVersion !== undefined &&
@@ -169,6 +172,28 @@ export class PolygonImportRepository {
         'Test data changed since the import was queued',
       );
     return existing && { dataVersion: existing.dataVersion };
+  }
+
+  /** A sync runs as the linking user long after the link (auto-sync every 10 minutes), so the api's rule is read again: active, `judge.import_polygon_package`, and still allowed to edit the problem. */
+  private async assertSyncRequester(
+    requesterId: string,
+    problem: Problem,
+  ): Promise<void> {
+    const requester = await this.users.findById(requesterId).exec();
+    const principal =
+      requester?.isActive &&
+      buildPrincipal(
+        requester,
+        await this.groups.find({ _id: { $in: requester.groups } }).exec(),
+      );
+    if (
+      !principal ||
+      !hasPermission(principal, IMPORT_PERMISSION) ||
+      !ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem))
+    )
+      throw new PolygonImportError(
+        'the linking user may no longer sync this problem',
+      );
   }
 
   /** The editor's rule: statement text on a full-markup problem needs `judge.problem_full_markup` from the person who started the import. */
@@ -222,6 +247,8 @@ export class PolygonImportRepository {
       .exec();
     this.checkTarget(job, existing);
     this.checkLink(job, existing);
+    if (existing && job.polygon?.purpose === 'sync')
+      await this.assertSyncRequester(job.requesterId, existing);
     const before = existing?.toObject();
     const statement = statementFields(imported, before);
     const written =
