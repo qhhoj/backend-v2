@@ -27,11 +27,10 @@ export interface NewSimilarityRun {
 const DUPLICATE_KEY = 11000;
 const ABANDONED: SimilarityError = 'abandoned';
 /** A run still queued this long is abandoned: its job was most likely lost. A run merely waiting behind a very long backlog is released too (accepted: rare under the start limit). */
-export const QUEUED_STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+const QUEUED_STALE_AFTER_MS = 3 * 60 * 60 * 1000;
 /** A running run past the worker's deadline plus this margin is abandoned: the worker would have failed it by now. */
 const RUNNING_STALE_MARGIN_MS = 10 * 60 * 1000;
-export const RUNNING_STALE_AFTER_MS =
-  SIMILARITY_DEADLINE_MS + RUNNING_STALE_MARGIN_MS;
+const RUNNING_STALE_AFTER_MS = SIMILARITY_DEADLINE_MS + RUNNING_STALE_MARGIN_MS;
 
 @Injectable()
 export class SimilarityRunsRepository {

@@ -11,18 +11,18 @@ import { SubmissionEffectsService } from '../submission-effects/submission-effec
 const MINUTE_MS = 60 * 1000;
 export const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 /** `judgedDate` is grading-begin: a grading that began up to this long before the last sweep and finished after it is still covered. */
-export const SWEEP_OVERLAP_MS = 10 * 60 * 1000;
+const SWEEP_OVERLAP_MS = 10 * 60 * 1000;
 /** After a long outage the sweep looks back at most this far; graded jobs wait in Redis meanwhile. */
-export const SWEEP_MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SWEEP_MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** End of the last successful sweep (epoch ms). */
 export const SWEEP_WATERMARK_KEY = 'effects:sweep:until';
 /** A row due for less than this still has its graded job on the way (BullMQ retries 10 s, then 20 s, apart); the sweep leaves it to the job. */
 export const EFFECTS_DUE_GRACE_MS = 2 * 60 * 1000;
 /** Rows repaired per sweep, oldest first; the rest wait for the next one. */
-export const EFFECTS_DUE_BATCH = 1000;
+const EFFECTS_DUE_BATCH = 1000;
 
 /** A row whose repair keeps failing is logged once per this long, not on every sweep; its retries go on. */
-export const REPAIR_LOG_BACKOFF_MS = 60 * 60 * 1000;
+const REPAIR_LOG_BACKOFF_MS = 60 * 60 * 1000;
 
 export interface SweepResult {
   users: number;

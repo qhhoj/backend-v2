@@ -27,9 +27,9 @@ import type {
 } from './similarity.repository';
 
 /** Sources over this many bytes are skipped (the spec's 64 KiB). */
-export const SIMILARITY_MAX_SOURCE_BYTES = 64 * 1024;
+const SIMILARITY_MAX_SOURCE_BYTES = 64 * 1024;
 /** Sources are read this many at a time. */
-export const SOURCE_CHUNK = 200;
+const SOURCE_CHUNK = 200;
 
 interface FamilyLanguages {
   family: SimilarityFamily;
