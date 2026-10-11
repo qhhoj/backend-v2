@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { loginAs } from './problem-fixtures';
 import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
 
+import { AuthService } from '../src/modules/auth/core/auth.service';
 import { SessionResponse } from '../src/modules/auth/core/dto/session.response';
 
 const sessionOf = (response: { body: unknown }) =>
@@ -411,6 +412,28 @@ describe('auth session endpoints', () => {
       })
       .expect(429);
     await api.http().post(LOGIN).send({ username: 'rita' }).expect(400);
+  });
+
+  it('counts failures per account and address, so another address still signs in', async () => {
+    await createUser(api.users, {
+      username: 'victor',
+      email: 'victor@example.com',
+    });
+    const auth = api.app.get(AuthService);
+    for (let attempt = 0; attempt < 10; attempt++)
+      await expect(
+        auth.login('victor', 'wrong password', '203.0.113.1', null),
+      ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    await expect(
+      auth.login('victor', 'correct horse battery', '203.0.113.1', null),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+    const session = await auth.login(
+      'victor',
+      'correct horse battery',
+      '203.0.113.2',
+      null,
+    );
+    expect(session.user.username).toBe('victor');
   });
 
   it('carries the personal appearance on the session user, null until it is set', async () => {

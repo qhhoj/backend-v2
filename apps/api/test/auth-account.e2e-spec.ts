@@ -115,17 +115,52 @@ describe('account endpoints', () => {
     expect((await api.sessions.get(sessionId))!.passwordPwned).toBe(false);
   });
 
+  const regenerate = (session: { cookie: string; csrf: string }) =>
+    post('token/regenerate', session, {
+      currentPassword: 'third passphrase here',
+    });
+  const bearerMe = (token: string) =>
+    api.http().get(`${AUTH}/me`).set('Authorization', `Bearer ${token}`);
+
+  it('issues an api token only against the current password', async () => {
+    const session = await login('third passphrase here');
+    await post('token/regenerate', session).expect(400);
+    await post('token/regenerate', session, { currentPassword: 'wrong guess' })
+      .expect(400)
+      .expect(errorCode('invalid_credentials'));
+    await bearerMe(
+      bodyOf(await regenerate(session).expect(201)).data.token,
+    ).expect(200);
+  });
+
+  it('revokes the api token on a password change and on signing out everywhere', async () => {
+    const session = await login('third passphrase here');
+    const beforeChange = bodyOf(await regenerate(session).expect(201)).data
+      .token;
+    await post('password/change', session, {
+      currentPassword: 'third passphrase here',
+      newPassword: 'fourth passphrase here',
+    }).expect(204);
+    await bearerMe(beforeChange).expect(401);
+    await post('password/change', session, {
+      currentPassword: 'fourth passphrase here',
+      newPassword: 'third passphrase here',
+    }).expect(204);
+    const beforeLogoutAll = bodyOf(await regenerate(session).expect(201)).data
+      .token;
+    await post('logout-all', session).expect(204);
+    await bearerMe(beforeLogoutAll).expect(401);
+  });
+
   it('issues an api token once and replaces the old one on regeneration', async () => {
     const session = await login('third passphrase here');
-    const first = bodyOf(await post('token/regenerate', session).expect(201))
-      .data.token;
+    const first = bodyOf(await regenerate(session).expect(201)).data.token;
     await api
       .http()
       .get(`${AUTH}/me`)
       .set('Authorization', `Bearer ${first}`)
       .expect(200);
-    const second = bodyOf(await post('token/regenerate', session).expect(201))
-      .data.token;
+    const second = bodyOf(await regenerate(session).expect(201)).data.token;
     await api
       .http()
       .get(`${AUTH}/me`)
@@ -140,8 +175,7 @@ describe('account endpoints', () => {
 
   it('refuses bearer tokens on every account-management route', async () => {
     const session = await login('third passphrase here');
-    const token = bodyOf(await post('token/regenerate', session).expect(201))
-      .data.token;
+    const token = bodyOf(await regenerate(session).expect(201)).data.token;
     for (const path of ['password/change', 'token/regenerate', 'logout-all'])
       await api
         .http()

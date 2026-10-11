@@ -228,7 +228,9 @@ describe('totp endpoints', () => {
         expect((body as Body).data.user!.username).toBe('alice');
       });
     expect((await stored())!.lastLogin).toBeInstanceOf(Date);
-    await post(`${AUTH}/token/regenerate`, session).expect(201);
+    await post(`${AUTH}/token/regenerate`, session, {
+      currentPassword: PASSWORD,
+    }).expect(201);
   });
 
   it('refuses a replayed TOTP code on a new login', async () => {

@@ -572,3 +572,5 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Comment edits are 20 per 5 minutes per user (each accepted edit stores a revision row with both bodies); a refused edit gives its hit back.
 - A comment page lists at most 100 replies per thread, a tree-order prefix (every listed reply's parent is listed), and names the cut threads in `truncatedThreads`; one crowded thread made every anonymous page read load all of its rows.
 - `/srv/qhhoj/problem-data` is 2750, not 2700: the local judge (qhhoj-judge, group qhhoj) reads it through the group, so 2700 cut it off; `pdf-cache`, `contest-data` and `user-data` stay 2700.
+- Login failures count per IP and per (account, IP), not per account alone: a per-account counter let anyone lock a named user out of password login. Spraying one account from many addresses is braked only per address; accepted for the lockout it removes.
+- The API token is minted only against the current password and is revoked by a password change, a password reset and sign-out-everywhere (it used to survive the first and last), so a stolen session cannot leave a credential behind.
