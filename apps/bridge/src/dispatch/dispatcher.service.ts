@@ -494,14 +494,18 @@ export class DispatcherService {
     this.logger.warn(
       `Grace of submission ${runOf(ref)} on judge ${judgeName} expired: ${GRACE_OUTCOME_TEXT[outcome]}`,
     );
-    if (outcome === 'requeued')
-      await this.enqueue(
-        await this.submissions.loadQueued([ref.submissionId]),
-      ).catch((error: Error) =>
-        this.logger.error(
-          `Dispatching requeued submission ${ref.submissionId} failed, the resync recovers it: ${error.message}`,
-        ),
+    if (outcome === 'requeued') await this.dispatchRequeued(ref.submissionId);
+  }
+
+  /** The row is QU: a failed read or enqueue is left to the resync. Runs from a timer, so nothing may reject (an unhandled rejection kills the process). */
+  private async dispatchRequeued(submissionId: string): Promise<void> {
+    try {
+      await this.enqueue(await this.submissions.loadQueued([submissionId]));
+    } catch (error) {
+      this.logger.error(
+        `Dispatching requeued submission ${submissionId} failed, the resync recovers it: ${(error as Error).message}`,
       );
+    }
   }
 
   private holdAgain({ ref, judgeName, abortRequested }: GraceEntry): void {
