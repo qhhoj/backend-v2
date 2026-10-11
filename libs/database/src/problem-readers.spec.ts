@@ -14,6 +14,11 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'F',
     'the newest list and the problem count show live problems only',
   ],
+  'apps/api/src/modules/organizations/editing/organization-unlink.repository.ts':
+    [
+      'S',
+      'an organization delete detaches every problem it owns, deleted ones too, so a restored problem does not point at a gone organization',
+    ],
   'apps/api/src/modules/problems/core/problems.repository.ts': [
     'F+S',
     'every finder filters; the explicit *IncludingDeleted and *Deleted* methods are the only deliberate exceptions',
