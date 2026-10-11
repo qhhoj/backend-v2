@@ -29,6 +29,8 @@ import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 export interface ProblemDetailContext {
   lang: StatementLanguage;
   canEdit: boolean;
+  /** See `ProblemEditorResponse.canPublishToMembers`. */
+  canPublishToMembers: boolean;
   hasEditorial: boolean;
   viewerStatus: ViewerStatus;
   contest: ProblemContestResponse | null;
@@ -100,10 +102,28 @@ export class ProblemEditorResponse {
   organizations!: string[];
   /** Image URL used for link previews; empty when none. */
   ogImage!: string;
+  /** The viewer may set `isPublic` without `judge.change_public_visibility`: the problem is organization-private and they may create problems for every one of its organizations (it then only reaches members). */
+  canPublishToMembers!: boolean;
+
+  /** The editor block for a viewer who may edit; null for everyone else. */
+  static forViewer(
+    problem: ProblemDocument,
+    summaries: Summaries,
+    context: Pick<ProblemDetailContext, 'canEdit' | 'canPublishToMembers'>,
+  ): ProblemEditorResponse | null {
+    return context.canEdit
+      ? ProblemEditorResponse.from(
+          problem,
+          summaries,
+          context.canPublishToMembers,
+        )
+      : null;
+  }
 
   static from(
     problem: ProblemDocument,
     summaries: Summaries,
+    canPublishToMembers: boolean,
   ): ProblemEditorResponse {
     const { solution } = problem;
     return {
@@ -131,6 +151,7 @@ export class ProblemEditorResponse {
       allowedLanguageIds: problem.allowedLanguages.map(uuidStr),
       organizations: problem.organizations.map(uuidStr),
       ogImage: problem.ogImage,
+      canPublishToMembers,
     };
   }
 }
@@ -312,9 +333,7 @@ export class ProblemDetailResponse {
       externalJudge: problem.externalJudge?.isActive
         ? { oj: problem.externalJudge.oj }
         : null,
-      editor: context.canEdit
-        ? ProblemEditorResponse.from(problem, summaries)
-        : null,
+      editor: ProblemEditorResponse.forViewer(problem, summaries, context),
     };
   }
 }

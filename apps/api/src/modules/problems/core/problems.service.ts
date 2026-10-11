@@ -50,6 +50,7 @@ import { ProblemGroupsQuerier } from '../catalog/problem-groups.querier';
 import { ProblemTypesQuerier } from '../catalog/problem-types.querier';
 import { ViewerStatusRepository } from './viewer-status.repository';
 import type { ViewerMark } from './viewer-status.repository';
+import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 
 const byField =
   <Item>(field: keyof Item) =>
@@ -106,6 +107,7 @@ export class ProblemsService {
     private readonly viewerStatuses: ViewerStatusRepository,
     private readonly currentContest: CurrentContestService,
     private readonly participations: ParticipationsRepository,
+    private readonly creationRights: OrganizationCreationRights,
   ) {}
 
   meta(): ProblemMetaResponse {
@@ -239,6 +241,14 @@ export class ProblemsService {
     return ProblemDetailResponse.from(problem, {
       lang,
       canEdit,
+      canPublishToMembers:
+        canEdit &&
+        principal !== null &&
+        problem.isOrganizationPrivate &&
+        (await this.creationRights.createsProblemsInAll(
+          principal,
+          problem.organizations.map(uuidStr),
+        )),
       hasEditorial: this.editorialReadable(principal, problem, scope),
       viewerStatus:
         (await this.viewerStatusesOf(principal, [problem._id])).get(
