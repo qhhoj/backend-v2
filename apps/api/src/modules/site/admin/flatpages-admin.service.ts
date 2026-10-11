@@ -53,8 +53,15 @@ export class FlatpagesAdminService {
     private readonly revisions: RevisionsRepository,
   ) {}
 
-  async list(page: number): Promise<Paginated<FlatpageAdminListItemResponse>> {
-    const { items, total } = await this.pages.list(page, PAGE_SIZE);
+  async list(
+    page: number,
+    search = '',
+  ): Promise<Paginated<FlatpageAdminListItemResponse>> {
+    const { items, total } = await this.pages.list(
+      page,
+      PAGE_SIZE,
+      search.trim(),
+    );
     return new Paginated(
       items.map((row) => FlatpageAdminListItemResponse.from(row)),
       { page, pageSize: PAGE_SIZE, total },

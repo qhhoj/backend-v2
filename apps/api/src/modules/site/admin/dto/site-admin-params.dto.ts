@@ -7,6 +7,7 @@ import {
   Length,
   Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { MISC_CONFIG_KEY_MAX } from '@libs/database';
@@ -41,4 +42,9 @@ export class PageListQueryDto {
   @Min(1)
   @Max(10000)
   page: number = 1;
+}
+
+export class FlatpageListQueryDto extends PageListQueryDto {
+  /** Keeps pages whose url or title contains this text, any case. */
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
 }
