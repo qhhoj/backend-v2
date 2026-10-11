@@ -61,6 +61,34 @@ function textClauses(query: ProblemFilterQueryDto): FilterQuery<Problem>[] {
   ];
 }
 
+/** Pending suggestions: legacy `is_suggesting` (a suggester, not yet public). */
+const SUGGESTED_FILTER: FilterQuery<Problem> = {
+  suggester: { $ne: null },
+  isPublic: false,
+};
+
+/** The admin list's person and review-queue filters; curators stay private, so only full editors may match on them. */
+function staffClauses(
+  principal: Principal | null,
+  query: ProblemFilterQueryDto,
+): FilterQuery<Problem>[] {
+  const clauses: FilterQuery<Problem>[] = [];
+  if (query.authorId) {
+    const seesCurators =
+      principal !== null && hasPermission(principal, 'judge.edit_all_problem');
+    clauses.push(
+      seesCurators
+        ? { $or: [{ authors: query.authorId }, { curators: query.authorId }] }
+        : { authors: query.authorId },
+    );
+  }
+  if (query.suggested !== undefined)
+    clauses.push(
+      query.suggested ? SUGGESTED_FILTER : { $nor: [SUGGESTED_FILTER] },
+    );
+  return clauses;
+}
+
 @Injectable()
 export class ProblemsService {
   constructor(
@@ -106,10 +134,13 @@ export class ProblemsService {
       query.page,
       query.pageSize,
     );
-    const statuses = await this.viewerStatusesOf(
-      principal,
-      items.map((problem) => problem._id),
-    );
+    const [statuses, authorsOf] = await Promise.all([
+      this.viewerStatusesOf(
+        principal,
+        items.map((problem) => problem._id),
+      ),
+      this.authorSummaries(items),
+    ]);
     const catalog = {
       lang: query.lang,
       types: this.types,
@@ -121,10 +152,28 @@ export class ProblemsService {
           problem,
           catalog,
           statuses.get(problem._id) ?? null,
+          authorsOf(problem),
         ),
       ),
       { page: query.page, pageSize: query.pageSize, total },
     );
+  }
+
+  /** One user lookup for a whole page; returns each problem's author summaries in stored order. */
+  private async authorSummaries(
+    problems: ProblemDocument[],
+  ): Promise<(problem: ProblemDocument) => UserSummaryResponse[]> {
+    const ids = [
+      ...new Set(problems.flatMap((problem) => problem.authors.map(uuidStr))),
+    ];
+    const users = new Map(
+      (await this.users.findByIds(ids)).map((user) => [
+        user._id,
+        UserSummaryResponse.from(user),
+      ]),
+    );
+    return (problem) =>
+      problem.authors.flatMap((id) => users.get(uuidStr(id)) ?? []);
   }
 
   /** Same filters and visibility as `list`; 404 when nothing matches. */
@@ -331,6 +380,7 @@ export class ProblemsService {
           ? publicEditorialFilter()
           : { $nor: [publicEditorialFilter()] },
       );
+    clauses.push(...staffClauses(principal, query));
     if (query.solved !== undefined) {
       const solved = principal
         ? await this.viewerStatuses.solvedIds(principal.userId)

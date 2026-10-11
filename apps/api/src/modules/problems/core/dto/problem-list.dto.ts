@@ -51,6 +51,10 @@ export class ProblemFilterQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() hasEditorial?: boolean;
   /** `false`: only problems the viewer has not solved; `true`: only solved ones (an AC with every case point). Anonymous viewers have solved nothing. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() solved?: boolean;
+  /** Only problems this user authored; viewers with `judge.edit_all_problem` also get the problems the user curates. */
+  @IsOptional() @IsUUID('7') authorId?: string;
+  /** true: only suggested problems still awaiting review (a suggester set, not public, so pair it with `visibility=private` or `all`); false: only the rest. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() suggested?: boolean;
   /** `public` (default): public problems; `private`: visible problems that are not public; `all`: both. */
   @ApiPropertyOptional()
   @IsOptional()

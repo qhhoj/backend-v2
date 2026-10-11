@@ -76,6 +76,13 @@ export const PERMISSIONS = [
   // Languages admin: legacy Django codenames.
   'judge.add_language',
   'judge.change_language',
+  // Problem catalogs admin (types, groups, licenses): legacy Django codenames.
+  'judge.add_problemtype',
+  'judge.change_problemtype',
+  'judge.add_problemgroup',
+  'judge.change_problemgroup',
+  'judge.add_license',
+  'judge.change_license',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

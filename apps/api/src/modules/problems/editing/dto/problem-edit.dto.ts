@@ -136,4 +136,12 @@ export class CreateProblemDto {
   @IsOptional() @IsTimestamp() date?: string | null;
 }
 
-export class UpdateProblemDto extends PartialType(CreateProblemDto) {}
+export const MAX_CHANGE_MESSAGE_LENGTH = 500;
+
+export class UpdateProblemDto extends PartialType(CreateProblemDto) {
+  /** Why the change was made, kept as the comment of the revision this edit writes; never stored on the problem. Up to 500 characters. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_CHANGE_MESSAGE_LENGTH)
+  changeMessage?: string;
+}

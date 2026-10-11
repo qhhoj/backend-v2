@@ -8,6 +8,7 @@ import { statementFor } from '@libs/problems';
 import { CatalogItemResponse } from './problem-meta.response';
 import { ApiProperty } from '@nestjs/swagger';
 import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
+import { UserSummaryResponse } from './user-summary.response';
 
 export class ProblemListItemResponse {
   /** Problem id. */
@@ -38,6 +39,8 @@ export class ProblemListItemResponse {
   hasPublicEditorial!: boolean;
   /** Whether a PDF statement was uploaded. */
   hasPdfStatement!: boolean;
+  /** Credited authors, in stored order; deleted accounts are left out. */
+  authors!: UserSummaryResponse[];
   /** For the signed-in viewer; null when anonymous or never submitted. */
   @ApiProperty({ enum: VIEWER_MARKS, nullable: true })
   viewerStatus!: ViewerStatus;
@@ -50,6 +53,7 @@ export class ProblemListItemResponse {
       groups: ProblemGroupsQuerier;
     },
     viewerStatus: ViewerStatus,
+    authors: UserSummaryResponse[],
   ): ProblemListItemResponse {
     const { lang, types, groups } = catalog;
     const group = groups.byId(uuidStr(problem.groupId));
@@ -70,6 +74,7 @@ export class ProblemListItemResponse {
       isOrganizationPrivate: problem.isOrganizationPrivate,
       hasPublicEditorial: isEditorialPublished(problem.solution),
       hasPdfStatement: problem.pdfStatementUrl !== null,
+      authors,
       viewerStatus,
     };
   }

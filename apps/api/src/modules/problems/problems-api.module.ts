@@ -18,6 +18,16 @@ import { DiscordModule } from '../discord/discord.module';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
 import { LanguagesAdminService } from './catalog/languages-admin.service';
 import { LanguagesQuerier } from './catalog/languages.querier';
+import { LicensesAdminController } from './catalog/licenses-admin.controller';
+import { LicensesAdminService } from './catalog/licenses-admin.service';
+import { ProblemGroupsAdminController } from './catalog/problem-groups-admin.controller';
+import { ProblemTypesAdminController } from './catalog/problem-types-admin.controller';
+import {
+  ProblemGroupsAdminService,
+  ProblemTypesAdminService,
+} from './catalog/problem-taxa-admin.service';
+import { ProblemBulkVisibilityController } from './bulk/problem-bulk-visibility.controller';
+import { ProblemBulkVisibilityService } from './bulk/problem-bulk-visibility.service';
 import { LicensesQuerier } from './catalog/licenses.querier';
 import { ProblemGroupsQuerier } from './catalog/problem-groups.querier';
 import { ProblemTypesQuerier } from './catalog/problem-types.querier';
@@ -92,6 +102,10 @@ const repositories = [
     ProblemImportsController,
     ProblemsController,
     LanguagesAdminController,
+    ProblemTypesAdminController,
+    ProblemGroupsAdminController,
+    LicensesAdminController,
+    ProblemBulkVisibilityController,
     ProblemEditingController,
     ProblemUploadsController,
     ProblemDataController,
@@ -107,6 +121,10 @@ const repositories = [
     ...repositories,
     ProblemsService,
     LanguagesAdminService,
+    ProblemTypesAdminService,
+    ProblemGroupsAdminService,
+    LicensesAdminService,
+    ProblemBulkVisibilityService,
     ProblemEditPolicyService,
     ProblemEditingService,
     ProblemStatementEditingService,

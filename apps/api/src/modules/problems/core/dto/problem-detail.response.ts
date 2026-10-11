@@ -93,6 +93,8 @@ export class ProblemEditorResponse {
   allowedLanguageIds!: string[];
   /** Ids of the organizations the problem is private to. */
   organizations!: string[];
+  /** Image URL used for link previews; empty when none. */
+  ogImage!: string;
 
   static from(
     problem: ProblemDocument,
@@ -123,6 +125,7 @@ export class ProblemEditorResponse {
       licenseId: problem.licenseId === null ? null : uuidStr(problem.licenseId),
       allowedLanguageIds: problem.allowedLanguages.map(uuidStr),
       organizations: problem.organizations.map(uuidStr),
+      ogImage: problem.ogImage,
     };
   }
 }
