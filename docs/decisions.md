@@ -571,3 +571,4 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Raw-HTML math scan finds tags with a forward scanner that walks each position once (same tags as the old regex, verified by a differential fuzz): the regex retried every `<` and was quadratic on unclosed tags, so a 200 KB post blocked the api for tens of seconds.
 - Comment edits are 20 per 5 minutes per user (each accepted edit stores a revision row with both bodies); a refused edit gives its hit back.
 - A comment page lists at most 100 replies per thread, a tree-order prefix (every listed reply's parent is listed), and names the cut threads in `truncatedThreads`; one crowded thread made every anonymous page read load all of its rows.
+- `/srv/qhhoj/problem-data` is 2750, not 2700: the local judge (qhhoj-judge, group qhhoj) reads it through the group, so 2700 cut it off; `pdf-cache`, `contest-data` and `user-data` stay 2700.
