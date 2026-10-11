@@ -26,6 +26,7 @@ export const CLONE_RESET_FIELDS = [
   'data',
   'dataVersion',
   'dataBytes',
+  'sourceChecks',
   'deletedAt',
   'deletedBy',
   'purgeStartedAt',

@@ -132,7 +132,7 @@ export class DispatcherService {
   private async offerGenerations(judge: DispatchTarget): Promise<void> {
     while (
       this.takesWork(judge) &&
-      this.generations.hasQueued() &&
+      this.generations.hasQueuedFor(judge) &&
       mayStartGeneration(
         judge,
         nextFor(judge, this.queue, this.connected()) !== null,

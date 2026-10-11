@@ -8,8 +8,8 @@ import type {
   TestGenerationFailure,
   TestGenerationStatus,
 } from '@libs/database';
-import { generationBucket, GENERATE_FEATURE } from '@libs/judging';
-import type { GenerationPlan } from '@libs/judging';
+import { featureOf, generationBucket } from '@libs/judging';
+import type { GenerationFeature, GenerationPlan } from '@libs/judging';
 import type { Connection, Model } from 'mongoose';
 
 /** What the waiter reads of a row on each poll. */
@@ -40,6 +40,7 @@ export class TestGenerationRepository {
         _id: id,
         status: 'queued',
         plan,
+        feature: featureOf(plan),
         bundleFileId: upload.id,
         bundleSize: upload.length,
       });
@@ -57,14 +58,14 @@ export class TestGenerationRepository {
       .exec();
   }
 
-  /** An enabled judge that is online and advertises test generation. */
-  async hasCapableJudge(): Promise<boolean> {
+  /** An enabled judge that is online and advertises `feature`. */
+  async hasCapableJudge(feature: GenerationFeature): Promise<boolean> {
     return Boolean(
       await this.judges.exists({
         online: true,
         isBlocked: false,
         isDisabled: false,
-        features: GENERATE_FEATURE,
+        features: feature,
       }),
     );
   }

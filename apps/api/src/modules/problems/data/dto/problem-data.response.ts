@@ -4,6 +4,8 @@ import type {
   JsonObject,
   ProblemData,
   ProblemTestCase,
+  SourceCheck,
+  SourceChecks,
 } from '@libs/database';
 import { SOFT_TESTCASES } from '../../core/dto/limits';
 
@@ -35,6 +37,24 @@ export class ProblemDataLimitsResponse {
   softCases!: number;
   /** Most cases the caller may save. */
   maxCases!: number;
+}
+
+export class SourceCheckResponse implements SourceCheck {
+  /** The uploaded file this check is about. */
+  file!: string;
+  /** `pending` (queued or compiling on a judge), `ok`, `error` (see `log`) or `unavailable` (no judge with `generate.compile` could compile it; `log` says why). */
+  status!: SourceCheck['status'];
+  /** Compile log of an `error`, reason of an `unavailable`; empty otherwise. */
+  log!: string;
+  /** When the judge answered; null while pending. */
+  checkedAt!: Date | null;
+}
+
+export class SourceChecksResponse implements SourceChecks {
+  /** Compile check of the uploaded checker; null when there is none. */
+  customChecker!: SourceCheckResponse | null;
+  /** Compile check of the uploaded interactor (interactive grader only); null otherwise. */
+  customGrader!: SourceCheckResponse | null;
 }
 
 export class ProblemDataResponse {
@@ -74,10 +94,17 @@ export class ProblemDataResponse {
   hasInit!: boolean;
   /** Case count limits for the editor. */
   limits!: ProblemDataLimitsResponse;
+  /** Compile checks of the uploaded checker and interactor, run on a judge after each upload. */
+  sourceChecks!: SourceChecksResponse;
 
   static from(
     data: ProblemData,
-    extra: { archiveFiles: string[]; hasInit: boolean; maxCases: number },
+    extra: {
+      archiveFiles: string[];
+      hasInit: boolean;
+      maxCases: number;
+      sourceChecks: SourceChecks;
+    },
   ): ProblemDataResponse {
     return {
       ...data,
@@ -85,6 +112,7 @@ export class ProblemDataResponse {
       archiveFiles: extra.archiveFiles,
       hasInit: extra.hasInit,
       limits: { softCases: SOFT_TESTCASES, maxCases: extra.maxCases },
+      sourceChecks: extra.sourceChecks,
     };
   }
 }

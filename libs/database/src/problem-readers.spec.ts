@@ -104,6 +104,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the purge reads the deleted problems it is removing',
   ],
+  'apps/worker/src/jobs/source-check/source-check.repository.ts': [
+    'F',
+    'a deleted problem gets no compile check',
+  ],
   'apps/worker/src/jobs/problem-package/problem-package.repository.ts': [
     'F',
     'a deleted problem is not packaged',

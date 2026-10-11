@@ -14,13 +14,18 @@ import type { Queue } from 'bullmq';
 import {
   POLYGON_ERROR_PREFIX,
   POLYGON_QUEUE,
+  SOURCE_CHECK_QUEUE,
   SVG_MAX_BYTES,
   PDF_QUEUE,
   PdfCacheService,
   pdfJobId,
   listZipEntries,
 } from '@libs/problems';
-import type { PolygonImportJob, PdfRenderJob } from '@libs/problems';
+import type {
+  PolygonImportJob,
+  PdfRenderJob,
+  SourceCheckJob,
+} from '@libs/problems';
 import { buildZip, PDF, PNG, SVG_WITH_SCRIPT } from '@libs/problems/testing';
 import {
   authed,
@@ -1272,6 +1277,18 @@ afterAll(() => api.teardown());
       expect(readFileSync(join(directory, 'chk.cpp'), 'utf8')).toBe(
         'int main(){}',
       );
+      // the worker compiles it on a judge; until then the editor shows it pending
+      expect(data.sourceChecks.customChecker).toMatchObject({
+        file: 'chk.cpp',
+        status: 'pending',
+      });
+      const checks: Queue<SourceCheckJob> = api.app.get(
+        getQueueToken(SOURCE_CHECK_QUEUE),
+      );
+      const queued = await checks.getJobs(['waiting', 'delayed']);
+      expect(queued.map((job) => job.data)).toContainEqual(
+        expect.objectContaining({ kind: 'customChecker', file: 'chk.cpp' }),
+      );
       const files = `${PROBLEMS}/sum/data/files`;
       expect(
         codeOf(
@@ -1482,6 +1499,7 @@ afterAll(() => api.teardown());
         ).expect(200),
       );
       expect(data.customChecker).toBeNull();
+      expect(data.sourceChecks.customChecker).toBeNull();
       expect(data.feedback).toBe(
         'A custom checker file is required for the custom checker.',
       );

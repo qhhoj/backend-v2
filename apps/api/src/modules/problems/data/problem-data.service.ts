@@ -12,6 +12,7 @@ import { ProblemDataResponse } from './dto/problem-data.response';
 import { MAX_CASE_ARGS_BYTES, maxTestcasesFor } from '../core/dto/limits';
 import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service';
 import { ProblemDataStore } from './problem-data.store';
+import { SourceChecksService } from './source-checks.service';
 
 @Injectable()
 export class ProblemDataService {
@@ -19,6 +20,7 @@ export class ProblemDataService {
     private readonly policy: ProblemEditPolicyService,
     private readonly store: ProblemDataStore,
     private readonly dataFiles: ProblemDataFilesService,
+    private readonly sourceChecks: SourceChecksService,
   ) {}
 
   async get(auth: AuthContext, code: string): Promise<ProblemDataResponse> {
@@ -70,6 +72,12 @@ export class ProblemDataService {
       after: stored,
       comment: 'Data edited from site',
     });
+    if (stored.grader !== previous.grader)
+      await this.sourceChecks.afterFileChange(
+        problem._id,
+        'customGrader',
+        stored,
+      );
     return this.store.response(auth.principal, problem, stored, archiveFiles);
   }
 
@@ -108,6 +116,7 @@ export class ProblemDataService {
       after: stored,
       comment: `${kind} removed`,
     });
+    await this.sourceChecks.afterFileChange(problem._id, kind, stored);
     return this.store.response(auth.principal, problem, stored, archiveFiles);
   }
 

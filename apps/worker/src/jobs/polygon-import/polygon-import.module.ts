@@ -31,5 +31,6 @@ import { TestGenerationService } from './test-generation.service';
     TestGenerationService,
     TestGenerationRepository,
   ],
+  exports: [TestGenerationService, TestGenerationRepository],
 })
 export class PolygonImportModule {}

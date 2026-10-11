@@ -24,6 +24,7 @@ import { QuotaService } from '../../organizations/quota/quota.service';
 import type { ProblemDocument } from '../core/problems.repository';
 import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 import { ProblemDataStore } from './problem-data.store';
+import { SourceChecksService } from './source-checks.service';
 import { UPLOAD_LIMIT, UPLOAD_WINDOW_SECONDS } from '../core/rate-limits';
 
 export const ARCHIVE_MAX_BYTES = 512 * 1024 * 1024;
@@ -43,6 +44,7 @@ export class ProblemDataUploadService {
     private readonly rateLimit: RateLimitService,
     private readonly quota: QuotaService,
     private readonly storage: ProblemStorageQuota,
+    private readonly sourceChecks: SourceChecksService,
   ) {}
 
   /**
@@ -199,6 +201,7 @@ export class ProblemDataUploadService {
       after: stored,
       comment: `${kind} uploaded`,
     });
+    await this.sourceChecks.afterFileChange(problem._id, kind, stored);
     await this.storage.afterWrite(organizationId);
     return this.store.response(auth.principal, problem, stored, archiveFiles);
   }

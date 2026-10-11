@@ -1,7 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
-import { ProblemData, ProblemDataSchema } from './problem-data.schema';
+import {
+  ProblemData,
+  ProblemDataSchema,
+  SourceChecksSchema,
+} from './problem-data.schema';
+import type { SourceChecks } from './problem-data.schema';
 import { PolygonLink, PolygonLinkSchema } from './polygon-link.schema';
 import {
   ExternalJudgeLink,
@@ -131,6 +136,9 @@ export class Problem {
   /** Test data configuration (3b); null until the data editor or an import writes it. */
   @Prop({ type: ProblemDataSchema, default: null, select: false })
   data!: ProblemData | null;
+  /** Compile checks of the uploaded checker and interactor; kept beside `data` so a data save never overwrites a result the worker wrote meanwhile. Absent (never null, so `$set` on a member works) until the first check. */
+  @Prop({ type: SourceChecksSchema, select: false })
+  sourceChecks?: SourceChecks;
   /** Compare-and-set counter for `data`: bumped by every data write so concurrent editors cannot overwrite each other. */
   @Prop({ default: 0 }) dataVersion!: number;
   /** Bytes in the problem's data directory. Recompute-and-set after every data write and by the `problem-databytes` job; the storage meter sums it. */

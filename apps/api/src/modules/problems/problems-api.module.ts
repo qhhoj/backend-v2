@@ -10,6 +10,7 @@ import {
   POLYGON_QUEUE,
   PROBLEM_PURGE_QUEUE,
   PROBLEM_SOLVERS_QUEUE,
+  SOURCE_CHECK_QUEUE,
 } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ContributionsModule } from '../contributions/contributions.module';
@@ -40,6 +41,7 @@ import { ProblemDataStore } from './data/problem-data.store';
 import { ProblemDataUploadService } from './data/problem-data-upload.service';
 import { OrganizationProblemCreationController } from './editing/organization-problem-creation.controller';
 import { OrganizationProblemRules } from './editing/organization-problem-rules.service';
+import { SourceChecksService } from './data/source-checks.service';
 import { ProblemEditingController } from './editing/problem-editing.controller';
 import { ProblemEditingService } from './editing/problem-editing.service';
 import { ProblemEditPolicyService } from './editing/problem-edit-policy.service';
@@ -108,6 +110,7 @@ const repositories = [
       { name: PACKAGE_QUEUE },
       { name: PROBLEM_PURGE_QUEUE },
       { name: PROBLEM_SOLVERS_QUEUE },
+      { name: SOURCE_CHECK_QUEUE },
     ),
   ],
   controllers: [
@@ -151,6 +154,7 @@ const repositories = [
     ProblemDataStore,
     ProblemDataService,
     ProblemDataUploadService,
+    SourceChecksService,
     ProblemStorageQuota,
     ProblemDataLifecycleService,
     ProblemImportsService,

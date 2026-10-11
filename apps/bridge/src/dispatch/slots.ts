@@ -1,5 +1,5 @@
 import { SUBMISSION_PRIORITY } from '@libs/database';
-import { GENERATE_FEATURE } from '@libs/judging';
+import { COMPILE_FEATURE, GENERATE_FEATURE } from '@libs/judging';
 import type { AssignmentRef, GenerateTests } from '@libs/judge-proto';
 import type { AssignRequest } from '../submissions/assign-request';
 
@@ -69,14 +69,15 @@ export const freeSlots = (judge: JudgeState): number =>
 export const loadOf = (judge: JudgeState): number =>
   judge.slots > 0 ? busySlots(judge) / judge.slots : 1;
 
-/** Spec §2 Scheduling: a generation goes only to an enabled judge that advertises the feature, when no queued submission waits for it and it would not take the judge's last free slot (a 1-slot judge has no other). */
+/** Spec §2 Scheduling: a generation goes only to an enabled judge that advertises a generation feature (which queued row fits is `pickGeneration`'s call), when no queued submission waits for it and it would not take the judge's last free slot (a 1-slot judge has no other). */
 export const mayStartGeneration = (
   judge: JudgeState,
   isSubmissionWaiting: boolean,
 ): boolean => {
   const free = freeSlots(judge);
   return (
-    judge.features.has(GENERATE_FEATURE) &&
+    (judge.features.has(GENERATE_FEATURE) ||
+      judge.features.has(COMPILE_FEATURE)) &&
     !judge.isDisabled &&
     !isSubmissionWaiting &&
     (free > 1 || (free === 1 && judge.slots === 1))

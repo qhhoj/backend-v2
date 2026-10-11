@@ -18,6 +18,7 @@ import { ProblemEditPolicyService } from '../editing/problem-edit-policy.service
 import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
 import { RevisionsRepository } from '../core/revisions.repository';
+import { SourceChecksService } from './source-checks.service';
 
 /** Access checks, compile-and-persist and the response shape shared by the data and upload services. */
 @Injectable()
@@ -29,6 +30,7 @@ export class ProblemDataStore {
     private readonly repository: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
     private readonly dataFiles: ProblemDataFilesService,
+    private readonly sourceChecks: SourceChecksService,
   ) {}
 
   async recordChange(
@@ -199,6 +201,7 @@ export class ProblemDataStore {
       archiveFiles,
       hasInit: await this.dataFiles.exists(problem.code, INIT_FILE),
       maxCases: maxTestcasesFor(principal),
+      sourceChecks: await this.sourceChecks.of(problem._id),
     });
   }
 

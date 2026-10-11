@@ -3,6 +3,15 @@ import type { PolygonSource } from './polygon/polygon-link';
 
 export const PDF_QUEUE = 'pdf-render';
 export const POLYGON_QUEUE = 'polygon-import';
+/** Compiles an uploaded checker or interactor on a judge (`generate.compile`) and records the result on the problem. */
+export const SOURCE_CHECK_QUEUE = 'source-compile-check';
+
+export interface SourceCheckJob {
+  problemId: string;
+  kind: 'customChecker' | 'customGrader';
+  /** The uploaded name; a later upload or removal makes the job a no-op. */
+  file: string;
+}
 /** Largest Polygon package accepted, uploaded or downloaded from Polygon. */
 export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** Marks a job failure reason as written for the requester; any other reason (I/O errors with absolute paths, driver messages) stays in the logs and is never shown. */
