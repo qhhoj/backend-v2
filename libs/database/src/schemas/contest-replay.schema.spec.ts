@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { ContestGhostSchema } from './contest-ghost.schema';
 import { ContestReplayChunkSchema } from './contest-replay-chunk.schema';
 
 describe('contest replay schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Chunks = mongoose.model(
     'ReplayChunkSchemaSpec',
     ContestReplayChunkSchema,

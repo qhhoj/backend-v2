@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { ProblemSchema } from './problem.schema';
 
 describe('Problem schema', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Problems = mongoose.model('ProblemSchemaSpec', ProblemSchema);
   const base = {
     name: 'Sum',

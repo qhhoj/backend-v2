@@ -16,14 +16,14 @@ import {
   uuidStr,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import { readSetting, SETTINGS } from '@libs/settings';
 import { createConnection } from 'mongoose';
 import type { Connection } from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { assertSeedAllowed, seedE2e } from '../src/seed/seed-e2e';
 
 describe('seed:e2e', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   let connection: Connection;
   let root: string;
   const key = encryptionKey(TEST_ENV.ENCRYPTION_KEY);

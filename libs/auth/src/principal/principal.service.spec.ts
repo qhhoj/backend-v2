@@ -3,7 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseModule, Group, newId, User } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import type { TestMongo } from '@libs/database/testing';
 import { Model } from 'mongoose';
 import { GroupsModule } from '../groups/groups.module';
 import { UsersRepository } from '../users/users.repository';
@@ -14,7 +14,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 describe('PrincipalService', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   let testingModule: TestingModule;
   let users: Model<User>;
   let principals: PrincipalService;

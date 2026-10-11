@@ -2,12 +2,12 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseModule, newId, Problem } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import { Model } from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { ProblemsRepository } from './problems.repository';
 
 describe('ProblemsRepository', () => {
-  let replSet: MongoMemoryReplSet,
+  let replSet: TestMongo,
     testingModule: TestingModule,
     repository: ProblemsRepository,
     problems: Model<Problem>;

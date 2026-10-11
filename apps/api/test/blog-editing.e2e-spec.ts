@@ -18,14 +18,24 @@ import {
   writer,
 } from './community-fixtures';
 import { createOrganization } from './organization-fixtures';
-import { authed, loginAs } from './problem-fixtures';
-import type { TestSession } from './problem-fixtures';
+import {
+  authed,
+  loginAs,
+  createUserWith,
+  seedCatalog,
+} from './problem-fixtures';
+import type { TestSession, Catalog } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
+let api: ApiTest;
+beforeAll(async () => {
+  api = await setupApiTest();
+});
+afterAll(() => api.teardown());
+
 describe('blog editing', () => {
-  let api: ApiTest;
   let discord: Queue<DiscordWebhookJob>;
   let contributions: Queue<ContributionPointsJob>;
   let userCount = 0;
@@ -43,7 +53,7 @@ describe('blog editing', () => {
     authed(api.http().patch(postUrl(id)), session).send(body);
 
   beforeAll(async () => {
-    api = await setupApiTest();
+    await api.reset();
     await api.setSetting('discord.webhooks', {
       default: 'http://127.0.0.1:9/hook',
     });
@@ -60,7 +70,6 @@ describe('blog editing', () => {
   afterAll(async () => {
     await discord.obliterate({ force: true });
     await contributions.obliterate({ force: true });
-    await api.teardown();
   });
 
   it('creates a post with sanitized HTML, a revision and a Discord announcement', async () => {
@@ -394,5 +403,80 @@ describe('blog editing', () => {
         .sort(),
     ).toEqual([user._id, deleter._id, commenter._id].sort());
     await authed(api.http().get(postUrl(post._id)), deleterSession).expect(404);
+  });
+});
+
+describe('problem webhooks', () => {
+  let catalog: Catalog;
+  let queue: Queue<DiscordWebhookJob>;
+  let admin: TestSession;
+  let suggester: TestSession;
+  const queued = async () =>
+    (await queue.getJobs(['waiting', 'delayed'])).map((job) => job.data);
+  const problem = (code: string, extra: object = {}) => ({
+    code,
+    name: code.toUpperCase(),
+    description: 'Statement text',
+    timeLimit: 1,
+    memoryLimit: 262144,
+    points: 1000,
+    typeIds: [catalog.types.dp],
+    groupId: catalog.groups.voi,
+    ...extra,
+  });
+
+  beforeAll(async () => {
+    await api.reset();
+    await api.setSetting('discord.webhooks', {
+      default: 'http://127.0.0.1:9/secret-hook',
+    });
+    catalog = await seedCatalog(api);
+    queue = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
+    admin = await loginAs(
+      api,
+      (await createUserWith(api, 'root', { isSuperuser: true }))._id,
+    );
+    suggester = await loginAs(
+      api,
+      (
+        await createUserWith(api, 'idea', {
+          permissions: ['judge.suggest_new_problem', 'judge.edit_own_problem'],
+        })
+      )._id,
+    );
+  });
+  beforeEach(() => queue.drain());
+  afterAll(async () => {
+    await queue.obliterate({ force: true });
+  });
+
+  it('announces organization and suggested problems only, without the URL', async () => {
+    const organization = await createOrganization(api);
+    await authed(api.http().post('/api/internal/problems'), admin)
+      .send(problem('public_one'))
+      .expect(201);
+    await authed(api.http().post('/api/internal/problems'), admin)
+      .send(
+        problem('org_one', {
+          isOrganizationPrivate: true,
+          organizations: [organization._id],
+        }),
+      )
+      .expect(201);
+    await authed(api.http().post('/api/internal/problems/suggest'), suggester)
+      .send(problem('idea_one'))
+      .expect(201);
+    const jobs = await queued();
+    expect(jobs.map((job) => job.event).sort()).toEqual([
+      'on_new_problem',
+      'on_new_suggested_problem',
+    ]);
+    expect(jobs.find((job) => job.event === 'on_new_problem')).toMatchObject({
+      message: {
+        title: 'New organization problem http://localhost:5173/problem/org_one',
+        author: { name: 'root' },
+      },
+    });
+    expect(JSON.stringify(jobs)).not.toContain('secret-hook');
   });
 });

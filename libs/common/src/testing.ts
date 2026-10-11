@@ -53,6 +53,8 @@ export const TEST_ENV = {
   COOKIE_SECURE: 'false',
   LOG_LEVEL: 'silent',
   DISABLE_MONGODB_STREAM: 'true',
+  /** New hashes and the rehash floor at `createUser`'s cost, not 870k rounds per login (`passwordIterations`). */
+  TEST_PASSWORD_ITERATIONS: '1000',
 };
 
 /** Polls `condition` every 20 ms until it holds; throws after `timeoutMs`. */

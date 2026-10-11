@@ -3,8 +3,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseModule, Group } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import { Model } from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { GroupsModule } from './groups.module';
 import { GroupsQuerier } from './groups.querier';
 
@@ -20,7 +20,7 @@ const waitFor = async (check: () => boolean, timeoutMs = 20000) => {
 describe('GroupsQuerier', () => {
   const permissionsOf = (ids: string[]) =>
     querier.groupsOf(ids).flatMap((group) => group.permissions);
-  let replSet: MongoMemoryReplSet,
+  let replSet: TestMongo,
     testingModule: TestingModule,
     groups: Model<Group>,
     querier: GroupsQuerier;

@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { IntegrationClientSchema } from './integration-client.schema';
 import { ShortLinkSchema } from './short-link.schema';
 
 describe('short link and integration client schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Links = mongoose.model('ShortLinkSpec', ShortLinkSchema);
   const Clients = mongoose.model(
     'IntegrationClientSpec',

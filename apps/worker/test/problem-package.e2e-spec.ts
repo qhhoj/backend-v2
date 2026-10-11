@@ -25,6 +25,7 @@ import { ProblemPackageService } from '../src/jobs/problem-package/problem-packa
 import { softDeleteWorker } from './deleted-problem-fixtures';
 import { seedProblem } from './effects-fixtures';
 import { readZip } from './read-zip';
+import { ProblemPackageProcessor } from '../src/jobs/problem-package/problem-package.processor';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
@@ -227,20 +228,14 @@ describe('problem package build', () => {
     expect(await cache.has(old.code, oldKey)).toBe(false);
     expect(await cache.has(fresh.code, freshKey)).toBe(true);
   });
-});
-
-describe('problem package sweep scheduler', () => {
-  let worker: WorkerTest;
-  // `seedBeforeBoot` also keeps the setup from flushing Redis after boot, which would drop the scheduler.
-  beforeAll(async () => {
-    worker = await setupWorkerTest({ seedBeforeBoot: () => Promise.resolve() });
-  });
-  afterAll(() => worker.teardown());
 
   it('registers the daily sweep once, whatever the number of boots', async () => {
+    // A boot registers the schedule (the setup's Redis flush dropped the one from this boot); a second boot must not add one.
+    const processor = worker.module.get(ProblemPackageProcessor);
+    await processor.onApplicationBootstrap();
+    await processor.onApplicationBootstrap();
     const queue = worker.module.get<Queue>(getQueueToken(PACKAGE_QUEUE));
-    const schedulers = await queue.getJobSchedulers();
-    const ours = schedulers.filter(
+    const ours = (await queue.getJobSchedulers()).filter(
       (scheduler) => scheduler.key === PACKAGE_SWEEP_SCHEDULER,
     );
     expect(ours).toHaveLength(1);

@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { SimilarityPairSchema } from './similarity-pair.schema';
 import { SimilarityRunSchema } from './similarity-run.schema';
 
 describe('similarity schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Runs = mongoose.model('SimilarityRunSchemaSpec', SimilarityRunSchema);
   const Pairs = mongoose.model(
     'SimilarityPairSchemaSpec',

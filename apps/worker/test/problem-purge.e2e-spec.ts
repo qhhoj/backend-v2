@@ -24,6 +24,7 @@ import {
   seedProblem,
   seedUser,
 } from './effects-fixtures';
+import { ProblemPurgeProcessor } from '../src/jobs/problem-purge/problem-purge.processor';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
@@ -344,17 +345,12 @@ describe('problem purge', () => {
     expect(queuedJobIds()).toContain(problemPurgeJobId(recent.problem._id));
     await worker.setSetting('problem.deleteGraceDays', 30);
   });
-});
-
-describe('problem purge scheduler', () => {
-  let worker: WorkerTest;
-  // `seedBeforeBoot` also keeps the setup from flushing Redis after boot, which would drop the scheduler.
-  beforeAll(async () => {
-    worker = await setupWorkerTest({ seedBeforeBoot: () => Promise.resolve() });
-  });
-  afterAll(() => worker.teardown());
 
   it('runs the sweep daily at 03:30 in the site time zone, registered once', async () => {
+    // A boot registers the schedule (the setup's Redis flush dropped the one from this boot); a second boot must not add one.
+    const processor = worker.module.get(ProblemPurgeProcessor);
+    await processor.onApplicationBootstrap();
+    await processor.onApplicationBootstrap();
     const queue = worker.module.get<Queue>(getQueueToken(PROBLEM_PURGE_QUEUE));
     const ours = (await queue.getJobSchedulers()).filter(
       (scheduler) => scheduler.key === PROBLEM_PURGE_SCHEDULER,

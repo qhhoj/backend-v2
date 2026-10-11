@@ -1,14 +1,14 @@
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { CI } from '../schema';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { UserSchema } from './user.schema';
 
 const UUID_PATTERN = /^[0-9a-f-]{36}$/;
 
 describe('user schema', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Users = mongoose.model('User', UserSchema);
   const socialAuth = [
     { provider: 'google-oauth2', uid: 'g-123', extraData: {} },

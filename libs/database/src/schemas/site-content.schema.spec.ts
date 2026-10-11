@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { FlatpageSchema } from './flatpage.schema';
 import { MiscConfigSchema } from './misc-config.schema';
 
 describe('site content schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Flatpages = mongoose.model('FlatpageSchemaSpec', FlatpageSchema);
   const Misc = mongoose.model('MiscConfigSchemaSpec', MiscConfigSchema);
 

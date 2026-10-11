@@ -757,7 +757,7 @@ afterAll(() => worker.teardown());
 
     it('reads its window through indexes', async () => {
       const problem = await seedProblem(worker);
-      await insertGradedRows(worker, 20_000, () => ({
+      await insertGradedRows(worker, 2000, () => ({
         user: newId(),
         problem: problem._id,
         result: 'WA',
@@ -780,7 +780,7 @@ afterAll(() => worker.teardown());
       ).toBe(true);
       expect(
         windowReads.reduce((sum, { docsExamined }) => sum + docsExamined, 0),
-      ).toBeLessThan(20_000);
+      ).toBeLessThan(2000);
       const dueReads = operations.filter(
         ({ collection, operation, planSummary }) =>
           collection === 'submissions' &&
@@ -794,7 +794,7 @@ afterAll(() => worker.teardown());
             planSummary.includes('IXSCAN { effectsDueAt: 1 }') && !hasSortStage,
         ),
       ).toBe(true);
-    }, 60_000);
+    });
 
     it('never runs two sweeps at once, even across worker processes', async () => {
       // The harness flushes Redis after boot, which drops the queue's global concurrency.
@@ -1091,22 +1091,22 @@ afterAll(() => worker.teardown());
       expect(await dueOf(rejudged._id)).toEqual(newer);
     });
 
-    it('recomputes a user with 10k submissions through indexes', async () => {
+    it('recomputes a user past 300 problems through indexes', async () => {
       const user = await seedUser(worker);
       const solved = await worker.problems.insertMany(
-        Array.from({ length: 2000 }, () => problemFields({ points: 800 })),
+        Array.from({ length: 400 }, () => problemFields({ points: 800 })),
       );
-      await insertGradedRows(worker, 10_000, (index) => ({
+      await insertGradedRows(worker, 2000, (index) => ({
         user: user._id,
-        problem: solved[index % 2000]._id,
-        result: index < 2000 ? 'AC' : 'WA',
-        points: index < 2000 ? 800 : 400,
-        casePoints: index < 2000 ? 2 : 1,
+        problem: solved[index % 400]._id,
+        result: index < 400 ? 'AC' : 'WA',
+        points: index < 400 ? 800 : 400,
+        casePoints: index < 400 ? 2 : 1,
         caseTotal: 2,
       }));
-      await insertGradedRows(worker, 10_000, (index) => ({
+      await insertGradedRows(worker, 2000, (index) => ({
         user: newId(),
-        problem: solved[index % 2000]._id,
+        problem: solved[index % 400]._id,
         result: 'AC',
         points: 800,
         casePoints: 1,
@@ -1122,22 +1122,22 @@ afterAll(() => worker.teardown());
       expect(
         reads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
       ).toBe(true);
-      // A collection scan would read the other users' 10k rows too.
+      // A collection scan would read the other users' 2000 rows too.
       expect(
         reads.reduce((sum, { docsExamined }) => sum + docsExamined, 0),
-      ).toBeLessThan(20_000);
+      ).toBeLessThan(4000);
       const recomputed = await pointsOf(user._id);
       expect(recomputed).toMatchObject({
-        points: 2000 * 800,
-        problemCount: 2000,
+        points: 400 * 800,
+        problemCount: 400,
       });
       expect(recomputed.performancePoints).toBeCloseTo(
-        800 * geometric(300) + 0.05 * 2000,
+        800 * geometric(300) + 0.05 * 400,
         6,
       );
-    }, 120_000);
+    });
 
-    it('recomputes a problem with 100k submissions through indexes', async () => {
+    it('recomputes a problem through indexes', async () => {
       const problem = await seedProblem(worker, { points: 1000 });
       const other = await seedProblem(worker);
       const unlisted = await Promise.all(
@@ -1147,18 +1147,18 @@ afterAll(() => worker.teardown());
       );
       const userIds = [
         ...unlisted.map((user) => user._id),
-        ...Array.from({ length: 990 }, newId),
+        ...Array.from({ length: 90 }, newId),
       ];
       const accepted = (index: number) => index % 10 === 0;
-      await insertGradedRows(worker, 100_000, (index) => ({
-        user: userIds[index % 1000],
+      await insertGradedRows(worker, 2000, (index) => ({
+        user: userIds[index % 100],
         problem: problem._id,
         result: accepted(index) ? 'AC' : 'WA',
         points: accepted(index) ? 1000 : 0,
         casePoints: accepted(index) ? 1 : 0,
         caseTotal: 1,
       }));
-      await insertGradedRows(worker, 20_000, () => ({
+      await insertGradedRows(worker, 2000, () => ({
         user: newId(),
         problem: other._id,
         result: 'AC',
@@ -1190,13 +1190,13 @@ afterAll(() => worker.teardown());
             docsExamined === 0,
         ),
       ).toBe(true);
-      // A collection scan would also read the other problem's 20k rows.
-      expect(examined).toBeLessThan(120_000);
-      // 99000 rows of listed users, 9900 of them AC with full points, from 99 users.
+      // A collection scan would also read the other problem's 2000 rows.
+      expect(examined).toBeLessThan(4000);
+      // 1800 rows of listed users, 180 of them AC with full points, from 9 users.
       expect(await statsOf(problem._id)).toMatchObject({
-        userCount: 99,
+        userCount: 9,
         acRate: 10,
       });
-    }, 120_000);
+    });
   });
 }

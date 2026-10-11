@@ -1,7 +1,22 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { CONTEST_FINAL_JUDGE_QUEUE, finalJudgeJobId } from '@libs/contests';
-import type { ContestFinalJudgeJob } from '@libs/contests';
+import {
+  CONTEST_FINAL_JUDGE_QUEUE,
+  finalJudgeJobId,
+  CONTEST_RATING_QUEUE,
+  CONTEST_EXPORT_QUEUE,
+  contestExportJobId,
+  contestExportPath,
+  CONTEST_DATA_QUEUE,
+  contestDataJobId,
+  contestDataPath,
+} from '@libs/contests';
+import type {
+  ContestFinalJudgeJob,
+  ContestRatingJob,
+  ContestExportJob,
+  ContestDataJob,
+} from '@libs/contests';
 import { uuidStr, newId } from '@libs/database';
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 import {
@@ -25,9 +40,11 @@ import { randomUUID } from 'node:crypto';
 import { sha256 } from '@libs/auth';
 import type { User } from '@libs/database';
 import type { OfficialRankingResponse } from '../src/modules/contests/ranking/dto/official-ranking.dto';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import type { ContestExportStatusResponse } from '../src/modules/contests/export/dto/contest-export.dto';
+import type { ContestDataStatusResponse } from '../src/modules/contests/data/dto/contest-data.dto';
 
 let api: ApiTest;
-
 beforeAll(async () => {
   api = await setupApiTest();
 });
@@ -470,3 +487,290 @@ afterAll(() => api.teardown());
     });
   });
 }
+
+describe('contest rating request', () => {
+  let ratingQueue: Queue<ContestRatingJob>;
+  const sessions: Record<string, TestSession> = {};
+  const users: Record<string, { _id: string }> = {};
+  const roles = {
+    rater: ['judge.contest_rating', 'judge.edit_own_contest'],
+    author: ['judge.edit_own_contest'],
+    outsider: ['judge.contest_rating'],
+  };
+  const endedContest = (authors: string[]) =>
+    createContest(api, {
+      authors,
+      startTime: hoursFromNow(-3),
+      endTime: hoursFromNow(-1),
+    });
+  const rate = (who: string, key: string) =>
+    authed(api.http().post(contestUrl(key, '/rate')), sessions[who]);
+
+  beforeAll(async () => {
+    await api.reset();
+    ratingQueue = api.app.get(getQueueToken(CONTEST_RATING_QUEUE));
+    for (const [name, permissions] of Object.entries(roles)) {
+      users[name] = await createUserWith(api, name, { permissions });
+      sessions[name] = await loginAs(api, users[name]._id);
+    }
+  });
+  beforeEach(() => ratingQueue.obliterate({ force: true }));
+
+  it('queues a rating for an editor with judge.contest_rating once the contest ended', async () => {
+    const contest = await endedContest([users.rater._id]);
+    const response = await rate('rater', contest.key).expect(202);
+    expect(dataOf(response)).toEqual({ queued: true });
+    expect(
+      (await ratingQueue.getJobs(['waiting'])).map((job) => job.data),
+    ).toEqual([{ contestId: contest._id }]);
+  });
+
+  it('refuses to rate while the board is frozen, also after the end, until the freeze is set to 0', async () => {
+    const contest = await createContest(api, {
+      authors: [users.rater._id],
+      formatName: 'icpc',
+      startTime: hoursFromNow(-3),
+      endTime: hoursFromNow(-1),
+      frozenLastMinutes: 120,
+    });
+    await rate('rater', contest.key).expect(409).expect(errorCode('conflict'));
+    expect(await ratingQueue.count()).toBe(0);
+    await api.contests.updateOne(
+      { _id: contest._id },
+      { frozenLastMinutes: 0 },
+    );
+    await rate('rater', contest.key).expect(202);
+    expect(await ratingQueue.getWaitingCount()).toBe(1);
+  });
+
+  it('refuses without the permission, without edit rights and before the end', async () => {
+    const ended = await endedContest([users.rater._id, users.author._id]);
+    await rate('author', ended.key).expect(403).expect(errorCode('forbidden'));
+    await rate('outsider', ended.key)
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    const running = await createContest(api, { authors: [users.rater._id] });
+    await rate('rater', running.key).expect(409).expect(errorCode('conflict'));
+    expect(await ratingQueue.count()).toBe(0);
+  });
+});
+
+const issueCodes = ({ body }: { body: unknown }): string[] =>
+  (body as { error: { issues: { code: string }[] } }).error.issues.map(
+    (issue) => issue.code,
+  );
+
+describe('contest submissions export', () => {
+  let queue: Queue<ContestExportJob>;
+  let ended: { _id: string; key: string };
+  let running: { _id: string; key: string };
+  const sessions: Record<string, TestSession> = {};
+  const users: Record<string, { _id: string }> = {};
+  const request = (who: string, key: string) =>
+    authed(api.http().post(contestUrl(key, '/export')), sessions[who]);
+  const download = (who: string, key: string) =>
+    authed(api.http().get(contestUrl(key, '/export/download')), sessions[who]);
+  const statusOf = async (key: string) =>
+    dataOf<ContestExportStatusResponse>(
+      await authed(
+        api.http().get(contestUrl(key, '/export')),
+        sessions.editor,
+      ).expect(200),
+    );
+  const zipFile = () => contestExportPath(api.contestDataRoot, ended._id);
+
+  beforeAll(async () => {
+    await api.reset();
+    queue = api.app.get(getQueueToken(CONTEST_EXPORT_QUEUE));
+    for (const [name, permissions] of [
+      ['plain', []],
+      ['editor', ['judge.edit_own_contest']],
+    ] as const) {
+      users[name] = await createUserWith(api, name, {
+        permissions: [...permissions],
+      });
+      sessions[name] = await loginAs(api, users[name]._id);
+    }
+    const authors = [users.editor._id];
+    ended = await createContest(api, {
+      authors,
+      startTime: hoursFromNow(-3),
+      endTime: hoursFromNow(-1),
+    });
+    running = await createContest(api, { authors });
+  });
+  beforeEach(async () => {
+    await queue.obliterate({ force: true });
+    await api.contests.updateOne(
+      { _id: ended._id },
+      { exportPreparedAt: null },
+    );
+    rmSync(zipFile(), { force: true });
+  });
+
+  it('queues an export for editors of an ended contest, once a day while a zip exists', async () => {
+    await request('editor', running.key).expect(409);
+    await request('editor', ended.key).expect(202);
+    expect((await queue.getJob(contestExportJobId(ended._id)))!.data).toEqual({
+      contestId: ended._id,
+    });
+    expect(issueCodes(await request('editor', ended.key).expect(409))).toEqual([
+      'export_in_progress',
+    ]);
+    expect((await statusOf(ended.key)).state).toBe('preparing');
+    await queue.obliterate({ force: true });
+    writeFileSync(zipFile(), 'zip bytes');
+    const limited = await request('editor', ended.key).expect(429);
+    expect(issueCodes(limited)).toEqual(['export_rate_limited']);
+    rmSync(zipFile());
+    await request('editor', ended.key).expect(202);
+  });
+
+  it('refuses everyone but editors, each refusal carrying an issue code', async () => {
+    const asked = await request('plain', ended.key).expect(403);
+    expect(issueCodes(asked)).toEqual(['forbidden']);
+    writeFileSync(zipFile(), 'zip bytes');
+    const fetched = await download('plain', ended.key).expect(403);
+    expect(issueCodes(fetched)).toEqual(['forbidden']);
+    expect(
+      issueCodes(await request('editor', running.key).expect(409)),
+    ).toEqual(['contest_not_ended']);
+    const status = await authed(
+      api.http().get(contestUrl(ended.key, '/export')),
+      sessions.plain,
+    ).expect(403);
+    expect(issueCodes(status)).toEqual(['forbidden']);
+  });
+
+  it('serves the zip as an uncached attachment to editors only, 404 while none exists', async () => {
+    const missing = await download('editor', ended.key).expect(404);
+    expect(issueCodes(missing)).toEqual(['export_not_prepared']);
+    writeFileSync(zipFile(), 'zip bytes');
+    const response = await download('editor', ended.key).expect(200);
+    expect(response.headers['content-type']).toMatch(/application\/zip/);
+    expect(response.headers['content-disposition']).toBe(
+      `attachment; filename="${ended.key}-export.zip"`,
+    );
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(
+      existsSync(contestExportPath(api.contestDataRoot, running._id)),
+    ).toBe(false);
+  });
+});
+
+describe('contest data download', () => {
+  let dataQueue: Queue<ContestDataJob>;
+  let ended: { _id: string; key: string };
+  let running: { _id: string; key: string };
+  const sessions: Record<string, TestSession> = {};
+  const users: Record<string, { _id: string }> = {};
+  const prepare = (who: string, key: string, body: object = {}) =>
+    authed(api.http().post(contestUrl(key, '/data')).send(body), sessions[who]);
+  const statusOf = async (key: string) =>
+    dataOf<ContestDataStatusResponse>(
+      await authed(
+        api.http().get(contestUrl(key, '/data')),
+        sessions.editor,
+      ).expect(200),
+    );
+  const download = (who: string, key: string) =>
+    authed(api.http().get(contestUrl(key, '/data/download')), sessions[who])
+      .buffer(true)
+      .parse((response, done) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          const body = Buffer.concat(chunks);
+          done(
+            null,
+            response.headers['content-type']?.includes('json')
+              ? JSON.parse(body.toString())
+              : body,
+          );
+        });
+      });
+  const zipFile = () => contestDataPath(api.contestDataRoot, ended._id);
+
+  beforeAll(async () => {
+    await api.reset();
+    dataQueue = api.app.get(getQueueToken(CONTEST_DATA_QUEUE));
+    for (const [name, permissions] of [
+      ['plain', []],
+      ['editor', ['judge.edit_own_contest']],
+    ] as const) {
+      users[name] = await createUserWith(api, name, {
+        permissions: [...permissions],
+      });
+      sessions[name] = await loginAs(api, users[name]._id);
+    }
+    const authors = [users.editor._id];
+    ended = await createContest(api, {
+      authors,
+      startTime: hoursFromNow(-3),
+      endTime: hoursFromNow(-1),
+    });
+    running = await createContest(api, { authors });
+  });
+  beforeEach(async () => {
+    await dataQueue.obliterate({ force: true });
+    await api.contests.updateOne({ _id: ended._id }, { dataPreparedAt: null });
+    rmSync(zipFile(), { force: true });
+  });
+
+  it('prepares for editors of an ended contest, once a day while a zip exists', async () => {
+    await prepare('plain', ended.key).expect(403);
+    await prepare('editor', running.key)
+      .expect(409)
+      .expect(errorCode('conflict'));
+    await prepare('editor', ended.key, { problemGlob: '../x' }).expect(400);
+    await prepare('editor', ended.key, { results: ['NOPE'] }).expect(400);
+    await prepare('editor', ended.key, {
+      problemGlob: 's*',
+      results: ['AC'],
+    }).expect(202);
+    expect((await dataQueue.getJob(contestDataJobId(ended._id)))!.data).toEqual(
+      { contestId: ended._id, problemGlob: 's*', results: ['AC'] },
+    );
+    await prepare('editor', ended.key).expect(409); // still preparing
+    expect((await statusOf(ended.key)).state).toBe('preparing');
+    await dataQueue.obliterate({ force: true });
+    writeFileSync(zipFile(), 'zip bytes');
+    await prepare('editor', ended.key)
+      .expect(429)
+      .expect(errorCode('rate_limited'));
+    rmSync(zipFile());
+    await prepare('editor', ended.key).expect(202); // the zip is gone: allowed again
+  });
+
+  it('downloads the zip as an attachment, and 404 without one', async () => {
+    writeFileSync(zipFile(), 'zip bytes');
+    const response = await download('editor', ended.key).expect(200);
+    expect(response.headers).toMatchObject({
+      'content-type': 'application/zip',
+      'content-disposition': `attachment; filename="${ended.key}-data.zip"`,
+      'x-content-type-options': 'nosniff',
+    });
+    expect((response.body as Buffer).toString()).toBe('zip bytes');
+    rmSync(zipFile());
+    await download('editor', ended.key)
+      .expect(404)
+      .expect(errorCode('not_found'));
+  });
+
+  it('serves status and download to editors only, once the contest has ended', async () => {
+    writeFileSync(zipFile(), 'zip bytes');
+    await download('plain', ended.key).expect(403);
+    await authed(
+      api.http().get(contestUrl(ended.key, '/data')),
+      sessions.plain,
+    ).expect(403);
+    await api.http().get(contestUrl(ended.key, '/data/download')).expect(401);
+    await download('editor', running.key).expect(409);
+    await authed(
+      api.http().get(contestUrl(running.key, '/data')),
+      sessions.editor,
+    ).expect(409);
+    expect(existsSync(zipFile())).toBe(true);
+  });
+});

@@ -50,9 +50,15 @@ describe('filing tickets and posting messages', () => {
     queue = api.app.get(getQueueToken(DISCORD_WEBHOOK_QUEUE));
     subscriber = api.app.get<Redis>(REDIS).duplicate();
     await subscriber.subscribe(TICKET_EVENTS_CHANNEL);
-    subscriber.on('message', (_channel, raw) =>
-      events.push(JSON.parse(raw) as TicketEvent),
-    );
+    // The channel is server-wide: keep only events of this file's tickets (another jest worker publishes too), in order.
+    let received = Promise.resolve();
+    subscriber.on('message', (_channel, raw) => {
+      const event = JSON.parse(raw) as TicketEvent;
+      received = received.then(async () => {
+        if (await api.tickets.exists({ _id: event.ticketId }))
+          events.push(event);
+      });
+    });
     for (const [name, extra] of [
       ['filer', {}],
       ['author', {}],

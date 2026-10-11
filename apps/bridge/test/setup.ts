@@ -1,11 +1,12 @@
 import { tmpdir } from 'node:os';
 import { getQueueToken } from '@nestjs/bullmq';
-import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import type { Connection, Model } from 'mongoose';
+import { MongoClient } from 'mongodb';
+import type { Model } from 'mongoose';
 import { TEST_ENV, TEST_REDIS_URL } from '@libs/common/testing';
 import {
   Contest,
@@ -75,15 +76,30 @@ export async function setupBridgeTest({
   let current: TestingModule;
   /** Set while `current` is closed (a failed restart), so `teardown` does not close it twice. */
   let currentClosed = false;
-  try {
+  const flushRedis = async () => {
     const redis = new Redis(TEST_REDIS_URL);
     await redis.flushdb();
     await redis.quit();
+  };
+  try {
+    await flushRedis();
     current = await compile();
   } catch (error) {
     await replSet.stop();
     throw error;
   }
+  /** Closes the bridge: its timers and judge connections die, Mongo and Redis stay. */
+  const stop = async () => {
+    if (currentClosed) return;
+    await current.close();
+    currentClosed = true;
+  };
+  /** Boots a bridge on the same Mongo and Redis; `timings` replaces the overrides from here on. */
+  const start = async (nextTimings?: Partial<BridgeTimings>) => {
+    if (nextTimings) timings = nextTimings;
+    current = await compile();
+    currentClosed = false;
+  };
   const model = <Entity>(name: string) =>
     current.get<Model<Entity>>(getModelToken(name));
   const graded = () =>
@@ -129,20 +145,24 @@ export async function setupBridgeTest({
     /** Nothing consumes the queue in 2a, so every job waits. */
     gradedJobs: async (): Promise<SubmissionGradedJob[]> =>
       (await graded().getJobs(['waiting'])).map((job) => job.data),
-    /** Empties every collection and the graded queue (between conformance scenarios). */
+    /** Empties every collection and the Redis db; only between `stop()` and `start()` (conformance scenarios), so no timer of a running bridge sees it. */
     reset: async () => {
-      const connection = current.get<Connection>(getConnectionToken());
-      for (const collection of await connection.db!.collections())
-        await collection.deleteMany({});
-      await graded().obliterate({ force: true });
+      if (!currentClosed) throw new Error('reset() needs a stopped bridge');
+      const client = await MongoClient.connect(replSet.getUri('qhhoj'));
+      try {
+        for (const collection of await client.db().collections())
+          await collection.deleteMany({});
+      } finally {
+        await client.close();
+      }
+      await flushRedis();
     },
+    stop,
+    start,
     /** A bridge process restart: same Mongo and Redis, fresh in-memory state; `timings` replaces the overrides from here on. */
     restart: async (nextTimings?: Partial<BridgeTimings>) => {
-      if (nextTimings) timings = nextTimings;
-      await current.close();
-      currentClosed = true;
-      current = await compile();
-      currentClosed = false;
+      await stop();
+      await start(nextTimings);
     },
     teardown: async () => {
       if (!currentClosed) await current.close();

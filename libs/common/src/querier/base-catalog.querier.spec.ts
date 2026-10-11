@@ -8,9 +8,9 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseModule, Language } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import type { ChangeStream } from 'mongodb';
 import { Model } from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { BaseCatalogQuerier } from './base-catalog.querier';
 
 const waitFor = async (check: () => boolean, timeoutMs = 5000) => {
@@ -53,7 +53,7 @@ class WindowedQuerier extends BaseCatalogQuerier<Language> {
 }
 
 describe('BaseCatalogQuerier', () => {
-  let replSet: MongoMemoryReplSet,
+  let replSet: TestMongo,
     testingModule: TestingModule,
     languages: Model<Language>,
     querier: WindowedQuerier,

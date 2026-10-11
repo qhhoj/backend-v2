@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import {
   MAX_CASE_FEEDBACK_LENGTH,
@@ -11,7 +11,7 @@ import {
 import { SubmissionSourceSchema } from './submission-source.schema';
 
 describe('Submission schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Submissions = mongoose.model('SubmissionSchemaSpec', SubmissionSchema);
   const Sources = mongoose.model(
     'SubmissionSourceSchemaSpec',

@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { newId, SubmissionSchema } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import { IS_SOLVED } from './points';
 
 describe('IS_SOLVED (legacy user_completed_ids)', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Submissions = mongoose.model('IsSolvedSpec', SubmissionSchema);
   beforeAll(async () => {
     replSet = await startMongo();

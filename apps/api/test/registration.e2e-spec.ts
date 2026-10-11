@@ -1,10 +1,21 @@
-import { UsersRepository } from '@libs/auth';
+import { UsersRepository, hashPassword } from '@libs/auth';
 import { getModelToken } from '@nestjs/mongoose';
 import { REDIS } from '@libs/common';
 import { ActivationKey, CI } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
-import { ApiTest, createUser, errorCode, setupApiTest } from './setup';
+import { createUser, errorCode, setupApiTest } from './setup';
+import { getQueueToken } from '@nestjs/bullmq';
+import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
+import type { Queue } from 'bullmq';
+import { createUserWith } from './problem-fixtures';
+import type { ApiTest } from './setup';
+
+let api: ApiTest;
+beforeAll(async () => {
+  api = await setupApiTest();
+});
+afterAll(() => api.teardown());
 
 const AUTH = '/api/internal/auth';
 const PASSWORD = 'correct horse battery';
@@ -12,7 +23,6 @@ const activationKeyFrom = (text: string) =>
   /\/activate\/([0-9a-f]{64})/.exec(text)![1];
 
 describe('registration', () => {
-  let api: ApiTest;
   let activationKeys: Model<ActivationKey>;
   const register = (username: string, email: string, password = PASSWORD) =>
     api.http().post(`${AUTH}/register`).send({ username, email, password });
@@ -20,14 +30,13 @@ describe('registration', () => {
     api.http().post(`${AUTH}/activate`).send({ token });
 
   beforeAll(async () => {
-    api = await setupApiTest();
+    await api.reset();
     activationKeys = api.app.get(getModelToken(ActivationKey.name));
     await createUser(api.users, {
       username: 'Taken',
       email: 'taken@example.com',
     });
   });
-  afterAll(() => api.teardown());
   const resetRateLimits = async () => {
     const redis = api.app.get<Redis>(REDIS);
     await Promise.all(
@@ -169,5 +178,299 @@ describe('registration', () => {
     await register('new_owner', 'StaleMail@example.com').expect(204);
     expect(await api.users.findOne({ username: 'stale_mail' })).toBeNull();
     expect(await activationKeys.countDocuments({ userId: stale._id })).toBe(0);
+  });
+});
+
+const LONG_PASSWORD = 'a long enough passphrase 42';
+
+describe('registration extras', () => {
+  let privateOrg: string;
+  let unlistedOrg: string;
+  let queue: Queue<{ organizationId: string }>;
+  const register = (overrides: object = {}) =>
+    api
+      .http()
+      .post(`${AUTH}/register`)
+      .send({
+        username: 'newbie',
+        email: 'newbie@example.com',
+        password: LONG_PASSWORD,
+        ...overrides,
+      });
+  const issues = (response: { body: unknown }) =>
+    (
+      response.body as {
+        error: { issues: Array<{ field: string; code: string }> };
+      }
+    ).error.issues;
+
+  beforeAll(async () => {
+    await api.reset();
+    queue = api.app.get(getQueueToken(ORGANIZATION_POINTS_QUEUE));
+    await api.languages.create({
+      key: 'PY3',
+      name: 'Python 3',
+      commonName: 'Python',
+      ace: 'python',
+      pygments: 'python3',
+      extension: 'py',
+    });
+    const base = { name: 'School', about: '', aboutHtml: '' };
+    [, privateOrg, unlistedOrg] = (
+      await api.organizations.create([
+        {
+          ...base,
+          slug: 'open',
+          shortName: 'OPEN',
+          isOpen: true,
+          isUnlisted: false,
+        },
+        {
+          ...base,
+          slug: 'closed',
+          shortName: 'CLOSED',
+          isOpen: false,
+          isUnlisted: false,
+        },
+        {
+          ...base,
+          slug: 'hidden',
+          shortName: 'HID',
+          isOpen: true,
+          isUnlisted: true,
+        },
+      ])
+    ).map((organization) => organization._id);
+  });
+  beforeEach(async () => {
+    await api.users.deleteMany({
+      username: { $in: ['newbie', 'pending', 'stale'] },
+    });
+    await queue.drain();
+    await api.app.get<Redis>(REDIS).flushdb();
+    api.mailer.sent.length = 0;
+  });
+
+  describe('organization and language on register', () => {
+    it('refuses an unknown language and a private, unlisted or unknown organization with codes', async () => {
+      const bad = await register({
+        languageId: '0199a000-0000-7000-8000-00000000dead',
+      }).expect(400);
+      expect(issues(bad)).toEqual([
+        expect.objectContaining({
+          field: 'languageId',
+          code: 'language_unknown',
+        }),
+      ]);
+      for (const organizationId of [
+        privateOrg,
+        unlistedOrg,
+        '0199a000-0000-7000-8000-00000000beef',
+      ])
+        expect(issues(await register({ organizationId }).expect(400))).toEqual([
+          expect.objectContaining({
+            field: 'organizationId',
+            code: 'organization_unavailable',
+          }),
+        ]);
+      await register({ organizationId: 'not-a-uuid' }).expect(400);
+      expect(await api.users.countDocuments({ username: 'newbie' })).toBe(0);
+    });
+  });
+
+  describe('POST activate/resend', () => {
+    const resend = (email: string) =>
+      api.http().post(`${AUTH}/activate/resend`).send({ email });
+
+    const waitForMail = async (count: number) => {
+      for (
+        let attempt = 0;
+        attempt < 100 && api.mailer.sent.length < count;
+        attempt++
+      )
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+
+    it('mails a fresh working link to a pending account and retires the old key', async () => {
+      await register().expect(204);
+      const oldKey = /activate\/(\w+)/.exec(api.mailer.sent[0].text)![1];
+      await resend('newbie@example.com').expect(204);
+      await waitForMail(2);
+      const newKey = /activate\/(\w+)/.exec(api.mailer.sent[1].text)![1];
+      expect(newKey).not.toBe(oldKey);
+      await api
+        .http()
+        .post(`${AUTH}/activate`)
+        .send({ token: oldKey })
+        .expect(400)
+        .expect(errorCode('invalid_token'));
+      await api
+        .http()
+        .post(`${AUTH}/activate`)
+        .send({ token: newKey })
+        .expect(204);
+    });
+
+    it('answers 204 and sends nothing for unknown, active and banned emails', async () => {
+      await createUserWith(api, 'newbie', { email: 'active@example.com' });
+      await api.users.create({
+        username: 'pending',
+        email: 'banned@example.com',
+        password: '!',
+        isActive: false,
+        banReason: 'spam',
+      });
+      for (const email of [
+        'nobody@example.com',
+        'active@example.com',
+        'banned@example.com',
+      ])
+        await resend(email).expect(204);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(api.mailer.sent).toHaveLength(0);
+    });
+  });
+});
+
+const OLD_PASSWORD = 'correct horse battery';
+const NEW_PASSWORD = 'purple monkey dishwasher';
+const tokenFrom = (text: string) =>
+  /\/reset-password\/([A-Za-z0-9_-]+)/.exec(text)![1];
+
+describe('password reset', () => {
+  const requestReset = (email: string) =>
+    api.http().post(`${AUTH}/password/reset`).send({ email });
+  const confirm = (token: string, newPassword = NEW_PASSWORD) =>
+    api
+      .http()
+      .post(`${AUTH}/password/reset/confirm`)
+      .send({ token, newPassword });
+  const login = (username: string, password: string) =>
+    api.http().post(`${AUTH}/login`).send({ username, password });
+  /** Mail is sent in the background, so wait for it to land. */
+  const mailCountAfterSettling = async (expected: number) => {
+    for (
+      let attempt = 0;
+      attempt < 50 && api.mailer.sent.length < expected;
+      attempt++
+    )
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return api.mailer.sent.length;
+  };
+
+  beforeAll(async () => {
+    await api.reset();
+  });
+  beforeEach(async () => {
+    const redis = api.app.get<Redis>(REDIS);
+    await Promise.all(
+      (await redis.keys('rate:*')).map((key) => redis.del(key)),
+    );
+    api.mailer.sent.length = 0;
+  });
+
+  it('sets a first password for an unusable-hash account, once', async () => {
+    await createUser(api.users, {
+      username: 'social',
+      email: 'social@example.com',
+    });
+    await api.users.updateOne(
+      { username: 'social' },
+      { $set: { password: '!unusable' } },
+    );
+    await requestReset('social@example.com').expect(204);
+    expect(await mailCountAfterSettling(1)).toBe(1);
+    const token = tokenFrom(api.mailer.sent[0].text);
+    await confirm(token).expect(204);
+    await confirm(token, 'another long passphrase 1')
+      .expect(400)
+      .expect(errorCode('invalid_token'));
+    await login('social', OLD_PASSWORD).expect(401);
+    const response = await login('social', NEW_PASSWORD).expect(200);
+    const cookie = String(
+      (response.headers['set-cookie'] as unknown as string[])[0],
+    ).split(';')[0];
+    const csrf = (response.body as { data: { csrfToken: string } }).data
+      .csrfToken;
+    await api
+      .http()
+      .post(`${AUTH}/2fa/totp/enroll`)
+      .set('Cookie', cookie)
+      .set('X-CSRF-Token', csrf)
+      .send({ currentPassword: NEW_PASSWORD })
+      .expect(201);
+  });
+
+  it('resets the password once, revokes sessions and switches the login', async () => {
+    const user = await createUser(api.users, {
+      username: 'resetme',
+      email: 'resetme@example.com',
+    });
+    const { id: sessionId } = await api.sessions.create({
+      userId: user._id,
+      twoFaPassed: true,
+      passwordPwned: false,
+      impersonatorId: null,
+    });
+    await requestReset('resetme@example.com').expect(204);
+    await mailCountAfterSettling(1);
+    const token = tokenFrom(api.mailer.sent[0].text);
+    await confirm(token).expect(204);
+    expect(await api.sessions.get(sessionId)).toBeNull();
+    await login('resetme', OLD_PASSWORD).expect(401);
+    await login('resetme', NEW_PASSWORD).expect(200);
+    await confirm(token, 'another long passphrase 1')
+      .expect(400)
+      .expect(errorCode('invalid_token'));
+  });
+
+  it('rejects a token after a login that followed the request', async () => {
+    // Full-cost hash: a login must not rehash it, so only lastLogin can invalidate the token.
+    await createUser(api.users, {
+      username: 'loggedin',
+      email: 'loggedin@example.com',
+    });
+    await api.users.updateOne(
+      { username: 'loggedin' },
+      { $set: { password: await hashPassword(OLD_PASSWORD) } },
+    );
+    const hashBefore = (await api.users.findOne({ username: 'loggedin' }))!
+      .password;
+    await requestReset('loggedin@example.com').expect(204);
+    await mailCountAfterSettling(1);
+    const token = tokenFrom(api.mailer.sent[0].text);
+    await login('loggedin', OLD_PASSWORD).expect(200);
+    const after = (await api.users.findOne({ username: 'loggedin' }))!;
+    expect(after.password).toBe(hashBefore);
+    expect(after.lastLogin).not.toBeNull();
+    await confirm(token).expect(400).expect(errorCode('invalid_token'));
+  });
+
+  it('rejects malformed and forged tokens and weak passwords', async () => {
+    await createUser(api.users, {
+      username: 'weak',
+      email: 'weak@example.com',
+    });
+    await requestReset('weak@example.com').expect(204);
+    await mailCountAfterSettling(1);
+    const token = tokenFrom(api.mailer.sent[0].text);
+    const raw = Buffer.from(token, 'base64url');
+    raw[raw.length - 1] ^= 0xff;
+    const forged = raw.toString('base64url');
+    for (const bad of ['x', 'A'.repeat(70), forged])
+      await confirm(bad).expect(400).expect(errorCode('invalid_token'));
+    const response = await confirm(token, 'weak').expect(400);
+    expect(
+      (
+        response.body as {
+          error: { code: string; fields: Record<string, unknown> };
+        }
+      ).error,
+    ).toMatchObject({
+      code: 'validation_failed',
+      fields: { newPassword: expect.any(Array) as unknown },
+    });
+    await confirm(token).expect(204);
   });
 });

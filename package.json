@@ -135,6 +135,8 @@
       ]
     },
     "testEnvironment": "node",
+    "globalSetup": "<rootDir>/jest.global-setup.js",
+    "globalTeardown": "<rootDir>/jest.global-teardown.js",
     "roots": [
       "<rootDir>/apps/",
       "<rootDir>/libs/",
@@ -143,7 +145,7 @@
     "moduleNameMapper": {
       "^@libs/(common|database|auth|render|problems|judging|judge-proto|contests|community|settings)(|/.*)$": "<rootDir>/libs/$1/src$2"
     },
-    "testTimeout": 60000,
+    "testTimeout": 30000,
     "transformIgnorePatterns": [
       "/node_modules/(?!@scalar/|github-slugger/)"
     ]

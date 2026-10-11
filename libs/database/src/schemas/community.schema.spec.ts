@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { subtreeFilter } from '@libs/community';
 import { profileQueries, startMongo } from '../testing';
+import type { TestMongo } from '../testing';
 import { newId } from '../uuid';
 import { BlogPostSchema } from './blog-post.schema';
 import { BlogVoteSchema } from './blog-vote.schema';
@@ -12,7 +12,7 @@ import { OrganizationSchema } from './organization.schema';
 import { OrganizationRequestSchema } from './organization-request.schema';
 
 describe('Community schemas', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   const Organizations = mongoose.model(
     'OrganizationSchemaSpec',
     OrganizationSchema,

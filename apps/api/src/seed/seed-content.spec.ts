@@ -4,13 +4,13 @@ import { join } from 'node:path';
 import { encryptionKey } from '@libs/common';
 import { TEST_ENV } from '@libs/common/testing';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import { createConnection } from 'mongoose';
 import type { Connection } from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { seedE2e } from './seed-e2e';
 
 describe('seed:e2e content', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   let connection: Connection;
   let root: string;
   const options = () => ({

@@ -4,8 +4,8 @@ import type { TestingModule } from '@nestjs/testing';
 import type { Permission, Principal } from '@libs/auth';
 import { Contest, DatabaseModule, newId } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
+import type { TestMongo } from '@libs/database/testing';
 import type { Model } from 'mongoose';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { ContestAccess, NO_FACTS } from './contest-access';
 import type { ContestAccessView } from './contest-access';
 
@@ -346,7 +346,7 @@ describe('ContestAccess.canSeeFullSubmissionList (legacy can_see_full_submission
 });
 
 describe('ContestAccess.visibleFilter', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   let testingModule: TestingModule;
   let contests: Model<Contest>;
   const generated: Array<{ key: string; view: ContestAccessView }> = [];

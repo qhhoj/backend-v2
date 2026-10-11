@@ -17,7 +17,7 @@ describe('problem rescore at boot', () => {
   /** A fresh deployment: rows exist, the submissions indexes do not, and a rescore is already queued. */
   const seedBeforeBoot = async (mongoUri: string) => {
     const client = await MongoClient.connect(mongoUri);
-    const database = client.db('qhhoj');
+    const database = client.db();
     await database
       .collection<{ _id: UUID } & Record<string, unknown>>('problems')
       .insertOne({

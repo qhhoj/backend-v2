@@ -66,9 +66,9 @@ npm run lint
 npm run typecheck
 ```
 
-- Always `--runInBand`: suites share one Redis db.
-- `TEST_REDIS_URL` picks the db (default `redis://127.0.0.1:6379/15`); use another db to run two checkouts side by side, e.g. `TEST_REDIS_URL=redis://127.0.0.1:6379/14 npm test`. Each jest worker uses the next db up (db + `JEST_WORKER_ID - 1`), so the base db plus `--maxWorkers` must fit the server (16 dbs by default).
-- MongoDB is in-memory (`mongodb-memory-server`).
+- `npm test` runs in band; `npx jest --maxWorkers=2` (what CI runs) is safe: each worker has its own Redis db and Mongo databases.
+- `TEST_REDIS_URL` picks the db (default `redis://127.0.0.1:6379/15`); use another db to run two checkouts side by side, e.g. `TEST_REDIS_URL=redis://127.0.0.1:6379/12 npm test`. Each jest worker uses the next db up (db + `JEST_WORKER_ID - 1`), so the base db plus `--maxWorkers` must fit the server (16 dbs by default).
+- MongoDB is in-memory (`mongodb-memory-server`): one replica set per jest run (`jest.global-setup.js`); `startMongo()` gives each caller databases of its own on it and drops them on `stop()`.
 
 ## Architecture
 

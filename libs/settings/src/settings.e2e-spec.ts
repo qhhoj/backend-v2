@@ -10,7 +10,7 @@ import { encrypt, encryptionKey, EnvModule } from '@libs/common';
 import { TEST_ENV } from '@libs/common/testing';
 import { DatabaseModule, Setting, SettingRevision } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
-import type { MongoMemoryReplSet } from 'mongodb-memory-server';
+import type { TestMongo } from '@libs/database/testing';
 import type { Model } from 'mongoose';
 import { SettingError } from './setting-types';
 import { SettingsModule } from './settings.module';
@@ -27,7 +27,7 @@ const waitFor = async (check: () => boolean, timeoutMs = 20000) => {
 };
 
 describe('settings', () => {
-  let replSet: MongoMemoryReplSet;
+  let replSet: TestMongo;
   let first: TestingModule;
   let second: TestingModule;
   let settings: SettingsService;

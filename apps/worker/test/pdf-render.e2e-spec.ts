@@ -274,4 +274,87 @@ describeWithChromium('PdfRenderProcessor (Chromium)', () => {
     );
     expect(existsSync(join(worker.pdfCacheRoot, 'ghost.en.pdf'))).toBe(false);
   });
+
+  describe('limits', () => {
+    const baseProblem = {
+      timeLimit: 1,
+      memoryLimit: 262144,
+      points: 1000,
+      typeIds: [newId()],
+      groupId: newId(),
+      languageLimits: [],
+      description: 'raw',
+    };
+    /** Sets a setting for this describe only; the other tests run on the defaults. */
+    const useSetting = (
+      key: 'pdf.renderTimeoutMs' | 'pdf.maxBytes',
+      value: number,
+    ) => {
+      let previous: unknown;
+      beforeAll(async () => {
+        previous = worker.module.get(SettingsService).get(key);
+        await worker.setSetting(key, value);
+      });
+      afterAll(() => worker.setSetting(key, previous));
+    };
+
+    describe('render timeout', () => {
+      useSetting('pdf.renderTimeoutMs', 1000);
+      beforeAll(async () => {
+        await worker.problems.create([
+          {
+            ...baseProblem,
+            code: 'heavy',
+            name: 'Heavy',
+            descriptionHtml: `<table>${'<tr><td>cell</td><td>cell</td></tr>'.repeat(20000)}</table>`,
+          },
+          {
+            ...baseProblem,
+            code: 'light',
+            name: 'Light',
+            descriptionHtml: '<p>hi</p>',
+          },
+        ]);
+      });
+
+      it('aborts a render that outlives the timeout, leaves nothing behind and keeps serving', async () => {
+        await processor.process(job({ code: 'light', lang: 'en' }));
+        await expect(
+          processor.process(job({ code: 'heavy', lang: 'en' })),
+        ).rejects.toThrow('exceeded 1000 ms');
+        expect(existsSync(join(worker.pdfCacheRoot, 'heavy.en.pdf'))).toBe(
+          false,
+        );
+        expect(readdirSync(join(worker.pdfCacheRoot, '.tmp'))).toEqual([]);
+        expect(
+          readdirSync(worker.pdfCacheRoot).filter((name) =>
+            /\.pdf\..*\.tmp$/.test(name),
+          ),
+        ).toEqual([]);
+        expect(
+          await processor.process(job({ code: 'light', lang: 'en' })),
+        ).toBe('rendered');
+      });
+    });
+
+    describe('size cap', () => {
+      useSetting('pdf.maxBytes', 500);
+      beforeAll(async () => {
+        await worker.problems.create({
+          ...baseProblem,
+          code: 'big',
+          name: 'Big',
+          descriptionHtml: '<p>hi</p>',
+        });
+      });
+
+      it('rejects a PDF over the cap and leaves no file', async () => {
+        await expect(
+          processor.process(job({ code: 'big', lang: 'en' })),
+        ).rejects.toThrow('over the 500 limit');
+        expect(existsSync(join(worker.pdfCacheRoot, 'big.en.pdf'))).toBe(false);
+        expect(readdirSync(join(worker.pdfCacheRoot, '.tmp'))).toEqual([]);
+      });
+    });
+  });
 });
