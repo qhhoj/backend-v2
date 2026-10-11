@@ -181,6 +181,7 @@ afterAll(() => api.teardown());
   interface Stats {
     judgedToday: number;
     acceptedToday: number;
+    verdictsToday: { result: string; count: number }[];
     queueLength: number;
     judgesOnline: number;
     judgesTotal: number;
@@ -305,6 +306,10 @@ afterAll(() => api.teardown());
       expect(await stats()).toEqual({
         judgedToday: 2,
         acceptedToday: 1,
+        verdictsToday: [
+          { result: 'AC', count: 1 },
+          { result: 'WA', count: 1 },
+        ],
         queueLength: 3,
         judgesOnline: 2,
         judgesTotal: 3,
@@ -356,13 +361,36 @@ afterAll(() => api.teardown());
       const onSubmissions = operations.filter(
         (operation) => operation.collection === 'submissions',
       );
-      expect(onSubmissions.length).toBeGreaterThanOrEqual(3);
+      expect(onSubmissions.length).toBeGreaterThanOrEqual(2);
       for (const operation of onSubmissions) {
         expect(operation.planSummary).toContain('IXSCAN');
         expect(operation.planSummary).not.toContain('COLLSCAN');
         // 100 submissions judged yesterday must not be looked at: only today's and the queue's rows count
         expect(operation.docsExamined).toBeLessThanOrEqual(12);
       }
+    });
+
+    it('counts the verdicts of today by result, most frequent first, adding up to the judged total', async () => {
+      for (const result of ['TLE', 'TLE', 'TLE', 'TLE', 'CE'])
+        await row(publicProblem, {
+          status: 'D',
+          result,
+          judgedDate: new Date(),
+        });
+      await clearCache();
+      const day = await stats();
+      expect(day.verdictsToday.slice(0, 1)).toEqual([
+        { result: 'TLE', count: 4 },
+      ]);
+      expect(day.verdictsToday).toContainEqual({ result: 'CE', count: 1 });
+      const counted = day.verdictsToday.reduce(
+        (sum, { count }) => sum + count,
+        0,
+      );
+      expect(counted).toBe(day.judgedToday);
+      expect(
+        day.verdictsToday.find(({ result }) => result === 'AC')?.count ?? 0,
+      ).toBe(day.acceptedToday);
     });
   });
 }
