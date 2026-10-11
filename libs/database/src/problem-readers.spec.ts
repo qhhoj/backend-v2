@@ -31,6 +31,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'a deleted problem keeps its Polygon link (it comes back on restore), so the list marks it linked and a second link is refused; the link writes run after an editable-problem check',
   ],
+  'apps/api/src/modules/problems/catalog/language-usage.repository.ts': [
+    'F',
+    'a language counts as used by the live problems that allow it',
+  ],
   'apps/api/src/modules/users/pages/user-pages.repository.ts': [
     'F',
     'solved lists and PP breakdowns count live public problems only',

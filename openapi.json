@@ -4048,6 +4048,10 @@
             "maxLength": 65536,
             "type": "string"
           },
+          "isActive": {
+            "description": "false hides it from the submit form and refuses new submissions in it. Default true.",
+            "type": "boolean"
+          },
           "key": {
             "description": "Key judges report for the language; letters, digits and `_+#.-`, up to 10 characters. Fixed once created.",
             "type": "string"
@@ -4057,6 +4061,12 @@
             "maxLength": 20,
             "minLength": 1,
             "type": "string"
+          },
+          "order": {
+            "description": "Position in language lists (then name); lower first. Default 0.",
+            "maximum": 10000,
+            "minimum": -10000,
+            "type": "number"
           },
           "pygments": {
             "description": "Syntax highlighter name.",
@@ -6283,6 +6293,35 @@
         },
         "type": "object"
       },
+      "JudgeAddressResponse": {
+        "properties": {
+          "connections": {
+            "description": "Sessions opened from it.",
+            "type": "number"
+          },
+          "firstSeen": {
+            "description": "First connection from it.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "ip": {
+            "description": "IP address it connected from.",
+            "type": "string"
+          },
+          "lastSeen": {
+            "description": "Latest connection from it.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "firstSeen",
+          "lastSeen",
+          "connections"
+        ],
+        "type": "object"
+      },
       "JudgeKeyResponse": {
         "properties": {
           "authKey": {
@@ -6350,6 +6389,10 @@
       },
       "JudgeResponse": {
         "properties": {
+          "blockReason": {
+            "description": "Why staff blocked it; empty when not blocked or no reason was given.",
+            "type": "string"
+          },
           "build": {
             "description": "Judge software build identifier.",
             "type": "string"
@@ -6372,6 +6415,13 @@
           "id": {
             "description": "Judge id.",
             "type": "string"
+          },
+          "ipHistory": {
+            "description": "Addresses it connected from, most recently seen first; at most 20.",
+            "items": {
+              "$ref": "#/components/schemas/JudgeAddressResponse"
+            },
+            "type": "array"
           },
           "isBlocked": {
             "description": "Whether the judge is refused.",
@@ -6432,11 +6482,13 @@
           "description",
           "online",
           "isBlocked",
+          "blockReason",
           "isDisabled",
           "startTime",
           "ping",
           "load",
           "lastIp",
+          "ipHistory",
           "runtimes",
           "slots",
           "busy",
@@ -6523,6 +6575,10 @@
             "description": "Notes about the compiler or runtime.",
             "type": "string"
           },
+          "isActive": {
+            "description": "false: hidden from the submit form, new submissions refused.",
+            "type": "boolean"
+          },
           "key": {
             "description": "Key judges report for the language.",
             "type": "string"
@@ -6530,6 +6586,10 @@
           "name": {
             "description": "Display name.",
             "type": "string"
+          },
+          "order": {
+            "description": "Lists show languages by this, then name; lower first.",
+            "type": "number"
           },
           "pygments": {
             "description": "Syntax highlighter name.",
@@ -6559,7 +6619,9 @@
           "extension",
           "fileOnly",
           "fileSizeLimit",
-          "includeInProblem"
+          "includeInProblem",
+          "isActive",
+          "order"
         ],
         "type": "object"
       },
@@ -6642,6 +6704,10 @@
             "description": "Whether new problems allow this language by default.",
             "type": "boolean"
           },
+          "isActive": {
+            "description": "false: no new submissions; past ones still show it.",
+            "type": "boolean"
+          },
           "key": {
             "description": "Key judges report for the language.",
             "type": "string"
@@ -6671,7 +6737,30 @@
           "template",
           "fileOnly",
           "fileSizeLimit",
-          "includeInProblem"
+          "includeInProblem",
+          "isActive"
+        ],
+        "type": "object"
+      },
+      "LanguageUsageResponse": {
+        "properties": {
+          "languageId": {
+            "description": "Language id.",
+            "type": "string"
+          },
+          "problems": {
+            "description": "Problems that allow it.",
+            "type": "number"
+          },
+          "recentSubmissions": {
+            "description": "Submissions in it over the last 30 days.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "languageId",
+          "problems",
+          "recentSubmissions"
         ],
         "type": "object"
       },
@@ -10852,6 +10941,18 @@
         ],
         "type": "object"
       },
+      "RenameJudgeDto": {
+        "properties": {
+          "name": {
+            "description": "The new name, hostname-style like at creation; the judge's config must use it to reconnect.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "RenameUserDto": {
         "properties": {
           "username": {
@@ -14938,13 +15039,18 @@
       },
       "UpdateJudgeDto": {
         "properties": {
+          "blockReason": {
+            "description": "Why it is blocked, up to 500 characters; shown to staff only.",
+            "maxLength": 500,
+            "type": "string"
+          },
           "description": {
             "description": "Free-form notes about the judge, up to 10000 characters.",
             "maxLength": 10000,
             "type": "string"
           },
           "isBlocked": {
-            "description": "true disconnects the judge and refuses it until unblocked.",
+            "description": "true disconnects the judge and refuses it until unblocked; false also clears `blockReason`.",
             "type": "boolean"
           },
           "isDisabled": {
@@ -14996,11 +15102,21 @@
             "maxLength": 65536,
             "type": "string"
           },
+          "isActive": {
+            "description": "false hides it from the submit form and refuses new submissions in it. Default true.",
+            "type": "boolean"
+          },
           "name": {
             "description": "Display name, up to 20 characters.",
             "maxLength": 20,
             "minLength": 1,
             "type": "string"
+          },
+          "order": {
+            "description": "Position in language lists (then name); lower first. Default 0.",
+            "maximum": 10000,
+            "minimum": -10000,
+            "type": "number"
           },
           "pygments": {
             "description": "Syntax highlighter name.",
@@ -17131,7 +17247,7 @@
     },
     "/api/internal/admin/languages": {
       "get": {
-        "description": "Needs `judge.change_language`. Returns every programming language of the\nsite, sorted by name, including editor, highlighting and file-size settings\nthat the public catalog omits.",
+        "description": "Needs `judge.change_language`. Returns every programming language of the\nsite, sorted by `order` then name, including editor, highlighting and file-size settings\nthat the public catalog omits.",
         "operationId": "LanguagesAdminController_list",
         "parameters": [],
         "responses": {
@@ -17235,6 +17351,59 @@
           }
         },
         "summary": "Add a judge language",
+        "tags": [
+          "Admin: judges & languages"
+        ]
+      }
+    },
+    "/api/internal/admin/languages/usage": {
+      "get": {
+        "description": "Needs `judge.change_language`. For each language, the problems that allow\nit (deleted problems left out) and its submissions over the last 30 days.\nA language nothing uses is absent.",
+        "operationId": "LanguagesAdminController_usage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/LanguageUsageResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Count how much each language is used",
         "tags": [
           "Admin: judges & languages"
         ]
@@ -28605,7 +28774,7 @@
         ]
       },
       "patch": {
-        "description": "Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,\n`isDisabled` and `description`. Blocking disconnects the judge and refuses\nit until unblocked; disabling tells a connected judge to stop taking work,\nenabling lets it resume. Responds 404 `not_found` (issue `judge_not_found`)\nfor an unknown name.",
+        "description": "Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,\n`blockReason`, `isDisabled` and `description`. Blocking disconnects the\njudge and refuses it until unblocked; `blockReason` is kept only while the\njudge is blocked and cleared on unblock.\nDisabling tells a connected judge to stop taking work, enabling lets it\nresume. Responds 404 `not_found` (issue `judge_not_found`)\nfor an unknown name.",
         "operationId": "JudgesController_update",
         "parameters": [
           {
@@ -28783,6 +28952,76 @@
           }
         },
         "summary": "Issue a new authentication key for a judge",
+        "tags": [
+          "Admin: judges & languages"
+        ]
+      }
+    },
+    "/api/internal/judges/{name}/rename": {
+      "post": {
+        "description": "Needs `judge.change_judge`. Only an offline judge can be renamed: 409\n`conflict` (issue `judge_online`) while it is connected, and (issue\n`judge_busy`) while submissions handed to it are still in flight. The new\nname follows the creation rule; 409 (issue `name_taken`) when it exists.\nThe judge reconnects only with its config set to the new name; a session\nstill opening under the old name is dropped. Queued and pending final\nsubmissions pinned to it follow. 404 `not_found` for an unknown name.",
+        "operationId": "JudgesController_rename",
+        "parameters": [
+          {
+            "description": "Judge name.",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameJudgeDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/JudgeResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Rename a judge server",
         "tags": [
           "Admin: judges & languages"
         ]
@@ -35421,7 +35660,7 @@
     },
     "/api/internal/problems/{code}/submit": {
       "post": {
-        "description": "Needs a signed-in user who can see the problem. `language` must be one of\nthe problem's allowed languages and not a file-only language (400\n`language_takes_file`); `source` is 1 to 65536 characters. `judgeId` pins a\njudge and is for problem editors only (403 `judge_choice_forbidden`; 400\n`judge_unavailable` if it is offline or lacks the language). When the\ncaller's current contest lists the problem, the submission counts as a\ncontest submission, subject to the contest's attempt cap (403\n`contest_submission_limit`). Other errors: 403 `banned_from_problem`, 429\n`rate_limited` (20 per minute per user) and 429\n`unfinished_submission_limit` (2 unfinished submissions, waived by\n`judge.spam_submission`). Queues the submission for judging and returns its\n`id`.",
+        "description": "Needs a signed-in user who can see the problem. `language` must be one of\nthe problem's allowed languages, active (400 `language_inactive`) and not\na file-only language (400 `language_takes_file`); `source` is 1 to 65536 characters. `judgeId` pins a\njudge and is for problem editors only (403 `judge_choice_forbidden`; 400\n`judge_unavailable` if it is offline or lacks the language). When the\ncaller's current contest lists the problem, the submission counts as a\ncontest submission, subject to the contest's attempt cap (403\n`contest_submission_limit`). Other errors: 403 `banned_from_problem`, 429\n`rate_limited` (20 per minute per user) and 429\n`unfinished_submission_limit` (2 unfinished submissions, waived by\n`judge.spam_submission`). Queues the submission for judging and returns its\n`id`.",
         "operationId": "SubmissionCreateController_submit",
         "parameters": [
           {

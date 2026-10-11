@@ -63,6 +63,9 @@ export class JudgesService {
     const changes = Object.fromEntries(
       Object.entries(dto).filter(([, value]) => value !== undefined),
     ) as JudgeChanges;
+    // a reason belongs to a block: unblocking clears it, and an unblocked judge keeps none
+    if (!(dto.isBlocked ?? (await this.one(name)).isBlocked))
+      changes.blockReason = '';
     await this.change(name, changes);
     if (dto.isBlocked)
       await this.commands.publish({
@@ -92,6 +95,40 @@ export class JudgesService {
       'judge_online',
       'Disconnect the judge before deleting it.',
     );
+  }
+
+  /** Offline only, like delete: the judge's config names it, so it reconnects only once redeployed under the new name. Refused while a run handed to it may still be resumed under the old name. Queued submissions pinned to it follow the rename. */
+  async rename(name: string, newName: string): Promise<JudgeResponse> {
+    const judge = await this.one(name);
+    if (newName === name) return judge;
+    if (await this.judges.hasRunsInFlight(name))
+      throw conflictIssue(
+        'name',
+        'judge_busy',
+        'Submissions handed to this judge are still in flight; wait for them to be requeued.',
+      );
+    let isRenamed: boolean;
+    try {
+      isRenamed = await this.judges.renameOffline(name, newName);
+    } catch (error) {
+      if (isDuplicateKey(error, 'name'))
+        throw conflictIssue('name', 'name_taken', 'This name is taken.');
+      throw error;
+    }
+    if (!isRenamed)
+      throw conflictIssue(
+        'name',
+        'judge_online',
+        'Disconnect the judge before renaming it.',
+      );
+    await this.judges.movePins(name, newName);
+    // a connection that authenticated under the old name just before the rename is dropped
+    await this.commands.publish({
+      type: 'disconnect-judge',
+      judgeName: name,
+      force: true,
+    });
+    return this.one(newName);
   }
 
   async disconnect(name: string, isForced: boolean): Promise<void> {

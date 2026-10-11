@@ -17,6 +17,7 @@ import { OrganizationQuotaModule } from '../organizations/quota/organization-quo
 import { DiscordModule } from '../discord/discord.module';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
 import { LanguagesAdminService } from './catalog/languages-admin.service';
+import { LanguageUsageRepository } from './catalog/language-usage.repository';
 import { LanguagesQuerier } from './catalog/languages.querier';
 import { LicensesAdminController } from './catalog/licenses-admin.controller';
 import { LicensesAdminService } from './catalog/licenses-admin.service';
@@ -131,6 +132,7 @@ const repositories = [
     ...repositories,
     ProblemsService,
     LanguagesAdminService,
+    LanguageUsageRepository,
     ProblemTypesAdminService,
     ProblemGroupsAdminService,
     LicensesAdminService,

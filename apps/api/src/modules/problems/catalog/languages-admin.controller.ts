@@ -7,7 +7,10 @@ import {
   LanguageIdParamDto,
   UpdateLanguageDto,
 } from './dto/language-admin.dto';
-import { LanguageAdminResponse } from './dto/language-admin.response';
+import {
+  LanguageAdminResponse,
+  LanguageUsageResponse,
+} from './dto/language-admin.response';
 import { LanguagesAdminService } from './languages-admin.service';
 
 @ApiTags('Admin: judges & languages')
@@ -20,13 +23,27 @@ export class LanguagesAdminController {
    *
    * @remarks
    * Needs `judge.change_language`. Returns every programming language of the
-   * site, sorted by name, including editor, highlighting and file-size settings
+   * site, sorted by `order` then name, including editor, highlighting and file-size settings
    * that the public catalog omits.
    */
   @RequirePermission('judge.change_language')
   @Get()
   list(): Promise<LanguageAdminResponse[]> {
     return this.languages.list();
+  }
+
+  /**
+   * Count how much each language is used
+   *
+   * @remarks
+   * Needs `judge.change_language`. For each language, the problems that allow
+   * it (deleted problems left out) and its submissions over the last 30 days.
+   * A language nothing uses is absent.
+   */
+  @RequirePermission('judge.change_language')
+  @Get('usage')
+  usage(): Promise<LanguageUsageResponse[]> {
+    return this.languages.usage();
   }
 
   /**

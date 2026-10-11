@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { HydratedDocument, Model } from 'mongoose';
-import { Judge } from '@libs/database';
+import { IN_FLIGHT_STATUSES, Judge, Submission } from '@libs/database';
 
 export type JudgeDocument = HydratedDocument<Judge>;
 /** A judge without its key hash. */
@@ -12,12 +12,19 @@ export type PublicJudgeRow = Pick<
   'name' | 'online' | 'slots' | 'busy' | 'ping' | 'startTime' | 'runtimes'
 >;
 export type JudgeChanges = Partial<
-  Pick<Judge, 'authKeyHash' | 'isBlocked' | 'isDisabled' | 'description'>
+  Pick<
+    Judge,
+    'authKeyHash' | 'isBlocked' | 'isDisabled' | 'description' | 'blockReason'
+  >
 >;
 
 @Injectable()
 export class JudgesRepository {
-  constructor(@InjectModel(Judge.name) private readonly judges: Model<Judge>) {}
+  constructor(
+    @InjectModel(Judge.name) private readonly judges: Model<Judge>,
+    @InjectModel(Submission.name)
+    private readonly submissions: Model<Submission>,
+  ) {}
 
   /** Connected judges and judges that may connect at all (neither blocked nor disabled). */
   async counts(): Promise<{ online: number; total: number }> {
@@ -82,6 +89,34 @@ export class JudgesRepository {
       .deleteOne({ name, online: false })
       .exec();
     return deletedCount === 1;
+  }
+
+  /** Renames an offline judge; false when it is unknown or online. Throws a duplicate-key error when `to` is taken. */
+  async renameOffline(from: string, to: string): Promise<boolean> {
+    const { matchedCount } = await this.judges
+      .updateOne({ name: from, online: false }, { $set: { name: to } })
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** A run handed to the judge before it went offline: its session may still resume it under this name. */
+  async hasRunsInFlight(name: string): Promise<boolean> {
+    return (
+      (await this.submissions.exists({
+        status: { $in: [...IN_FLIGHT_STATUSES] },
+        judgedOn: name,
+      })) !== null
+    );
+  }
+
+  /** Queued and pending final submissions pinned to `from` wait for `to` instead. */
+  async movePins(from: string, to: string): Promise<void> {
+    await this.submissions
+      .updateMany(
+        { status: { $in: ['QU', 'PD'] }, pinnedJudge: from },
+        { $set: { pinnedJudge: to } },
+      )
+      .exec();
   }
 
   /** Submit with `judgeId`: the judge is connected and runs the language (every judge sees the whole data root). */

@@ -1,3 +1,4 @@
+import { isLanguageActive } from '@libs/database';
 import type { Language, License } from '@libs/database';
 
 export class CatalogItemResponse {
@@ -66,6 +67,8 @@ export class LanguageResponse {
   fileSizeLimit!: number;
   /** Whether new problems allow this language by default. */
   includeInProblem!: boolean;
+  /** false: no new submissions; past ones still show it. */
+  isActive!: boolean;
 
   static from(language: Language): LanguageResponse {
     const {
@@ -93,6 +96,7 @@ export class LanguageResponse {
       fileOnly,
       fileSizeLimit,
       includeInProblem,
+      isActive: isLanguageActive(language),
     };
   }
 }

@@ -18,8 +18,8 @@ export class SubmissionCreateController {
    *
    * @remarks
    * Needs a signed-in user who can see the problem. `language` must be one of
-   * the problem's allowed languages and not a file-only language (400
-   * `language_takes_file`); `source` is 1 to 65536 characters. `judgeId` pins a
+   * the problem's allowed languages, active (400 `language_inactive`) and not
+   * a file-only language (400 `language_takes_file`); `source` is 1 to 65536 characters. `judgeId` pins a
    * judge and is for problem editors only (403 `judge_choice_forbidden`; 400
    * `judge_unavailable` if it is offline or lacks the language). When the
    * caller's current contest lists the problem, the submission counts as a

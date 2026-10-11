@@ -12,6 +12,17 @@ export class JudgeRuntimeResponse {
   priority!: number;
 }
 
+export class JudgeAddressResponse {
+  /** IP address it connected from. */
+  ip!: string;
+  /** First connection from it. */
+  firstSeen!: Date;
+  /** Latest connection from it. */
+  lastSeen!: Date;
+  /** Sessions opened from it. */
+  connections!: number;
+}
+
 export class JudgeResponse {
   /** Judge id. */
   id!: string;
@@ -23,6 +34,8 @@ export class JudgeResponse {
   online!: boolean;
   /** Whether the judge is refused. */
   isBlocked!: boolean;
+  /** Why staff blocked it; empty when not blocked or no reason was given. */
+  blockReason!: string;
   /** Whether the judge is told to take no new work. */
   isDisabled!: boolean;
   /** When the judge process last started; null if it never connected. */
@@ -33,6 +46,8 @@ export class JudgeResponse {
   load!: number | null;
   /** IP address of the last connection; null if it never connected. */
   lastIp!: string | null;
+  /** Addresses it connected from, most recently seen first; at most 20. */
+  ipHistory!: JudgeAddressResponse[];
   /** Languages the judge can run. */
   runtimes!: JudgeRuntimeResponse[];
   /** Assignments it runs at once. */
@@ -53,11 +68,23 @@ export class JudgeResponse {
       description: judge.description,
       online: judge.online,
       isBlocked: judge.isBlocked,
+      blockReason: judge.blockReason ?? '',
       isDisabled: judge.isDisabled,
       startTime: judge.startTime,
       ping: judge.ping,
       load: judge.load,
       lastIp: judge.lastIp,
+      // rows from before the field are read through `aggregate`, so no schema default fills it
+      ipHistory: (judge.ipHistory ?? [])
+        .map(({ ip, firstSeen, lastSeen, connections }) => ({
+          ip,
+          firstSeen,
+          lastSeen,
+          connections,
+        }))
+        .sort(
+          (left, right) => right.lastSeen.getTime() - left.lastSeen.getTime(),
+        ),
       runtimes: judge.runtimes.map(({ language, name, version, priority }) => ({
         language,
         name,

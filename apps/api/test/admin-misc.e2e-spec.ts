@@ -475,6 +475,7 @@ afterAll(() => api.teardown());
         api.http().post(`${JUDGES}/judge-guarded/key`),
         api.http().post(`${JUDGES}/judge-guarded/disconnect`).send({}),
         api.http().delete(`${JUDGES}/judge-guarded`),
+        api.http().post(`${JUDGES}/judge-guarded/rename`).send({ name: 'x' }),
         api.http().get(`${JUDGES}/queue`),
       ];
       await api.http().get(JUDGES).expect(401);
@@ -542,6 +543,69 @@ afterAll(() => api.teardown());
         .expect(404)
         .expect(errorCode('not_found'));
       expect(await api.judges.findOne({ name: 'judge-live' })).not.toBeNull();
+    });
+
+    it('renames an offline judge with nothing in flight, moving queued pins to the new name', async () => {
+      const rename = (from: string, name: string) =>
+        authed(api.http().post(`${JUDGES}/${from}/rename`), admin).send({
+          name,
+        });
+      await create('judge-ren');
+      await create('judge-taken');
+      const row = (status: string, pins: Record<string, string>) => ({
+        user: newId(),
+        problem: newId(),
+        language: newId(),
+        status,
+        ...pins,
+      });
+      const [queued, running] = await api.submissions.create([
+        row('QU', { pinnedJudge: 'judge-ren' }),
+        row('G', { judgedOn: 'judge-ren' }),
+      ]);
+      // a run handed out before the judge dropped may still resume under the old name
+      await rename('judge-ren', 'judge-new')
+        .expect(409)
+        .expect(issueCodes(['judge_busy']));
+      await api.submissions.updateOne({ _id: running._id }, { status: 'D' });
+      await rename('judge-ren', 'judge-taken')
+        .expect(409)
+        .expect(issueCodes(['name_taken']));
+      await api.judges.updateOne({ name: 'judge-ren' }, { online: true });
+      await rename('judge-ren', 'judge-new')
+        .expect(409)
+        .expect(issueCodes(['judge_online']));
+      await api.judges.updateOne({ name: 'judge-ren' }, { online: false });
+      const renamed = dataOf<{ name: string }>(
+        await rename('judge-ren', 'judge-new').expect(200),
+      );
+      expect(renamed.name).toBe('judge-new');
+      expect(await api.judges.exists({ name: 'judge-ren' })).toBeNull();
+      expect(
+        (await api.submissions.findById(queued._id).lean())?.pinnedJudge,
+      ).toBe('judge-new');
+      // the finished run keeps the name it was judged on
+      expect(
+        (await api.submissions.findById(running._id).lean())?.judgedOn,
+      ).toBe('judge-ren');
+    });
+
+    it('stores a block reason with the block and clears it on unblock', async () => {
+      await create('judge-blk');
+      const patch = (body: object) =>
+        authed(api.http().patch(`${JUDGES}/judge-blk`), admin).send(body);
+      expect(
+        dataOf<{ blockReason: string }>(
+          await patch({ isBlocked: true, blockReason: 'leaked key' }).expect(
+            200,
+          ),
+        ).blockReason,
+      ).toBe('leaked key');
+      expect(
+        dataOf<{ blockReason: string; isBlocked: boolean }>(
+          await patch({ isBlocked: false }).expect(200),
+        ),
+      ).toMatchObject({ isBlocked: false, blockReason: '' });
     });
   });
 }

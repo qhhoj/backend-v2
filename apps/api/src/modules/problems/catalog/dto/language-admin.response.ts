@@ -1,4 +1,4 @@
-import { uuidStr } from '@libs/database';
+import { isLanguageActive, uuidStr } from '@libs/database';
 import type { Language } from '@libs/database';
 
 export class LanguageAdminResponse {
@@ -30,6 +30,10 @@ export class LanguageAdminResponse {
   fileSizeLimit!: number;
   /** Whether new problems allow it by default. */
   includeInProblem!: boolean;
+  /** false: hidden from the submit form, new submissions refused. */
+  isActive!: boolean;
+  /** Lists show languages by this, then name; lower first. */
+  order!: number;
 
   static from(language: Language): LanguageAdminResponse {
     return {
@@ -47,6 +51,17 @@ export class LanguageAdminResponse {
       fileOnly: language.fileOnly,
       fileSizeLimit: language.fileSizeLimit,
       includeInProblem: language.includeInProblem,
+      isActive: isLanguageActive(language),
+      order: language.order ?? 0,
     };
   }
+}
+
+export class LanguageUsageResponse {
+  /** Language id. */
+  languageId!: string;
+  /** Problems that allow it. */
+  problems!: number;
+  /** Submissions in it over the last 30 days. */
+  recentSubmissions!: number;
 }

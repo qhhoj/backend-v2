@@ -17,6 +17,8 @@ import { LANGUAGE_EXTENSION_PATTERN } from '@libs/database';
 const LANGUAGE_KEY_PATTERN = /^[A-Za-z0-9_+#.-]{1,10}$/;
 const LANGUAGE_FILE_SIZE_LIMIT_MAX = 1_073_741_824;
 const LANGUAGE_TEXT_MAX = 65_536;
+const LANGUAGE_ORDER_MIN = -10_000;
+const LANGUAGE_ORDER_MAX = 10_000;
 
 /** No property initializers (`PartialType` would inherit them). */
 export class CreateLanguageDto {
@@ -50,6 +52,14 @@ export class CreateLanguageDto {
   fileSizeLimit?: number;
   /** Whether new problems allow this language by default. */
   @IsOptional() @IsBoolean() includeInProblem?: boolean;
+  /** false hides it from the submit form and refuses new submissions in it. Default true. */
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  /** Position in language lists (then name); lower first. Default 0. */
+  @IsOptional()
+  @IsInt()
+  @Min(LANGUAGE_ORDER_MIN)
+  @Max(LANGUAGE_ORDER_MAX)
+  order?: number;
 }
 
 /** `shortName: null` clears it; the other fields refuse null (see `RefuseNullFieldsPipe`). */

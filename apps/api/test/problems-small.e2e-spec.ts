@@ -82,6 +82,7 @@ afterAll(() => api.teardown());
         fileOnly: false,
         fileSizeLimit: 0,
         includeInProblem: true,
+        isActive: true,
       });
     });
   });
