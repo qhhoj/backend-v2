@@ -169,6 +169,16 @@ export class OrganizationMembersRepository {
     return matchedCount === 1;
   }
 
+  /** Organization delete: every member loses the membership. */
+  async removeAll(organizationId: string): Promise<void> {
+    await this.users
+      .updateMany(
+        { organizations: organizationId },
+        { $pull: { organizations: organizationId } },
+      )
+      .exec();
+  }
+
   /** Profile edit: a reordering or a subset of `current`, compare-and-set like `joinIfUnchanged`. */
   async reorderIfUnchanged(
     userId: string,

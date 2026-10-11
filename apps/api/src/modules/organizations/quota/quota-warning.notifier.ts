@@ -55,7 +55,10 @@ export class QuotaWarningNotifier {
     meter: QuotaMeterName,
   ): Promise<void> {
     const organization = await this.organizations
-      .findById(key.organizationId, { adminIds: 1, slug: 1, shortName: 1 })
+      .findOne(
+        { _id: key.organizationId, deletedAt: null },
+        { adminIds: 1, slug: 1, shortName: 1 },
+      )
       .lean()
       .exec();
     if (!organization?.adminIds.length) return;

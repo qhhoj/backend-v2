@@ -351,6 +351,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Organization slug `usage` is reserved — `GET /organizations/usage` is a static route and wins over `:slug`.
 - `OrganizationProblemResponse.updatedAt` is the problem document's own `updatedAt` (Mongoose timestamps), so counter writes move it too — the list shows "last touched", not "last edited by a person".
 - `recent[].actor` on the usage dashboard comes from the ledger's `user`; null for a system entry (no user) or a deleted user.
+- Organization delete is a superuser-only soft delete (`deletedAt`; every `OrganizationsRepository` read skips it, the slug stays reserved): problems and contests are unlinked and keep their privacy flags, so an organization-private one left with no organization is visible only to its editors; posts are unlinked and hidden (a post without an organization is public once visible); members are released, pending requests rejected, the organization's problem links and tags removed; `Org Admin` is not revoked, like any admin removal. It is marked first so no join or admin action reaches it while it is detached; the unlinks are idempotent and a repeated delete on the slug runs them again; there is no restore.
 
 ## Blog and comments
 

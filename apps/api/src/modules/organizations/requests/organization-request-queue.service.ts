@@ -40,6 +40,7 @@ export class OrganizationRequestQueueService {
     const [organizations, usernameById] = await Promise.all([
       this.organizations.findByIds(
         unique(items.map((row) => uuidStr(row.organization))),
+        { includeDeleted: true },
       ),
       requestUsernames(this.users, items),
     ]);

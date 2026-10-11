@@ -97,7 +97,10 @@ export class FeedDataRepository {
     organizationIds: string[],
   ): Promise<Array<{ id: string; name: string }>> {
     const rows = await this.organizations
-      .find({ _id: { $in: organizationIds }, isUnlisted: false }, { name: 1 })
+      .find(
+        { _id: { $in: organizationIds }, isUnlisted: false, deletedAt: null },
+        { name: 1 },
+      )
       .lean()
       .exec();
     return rows.map((row) => ({ id: uuidStr(row._id), name: row.name }));

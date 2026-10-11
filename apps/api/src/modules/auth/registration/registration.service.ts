@@ -111,6 +111,7 @@ export class RegistrationService {
         _id: organizationId,
         isOpen: true,
         isUnlisted: false,
+        deletedAt: null,
       }))
     )
       issues.push({

@@ -123,6 +123,20 @@ export class OrganizationRequestsRepository {
     return matchedCount === 1;
   }
 
+  /** Organization delete: every pending request of the organization becomes rejected by the deleting user. */
+  async rejectAllPending(
+    organizationId: string,
+    decidedBy: string,
+    decidedAt: Date,
+  ): Promise<void> {
+    await this.requests
+      .updateMany(
+        { organization: organizationId, state: 'P' },
+        { $set: { state: 'R', decidedBy, decidedAt } },
+      )
+      .exec();
+  }
+
   /** Undo a compare-and-set approval whose member could not be added. */
   async reopen(id: string): Promise<void> {
     await this.requests
