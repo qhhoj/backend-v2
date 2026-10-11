@@ -144,6 +144,25 @@ export const optionalUrlType: SettingType<string> = {
       : fail('Must be empty or an https URL.'),
 };
 
+/** `''` switches the feature off; otherwise an http(s) base URL without credentials, query or fragment. Plain http and private hosts are allowed: only settings admins set it, and a self-hosted service may have neither TLS nor a public address. */
+export const optionalServiceUrlType: SettingType<string> = {
+  parse: (raw) => {
+    if (raw === '') return '';
+    if (typeof raw !== 'string' || raw.length > 2048 || !URL.canParse(raw))
+      return fail('Must be empty or an http(s) URL.');
+    const url = new URL(raw);
+    return ['http:', 'https:'].includes(url.protocol) &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+      ? raw.replace(/\/+$/, '')
+      : fail(
+          'Must be empty or an http(s) URL without credentials, query or fragment.',
+        );
+  },
+};
+
 export const smtpUrlType: SettingType<string> = {
   parse: (raw) =>
     typeof raw === 'string' &&
