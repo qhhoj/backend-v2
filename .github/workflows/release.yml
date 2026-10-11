@@ -37,7 +37,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run the required checks on the Version Packages PR
-        if: steps.version.outputs.hasChangesets == 'true'
+        if: steps.version.outputs.pullRequestNumber != '' # empty-only changesets make no PR or branch
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           gh workflow run ci.yml --ref changeset-release/main
