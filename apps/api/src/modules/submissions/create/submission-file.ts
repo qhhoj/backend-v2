@@ -5,8 +5,6 @@ import { extensionOf, ZipArchive, ZipError } from '@libs/problems';
 import { tooLarge } from '../../problems/core/multipart';
 import type { UploadedFile } from '../../problems/core/multipart';
 
-/** Legacy `SUBMISSION_FILE_UPLOAD_MEDIA_DIR`: uploads live at `<dir>/<problem code>/<user id>/<random>.<extension>` under the media root. */
-export const SUBMISSION_FILE_DIR = 'submission_file';
 const SCRATCH_KEY = 'SCRATCH';
 const SCRATCH_PROJECT = 'project.json';
 const BYTES_PER_MB = 1024 * 1024;
