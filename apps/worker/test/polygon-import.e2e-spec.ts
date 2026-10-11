@@ -13,7 +13,7 @@ import type { Job, Queue } from 'bullmq';
 import type { Model } from 'mongoose';
 import { parse } from 'yaml';
 import { waitUntil } from '@libs/common/testing';
-import { Group, newId, Problem, Revision } from '@libs/database';
+import { Group, newId, Problem, Revision, uuidStr } from '@libs/database';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import type { ProblemRescoreJob } from '@libs/judging';
 import {
@@ -315,6 +315,19 @@ describe('PolygonImportProcessor', () => {
       allowedLanguages: [cppId],
       authors: [],
     });
+  });
+
+  it("creates a problem private to the job's organization, and a site problem without one", async () => {
+    const organizationId = newId();
+    await processor.process(job({ code: 'org_sum', organizationId }));
+    await processor.process(job({ code: 'site_sum' }));
+    const owned = await worker.problems.findOne({ code: 'org_sum' }).lean();
+    expect(owned?.organizations.map(uuidStr)).toEqual([organizationId]);
+    expect(owned?.isOrganizationPrivate).toBe(true);
+    expect(owned?.isPublic).toBe(false);
+    const site = await worker.problems.findOne({ code: 'site_sum' }).lean();
+    expect(site?.organizations).toEqual([]);
+    expect(site?.isOrganizationPrivate).toBe(false);
   });
 
   it('updates in place, keeping what is not given, and replaces statement, translations and data', async () => {

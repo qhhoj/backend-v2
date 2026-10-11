@@ -34,8 +34,14 @@ export class ProblemImportsController {
    * `judge.add_problem`, updating needs write access to the problem's test data.
    * Send the Polygon package as a multipart `file` (a zip with `problem.xml` at
    * its root, up to 512 MiB) and the options in the query string: `code`, `mode`
-   * (`create` or `update`), authors, curators, group, types, points, statement
-   * language mapping and the zero-point and main-solution switches. The package
+   * (`create` or `update`), `organization`, authors, curators, group, types,
+   * points, statement language mapping and the zero-point and main-solution
+   * switches. A create with `organization` (a slug) makes the problem private
+   * to that organization under the rules of
+   * `POST /organizations/{slug}/problems` instead of `judge.add_problem`: its
+   * rights (404 unknown organization, 403 `forbidden`), the code prefix (400
+   * `organization_code_prefix`), its credits (spent when the job is queued,
+   * kept if the job fails later) and its storage. The package
    * is checked, then imported by a background job; the answer is 202 with a
    * `jobId` to poll at `GET /problems/imports/{jobId}`. Limited to 10 imports
    * per hour per user. Errors: 400 `code_taken`, 400 for a bad package

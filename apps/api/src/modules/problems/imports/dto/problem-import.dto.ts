@@ -32,6 +32,8 @@ export class PolygonImportQueryDto {
   @IsOptional()
   @IsIn(IMPORT_MODES)
   mode: ImportMode = 'create';
+  /** Slug of the organization a created problem belongs to: private to it, code with its prefix, charged to its quota; needs the rights of `POST /organizations/{slug}/problems` instead of `judge.add_problem`. Ignored by `update`. */
+  @IsOptional() @IsString() organization?: string;
   /** Author user ids; repeat the parameter. */
   @IsOptional()
   @Transform(toArray)

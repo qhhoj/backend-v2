@@ -39,7 +39,9 @@ import {
 import type { Catalog, TestSession } from './problem-fixtures';
 import { IMPORT_LIMIT } from '../src/modules/problems/core/rate-limits';
 import { softDelete, tombstone } from './deleted-problem-fixtures';
-import { errorCode, setupApiTest } from './setup';
+import { errorCode, issueCodes, setupApiTest } from './setup';
+import { createOrganization } from './organization-fixtures';
+import { uuidStr } from '@libs/database';
 import type { ApiTest } from './setup';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
@@ -324,6 +326,88 @@ afterAll(() => api.teardown());
       await upload('code=managed&mode=update', importer).expect(404);
       expect(storedPackages()).toHaveLength(before);
     });
+    describe('into an organization', () => {
+      /** The `Org Admin` role's problem rights plus the import permission, without `judge.add_problem`. */
+      const TEACHER_RIGHTS = [
+        'judge.import_polygon_package',
+        'judge.create_organization_problem',
+        'judge.edit_own_problem',
+      ];
+      let teacher: TestSession, member: TestSession;
+      let teacherId: string, organizationId: string;
+
+      beforeAll(async () => {
+        teacherId = (
+          await createUserWith(api, 'teacher', { permissions: TEACHER_RIGHTS })
+        )._id;
+        teacher = await loginAs(api, teacherId);
+        const memberId = (
+          await createUserWith(api, 'member', { permissions: TEACHER_RIGHTS })
+        )._id;
+        member = await loginAs(api, memberId);
+        organizationId = uuidStr(
+          (
+            await createOrganization(
+              api,
+              { slug: 'thpt-demo', adminIds: [teacherId] },
+              [memberId],
+            )
+          )._id,
+        );
+      });
+
+      it('lets an organization administrator without judge.add_problem import a new problem private to the organization', async () => {
+        const jobId = jobIdOf(
+          await upload(
+            'code=thptdemo_sum&organization=thpt-demo',
+            teacher,
+          ).expect(202),
+        );
+        expect((await queue.getJob(jobId))?.data).toMatchObject({
+          code: 'thptdemo_sum',
+          mode: 'create',
+          organizationId,
+          curators: [teacherId],
+        });
+      });
+
+      it('still needs judge.add_problem for a site problem', async () => {
+        await upload('code=sitesum', teacher)
+          .expect(403)
+          .expect(errorCode('forbidden'));
+      });
+
+      it('refuses a member who does not administer the organization, an unknown organization and a code without the prefix, storing nothing', async () => {
+        const before = storedPackages().length;
+        await upload('code=thptdemo_m&organization=thpt-demo', member)
+          .expect(403)
+          .expect(errorCode('forbidden'));
+        await upload('code=nowhere_a&organization=nowhere', teacher)
+          .expect(404)
+          .expect(errorCode('not_found'));
+        await upload('code=sum2&organization=thpt-demo', teacher)
+          .expect(400)
+          .expect(issueCodes(['organization_code_prefix']));
+        expect(storedPackages()).toHaveLength(before);
+      });
+
+      it('ignores the organization of an update', async () => {
+        await createProblem(api, catalog, {
+          code: 'teachers',
+          authors: [teacherId],
+        });
+        const jobId = jobIdOf(
+          await upload(
+            'code=teachers&mode=update&organization=thpt-demo',
+            teacher,
+          ).expect(202),
+        );
+        expect((await queue.getJob(jobId))?.data).not.toHaveProperty(
+          'organizationId',
+        );
+      });
+    });
+
     it('keeps the catalog of an updated problem unless given and pins its data version', async () => {
       const jobId = jobIdOf(
         await upload('code=mine&mode=update&points=1500', importer).expect(202),
