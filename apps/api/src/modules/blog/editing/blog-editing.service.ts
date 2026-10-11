@@ -52,6 +52,11 @@ const POST_STYLE = 'blog';
 /** Creates and edits share one budget: each renders user Markdown and KaTeX synchronously. */
 const WRITE_LIMIT = 10;
 const WRITE_WINDOW_SECONDS = 60 * 60;
+const MODERATION_FIELDS: readonly string[] = [
+  'visible',
+  'sticky',
+  'globalPost',
+];
 
 @Injectable()
 export class BlogEditingService {
@@ -275,14 +280,14 @@ export class BlogEditingService {
     if (!hasPermission(principal, permission)) throw forbidden(message);
   }
 
-  /** Hiding or showing a post (only `visible` sent) by `edit_all_post`: exempt from the write limit and the contest lock, so spam can go during a contest. */
+  /** One moderation flag sent alone (`visible`, `sticky` or `globalPost`) by `edit_all_post`: exempt from the write limit and the contest lock, so staff can clear spam and pin from the moderation list. The flag's own permission still applies. */
   private isModeration(principal: Principal, dto: UpdatePostDto): boolean {
     const sent = Object.keys(dto).filter(
       (key) => dto[key as keyof UpdatePostDto] !== undefined,
     );
     return (
       sent.length === 1 &&
-      sent[0] === 'visible' &&
+      MODERATION_FIELDS.includes(sent[0]) &&
       hasPermission(principal, 'judge.edit_all_post')
     );
   }

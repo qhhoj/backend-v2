@@ -33,6 +33,16 @@ const mergeFields = <Value extends object>(current: Value, patch: unknown) =>
     ? { ...current, ...patch }
     : patch;
 
+/** The events sent replace theirs and a null removes one; the others (secret, so the UI cannot resend them) are kept. */
+const mergeWebhooks = (current: Record<string, string>, patch: unknown) => {
+  if (typeof patch !== 'object' || patch === null || Array.isArray(patch))
+    return patch;
+  const merged: Record<string, unknown> = { ...current, ...patch };
+  return Object.fromEntries(
+    Object.entries(merged).filter(([, url]) => url !== null),
+  );
+};
+
 const disabledClient: OAuthClientSetting = {
   enabled: false,
   clientId: '',
@@ -128,6 +138,7 @@ export const SETTINGS = {
     description:
       'Discord webhook URLs by event (default, on_new_comment, on_new_blogpost, on_new_problem, on_new_suggested_problem, on_new_ticket, on_new_ticket_message); empty disables them.',
     secret: true,
+    combine: mergeWebhooks,
   }),
   'mail.from': define({
     type: mailFromType,

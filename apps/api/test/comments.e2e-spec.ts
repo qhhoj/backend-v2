@@ -655,6 +655,95 @@ describe('comment votes and moderation', () => {
     ).toBeNull();
   });
 
+  it('hides many comments with one outcome each and recomputes their authors once', async () => {
+    const [rootAuthor, childAuthor, otherAuthor] = (
+      await Promise.all([person(), person(), person()])
+    ).map(({ user }) => user._id);
+    const { session: moderator } = await person(MODERATOR);
+    const { session: plain } = await person();
+    const page = await createPost(api);
+    const at = { type: 'blog' as const, id: page._id };
+    const root = await createComment(api, { page: at, author: rootAuthor });
+    const child = await createComment(api, {
+      page: at,
+      author: childAuthor,
+      parent: root,
+    });
+    const other = await createComment(api, { page: at, author: otherAuthor });
+    const bulk = (session: TestSession, ids: string[], hidden: boolean) =>
+      authed(
+        api.http().post('/api/internal/admin/comments/hidden'),
+        session,
+      ).send({ ids, hidden });
+    await bulk(plain, [other._id], true).expect(403);
+    const missing = '0190a0a0-0000-7000-8000-000000000000';
+    expect(
+      dataOf(
+        await bulk(moderator, [root._id, other._id, missing], true).expect(200),
+      ),
+    ).toEqual([
+      { id: root._id, code: null },
+      { id: other._id, code: null },
+      { id: missing, code: 'not_found' },
+    ]);
+    expect(await queuedUsers()).toEqual(
+      [rootAuthor, childAuthor, otherAuthor].sort(),
+    );
+    await clearQueued();
+    expect(
+      dataOf(await bulk(moderator, [child._id, other._id], false).expect(200)),
+    ).toEqual([
+      { id: child._id, code: 'conflict' },
+      { id: other._id, code: null },
+    ]);
+    expect((await api.comments.findById(child._id).lean())?.hidden).toBe(true);
+    expect(await queuedUsers()).toEqual([otherAuthor]);
+    expect(
+      dataOf(await bulk(moderator, [child._id, root._id], false).expect(200)),
+    ).toEqual([
+      { id: child._id, code: null },
+      { id: root._id, code: null },
+    ]);
+    expect((await api.comments.findById(child._id).lean())?.hidden).toBe(false);
+  });
+
+  it('searches every comment for moderators, leaving out pages they cannot read', async () => {
+    const { user: author } = await person();
+    const { user: other } = await person();
+    const { session: moderator } = await person(MODERATOR);
+    const page = await createPost(api);
+    const draft = await createPost(api, { visible: false });
+    const at = { type: 'blog' as const, id: page._id };
+    const spam = await createComment(api, {
+      page: at,
+      author: author._id,
+      body: 'Buy CHEAP pills',
+      hidden: true,
+    });
+    const plain = await createComment(api, {
+      page: at,
+      author: other._id,
+      body: 'cheap trick',
+    });
+    await createComment(api, {
+      page: { type: 'blog', id: draft._id },
+      author: author._id,
+      body: 'cheap on a draft',
+    });
+    const search = async (query: string) =>
+      dataOf<Array<{ comment: { id: string } }>>(
+        await authed(
+          api.http().get(`/api/internal/admin/comments?${query}`),
+          moderator,
+        ).expect(200),
+      ).map((item) => item.comment.id);
+    expect(await search('search=cheap')).toEqual([plain._id, spam._id]);
+    expect(await search('search=cheap&state=hidden')).toEqual([spam._id]);
+    expect(await search(`author=${author.username}`)).toEqual([spam._id]);
+    expect(await search('author=nobody-here')).toEqual([]);
+    expect(await search('search=cheap&pageType=problem')).toEqual([]);
+  });
+
   it('refuses moderation in official contest mode without touching the comment', async () => {
     const { user: author } = await person();
     const { session: moderator } = await person({

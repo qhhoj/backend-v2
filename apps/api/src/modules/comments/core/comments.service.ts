@@ -182,6 +182,35 @@ export class CommentsService {
     });
   }
 
+  /** User summaries by id, one read; for moderator lists that name authors, reporters and hiding moderators. */
+  async summariesOf(
+    userIds: readonly unknown[],
+  ): Promise<Map<string, UserSummaryResponse>> {
+    const users = await this.users.findByIds(unique(userIds.map(uuidStr)));
+    return new Map(
+      users.map((user) => [user._id, UserSummaryResponse.from(user)]),
+    );
+  }
+
+  /** The comments whose page the viewer may read (and whose contest thread is not hidden from them), keyed by comment id, with that page; one read per page type. */
+  async readablePagesOf(
+    principal: Principal,
+    comments: readonly Comment[],
+  ): Promise<Map<string, PageInfo>> {
+    const readable = await this.pages.accessible(
+      principal,
+      comments.map(pageOf),
+    );
+    return new Map(
+      comments.flatMap((comment) => {
+        const pageInfo = readable.get(pageRef(pageOf(comment)));
+        return pageInfo && !this.hidesThread(principal, pageInfo)
+          ? [[uuidStr(comment._id), pageInfo] as const]
+          : [];
+      }),
+    );
+  }
+
   /** Legacy hid the comment area in official contest mode; superusers keep it. */
   assertOpen(principal: Principal | null): void {
     if (officialModeLocks(this.settings, principal))

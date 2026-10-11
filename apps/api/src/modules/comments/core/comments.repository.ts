@@ -4,6 +4,7 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type {
   ClientSession,
   Connection,
+  FilterQuery,
   HydratedDocument,
   Model,
 } from 'mongoose';
@@ -16,6 +17,9 @@ import {
   toUuid,
   uuidStr,
 } from '@libs/database';
+
+/** A moderator's search never holds the database longer than this. */
+const SEARCH_TIME_LIMIT_MS = 5000;
 
 export type CommentDocument = HydratedDocument<Comment>;
 
@@ -154,6 +158,29 @@ export class CommentsRepository {
       ])
       .exec();
     return new Map(rows.map((row) => [uuidStr(row._id), row.count]));
+  }
+
+  /** One page of any comments (hidden and deleted ones too) matching `filter`, newest first; a body search scans, so it is bounded by `maxTimeMS`. */
+  async newestMatching(
+    filter: FilterQuery<Comment>,
+    pageNumber: number,
+    pageSize: number,
+  ): Promise<{ items: Comment[]; total: number }> {
+    const [items, total] = await Promise.all([
+      this.comments
+        .find(filter)
+        .sort({ _id: -1 })
+        .skip((pageNumber - 1) * pageSize)
+        .limit(pageSize)
+        .maxTimeMS(SEARCH_TIME_LIMIT_MS)
+        .lean<Comment[]>()
+        .exec(),
+      this.comments
+        .countDocuments(filter)
+        .maxTimeMS(SEARCH_TIME_LIMIT_MS)
+        .exec(),
+    ]);
+    return { items, total };
   }
 
   /** Compare-and-set on the edit count: a concurrent edit makes this return false (409). */

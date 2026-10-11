@@ -13,6 +13,8 @@ import { CommentsController } from './core/comments.controller';
 import { CommentsRepository } from './core/comments.repository';
 import { CommentsService } from './core/comments.service';
 import { RecentCommentsService } from './core/recent-comments.service';
+import { CommentAdminController } from './moderation/comment-admin.controller';
+import { CommentAdminService } from './moderation/comment-admin.service';
 import { CommentModerationController } from './moderation/comment-moderation.controller';
 import { CommentModerationService } from './moderation/comment-moderation.service';
 import { CommentPostingController } from './posting/comment-posting.controller';
@@ -38,6 +40,7 @@ import { CommentVotesService } from './votes/comment-votes.service';
     CommentPostingController,
     CommentVotesController,
     CommentModerationController,
+    CommentAdminController,
     CommentReportsController,
   ],
   providers: [
@@ -48,6 +51,7 @@ import { CommentVotesService } from './votes/comment-votes.service';
     CommentPostingService,
     CommentVotesService,
     CommentModerationService,
+    CommentAdminService,
     RecentCommentsService,
     CommentReportsRepository,
     CommentReportsService,
