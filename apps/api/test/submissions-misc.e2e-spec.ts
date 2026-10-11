@@ -388,6 +388,10 @@ afterAll(() => api.teardown());
       await clearCache();
       expect((await stats()).judgedToday).toBe(before.judgedToday + 1);
       await api.setSetting('site.timeZone', 'Asia/Ho_Chi_Minh');
+      // After 10:00 UTC both rows also fall on today in Asia/Ho_Chi_Minh: drop them so later counts do not depend on the hour.
+      await api.submissions.deleteMany({
+        judgedDate: { $in: [new Date(start.getTime() - 1), start] },
+      });
     });
 
     it('reads submissions through an index and never scans the old ones', async () => {
