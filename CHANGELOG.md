@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.19.1
+
+### Patch Changes
+
+- 5d02b48: Remove the finished one-off comment-numbers backfill worker job.
+
 ## 2.19.0
 
 ### Minor Changes
