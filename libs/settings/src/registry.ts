@@ -8,6 +8,7 @@ import {
   optionalServiceUrlType,
   optionalTextType,
   optionalUrlType,
+  optionalUuidType,
   smtpUrlType,
   timeZoneType,
   webhooksType,
@@ -124,6 +125,13 @@ export const SETTINGS = {
     type: integerType(0, 1000),
     default: 1,
     description: 'Credits per 10 MiB (started) of an uploaded data archive.',
+    secret: false,
+  }),
+  'organization.adminRoleId': define({
+    type: optionalUuidType,
+    default: '',
+    description:
+      'Id of the role every organization admin is given on becoming one (never taken away); empty: the role named "Org Admin".',
     secret: false,
   }),
   'problem.deleteGraceDays': define({

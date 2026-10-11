@@ -404,6 +404,36 @@ afterAll(() => api.teardown());
       expect(await queuedFor()).toEqual([created.id]);
     });
 
+    it('gives a promoted admin the configured role once and keeps it after demotion', async () => {
+      const byName =
+        (await api.groups.findOne({ name: 'Org Admin' }).lean()) ??
+        (await api.groups.create({ name: 'Org Admin' }));
+      const role = await api.groups.create({ name: 'Organization staff' });
+      await api.setSetting('organization.adminRoleId', role._id);
+      try {
+        const { user: owner, session } = await person();
+        const { user: helper } = await person();
+        const organization = await createOrganization(api, {
+          adminIds: [owner._id],
+        });
+        const url = organizationUrl(organization.slug);
+        const rolesOf = async () =>
+          (await api.users.findById(helper._id).lean())!.groups.map(uuidStr);
+        const setAdmins = (adminIds: string[]) =>
+          patch(url, session, { adminIds }).expect(200);
+
+        await setAdmins([owner._id, helper._id]);
+        expect(await rolesOf()).toEqual([role._id]);
+        await setAdmins([owner._id]);
+        expect(await rolesOf()).toEqual([role._id]);
+        await setAdmins([owner._id, helper._id]);
+        expect(await rolesOf()).toEqual([role._id]);
+        expect(await rolesOf()).not.toContain(uuidStr(byName._id));
+      } finally {
+        await api.setSetting('organization.adminRoleId', '');
+      }
+    });
+
     it('caps admin roles at three unless the acting user has spam_organization', async () => {
       const { user, session } = await person({
         permissions: ['judge.add_organization'],

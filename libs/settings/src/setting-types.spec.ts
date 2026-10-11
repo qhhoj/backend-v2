@@ -5,6 +5,7 @@ import {
   optionalDatetimeType,
   optionalTextType,
   optionalUrlType,
+  optionalUuidType,
   SettingError,
   webhooksType,
 } from './setting-types';
@@ -25,6 +26,15 @@ describe('setting types', () => {
       expect(optionalUrlType.parse(ok)).toBe(ok);
     for (const bad of ['http://example.com', 'ftp://x.test', 'nonsense', 5])
       expect(() => optionalUrlType.parse(bad)).toThrow(SettingError);
+  });
+
+  it('takes an empty value or a record id, lower-cased', () => {
+    expect(optionalUuidType.parse('')).toBe('');
+    expect(optionalUuidType.parse('01A12501-DB2B-744C-BC51-4805439A680F')).toBe(
+      '01a12501-db2b-744c-bc51-4805439a680f',
+    );
+    for (const bad of ['Org Admin', '01a12501-db2b-744c', 5, null])
+      expect(() => optionalUuidType.parse(bad)).toThrow(SettingError);
   });
 
   it('takes a bare address or "Name <address>" and nothing that can inject a header', () => {

@@ -1,4 +1,5 @@
 import { canonicalTimeZone, MAIL_ADDRESS_PATTERN } from '@libs/common';
+import { isUuid } from '@libs/database';
 import { BlockList, isIP } from 'node:net';
 
 /** A rejected value; the message is safe to show an admin and never contains the value. */
@@ -135,6 +136,16 @@ export const optionalTextType = (maxLength: number): SettingType<string> => ({
       ? raw.trim()
       : fail(`Must be text of at most ${maxLength} characters on one line.`),
 });
+
+/** `''` means unset; otherwise a record id such as a role's. Stored lower-case, as Mongo's UUIDs print. */
+export const optionalUuidType: SettingType<string> = {
+  parse: (raw) =>
+    typeof raw === 'string' && (raw === '' || isUuid(raw))
+      ? raw.toLowerCase()
+      : fail(
+          'Must be empty or an id like 01a12501-db2b-744c-bc51-4805439a680f.',
+        ),
+};
 
 /** `''` switches the feature off. */
 export const optionalUrlType: SettingType<string> = {
