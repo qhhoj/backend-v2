@@ -21,13 +21,6 @@ export class Revision {
 
 export const RevisionSchema = SchemaFactory.createForClass(Revision);
 RevisionSchema.index({ entity: 1, entityId: 1, createdAt: -1, _id: -1 });
-// The site-wide audit feed, newest first: all, by kind, by actor. The kind index shares its keys with the delete-only one below, so it is named.
-RevisionSchema.index({ createdAt: -1, _id: -1 });
-RevisionSchema.index(
-  { entity: 1, createdAt: -1, _id: -1 },
-  { name: 'entity_feed' },
-);
-RevisionSchema.index({ userId: 1, createdAt: -1, _id: -1 });
 // Lists of deleted entities (flatpages), newest first.
 RevisionSchema.index(
   { entity: 1, createdAt: -1, _id: -1 },
