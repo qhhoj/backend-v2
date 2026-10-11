@@ -1,4 +1,4 @@
-import type { Problem, SubmissionCase } from '@libs/database';
+import type { Problem, Submission, SubmissionCase } from '@libs/database';
 import {
   authed,
   createProblem,
@@ -269,6 +269,74 @@ afterAll(() => api.teardown());
         expect((await listed('other', 'problem=Not-A-Code')).meta.total).toBe(
           0,
         );
+      });
+    });
+
+    describe('GET /problems/:code/best-submissions', () => {
+      const best = async (who: string, code: string, query = '') =>
+        (
+          await as(
+            who,
+            `/api/internal/problems/${code}/best-submissions?${query}`,
+          ).expect(200)
+        ).body as {
+          data: Array<{ id: string; user: { username: string } }>;
+          meta: { page: number; pageSize: number; total: number };
+        };
+
+      it('ranks each user once by their best submission: points, then time, then memory, then earliest', async () => {
+        const problem = await problemWith('best');
+        const unlisted = await createUserWith(api, 'unlisted', {
+          isUnlisted: true,
+        });
+        const seed = (user: string, fields: Partial<Submission>) =>
+          seedSubmission(api, {
+            user,
+            problem: problem._id,
+            language: catalog.languages.cpp,
+            points: 100,
+            time: 0.2,
+            memory: 50,
+            ...fields,
+          });
+        const at = (minute: number) =>
+          new Date(Date.UTC(2026, 0, 1, 0, minute));
+        const ownerBest = await seed(ids.owner, { time: 0.5, date: at(1) });
+        await seed(ids.owner, { result: 'WA', points: 30, date: at(2) });
+        await seed(ids.other, { memory: 100, date: at(3) });
+        await seed(ids.tester, { date: at(5) });
+        await seed(ids.editor, { date: at(4) });
+        await seed(ids.staff, { result: 'WA', points: 40, date: at(6) });
+        await seed(ids.seer, { result: 'WA', points: 0 });
+        await seed(unlisted._id, { time: 0.01 });
+        await seed(ids.root, { status: 'QU', result: null, points: null });
+
+        const page = await best('anonymous', 'best', 'pageSize=100');
+        expect(page.data.map((row) => row.user.username)).toEqual([
+          'editor',
+          'tester',
+          'other',
+          'owner',
+          'staff',
+        ]);
+        expect(page.data[3].id).toBe(ownerBest._id);
+        expect(page.meta.total).toBe(5);
+        const second = await best('anonymous', 'best', 'page=2&pageSize=2');
+        expect(second.data.map((row) => row.user.username)).toEqual([
+          'other',
+          'owner',
+        ]);
+        expect(second.meta).toEqual({ page: 2, pageSize: 2, total: 5 });
+      });
+
+      it('answers 404 for a problem the viewer cannot see', async () => {
+        await as('other', '/api/internal/problems/priv/best-submissions')
+          .expect(404)
+          .expect(errorCode('not_found'));
+        await as('anonymous', '/api/internal/problems/nope/best-submissions')
+          .expect(404)
+          .expect(errorCode('not_found'));
+        expect((await best('tester', 'priv')).meta.total).toBe(0);
       });
     });
 

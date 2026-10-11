@@ -26475,6 +26475,98 @@
         ]
       }
     },
+    "/api/internal/problems/{code}/best-submissions": {
+      "get": {
+        "description": "Public. One row per user: their judged submission with the most points,\nties broken by less time, then less memory, then the earlier submission.\nRows are ordered the same way (`page` from 1, `pageSize` 1-100, default\n50); submissions without points, unlisted and banned users are left out.\nVisibility follows the submission list: other users' submissions of a\ncontest whose list is closed to the viewer are left out. Unknown or\ninvisible problems are 404 `not_found`.",
+        "operationId": "BestSubmissionsController_list",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number, from 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Items per page, 1 to 100.",
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/SubmissionListItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the best submission of each user on a problem",
+        "tags": [
+          "Submissions"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/problems/{code}/clone": {
       "post": {
         "description": "Needs `judge.clone_problem` and edit rights on the source. Copies the\nstatement, limits, languages, classification and visibility settings; test\ndata, translations, editorial, people and counters are not copied. The\ncaller becomes the only curator and the clone starts private. Charges the\norganization's quota when the source is organization-private (403\n`quota_exceeded`); a taken code is 400 `code_taken`. Returns the new\nproblem.",

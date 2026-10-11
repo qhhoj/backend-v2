@@ -9,6 +9,9 @@ import { JudgesApiModule } from '../judges/judges-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionActionsController } from './actions/submission-actions.controller';
 import { SubmissionActionsService } from './actions/submission-actions.service';
+import { BestSubmissionsController } from './best/best-submissions.controller';
+import { BestSubmissionsRepository } from './best/best-submissions.repository';
+import { BestSubmissionsService } from './best/best-submissions.service';
 import { SubmissionCreateController } from './create/submission-create.controller';
 import { SubmissionCreateService } from './create/submission-create.service';
 import { SubmissionStreamsController } from './streams/submission-streams.controller';
@@ -33,6 +36,7 @@ import { SubmissionsService } from './core/submissions.service';
     SubmissionsController,
     SubmissionActionsController,
     SubmissionStreamsController,
+    BestSubmissionsController,
   ],
   exports: [SubmissionsService, SubmissionsRepository],
   providers: [
@@ -43,6 +47,8 @@ import { SubmissionsService } from './core/submissions.service';
     SubmissionActionsService,
     RateLimitService,
     SubmissionStreamsService,
+    BestSubmissionsRepository,
+    BestSubmissionsService,
   ],
 })
 export class SubmissionsApiModule {}

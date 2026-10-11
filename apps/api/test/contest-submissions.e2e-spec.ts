@@ -157,6 +157,23 @@ describe('contest submissions and the freeze', () => {
     );
   });
 
+  it("ranks best submissions without other participants' frozen contest rows", async () => {
+    const { bobId, bobOutside } = await frozenScene('frozen_best_p');
+    await api.submissions.updateOne({ _id: bobId }, { points: 100 });
+    await api.submissions.updateOne({ _id: bobOutside }, { points: 10 });
+    const bestOf = async (who?: string) =>
+      idsOf(
+        await get(
+          '/api/internal/problems/frozen_best_p/best-submissions',
+          who,
+        ).expect(200),
+      );
+    expect(await bestOf('alice')).not.toContain(bobId);
+    expect(await bestOf('alice')).toContain(bobOutside);
+    expect(await bestOf('staff')).toContain(bobId);
+    expect(await bestOf('staff')).not.toContain(bobOutside);
+  });
+
   it('answers contest_running, not solve_first, for an unsolved if-solved source while the list is closed', async () => {
     const { bobId } = await frozenScene(
       'if_solved_p',
