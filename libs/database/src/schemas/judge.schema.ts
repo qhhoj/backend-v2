@@ -13,6 +13,19 @@ export class JudgeRuntime {
   @Prop({ default: 0 }) priority!: number;
 }
 
+/** Connections are recorded per address; the oldest-seen address drops out past this many. */
+export const JUDGE_IP_HISTORY_LIMIT = 20;
+export const JUDGE_BLOCK_REASON_MAX = 500;
+
+@Schema({ _id: false })
+export class JudgeAddress {
+  @Prop({ required: true }) ip!: string;
+  @Prop({ type: Date, required: true }) firstSeen!: Date;
+  @Prop({ type: Date, required: true }) lastSeen!: Date;
+  /** Sessions opened from this address. */
+  @Prop({ default: 1 }) connections!: number;
+}
+
 /** Legacy `Judge` + `RuntimeVersion`; the online fields are written only by the bridge. */
 @Schema({ ...baseSchemaOptions, collection: 'judges' })
 export class Judge {
@@ -21,6 +34,9 @@ export class Judge {
   /** sha256 hex of the key; the key itself is shown once, at creation or rotation. */
   @Prop({ required: true }) authKeyHash!: string;
   @Prop({ default: false }) isBlocked!: boolean;
+  /** Why staff blocked it; cleared on unblock. */
+  @Prop({ default: '', maxlength: JUDGE_BLOCK_REASON_MAX })
+  blockReason!: string;
   @Prop({ default: false }) isDisabled!: boolean;
   @Prop({ default: '' }) description!: string;
   @Prop({ default: false }) online!: boolean;
@@ -28,6 +44,12 @@ export class Judge {
   @Prop({ type: Number, default: null }) ping!: number | null;
   @Prop({ type: Number, default: null }) load!: number | null;
   @Prop({ type: String, default: null }) lastIp!: string | null;
+  /** Addresses it connected from, least recently seen first; written by the bridge at each Hello. */
+  @Prop({
+    type: [SchemaFactory.createForClass(JudgeAddress)],
+    default: [],
+  })
+  ipHistory!: JudgeAddress[];
   @Prop({ type: [SchemaFactory.createForClass(JudgeRuntime)], default: [] })
   runtimes!: JudgeRuntime[];
   /** Assignments the judge runs at once (`Hello.slots`); kept after it goes offline. */

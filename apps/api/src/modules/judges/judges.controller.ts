@@ -15,6 +15,7 @@ import {
   CreateJudgeDto,
   DisconnectJudgeDto,
   JudgeNameParamDto,
+  RenameJudgeDto,
   UpdateJudgeDto,
 } from './dto/judge.dto';
 import {
@@ -82,9 +83,11 @@ export class JudgesController {
    *
    * @remarks
    * Needs `judge.change_judge`. Send only the fields to change: `isBlocked`,
-   * `isDisabled` and `description`. Blocking disconnects the judge and refuses
-   * it until unblocked; disabling tells a connected judge to stop taking work,
-   * enabling lets it resume. Responds 404 `not_found` (issue `judge_not_found`)
+   * `blockReason`, `isDisabled` and `description`. Blocking disconnects the
+   * judge and refuses it until unblocked; `blockReason` is kept only while the
+   * judge is blocked and cleared on unblock.
+   * Disabling tells a connected judge to stop taking work, enabling lets it
+   * resume. Responds 404 `not_found` (issue `judge_not_found`)
    * for an unknown name.
    */
   @Patch(':name')
@@ -93,6 +96,27 @@ export class JudgesController {
     @Body(new RefuseNullFieldsPipe()) dto: UpdateJudgeDto,
   ): Promise<JudgeResponse> {
     return this.judges.update(name, dto);
+  }
+
+  /**
+   * Rename a judge server
+   *
+   * @remarks
+   * Needs `judge.change_judge`. Only an offline judge can be renamed: 409
+   * `conflict` (issue `judge_online`) while it is connected, and (issue
+   * `judge_busy`) while submissions handed to it are still in flight. The new
+   * name follows the creation rule; 409 (issue `name_taken`) when it exists.
+   * The judge reconnects only with its config set to the new name; a session
+   * still opening under the old name is dropped. Queued and pending final
+   * submissions pinned to it follow. 404 `not_found` for an unknown name.
+   */
+  @Post(':name/rename')
+  @HttpCode(200)
+  rename(
+    @Param() { name }: JudgeNameParamDto,
+    @Body() dto: RenameJudgeDto,
+  ): Promise<JudgeResponse> {
+    return this.judges.rename(name, dto.name);
   }
 
   /**

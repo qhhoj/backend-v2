@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { constantTimeEqual, sha256 } from '@libs/auth';
-import { Judge, JUDGE_NAME_PATTERN } from '@libs/database';
+import {
+  Judge,
+  JUDGE_IP_HISTORY_LIMIT,
+  JUDGE_NAME_PATTERN,
+} from '@libs/database';
 import type { HelloRuntime } from '../link/messages';
 
 /** What a judge row holds while no connection serves it; written by `markOffline` and by the bridge's start-up sweep. */
@@ -78,7 +82,7 @@ export class JudgesRepository {
     startTime: Date,
     details: SessionDetails,
   ): Promise<void> {
-    await this.judges.updateOne(
+    const { matchedCount } = await this.judges.updateOne(
       { name, startTime: { $not: { $gt: startTime } } },
       {
         $set: {
@@ -88,6 +92,32 @@ export class JudgesRepository {
           load: null,
           busy: 0,
           ...details,
+        },
+      },
+    );
+    if (matchedCount === 1 && details.lastIp)
+      await this.recordAddress(name, details.lastIp, startTime);
+  }
+
+  /** The admin page's address history: bumps the address's entry, or adds it and drops the least recently seen past the limit. The `$ne` filter keeps two racing Hellos from adding the same address twice. */
+  async recordAddress(name: string, ip: string, at: Date): Promise<void> {
+    const { matchedCount } = await this.judges.updateOne(
+      { name, 'ipHistory.ip': ip },
+      {
+        $max: { 'ipHistory.$.lastSeen': at },
+        $inc: { 'ipHistory.$.connections': 1 },
+      },
+    );
+    if (matchedCount === 1) return;
+    await this.judges.updateOne(
+      { name, 'ipHistory.ip': { $ne: ip } },
+      {
+        $push: {
+          ipHistory: {
+            $each: [{ ip, firstSeen: at, lastSeen: at, connections: 1 }],
+            $sort: { lastSeen: 1 },
+            $slice: -JUDGE_IP_HISTORY_LIMIT,
+          },
         },
       },
     );

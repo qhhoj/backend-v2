@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
-import { narrowTo, PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
+import {
+  compareLanguages,
+  narrowTo,
+  PROBLEM_CODE_PATTERN,
+  uuidStr,
+} from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
@@ -119,7 +124,7 @@ export class ProblemsService {
         .map((license) => LicenseResponse.from(license)),
       languages: this.languages
         .all()
-        .sort(byField('name'))
+        .sort(compareLanguages)
         .map((language) => LanguageResponse.from(language)),
     };
   }

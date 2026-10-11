@@ -159,7 +159,10 @@ describe('Judge link (gRPC)', () => {
 
   describe('driven by the api judges service (admin path)', () => {
     const admin = () =>
-      new JudgesService(new JudgesRepository(bridge.judges), commands);
+      new JudgesService(
+        new JudgesRepository(bridge.judges, bridge.submissions),
+        commands,
+      );
 
     it('rotating the key closes the judge, refuses the old key and serves the new one', async () => {
       await seedJudge(bridge, 'admin-rot', 'admin-rot-key');

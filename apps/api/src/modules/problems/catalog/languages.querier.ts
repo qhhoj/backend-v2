@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { BaseCatalogQuerier } from '@libs/common';
-import { Language } from '@libs/database';
+import { isLanguageActive, Language } from '@libs/database';
 import { Model } from 'mongoose';
 
 @Injectable()
@@ -14,8 +14,10 @@ export class LanguagesQuerier extends BaseCatalogQuerier<Language> {
     super(model, scheduler);
   }
 
-  /** Languages every new problem allows (legacy `include_in_problem`). */
+  /** Languages every new problem allows (legacy `include_in_problem`), inactive ones left out. */
   includedInProblems(): Language[] {
-    return this.all().filter((language) => language.includeInProblem);
+    return this.all().filter(
+      (language) => language.includeInProblem && isLanguageActive(language),
+    );
   }
 }
