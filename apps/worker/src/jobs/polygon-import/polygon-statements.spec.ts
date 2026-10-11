@@ -13,6 +13,7 @@ import {
   parseStatements,
   rehostImages,
   renderStatement,
+  withImageBudget,
   withMainSolution,
 } from './polygon-statements';
 import { SVG_MAX_BYTES } from '@libs/problems';
@@ -169,6 +170,42 @@ describe('polygon statements', () => {
       }),
     ).rejects.toThrow('invalid main tutorial language');
     await pkg.close();
+  });
+  it('sanitizes imported statements even for a full-markup problem', async () => {
+    // TeX math may hold `$` (`\\text{$a$}`), which splits the Markdown formula and leaves raw HTML outside it.
+    const legend = '$\\text{$a$ $b$}<b onmouseover=alert(1)>x</b>$';
+    const pkg = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      statements: [
+        {
+          language: 'english',
+          name: 'Sum',
+          properties: properties({ legend }),
+        },
+      ],
+    });
+    const result = await parseStatements(await pkg.problemXml(), {
+      pkg,
+      job: job({ isFullMarkup: true, mainStatementLanguage: 'english' }),
+      texToMarkdown: identity,
+      saveImage: () => Promise.resolve('/media/images/x.png'),
+    });
+    expect(result.description).toContain('onmouseover');
+    expect(result.descriptionHtml).not.toContain('onmouseover');
+    await pkg.close();
+  });
+  it('stops saving images once an import passes its byte budget', async () => {
+    const saved: number[] = [];
+    const save = withImageBudget((bytes) => {
+      saved.push(bytes.length);
+      return Promise.resolve('/media/images/x.png');
+    }, 10);
+    await save(Buffer.alloc(6), 'a.png');
+    await save(Buffer.alloc(4), 'b.png');
+    await expect(save(Buffer.alloc(1), 'c.png')).rejects.toThrow(
+      PolygonImportError,
+    );
+    expect(saved).toEqual([6, 4]);
   });
   it('requires a statement and problem-properties.json', async () => {
     const none = await openPackage({ tests: [{ input: '1', answer: '1' }] });

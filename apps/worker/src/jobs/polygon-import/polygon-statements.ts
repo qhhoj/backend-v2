@@ -31,6 +31,24 @@ export interface ProblemProperties {
 }
 export type TexToMarkdown = (tex: string) => Promise<string>;
 export type ImageSaver = (bytes: Buffer, name: string) => Promise<string>;
+/** Re-hosted image bytes per import, all statements and the tutorial together: each image is capped, but a compressed package can hold thousands of them, and they are saved outside the problem's storage meter. */
+export const IMPORT_IMAGES_MAX_BYTES = 64 * 1024 * 1024;
+
+/** `saveImage` that fails the import once the bytes it saved would pass `maxBytes`. */
+export function withImageBudget(
+  saveImage: ImageSaver,
+  maxBytes: number,
+): ImageSaver {
+  let savedBytes = 0;
+  return async (bytes, name) => {
+    savedBytes += bytes.length;
+    if (savedBytes > maxBytes)
+      throw new PolygonImportError(
+        `statement images exceed ${maxBytes} bytes in total`,
+      );
+    return saveImage(bytes, name);
+  };
+}
 export interface ImportedStatements {
   name: string;
   description: string;
@@ -415,9 +433,12 @@ export async function parseStatements(
 ): Promise<ImportedStatements> {
   const sources = await readStatementSources(root, context.pkg);
   const mainLanguage = pickMainLanguage(sources, context.job);
-  const style: RenderStyle = context.job.isFullMarkup
-    ? 'problem-full'
-    : 'problem';
+  // Imported text is never trusted HTML, full-markup problem or not: TeX math holding `$` splits a formula and leaves raw HTML outside it.
+  const style: RenderStyle = 'problem';
+  context = {
+    ...context,
+    saveImage: withImageBudget(context.saveImage, IMPORT_IMAGES_MAX_BYTES),
+  };
   const imported: ImportedStatements = {
     name: '',
     description: '',
