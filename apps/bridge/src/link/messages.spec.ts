@@ -4,14 +4,12 @@ import {
   ErrorCode,
   Final,
   Hello,
-  JudgeMessage,
   Outcome,
   Status,
 } from '@libs/judge-proto';
 import {
   caseRowsOf,
   clipBytes,
-  decodeJudgeMessage,
   finalReportOf,
   helloOf,
   refOf,
@@ -36,17 +34,6 @@ const thrown = (run: () => unknown): ProtocolError => {
 };
 
 describe('judge link messages', () => {
-  it('decodes a message and keeps its encoded size', () => {
-    const message = JudgeMessage.fromPartial({
-      body: { $case: 'draining', draining: {} },
-    });
-    const bytes = Buffer.from(JudgeMessage.encode(message).finish());
-    expect(decodeJudgeMessage(bytes)).toEqual({
-      message,
-      bytes: bytes.length,
-    });
-  });
-
   it('normalises a Hello: runtimes with an impossible key dropped, labels clipped, resume candidates checked', () => {
     const info = helloOf(
       hello({

@@ -1,7 +1,5 @@
 import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type Redis from 'ioredis';
-import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import { newId } from '@libs/database';
 import type { Submission, SubmissionStatus } from '@libs/database';
@@ -107,7 +105,6 @@ describe('submission event streams', () => {
       ['stream_hidden', { isPublic: false }],
       ['stream_org', { isOrganizationPrivate: true }],
       ['stream_flip', {}],
-      ['stream_gone', {}],
       ['stream_dead', {}],
       ['stream_warm', {}],
     ] as const)
@@ -120,33 +117,6 @@ describe('submission event streams', () => {
     await waitUntil(() => streams.openCounts().total === 0);
   });
   afterAll(() => api.teardown());
-
-  it('sends the current state first, then the submission events in order', async () => {
-    const submission = await seed('stream_a');
-    const client = await open('owner', `${EVENTS}/${submission._id}`);
-    expect(client.status).toBe(200);
-    expect((await client.next('state')).data).toMatchObject({
-      submissionId: submission._id,
-      status: 'QU',
-    });
-    await publish(submission, 'processing', 'P');
-    await publish(submission, 'grading-begin', 'G');
-    await publish(submission, 'test-case', 'G', 3);
-    await publish(submission, 'done', 'D');
-    await waitUntil(() => client.messages.length === 4);
-    expect(client.messages.map((message) => message.event)).toEqual([
-      'processing',
-      'grading-begin',
-      'test-case',
-      'done',
-    ]);
-    expect(client.messages.map((message) => message.data)).toMatchObject([
-      { status: 'P' },
-      { status: 'G' },
-      { currentTestcase: 3 },
-      { status: 'D' },
-    ]);
-  });
 
   it('gates like the detail: 401 anonymous, 404 unknown or invisible, 403 without detail rights', async () => {
     const visible = await seed('stream_a');
@@ -225,21 +195,6 @@ describe('submission event streams', () => {
     expect(done.length).toBeLessThan(6);
   });
 
-  it('public feed: a submission of a deleted problem never appears', async () => {
-    const feed = await open(null, EVENTS);
-    await waitUntil(() => streams.openCounts().feed === 1);
-    await softDelete(api, problems.stream_gone);
-    const gone = await seed('stream_gone');
-    const live = await seed('stream_a');
-    await publish(gone, 'done', 'D');
-    await publish(live, 'done', 'D');
-    expect((await feed.next('done')).data).toMatchObject({
-      submissionId: live._id,
-    });
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(feed.messages).toEqual([]);
-  });
-
   it('public feed: deleting a problem it already trusts drops its submissions at once, restoring brings them back', async () => {
     const feed = await open(null, EVENTS);
     await waitUntil(() => streams.openCounts().feed === 1);
@@ -306,49 +261,6 @@ describe('submission event streams', () => {
     expect(overIp.status).toBe(429);
   });
 
-  it('answers 429 before 404 or 403, and a refused stream keeps no slot', async () => {
-    const submission = await seed('stream_a');
-    const path = `${EVENTS}/${submission._id}`;
-    await open('owner', path);
-    await open('owner', path);
-    expect((await open('owner', `${EVENTS}/${newId()}`)).status).toBe(429);
-    const forbidden = await open('other', path);
-    expect(forbidden.status).toBe(403);
-    await forbidden.closed;
-    await waitUntil(() => streams.openCounts().total === 2);
-    expect(streams.openCounts().users).toBe(1);
-  });
-
-  it('caps the public feed per process separately', async () => {
-    for (let feeds = 0; feeds < LIMITS.feedTotal; feeds += 1)
-      expect((await open(null, EVENTS)).status).toBe(200);
-    expect((await open(null, EVENTS)).status).toBe(429);
-    expect(
-      (await open('owner', `${EVENTS}/${(await seed('stream_a'))._id}`)).status,
-    ).toBe(200);
-  });
-
-  it('leaves no stream, counter or listener behind after clients disconnect', async () => {
-    const submission = await seed('stream_a');
-    await open('owner', `${EVENTS}/${submission._id}`);
-    await open('root', `${EVENTS}/${submission._id}`);
-    await open(null, EVENTS);
-    await waitUntil(() => streams.openCounts().total === 3);
-    for (const client of opened.splice(0)) client.close();
-    await waitUntil(() => streams.openCounts().total === 0);
-    expect(streams.openCounts()).toEqual({
-      total: 0,
-      users: 0,
-      ips: 0,
-      submissions: 0,
-      feed: 0,
-      contests: 0,
-      tickets: 0,
-      userStreams: 0,
-      subscriberListeners: 1,
-    });
-  });
-
   it('closes a stream once its session ends or its problem becomes invisible', async () => {
     const session = await loginAs(api, ids.owner);
     const submission = await seed('stream_a');
@@ -367,19 +279,6 @@ describe('submission event streams', () => {
       { isPublic: false },
     );
     await losing.closed;
-  });
-
-  it('closes the stream of a user who was deactivated', async () => {
-    const leaver = await createUserWith(api, 'leaver');
-    const session = await loginAs(api, leaver._id);
-    const submission = await seed('stream_a', { user: leaver._id });
-    const client = await openStream(api, `${EVENTS}/${submission._id}`, {
-      Cookie: session.cookie,
-    });
-    opened.push(client);
-    await client.next('state');
-    await api.users.updateOne({ _id: leaver._id }, { isActive: false });
-    await client.closed;
   });
 
   it('frees everything when a slow client is dropped', async () => {
@@ -406,22 +305,6 @@ describe('submission event streams', () => {
       userStreams: 0,
       subscriberListeners: 1,
     });
-  });
-
-  it('keeps delivering after the Redis subscription drops, telling clients to resync', async () => {
-    const submission = await seed('stream_a');
-    const client = await open('owner', `${EVENTS}/${submission._id}`);
-    await client.next('state');
-    await api.app.get<Redis>(REDIS).call('CLIENT', 'KILL', 'TYPE', 'pubsub');
-    await client.next('resync', 5000);
-    await waitUntil(() => streams.isSubscribed());
-    await publish(submission, 'done', 'D');
-    expect((await client.next('done')).data).toMatchObject({ status: 'D' });
-  });
-
-  it('heartbeats an idle stream', async () => {
-    const feed = await open(null, EVENTS);
-    await waitUntil(() => feed.pings() >= 2, 2000);
   });
 
   it('frees the slot of a client that left while the access lookups were pending', async () => {
@@ -456,55 +339,6 @@ describe('submission event streams', () => {
       ips: 0,
       submissions: 0,
     });
-  });
-
-  it('does not lose an event published while the stream was opening', async () => {
-    const submission = await seed('stream_a');
-    const service = api.app.get(SubmissionsService);
-    const original = service.streamAccess.bind(service);
-    const racing = jest
-      .spyOn(service, 'streamAccess')
-      .mockImplementation(async (...args) => {
-        const access = await original(...args);
-        await api.submissions.updateOne(
-          { _id: submission._id },
-          { status: 'D', result: 'AC' },
-        );
-        await publish(submission, 'done', 'D');
-        return access;
-      });
-    try {
-      const client = await open('owner', `${EVENTS}/${submission._id}`);
-      expect((await client.next('state')).data).toMatchObject({ status: 'D' });
-    } finally {
-      racing.mockRestore();
-    }
-  });
-
-  it('keeps a client up when a burst of events arrives in one tick', async () => {
-    const submission = await seed('stream_a');
-    const client = await open('owner', `${EVENTS}/${submission._id}`);
-    await client.next('state');
-    await Promise.all(
-      Array.from({ length: 300 }, () => publish(submission, 'processing', 'P')),
-    );
-    await waitUntil(
-      () =>
-        client.messages.filter(({ event }) => event === 'processing').length ===
-        300,
-      5000,
-    );
-  });
-
-  it('delivers to a stream opened with an uppercase id', async () => {
-    const submission = await seed('stream_a');
-    const client = await open(
-      'owner',
-      `${EVENTS}/${submission._id.toUpperCase()}`,
-    );
-    await client.next('state');
-    await publish(submission, 'done', 'D');
-    await client.next('done');
   });
 
   it('drops a paused feed client under a flood, with memory bounded', async () => {

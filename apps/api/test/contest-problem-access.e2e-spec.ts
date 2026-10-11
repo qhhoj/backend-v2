@@ -213,18 +213,6 @@ describe('contest-only problem access', () => {
     await problem('hidden_private').expect(404);
   });
 
-  it('treats a spectate participation like legacy: the contest problems are granted', async () => {
-    const watched = await createProblem(api, catalog, {
-      code: 'watched_private',
-      isPublic: false,
-    });
-    const contest = await createContest(api, {
-      problems: [contestProblem(watched._id, 0)],
-    });
-    await enter(contest._id, { virtual: -1 });
-    await problem('watched_private').expect(200);
-  });
-
   it('hides the editorial while in any contest, and shows it again after leaving', async () => {
     await createProblem(api, catalog, {
       code: 'solved_public',

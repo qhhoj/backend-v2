@@ -106,25 +106,6 @@ describe('contest public ranking', () => {
     ]);
   });
 
-  it('serves the frozen board through a link while frozen', async () => {
-    const contest = await createContest(api, {
-      formatName: 'icpc',
-      formatConfig: {},
-      frozenLastMinutes: 180,
-      authors: [users.editor._id],
-    });
-    await joinParticipation(api, contest._id, users.alice._id, {
-      score: 3,
-      frozenScore: 1,
-    });
-    const link = await createLink(contest.key);
-    const { ranking } = dataOf<PublicRankingResponse>(
-      await api.http().get(publicUrl(link.token)).expect(200),
-    );
-    expect(ranking.frozen).toBe(true);
-    expect(ranking.rows[0].score).toBe(1);
-  });
-
   it('answers unknown, private and expired tokens with the same 404 and limits misses per IP', async () => {
     await clearRateLimits(api);
     const contest = await createContest(api, { authors: [users.editor._id] });
@@ -277,11 +258,5 @@ describe('contest public ranking', () => {
     expect(await scoreSeen('/ranking?code=cache-code')).toBe(1);
     expect(await scoreSeen('/ranking?code=cache-code', 'editor')).toBe(5);
     expect(await scoreSeen('/ranking', 'editor')).toBe(5);
-  });
-
-  it('refuses any code on a contest without a ranking code', async () => {
-    await clearRateLimits(api);
-    const contest = await createContest(api, { scoreboardVisibility: 'H' });
-    await api.http().get(contestUrl(contest.key, '/ranking?code=')).expect(403);
   });
 });

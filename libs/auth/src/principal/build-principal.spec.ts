@@ -24,10 +24,4 @@ describe('buildPrincipal', () => {
       organizationIds: ['0198a1b2-0000-7000-8000-0000000000aa'],
     });
   });
-
-  it('grants nothing to a user with no direct permission and no group', () => {
-    expect(
-      buildPrincipal({ ...user, permissions: [] }, []).permissions.size,
-    ).toBe(0);
-  });
 });

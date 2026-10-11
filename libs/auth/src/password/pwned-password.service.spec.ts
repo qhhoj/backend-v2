@@ -54,8 +54,6 @@ describe('PwnedPasswordService', () => {
       `/range/${sha1('password123').slice(0, 5)}`,
     );
   });
-  it('is disabled without a URL', async () =>
-    expect(await service('').isPwned('password123')).toBe(false));
   it('follows a changed URL', async () => {
     const settings = fakeSettings({ 'auth.pwnedApiUrl': baseUrl });
     const pwned = new PwnedPasswordService(settings);

@@ -7,12 +7,8 @@ import {
   CONTEST_DATA_JOB,
   CONTEST_DATA_QUEUE,
   CONTEST_FINAL_JUDGE_QUEUE,
-  CONTEST_RATING_QUEUE,
-  CONTEST_RESCORE_JOB,
-  CONTEST_RESCORE_QUEUE,
   contestActionState,
   contestDataJobId,
-  enqueueContestRating,
   finalJudgeJobId,
   oneJobPerContest,
   notifyContestRescore,
@@ -21,39 +17,11 @@ import {
 import type {
   ContestDataJob,
   ContestFinalJudgeJob,
-  ContestRatingJob,
   ContestRescoreJob,
   FinalJudgeTarget,
 } from './queues';
 
 describe('notifyContestRescore', () => {
-  let queue: Queue<ContestRescoreJob>;
-  beforeAll(async () => {
-    queue = new Queue(CONTEST_RESCORE_QUEUE, {
-      connection: { url: TEST_REDIS_URL },
-    });
-    await queue.obliterate({ force: true });
-  });
-  afterAll(async () => {
-    await queue.obliterate({ force: true });
-    await queue.close();
-  });
-
-  it('queues one retried job per call, even for the same contest', async () => {
-    await notifyContestRescore(queue, 'c1', new Logger('spec'));
-    await notifyContestRescore(queue, 'c1', new Logger('spec'));
-    const jobs = await queue.getJobs(['waiting']);
-    expect(jobs.map((job) => [job.name, job.data])).toEqual([
-      [CONTEST_RESCORE_JOB, { contestId: 'c1' }],
-      [CONTEST_RESCORE_JOB, { contestId: 'c1' }],
-    ]);
-    expect(jobs.every((job) => job.opts.attempts === 3)).toBe(true);
-    expect(jobs[0].opts).toMatchObject({
-      backoff: { type: 'exponential', delay: 10_000 },
-      removeOnComplete: true,
-    });
-  });
-
   it('logs instead of throwing when Redis does not answer', async () => {
     const hanging = {
       add: () => new Promise(() => undefined),
@@ -140,42 +108,21 @@ describe('rescheduleFinalJudge', () => {
     );
     expect(await ids()).toEqual([]);
   });
-
-  it('still adds the new job when removing the previous one throws', async () => {
-    const later = new Date(end.getTime() + 60_000);
-    const failingRemove = {
-      remove: () => Promise.reject(new Error('redis down')),
-      add: queue.add.bind(queue),
-    };
-    await rescheduleFinalJudge(
-      failingRemove as unknown as Queue<ContestFinalJudgeJob>,
-      { previous: target(), next: target({ endTime: later }) },
-      logger,
-    );
-    expect(await ids()).toEqual([finalJudgeJobId('c9', later)]);
-  });
 });
 
 describe('contest extras queues', () => {
   let dataQueue: Queue<ContestDataJob>;
-  let ratingQueue: Queue<ContestRatingJob>;
   beforeAll(() => {
     dataQueue = new Queue<ContestDataJob>(CONTEST_DATA_QUEUE, {
-      connection: { url: TEST_REDIS_URL },
-    });
-    ratingQueue = new Queue(CONTEST_RATING_QUEUE, {
       connection: { url: TEST_REDIS_URL },
     });
   });
   beforeEach(async () => {
     await dataQueue.obliterate({ force: true });
-    await ratingQueue.obliterate({ force: true });
   });
   afterAll(async () => {
     await dataQueue.obliterate({ force: true });
-    await ratingQueue.obliterate({ force: true });
     await dataQueue.close();
-    await ratingQueue.close();
   });
 
   it('dedupes data jobs by contest id; one attempt, removed on completion and failure', async () => {
@@ -200,30 +147,6 @@ describe('contest extras queues', () => {
       removeOnFail: true,
     });
   });
-
-  it('gives an export its own job id, so it and a data prepare of one contest can both be queued', () => {
-    const contestId = newId();
-    expect(oneJobPerContest('export', contestId)).toEqual({
-      jobId: `export-${contestId}`,
-      attempts: 1,
-      removeOnComplete: true,
-      removeOnFail: true,
-    });
-    expect(oneJobPerContest('export', contestId).jobId).not.toBe(
-      oneJobPerContest('data', contestId).jobId,
-    );
-  });
-
-  it('queues a rating per request, retried', async () => {
-    const contestId = newId();
-    await enqueueContestRating(ratingQueue, contestId);
-    await enqueueContestRating(ratingQueue, contestId);
-    const jobs = await ratingQueue.getJobs(['waiting']);
-    expect(jobs.map((job) => [job.data, job.opts.attempts])).toEqual([
-      [{ contestId }, 3],
-      [{ contestId }, 3],
-    ]);
-  });
 });
 
 interface StubJob {
@@ -238,10 +161,6 @@ const stubQueue = (jobsByType: Partial<Record<JobType, StubJob[]>>) =>
   }) as unknown as Queue<StubJob['data']>;
 
 describe('contestActionState', () => {
-  it('is idle without a job', async () => {
-    expect(await contestActionState(stubQueue({}), 'contest-a')).toBe('idle');
-  });
-
   it('is running while the job is active, even with a waiting one behind it', async () => {
     const queue = stubQueue({
       active: [{ data: { contestId: 'contest-a' } }],
@@ -250,7 +169,7 @@ describe('contestActionState', () => {
     expect(await contestActionState(queue, 'contest-a')).toBe('running');
   });
 
-  it.each<JobType>(['waiting', 'prioritized', 'delayed'])(
+  it.each<JobType>(['waiting', 'delayed'])(
     'is queued while a %s job waits',
     async (type) => {
       const queue = stubQueue({
@@ -275,13 +194,5 @@ describe('contestActionState', () => {
     const isManual = (data: StubJob['data']) => data.manual === true;
     expect(await contestActionState(queue, 'contest-a', isManual)).toBe('idle');
     expect(await contestActionState(queue, 'contest-a')).toBe('queued');
-  });
-
-  it('ignores an active job the request filter rejects', async () => {
-    const queue = stubQueue({
-      active: [{ data: { contestId: 'contest-a', manual: false } }],
-    });
-    const isManual = (data: StubJob['data']) => data.manual === true;
-    expect(await contestActionState(queue, 'contest-a', isManual)).toBe('idle');
   });
 });

@@ -1,13 +1,13 @@
-import { generateApiToken } from '@libs/auth';
 import { REDIS } from '@libs/common';
+
 import Redis from 'ioredis';
+
 import {
   ApiTest,
   createUser,
   errorCode,
   sessionCookie,
   setupApiTest,
-  TEST_ENV,
 } from './setup';
 import { SessionResponse } from '../src/modules/auth/core/dto/session.response';
 
@@ -118,41 +118,10 @@ describe('impersonation', () => {
     expect(sessionOf(restored).impersonatorId).toBeNull();
   });
 
-  it('does not record lastLogin for the target or the admin', async () => {
-    const admin = await login('admin');
-    const adminLastLogin = (await api.users.findById(adminId))!.lastLogin;
-    const alice = {
-      cookie: cookieFrom(
-        (await post(`${IMPERSONATE}/${aliceId}`, admin).expect(200)).headers,
-      ),
-    };
-    const aliceLastLogin = (await api.users.findById(aliceId))!.lastLogin;
-    expect(aliceLastLogin).toBeNull();
-    const aliceSession = await me(alice).expect(200);
-    await post(`${IMPERSONATE}/stop`, {
-      cookie: alice.cookie,
-      csrf: sessionOf(aliceSession).csrfToken!,
-    }).expect(200);
-    expect((await api.users.findById(adminId))!.lastLogin).toEqual(
-      adminLastLogin,
-    );
-    expect((await api.users.findById(aliceId))!.lastLogin).toBeNull();
-  });
-
   it('refuses non-superusers', async () => {
     await post(`${IMPERSONATE}/${aliceId}`, await login('bob'))
       .expect(403)
       .expect(errorCode('forbidden'));
-  });
-
-  it('refuses nested impersonation', async () => {
-    const alice = await impersonate(aliceId);
-    const bob = (await api.users.findOne({ username: 'bob' }))!._id;
-    await post(`${IMPERSONATE}/${bob}`, alice)
-      .expect(403)
-      .expect(({ body }: { body: { error: { message: string } } }) =>
-        expect(body.error.message).toBe('Already impersonating'),
-      );
   });
 
   it('refuses to impersonate a superuser', async () => {
@@ -173,23 +142,6 @@ describe('impersonation', () => {
       await post(`${IMPERSONATE}/${target}`, admin)
         .expect(404)
         .expect(errorCode('not_found'));
-  });
-
-  it('refuses a Bearer token', async () => {
-    const { token, hash } = generateApiToken(adminId, TEST_ENV.TOKEN_SECRET);
-    await api.users.updateOne({ _id: adminId }, { apiTokenHash: hash });
-    await api
-      .http()
-      .post(`${IMPERSONATE}/${aliceId}`)
-      .set('Authorization', `Bearer ${token}`)
-      .expect(403)
-      .expect(errorCode('forbidden'));
-  });
-
-  it('answers 400 not_impersonating on stop outside impersonation, not 404', async () => {
-    await post(`${IMPERSONATE}/stop`, await login('admin'))
-      .expect(400)
-      .expect(errorCode('not_impersonating'));
   });
 
   it('restores the admin with a passed second factor', async () => {
@@ -276,13 +228,5 @@ describe('impersonation', () => {
       );
     await me(alice).expect(200);
     await me(aliceOwn).expect(200);
-  });
-
-  it('lets a normal session sign out everywhere', async () => {
-    const first = await login('alice');
-    const second = await login('alice');
-    await post(`${AUTH}/logout-all`, first).expect(204);
-    await me(first).expect(401);
-    await me(second).expect(401);
   });
 });

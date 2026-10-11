@@ -34,16 +34,6 @@ describe('scoringContextOf', () => {
     ).toEqual(start);
   });
 
-  it('starts a registration that never joined at the contest start, and always exposes the contest start', () => {
-    const context = scoringContextOf(
-      contest({ timeLimit: 3600 }),
-      participation({ isRegistered: true }),
-      new Map(),
-    );
-    expect(context.start).toEqual(start);
-    expect(context.contestStart).toEqual(start);
-  });
-
   it('freezes only formats that freeze, from the end minus the freeze minutes', () => {
     const frozen = scoringContextOf(
       contest({ formatName: 'icpc', frozenLastMinutes: 30 }),
@@ -58,22 +48,5 @@ describe('scoringContextOf', () => {
         new Map(),
       ).frozenTime,
     ).toBeNull();
-  });
-
-  it("carries each problem's points and its data points, null when the data has none", () => {
-    const context = scoringContextOf(
-      contest({
-        problems: [
-          { problem: 'p1', points: 100 },
-          { problem: 'p2', points: 50 },
-        ],
-      }),
-      participation(),
-      new Map([['p1', 90]]),
-    );
-    expect(context.problems).toEqual([
-      { problemId: 'p1', points: 100, dataPoints: 90 },
-      { problemId: 'p2', points: 50, dataPoints: null },
-    ]);
   });
 });

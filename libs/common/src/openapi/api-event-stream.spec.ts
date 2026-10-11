@@ -3,7 +3,7 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ApiProperty, DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Test } from '@nestjs/testing';
-import { ApiEventStream, ApiNdjsonStream } from './api-event-stream';
+import { ApiEventStream } from './api-event-stream';
 
 class Payload {
   @ApiProperty() id!: string;
@@ -21,12 +21,6 @@ class StreamController {
   @Get()
   @ApiEventStream(StateFrame, ProgressFrame)
   stream() {
-    return null;
-  }
-
-  @Get('lines')
-  @ApiNdjsonStream(Payload)
-  lines() {
     return null;
   }
 }
@@ -64,21 +58,5 @@ describe('ApiEventStream', () => {
     expect(Object.keys(document.components!.schemas!)).toEqual(
       expect.arrayContaining(['StateFrame', 'ProgressFrame', 'Payload']),
     );
-  });
-});
-
-describe('ApiNdjsonStream', () => {
-  it('documents the stream as NDJSON lines of one schema, not as server-sent events', async () => {
-    const document = await documentOf();
-    const content = (
-      document.paths['/streams/lines'].get!.responses['200'] as unknown as {
-        content: Record<string, { schema: Record<string, unknown> }>;
-      }
-    ).content;
-    expect(content).toEqual({
-      'application/x-ndjson': {
-        schema: { $ref: '#/components/schemas/Payload' },
-      },
-    });
   });
 });

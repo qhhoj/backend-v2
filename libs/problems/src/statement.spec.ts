@@ -19,31 +19,32 @@ const english = {
 };
 
 describe('statementFor', () => {
-  it('serves the base statement as Vietnamese, in the requested language', () => {
-    expect(statementFor(problem, 'vi')).toMatchObject({
-      language: 'vi',
-      name: 'Tổng',
-      translated: true,
+  const withEnglish = { ...problem, translations: [english] };
+  it.each([
+    ['base as Vietnamese', problem, 'vi', ['vi', 'Tổng', true]],
+    [
+      'Vietnamese fallback for untranslated English',
+      problem,
+      'en',
+      ['vi', 'Tổng', false],
+    ],
+    [
+      'English translation when it exists',
+      withEnglish,
+      'en',
+      ['en', 'Sum', true],
+    ],
+    [
+      'base for Vietnamese when only English is translated',
+      withEnglish,
+      'vi',
+      ['vi', 'Tổng', true],
+    ],
+  ] as const)('%s', (_label, source, asked, [language, name, translated]) => {
+    expect(statementFor(source, asked)).toMatchObject({
+      language,
+      name,
+      translated,
     });
-  });
-
-  it('falls back to the Vietnamese base for English without a translation', () => {
-    expect(statementFor(problem, 'en')).toMatchObject({
-      language: 'vi',
-      name: 'Tổng',
-      translated: false,
-    });
-  });
-
-  it('serves the English translation when it exists', () => {
-    expect(
-      statementFor({ ...problem, translations: [english] }, 'en'),
-    ).toMatchObject({ language: 'en', name: 'Sum', translated: true });
-  });
-
-  it('keeps serving the base for Vietnamese when only English is translated', () => {
-    expect(
-      statementFor({ ...problem, translations: [english] }, 'vi'),
-    ).toMatchObject({ language: 'vi', name: 'Tổng', translated: true });
   });
 });

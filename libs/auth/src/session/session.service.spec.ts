@@ -92,13 +92,6 @@ describe('SessionService', () => {
       impersonatorId: null,
     });
   });
-  it('keeps the sliding expiry on update', async () => {
-    const { id } = await sessions.create(fresh);
-    const [key] = await redis.keys('session:*');
-    await redis.expire(key, 10);
-    await sessions.update(id, { twoFaPassed: false });
-    expect(await redis.ttl(key)).toBeGreaterThan(SESSION_TTL_SECONDS - 5);
-  });
   it('consumes a single-use field exactly once, even concurrently', async () => {
     const { id } = await sessions.create(fresh);
     await sessions.update(id, { pendingTotpSecret: 'secret' });

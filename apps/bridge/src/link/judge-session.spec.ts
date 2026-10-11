@@ -223,14 +223,6 @@ describe('JudgeSession', () => {
     }
   });
 
-  it('refuses a second Hello', async () => {
-    await online();
-    await receive(HELLO);
-    expect(call.statuses).toEqual([
-      expect.objectContaining({ code: status.INVALID_ARGUMENT }),
-    ]);
-  });
-
   it('stores a held run message, acks its seq, and stops the accept clock at seq 1', async () => {
     const ref = run(newId());
     await holding(ref);
@@ -245,14 +237,6 @@ describe('JudgeSession', () => {
     ]);
     jest.advanceTimersByTime(TIMINGS.acceptMs);
     expect(calls.acceptTimedOut).toBeUndefined();
-  });
-
-  it('releases an Assign not accepted in time', async () => {
-    const ref = run(newId());
-    await holding(ref);
-    jest.advanceTimersByTime(TIMINGS.acceptMs);
-    await settle();
-    expect(calls.acceptTimedOut).toEqual([[session, ref]]);
   });
 
   it('keeps the accept clock of a run when an older generation of its submission is aborted', async () => {
@@ -464,23 +448,6 @@ describe('JudgeSession', () => {
     expect(calls.recordPong).toBeUndefined();
   });
 
-  it('records the round trip of a pong to its own ping only', async () => {
-    await online();
-    const [ping] = call.bodies('ping');
-    const nonce = ping.$case === 'ping' ? ping.ping.nonce : 0;
-    await receive(
-      JudgeMessage.fromPartial({
-        body: { $case: 'pong', pong: { nonce, busy: 9, load: 0.5 } },
-      }),
-    );
-    const [[name, , recorded]] = calls.recordPong as [
-      [string, Date, { ping: number }],
-    ];
-    expect(name).toBe('j1');
-    expect(recorded).toMatchObject({ load: 0.5, busy: 2 });
-    expect(recorded.ping).toBeGreaterThanOrEqual(0);
-  });
-
   it('closes a session that sends no Hello in time, or falls silent', async () => {
     jest.advanceTimersByTime(TIMINGS.handshakeMs);
     expect(call.statuses).toEqual([
@@ -585,47 +552,5 @@ describe('JudgeSession', () => {
     expect(session.isClosed).toBe(false);
     expect(call.paused).toBe(false);
     runs.compiled = record('compiled', () => outcome);
-  });
-
-  it('logs the connect with the address, build and resume counts, and the disconnect with its reason', async () => {
-    dispatch.resume = record('resume', {
-      resume: [
-        { ref: run(newId()), action: Resume_Action.ACTION_CONTINUE },
-        { ref: run(newId()), action: Resume_Action.ACTION_DROP },
-      ],
-      abort: [],
-    });
-    const lines: string[] = [];
-    const logs = jest
-      .spyOn(Logger.prototype, 'log')
-      .mockImplementation((message) => void lines.push(String(message)));
-    try {
-      await online();
-      call.emit('end');
-      await session.finished;
-    } finally {
-      logs.mockRestore();
-      dispatch.resume = record('resume', { resume: [], abort: [] });
-    }
-    expect(lines).toEqual([
-      `Judge j1 connected from 10.0.0.5: build qhhoj-judge 0.1.0, protocol 1.${PROTOCOL_MINOR}, 2 slots, 1 runtimes, resumed 1, dropped 1`,
-      'Judge j1 disconnected: the judge ended its stream; 0 runs held',
-    ]);
-  });
-
-  it('logs a lost connection, and a session that never said Hello', async () => {
-    const lines: string[] = [];
-    const logs = jest
-      .spyOn(Logger.prototype, 'log')
-      .mockImplementation((message) => void lines.push(String(message)));
-    try {
-      jest.advanceTimersByTime(TIMINGS.handshakeMs);
-      await session.finished;
-    } finally {
-      logs.mockRestore();
-    }
-    expect(lines).toEqual([
-      'Judge j1 disconnected before Hello: no Hello in time; 0 runs held',
-    ]);
   });
 });

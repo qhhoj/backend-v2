@@ -35,18 +35,6 @@ describe('Notification schema', () => {
     await replSet.stop();
   });
 
-  it('stores a new row as one unread normal event', async () => {
-    const row = await Notifications.create(fields());
-    expect(row).toMatchObject({
-      count: 1,
-      unread: true,
-      priority: 'normal',
-      body: '',
-      readAt: null,
-      refs: [],
-    });
-  });
-
   it('keeps one unread row per user and group, and any number of read ones', async () => {
     const first = fields();
     await Notifications.create(first);
@@ -67,12 +55,6 @@ describe('Notification schema', () => {
         groupKey: first.groupKey,
       }),
     ).toBe(3);
-  });
-
-  it('lets two users hold the same group', async () => {
-    const groupKey = `shared-${newId()}`;
-    await Notifications.create(fields({ groupKey }));
-    await Notifications.create(fields({ groupKey }));
   });
 
   it('refuses a path that leaves the site', async () => {

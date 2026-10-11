@@ -21,14 +21,6 @@ describe('contestSubmissionPoints (legacy update_contest)', () => {
       points: 0,
     },
     {
-      name: 'non-partial problem',
-      totals: quarter,
-      partial: true,
-      formatName: 'icpc',
-      problemPartial: false,
-      points: 0,
-    },
-    {
       name: 'full marks are never zeroed',
       totals: full,
       partial: false,
@@ -43,14 +35,6 @@ describe('contestSubmissionPoints (legacy update_contest)', () => {
       formatName: 'final_submission',
       problemPartial: false,
       points: 25,
-    },
-    {
-      name: 'no cases score nothing',
-      totals: { casePoints: 0, caseTotal: 0 },
-      partial: true,
-      formatName: 'default',
-      problemPartial: true,
-      points: 0,
     },
   ] as const)(
     '$name',

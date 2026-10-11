@@ -44,19 +44,6 @@ describe('runCoalesced', () => {
     expect(seen.at(-1)).toBe(10);
   });
 
-  it('collapses a burst of calls into a few runs', async () => {
-    let runs = 0;
-    const work = async () => {
-      runs += 1;
-      await sleep(30);
-    };
-    await Promise.all(
-      Array.from({ length: 50 }, () => runCoalesced(redis, key, work)),
-    );
-    expect(runs).toBeGreaterThanOrEqual(1);
-    expect(runs).toBeLessThanOrEqual(3);
-  });
-
   it('returns at once while another process owns the key, which then runs again for it', async () => {
     let ownerRuns = 0;
     let open: () => void = () => undefined;

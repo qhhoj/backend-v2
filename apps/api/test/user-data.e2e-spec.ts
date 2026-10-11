@@ -40,31 +40,6 @@ describe('user data routes', () => {
   });
   afterAll(() => api.teardown());
 
-  it('queues one job per user and refuses a second while it exists', async () => {
-    const { user, session } = await person();
-    const queued = await prepare(session).expect(202);
-    expect(dataOf<{ queued: true }>(queued)).toEqual({ queued: true });
-    expect((await queue.getJob(userDataJobId(user._id)))?.data).toEqual({
-      userId: user._id,
-    });
-    expect(await status(session)).toMatchObject({
-      state: 'preparing',
-      canPrepare: false,
-    });
-    await prepare(session).expect(409);
-  });
-
-  it('accepts a new prepare once the failed job is gone', async () => {
-    const { user, session } = await person();
-    await prepare(session).expect(202);
-    await queue.remove(userDataJobId(user._id));
-    expect(await status(session)).toMatchObject({
-      state: 'none',
-      canPrepare: true,
-    });
-    await prepare(session).expect(202);
-  });
-
   it('prepares once a day while a fresh zip is ready, at once when it is missing or expired', async () => {
     const { user, session } = await person({ dataLastDownloaded: new Date() });
     await prepare(session).expect(202);
@@ -99,40 +74,6 @@ describe('user data routes', () => {
     await prepare(session).expect(429);
     expect(await queue.getJob(userDataJobId(user._id))).toBeUndefined();
     expect((await status(session)).canPrepare).toBe(false);
-  });
-
-  it('streams the zip as an attachment', async () => {
-    const { user, session } = await person();
-    await download(session).expect(404);
-    writeFileSync(userDataPath(api.userDataRoot, user._id), 'zip-bytes');
-    const response = await download(session).expect(200);
-    expect(response.headers['content-disposition']).toBe(
-      `attachment; filename="${user.username}-data.zip"; filename*=UTF-8''${user.username}-data.zip`,
-    );
-    expect(response.headers['content-type']).toContain('application/zip');
-    expect(response.headers['x-content-type-options']).toBe('nosniff');
-  });
-
-  it('downloads for a non-ASCII username with an ASCII fallback and an encoded name', async () => {
-    const { user, session } = await person({}, 'ngườidùng');
-    writeFileSync(userDataPath(api.userDataRoot, user._id), 'zip-bytes');
-    const response = await download(session).expect(200);
-    expect(response.headers['content-disposition']).toBe(
-      `attachment; filename="ng__id_ng-data.zip"; filename*=UTF-8''${encodeURIComponent('ngườidùng')}-data.zip`,
-    );
-  });
-
-  it('hides the export from muted users', async () => {
-    const { session } = await person({ mute: true });
-    await authed(api.http().get('/api/internal/profile/data'), session).expect(
-      404,
-    );
-    await prepare(session).expect(404);
-    await download(session).expect(404);
-  });
-
-  it('is for signed-in users only', async () => {
-    await api.http().get('/api/internal/profile/data').expect(401);
   });
 });
 

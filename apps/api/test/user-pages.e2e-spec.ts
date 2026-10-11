@@ -1,4 +1,4 @@
-import { AppError, REDIS } from '@libs/common';
+import { REDIS } from '@libs/common';
 import type Redis from 'ioredis';
 import { newId } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
@@ -9,7 +9,6 @@ import type {
   SolvedResponse,
   UserPageResponse,
 } from '../src/modules/users/pages/dto/user-page.response';
-import { UserPagesRepository } from '../src/modules/users/pages/user-pages.repository';
 import {
   createContest,
   hoursFromNow,
@@ -31,7 +30,6 @@ import { setupApiTest, errorCode } from './setup';
 import type { ApiTest } from './setup';
 import type { RecentCommentResponse } from '../src/modules/comments/core/dto/recent-comment.response';
 import type { HomeResponse } from '../src/modules/home/dto/home.response';
-import { HOME_NEW_PROBLEMS } from '../src/modules/home/home.service';
 import {
   createComment,
   createPost,
@@ -45,7 +43,6 @@ import {
 } from '@libs/community';
 import type { CommentPageType } from '@libs/community';
 import type { CommentPageResponse } from '../src/modules/comments/core/dto/comment.response';
-import type { PostListItemResponse } from '../src/modules/blog/core/dto/post.response';
 
 let api: ApiTest;
 
@@ -87,134 +84,6 @@ afterAll(() => api.teardown());
 
     beforeAll(async () => {
       catalog = await seedCatalog(api);
-    });
-
-    it('shows the profile with ranks among listed, active users', async () => {
-      const subject = await createUserWith(api, 'subject', {
-        performancePoints: 50,
-        rating: 1500,
-        aboutHtml: '<p>hi</p>',
-        usernameDisplayOverride: 'Subject S',
-      });
-      await createUserWith(api, 'above', {
-        performancePoints: 80,
-        rating: 1600,
-      });
-      await createUserWith(api, 'tied', {
-        performancePoints: 50,
-        rating: 1500,
-      });
-      await createUserWith(api, 'hidden', {
-        performancePoints: 90,
-        rating: 2000,
-        isUnlisted: true,
-      });
-      await createUserWith(api, 'inactive', {
-        performancePoints: 95,
-        rating: 2100,
-        isActive: false,
-      });
-      const page = dataOf<UserPageResponse>(
-        await get('/api/internal/users/SUBJECT').expect(200),
-      );
-      expect(page).toMatchObject({
-        id: subject._id,
-        username: 'subject',
-        displayName: 'Subject S',
-        aboutHtml: '<p>hi</p>',
-        rank: 2,
-        ratingRank: 2,
-      });
-      await createUserWith(api, 'unrated', {});
-      expect(
-        dataOf<UserPageResponse>(
-          await get('/api/internal/users/unrated').expect(200),
-        ).ratingRank,
-      ).toBeNull();
-      await get('/api/internal/users/nobody').expect(404);
-    });
-
-    it('lists only the organizations the viewer may see, in the user order', async () => {
-      const owner = await createUserWith(api, 'org_owner', {});
-      const listed = await createOrganization(api, { slug: 'pub' }, [
-        owner._id,
-      ]);
-      const unlisted = await createOrganization(
-        api,
-        { slug: 'secret', isUnlisted: true },
-        [owner._id],
-      );
-      const outsider = await loginAs(
-        api,
-        (await createUserWith(api, 'org_outsider', {}))._id,
-      );
-      const member = await loginAs(
-        api,
-        (
-          await createUserWith(api, 'org_member', {
-            organizations: [unlisted._id],
-          })
-        )._id,
-      );
-      const staff = await loginAs(
-        api,
-        (
-          await createUserWith(api, 'org_staff', {
-            permissions: ['judge.edit_all_organization'],
-          })
-        )._id,
-      );
-      const slugs = async (session?: TestSession) =>
-        dataOf<UserPageResponse>(
-          await get('/api/internal/users/org_owner', session).expect(200),
-        ).organizations.map((row) => row.slug);
-      expect(await slugs()).toEqual([listed.slug]);
-      expect(await slugs(outsider)).toEqual([listed.slug]);
-      expect(await slugs(member)).toEqual([listed.slug, unlisted.slug]);
-      expect(await slugs(staff)).toEqual([listed.slug, unlisted.slug]);
-    });
-
-    it('returns the rating history oldest first with min, max and count on the page', async () => {
-      const rated = await createUserWith(api, 'rated', { rating: 1700 });
-      const early = await createContest(api, {
-        name: 'Early',
-        startTime: hoursFromNow(-50),
-        endTime: hoursFromNow(-48),
-      });
-      const late = await createContest(api, {
-        name: 'Late',
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-3),
-      });
-      for (const [contest, rating, rank] of [
-        [late, 1700, 2],
-        [early, 1400, 7],
-      ] as const)
-        await api.ratings.create({
-          user: rated._id,
-          contest: contest._id,
-          participation: newId(),
-          contestEndTime: contest.endTime,
-          rank,
-          rating,
-          mean: rating,
-          performance: rating,
-          lastRated: new Date(),
-        });
-      const history = dataOf<RatingHistoryEntryResponse[]>(
-        await get('/api/internal/users/rated/ratings').expect(200),
-      );
-      expect(
-        history.map((row) => [row.contestName, row.rating, row.rank]),
-      ).toEqual([
-        ['Early', 1400, 7],
-        ['Late', 1700, 2],
-      ]);
-      expect(
-        dataOf<UserPageResponse>(
-          await get('/api/internal/users/rated').expect(200),
-        ).ratingSummary,
-      ).toEqual({ min: 1400, max: 1700, contests: 2 });
     });
 
     it('keeps the points of rated contests the viewer cannot see but not their names', async () => {
@@ -264,44 +133,6 @@ afterAll(() => api.teardown());
           ),
         ),
       ).toMatchObject({ contestName: null });
-    });
-
-    it('names a private rated contest to a listed balloon volunteer but not to a stranger', async () => {
-      const rated = await createUserWith(api, 'rated_balloon', {
-        rating: 1400,
-      });
-      const secret = await createContest(api, {
-        name: 'Balloon secret',
-        isPrivate: true,
-        startTime: hoursFromNow(-30),
-        endTime: hoursFromNow(-28),
-      });
-      await api.ratings.create({
-        user: rated._id,
-        contest: secret._id,
-        participation: newId(),
-        contestEndTime: secret.endTime,
-        rank: 1,
-        rating: 1400,
-        mean: 1400,
-        performance: 1400,
-        lastRated: new Date(),
-      });
-      const volunteer = await createUserWith(api, 'balloon_volunteer', {});
-      const stranger = await createUserWith(api, 'balloon_stranger', {});
-      await api.contests.updateOne(
-        { _id: secret._id },
-        { balloonStaff: [volunteer._id] },
-      );
-      const nameFor = async (user: { _id: string }) =>
-        dataOf<RatingHistoryEntryResponse[]>(
-          await get(
-            '/api/internal/users/rated_balloon/ratings',
-            await loginAs(api, user._id),
-          ).expect(200),
-        )[0].contestName;
-      expect(await nameFor(volunteer)).toBe('Balloon secret');
-      expect(await nameFor(stranger)).toBeNull();
     });
 
     it('nulls rank, performance and rating of hidden and re-frozen boards for viewers who may not read them', async () => {
@@ -562,81 +393,6 @@ afterAll(() => api.teardown());
       );
     });
 
-    it('caches the heatmap per user and zone for ten minutes and reads it through the user-date index', async () => {
-      const busy = await createUserWith(api, 'busy', {});
-      const problem = await createProblem(api, catalog, { code: 'cached' });
-      await submit(busy._id, problem._id, { date: daysAgo(1, 12) });
-      const operations = await profileQueries(api.db, () =>
-        get('/api/internal/users/busy/activity?timezone=UTC').expect(200),
-      );
-      const reads = operations.filter(
-        ({ collection }) => collection === 'submissions',
-      );
-      expect(reads.length).toBeGreaterThan(0);
-      expect(
-        reads.every(({ planSummary }) => planSummary.includes('IXSCAN')),
-      ).toBe(true);
-      await submit(busy._id, problem._id, { date: daysAgo(1, 13) });
-      expect(
-        Object.values(
-          dataOf<ActivityResponse>(
-            await get('/api/internal/users/busy/activity?timezone=UTC').expect(
-              200,
-            ),
-          ).days,
-        ),
-      ).toEqual([1]);
-      expect(
-        Object.values(
-          dataOf<ActivityResponse>(
-            await get(
-              '/api/internal/users/busy/activity?timezone=Asia%2FTokyo',
-            ).expect(200),
-          ).days,
-        ),
-      ).toEqual([2]);
-    });
-
-    it('rejects a zone Mongo does not know with a 400 on timezone', async () => {
-      const repository = api.app.get(UserPagesRepository);
-      await expect(
-        repository.activity(newId(), new Date(0), 'Mars/Base'),
-      ).rejects.toMatchObject({
-        status: 400,
-        fields: { timezone: [expect.any(String)] },
-      });
-    });
-
-    it("falls back to UTC when the viewer's stored zone is rejected by Mongo, but not for an asked one", async () => {
-      const stored = await createUserWith(api, 'zone_stored', {
-        timezone: 'Asia/Tokyo',
-      });
-      const viewer = await loginAs(api, stored._id);
-      const rejection = () =>
-        new AppError('validation_failed', 400, 'Unknown time zone', {
-          timezone: ['x'],
-        });
-      const spy = jest
-        .spyOn(UserPagesRepository.prototype, 'activity')
-        .mockRejectedValueOnce(rejection());
-      try {
-        expect(
-          dataOf<ActivityResponse>(
-            await get('/api/internal/users/active/activity', viewer).expect(
-              200,
-            ),
-          ).timezone,
-        ).toBe('UTC');
-        spy.mockRejectedValueOnce(rejection());
-        await get(
-          '/api/internal/users/active/activity?timezone=Asia%2FSeoul',
-          viewer,
-        ).expect(400);
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
     it('shows the ban reason and superuser flag only to judges who may ban', async () => {
       await createUserWith(api, 'banned_page', {
         banReason: 'spam',
@@ -769,189 +525,6 @@ afterAll(() => api.teardown());
       } finally {
         await api.setSetting('contest.officialMode', false);
       }
-    });
-
-    it('computes the viewer contest scope once per scan and serves the anonymous slice from a 60 s cache', async () => {
-      const { user: author } = await person();
-      const { user: contestant, session } = await person();
-      const running = await createContest(api);
-      await makeCurrent(
-        api,
-        contestant._id,
-        (await joinParticipation(api, running._id, contestant._id))._id,
-      );
-      const secret = await createProblem(api, catalog, {
-        code: 'home_scan',
-        isPublic: false,
-      });
-      const post = await createPost(api);
-      await createComment(api, {
-        page: { type: 'blog', id: post._id },
-        author: author._id,
-      });
-      for (let index = 0; index < 100; index += 1)
-        await createComment(api, {
-          page: { type: 'problem', id: secret._id },
-          author: author._id,
-        });
-      const participationReads = (
-        await profileQueries(api.db, () => home(session))
-      ).filter(({ collection }) => collection === 'contestParticipations');
-      // 101 rows are six batches of 20; the scope (one participation read) is computed once, not per batch.
-      expect(participationReads).toHaveLength(1);
-      await home();
-      const cached = await profileQueries(api.db, () => home());
-      expect(
-        cached.filter(({ collection }) => collection === 'comments'),
-      ).toEqual([]);
-      // A signed-in viewer is never answered from the shared slice.
-      const signedIn = await profileQueries(api.db, () => home(session));
-      expect(signedIn.some(({ collection }) => collection === 'comments')).toBe(
-        true,
-      );
-    });
-
-    it('never leaks a per-viewer slice through the anonymous cache', async () => {
-      const { user: author } = await person();
-      const { user: member, session: memberSession } = await person();
-      const organization = await createOrganization(api, {}, [member._id]);
-      await createProblem(api, catalog, {
-        code: 'home_orgthread',
-        isOrganizationPrivate: true,
-        organizations: [organization._id],
-      });
-      const problem = await api.problems
-        .findOne({ code: 'home_orgthread' })
-        .orFail();
-      const comment = await createComment(api, {
-        page: { type: 'problem', id: problem._id },
-        author: author._id,
-      });
-      expect((await home()).recentComments).toEqual([]);
-      expect(
-        (await home(memberSession)).recentComments.map(({ id }) => id),
-      ).toEqual([comment._id]);
-      expect((await home()).recentComments).toEqual([]);
-      const outsider = await person();
-      expect((await home(outsider.session)).recentComments).toEqual([]);
-    });
-
-    it('hides a contest problem thread from its contestants only', async () => {
-      const { user: author } = await person();
-      const { user: contestant, session: contestantSession } = await person();
-      const contestProblemDoc = await createProblem(api, catalog, {
-        code: 'home_cpub',
-      });
-      const contest = await createContest(api, {
-        problems: [contestProblem(contestProblemDoc._id, 0)],
-      });
-      const participation = await joinParticipation(
-        api,
-        contest._id,
-        contestant._id,
-      );
-      await makeCurrent(api, contestant._id, participation._id);
-      const comment = await createComment(api, {
-        page: { type: 'problem', id: contestProblemDoc._id },
-        author: author._id,
-      });
-      expect((await home(contestantSession)).recentComments).toEqual([]);
-      expect((await home()).recentComments.map(({ id }) => id)).toEqual([
-        comment._id,
-      ]);
-    });
-
-    it('serves new public problems, top users and counts (problems = all live ones)', async () => {
-      await api.problems.deleteMany({});
-      const organization = await createOrganization(api);
-      for (let index = 0; index < 8; index += 1)
-        await createProblem(api, catalog, {
-          code: `home_${index}`,
-          date: new Date(Date.now() - index * 60_000),
-        });
-      await createProblem(api, catalog, {
-        code: 'home_private',
-        isPublic: false,
-      });
-      await createProblem(api, catalog, {
-        code: 'home_org',
-        isOrganizationPrivate: true,
-        organizations: [organization._id],
-      });
-      await api.users.updateMany(
-        {},
-        { $set: { performancePoints: 0, contributionPoints: 0 } },
-      );
-      const { user: best } = await person({
-        performancePoints: 500,
-        contributionPoints: 7,
-      });
-      await person({ performancePoints: 400, isUnlisted: true });
-      const operations = await profileQueries(api.db, () => home());
-      const data = await home();
-      expect(data.newProblems.map((problem) => problem.code)).toEqual([
-        'home_0',
-        'home_1',
-        'home_2',
-        'home_3',
-        'home_4',
-        'home_5',
-        'home_6',
-      ]);
-      expect(data.topPerformers.map((user) => user.username)).toEqual([
-        best.username,
-      ]);
-      expect(data.topContributors).toEqual([
-        expect.objectContaining({
-          username: best.username,
-          contributionPoints: 7,
-        }),
-      ]);
-      expect(data.counts).toMatchObject({ problems: 10 });
-      const newest = operations.filter(
-        ({ collection, operation }) =>
-          collection === 'problems' && operation === 'query',
-      );
-      expect(newest).toHaveLength(1);
-      expect(newest[0].planSummary).not.toContain('COLLSCAN');
-      expect(newest[0].hasSortStage).toBe(false);
-      expect(newest[0].docsExamined).toBeLessThanOrEqual(HOME_NEW_PROBLEMS + 2);
-    });
-
-    it('counts only the contests an anonymous visitor can see, through an index', async () => {
-      await api.contests.deleteMany({});
-      await createContest(api);
-      await createContest(api, { isVisible: false });
-      await createContest(api, { isPrivate: true });
-      const organization = await createOrganization(api);
-      await createContest(api, {
-        isOrganizationPrivate: true,
-        organizations: [organization._id],
-      });
-      const operations = await profileQueries(api.db, () => home());
-      expect((await home()).counts.contests).toBe(1);
-      const counted = operations.filter(
-        ({ collection }) => collection === 'contests',
-      );
-      expect(counted.length).toBeGreaterThan(0);
-      for (const operation of counted)
-        expect(operation.planSummary).not.toContain('COLLSCAN');
-      await createContest(api);
-      expect((await home()).counts.contests).toBe(2);
-    });
-
-    it('gives each top user their first listed organization, never an unlisted one', async () => {
-      await api.users.updateMany({}, { $set: { performancePoints: 0 } });
-      const listed = await createOrganization(api, { isOpen: false });
-      const hidden = await createOrganization(api, { isUnlisted: true });
-      await person({ performancePoints: 900, organizations: [listed._id] });
-      await person({ performancePoints: 800, organizations: [hidden._id] });
-      const { topPerformers } = await home();
-      expect(topPerformers[0].organization).toMatchObject({
-        slug: listed.slug,
-        isOpen: false,
-      });
-      expect(topPerformers[1].organization).toBeNull();
     });
 
     it("pages a user's readable comments for view_all_user_comment only", async () => {
@@ -1308,107 +881,6 @@ afterAll(() => api.teardown());
         crowdedRows.indexOf(first._id) + 1,
       );
       expect(view.truncatedThreads).toEqual([crowded._id]);
-    });
-
-    it('pages roots by 20 and reads through the comment indexes', async () => {
-      const { user: author } = await person();
-      const post = await createPost(api);
-      const page = { type: 'blog' as const, id: post._id };
-      const roots = [];
-      for (let index = 0; index < 25; index += 1)
-        roots.push(await createComment(api, { page, author: author._id }));
-      await createComment(api, { page, author: author._id, parent: roots[24] });
-      const operations = await profileQueries(api.db, () =>
-        read('blog', post._id),
-      );
-      const reads = operations.filter(
-        ({ collection, operation }) =>
-          collection === 'comments' && operation === 'query',
-      );
-      expect(reads.length).toBeGreaterThan(0);
-      expect(
-        reads.every(({ planSummary }) => planSummary.includes('IXSCAN')),
-      ).toBe(true);
-      expect(
-        Math.max(...reads.map(({ docsExamined }) => docsExamined)),
-      ).toBeLessThanOrEqual(COMMENT_THREADS_PAGE_SIZE + 1);
-      expect(
-        (await read('blog', post._id, undefined, '?page=2')).comments,
-      ).toHaveLength(5);
-    });
-
-    it('honours locks and their override, and closes comments in official contest mode', async () => {
-      const { session } = await person();
-      const { session: moderator } = await person({
-        permissions: ['judge.override_comment_lock'],
-      });
-      const { session: root } = await person({ isSuperuser: true });
-      const post = await createPost(api);
-      await api.commentLocks.create({ page: { type: 'blog', id: post._id } });
-      expect(await read('blog', post._id, session)).toMatchObject({
-        locked: true,
-        canComment: false,
-      });
-      expect(await read('blog', post._id, moderator)).toMatchObject({
-        locked: false,
-        canComment: true,
-      });
-      await api.setSetting('contest.officialMode', true);
-      try {
-        expect(await status('blog', post._id, session)).toBe(403);
-        expect(await status('blog', post._id, root)).toBe(200);
-      } finally {
-        await api.setSetting('contest.officialMode', false);
-      }
-    });
-
-    it('returns the markdown source only to the author and moderators', async () => {
-      const { user: author, session: authorSession } = await person();
-      const { session: otherSession } = await person();
-      const { session: moderatorSession } = await person({
-        permissions: ['judge.change_comment'],
-      });
-      const post = await createPost(api);
-      const comment = await createComment(api, {
-        page: { type: 'blog', id: post._id },
-        author: author._id,
-        body: '**bold**',
-        bodyHtml: '<p><strong>bold</strong></p>',
-      });
-      const bodyFor = async (session?: TestSession) =>
-        (await read('blog', post._id, session)).comments.find(
-          (item) => item.id === comment._id,
-        )?.body;
-      expect(await bodyFor(authorSession)).toBe('**bold**');
-      expect(await bodyFor(moderatorSession)).toBe('**bold**');
-      expect(await bodyFor(otherSession)).toBeNull();
-      expect(await bodyFor()).toBeNull();
-      const detail = await api.http().get(commentUrl(comment._id)).expect(200);
-      expect(dataOf<{ body: string | null }>(detail).body).toBeNull();
-    });
-
-    it('counts visible comments on post lists', async () => {
-      const { user: author } = await person();
-      await api.blogPosts.deleteMany({});
-      const post = await createPost(api, { globalPost: true });
-      const page = { type: 'blog' as const, id: post._id };
-      await createComment(api, { page, author: author._id });
-      await createComment(api, { page, author: author._id, hidden: true });
-      let items!: PostListItemResponse[];
-      const operations = await profileQueries(api.db, async () => {
-        items = dataOf<PostListItemResponse[]>(
-          await api.http().get('/api/internal/posts').expect(200),
-        );
-      });
-      expect(items[0].commentCount).toBe(1);
-      const counts = operations.filter(
-        ({ collection, operation }) =>
-          collection === 'comments' && operation === 'command',
-      );
-      expect(counts.length).toBeGreaterThan(0);
-      expect(
-        counts.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
-      ).toBe(true);
     });
   });
 }

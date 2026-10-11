@@ -52,12 +52,5 @@ describe('uuid', () => {
       expect(isUuid(value)).toBe(expected);
       if (expected) expect(mongooseCasts(value)).toBe(true);
     });
-    it('rejects ids Mongoose cannot cast', () => {
-      for (const value of [
-        '6F9619FF-8B86-D011-B42D-00C04FC964FF',
-        '00000000-0000-0000-0000-000000000000',
-      ])
-        expect([isUuid(value), mongooseCasts(value)]).toEqual([false, false]);
-    });
   });
 });

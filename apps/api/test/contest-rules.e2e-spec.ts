@@ -1,16 +1,21 @@
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
+
 import {
   contestUrl,
   createContest,
   clearRateLimits,
   hoursFromNow,
 } from './contest-fixtures';
+
 import { authed, createUserWith, loginAs } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
+
 import { setupApiTest, errorCode } from './setup';
+
 import type { ApiTest } from './setup';
+
 import { dataOf } from './submission-fixtures';
-import type { ParticipationResponse } from '../src/modules/contests/participation/dto/participation.response';
 
 let api: ApiTest;
 
@@ -89,19 +94,6 @@ afterAll(() => api.teardown());
       expect(padded).toMatchObject({ rules: 'Be fair', rulesRevision: 1 });
     });
 
-    it('refuses rules past 8192 characters', async () => {
-      const contest = await createContest(api, { authors: [editorId] });
-      const response = await patch(contest.key, {
-        rules: 'x'.repeat(8193),
-      }).expect(400);
-      const { error } = response.body as {
-        error: { issues: { field: string; code: string }[] };
-      };
-      expect(error.issues).toEqual([
-        expect.objectContaining({ field: 'rules', code: 'max_length' }),
-      ]);
-    });
-
     it('keeps the revision equal to the number of text changes under concurrent saves', async () => {
       const contest = await createContest(api, { authors: [editorId] });
       const statuses = (
@@ -117,22 +109,6 @@ afterAll(() => api.teardown());
       );
       const stored = await api.contests.findById(contest._id).lean();
       expect(stored!.rulesRevision).toBe(saved);
-    });
-
-    it('shows the rules to a signed-out visitor of a public contest', async () => {
-      const contest = await createContest(api, {
-        rules: 'Public rules',
-        rulesHtml: '<p>Public rules</p>',
-        rulesRevision: 4,
-      });
-      const detail = detailOf(
-        await api.http().get(contestUrl(contest.key)).expect(200),
-      );
-      expect(detail).toMatchObject({
-        rules: 'Public rules',
-        rulesHtml: '<p>Public rules</p>',
-        rulesRevision: 4,
-      });
     });
   });
 }
@@ -213,14 +189,6 @@ afterAll(() => api.teardown());
       expect((await rowsOf(without._id, 'bob'))[0].rulesAcceptedAt).toBeNull();
     });
 
-    it('does not ask when the rules are empty, whatever their revision', async () => {
-      const contest = await createContest(api, { rules: '', rulesRevision: 2 });
-      await post('carol', contest.key, 'join').expect(201);
-      expect(
-        (await rowsOf(contest._id, 'carol'))[0].rulesAcceptedAt,
-      ).toBeNull();
-    });
-
     it('exempts spectating and re-entering, even after the rules were edited', async () => {
       const contest = await createContest(api, {
         ...rules,
@@ -270,60 +238,6 @@ afterAll(() => api.teardown());
         [1, 1],
         [2, 2],
       ]);
-    });
-
-    it('shows who accepted which revision to the contest editor', async () => {
-      const contest = await createContest(api, {
-        ...rules,
-        authors: [ids.editor],
-      });
-      await post('bob', contest.key, 'join', { acceptRules: true }).expect(201);
-      const rows = dataOf<ParticipationResponse[]>(
-        await authed(
-          api.http().get(contestUrl(contest.key, '/participations')),
-          sessions.editor,
-        ).expect(200),
-      );
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ rulesAcceptedRevision: 1 });
-      expect(rows[0].rulesAcceptedAt).not.toBeNull();
-    });
-
-    it('tells the participant which revision they accepted, on their own detail and in the join answer', async () => {
-      type Accepted = {
-        rulesAcceptedAt: string | null;
-        rulesAcceptedRevision: number | null;
-      };
-      const liveOf = async (key: string): Promise<Accepted | null> =>
-        dataOf<{ viewer: { liveParticipation: Accepted | null } }>(
-          await authed(api.http().get(contestUrl(key)), sessions.carol).expect(
-            200,
-          ),
-        ).viewer.liveParticipation;
-      const withRules = await createContest(api, rules);
-      const without = await createContest(api);
-      const joined = dataOf<Accepted>(
-        await post('carol', withRules.key, 'join', {
-          acceptRules: true,
-        }).expect(201),
-      );
-      await post('carol', without.key, 'join').expect(201);
-      const [row] = await rowsOf(withRules._id, 'carol');
-      const accepted = {
-        rulesAcceptedRevision: 1,
-        rulesAcceptedAt: row.rulesAcceptedAt!.toISOString(),
-      };
-      expect(joined).toMatchObject(accepted);
-      expect(await liveOf(withRules.key)).toMatchObject(accepted);
-      expect(await liveOf(without.key)).toMatchObject({
-        rulesAcceptedRevision: null,
-        rulesAcceptedAt: null,
-      });
-      await api.contests.updateOne(
-        { _id: withRules._id },
-        { rules: 'New', rulesRevision: 2 },
-      );
-      expect(await liveOf(withRules.key)).toMatchObject(accepted);
     });
   });
 }

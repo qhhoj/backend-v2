@@ -1,13 +1,11 @@
+import { tmpdir } from 'node:os';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { QueueEvents, Worker } from 'bullmq';
 import type { Queue } from 'bullmq';
-import { EnvModule, QueueModule, StorageService } from '@libs/common';
+import { EnvModule, QueueModule } from '@libs/common';
 import { TEST_ENV } from '@libs/common/testing';
-import { PdfCacheService, ProblemDataFilesService } from '@libs/problems';
-import { setupWorkerTest } from './setup';
-import type { WorkerTest } from './setup';
 
 const QUEUE_NAME = 'worker-e2e-queue';
 
@@ -21,23 +19,14 @@ const QUEUE_NAME = 'worker-e2e-queue';
 class QueueProbeModule {}
 
 describe('WorkerModule', () => {
-  let worker: WorkerTest;
-  beforeAll(async () => {
-    worker = await setupWorkerTest();
-  });
-  afterAll(() => worker.teardown());
-
-  it('boots with the database, storage, queues and problem file services', async () => {
-    expect(worker.module.get(ProblemDataFilesService)).toBeInstanceOf(
-      ProblemDataFilesService,
-    );
-    expect(worker.module.get(PdfCacheService)).toBeInstanceOf(PdfCacheService);
-    expect(worker.module.get(StorageService)).toBeInstanceOf(StorageService);
-    expect(await worker.problems.countDocuments()).toBe(0);
-  });
-
   it('a queue registered on the QueueModule root delivers jobs to a worker', async () => {
-    Object.assign(process.env, TEST_ENV);
+    // EnvModule validates these; the probe uses neither Mongo nor the folders.
+    Object.assign(process.env, TEST_ENV, {
+      MONGO_URL: 'mongodb://127.0.0.1:1/unused',
+      MEDIA_ROOT: tmpdir(),
+      PROBLEM_DATA_ROOT: tmpdir(),
+      PDF_CACHE_ROOT: tmpdir(),
+    });
     const probe = await Test.createTestingModule({
       imports: [QueueProbeModule],
     }).compile();

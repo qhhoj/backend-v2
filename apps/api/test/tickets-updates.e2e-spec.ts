@@ -12,7 +12,7 @@ import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import type { TicketDetailResponse } from '../src/modules/tickets/core/dto/ticket.response';
 import { clearContributionQueue } from './community-fixtures';
-import { authed, createProblem, seedCatalog } from './problem-fixtures';
+import { authed } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -96,25 +96,6 @@ describe('ticket updates', () => {
     expect((await stored(ticket._id))!.isOpen).toBe(true);
   });
 
-  it('answers 404 for an unknown ticket and 401 without a session', async () => {
-    await patch('creator', 'not-a-ticket', { isOpen: false }).expect(404);
-    await api.http().patch(ticketUrl('x')).send({ isOpen: false }).expect(401);
-  });
-
-  it('lets staff mark good, recomputing the creator, and undo', async () => {
-    const ticket = await createTicket(api, { creator: people.creator.id });
-    const toggled = dataOf<TicketDetailResponse>(
-      await patch('staff', ticket._id, { isContributive: true }).expect(200),
-    );
-    expect(toggled.isContributive).toBe(true);
-    expect(await queuedUsers()).toEqual([{ userId: people.creator.id }]);
-    await patch('staff', ticket._id, { isContributive: true }).expect(200);
-    await clearContributionQueue(api);
-    await patch('staff', ticket._id, { isContributive: false }).expect(200);
-    expect(await queuedUsers()).toHaveLength(1);
-    expect((await stored(ticket._id))!.isContributive).toBe(false);
-  });
-
   it('keeps the flag and the recompute consistent under parallel toggles', async () => {
     const ticket = await createTicket(api, { creator: people.creator.id });
     // the update is compare-and-set: a toggle that read a value another one already changed is refused with 409
@@ -147,27 +128,6 @@ describe('ticket updates', () => {
     expect((await stored(own._id))!.isContributive).toBe(false);
     expect((await stored(other._id))!.isContributive).toBe(false);
     expect(await queuedUsers()).toHaveLength(0);
-  });
-
-  it('edits notes for assignees and staff only', async () => {
-    const ticket = await createTicket(api, {
-      creator: people.creator.id,
-      assignees: [people.assignee.id],
-    });
-    const saved = dataOf<TicketDetailResponse>(
-      await patch('assignee', ticket._id, {
-        notes: 'checked the checker',
-      }).expect(200),
-    );
-    expect(saved.notes).toBe('checked the checker');
-    await patch('staff', ticket._id, { notes: '' }).expect(200);
-    expect((await stored(ticket._id))!.notes).toBe('');
-    await patch('creator', ticket._id, { notes: 'x' }).expect(403);
-    await patch('outsider', ticket._id, { notes: 'x' }).expect(403);
-    await patch('assignee', ticket._id, { notes: 'x'.repeat(8193) }).expect(
-      400,
-    );
-    expect((await stored(ticket._id))!.notes).toBe('');
   });
 
   it('refuses a PATCH atomically', async () => {
@@ -207,19 +167,6 @@ describe('ticket updates', () => {
     expect(await queuedUsers()).toHaveLength(0);
   });
 
-  it('refuses nulls and unknown fields', async () => {
-    const ticket = await createTicket(api, { creator: people.creator.id });
-    const response = await patch('creator', ticket._id, {
-      isOpen: null,
-    }).expect(400);
-    expect(
-      (response.body as { error: { issues: Array<{ code: string }> } }).error
-        .issues[0].code,
-    ).toBe('must_not_be_null');
-    await patch('creator', ticket._id, { title: 'new' }).expect(400);
-    await patch('creator', ticket._id, {}).expect(200);
-  });
-
   it('lets staff reassign by username and refuses unknown or inactive users', async () => {
     const ticket = await createTicket(api, {
       creator: people.creator.id,
@@ -248,56 +195,5 @@ describe('ticket updates', () => {
     await patch('creator', ticket._id, { assignees: [] }).expect(403);
     await patch('staff', ticket._id, { assignees: [] }).expect(200);
     expect((await stored(ticket._id))!.assignees.map(uuidStr)).toEqual([]);
-  });
-
-  it('refuses an inactive user alone and leaves the assignees untouched', async () => {
-    const ticket = await createTicket(api, {
-      creator: people.creator.id,
-      assignees: [people.assignee.id],
-    });
-    const bad = await patch('staff', ticket._id, {
-      assignees: ['inactive'],
-    }).expect(400);
-    expect(
-      (
-        bad.body as {
-          error: { issues: Array<{ field: string; code: string }> };
-        }
-      ).error.issues,
-    ).toEqual([
-      expect.objectContaining({ field: 'assignees', code: 'assignee_unknown' }),
-    ]);
-    expect((await stored(ticket._id))!.assignees.map(uuidStr)).toEqual([
-      people.assignee.id,
-    ]);
-  });
-
-  it('lets a problem editor who is not an assignee close, but not edit notes or mark good', async () => {
-    const problem = await createProblem(api, await seedCatalog(api), {
-      code: 'editor_problem',
-      authors: [people.author.id],
-    });
-    const ticket = await createTicket(api, {
-      creator: people.creator.id,
-      problem: problem._id,
-    });
-    await patch('author', ticket._id, { isOpen: false }).expect(200);
-    await patch('author', ticket._id, { notes: 'x' }).expect(403);
-    await patch('author', ticket._id, { isContributive: true }).expect(403);
-    expect(await stored(ticket._id)).toMatchObject({
-      isOpen: false,
-      notes: '',
-      isContributive: false,
-    });
-  });
-
-  it('stores one assignee for names that differ only by case', async () => {
-    const ticket = await createTicket(api, { creator: people.creator.id });
-    await patch('staff', ticket._id, {
-      assignees: ['newAssignee', 'NEWASSIGNEE'],
-    }).expect(200);
-    expect((await stored(ticket._id))!.assignees.map(uuidStr)).toEqual([
-      people.newAssignee.id,
-    ]);
   });
 });

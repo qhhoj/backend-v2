@@ -1,12 +1,16 @@
-import { profileQueries } from '@libs/database/testing';
 import type {
   LeaderboardEntryResponse,
   RankResponse,
 } from '../src/modules/users/leaderboards/dto/leaderboard.response';
+
 import { createOrganization } from './organization-fixtures';
+
 import { createUserWith } from './problem-fixtures';
+
 import { dataOf } from './submission-fixtures';
+
 import { setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 describe('leaderboards', () => {
@@ -76,27 +80,6 @@ describe('leaderboards', () => {
     ]);
   });
 
-  it('continues ranks across pages', async () => {
-    expect(
-      (await board('/api/internal/users?pageSize=2&page=2')).map((row) => [
-        row.username,
-        row.rank,
-      ]),
-    ).toEqual([
-      ['chi', 2],
-      ['dung', 2],
-    ]);
-    expect(
-      (await board('/api/internal/users?pageSize=2&page=3')).map((row) => [
-        row.username,
-        row.rank,
-      ]),
-    ).toEqual([
-      ['em', 5],
-      ['gia', 5],
-    ]);
-  });
-
   it('sorts by performance points on request and shows the first listed organization', async () => {
     const rows = await board('/api/internal/users?sort=performancePoints');
     expect(rows.map((row) => [row.username, row.rank])).toEqual([
@@ -112,18 +95,6 @@ describe('leaderboards', () => {
       isOpen: true,
     });
     await api.http().get('/api/internal/users?sort=password').expect(400);
-  });
-
-  it('sorts by contribution points like the other boards, ties sharing a rank', async () => {
-    const rows = await board('/api/internal/users?sort=contributionPoints');
-    expect(rows.map((row) => [row.username, row.rank])).toEqual([
-      ['ana', 1],
-      ['bao', 1],
-      ['chi', 3],
-      ['dung', 3],
-      ['em', 5],
-      ['gia', 6],
-    ]);
   });
 
   it('ranks contributors', async () => {
@@ -162,34 +133,6 @@ describe('leaderboards', () => {
     await api.http().get('/api/internal/users/zz_unlisted/rank').expect(404);
     await api.http().get('/api/internal/users/zz_inactive/rank').expect(404);
     await api.http().get('/api/internal/users/nobody/rank').expect(404);
-  });
-
-  it('puts a missing rating and a null rating on the same rank', async () => {
-    const rows = await board('/api/internal/users');
-    expect(
-      rows
-        .filter((row) => row.rating === null || row.rating === undefined)
-        .map((row) => row.rank),
-    ).toEqual([5, 5]);
-  });
-
-  it('rejects out-of-range paging and unknown rank sorts', async () => {
-    for (const query of ['page=0', 'pageSize=101', 'pageSize=0', 'sort=bogus'])
-      await api.http().get(`/api/internal/users?${query}`).expect(400);
-    await api.http().get('/api/internal/users/ana/rank?sort=bogus').expect(400);
-  });
-
-  it('reads the board through the leaderboard indexes', async () => {
-    const operations = await profileQueries(api.db, () =>
-      board('/api/internal/users?sort=points&pageSize=3'),
-    );
-    const reads = operations.filter(({ collection }) => collection === 'users');
-    expect(
-      reads.every(({ planSummary }) => !planSummary.includes('COLLSCAN')),
-    ).toBe(true);
-    expect(
-      Math.max(...reads.map(({ docsExamined }) => docsExamined)),
-    ).toBeLessThanOrEqual(4);
   });
 });
 

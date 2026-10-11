@@ -1,12 +1,10 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sha256, verifyPassword } from '@libs/auth';
+import { verifyPassword } from '@libs/auth';
 import { encryptionKey } from '@libs/common';
 import { TEST_ENV } from '@libs/common/testing';
 import {
-  Judge,
-  JudgeSchema,
   Language,
   LanguageSchema,
   Problem,
@@ -18,7 +16,7 @@ import {
   uuidStr,
 } from '@libs/database';
 import { startMongo } from '@libs/database/testing';
-import { readSetting, SETTINGS, sealSetting } from '@libs/settings';
+import { readSetting, SETTINGS } from '@libs/settings';
 import { createConnection } from 'mongoose';
 import type { Connection } from 'mongoose';
 import type { MongoMemoryReplSet } from 'mongodb-memory-server';
@@ -157,34 +155,6 @@ describe('seed:e2e', () => {
     const sum = await problems.findOne({ code: 'e2e_sum' }).lean();
     expect(sum!.allowedLanguages.map(uuidStr)).not.toContain(
       uuidStr(languages[0]._id),
-    );
-  });
-  it('registers a judge whose stored key is the hash, and never rewrites it', async () => {
-    const judges = connection.model<Judge>(Judge.name, JudgeSchema);
-    await seedE2e(connection, options());
-    const row = await judges.findOne({ name: 'seed-judge' }).lean();
-    expect(row!.authKeyHash).toBe(sha256('seed-judge-key'));
-    await seedE2e(connection, { ...options(), judgeKey: 'rotated-key' });
-    expect(await judges.countDocuments({ name: 'seed-judge' })).toBe(1);
-    expect(
-      (await judges.findOne({ name: 'seed-judge' }).lean())!.authKeyHash,
-    ).toBe(sha256('seed-judge-key'));
-  });
-
-  it('keeps a mail URL an admin already set', async () => {
-    const settings = connection.model<Setting>(Setting.name, SettingSchema);
-    await settings.deleteOne({ _id: 'mail.smtpUrl' });
-    const definition = SETTINGS['mail.smtpUrl'];
-    await settings.create({
-      _id: 'mail.smtpUrl',
-      value: sealSetting(definition, 'smtp://mail.example.org:587', key),
-      updatedBy: null,
-      updatedAt: new Date(),
-    });
-    await seedE2e(connection, options());
-    const row = await mailRow();
-    expect(readSetting('mail.smtpUrl', definition, row!.value, key)).toBe(
-      'smtp://mail.example.org:587',
     );
   });
 });

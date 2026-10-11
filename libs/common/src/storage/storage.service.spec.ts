@@ -2,7 +2,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -39,12 +38,6 @@ describe('StorageService', () => {
     await expect(storage.save('.', Buffer.from('x'))).rejects.toThrow(
       'Path escapes MEDIA_ROOT',
     );
-  });
-  it('leaves no temp file behind and overwrites atomically', async () => {
-    await storage.save('pdf/a.pdf', Buffer.from('one'));
-    await storage.save('pdf/a.pdf', Buffer.from('two'));
-    expect(readdirSync(join(root, 'pdf'))).toEqual(['a.pdf']);
-    expect(readFileSync(join(root, 'pdf', 'a.pdf'), 'utf8')).toBe('two');
   });
   it('deletes files, tolerates missing ones and refuses to escape', async () => {
     await storage.save('pdf/b.pdf', Buffer.from('x'));

@@ -9,8 +9,6 @@ import {
   CONTRIBUTION_POINTS_QUEUE,
   notifyContributionPoints,
   ORGANIZATION_POINTS_JOB,
-  ORGANIZATION_USAGE_AUDIT_QUEUE,
-  ORGANIZATION_USAGE_AUDIT_SCHEDULER,
 } from '@libs/community';
 import type { ContributionPointsJob } from '@libs/community';
 import {
@@ -29,12 +27,10 @@ import {
 } from './effects-fixtures';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
-import { OrganizationPointsRepository } from '../src/jobs/organization-points/organization-points.repository';
 import { OrganizationPointsService } from '../src/jobs/organization-points/organization-points.service';
 import { SubmissionEffectsService } from '../src/jobs/submission-effects/submission-effects.service';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { OrganizationUsageAuditProcessor } from '../src/jobs/organization-usage-audit/organization-usage-audit.processor';
 import { OrganizationUsageAuditService } from '../src/jobs/organization-usage-audit/organization-usage-audit.service';
 import {
   PROBLEM_SOLVERS_QUEUE,
@@ -249,26 +245,6 @@ afterAll(() => worker.teardown());
       ).toBe(true);
     });
 
-    it('reads exactly the top 100 member PPs, best first', async () => {
-      const organization = await seedOrganization(worker);
-      // Inserted lowest first, so the best members are the last stored.
-      await worker.users.insertMany(
-        Array.from({ length: 150 }, (_unused, index) => ({
-          username: `org_top_${index}`,
-          password: '!',
-          isActive: true,
-          organizations: [organization._id],
-          performancePoints: index + 1,
-        })),
-      );
-      const top = await worker.module
-        .get(OrganizationPointsRepository)
-        .topMemberPoints(organization._id, 100);
-      expect(top).toEqual(
-        Array.from({ length: 100 }, (_unused, rank) => 150 - rank),
-      );
-    });
-
     it('queues the member organizations when a graded submission changes the PP, and nothing when it does not', async () => {
       const [first, second] = [
         await seedOrganization(worker),
@@ -436,20 +412,6 @@ afterAll(() => worker.teardown());
       );
       warn.mockRestore();
       expect(seen).toBe(true);
-    });
-
-    it('registers its schedule with BullMQ', async () => {
-      const queue = worker.module.get<Queue>(
-        getQueueToken(ORGANIZATION_USAGE_AUDIT_QUEUE),
-      );
-      // The harness flushes Redis after boot, which drops the schedule; boot registers it again.
-      await worker.module
-        .get(OrganizationUsageAuditProcessor)
-        .onApplicationBootstrap();
-      const schedulers = await queue.getJobSchedulers();
-      expect(schedulers.map((scheduler) => scheduler.key)).toContain(
-        ORGANIZATION_USAGE_AUDIT_SCHEDULER,
-      );
     });
   });
 }

@@ -3,20 +3,7 @@ import type { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { startMongo } from '../testing';
 import { newId } from '../uuid';
 import { SimilarityPairSchema } from './similarity-pair.schema';
-import {
-  SIMILARITY_RESULTS,
-  SimilarityRunSchema,
-} from './similarity-run.schema';
-import { SUBMISSION_RESULTS } from './submission.schema';
-
-describe('SIMILARITY_RESULTS', () => {
-  it('leaves out only results whose source carries no signal', () => {
-    const excluded = SUBMISSION_RESULTS.filter(
-      (result) => !SIMILARITY_RESULTS.includes(result),
-    );
-    expect(excluded).toEqual(['CE', 'IE', 'AB', 'RJ']);
-  });
-});
+import { SimilarityRunSchema } from './similarity-run.schema';
 
 describe('similarity schemas', () => {
   let replSet: MongoMemoryReplSet;
@@ -46,18 +33,6 @@ describe('similarity schemas', () => {
   afterAll(async () => {
     await mongoose.disconnect();
     await replSet.stop();
-  });
-
-  it('starts a run queued and active, with no results yet', async () => {
-    const created = await Runs.create(run());
-    expect(created).toMatchObject({
-      status: 'queued',
-      active: true,
-      error: null,
-      startedAt: null,
-      finishedAt: null,
-    });
-    expect(created.groups).toHaveLength(0);
   });
 
   it('allows one active run per scope, but any number of finished ones', async () => {

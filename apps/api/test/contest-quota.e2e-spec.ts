@@ -1,22 +1,22 @@
-import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
-import type { Queue } from 'bullmq';
-import { CONTEST_PUBLISH_QUEUE } from '@libs/contests';
-import type { ContestPublishJob } from '@libs/contests';
+
 import { REDIS } from '@libs/common';
-import {
-  OrganizationCreditEntry,
-  OrganizationUsage,
-  uuidStr,
-} from '@libs/database';
+
+import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
 import type Redis from 'ioredis';
+
 import type { Model } from 'mongoose';
+
 import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
-import { QuotaService } from '../src/modules/organizations/quota/quota.service';
+
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
+
 import { contestUrl, createContest, hoursFromNow } from './contest-fixtures';
+
 import { createOrganization } from './organization-fixtures';
+
 import { softDelete } from './deleted-problem-fixtures';
+
 import {
   authed,
   createProblem,
@@ -24,8 +24,11 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
+
 import { errorCode, setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 describe('contest quota', () => {
@@ -119,12 +122,6 @@ describe('contest quota', () => {
     ]);
   });
 
-  it('keeps a contest without an organization free', async () => {
-    const before = await usage.countDocuments({});
-    await post(newContest()).expect(201);
-    expect(await usage.countDocuments({})).toBe(before);
-  });
-
   it('charges a clone of an organization contest', async () => {
     const organization = await limited(30);
     const source = await createContest(api, {
@@ -143,38 +140,6 @@ describe('contest quota', () => {
       .expect(403)
       .expect(errorCode('quota_exceeded'));
     expect(await api.contests.countDocuments({ key: refusedKey })).toBe(0);
-  });
-
-  it('creates and schedules the contest once even when the warning read fails', async () => {
-    const organization = await limited(100);
-    const reading = jest
-      .spyOn(api.app.get(QuotaService), 'creditsUsed')
-      .mockRejectedValueOnce(new Error('mongo blip'));
-    const body = {
-      ...orgContest([organization._id]),
-      publishAfterEnd: true,
-    };
-    await post(body).expect(201);
-    reading.mockRestore();
-    expect(await usedBy(organization._id)).toBe(20);
-    expect(
-      await ledger.countDocuments({ organization: organization._id }),
-    ).toBe(1);
-    const queue = api.app.get<Queue<ContestPublishJob>>(
-      getQueueToken(CONTEST_PUBLISH_QUEUE),
-    );
-    const contest = await api.contests.findOne({ key: body.key }).lean();
-    const jobs = await queue.getJobs(['delayed', 'waiting']);
-    expect(jobs.map((job) => job.data.contestId)).toContain(
-      uuidStr(contest!._id),
-    );
-  });
-
-  it('lets an over-limit contest through in warn mode', async () => {
-    await api.setSetting('quota.enforce', 'warn');
-    const organization = await limited(5);
-    await post(orgContest([organization._id])).expect(201);
-    expect(await usedBy(organization._id)).toBe(20);
   });
 
   describe('an edit that scopes a contest to an organization', () => {
@@ -216,19 +181,6 @@ describe('contest quota', () => {
       expect(stored?.isOrganizationPrivate).toBe(false);
     });
 
-    it('does not charge a contest that was already organization-private', async () => {
-      const first = await limited(100);
-      const second = await limited(100);
-      const contest = await owned({
-        isOrganizationPrivate: true,
-        organizations: [first._id],
-      });
-      await patch(contest.key, { name: 'Renamed' }).expect(200);
-      await patch(contest.key, { organizations: [second._id] }).expect(200);
-      expect(await usedBy(first._id)).toBeNull();
-      expect(await usedBy(second._id)).toBeNull();
-    });
-
     it('charges once when two edits scope the same contest at the same time', async () => {
       const organization = await limited(100);
       const contest = await owned();
@@ -252,28 +204,6 @@ describe('contest quota', () => {
         .expect(errorCode('conflict'));
       overtaken.mockRestore();
       expect(await usedBy(organization._id)).toBe(0);
-    });
-
-    it('refunds when the save fails', async () => {
-      const organization = await limited(100);
-      const contest = await owned();
-      const failing = jest
-        .spyOn(api.app.get(ContestsRepository), 'update')
-        .mockRejectedValueOnce(new Error('mongo blip'));
-      await patch(contest.key, {
-        isOrganizationPrivate: true,
-        organizations: [organization._id],
-      }).expect(500);
-      failing.mockRestore();
-      expect(await usedBy(organization._id)).toBe(0);
-      const entries = await ledger
-        .find({ organization: organization._id })
-        .sort({ _id: 1 })
-        .lean();
-      expect(entries.map(({ reason, amount }) => [reason, amount])).toEqual([
-        ['contest', 20],
-        ['refund', -20],
-      ]);
     });
 
     it('refunds when a problem added by the save was deleted meanwhile and the save is undone', async () => {

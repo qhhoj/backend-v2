@@ -1,6 +1,7 @@
 # workflow_dispatch: release.yml starts it on changeset-release/main (a PR opened with GITHUB_TOKEN triggers nothing).
 name: ci
-on: { push: { branches: [main] }, pull_request: {}, workflow_dispatch: {} }
+on: { push: { branches: [main] }, pull_request: {}, workflow_dispatch: {}, schedule: [{ cron: '0 20 * * *' }] }
+# Pull requests run only the tests that import a changed file; pushes to main, the nightly schedule and manual runs run all.
 jobs:
   # Pushes that touch only docs, changesets or deploy scripts skip the heavy jobs below; a skipped job counts as a
   # pass, so the run (and the deploy gate waiting on it) stays green. deploy-scripts always runs.
@@ -54,6 +55,7 @@ jobs:
       TEST_REDIS_URL: redis://127.0.0.1:6379/15
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - uses: actions/cache@v4
@@ -80,7 +82,19 @@ jobs:
           echo "$RUNNER_TEMP/pandoc-3.1.3/bin" >> "$GITHUB_PATH"
       - run: pandoc --version
       # --forceExit: one leaked handle must not hang the job until the timeout.
-      - run: npm test -- --shard=${{ matrix.shard }}/3 --forceExit
+      # PRs: only specs that import a changed file (--changedSince follows the import graph); a change to dependencies,
+      # jest or TypeScript config runs everything. Other events run the full suite.
+      - name: Select tests
+        id: scope
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+        run: |
+          args=""
+          if [ -n "$BASE" ] && ! git diff --name-only "$BASE"...HEAD | grep -qE '^(package(-lock)?[.]json|jest[.].*|tsconfig.*|[.]github/workflows/ci[.]yml)$'; then
+            args="--changedSince=$BASE --passWithNoTests"
+          fi
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+      - run: npm test -- --shard=${{ matrix.shard }}/3 --forceExit ${{ steps.scope.outputs.args }}
       # The swagger CLI plugin does not run under plain jest, so the OpenAPI spec has its own config (needs Redis).
       - if: matrix.shard == 1
         run: npm run test:openapi -- --forceExit

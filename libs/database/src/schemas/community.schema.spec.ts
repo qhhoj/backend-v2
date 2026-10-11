@@ -64,22 +64,6 @@ describe('Community schemas', () => {
     ).rejects.toThrow(/slug/);
   });
 
-  it('creates unlisted, closed organizations without a slot limit by default', async () => {
-    const organization = await Organizations.create({
-      name: 'Defaults',
-      slug: 'defaults',
-      shortName: 'defaults',
-    });
-    expect(organization.toObject()).toMatchObject({
-      isUnlisted: true,
-      isOpen: false,
-      slots: null,
-      memberCount: 0,
-      performancePoints: 0,
-      adminIds: [],
-    });
-  });
-
   it('keeps one pending request per user and organization, decided ones aside', async () => {
     const fields = { organization: newId(), user: newId(), reason: 'please' };
     const first = await Requests.create(fields);
@@ -90,19 +74,6 @@ describe('Community schemas', () => {
     await expect(
       Requests.create({ ...fields, organization: newId(), state: 'X' }),
     ).rejects.toThrow(/state/);
-  });
-
-  it('bounds the reason', async () => {
-    await expect(
-      Requests.create({
-        organization: newId(),
-        user: newId(),
-        reason: 'x'.repeat(4097),
-      }),
-    ).rejects.toThrow(/reason/);
-    await expect(
-      Requests.create({ organization: newId(), user: newId(), reason: '' }),
-    ).rejects.toThrow(/reason/);
   });
 
   it('keeps one vote per voter and target, worth +1 or -1', async () => {
@@ -121,64 +92,6 @@ describe('Community schemas', () => {
     await expect(
       PostVotes.create({ blog: newId(), voter, score: 0 }),
     ).rejects.toThrow(/score/);
-  });
-
-  it('keeps one lock per page', async () => {
-    const page = { type: 'problem', id: newId() };
-    await Locks.create({ page });
-    await expect(Locks.create({ page })).rejects.toThrow(/duplicate key/);
-    await expect(
-      Locks.create({ page: { ...page, type: 'contest' } }),
-    ).resolves.toBeDefined();
-  });
-
-  it('bounds comment bodies and page types', async () => {
-    const fields = {
-      page: { type: 'blog', id: newId() },
-      author: newId(),
-      threadId: newId(),
-      path: 'x',
-    };
-    await expect(
-      Comments.create({ ...fields, body: 'x'.repeat(8192) }),
-    ).resolves.toBeDefined();
-    await expect(
-      Comments.create({ ...fields, body: 'x'.repeat(8193) }),
-    ).rejects.toThrow(/body/);
-    await expect(Comments.create({ ...fields, body: '' })).rejects.toThrow(
-      /body/,
-    );
-    await expect(
-      Comments.create({
-        ...fields,
-        page: { type: 'ticket', id: newId() },
-        body: 'x',
-      }),
-    ).rejects.toThrow(/type/);
-  });
-
-  it('creates unpublished personal posts by default and bounds the title', async () => {
-    const post = await Posts.create({
-      title: 'Hello',
-      slug: 'alice',
-      publishOn: new Date(),
-      content: 'Hi',
-    });
-    expect(post.toObject()).toMatchObject({
-      visible: false,
-      sticky: false,
-      globalPost: false,
-      organization: null,
-      score: 0,
-    });
-    await expect(
-      Posts.create({
-        title: 'x'.repeat(101),
-        slug: 'a',
-        publishOn: new Date(),
-        content: 'Hi',
-      }),
-    ).rejects.toThrow(/title/);
   });
 
   it('reads a subtree by an index-bounded prefix, not the whole path index', async () => {

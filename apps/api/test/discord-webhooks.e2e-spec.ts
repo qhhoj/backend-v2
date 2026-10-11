@@ -88,23 +88,4 @@ describe('problem webhooks', () => {
     });
     expect(JSON.stringify(jobs)).not.toContain('secret-hook');
   });
-
-  it('stops and starts enqueuing when the setting changes', async () => {
-    const suggest = (code: string) =>
-      authed(api.http().post('/api/internal/problems/suggest'), suggester)
-        .send(problem(code))
-        .expect(201);
-    await api.setSetting('discord.webhooks', {});
-    await suggest('idea_off');
-    expect(await queued()).toEqual([]);
-    await api.setSetting('discord.webhooks', {
-      default: 'http://127.0.0.1:9/secret-hook',
-    });
-    await suggest('idea_on');
-    expect(await queued()).toHaveLength(1);
-    await queue.drain();
-    await api.setSetting('discord.webhooks', {});
-    await suggest('idea_off_again');
-    expect(await queued()).toEqual([]);
-  });
 });

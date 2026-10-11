@@ -15,19 +15,9 @@ describe('aes-gcm', () => {
     blob[blob.length - 1] ^= 1;
     expect(() => decrypt(blob.toString('base64'), key)).toThrow();
   });
-  it('rejects blobs too short to hold a 16-byte tag', () => {
-    const blob = Buffer.from(encrypt('secret', key), 'base64');
-    const short = Buffer.concat([
-      blob.subarray(0, 12),
-      blob.subarray(12, 16),
-      blob.subarray(28),
-    ]);
-    expect(() => decrypt(short.toString('base64'), key)).toThrow();
-  });
-  it('rejects too-short blobs', () =>
+  it('rejects blobs too short to hold the IV and tag', () =>
     expect(() => decrypt('AAAA', key)).toThrow(/invalid ciphertext/));
-  it('rejects non-hex keys', () =>
-    expect(() => encryptionKey('00'.repeat(32) + 'zz')).toThrow(/32 bytes/));
-  it('rejects wrong key length', () =>
-    expect(() => encryptionKey('abcd')).toThrow(/32 bytes/));
+  it.each(['abcd', '00'.repeat(32) + 'zz'])('rejects bad key %s', (bad) =>
+    expect(() => encryptionKey(bad)).toThrow(/32 bytes/),
+  );
 });

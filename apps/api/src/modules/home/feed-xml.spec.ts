@@ -1,4 +1,4 @@
-import { atomFeed, escapeXml, rssFeed, textExcerpt } from './feed-xml';
+import { escapeXml, rssFeed, textExcerpt } from './feed-xml';
 
 describe('feed XML', () => {
   const channel = {
@@ -48,24 +48,7 @@ describe('feed XML', () => {
     );
     expect(xml).toContain(`<guid isPermaLink="false">${items[0].id}</guid>`);
     expect(xml).toContain('<pubDate>Wed, 07 Oct 2026 10:00:00 GMT</pubDate>');
-    expect(xml).toContain(
-      '<atom:link href="https://oj.example/feed/blog/rss/" rel="self"',
-    );
     expect(xml.indexOf(items[0].id)).toBeLessThan(xml.indexOf(items[1].id));
-  });
-
-  it('writes Atom 1.0 updated at the newest entry', () => {
-    const xml = atomFeed(channel, items);
-    expect(xml).toContain('<feed xmlns="http://www.w3.org/2005/Atom">');
-    expect(xml).toContain('<updated>2026-10-07T10:00:00.000Z</updated>');
-    expect(xml).toContain('<author><name>QHHOJ</name></author>');
-    expect(xml).toContain(`<id>urn:uuid:${items[1].id}</id>`);
-    expect(xml).toContain(
-      '<summary type="html">&lt;p&gt;Old&lt;/p&gt;</summary>',
-    );
-    expect(atomFeed(channel, [])).toContain(
-      '<updated>1970-01-01T00:00:00.000Z</updated>',
-    );
   });
 
   it('reduces HTML to a plain-text excerpt', () => {

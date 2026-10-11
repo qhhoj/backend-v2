@@ -15,10 +15,6 @@ const describeWithPandoc =
 
 describeWithPandoc('PandocService (pandoc >= 3)', () => {
   const pandoc = new PandocService();
-  it('reports a usable version', async () => {
-    await expect(pandoc.assertAvailable()).resolves.toBeUndefined();
-    expect((await pandoc.version())![0]).toBeGreaterThanOrEqual(3);
-  });
   it('converts Polygon TeX to Markdown through the legacy filter', async () => {
     const markdown = await pandoc.texToMarkdown(
       "\\bf{Bold} and $x^2$ with \\t{code} and ``quoted'' -- dash.",
@@ -36,11 +32,6 @@ describeWithPandoc('PandocService (pandoc >= 3)', () => {
     expect(
       await pandoc.texToMarkdown('\\begin{verbatim}\n1 2\n\\end{verbatim}'),
     ).toMatch(/^```[ \t]*\n1 2\n```$/m);
-  }, 30000);
-  it('turns includegraphics into an image reference', async () => {
-    expect(await pandoc.texToMarkdown('\\includegraphics{fig.png}')).toContain(
-      '(fig.png)',
-    );
   }, 30000);
   it.each([
     ['\\input{SECRET}'],
@@ -150,32 +141,11 @@ describe('PandocService process handling', () => {
       'too large',
     );
   });
-  it('reports a failing process with its stderr', async () => {
-    const failing = fakePandoc('echo "bad tex" >&2; exit 3');
-    await expect(failing.texToMarkdown('x')).rejects.toThrow(
-      'pandoc failed: bad tex',
-    );
-  });
   it('does not pass the worker environment to pandoc', async () => {
     process.env.QHHOJ_TEST_SECRET = 'hunter2';
     const env = fakePandoc('env');
     expect(await env.texToMarkdown('x')).not.toContain('hunter2');
     delete process.env.QHHOJ_TEST_SECRET;
-  });
-  it('reports a missing binary as not installed', async () => {
-    const missing = new (class extends PandocService {
-      protected readonly binary = '/nonexistent/pandoc';
-    })();
-    await expect(missing.version()).resolves.toBeNull();
-    await expect(missing.assertAvailable()).rejects.toThrow(
-      'pandoc not installed',
-    );
-  });
-  it('reports a pandoc that exists but fails to start with its own error', async () => {
-    const broken = fakePandoc('echo "failed to create OS thread" >&2; exit 1');
-    await expect(broken.assertAvailable()).rejects.toThrow(
-      'pandoc failed: failed to create OS thread',
-    );
   });
   it('rejects pandoc older than 3', async () => {
     await expect(

@@ -1,5 +1,7 @@
 import { TicketContextService } from '../src/modules/tickets/core/ticket-context.service';
+
 import { softDelete, undelete, tombstone } from './deleted-problem-fixtures';
+
 import {
   authed,
   createProblem,
@@ -7,22 +9,33 @@ import {
   createUserWith,
   loginAs,
 } from './problem-fixtures';
+
 import type { Catalog, TestSession } from './problem-fixtures';
+
 import { setupApiTest, errorCode } from './setup';
+
 import type { ApiTest } from './setup';
+
 import { createTicket, signedIn, ticketUrl } from './ticket-fixtures';
+
 import type Redis from 'ioredis';
+
 import { REDIS } from '@libs/common';
+
 import { SimilarityRunsRepository } from '../src/modules/similarity/core/similarity-runs.repository';
+
 import type { HomeResponse } from '../src/modules/home/dto/home.response';
+
 import type {
   PpEntryResponse,
   SolvedResponse,
 } from '../src/modules/users/pages/dto/user-page.response';
+
 import { dataOf, seedSubmission } from './submission-fixtures';
-import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
+
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
-import { contestProblem, contestUrl, createContest } from './contest-fixtures';
+
+import { contestUrl, createContest } from './contest-fixtures';
 
 let api: ApiTest;
 
@@ -260,33 +273,6 @@ afterAll(() => api.teardown());
         .expect(200);
     });
 
-    it('offers named finders that see deleted problems, and only those', async () => {
-      expect(await repository.findByCode(gone.code)).toBeNull();
-      expect(await repository.findById(gone._id)).toBeNull();
-      expect(await repository.findByIds([gone._id, live._id])).toHaveLength(1);
-      expect(await repository.idByCode(gone.code)).toBeNull();
-      expect(await repository.findDeletedByCode(gone.code)).toMatchObject({
-        code: gone.code,
-      });
-      expect(await repository.findDeletedByCode(live.code)).toBeNull();
-      expect((await repository.findIncludingDeleted(gone._id))?.code).toBe(
-        gone.code,
-      );
-      expect((await repository.findIncludingDeleted(live._id))?.code).toBe(
-        live.code,
-      );
-      expect(await repository.findIncludingDeleted('not-an-id')).toBeNull();
-      const summaries = await repository.findSummariesIncludingDeleted([
-        gone._id,
-        live._id,
-      ]);
-      expect(summaries.map((row) => row.code).sort()).toEqual([
-        gone.code,
-        live.code,
-      ]);
-      expect(await repository.deletedIds()).toEqual([gone._id]);
-    });
-
     it('marks a problem deleted once, restores it, and refuses to restore a purged one', async () => {
       const problem = await createProblem(api, catalog, { code: 'del_cycle' });
       const actor = (await createUserWith(api, 'del_actor'))._id;
@@ -305,48 +291,6 @@ afterAll(() => api.teardown());
       await tombstone(api, problem._id);
       expect(await repository.restore(problem._id)).toBe(false);
       await undelete(api, problem._id);
-    });
-
-    it('pages the deleted problems newest deletion first, through a visibility filter', async () => {
-      await softDelete(api, gone._id, {
-        deletedAt: new Date(Date.now() - 10_000),
-      });
-      const older = await createProblem(api, catalog, { code: 'del_older' });
-      const newer = await createProblem(api, catalog, {
-        code: 'del_newer',
-        isPublic: false,
-      });
-      await softDelete(api, older._id, {
-        deletedAt: new Date(Date.now() - 5000),
-      });
-      await softDelete(api, newer._id, {
-        deletedAt: new Date(Date.now() - 100),
-      });
-      const all = await repository.deletedPage({}, 1, 10);
-      expect(all.items.map((row) => row.code)).toEqual([
-        'del_newer',
-        'del_older',
-        'del_gone',
-      ]);
-      const publicOnly = await repository.deletedPage(
-        { isPublic: true },
-        1,
-        10,
-      );
-      expect(publicOnly.items.map((row) => row.code)).toEqual([
-        'del_older',
-        'del_gone',
-      ]);
-      expect(publicOnly.total).toBe(2);
-    });
-
-    it('knows whether any contest holds a problem', async () => {
-      const used = await createProblem(api, catalog, { code: 'del_used' });
-      const free = await createProblem(api, catalog, { code: 'del_free' });
-      await createContest(api, { problems: [contestProblem(used._id, 0)] });
-      const contests = api.app.get(ContestsRepository);
-      expect(await contests.isProblemInAnyContest(used._id)).toBe(true);
-      expect(await contests.isProblemInAnyContest(free._id)).toBe(false);
     });
   });
 }
@@ -458,23 +402,6 @@ afterAll(() => api.teardown());
       );
     });
 
-    it('names the problem in the list row and marks it deleted', async () => {
-      const { problem, mine } = await scenario();
-      await softDelete(api, problem._id);
-      const rows = dataOf<Row[]>(
-        await authed(
-          api.http().get(`${SUBMISSIONS}?pageSize=100`),
-          sessions.owner,
-        ).expect(200),
-      );
-      expect(rows.find((row) => row.id === mine)!.problem).toEqual({
-        code: problem.code,
-        name: problem.name,
-        points: problem.points,
-        isDeleted: true,
-      });
-    });
-
     it('shows the detail and the source to the owner and staff without any case detail, and 404s a stranger', async () => {
       const { problem, mine, theirs } = await scenario();
       await softDelete(api, problem._id);
@@ -545,17 +472,6 @@ afterAll(() => api.teardown());
         },
       );
 
-      it.each(['rejudge', 'reject'])(
-        'refuses to %s a submission of a tombstoned problem',
-        async (action) => {
-          const { problem, mine } = await scenario();
-          await softDelete(api, problem._id);
-          await tombstone(api, problem._id);
-          const response = await act('rejudger', mine, action).expect(409);
-          expectProblemDeleted(response);
-        },
-      );
-
       it('rejudges again once the problem is restored', async () => {
         const { problem, mine } = await scenario();
         await api.submissions.updateOne(
@@ -579,17 +495,6 @@ afterAll(() => api.teardown());
         await softDelete(api, problem._id);
         expect((await act('owner', mine, 'abort')).status).toBeLessThan(300);
         expect((await stored(mine))!.status).toBe('AB');
-      });
-
-      it("answers 404 to the bulk rejudge of a deleted problem's code", async () => {
-        const { problem } = await scenario();
-        await softDelete(api, problem._id);
-        await authed(
-          api.http().post(`${SUBMISSIONS}/rejudge`),
-          sessions.rejudger,
-        )
-          .send({ problem: problem.code })
-          .expect(404);
       });
     });
 

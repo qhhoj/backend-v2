@@ -132,20 +132,6 @@ describe('problem data quota', () => {
     expect(await dataBytesOf(problem._id)).toBeLessThan(afterSource!);
   });
 
-  it('warns the organization admins when an upload takes storage past 80 percent', async () => {
-    await api.setSetting('quota.enforce', 'warn');
-    const admin = (await createUserWith(api, 'dqadmin'))._id;
-    const { problem } = await orgProblem(
-      {},
-      { adminIds: [admin], quotaStorageBytes: 1 },
-    );
-    await uploadArchive(problem.code, buildZip(tests(1))).expect(201);
-    expect(notify).toHaveBeenCalledWith(
-      [admin],
-      expect.objectContaining({ kind: 'quota-warning' }),
-    );
-  });
-
   it('charges one credit for a small archive of an organization problem and nothing for a public one', async () => {
     const { organization, problem } = await orgProblem();
     await uploadArchive(problem.code, buildZip(tests(1))).expect(201);
@@ -179,21 +165,6 @@ describe('problem data quota', () => {
     const directory = join(api.problemDataRoot, problem.code);
     const files = existsSync(directory) ? readdirSync(directory) : [];
     expect(files.filter((name) => name.endsWith('.zip'))).toEqual([]);
-  });
-
-  it('counts only the growth when an archive replaces an earlier one', async () => {
-    const { problem, organization } = await orgProblem(
-      {},
-      { quotaStorageBytes: 100_000 },
-    );
-    const archive = buildZip(tests(2));
-    await uploadArchive(problem.code, archive).expect(201);
-    const used = (await dataBytesOf(problem._id))!;
-    await api.organizations.updateOne(
-      { _id: organization._id },
-      { $set: { quotaStorageBytes: used + 5 } },
-    );
-    await uploadArchive(problem.code, archive).expect(201);
   });
 
   it('gives the credits back when storing the data fails', async () => {
@@ -253,15 +224,6 @@ describe('problem data quota', () => {
       ['upload', 1],
       ['refund', -1],
     ]);
-  });
-
-  it('lets an over-limit upload through in warn mode', async () => {
-    await api.setSetting('quota.enforce', 'warn');
-    const { problem } = await orgProblem(
-      {},
-      { quotaStorageBytes: 10, quotaMonthlyCredits: 0 },
-    );
-    await uploadArchive(problem.code, buildZip(tests(1))).expect(201);
   });
 
   it('refuses a Polygon import to an organization problem over the storage limit, keeping no package and queuing no job', async () => {

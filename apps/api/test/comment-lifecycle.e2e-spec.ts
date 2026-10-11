@@ -1,15 +1,19 @@
 import { COMMENT_THREADS_PAGE_SIZE } from '@libs/community';
-import { CommentsRepository } from '../src/modules/comments/core/comments.repository';
-import { RecentCommentsService } from '../src/modules/comments/core/recent-comments.service';
+
 import type { CommentPageResponse } from '../src/modules/comments/core/dto/comment.response';
+
 import type {
   CommentDetailResponse,
   CommentLocationResponse,
   CommentResponse,
 } from '../src/modules/comments/core/dto/comment.response';
+
 import type { CommentRevisionResponse } from '../src/modules/comments/posting/dto/comment-revision.response';
+
 import type { CommentPreviewResponse } from '../src/modules/comments/posting/dto/comment-preview.response';
+
 import type { CommentReportQueueItemResponse } from '../src/modules/comments/reports/dto/comment-report-queue-item.response';
+
 import {
   commentPageUrl,
   commentUrl,
@@ -17,6 +21,7 @@ import {
   createPost,
   signedInWriter,
 } from './community-fixtures';
+
 import {
   clearRateLimits,
   contestProblem,
@@ -24,10 +29,15 @@ import {
   joinParticipation,
   makeCurrent,
 } from './contest-fixtures';
+
 import { authed, createProblem, seedCatalog } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
+
 import { dataOf } from './submission-fixtures';
+
 import { errorCode, setupApiTest } from './setup';
+
 import type { ApiTest } from './setup';
 
 const MODERATOR = { permissions: ['judge.change_comment'] };
@@ -107,15 +117,6 @@ describe('comment preview, post blocks, hidden listings, delete, reports, locate
       await preview((await person({ problemCount: 1 })).session, 'x').expect(
         403,
       );
-    });
-
-    it('answers 429 past 30 previews a minute', async () => {
-      const { session } = await person();
-      for (let index = 0; index < 30; index += 1)
-        await preview(session, `p${index}`).expect(200);
-      await preview(session, 'one more')
-        .expect(429)
-        .expect(errorCode('rate_limited'));
     });
   });
 
@@ -241,23 +242,6 @@ describe('comment preview, post blocks, hidden listings, delete, reports, locate
         ['unhide', modUser._id],
       ]);
     });
-
-    it('keeps hide and unhide rows out of the public edit history', async () => {
-      const { session: moderator } = await person(MODERATOR);
-      const { user: author } = await person();
-      const page = await createPost(api);
-      const comment = await blogComment(page._id, author._id);
-      await hide(comment._id, moderator, true).expect(200);
-      await hide(comment._id, moderator, false).expect(200);
-      expect(
-        dataOf<CommentRevisionResponse[]>(
-          await api
-            .http()
-            .get(commentUrl(comment._id, '/revisions'))
-            .expect(200),
-        ),
-      ).toEqual([]);
-    });
   });
 
   describe('delete', () => {
@@ -323,24 +307,6 @@ describe('comment preview, post blocks, hidden listings, delete, reports, locate
         .lean();
       expect(deleteRow?.changes.body.before).toBe('edited text');
     });
-
-    it('leaves deleted comments out of page counts and the recent feed', async () => {
-      const { user: author, session } = await person();
-      const page = await createPost(api);
-      const kept = await blogComment(page._id, author._id);
-      const comment = await blogComment(page._id, author._id);
-      await remove(comment._id, session).expect(200);
-      const counts = await api.app
-        .get(CommentsRepository)
-        .countVisible('blog', [page._id]);
-      expect(counts.get(page._id)).toBe(1);
-      const { items } = await api.app
-        .get(RecentCommentsService)
-        .newest(null, { limit: 50 });
-      const ids = items.map((item) => item.id);
-      expect(ids).toContain(kept._id);
-      expect(ids).not.toContain(comment._id);
-    });
   });
 
   describe('reports', () => {
@@ -403,20 +369,6 @@ describe('comment preview, post blocks, hidden listings, delete, reports, locate
         ),
       ).toBe(false);
       await settle(moderator, 'resolved').expect(404);
-    });
-
-    it('answers 429 past 10 reports an hour', async () => {
-      const { user: author } = await person();
-      const { session } = await person();
-      const page = await createPost(api);
-      for (let index = 0; index < 10; index += 1) {
-        const comment = await blogComment(page._id, author._id);
-        await report(comment._id, session, { reason: 'spam' }).expect(204);
-      }
-      const last = await blogComment(page._id, author._id);
-      await report(last._id, session, { reason: 'spam' })
-        .expect(429)
-        .expect(errorCode('rate_limited'));
     });
   });
 

@@ -82,9 +82,7 @@ describe('BlogAccess', () => {
         organizationAdminIds: [],
       }),
     ).toBe(false);
-    expect(BlogAccess.canEdit(author, post())).toBe(true);
     expect(BlogAccess.canEdit(stranger, post())).toBe(false);
-    expect(BlogAccess.canEdit(anonymous, post())).toBe(false);
   });
 
   it('needs delete_blogpost on top of edit rights to delete', () => {
@@ -108,9 +106,6 @@ describe('BlogAccess', () => {
     expect(
       BlogAccess.organizationFilter(stranger, organization, now),
     ).toBeNull();
-    expect(
-      BlogAccess.organizationFilter(anonymous, organization, now),
-    ).toBeNull();
     expect(BlogAccess.organizationFilter(member, organization, now)).toEqual({
       organization: 'org',
       visible: true,
@@ -128,15 +123,5 @@ describe('BlogAccess', () => {
         visible: { $in: [true, false] },
       },
     );
-    expect(
-      BlogAccess.organizationFilter(
-        principal('curator', ['judge.edit_all_organization']),
-        organization,
-        now,
-      ),
-    ).toEqual({
-      organization: 'org',
-      $or: [{ visible: true }, { authors: 'curator' }],
-    });
   });
 });

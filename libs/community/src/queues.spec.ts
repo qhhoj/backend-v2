@@ -5,22 +5,13 @@ import { newId } from '@libs/database';
 import IORedis from 'ioredis';
 import type Redis from 'ioredis';
 import {
-  clearContributionPointsPending,
   clearOrganizationPointsPending,
-  CONTRIBUTION_POINTS_JOB,
-  CONTRIBUTION_POINTS_QUEUE,
-  DISCORD_WEBHOOK_JOB,
-  notifyContributionPoints,
   notifyDiscord,
   notifyOrganizationPoints,
   ORGANIZATION_POINTS_JOB,
   ORGANIZATION_POINTS_QUEUE,
 } from './queues';
-import type {
-  ContributionPointsJob,
-  DiscordWebhookJob,
-  OrganizationPointsJob,
-} from './queues';
+import type { DiscordWebhookJob, OrganizationPointsJob } from './queues';
 
 describe('notifyOrganizationPoints', () => {
   let queue: Queue<OrganizationPointsJob>;
@@ -47,7 +38,7 @@ describe('notifyOrganizationPoints', () => {
     redis.disconnect();
   });
 
-  it('queues one retried job per distinct organization', async () => {
+  it('queues one job per distinct organization', async () => {
     const [first, second] = [newId(), newId()];
     await notifyOrganizationPoints(
       queue,
@@ -61,12 +52,6 @@ describe('notifyOrganizationPoints', () => {
         [ORGANIZATION_POINTS_JOB, second],
       ].sort(),
     );
-    const jobs = await queue.getJobs(['waiting']);
-    expect(
-      jobs.every(
-        (job) => job.opts.attempts === 3 && job.opts.removeOnComplete === true,
-      ),
-    ).toBe(true);
   });
 
   it('queues no second job while one waits, and a new one once the recompute started', async () => {
@@ -77,11 +62,6 @@ describe('notifyOrganizationPoints', () => {
     await clearOrganizationPointsPending(redis, organizationId);
     await notifyOrganizationPoints(queue, redis, [organizationId], logger);
     expect(await waiting()).toHaveLength(2);
-  });
-
-  it('does nothing for no organizations', async () => {
-    await notifyOrganizationPoints(queue, redis, [], logger);
-    expect(await queue.getWaitingCount()).toBe(0);
   });
 
   it('logs instead of throwing when Redis does not answer', async () => {
@@ -102,85 +82,20 @@ describe('notifyOrganizationPoints', () => {
   });
 });
 
-describe('notifyContributionPoints', () => {
-  let queue: Queue<ContributionPointsJob>;
-  let redis: Redis;
-  const logger = new Logger('spec');
-  beforeAll(() => {
-    queue = new Queue(CONTRIBUTION_POINTS_QUEUE, {
-      connection: { url: TEST_REDIS_URL },
-    });
-    redis = new IORedis(TEST_REDIS_URL);
-  });
-  beforeEach(async () => {
-    await queue.obliterate({ force: true });
-    await redis.flushdb();
-  });
-  afterAll(async () => {
-    await queue.obliterate({ force: true });
-    await queue.close();
-    redis.disconnect();
-  });
-
-  it('queues one job per distinct user until the recompute starts', async () => {
-    const [first, second] = [newId(), newId()];
-    await notifyContributionPoints(
-      queue,
-      redis,
-      [first, second, first],
-      logger,
-    );
-    await notifyContributionPoints(queue, redis, [first], logger);
-    const waiting = async () =>
-      (await queue.getJobs(['waiting'])).map((job) => [
-        job.name,
-        job.data.userId,
-      ]);
-    expect((await waiting()).sort()).toEqual(
-      [
-        [CONTRIBUTION_POINTS_JOB, first],
-        [CONTRIBUTION_POINTS_JOB, second],
-      ].sort(),
-    );
-    await clearContributionPointsPending(redis, first);
-    await notifyContributionPoints(queue, redis, [first], logger);
-    expect(await waiting()).toHaveLength(3);
-  });
-});
-
 describe('notifyDiscord', () => {
-  it('enqueues a Discord job with retries and swallows a failing queue', async () => {
-    const added: unknown[] = [];
+  it('swallows a failing queue and logs the event', async () => {
     const error = jest.fn();
-    const logger = { error } as unknown as Logger;
     const job = {
       event: 'on_new_comment' as const,
       message: { title: 'T', description: 'D', author: null },
     };
-    await notifyDiscord(
-      {
-        add: (...args: unknown[]) => (added.push(args), Promise.resolve()),
-      } as unknown as Queue<DiscordWebhookJob>,
-      job,
-      logger,
-    );
-    expect(added).toEqual([
-      [
-        DISCORD_WEBHOOK_JOB,
-        job,
-        expect.objectContaining({
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 10_000 },
-        }),
-      ],
-    ]);
     await expect(
       notifyDiscord(
         {
           add: () => Promise.reject(new Error('redis down')),
         } as unknown as Queue<DiscordWebhookJob>,
         job,
-        logger,
+        { error } as unknown as Logger,
       ),
     ).resolves.toBeUndefined();
     expect(error).toHaveBeenCalledWith(

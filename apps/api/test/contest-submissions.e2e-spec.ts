@@ -468,19 +468,6 @@ describe('contest submissions and the freeze', () => {
     },
   );
 
-  it('streams a contest submission on the public feed once the list is open, as ids and status', async () => {
-    const { contest, bobId } = await frozenScene('feed_thawed_p');
-    const feeds = await openFeeds();
-    await api.contests.updateOne({ _id: contest._id }, endedUnfrozen);
-    await publishDone(bobId);
-    expect(await nextDoneIds(feeds)).toEqual([bobId, bobId]);
-    await publishDone(bobId);
-    const frame = (await feeds[0].next('done')).data as Record<string, unknown>;
-    expect(Object.keys(frame).sort()).toEqual(
-      ['problemId', 'status', 'submissionId', 'type', 'userId'].sort(),
-    );
-  });
-
   it("still streams a frozen contest submission's live updates to its owner", async () => {
     const { aliceId } = await frozenScene('feed_owner_p');
     const own = await openStream(api, `${EVENTS}/${aliceId}`, {

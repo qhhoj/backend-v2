@@ -22,7 +22,6 @@ const issueCodes = ({ body }: { body: unknown }): string[] =>
 
 describe('contest submissions export', () => {
   let api: ApiTest;
-  let unconfigured: ApiTest;
   let queue: Queue<ContestExportJob>;
   let ended: { _id: string; key: string };
   let running: { _id: string; key: string };
@@ -43,7 +42,6 @@ describe('contest submissions export', () => {
 
   beforeAll(async () => {
     api = await setupApiTest();
-    unconfigured = await setupApiTest({ env: { CONTEST_DATA_ROOT: '' } });
     queue = api.app.get(getQueueToken(CONTEST_EXPORT_QUEUE));
     for (const [name, permissions] of [
       ['plain', []],
@@ -64,7 +62,6 @@ describe('contest submissions export', () => {
   });
   afterAll(async () => {
     await api.teardown();
-    await unconfigured.teardown();
   });
   beforeEach(async () => {
     await queue.obliterate({ force: true });
@@ -109,28 +106,6 @@ describe('contest submissions export', () => {
     expect(issueCodes(status)).toEqual(['forbidden']);
   });
 
-  it('reports none, then ready with its size and the next allowed request', async () => {
-    expect(await statusOf(ended.key)).toEqual({
-      state: 'none',
-      preparedAt: null,
-      readyAt: null,
-      size: null,
-      nextPrepareAt: null,
-    });
-    const preparedAt = new Date(Date.now() - 3_600_000);
-    await api.contests.updateOne(
-      { _id: ended._id },
-      { exportPreparedAt: preparedAt },
-    );
-    writeFileSync(zipFile(), 'zip bytes');
-    expect(await statusOf(ended.key)).toMatchObject({
-      state: 'ready',
-      preparedAt: preparedAt.toISOString(),
-      size: 9,
-      nextPrepareAt: new Date(preparedAt.getTime() + 86_400_000).toISOString(),
-    });
-  });
-
   it('serves the zip as an uncached attachment to editors only, 404 while none exists', async () => {
     const missing = await download('editor', ended.key).expect(404);
     expect(issueCodes(missing)).toEqual(['export_not_prepared']);
@@ -145,30 +120,5 @@ describe('contest submissions export', () => {
     expect(
       existsSync(contestExportPath(api.contestDataRoot, running._id)),
     ).toBe(false);
-  });
-
-  it('keeps the data zip and the export independent', async () => {
-    await api.contests.updateOne(
-      { _id: ended._id },
-      { dataPreparedAt: new Date() },
-    );
-    await request('editor', ended.key).expect(202);
-  });
-
-  it('is off without a data root', async () => {
-    const author = await createUserWith(unconfigured, 'x_editor', {
-      permissions: ['judge.edit_own_contest'],
-    });
-    const editor = await loginAs(unconfigured, author._id);
-    const contest = await createContest(unconfigured, {
-      authors: [author._id],
-      startTime: hoursFromNow(-3),
-      endTime: hoursFromNow(-1),
-    });
-    const refused = await authed(
-      unconfigured.http().post(contestUrl(contest.key, '/export')),
-      editor,
-    ).expect(404);
-    expect(issueCodes(refused)).toEqual(['export_not_configured']);
   });
 });

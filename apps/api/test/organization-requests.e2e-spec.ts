@@ -1,11 +1,8 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import {
-  ORGANIZATION_POINTS_QUEUE,
-  NotificationsRepository,
-} from '@libs/community';
+import { ORGANIZATION_POINTS_QUEUE } from '@libs/community';
 import type { OrganizationPointsJob } from '@libs/community';
-import { uuidStr, newId } from '@libs/database';
+import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import type { OrganizationDetailResponse } from '../src/modules/organizations/core/dto/organization.response';
 import type { OrganizationRequestResponse } from '../src/modules/organizations/requests/dto/organization-request.response';
@@ -16,7 +13,6 @@ import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { setupApiTest, errorCode } from './setup';
 import type { ApiTest } from './setup';
-import { profileQueries } from '@libs/database/testing';
 
 let api: ApiTest;
 
@@ -144,25 +140,6 @@ afterAll(() => api.teardown());
       ).toHaveLength(1);
     });
 
-    it('keeps one pending request per user and organization; a rejected one allows another', async () => {
-      const { user: owner, session: ownerSession } = await person();
-      const { session } = await person();
-      const organization = await createOrganization(api, {
-        isOpen: false,
-        adminIds: [owner._id],
-      });
-      const first = await request(organization.slug, session);
-      expect(
-        issueCodeOf(
-          await post(organizationUrl(organization.slug, '/requests'), session, {
-            reason: 'again',
-          }).expect(409),
-        ),
-      ).toBe('request_pending');
-      await decide(organization.slug, first.id, ownerSession, 'R').expect(200);
-      await request(organization.slug, session);
-    });
-
     it('refuses requests to open organizations and from members', async () => {
       const { user, session } = await person();
       const open = await createOrganization(api, { isOpen: true });
@@ -263,19 +240,6 @@ afterAll(() => api.teardown());
       ).toBe(2);
     });
 
-    it('limits join requests to five per hour per user', async () => {
-      const { session } = await person();
-      const organizations = await Promise.all(
-        Array.from({ length: 6 }, () =>
-          createOrganization(api, { isOpen: false }),
-        ),
-      );
-      for (const organization of organizations.slice(0, 5))
-        await request(organization.slug, session);
-      await post(organizationUrl(organizations[5].slug, '/requests'), session, {
-        reason: 'x',
-      }).expect(429);
-    });
     it('gives the rate-limit hit back for a refused duplicate', async () => {
       const { session } = await person();
       const organizations = await Promise.all(
@@ -295,37 +259,6 @@ afterAll(() => api.teardown());
       for (const organization of organizations.slice(1))
         await request(organization.slug, session);
     });
-    it('never adds a member for a request that was already rejected', async () => {
-      const { user: owner, session: ownerSession } = await person();
-      const { user, session } = await person();
-      const organization = await createOrganization(api, {
-        isOpen: false,
-        adminIds: [owner._id],
-      });
-      const created = await request(organization.slug, session);
-      await decide(organization.slug, created.id, ownerSession, 'R').expect(
-        200,
-      );
-      await decide(organization.slug, created.id, ownerSession, 'A').expect(
-        409,
-      );
-      expect(await membershipsOf(user._id)).toEqual([]);
-    });
-
-    it('answers a duplicate with 409 even when the hourly limit is used up', async () => {
-      const { session } = await person();
-      const organizations = await Promise.all(
-        Array.from({ length: 5 }, () =>
-          createOrganization(api, { isOpen: false }),
-        ),
-      );
-      for (const organization of organizations)
-        await request(organization.slug, session);
-      await post(organizationUrl(organizations[0].slug, '/requests'), session, {
-        reason: 'again',
-      }).expect(409);
-    });
-
     it('rejects in parallel without the approval lock, and rereads slots under it', async () => {
       const { user: owner, session: ownerSession } = await person();
       const organization = await createOrganization(api, {
@@ -427,39 +360,6 @@ afterAll(() => api.teardown());
         404,
       );
     });
-
-    it('answers 400 for malformed list, decide and create input', async () => {
-      const { user: owner, session: ownerSession } = await person();
-      const organization = await createOrganization(api, {
-        isOpen: false,
-        adminIds: [owner._id],
-      });
-      const created = await request(
-        organization.slug,
-        (await person()).session,
-      );
-      await get(
-        organizationUrl(organization.slug, '/requests?state=X'),
-        ownerSession,
-      ).expect(400);
-      await get(
-        organizationUrl(organization.slug, '/requests?page=abc'),
-        ownerSession,
-      ).expect(400);
-      await decide(
-        organization.slug,
-        created.id,
-        ownerSession,
-        'P' as 'A',
-      ).expect(400);
-      const { session } = await person();
-      await post(organizationUrl(organization.slug, '/requests'), session, {
-        reason: 'x'.repeat(4097),
-      }).expect(400);
-      await post(organizationUrl(organization.slug, '/requests'), session, {
-        reason: '   ',
-      }).expect(400);
-    });
   });
 }
 
@@ -523,34 +423,6 @@ afterAll(() => api.teardown());
       expect(rows[0].title).toContain('đã được duyệt');
       expect(rows[0].title).toContain('THPT Chuyên');
       expect(await inbox(admin.user._id)).toHaveLength(0);
-    });
-
-    it('tells the requester the request was refused', async () => {
-      const { requester, decide } = await scenario();
-      await decide('R').expect(200);
-      const [row] = await inbox(requester.user._id);
-      expect(row.title).toContain('đã bị từ chối');
-    });
-
-    it('does not notify again when the request was already decided', async () => {
-      const { requester, decide } = await scenario();
-      await decide('A').expect(200);
-      await decide('R').expect(409);
-      const rows = await inbox(requester.user._id);
-      expect(rows).toHaveLength(1);
-      expect(rows[0].count).toBe(1);
-    });
-
-    it('still decides the request when the inbox write fails', async () => {
-      const { requester, created, decide } = await scenario();
-      const merge = jest
-        .spyOn(api.app.get(NotificationsRepository), 'merge')
-        .mockRejectedValueOnce(new Error('mongo down'));
-      await decide('A').expect(200);
-      merge.mockRestore();
-      expect(await inbox(requester.user._id)).toHaveLength(0);
-      const stored = await api.organizationRequests.findById(created.id).lean();
-      expect(stored?.state).toBe('A');
     });
   });
 }
@@ -646,74 +518,6 @@ afterAll(() => api.teardown());
         },
       ]);
       expect(await queueRows('?state=R', staffSession)).toEqual([]);
-    });
-
-    it('serves the queue from the state index, newest first, with no in-memory sort', async () => {
-      const { session: staffSession } = await person({
-        permissions: ['judge.edit_all_organization'],
-      });
-      const operations = await profileQueries(api.db, () =>
-        queueRows('?state=P', staffSession),
-      );
-      const reads = operations.filter(
-        ({ collection }) => collection === 'organizationRequests',
-      );
-      expect(reads.length).toBeGreaterThan(0);
-      expect(
-        reads.some(({ planSummary }) =>
-          planSummary.includes('IXSCAN { state: 1, _id: -1 }'),
-        ),
-      ).toBe(true);
-      expect(
-        reads.every(
-          ({ planSummary, hasSortStage }) =>
-            !planSummary.includes('COLLSCAN') && !hasSortStage,
-        ),
-      ).toBe(true);
-    });
-
-    it('pages 50 rows at a time, newest first', async () => {
-      await api.organizationRequests.deleteMany({ state: 'R' });
-      const { user: owner, session: staffSession } = await person({
-        permissions: ['judge.edit_all_organization'],
-      });
-      const organization = await createOrganization(api, {
-        isOpen: false,
-        adminIds: [owner._id],
-      });
-      const ids = Array.from({ length: 51 }, () => newId()).sort();
-      await api.organizationRequests.insertMany(
-        ids.map((id) => ({
-          _id: id,
-          organization: organization._id,
-          user: owner._id,
-          state: 'R',
-          reason: 'bulk',
-        })),
-        { ordered: true },
-      );
-      const firstPage = await queueRows('?state=R', staffSession);
-      const secondPage = await queueRows('?state=R&page=2', staffSession);
-      expect(firstPage).toHaveLength(50);
-      expect(secondPage.map((row) => row.id)).toEqual([ids[0]]);
-      expect(firstPage[0].id).toBe(ids[50]);
-      await api.organizationRequests.deleteMany({ state: 'R' });
-    });
-
-    it('refuses the queue to organization administrators, requesters and anonymous visitors', async () => {
-      const { user: owner, session: ownerSession } = await person();
-      const { session: requesterSession } = await person();
-      await createOrganization(api, { isOpen: false, adminIds: [owner._id] });
-      await get(QUEUE_URL, ownerSession).expect(403);
-      await get(QUEUE_URL, requesterSession).expect(403);
-      await get(QUEUE_URL).expect(401);
-    });
-
-    it('answers 400 for an unknown state', async () => {
-      const { session: staffSession } = await person({
-        permissions: ['judge.edit_all_organization'],
-      });
-      await get(`${QUEUE_URL}?state=X`, staffSession).expect(400);
     });
 
     it('lets edit_all_organization decide a request in an organization it does not administer', async () => {

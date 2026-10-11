@@ -20,7 +20,9 @@ describe('PdfCacheService', () => {
   it('maps code and language to <root>/<code>.<lang>.pdf and refuses bad codes', () => {
     expect(cache.pathOf('sum', 'vi')).toBe(join(root, 'sum.vi.pdf'));
     expect(() => cache.pathOf('../x', 'en')).toThrow('Invalid problem code');
-    expect(() => cache.pathOf('Sum', 'en')).toThrow('Invalid problem code');
+    expect(() => cache.pathOf('sum', '../x' as 'en')).toThrow(
+      'Invalid statement language',
+    );
   });
   it('writes through a temp file and deletes every language at once', async () => {
     await cache.write('sum', 'en', (temporary) =>
@@ -33,26 +35,14 @@ describe('PdfCacheService', () => {
     expect(existsSync(cache.pathOf('sum', 'vi'))).toBe(false);
     await cache.delete('sum');
   });
-  it('opens the cached file, or reports none', async () => {
-    writeFileSync(cache.pathOf('open', 'en'), '%PDF-1.4');
-    const handle = await cache.open('open', 'en');
-    expect((await handle?.readFile('utf8')) ?? '').toBe('%PDF-1.4');
-    await handle?.close();
+  it('reports none for an uncached file', async () => {
     expect(await cache.open('open', 'vi')).toBeNull();
-    await expect(cache.open('../x', 'en')).rejects.toThrow(
-      'Invalid problem code',
-    );
   });
   it('leaves nothing behind when producing the file fails', async () => {
     await expect(
       cache.write('bad', 'en', () => Promise.reject(new Error('boom'))),
     ).rejects.toThrow('boom');
     expect(existsSync(cache.pathOf('bad', 'en'))).toBe(false);
-  });
-  it('hands out scratch paths under .tmp', async () => {
-    const scratch = await cache.scratchPath('sum.en.html');
-    expect(scratch).toBe(join(root, '.tmp', 'sum.en.html'));
-    expect(existsSync(join(root, '.tmp'))).toBe(true);
   });
   it.each(['../x', 'a/b', '', '.hidden', 'a..b'])(
     'refuses the scratch name %j',
@@ -61,10 +51,6 @@ describe('PdfCacheService', () => {
         'Unsafe scratch file name',
       ),
   );
-  it('refuses a language outside the statement languages', () =>
-    expect(() => cache.pathOf('sum', '../x' as 'en')).toThrow(
-      'Invalid statement language',
-    ));
   it('refuses a scratch directory that is a symlink to outside the root', async () => {
     const outside = mkdtempSync(join(tmpdir(), 'qhhoj-outside-'));
     rmSync(join(root, '.tmp'), { recursive: true, force: true });

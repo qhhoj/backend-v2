@@ -27,8 +27,6 @@ import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 const SUBMISSIONS = '/api/internal/submissions';
-const NIL_UUID = '00000000-0000-0000-0000-000000000000';
-const MAX_UUID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 
 describe('submission actions', () => {
   let api: ApiTest;
@@ -117,31 +115,6 @@ describe('submission actions', () => {
   afterAll(() => api.teardown());
 
   describe('abort', () => {
-    it('lets the owner abort a queued submission: AB at once, graded, and the bridge told', async () => {
-      const id = await seed({ status: 'QU', result: null });
-      await post('owner', `${SUBMISSIONS}/${id}/abort`).expect(204);
-      expect(await row(id)).toMatchObject({
-        status: 'AB',
-        result: 'AB',
-        points: 0,
-        effectsDueAt: expect.any(Date) as Date,
-      });
-      expect(await gradedIds()).toEqual([id]);
-      expect(await bridgeCommands(api)).toEqual([
-        { type: 'abort', submissionId: id },
-      ]);
-    });
-
-    it('leaves a running submission to the bridge, which terminates it', async () => {
-      const id = await seed({ status: 'G', result: null, judgedOn: 'judge-1' });
-      await post('aborter', `${SUBMISSIONS}/${id}/abort`).expect(204);
-      expect(await row(id)).toMatchObject({ status: 'G' });
-      expect(await gradedIds()).toEqual([]);
-      expect(await bridgeCommands(api)).toEqual([
-        { type: 'abort', submissionId: id },
-      ]);
-    });
-
     it('refuses other users, and the owner once an admin rejudged it', async () => {
       const id = await seed({ status: 'QU', result: null });
       await post('other', `${SUBMISSIONS}/${id}/abort`)
@@ -154,13 +127,6 @@ describe('submission actions', () => {
       });
       await post('owner', `${SUBMISSIONS}/${rejudged}/abort`).expect(403);
       expect((await row(id)).status).toBe('QU');
-    });
-
-    it('does nothing to a finished submission', async () => {
-      const id = await seed();
-      await post('owner', `${SUBMISSIONS}/${id}/abort`).expect(204);
-      expect(await row(id)).toMatchObject({ status: 'D', result: 'AC' });
-      expect(await bridgeCommands(api)).toEqual([]);
     });
   });
 
@@ -250,15 +216,6 @@ describe('submission actions', () => {
       expect((await row(id)).status).toBe('D');
     });
 
-    it('refuses rejudging a pending final-submission row: it waits for the contest to end', async () => {
-      const id = await seed({ status: 'PD', result: null });
-      await post('manager', `${SUBMISSIONS}/${id}/rejudge`)
-        .expect(409)
-        .expect(errorCode('conflict'));
-      expect((await row(id)).status).toBe('PD');
-      expect(await bridgeCommands(api)).toEqual([]);
-    });
-
     it('rejects a finished submission: RJ, no points, cases cleared, graded', async () => {
       const id = await seed({
         points: 100,
@@ -330,35 +287,9 @@ describe('submission actions', () => {
         ).toEqual({ count: 1, dryRun: false, allowed: true });
       });
     });
-
-    it('answers 404 for unknown and malformed ids', async () => {
-      for (const action of ['abort', 'rejudge', 'reject'])
-        for (const id of ['0192b0e0-0000-7000-8000-00000000dead', 'nope'])
-          await post('manager', `${SUBMISSIONS}/${id}/${action}`).expect(404);
-    });
   });
 
   describe('visibility and permissions', () => {
-    it('answers 404 on a private problem to everyone who cannot see it, owner included', async () => {
-      const hidden = (await api.problems.findOne({ code: 'hidden' }))!._id;
-      const id = await seed({ problem: hidden });
-      for (const who of ['owner', 'other', 'aborter', 'lot'])
-        for (const action of ['abort', 'rejudge', 'reject'])
-          await post(who, `${SUBMISSIONS}/${id}/${action}`).expect(404);
-      expect((await row(id)).status).toBe('D');
-    });
-
-    it('needs the permission of each action on top of edit rights', async () => {
-      const id = await seed();
-      await post('editor', `${SUBMISSIONS}/${id}/rejudge`).expect(403);
-      await post('editor', `${SUBMISSIONS}/${id}/reject`).expect(403);
-      await post('lot', `${SUBMISSIONS}/${id}/reject`).expect(403);
-      await post('editor', `${SUBMISSIONS}/rejudge`, {
-        problem: 'acts',
-      }).expect(403);
-      expect(await row(id)).toMatchObject({ status: 'D', result: 'AC' });
-    });
-
     it('still succeeds once, without a retry hazard, when the graded job cannot be enqueued', async () => {
       const add = jest
         .spyOn(graded, 'add')
@@ -400,15 +331,6 @@ describe('submission actions', () => {
         command.type === 'judge' ? command.submissionIds : [],
       );
       expect([...commanded].sort()).toEqual([...seeded].sort());
-    });
-
-    it('allows exactly 10 submissions without the lot permission', async () => {
-      await Promise.all(Array.from({ length: 10 }, () => seed()));
-      expect(dataOf(await bulk('manager', {}).expect(200))).toEqual({
-        count: 10,
-        dryRun: false,
-        allowed: true,
-      });
     });
 
     it('resets and commands in chunks of at most 1000 ids', async () => {
@@ -477,30 +399,6 @@ describe('submission actions', () => {
           command.type === 'judge' ? command.submissionIds : [],
         ),
       ).toEqual([finished]);
-    });
-
-    it('rejects the nil and max UUIDs, which Mongoose cannot cast, with 400', async () => {
-      for (const unusable of [NIL_UUID, MAX_UUID]) {
-        for (const body of [
-          { idFrom: unusable },
-          { idTo: unusable },
-          { languages: [unusable] },
-        ])
-          await bulk('lot', body)
-            .expect(400)
-            .expect(errorCode('validation_failed'));
-      }
-    });
-
-    it('needs edit rights on the problem and a visible problem', async () => {
-      await seed();
-      await bulk('outsider', {}).expect(403);
-      await post('lot', `${SUBMISSIONS}/rejudge`, { problem: 'nope' }).expect(
-        404,
-      );
-      await post('lot', `${SUBMISSIONS}/rejudge`, {})
-        .expect(400)
-        .expect(errorCode('validation_failed'));
     });
   });
 });

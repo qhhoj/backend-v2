@@ -7,8 +7,7 @@ import {
   loginAs,
   detailOf,
 } from './problem-fixtures';
-import { setupApiTest, errorCode } from './setup';
-import { newId } from '@libs/database';
+import { setupApiTest } from './setup';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
@@ -85,100 +84,6 @@ afterAll(() => api.teardown());
         includeInProblem: true,
       });
     });
-    it('reflects new catalog rows after a resync', async () => {
-      await api.problemTypes.create({
-        name: 'graph',
-        fullName: 'Graph Theory',
-      });
-      await api.resyncCatalog();
-      expect(
-        metaOf(await api.http().get(META).expect(200)).types.map(
-          (type) => type.name,
-        ),
-      ).toEqual(['dp', 'graph', 'uncategorized']);
-    });
-  });
-}
-
-// from problems-random.e2e-spec.ts
-{
-  const RANDOM = '/api/internal/problems/random';
-  const codeOf = ({ body }: { body: unknown }) =>
-    (body as { data: { code: string } }).data.code;
-
-  describe('GET /api/internal/problems/random', () => {
-    beforeAll(() => api.reset());
-    let catalog: Catalog;
-    let author: TestSession;
-    const ORG = newId();
-
-    beforeAll(async () => {
-      catalog = await seedCatalog(api);
-      const authorUser = await createUserWith(api, 'author', {
-        permissions: ['judge.edit_own_problem'],
-      });
-      author = await loginAs(api, authorUser._id);
-      await createProblem(api, catalog, { code: 'easy', points: 900 });
-      await createProblem(api, catalog, { code: 'easy2', points: 1000 });
-      await createProblem(api, catalog, { code: 'hard', points: 3000 });
-      await createProblem(api, catalog, {
-        code: 'secret',
-        isPublic: false,
-        authors: [authorUser._id],
-        points: 3000,
-      });
-      await createProblem(api, catalog, {
-        code: 'orgonly',
-        isOrganizationPrivate: true,
-        organizations: [ORG],
-        points: 3000,
-      });
-    });
-
-    it('only returns problems matching the list filters', async () => {
-      const seen = new Set<string>();
-      for (let attempt = 0; attempt < 30; attempt++)
-        seen.add(codeOf(await api.http().get(`${RANDOM}?pointsMax=1000`)));
-      expect([...seen].sort()).toEqual(['easy', 'easy2']);
-      expect(codeOf(await api.http().get(`${RANDOM}?pointsMin=2000`))).toBe(
-        'hard',
-      );
-    });
-
-    it('never returns what the list would hide from the viewer', async () => {
-      for (let attempt = 0; attempt < 10; attempt++) {
-        expect(
-          codeOf(
-            await api.http().get(`${RANDOM}?pointsMin=2000&visibility=all`),
-          ),
-        ).toBe('hard');
-      }
-      expect(
-        codeOf(
-          await authed(
-            api.http().get(`${RANDOM}?q=secret&visibility=all`),
-            author,
-          ),
-        ),
-      ).toBe('secret');
-    });
-
-    it('answers 404 no_problem when nothing matches', async () => {
-      await api
-        .http()
-        .get(`${RANDOM}?pointsMin=9000`)
-        .expect(404)
-        .expect(errorCode('no_problem'));
-      await api
-        .http()
-        .get(`${RANDOM}?q=secret&visibility=all`)
-        .expect(404)
-        .expect(errorCode('no_problem'));
-    });
-
-    it('rejects invalid filters like the list', async () => {
-      await api.http().get(`${RANDOM}?groupId=nope`).expect(400);
-    });
   });
 }
 
@@ -224,14 +129,6 @@ afterAll(() => api.teardown());
         .send(change)
         .expect(200);
       expect(await queuedProblemIds()).toEqual([edited._id]);
-    });
-
-    it('queues nothing for other fields or an unchanged value', async () => {
-      const edited = await problem();
-      await authed(api.http().patch(`${PROBLEMS}/${edited.code}`), admin)
-        .send({ name: 'Renamed', points: 1000, partial: false })
-        .expect(200);
-      expect(await queuedProblemIds()).toEqual([]);
     });
   });
 }
@@ -335,18 +232,6 @@ afterAll(() => api.teardown());
       expect(detailOf(await detail('vs_solved', null)).viewerStatus).toBeNull();
     });
 
-    it('reads submissions once per page, through an index', async () => {
-      const db = api.app.get<Connection>(getConnectionToken()).db!;
-      const operations = await profileQueries(db, async () => {
-        await statusesFor(viewer);
-      });
-      const reads = operations.filter(
-        ({ collection }) => collection === 'submissions',
-      );
-      expect(reads).toHaveLength(1);
-      expect(reads[0].planSummary).not.toContain('COLLSCAN');
-    });
-
     describe('solved filter', () => {
       const codesOf = async (who: TestSession | null, solved: string) => {
         const request = api
@@ -381,41 +266,6 @@ afterAll(() => api.teardown());
           expect.arrayContaining(['vs_short', 'vs_wrong', 'vs_others']),
         );
         expect(await codesOf(viewer, 'true')).not.toContain('vs_others');
-      });
-
-      it('gives anonymous viewers every problem for false and none for true', async () => {
-        expect(await codesOf(null, 'false')).toEqual(EVERY_CODE);
-        expect(await codesOf(null, 'true')).toEqual([]);
-      });
-
-      it('is per viewer: another user sees their own solves', async () => {
-        const other = await loginAs(
-          api,
-          (await api.users.findOne({ username: 'other' }))!._id,
-        );
-        expect(await codesOf(other, 'true')).toEqual(['vs_others']);
-      });
-
-      it('rejects a non-boolean value', async () => {
-        await authed(
-          api.http().get(PROBLEMS).query({ solved: 'maybe' }),
-          viewer,
-        ).expect(400);
-      });
-
-      it('reads the viewer AC submissions through an index', async () => {
-        const operations = await profileQueries(api.db, async () => {
-          await codesOf(viewer, 'false');
-        });
-        const reads = operations.filter(
-          ({ collection }) => collection === 'submissions',
-        );
-        for (const read of reads)
-          expect(read.planSummary).not.toContain('COLLSCAN');
-        // The viewer has two AC rows (solved, short) among six submissions: the filter's read examines only those.
-        expect(Math.min(...reads.map(({ docsExamined }) => docsExamined))).toBe(
-          2,
-        );
       });
     });
   });

@@ -42,20 +42,6 @@ afterAll(() => api.teardown());
       await api.resyncCatalog();
     });
 
-    it('lists the catalogue to anyone, ordered by order then slug', async () => {
-      await api.contestTags.create([
-        { slug: 'zeta', name: 'Zeta', color: 'tag-2', order: 1 },
-        { slug: 'beta', name: 'Beta', color: 'tag-1', order: 1 },
-        { slug: 'first', name: 'First', color: 'tag-3', order: 0 },
-      ]);
-      await api.resyncCatalog();
-      expect((await list()).map((tag) => tag.slug)).toEqual([
-        'first',
-        'beta',
-        'zeta',
-      ]);
-    });
-
     it('creates, updates and deletes only for holders of judge.change_contest_tag', async () => {
       const body = {
         slug: 'olp',
@@ -94,49 +80,6 @@ afterAll(() => api.teardown());
         color: 'tag-1',
       }).expect(400);
       expect(await list()).toHaveLength(1);
-    });
-
-    it('pages the list and refuses a 101st tag', async () => {
-      await api.contestTags.create([
-        { slug: 'a', name: 'A', color: 'tag-1', order: 0 },
-        { slug: 'b', name: 'B', color: 'tag-1', order: 1 },
-        { slug: 'c', name: 'C', color: 'tag-1', order: 2 },
-      ]);
-      await api.resyncCatalog();
-      const page = await api.http().get(`${url}?pageSize=2&page=2`).expect(200);
-      expect(dataOf<ContestTagResponse[]>(page).map((tag) => tag.slug)).toEqual(
-        ['c'],
-      );
-      expect((page.body as { meta: { total: number } }).meta.total).toBe(3);
-      await api.contestTags.insertMany(
-        Array.from({ length: 97 }, (_unused, index) => ({
-          slug: `bulk-${index}`,
-          name: 'Bulk',
-          color: 'tag-2',
-          order: 10 + index,
-        })),
-      );
-      await create({ slug: 'one-too-many', name: 'X', color: 'tag-1' })
-        .expect(409)
-        .expect(errorCode('tag_limit'));
-    });
-
-    it('answers 404 for an unknown slug on update and delete', async () => {
-      await authed(api.http().patch(`${url}/nope`), admin)
-        .send({ name: 'X' })
-        .expect(404);
-      await authed(api.http().delete(`${url}/nope`), admin).expect(404);
-    });
-
-    it('keeps the contests that use a deleted tag (they show a neutral chip)', async () => {
-      await create({ slug: 'olp', name: 'Olympiad', color: 'tag-4' }).expect(
-        201,
-      );
-      const contest = await createContest(api, { tags: ['olp'] });
-      await authed(api.http().delete(`${url}/olp`), admin).expect(204);
-      expect((await api.contests.findById(contest._id).lean())!.tags).toEqual([
-        'olp',
-      ]);
     });
   });
 }

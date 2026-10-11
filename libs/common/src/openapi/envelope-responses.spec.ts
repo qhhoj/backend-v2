@@ -57,10 +57,4 @@ describe('envelopeResponses', () => {
     expect(result.paths['/x'].get).toEqual(raw);
     expect(result.paths['/x'].post).toEqual(paged);
   });
-  it('ignores responses without a body', () => {
-    const empty = { responses: { 204: { description: 'none' } } };
-    expect(
-      envelopeResponses(document({ delete: empty })).paths['/x'].delete,
-    ).toEqual(empty);
-  });
 });

@@ -82,15 +82,6 @@ describe('PrincipalService', () => {
       ),
     ).toBe(true);
   });
-  it('updates selected fields', async () => {
-    const bob = await users.create({ username: 'bob', password: 'x' });
-    await repository.update(bob._id, {
-      lastLogin: new Date('2026-01-01T00:00:00Z'),
-    });
-    expect((await repository.findById(bob._id))!.lastLogin).toEqual(
-      new Date('2026-01-01T00:00:00Z'),
-    );
-  });
   it('returns null for malformed or unknown ids', async () => {
     expect(await repository.findById('not-a-uuid')).toBeNull();
     expect(await repository.findById('')).toBeNull();

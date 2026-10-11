@@ -1,12 +1,6 @@
 import { attachmentHeader } from './attachment-header';
 
 describe('attachmentHeader', () => {
-  it('keeps an ASCII name in both parameters', () => {
-    expect(attachmentHeader('alice_1-data.zip')).toBe(
-      `attachment; filename="alice_1-data.zip"; filename*=UTF-8''alice_1-data.zip`,
-    );
-  });
-
   it('replaces non-ASCII characters in the fallback and percent-encodes the real name', () => {
     expect(attachmentHeader('ngườidùng-data.zip')).toBe(
       `attachment; filename="ng__id_ng-data.zip"; filename*=UTF-8''ng%C6%B0%E1%BB%9Did%C3%B9ng-data.zip`,

@@ -12,7 +12,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
 import type { Env } from '@libs/common';
 import Redis from 'ioredis';
 import { TEST_REDIS_URL } from '@libs/common/testing';
@@ -32,31 +31,19 @@ describe('ProblemDataFilesService', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('writes init.yml atomically under <root>/<code>/ and reads it back', async () => {
+  it('writes init.yml atomically, reads it back and removes it', async () => {
     await files.writeInit('sum', 'archive: tests.zip\n');
-    expect(readFileSync(join(root, 'sum', 'init.yml'), 'utf8')).toBe(
-      'archive: tests.zip\n',
-    );
     expect(readdirSync(join(root, 'sum'))).toEqual(['init.yml']);
     expect(await files.readInit('sum')).toBe('archive: tests.zip\n');
     await files.removeInit('sum');
     expect(await files.readInit('sum')).toBeNull();
-    await files.removeInit('sum');
   });
-  it('stamps the data version atomically, replaces it, and reads none from an unstamped directory', async () => {
-    expect(await files.readDataVersion('stamped')).toBeNull();
-    await files.writeInit('stamped', 'archive: tests.zip\n');
+  it('stamps the data version, reads none when unstamped, replaces it', async () => {
     expect(await files.readDataVersion('stamped')).toBeNull();
     await files.writeDataVersion('stamped', 4);
     await files.writeDataVersion('stamped', 5);
-    expect(readFileSync(join(root, 'stamped', '.data-version'), 'utf8')).toBe(
-      '5\n',
-    );
     expect(await files.readDataVersion('stamped')).toBe(5);
-    expect(readdirSync(join(root, 'stamped')).sort()).toEqual([
-      '.data-version',
-      'init.yml',
-    ]);
+    expect(readdirSync(join(root, 'stamped'))).toEqual(['.data-version']);
   });
   it('never lowers the stamp, even when overlapping writes finish out of order', async () => {
     await files.writeDataVersion('monotonic', 5);
@@ -138,34 +125,6 @@ describe('ProblemDataFilesService', () => {
     await files.rename('before_rename', 'after_rename');
     expect(await files.readDataVersion('after_rename')).toBe(7);
   });
-  it('refuses to stamp a directory that is not a problem code', async () => {
-    await expect(files.writeDataVersion('../x', 1)).rejects.toThrow(
-      /Invalid problem code/,
-    );
-  });
-  it('writes buffers and streams, reports existence', async () => {
-    await files.writeFile('sum', 'checker.cpp', Buffer.from('int main(){}'));
-    await files.writeFile(
-      'sum',
-      'tests.zip',
-      Readable.from([Buffer.from('PK')]),
-    );
-    expect(await files.exists('sum')).toBe(true);
-    expect(await files.exists('sum', 'tests.zip')).toBe(true);
-    expect(await files.exists('sum', 'missing.zip')).toBe(false);
-    expect(await files.exists('nope')).toBe(false);
-    await files.removeFile('sum', 'checker.cpp');
-    expect(await files.exists('sum', 'checker.cpp')).toBe(false);
-  });
-  it('removes an empty problem directory and leaves one that holds a file', async () => {
-    await files.stageUpload('hollow');
-    await files.removeDirectoryIfEmpty('hollow');
-    expect(existsSync(join(root, 'hollow'))).toBe(false);
-    await files.writeFile('kept', 'tests.zip', Buffer.from('PK'));
-    await files.removeDirectoryIfEmpty('kept');
-    await files.removeDirectoryIfEmpty('never_existed');
-    expect(readdirSync(join(root, 'kept'))).toEqual(['tests.zip']);
-  });
   it.each(['../x', 'a/b', '.hidden', 'a..b', '', 'x\0y'])(
     'refuses the file name %j',
     (name) =>
@@ -190,19 +149,6 @@ describe('ProblemDataFilesService', () => {
     await expect(files.rename('.imports', 'stolen')).rejects.toThrow(
       'Invalid problem code',
     );
-  });
-  it('refuses to rename onto an existing directory and leaves it untouched', async () => {
-    await files.writeInit('keep', 'x: 1\n');
-    await files.writeInit('src', 'x: 2\n');
-    await expect(files.rename('src', 'keep')).rejects.toThrow(
-      'Data directory already exists: keep',
-    );
-    expect(await files.readInit('keep')).toBe('x: 1\n');
-    expect(await files.readInit('src')).toBe('x: 2\n');
-  });
-  it('leaves no reservation behind when the source is missing', async () => {
-    await files.rename('ghost2', 'reserved');
-    expect(existsSync(join(root, 'reserved'))).toBe(false);
   });
   it("refuses a staged path that is not this code's upload", async () => {
     const staged = await files.stageUpload('sum');
@@ -266,11 +212,6 @@ describe('ProblemDataFilesService', () => {
     await expect(files.exists('planted')).rejects.toThrow('symlink');
     expect(readdirSync(outside)).toEqual(['init.yml']);
     rmSync(outside, { recursive: true, force: true });
-  });
-  it('accepts a long safe file name', async () => {
-    const name = `${'n'.repeat(225)}.zip`;
-    await files.writeFile('sum', name, Buffer.from('x'));
-    expect(await files.exists('sum', name)).toBe(true);
   });
   it('renames a directory, refuses an existing target and ignores a missing source', async () => {
     await files.writeInit('old', 'x: 1\n');

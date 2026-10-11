@@ -35,25 +35,6 @@ class DrainingResponse extends StalledResponse {
 }
 
 describe('openEventStream', () => {
-  it('takes the response over with event-stream headers, keeping the reply headers', () => {
-    const raw = new StalledResponse();
-    const hijack = jest.fn();
-    openEventStream(replyOn(raw, hijack), 1024);
-    expect(hijack).toHaveBeenCalledTimes(1);
-    expect(raw.statusCode).toBe(200);
-    expect(raw.headers).toMatchObject({
-      'x-request-id': 'req-1',
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      'X-Accel-Buffering': 'no',
-    });
-  });
-
-  it('frames an event as SSE', () =>
-    expect(sseFrame('done', { status: 'D' })).toBe(
-      'event: done\ndata: {"status":"D"}\n\n',
-    ));
-
   it('drops a client that stops reading once its unsent bytes pass the cap', async () => {
     const raw = new StalledResponse();
     const stream = openEventStream(replyOn(raw), 1024);

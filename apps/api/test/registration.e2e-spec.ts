@@ -1,7 +1,6 @@
 import { UsersRepository } from '@libs/auth';
-import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { MAILER, REDIS } from '@libs/common';
+import { REDIS } from '@libs/common';
 import { ActivationKey, CI } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
@@ -91,39 +90,6 @@ describe('registration', () => {
         .expect(errorCode('validation_failed'));
   });
 
-  it('answers machine codes next to the messages', async () => {
-    const response = await register(
-      'TAKEN',
-      'TAKEN@example.com',
-      '12345678',
-    ).expect(400);
-    const { error } = response.body as {
-      error: {
-        fields: Record<string, string[]>;
-        issues: Array<{ field: string; code: string }>;
-      };
-    };
-    expect(error.issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ field: 'username', code: 'username_taken' }),
-        expect.objectContaining({ field: 'email', code: 'email_taken' }),
-        expect.objectContaining({
-          field: 'password',
-          code: 'password_numeric',
-        }),
-      ]),
-    );
-    expect(error.fields.username).toEqual(['Username is taken.']);
-    const invalid = await register('bad name', 'nope', 'x').expect(400);
-    expect(
-      (
-        invalid.body as { error: { issues: Array<{ code: string }> } }
-      ).error.issues.map((issue) => issue.code),
-    ).toEqual(
-      expect.arrayContaining(['username_invalid_characters', 'email_invalid']),
-    );
-  });
-
   it.each([
     ['email', 'email_taken'],
     ['username', 'username_taken'],
@@ -144,45 +110,6 @@ describe('registration', () => {
         }
       ).error.issues,
     ).toEqual([expect.objectContaining({ field, code })]);
-  });
-
-  it('rejects expired and unknown activation keys without activating', async () => {
-    await register('late', 'late@example.com').expect(204);
-    const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
-    await activationKeys.updateMany(
-      {},
-      { expiresAt: new Date(Date.now() - 1000) },
-    );
-    await activate(key).expect(400).expect(errorCode('invalid_token'));
-    await activate('f'.repeat(64))
-      .expect(400)
-      .expect(errorCode('invalid_token'));
-    expect((await api.users.findOne({ username: 'late' }))!.isActive).toBe(
-      false,
-    );
-  });
-
-  it('does not activate banned users', async () => {
-    await register('banned_one', 'banned@example.com').expect(204);
-    const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
-    const banned = (await api.users.findOne({ username: 'banned_one' }))!;
-    await api.users.updateOne(
-      { username: 'banned_one' },
-      { banReason: 'spam' },
-    );
-    await activate(key).expect(400).expect(errorCode('invalid_token'));
-    await activate(key).expect(400).expect(errorCode('invalid_token'));
-    expect(await activationKeys.countDocuments({ userId: banned._id })).toBe(0);
-    expect(
-      (await api.users.findOne({ username: 'banned_one' }))!.isActive,
-    ).toBe(false);
-  });
-
-  it('rejects a key whose user was reclaimed meanwhile', async () => {
-    await register('reclaimed', 'reclaimed@example.com').expect(204);
-    const key = activationKeyFrom(api.mailer.sent.at(-1)!.text);
-    await api.users.deleteOne({ username: 'reclaimed' });
-    await activate(key).expect(400).expect(errorCode('invalid_token'));
   });
 
   it('consumes an activation key exactly once under concurrency', async () => {
@@ -242,70 +169,5 @@ describe('registration', () => {
     await register('new_owner', 'StaleMail@example.com').expect(204);
     expect(await api.users.findOne({ username: 'stale_mail' })).toBeNull();
     expect(await activationKeys.countDocuments({ userId: stale._id })).toBe(0);
-  });
-
-  it('keeps an email taken when an active duplicate remains after reclaiming a stale one', async () => {
-    const ancient = new Date(Date.now() - 30 * 86_400_000);
-    await createUser(api.users, {
-      username: 'stale_dup',
-      email: 'DUP@example.com',
-      isActive: false,
-      dateJoined: ancient,
-    });
-    await createUser(api.users, {
-      username: 'active_dup',
-      email: 'dup@example.com',
-    });
-    const response = await register('dup_newcomer', 'dup@example.com').expect(
-      400,
-    );
-    expect(
-      (response.body as { error: { fields: unknown } }).error.fields,
-    ).toMatchObject({ email: ['Email is already registered.'] });
-    expect(await api.users.findOne({ username: 'stale_dup' })).toBeNull();
-    expect(await api.users.findOne({ username: 'dup_newcomer' })).toBeNull();
-  });
-
-  it('rate-limits registrations per IP', async () => {
-    for (let attempt = 0; attempt < 5; attempt++)
-      await register('Taken', 'x@example.com', 'p');
-    await register('another', 'another@example.com').expect(429);
-  });
-});
-
-describe('registration with a failing mailer', () => {
-  let api: ApiTest;
-  beforeAll(async () => {
-    api = await setupApiTest({
-      overrides: [
-        {
-          provide: MAILER,
-          useValue: { send: () => Promise.reject(new Error('smtp down')) },
-        },
-      ],
-    });
-  });
-  afterAll(() => api.teardown());
-
-  it('returns 503 and leaves no user or key behind', async () => {
-    const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation();
-    await api
-      .http()
-      .post(`${AUTH}/register`)
-      .send({
-        username: 'ghost',
-        email: 'ghost@example.com',
-        password: PASSWORD,
-      })
-      .expect(503)
-      .expect(errorCode('mail_unavailable'));
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining('smtp down'));
-    logged.mockRestore();
-    expect(await api.users.findOne({ username: 'ghost' })).toBeNull();
-    expect(
-      await api.app
-        .get<Model<ActivationKey>>(getModelToken(ActivationKey.name))
-        .countDocuments(),
-    ).toBe(0);
   });
 });

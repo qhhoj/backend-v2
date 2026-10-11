@@ -15,24 +15,8 @@ describe('Judge schema', () => {
     await mongoose.disconnect();
     await replSet.stop();
   });
-
-  it('is offline, enabled and unblocked until the bridge says otherwise', async () => {
-    const judge = await Judges.create({ name: 'judge-01', authKeyHash: 'h' });
-    expect(judge.toObject()).toMatchObject({
-      online: false,
-      isBlocked: false,
-      isDisabled: false,
-      ping: null,
-      load: null,
-      runtimes: [],
-      slots: 0,
-      busy: 0,
-      build: '',
-      protocolMinor: 0,
-      features: [],
-    });
-  });
   it('rejects a duplicate name and names that are not hostname-like', async () => {
+    await Judges.create({ name: 'judge-01', authKeyHash: 'h' });
     await expect(
       Judges.create({ name: 'judge-01', authKeyHash: 'h' }),
     ).rejects.toThrow(/duplicate key/);

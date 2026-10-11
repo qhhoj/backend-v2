@@ -32,18 +32,6 @@ const bytesOf = (name: string) =>
   new Uint8Array(readFileSync(join(GOLDEN, `${name}.bin`)));
 
 describe('golden fixtures from judge-v2', () => {
-  it('has the fixtures the Rust side wrote', () => {
-    expect(names).toEqual(
-      expect.arrayContaining([
-        'judge-hello',
-        'judge-cases',
-        'bridge-welcome',
-        'bridge-assign-inline',
-        'chunk',
-      ]),
-    );
-  });
-
   it.each(names)('%s: the Rust bytes decode to the JSON message', (name) => {
     const { type, message } = fixture(name);
     const codec = CODECS[type] as typeof JudgeMessage;

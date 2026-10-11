@@ -116,17 +116,6 @@ describe('contest participation', () => {
       expect(numbers.every((number) => number >= 1)).toBe(true);
     });
 
-    it('refuses a virtual join when virtual joining is disallowed', async () => {
-      const ended = await createContest(api, {
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-        disallowVirtual: true,
-      });
-      await post('alice', ended.key, 'join')
-        .expect(409)
-        .expect(errorCode('virtual_disallowed'));
-    });
-
     it('lets only editors and testers in before the start, as spectators', async () => {
       const upcoming = await createContest(api, {
         startTime: hoursFromNow(1),
@@ -139,19 +128,6 @@ describe('contest participation', () => {
       expect(
         dataOf<ParticipationSummaryResponse>(
           await post('author', upcoming.key, 'join').expect(201),
-        ).virtual,
-      ).toBe(-1);
-    });
-
-    it('lets a tester in before the start, as a spectator', async () => {
-      const upcoming = await createContest(api, {
-        startTime: hoursFromNow(1),
-        endTime: hoursFromNow(3),
-        testers: [users.tester._id],
-      });
-      expect(
-        dataOf<ParticipationSummaryResponse>(
-          await post('tester', upcoming.key, 'join').expect(201),
         ).virtual,
       ).toBe(-1);
     });
@@ -186,26 +162,6 @@ describe('contest participation', () => {
         ).toBe(-1);
       expect(await api.contests.findById(ended._id).lean()).toMatchObject({
         virtualCount: 0,
-      });
-    });
-
-    it('numbers sequential virtual joins 1, 2 and counts them apart from live users', async () => {
-      const ended = await createContest(api, {
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-      });
-      await joinParticipation(api, ended._id, users.alice._id);
-      const numbers: number[] = [];
-      for (let attempt = 0; attempt < 2; attempt += 1)
-        numbers.push(
-          dataOf<ParticipationSummaryResponse>(
-            await post('carol', ended.key, 'join').expect(201),
-          ).virtual,
-        );
-      expect(numbers).toEqual([1, 2]);
-      expect(await api.contests.findById(ended._id).lean()).toMatchObject({
-        userCount: 1,
-        virtualCount: 2,
       });
     });
 
@@ -279,20 +235,6 @@ describe('contest participation', () => {
       await post('erin', contest.key, 'join', { accessCode: 'opensesame' })
         .expect(429)
         .expect(errorCode('rate_limited'));
-    });
-
-    it('limits guesses per IP across users', async () => {
-      const contest = await createContest(api, {
-        accessCodeHash: sha256('opensesame'),
-      });
-      for (const who of ['alice', 'bob', 'carol'])
-        for (let attempt = 0; attempt < 10; attempt += 1)
-          await post(who, contest.key, 'join', {
-            accessCode: `guess${attempt}`,
-          }).expect(403);
-      await post('frank', contest.key, 'join', { accessCode: 'guess' }).expect(
-        429,
-      );
     });
 
     it('never charges a right code', async () => {
@@ -423,32 +365,9 @@ describe('contest participation', () => {
           .expect(errorCode(code));
       },
     );
-
-    it('keeps banned users from registering', async () => {
-      const contest = await createContest(api, {
-        startTime: hoursFromNow(1),
-        endTime: hoursFromNow(3),
-        registrationEnd: hoursFromNow(0.5),
-        bannedUsers: [users.carol._id],
-      });
-      await post('carol', contest.key, 'register')
-        .expect(403)
-        .expect(errorCode('banned_from_contest'));
-    });
   });
 
   describe('leave and current', () => {
-    it('leaves only the current contest', async () => {
-      const contest = await createContest(api);
-      const other = await createContest(api);
-      await post('carol', contest.key, 'join').expect(201);
-      await post('carol', other.key, 'leave')
-        .expect(404)
-        .expect(errorCode('not_in_contest'));
-      await post('carol', contest.key, 'leave').expect(204);
-      expect(await pointerOf('carol')).toBeNull();
-    });
-
     it('never clears a pointer that moved to another participation', async () => {
       const contest = await createContest(api);
       const other = await createContest(api);

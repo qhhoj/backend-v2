@@ -13,27 +13,17 @@ const codeErrors = async (
     .flatMap((error) => Object.keys(error.constraints ?? {}));
 
 describe('problem code validation', () => {
-  it.each([CreateProblemDto, CloneProblemDto])(
-    'refuses the codes that static routes own on %p',
+  it.each([
+    CreateProblemDto,
+    CloneProblemDto,
+    UpdateProblemDto,
+    PolygonImportQueryDto,
+  ])(
+    'refuses codes that static routes own on %p, accepts others',
     async (type) => {
       for (const code of ['deleted', 'meta', 'imports', 'random'])
         expect(await codeErrors(type, code)).toContain('isNotIn');
+      expect(await codeErrors(type, 'sum_of_two')).toEqual([]);
     },
   );
-
-  it('refuses the same codes on a rename (UpdateProblemDto) and on a Polygon import', async () => {
-    for (const type of [UpdateProblemDto, PolygonImportQueryDto])
-      for (const code of ['deleted', 'meta', 'imports', 'random'])
-        expect(await codeErrors(type, code)).toContain('isNotIn');
-  });
-
-  it('accepts an ordinary code', async () => {
-    for (const type of [
-      CreateProblemDto,
-      UpdateProblemDto,
-      CloneProblemDto,
-      PolygonImportQueryDto,
-    ])
-      expect(await codeErrors(type, 'sum_of_two')).toEqual([]);
-  });
 });

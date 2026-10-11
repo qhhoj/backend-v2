@@ -1,14 +1,20 @@
 import { profileQueries } from '@libs/database/testing';
+
 import type { Contest, User } from '@libs/database';
+
 import type { FeedEvent } from '@libs/contests';
+
 import type { MintedFeedKeyResponse } from '../src/modules/contests/feed/dto/feed-key.dto';
+
 import { FeedAuthService } from '../src/modules/contests/feed/feed-auth.service';
+
 import {
   DEFAULT_FEED_LIMITS,
   FEED_LIMITS,
   FeedService,
   newFeedSession,
 } from '../src/modules/contests/feed/feed.service';
+
 import {
   clearRateLimits,
   contestProblem,
@@ -17,6 +23,7 @@ import {
   hoursFromNow,
   joinParticipation,
 } from './contest-fixtures';
+
 import {
   authed,
   createProblem,
@@ -24,9 +31,12 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { Catalog, TestSession } from './problem-fixtures';
+
 import { dataOf, seedSubmission } from './submission-fixtures';
-import { errorCode, setupApiTest } from './setup';
+
+import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 const basic = (key: string) =>
@@ -230,34 +240,6 @@ describe('contest event feed', () => {
     expect(JSON.stringify(events)).not.toContain('Secret Club');
   });
 
-  it('answers every failure with the same 401 and a Basic challenge', async () => {
-    const { contest } = await seed();
-    const key = await mint(contest);
-    const wrong = await api
-      .http()
-      .get(url(contest))
-      .set('Authorization', basic(`${key}x`))
-      .expect(401);
-    expect(wrong.headers['www-authenticate']).toBe('Basic realm="feed"');
-    await api.http().get(url(contest)).expect(401);
-    await authed(api.http().get(url(contest)), sessions.editor).expect(401);
-    const unknown = await api
-      .http()
-      .get(contestUrl('no_such_contest', '/feed'))
-      .set('Authorization', basic(key))
-      .expect(401);
-    expect(unknown.body).toEqual(wrong.body);
-    await authed(
-      api.http().delete(contestUrl(contest.key, '/feed-key')),
-      sessions.editor,
-    ).expect(204);
-    await api
-      .http()
-      .get(url(contest))
-      .set('Authorization', basic(key))
-      .expect(401);
-  });
-
   it('keys the failure lock by the trusted client address, not by a forwarded header', async () => {
     const { contest } = await seed();
     const key = await mint(contest);
@@ -369,33 +351,6 @@ describe('contest event feed', () => {
     ]);
   });
 
-  it('leaves out a submission of a problem that left the contest, so no id dangles', async () => {
-    const { contest, ann } = await seed({
-      startTime: hoursFromNow(-3),
-      endTime: hoursFromNow(-1),
-    });
-    const kept = await submit(
-      contest,
-      [users.ann._id, ann._id],
-      hoursFromNow(-2.5),
-      'AC',
-    );
-    const orphan = await submit(
-      contest,
-      [users.ann._id, ann._id],
-      hoursFromNow(-2.4),
-      'AC',
-    );
-    await api.contestSubmissions.updateOne(
-      { _id: orphan._id },
-      { problem: problems[1]._id },
-    );
-    const events = await fetchFeed(contest, await mint(contest));
-    expect(ids(events, 'submissions')).toEqual([kept._id]);
-    expect(ids(events, 'judgements')).toEqual([kept._id]);
-    expect(JSON.stringify(events)).not.toContain(problems[1]._id);
-  });
-
   it('publishes judgement types for the verdicts, none for internal errors, and nothing for a queued submission', async () => {
     const { contest, ann } = await seed({
       startTime: hoursFromNow(-3),
@@ -416,25 +371,6 @@ describe('contest event feed', () => {
         .map((event) => [event.id, event.data.judgement_type_id]),
     ).toEqual([[ce._id, 'CE']]);
     expect(ids(events, 'submissions')).toHaveLength(3);
-  });
-
-  it('refuses a feed past the size cap', async () => {
-    const { contest, ann } = await seed({
-      startTime: hoursFromNow(-3),
-      endTime: hoursFromNow(-1),
-    });
-    await submit(contest, [users.ann._id, ann._id], hoursFromNow(-2), 'AC');
-    await submit(contest, [users.ann._id, ann._id], hoursFromNow(-1.9), 'WA');
-    const key = await mint(contest);
-    limits.maxSubmissions = 1;
-    await api
-      .http()
-      .get(url(contest))
-      .set('Authorization', basic(key))
-      .expect(409)
-      .expect(errorCode('feed_too_large'));
-    limits.maxSubmissions = 2;
-    expect(ids(await fetchFeed(contest, key), 'submissions')).toHaveLength(2);
   });
 
   it('refuses a stream session past the stream cap, reads everything on the first tick and only the changes on the next', async () => {

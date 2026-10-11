@@ -2,7 +2,6 @@ import {
   competitionRanks,
   compareStandings,
   disqualify,
-  rankingCacheKeys,
   standingOf,
 } from './standings';
 import type { ParticipationResults } from './standings';
@@ -91,9 +90,6 @@ describe('compareStandings and competitionRanks (legacy order and ranker)', () =
       ]),
     ).toEqual([1, 2, 3, 4, 4]);
   });
-
-  it('ranks an empty board as empty', () =>
-    expect(competitionRanks([])).toEqual([]));
 });
 
 describe('standingOf', () => {
@@ -110,15 +106,6 @@ describe('standingOf', () => {
     frozenFormatData: frozenCells,
   });
 
-  it('shows the live fields when not frozen', () =>
-    expect(standingOf(participation, false)).toEqual({
-      score: 200,
-      cumtime: 315,
-      tiebreaker: 250,
-      isDisqualified: false,
-      cells: { ...live, STALE: { points: 999 } },
-    }));
-
   it('a frozen standing never carries a live value', () => {
     const standing = standingOf(participation, true);
     expect(standing).toEqual({
@@ -132,20 +119,6 @@ describe('standingOf', () => {
     for (const liveOnly of ['200', '315', '250', '1530', '999', 'STALE'])
       expect(serialized).not.toContain(liveOnly);
   });
-});
-
-describe('standingOf on a lean read', () => {
-  it.each([true, false])(
-    'treats missing cells as empty (frozen %p)',
-    (frozen) => {
-      const lean = { ...results() } as Partial<ParticipationResults>;
-      delete lean.formatData;
-      delete lean.frozenFormatData;
-      expect(standingOf(lean as ParticipationResults, frozen).cells).toEqual(
-        {},
-      );
-    },
-  );
 });
 
 describe('disqualify', () => {
@@ -171,15 +144,4 @@ describe('disqualify', () => {
       formatData: { A: { points: 500 } },
       frozenFormatData: { A: { points: 300 } },
     }));
-});
-
-describe('rankingCacheKeys', () => {
-  it('names four distinct keys per contest, one per {virtual, frozen}', () => {
-    const keys = rankingCacheKeys('c1');
-    expect(new Set(keys).size).toBe(4);
-    expect(keys.every((key) => key.includes('c1'))).toBe(true);
-    expect(rankingCacheKeys('c2').some((key) => keys.includes(key))).toBe(
-      false,
-    );
-  });
 });

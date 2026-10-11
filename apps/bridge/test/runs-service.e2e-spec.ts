@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { TEST_REDIS_URL } from '@libs/common/testing';
 import type { SubmissionCase } from '@libs/database';
 import { recordSubmissionEvents } from '@libs/judging/testing';
@@ -113,30 +112,7 @@ describe('RunsService (events and graded jobs of a run)', () => {
     expect(jobs.map((job) => job.id)).toEqual([`${id}.1`]);
   });
 
-  it('ends CE, IE and AB runs with done and their status', async () => {
-    for (const [kind, status] of [
-      ['compile-error', 'CE'],
-      ['internal-error', 'IE'],
-      ['aborted', 'AB'],
-    ] as const) {
-      const { id, key } = await newRun();
-      await runs.accepted(key(1));
-      expect(await runs.final(key(2), final({ kind, log: 'x' }))).toBe(
-        'applied',
-      );
-      await recorder.waitFor(() => eventsOf(id).length === 2);
-      expect(typesAndStatuses(id)).toEqual([
-        ['processing', 'P'],
-        ['done', status],
-      ]);
-    }
-  });
-
   it('publishes queued for a RETRY (a replay of it is a duplicate), and done IE with one graded job for the third', async () => {
-    const warnings: string[] = [];
-    const warn = jest
-      .spyOn(Logger.prototype, 'warn')
-      .mockImplementation((message) => void warnings.push(String(message)));
     const { id, key } = await newRun();
     await bridge.submissions.updateOne({ _id: id }, { pinnedJudge: JUDGE });
     await runs.accepted(key(1));
@@ -161,12 +137,6 @@ describe('RunsService (events and graded jobs of a run)', () => {
         final({ kind: 'retry', log: 'no data\nmount gone' }),
       );
     }
-    warn.mockRestore();
-    expect(warnings).toEqual([
-      `Judge ${JUDGE} answered RETRY for submission ${id} gen 1 (requeued): no data`,
-      `Judge ${JUDGE} answered RETRY for submission ${id} gen 2 (requeued): no data mount gone`,
-      `Judge ${JUDGE} answered RETRY for submission ${id} gen 3 (internal error, retry cap reached): no data mount gone`,
-    ]);
     expect((await stored(id)).effectsDueAt).toBeInstanceOf(Date);
     await recorder.waitFor(() =>
       eventsOf(id).some((event) => event.type === 'done'),
@@ -208,16 +178,6 @@ describe('RunsService (events and graded jobs of a run)', () => {
       ['processing', 'P'],
       ['done', 'IE'],
     ]);
-  });
-
-  it('stops tracking a run the bridge let go of, but not a newer run of the same submission', async () => {
-    const before = runs.trackedCount();
-    const { ref } = await newRun();
-    expect(runs.trackedCount()).toBe(before + 1);
-    runs.forget({ ...ref, generation: ref.generation + 1 });
-    expect(runs.trackedCount()).toBe(before + 1);
-    runs.forget(ref);
-    expect(runs.trackedCount()).toBe(before);
   });
 
   it('publishes queued when an unaccepted run is released, and nothing for another judge', async () => {

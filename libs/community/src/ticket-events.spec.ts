@@ -3,15 +3,17 @@ import { parseTicketEvent } from './ticket-events';
 
 describe('parseTicketEvent', () => {
   const ticketId = newId();
-  it('rebuilds a valid event field by field and drops extras', () => {
-    const raw = JSON.stringify({
+  const event = (extra: object) =>
+    JSON.stringify({
       type: 'ticket-status',
       ticketId,
       messageId: null,
       open: false,
-      secret: 'x',
+      ...extra,
     });
-    expect(parseTicketEvent(raw)).toEqual({
+
+  it('rebuilds a valid event field by field and drops extras', () => {
+    expect(parseTicketEvent(event({ secret: 'x' }))).toEqual({
       type: 'ticket-status',
       ticketId,
       messageId: null,
@@ -21,38 +23,10 @@ describe('parseTicketEvent', () => {
 
   it.each([
     ['not json', '{'],
-    ['an array', '[]'],
-    [
-      'an unknown type',
-      JSON.stringify({ type: 'x', ticketId, messageId: null, open: null }),
-    ],
-    [
-      'a malformed ticket id',
-      JSON.stringify({
-        type: 'new-ticket',
-        ticketId: '1',
-        messageId: null,
-        open: null,
-      }),
-    ],
-    [
-      'a malformed message id',
-      JSON.stringify({
-        type: 'ticket-message',
-        ticketId,
-        messageId: 'nope',
-        open: null,
-      }),
-    ],
-    [
-      'a non-boolean open',
-      JSON.stringify({
-        type: 'ticket-status',
-        ticketId,
-        messageId: null,
-        open: 'yes',
-      }),
-    ],
+    ['an unknown type', event({ type: 'x' })],
+    ['a malformed ticket id', event({ ticketId: '1' })],
+    ['a malformed message id', event({ messageId: 'nope' })],
+    ['a non-boolean open', event({ open: 'yes' })],
   ])('ignores %s', (_name, raw) => {
     expect(parseTicketEvent(raw)).toBeNull();
   });

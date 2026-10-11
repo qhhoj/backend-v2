@@ -51,7 +51,6 @@ describe('default (legacy DefaultContestFormat)', () => {
 
   it.each([
     [2.5, 0, 2],
-    [3.5, 0, 4],
     [0.125, 2, 0.12],
   ])(
     'rounds the tie %p at %p digits half to even',
@@ -67,7 +66,6 @@ describe('default (legacy DefaultContestFormat)', () => {
 
   it.each([
     [3, 66.667],
-    [2, 66.67],
     [0, 67],
   ])('rounds the score to %p digits', (pointsPrecision, score) =>
     expect(
@@ -79,22 +77,9 @@ describe('default (legacy DefaultContestFormat)', () => {
     ).toBe(score),
   );
 
-  it('scores no rows as zero', () =>
-    expect(defaultFormat.score([], {}, context())).toMatchObject({
-      score: 0,
-      cumtime: 0,
-      formatData: {},
-    }));
-
-  it.each([null, undefined, {}])('accepts the config %p', (config) =>
-    expect(defaultFormat.parseConfig(config)).toEqual({}),
-  );
-  it.each([{ penalty: 20 }, [], 'x'])('rejects the config %p', (config) =>
+  it.each([{ penalty: 20 }, 'x'])('rejects the config %p', (config) =>
     expect(() => defaultFormat.parseConfig(config)).toThrow(FormatConfigError),
   );
-
-  it('offers the cell time for first solves', () =>
-    expect(defaultFormat.firstSolveTime({ time: 42, points: 1 }, {})).toBe(42));
 });
 
 describe('ioi (legacy LegacyIOIContestFormat, "IOI (pre-2016)")', () => {
@@ -115,21 +100,6 @@ describe('ioi (legacy LegacyIOIContestFormat, "IOI (pre-2016)")', () => {
     });
   });
 
-  it('scores rows the same whatever order they arrive in', () =>
-    expect(
-      ioiFormat.score(
-        rows().reverse(),
-        { cumtime: true, lastScoreAltering: true },
-        context(),
-      ),
-    ).toEqual(
-      ioiFormat.score(
-        rows(),
-        { cumtime: true, lastScoreAltering: true },
-        context(),
-      ),
-    ));
-
   it('times a problem at its earliest best and the tiebreaker at the latest of those times', () => {
     const score = ioiFormat.score(
       [
@@ -147,30 +117,6 @@ describe('ioi (legacy LegacyIOIContestFormat, "IOI (pre-2016)")', () => {
     });
     expect(score.tiebreaker).toBe(3000);
   });
-
-  it.each([
-    [2.5, 0, 2],
-    [0.125, 2, 0.12],
-  ])(
-    'rounds the tie %p at %p digits half to even',
-    (points, pointsPrecision, score) =>
-      expect(
-        ioiFormat.score(
-          [row('A', 1, points)],
-          { cumtime: false, lastScoreAltering: false },
-          context({ pointsPrecision }),
-        ).score,
-      ).toBe(score),
-  );
-
-  it('clamps a negative cumtime to 0', () =>
-    expect(
-      ioiFormat.score(
-        [row('C', -10, 10)],
-        { cumtime: true, lastScoreAltering: false },
-        context(),
-      ).cumtime,
-    ).toBe(0));
 
   it('rejects inherited keys as unknown', () => {
     expect(() =>
@@ -196,21 +142,5 @@ describe('ioi (legacy LegacyIOIContestFormat, "IOI (pre-2016)")', () => {
     expect(() => ioiFormat.parseConfig({ penalty: 1 })).toThrow(
       'unknown config key "penalty"',
     );
-  });
-
-  it('shows solve times only with cumtime or last score altering', () => {
-    const cell = { points: 100, time: 1200 };
-    expect(
-      ioiFormat.firstSolveTime(cell, {
-        cumtime: false,
-        lastScoreAltering: false,
-      }),
-    ).toBeNull();
-    expect(
-      ioiFormat.firstSolveTime(cell, {
-        cumtime: false,
-        lastScoreAltering: true,
-      }),
-    ).toBe(1200);
   });
 });

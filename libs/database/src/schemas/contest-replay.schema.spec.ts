@@ -4,7 +4,6 @@ import { startMongo } from '../testing';
 import { newId } from '../uuid';
 import { ContestGhostSchema } from './contest-ghost.schema';
 import { ContestReplayChunkSchema } from './contest-replay-chunk.schema';
-import { ContestReplayHeadSchema } from './contest-replay-head.schema';
 
 describe('contest replay schemas', () => {
   let replSet: MongoMemoryReplSet;
@@ -12,15 +11,12 @@ describe('contest replay schemas', () => {
     'ReplayChunkSchemaSpec',
     ContestReplayChunkSchema,
   );
-  const Heads = mongoose.model('ReplayHeadSchemaSpec', ContestReplayHeadSchema);
   const Ghosts = mongoose.model('ContestGhostSchemaSpec', ContestGhostSchema);
 
   beforeAll(async () => {
     replSet = await startMongo();
     await mongoose.connect(replSet.getUri());
-    await Promise.all(
-      [Chunks, Heads, Ghosts].map((model) => model.syncIndexes()),
-    );
+    await Promise.all([Chunks, Ghosts].map((model) => model.syncIndexes()));
   });
   afterAll(async () => {
     await mongoose.disconnect();
@@ -52,31 +48,6 @@ describe('contest replay schemas', () => {
     await expect(
       Chunks.create({ contest, buildId: newId(), chunk: 0, events: [] }),
     ).resolves.toBeDefined();
-  });
-
-  it('stores one head per contest id', async () => {
-    const contest = newId();
-    const fields = {
-      _id: contest,
-      buildId: newId(),
-      builtAt: new Date(),
-      formatVersion: 1,
-      chunkCount: 2,
-      ghostChunkCount: 1,
-      participants: [{ participationId: newId(), userId: newId() }],
-      problems: [{ problemId: newId(), points: 100 }],
-      ghosts: [{ label: 'Ann', caption: '', isUnranked: true, gap: 'points' }],
-    };
-    await Heads.create(fields);
-    const stored = await Heads.findById(contest).lean();
-    expect(stored!.participants).toHaveLength(1);
-    expect(stored!.problems[0].points).toBe(100);
-    expect(stored!.ghosts[0]).toMatchObject({
-      label: 'Ann',
-      isUnranked: true,
-      gap: 'points',
-    });
-    await expect(Heads.create(fields)).rejects.toThrow(/duplicate key/);
   });
 
   it('keeps one ghost label per contest, defaults absent cell data to null and bounds the label', async () => {

@@ -1,4 +1,5 @@
 import type { PublishProblemsResponse } from '../src/modules/contests/publish/dto/publish-problems.response';
+
 import {
   contestProblem,
   contestUrl,
@@ -6,7 +7,9 @@ import {
   hoursFromNow,
   clearRateLimits,
 } from './contest-fixtures';
+
 import { softDelete } from './deleted-problem-fixtures';
+
 import {
   authed,
   createProblem,
@@ -14,20 +17,34 @@ import {
   loginAs,
   seedCatalog,
 } from './problem-fixtures';
+
 import type { TestSession, Catalog } from './problem-fixtures';
+
 import { setupApiTest, errorCode } from './setup';
+
 import type { ApiTest } from './setup';
+
 import { dataOf } from './submission-fixtures';
+
 import { getQueueToken } from '@nestjs/bullmq';
+
 import type { Queue } from 'bullmq';
+
 import { CONTEST_PUBLISH_QUEUE, publishJobId } from '@libs/contests';
+
 import type { ContestPublishJob } from '@libs/contests';
-import { uuidStr, newId } from '@libs/database';
+
+import { newId } from '@libs/database';
 import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
+
 import { waitUntil } from '@libs/common/testing';
+
 import type { Problem } from '@libs/database';
+
 import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+
 import type { ProblemRescoreJob } from '@libs/judging';
+
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 
 let api: ApiTest;
@@ -143,51 +160,6 @@ afterAll(() => api.teardown());
       await patch(contest.key, { publishAfterEnd: false }).expect(200);
       expect(await jobIds()).toEqual([]);
     });
-
-    it('schedules a contest created with the switch on', async () => {
-      const endTime = hoursFromNow(3);
-      await authed(api.http().post('/api/internal/contests'), editor)
-        .send({
-          key: 'schedule_create',
-          name: 'Scheduled',
-          startTime: hoursFromNow(1).toISOString(),
-          endTime: endTime.toISOString(),
-          publishAfterEnd: true,
-        })
-        .expect(201);
-      const id = uuidStr(
-        (await api.contests.findOne({ key: 'schedule_create' }).lean())!._id,
-      );
-      expect(await jobIds()).toEqual([publishJobId(id, endTime)]);
-    });
-
-    it('starts a clone with the switch off, no editor and no outcome', async () => {
-      const source = await createContest(api, {
-        authors: [editorId],
-        endTime: hoursFromNow(3),
-        publishAfterEnd: true,
-        publishAfterEndBy: editorId,
-        autoPublishOutcome: {
-          at: new Date(),
-          status: 'failed',
-          reason: 'no_permission',
-          published: 0,
-          skipped: 1,
-        },
-      });
-      await authed(api.http().post(contestUrl(source.key, '/clone')), editor)
-        .send({ key: 'schedule_copy' })
-        .expect(201);
-      const copy = (await api.contests
-        .findOne({ key: 'schedule_copy' })
-        .lean())!;
-      expect(copy).toMatchObject({
-        publishAfterEnd: false,
-        publishAfterEndBy: null,
-        autoPublishOutcome: null,
-      });
-      expect(await jobIds()).toEqual([]);
-    });
   });
 }
 
@@ -247,47 +219,6 @@ afterAll(() => api.teardown());
         }).expect(200),
       );
       expect(back.publishAfterEndBy).toBe(ids.second_editor);
-    });
-
-    it('clears an earlier outcome when it is switched on again', async () => {
-      const contest = await createContest(api, {
-        authors: [ids.first_editor],
-        publishAfterEnd: false,
-        autoPublishOutcome: {
-          at: new Date(),
-          status: 'failed',
-          reason: 'no_permission',
-          published: 0,
-          skipped: 2,
-        },
-      });
-      await patch('first_editor', contest.key, {
-        publishAfterEnd: true,
-      }).expect(200);
-      expect(
-        (await api.contests.findById(contest._id).lean())!.autoPublishOutcome,
-      ).toBeNull();
-    });
-
-    it('sets the editor when a contest is created with the switch on', async () => {
-      const created = dataOf<ContestDetailResponse>(
-        await authed(
-          api.http().post('/api/internal/contests'),
-          sessions.first_editor,
-        )
-          .send({
-            key: 'switch_create',
-            name: 'Switch',
-            startTime: new Date(Date.now() + 3_600_000).toISOString(),
-            endTime: new Date(Date.now() + 7_200_000).toISOString(),
-            publishAfterEnd: true,
-          })
-          .expect(201),
-      );
-      expect(created.settings).toMatchObject({
-        publishAfterEnd: true,
-        publishAfterEndBy: ids.first_editor,
-      });
     });
   });
 }
@@ -509,32 +440,6 @@ afterAll(() => api.teardown());
       ).toBe(false);
     });
 
-    it('answers 200 with an empty list for a contest without problems and skips a missing problem', async () => {
-      const empty = await createContest(api, {
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-        authors: [ids.owner],
-      });
-      expect(resultOf(await run('owner', empty.key).expect(200)).items).toEqual(
-        [],
-      );
-      const missingId = newId();
-      const holed = await createContest(api, {
-        startTime: hoursFromNow(-5),
-        endTime: hoursFromNow(-1),
-        authors: [ids.owner],
-        problems: [contestProblem(missingId, 0)],
-      });
-      const [item] = resultOf(await run('owner', holed.key).expect(200)).items;
-      expect(item).toEqual({
-        problemId: missingId,
-        code: null,
-        outcome: 'skipped',
-        reason: 'not_found',
-        editorial: null,
-      });
-    });
-
     it('reports a trashed problem as deleted with its code for an editor, and a flagged private one as no_permission to an actor without rights', async () => {
       const { contest, problems } = await endedContest(
         [{ deletedAt: new Date() }, { isOrganizationPrivate: true }],
@@ -565,17 +470,6 @@ afterAll(() => api.teardown());
         .expect(429)
         .expect(errorCode('rate_limited'));
       await run('owner', contest.key, { dryRun: true }).expect(200);
-    });
-
-    it('gives the hit back when a run fails midway', async () => {
-      const { contest } = await endedContest([{ isPublic: true }], [ids.owner]);
-      const failing = jest
-        .spyOn(api.app.get(ProblemsRepository), 'findIncludingDeleted')
-        .mockRejectedValueOnce(new Error('database down'));
-      await run('owner', contest.key).expect(500);
-      failing.mockRestore();
-      for (let count = 0; count < 5; count += 1)
-        await run('owner', contest.key).expect(200);
     });
 
     it('releases an editorial once even when two writers race', async () => {

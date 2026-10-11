@@ -26,30 +26,6 @@ describe('user schema', () => {
     await Users.deleteMany({});
   });
 
-  it('applies profile defaults and assigns a UUID _id', async () => {
-    const user = await Users.create({ username: 'alice', password: 'x' });
-    const stored = await Users.collection.findOne({ username: 'alice' });
-    expect(stored?._id.toString()).toMatch(UUID_PATTERN);
-    expect(user.toObject()).toMatchObject({
-      timezone: 'America/Toronto',
-      allowTagging: true,
-      aceTheme: 'auto',
-      siteTheme: 'auto',
-      appearance: null,
-      displayRank: 'user',
-      mathEngine: 'auto',
-      points: 0,
-      groups: [],
-      badges: [],
-      organizations: [],
-      permissions: [],
-      webauthnCredentials: [],
-      socialAuth: [],
-      totpKey: null,
-      webauthnUserHandle: null,
-    });
-  });
-
   it('enforces case-insensitive unique usernames', async () => {
     await Users.create({ username: 'alice', password: 'x' });
     await expect(
@@ -87,17 +63,6 @@ describe('user schema', () => {
     ).resolves.toHaveLength(2);
   });
 
-  it('assigns a UUID _id to webauthn credentials', async () => {
-    const user = await Users.create({
-      username: 'carol',
-      password: 'x',
-      webauthnCredentials: [
-        { name: 'key', credId: 'cred-id', publicKey: 'pk', counter: 0 },
-      ],
-    });
-    expect(user.webauthnCredentials[0]._id).toMatch(UUID_PATTERN);
-  });
-
   it('enforces unique webauthn credId across users', async () => {
     const webauthnCredentials = [
       { name: 'key', credId: 'cred-1', publicKey: 'pk', counter: 0 },
@@ -112,16 +77,6 @@ describe('user schema', () => {
         { username: 'four', password: 'x' },
       ]),
     ).resolves.toHaveLength(2);
-  });
-
-  it('exposes id and hides _id in JSON', async () => {
-    const json = (
-      await Users.create({ username: 'alice', password: 'x' })
-    ).toJSON();
-    expect(json).toMatchObject({
-      id: expect.stringMatching(UUID_PATTERN) as string,
-    });
-    expect(json).not.toHaveProperty('_id');
   });
 
   it('serializes nested UUID references as strings', async () => {

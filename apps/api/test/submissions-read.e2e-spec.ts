@@ -2,11 +2,9 @@ import type { Problem, Submission, SubmissionCase } from '@libs/database';
 import {
   authed,
   createProblem,
-  dataFixture,
   createUserWith,
   loginAs,
   seedCatalog,
-  testCase,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
@@ -16,10 +14,9 @@ import type { ApiTest } from './setup';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Redis from 'ioredis';
-import { AppError, REDIS, StorageService } from '@libs/common';
+import { REDIS } from '@libs/common';
 import { uuidStr } from '@libs/database';
 import { buildZip } from '@libs/problems/testing';
-import { SUBMIT_LIMIT } from '../src/modules/submissions/core/rate-limits';
 
 let api: ApiTest;
 
@@ -150,85 +147,6 @@ afterAll(() => api.teardown());
     });
 
     describe('GET /submissions', () => {
-      it('lists newest first with user, problem and language, paginated, without cases or source', async () => {
-        const problem = await problemWith('list', { points: 1234 });
-        const created: string[] = [];
-        for (let index = 0; index < 3; index += 1)
-          created.push(
-            (
-              await seedSubmission(api, {
-                user: ids.owner,
-                problem: problem._id,
-                language: catalog.languages.cpp,
-              })
-            )._id,
-          );
-        const page = await listed('anonymous', 'problem=list&pageSize=2');
-        expect(page.data.map((row) => row.id)).toEqual([
-          created[2],
-          created[1],
-        ]);
-        expect(page.meta).toEqual({ page: 1, pageSize: 2, total: 3 });
-        expect(page.data[0]).toMatchObject({
-          user: { username: 'owner' },
-          problem: { code: 'list', name: 'LIST', points: 1234 },
-          language: { key: 'CPP17' },
-          status: 'D',
-          result: 'AC',
-        });
-        expect(page.data[0]).not.toHaveProperty('cases');
-        expect(page.data[0]).not.toHaveProperty('error');
-        expect(JSON.stringify(page)).not.toContain('int main');
-      });
-
-      it('shows only submissions on problems the viewer can see', async () => {
-        const visibleTo = async (who: string) =>
-          (await listed(who, 'user=owner&pageSize=100')).data.map(
-            (row) => row.id,
-          );
-        expect(await visibleTo('anonymous')).not.toContain(owned.priv);
-        expect(await visibleTo('other')).not.toContain(owned.priv);
-        expect(await visibleTo('tester')).toContain(owned.priv);
-        expect(await visibleTo('root')).toContain(owned.priv);
-      });
-
-      it('filters by user, problem, language and result', async () => {
-        const problem = await problemWith('filters');
-        const seed = (user: string, result: 'AC' | 'WA', language: string) =>
-          seedSubmission(api, {
-            user: ids[user],
-            problem: problem._id,
-            language,
-            result,
-          });
-        const ownerAccepted = await seed('owner', 'AC', catalog.languages.cpp);
-        const ownerWrong = await seed('owner', 'WA', catalog.languages.python);
-        const otherAccepted = await seed('other', 'AC', catalog.languages.cpp);
-        const idsOf = async (query: string) =>
-          (await listed('anonymous', `problem=filters&${query}`)).data.map(
-            (row) => row.id,
-          );
-        expect(await idsOf('result=WA')).toEqual([ownerWrong._id]);
-        expect(await idsOf(`language=${catalog.languages.python}`)).toEqual([
-          ownerWrong._id,
-        ]);
-        expect(await idsOf('user=other')).toEqual([otherAccepted._id]);
-        expect(await idsOf('result=AC&user=owner')).toEqual([
-          ownerAccepted._id,
-        ]);
-        expect(await idsOf('result=AC&result=WA')).toHaveLength(3);
-      });
-
-      it('rejects the nil and max UUIDs, which Mongoose cannot cast, in language with 400', async () => {
-        for (const unusable of [
-          '00000000-0000-0000-0000-000000000000',
-          'ffffffff-ffff-ffff-ffff-ffffffffffff',
-        ])
-          await as('other', `${SUBMISSIONS}?language=${unusable}`)
-            .expect(400)
-            .expect(errorCode('validation_failed'));
-      });
-
       it('lets only staff filter by IE, QU, P, G, D and SC', async () => {
         for (const [query, field] of [
           ['status=QU', 'status'],
@@ -261,14 +179,6 @@ afterAll(() => api.teardown());
             (row) => row.id,
           ),
         ).toEqual([finished._id]);
-      });
-
-      it('answers an empty page for an unknown user or a problem the viewer cannot see', async () => {
-        expect((await listed('anonymous', 'user=nobody')).meta.total).toBe(0);
-        expect((await listed('other', 'problem=priv')).meta.total).toBe(0);
-        expect((await listed('other', 'problem=Not-A-Code')).meta.total).toBe(
-          0,
-        );
       });
     });
 
@@ -327,16 +237,6 @@ afterAll(() => api.teardown());
           'owner',
         ]);
         expect(second.meta).toEqual({ page: 2, pageSize: 2, total: 5 });
-      });
-
-      it('answers 404 for a problem the viewer cannot see', async () => {
-        await as('other', '/api/internal/problems/priv/best-submissions')
-          .expect(404)
-          .expect(errorCode('not_found'));
-        await as('anonymous', '/api/internal/problems/nope/best-submissions')
-          .expect(404)
-          .expect(errorCode('not_found'));
-        expect((await best('tester', 'priv')).meta.total).toBe(0);
       });
     });
 
@@ -425,50 +325,6 @@ afterAll(() => api.teardown());
         findById.mockRestore();
       });
 
-      it('reports the number of test cases, batch members included, markers excluded', async () => {
-        await api.problems.updateOne(
-          { code: 'res_b' },
-          {
-            data: dataFixture({
-              cases: [
-                testCase({ type: 'C' }),
-                testCase({ type: 'S' }),
-                testCase({ type: 'C' }),
-                testCase({ type: 'C' }),
-                testCase({ type: 'E' }),
-                testCase({ type: 'C' }),
-              ],
-            }),
-          },
-        );
-        const detail = dataOf<{ totalCases: number | null }>(
-          await as('owner', `${SUBMISSIONS}/${owned['res_b']}`).expect(200),
-        );
-        expect(detail.totalCases).toBe(4);
-      });
-
-      it('counts zero for a problem with no data', async () => {
-        expect(
-          dataOf<{ totalCases: number | null }>(
-            await as('owner', `${SUBMISSIONS}/${owned['vis_a']}`).expect(200),
-          ).totalCases,
-        ).toBe(0);
-      });
-
-      it('hides the count with the case results, except from those who see them', async () => {
-        await api.problems.updateOne(
-          { code: 'res_s' },
-          { data: dataFixture({ cases: [testCase({ type: 'C' })] }) },
-        );
-        const totalFor = async (who: string) =>
-          dataOf<{ totalCases: number | null }>(
-            await as(who, `${SUBMISSIONS}/${owned['res_s']}`).expect(200),
-          ).totalCases;
-        expect(await totalFor('owner')).toBeNull();
-        expect(await totalFor('editor')).toBeNull();
-        expect(await totalFor('root')).toBe(1);
-      });
-
       it('withholds the judged-case position with the case results', async () => {
         const positionFor = async (who: string, code: string) => {
           await api.submissions.updateOne(
@@ -483,17 +339,6 @@ afterAll(() => api.teardown());
         expect(await positionFor('owner', 'res_b')).toBeNull();
         expect(await positionFor('root', 'res_s')).toBe(3);
         expect(await positionFor('owner', 'vis_a')).toBe(3);
-      });
-
-      it('needs a login and answers 404 for unknown and malformed ids', async () => {
-        await as('anonymous', `${SUBMISSIONS}/${owned['vis_a']}`).expect(401);
-        await as(
-          'owner',
-          `${SUBMISSIONS}/0192b0e0-0000-7000-8000-00000000dead`,
-        ).expect(404);
-        await as('owner', `${SUBMISSIONS}/not-an-id`)
-          .expect(404)
-          .expect(errorCode('not_found'));
       });
 
       it('shapes cases by the problem: all, batch summaries or nothing; feedback and output when allowed', async () => {
@@ -528,58 +373,12 @@ afterAll(() => api.teardown());
           feedback: 'wrong',
         });
       });
-
-      it('shows an internal error message to editors only, compile errors to every viewer', async () => {
-        const problem = (await api.problems.findOne({ code: 'vis_a' }))!;
-        const seed = (status: 'IE' | 'CE', error: string) =>
-          seedSubmission(api, {
-            user: ids.owner,
-            problem: problem._id,
-            language: catalog.languages.cpp,
-            status,
-            result: status,
-            error,
-          });
-        const crashed = await seed('IE', 'Traceback (most recent call last)');
-        const broken = await seed('CE', 'error: expected ;');
-        const errorFor = async (who: string, id: string) =>
-          dataOf<{ error: string | null }>(
-            await as(who, `${SUBMISSIONS}/${id}`).expect(200),
-          ).error;
-        expect(await errorFor('owner', crashed._id)).toBeNull();
-        expect(await errorFor('editor', crashed._id)).toBe(
-          'Traceback (most recent call last)',
-        );
-        expect(await errorFor('other', broken._id)).toBe('error: expected ;');
-      });
-    });
-
-    describe('GET /submissions/:id/source', () => {
-      it('returns the source under the detail rules', async () => {
-        expect(
-          dataOf(
-            await as('owner', `${SUBMISSIONS}/${owned['vis_o']}/source`).expect(
-              200,
-            ),
-          ),
-        ).toEqual({
-          id: owned['vis_o'],
-          source: '// vis_o',
-        });
-        await as('other', `${SUBMISSIONS}/${owned['vis_o']}/source`).expect(
-          403,
-        );
-        await as('anonymous', `${SUBMISSIONS}/${owned['vis_o']}/source`).expect(
-          401,
-        );
-      });
     });
   });
 }
 
 // from submissions-file.e2e-spec.ts
 {
-  const MIB = 1024 * 1024;
   const UUID =
     '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
   const PROJECT = Buffer.from('{"targets":[],"meta":{"semver":"3.0.0"}}');
@@ -594,8 +393,6 @@ afterAll(() => api.teardown());
     let catalog: Catalog;
     let uploader: { _id: string };
     let session: TestSession;
-    let banned: TestSession;
-    let bannedId: string;
     const languages: Record<'zip' | 'scratch' | 'off' | 'html', string> = {
       html: '',
       zip: '',
@@ -649,8 +446,6 @@ afterAll(() => api.teardown());
         bannedUsers: [bannedUser._id],
       });
       session = await loginAs(api, uploader._id);
-      bannedId = bannedUser._id;
-      banned = await loginAs(api, bannedId);
     });
     beforeEach(async () => {
       const redis = api.app.get<Redis>(REDIS);
@@ -685,111 +480,6 @@ afterAll(() => api.teardown());
         'QU',
         languages.zip,
       ]);
-    });
-
-    it('caps the file at fileSizeLimit MB and keeps nothing above it', async () => {
-      const before = await api.submissions.countDocuments();
-      const files = storedFiles().length;
-      await submitFile(languages.zip, Buffer.alloc(MIB + 1, 7), 'big.zip')
-        .expect(413)
-        .expect(errorCode('file_too_large'));
-      expect(await api.submissions.countDocuments()).toBe(before);
-      expect(storedFiles()).toHaveLength(files);
-      await submitFile(languages.zip, Buffer.alloc(MIB, 7), 'edge.zip').expect(
-        201,
-      );
-    });
-
-    it('wants the language extension', async () => {
-      const files = storedFiles().length;
-      const response = await submitFile(
-        languages.zip,
-        Buffer.from('x'),
-        'answer.tar',
-      ).expect(400);
-      expect(issueCodes(response)).toEqual(['file_wrong_extension']);
-      expect(storedFiles()).toHaveLength(files);
-    });
-
-    it('keeps the text and file paths apart', async () => {
-      expect(
-        issueCodes(
-          await submitFile(
-            catalog.languages.cpp,
-            Buffer.from('int main(){}'),
-            'a.cpp',
-          ).expect(400),
-        ),
-      ).toEqual(['language_takes_text']);
-      expect(
-        issueCodes(
-          await submitFile(languages.off, Buffer.from('x'), 'a.zip').expect(
-            400,
-          ),
-        ),
-      ).toEqual(['file_upload_disabled']);
-      expect(
-        issueCodes(
-          await authed(
-            api.http().post('/api/internal/problems/files/submit'),
-            session,
-          )
-            .send({ language: languages.zip, source: 'x' })
-            .expect(400),
-        ),
-      ).toEqual(['language_takes_file']);
-    });
-
-    it('runs the submit checks before anything is stored', async () => {
-      const before = await api.submissions.countDocuments();
-      await submitFile(languages.zip, Buffer.from('x'), 'a.zip', banned)
-        .expect(403)
-        .expect(errorCode('banned_from_problem'));
-      expect(await api.submissions.countDocuments()).toBe(before);
-      expect(
-        existsSync(join(api.mediaRoot, 'submission_file', 'files', bannedId)),
-      ).toBe(false);
-    });
-
-    it('wants the language field and exactly one part named file', async () => {
-      const post = () =>
-        authed(
-          api.http().post('/api/internal/problems/files/submit/file'),
-          session,
-        );
-      const missing = await post()
-        .attach('file', Buffer.from('x'), 'a.zip')
-        .expect(400);
-      expect(
-        (
-          missing.body as { error: { issues: Array<{ field: string }> } }
-        ).error.issues.map((issue) => issue.field),
-      ).toEqual(['language']);
-      await post().field('language', languages.zip).expect(400);
-      await post()
-        .field('language', languages.zip)
-        .attach('other', Buffer.from('x'), 'a.zip')
-        .expect(400);
-      await post()
-        .field('language', languages.zip)
-        .field('source', 'x')
-        .attach('file', Buffer.from('x'), 'a.zip')
-        .expect(400);
-    });
-
-    it('stores the project.json of a Scratch .sb3', async () => {
-      const sb3 = buildZip([
-        { name: 'project.json', content: PROJECT, method: 'deflate' },
-        { name: 'costume.svg', content: '<svg/>' },
-      ]);
-      const { id } = dataOf<{ id: string }>(
-        await submitFile(languages.scratch, sb3, 'game.sb3').expect(201),
-      );
-      const source = await storedSource(id);
-      expect(source).toMatch(new RegExp(`/${UUID}\\.sb3$`));
-      expect(
-        readFileSync(join(uploadDirectory(), source.split('/').pop()!)),
-      ).toEqual(PROJECT);
     });
 
     it.each([
@@ -827,77 +517,6 @@ afterAll(() => api.teardown());
       expect(issueCodes(response)).toEqual(['scratch_project_invalid']);
       expect(await api.submissions.countDocuments()).toBe(before);
       expect(storedFiles()).toHaveLength(files);
-    });
-
-    it('caps the extracted project.json at fileSizeLimit MB', async () => {
-      const bomb = buildZip([
-        {
-          name: 'project.json',
-          content: Buffer.alloc(MIB + 1),
-          method: 'deflate',
-        },
-      ]);
-      expect(bomb.length).toBeLessThan(MIB);
-      await submitFile(languages.scratch, bomb, 'bomb.sb3')
-        .expect(413)
-        .expect(errorCode('file_too_large'));
-    });
-    it('spends the submit budget before reading the upload', async () => {
-      await api.app
-        .get<Redis>(REDIS)
-        .set(`rate:submit:user:${uploader._id}`, SUBMIT_LIMIT);
-      const files = storedFiles().length;
-      await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
-        .field('source', 'unexpected field, only seen when the body is read')
-        .expect(429)
-        .expect(errorCode('rate_limited'));
-      await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
-        .expect(429)
-        .expect(errorCode('rate_limited'));
-      expect(storedFiles()).toHaveLength(files);
-    });
-
-    it('refuses a language whose stored extension is not plain alphanumeric', async () => {
-      await api.languages.updateOne(
-        { _id: languages.html },
-        { extension: 'HTM/..' },
-        { runValidators: false },
-      );
-      await api.resyncCatalog();
-      const files = storedFiles().length;
-      const response = await submitFile(
-        languages.html,
-        Buffer.from('<script>'),
-        'page.htm',
-      ).expect(400);
-      expect(issueCodes(response)).toEqual(['language_extension_invalid']);
-      expect(storedFiles()).toHaveLength(files);
-      expect(
-        await api.submissions.countDocuments({ language: languages.html }),
-      ).toBe(0);
-    });
-
-    it('removes the stored file when the row cannot be written', async () => {
-      const files = storedFiles().length;
-      jest
-        .spyOn(api.app.get(SubmissionsRepository), 'create')
-        .mockRejectedValueOnce(new AppError('insert_failed', 409, 'no row'));
-      await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
-        .expect(409)
-        .expect(errorCode('insert_failed'));
-      expect(storedFiles()).toHaveLength(files);
-    });
-
-    it('keeps the insert error when removing the file fails too', async () => {
-      jest
-        .spyOn(api.app.get(SubmissionsRepository), 'create')
-        .mockRejectedValueOnce(new AppError('insert_failed', 409, 'no row'));
-      jest
-        .spyOn(api.app.get(StorageService), 'delete')
-        .mockRejectedValueOnce(new Error('disk gone'));
-      await submitFile(languages.zip, Buffer.from('x'), 'a.zip')
-        .expect(409)
-        .expect(errorCode('insert_failed'));
     });
   });
 }

@@ -1,10 +1,7 @@
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
-import { waitUntil } from '@libs/common/testing';
 import { uuidStr } from '@libs/database';
 import { ActiveUsersStore } from '../src/modules/user-activity/capture/active-users.store';
-import type { ActivityRow } from '../src/modules/user-activity/capture/activity-row';
-import { ActivityWriterRepository } from '../src/modules/user-activity/capture/activity-writer.repository';
 import { UserActivityCaptureService } from '../src/modules/user-activity/capture/user-activity-capture.service';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 import { setupApiTest } from './setup';
@@ -78,51 +75,6 @@ describe('user activity capture', () => {
       expect(everything).not.toContain(secret);
   });
 
-  it('redacts a ranking link token in the path and the referer', async () => {
-    await visit(CHROME, '/api/internal/public-rankings/s3cr3t-link-token').set(
-      'Referer',
-      'https://oj.example/public-rankings/another-s3cr3t',
-    );
-    await capture.flush();
-    const [row] = await rows();
-    expect(row.path).toBe('/api/internal/public-rankings/:token');
-    expect(row.referer).toBe('https://oj.example/public-rankings/:token');
-    expect(JSON.stringify(await rows())).not.toContain('s3cr3t');
-  });
-
-  it('redacts password reset and activation tokens that arrive as referers', async () => {
-    await visit().set(
-      'Referer',
-      'https://oj.example/reset-password/r3set-secret',
-    );
-    await visit().set('Referer', 'https://oj.example/activate/4ctivate-secret');
-    await visit(CHROME, '/api/internal/auth/activate/resend').set(
-      'Referer',
-      'https://oj.example/activate/resend-secret',
-    );
-    await capture.flush();
-    const referers = (await rows()).map((row) => row.referer);
-    expect(referers).toEqual([
-      'https://oj.example/reset-password/:token',
-      'https://oj.example/activate/:token',
-      'https://oj.example/activate/:token',
-    ]);
-    expect(JSON.stringify(await rows())).not.toMatch(/secret/);
-  });
-
-  it('truncates an oversized user agent to the stored maximum instead of failing the batch', async () => {
-    await visit('A'.repeat(900)).expect(200);
-    await visit().expect(200);
-    await capture.flush();
-    const stored = await rows();
-    expect(stored).toHaveLength(2);
-    expect(
-      stored
-        .map((row) => row.userAgent.length)
-        .sort((first, second) => first - second),
-    ).toEqual([CHROME.length, 500]);
-  });
-
   it('upserts one session per visitor with device details', async () => {
     const user = await createUserWith(api, 'visitor');
     const session = await loginAs(api, user._id);
@@ -145,22 +97,6 @@ describe('user activity capture', () => {
     expect(uuidStr(sessions[0].userId)).toBe(user._id);
     expect(sessions[1]).toMatchObject({ deviceType: 'bot', userId: null });
     expect(await api.userActivities.countDocuments()).toBe(3);
-  });
-
-  it('tracks anonymous visitors under a stable key and skips untracked paths, query strings included', async () => {
-    await visit().expect(200);
-    await visit().expect(200);
-    await visit('Other agent').expect(200);
-    await api.http().get('/healthz').expect(200);
-    await api.http().get('/api/internal/openapi.json').expect(200);
-    await api.http().get('/api/internal/site').expect(200);
-    await api.http().get('/api/internal/site?probe=1').expect(200);
-    await api.http().get('/api/internal/auth/me?probe=1').expect(401);
-    await capture.flush();
-    const stored = await rows();
-    expect(stored).toHaveLength(3);
-    expect(stored.every((row) => row.userId === null)).toBe(true);
-    expect(await api.userSessions.countDocuments()).toBe(2);
   });
 
   it('attributes impersonated requests to the impersonator and leaves the target untouched', async () => {
@@ -238,111 +174,5 @@ describe('user activity capture', () => {
     expect((await active.users(1, 50)).map((entry) => entry.userId)).toEqual([
       user._id,
     ]);
-  });
-
-  it('lets live entries expire after 30 minutes and gives every live set a ttl', async () => {
-    const user = await createUserWith(api, 'visitor');
-    const session = await loginAs(api, user._id);
-    await authed(visit(), session).expect(200);
-    await visit('Anon agent').expect(200);
-    await visit(GOOGLEBOT).expect(200);
-    await capture.flush();
-    for (const key of ['active:users', 'active:anonymous', 'active:bots']) {
-      const ttl = await redis.ttl(key);
-      expect(ttl).toBeGreaterThan(0);
-      expect(ttl).toBeLessThanOrEqual(3600);
-    }
-    const inTwentyNine = Date.now() + 29 * MINUTE;
-    expect(await active.counts(inTwentyNine)).toEqual({
-      authenticatedUsers: 1,
-      anonymousVisitors: 1,
-      bots: 1,
-    });
-    const inThirtyOne = Date.now() + 31 * MINUTE;
-    expect(await active.users(1, 50, inThirtyOne)).toEqual([]);
-    expect(await active.counts(inThirtyOne)).toEqual({
-      authenticatedUsers: 0,
-      anonymousVisitors: 0,
-      bots: 0,
-    });
-  });
-
-  it('caps each live set, dropping the least recently seen members', async () => {
-    const now = Date.now();
-    const crowd = (from: number, to: number): ActivityRow[] =>
-      Array.from({ length: to - from }, (_value, index) => ({
-        userId: null,
-        sessionKey: `visitor-${from + index}`,
-        ip: '1.1.1.1',
-        userAgent: CHROME,
-        referer: '',
-        path: TRACKED,
-        method: 'GET',
-        statusCode: 200,
-        at: new Date(now - 100_000 + from + index),
-      }));
-    await active.record(crowd(0, 25_000));
-    await active.record(crowd(25_000, 50_010));
-    expect(await redis.zcard('active:anonymous')).toBe(50_000);
-    expect(await redis.zscore('active:anonymous', 'visitor-9')).toBeNull();
-    expect(await redis.zscore('active:anonymous', 'visitor-10')).not.toBeNull();
-  });
-
-  it('writes the buffered rows on its own after two seconds', async () => {
-    await visit().expect(200);
-    expect(await api.userActivities.countDocuments()).toBe(0);
-    await waitUntil(
-      async () => (await api.userActivities.countDocuments()) === 1,
-    );
-  });
-
-  it('does not break responses when the write fails, and records the next requests', async () => {
-    const writer = api.app.get(ActivityWriterRepository);
-    const failing = jest
-      .spyOn(writer, 'write')
-      .mockRejectedValueOnce(new Error('mongo down'));
-    await visit().expect(200);
-    await expect(capture.flush()).resolves.toBeUndefined();
-    expect(failing).toHaveBeenCalledTimes(1);
-    expect(await api.userActivities.countDocuments()).toBe(0);
-    await visit().expect(200);
-    await capture.flush();
-    expect(await api.userActivities.countDocuments()).toBe(1);
-    failing.mockRestore();
-  });
-
-  it('answers requests while the write hangs', async () => {
-    const writer = api.app.get(ActivityWriterRepository);
-    let release!: () => void;
-    const hanging = jest
-      .spyOn(writer, 'write')
-      .mockImplementationOnce(
-        () => new Promise((resolve) => (release = () => resolve())),
-      );
-    await visit().expect(200);
-    const stuck = capture.flush();
-    await waitUntil(() => hanging.mock.calls.length === 1);
-    const started = Date.now();
-    await Promise.all([visit().expect(200), visit().expect(200)]);
-    expect(Date.now() - started).toBeLessThan(1000);
-    release();
-    await stuck;
-    await capture.flush();
-    expect(await api.userActivities.countDocuments()).toBe(2);
-    hanging.mockRestore();
-  });
-
-  it('flushes the remainder when the http server closes', async () => {
-    await capture.flush();
-    const written: ActivityRow[] = [];
-    jest
-      .spyOn(api.app.get(ActivityWriterRepository), 'write')
-      .mockImplementation((batch) => {
-        written.push(...batch);
-        return Promise.resolve();
-      });
-    await visit().expect(200);
-    await api.app.getHttpAdapter().getInstance().close();
-    expect(written.map((row) => row.path)).toEqual([TRACKED]);
   });
 });

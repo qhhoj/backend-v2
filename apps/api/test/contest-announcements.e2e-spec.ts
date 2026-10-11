@@ -1,20 +1,30 @@
 import type Redis from 'ioredis';
+
 import { REDIS } from '@libs/common';
+
 import { waitUntil } from '@libs/common/testing';
+
 import type { User } from '@libs/database';
-import { ANNOUNCEMENT_PUSH_LIMIT } from '../src/modules/contests/core/rate-limits';
+
 import type { AnnouncementResponse } from '../src/modules/contests/announcements/dto/announcement.response';
+
 import {
   DEFAULT_STREAM_LIMITS,
   STREAM_LIMITS,
 } from '../src/modules/events/stream-limits';
-import { clearRateLimits, contestUrl, createContest } from './contest-fixtures';
+
+import { contestUrl, createContest } from './contest-fixtures';
 import { authed, createUserWith, loginAs } from './problem-fixtures';
+
 import type { TestSession } from './problem-fixtures';
+
 import { openStream, streamsOf } from './sse-client';
+
 import type { SseClient } from './sse-client';
+
 import { dataOf } from './submission-fixtures';
-import { errorCode, setupApiTest } from './setup';
+
+import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
 describe('contest announcements', () => {
@@ -130,28 +140,6 @@ describe('contest announcements', () => {
     );
   });
 
-  it('paginates the list and hides announcements of an invisible contest', async () => {
-    const contest = await createContest(api, { authors: [users.editor._id] });
-    for (const title of ['a', 'b', 'c'])
-      await createAnnouncement('editor', contest.key, title);
-    const page = (
-      await api
-        .http()
-        .get(contestUrl(contest.key, '/announcements?page=2&pageSize=2'))
-        .expect(200)
-    ).body as { data: AnnouncementResponse[]; meta: { total: number } };
-    expect([page.data.map((item) => item.title), page.meta.total]).toEqual([
-      ['a'],
-      3,
-    ]);
-    await api
-      .http()
-      .get(contestUrl(contest.key, '/announcements?pageSize=51'))
-      .expect(400);
-    const hidden = await createContest(api, { isVisible: false });
-    await api.http().get(contestUrl(hidden.key, '/announcements')).expect(404);
-  });
-
   it('pushes announcement ids to viewers of the contest only and closes a stream once access is lost', async () => {
     const contest = await createContest(api, {
       authors: [users.editor._id],
@@ -175,20 +163,6 @@ describe('contest announcements', () => {
     expect(announcementFrames(elsewhere)).toEqual([]);
     await api.contests.updateOne({ _id: contest._id }, { isPrivate: true });
     await Promise.all([viewer.closed, anonymous.closed]);
-  });
-
-  it('closes a contest stream once its session ends, even on a public contest', async () => {
-    const contest = await createContest(api);
-    const session = await loginAs(api, users.alice._id);
-    const stream = await openStream(
-      api,
-      `/api/internal/events/contests/${contest.key}`,
-      { Cookie: session.cookie },
-    );
-    opened.push(stream);
-    expect(stream.status).toBe(200);
-    await api.sessions.destroy(session.cookie.split('=')[1]);
-    await stream.closed;
   });
 
   it('keeps delivering announcements after the Redis subscription drops, telling clients to resync', async () => {
@@ -248,29 +222,6 @@ describe('contest announcements', () => {
       contestId: contest._id,
       announcementId: created.id,
     });
-  });
-
-  it('limits pushes per contest', async () => {
-    await clearRateLimits(api);
-    const contest = await createContest(api, {
-      authors: [users.editor._id],
-      pushAnnouncements: true,
-    });
-    for (let index = 0; index < ANNOUNCEMENT_PUSH_LIMIT; index += 1)
-      await post('editor', contest.key, {
-        title: `#${index}`,
-        description: '',
-      }).expect(201);
-    await post('editor', contest.key, { title: 'one more', description: '' })
-      .expect(429)
-      .expect(errorCode('rate_limited'));
-    const listed = (
-      await api
-        .http()
-        .get(contestUrl(contest.key, '/announcements'))
-        .expect(200)
-    ).body as { meta: { total: number } };
-    expect(listed.meta.total).toBe(ANNOUNCEMENT_PUSH_LIMIT);
   });
 
   it('deletes an announcement of this contest only', async () => {

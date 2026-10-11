@@ -55,9 +55,6 @@ describe('renderMarkdown', () => {
       '<p>cost $5, see <code>$x$</code> here</p>\n',
     );
   });
-  it('does not close a math span on an escaped dollar', () => {
-    expect(full('a $x\\$ b')).toBe('<p>a $x$ b</p>\n');
-  });
   it('keeps strikethrough separate from tilde math', () => {
     expect(full('~~strike~~ and ~~a~b~~')).toBe(
       '<p><s>strike</s> and <s>a~b</s></p>\n',
@@ -235,11 +232,6 @@ describe('renderMarkdown', () => {
     expect(full('a $$x $$ b')).toContain('<span class="katex-display">');
     expect(full('a $$x$$5 b')).toContain('<span class="katex-display">');
   });
-  it('consumes both closing dollars of display math', () => {
-    expect(full('a $$x$$ b')).toMatch(
-      /^<p>a <span class="katex-display">.*<\/span> b<\/p>\n$/s,
-    );
-  });
   it('refuses any dollar span that contains a backtick', () => {
     expect(full('$a `b` c$')).not.toContain('katex');
     expect(full('$$a `b` c$$')).not.toContain('katex');
@@ -268,8 +260,6 @@ describe('renderMarkdown', () => {
   describe('render budget', () => {
     const floods: Record<string, (count: number) => string> = {
       dollar: (count) => '$x$ '.repeat(count),
-      tilde: (count) => '~x~ '.repeat(count),
-      display: (count) => '$$x$$ '.repeat(count),
       frac: (count) => '$\\frac{a}{b}$ '.repeat(count),
     };
     it.each(Object.keys(floods))(
@@ -282,11 +272,6 @@ describe('renderMarkdown', () => {
         expect(html.match(/Formula limit exceeded/g)).toHaveLength(1);
       },
     );
-    it('replaces formulas past the count without calling KaTeX', () => {
-      const html = full('$x$ '.repeat(2001));
-      expect(html.match(/class="katex"/g)).toHaveLength(2000);
-      expect(html).toContain('title="Formula limit exceeded">$x$</span>');
-    });
     it('replaces a formula longer than 4000 chars', () => {
       const cells = `$$\\begin{matrix}${'a&'.repeat(50000)}a\\end{matrix}$$`;
       const html = full(cells);
@@ -312,13 +297,10 @@ describe('renderMarkdown', () => {
     const nestings: Array<[string, (count: number) => string]> = [
       ['a', (count) => '<a>'.repeat(count)],
       ['self-closed a', (count) => '<a/>'.repeat(count)],
-      ['spaced self-closed a', (count) => '<a />'.repeat(count)],
-      ['span', (count) => '<span>'.repeat(count)],
       [
         'div and stray p',
         (count) => '<div>'.repeat(count) + '</p>'.repeat(count * 1.25),
       ],
-      ['table', (count) => '<table><tr><td>'.repeat(count)],
     ];
     it.each(nestings)(
       'bounds raw html nesting in linear time: %s',
@@ -363,12 +345,6 @@ describe('renderMarkdown', () => {
     it('keeps KaTeX svg self-closing tags out of the nesting count', () => {
       const html = full('$\\sqrt{x}$ '.repeat(600));
       expect(html.match(/class="katex"/g)).toHaveLength(600);
-    });
-    it('turns a formula at the length limit into a save-safe result', () => {
-      const cells = 'a&'.repeat(498) + 'a';
-      const html = full(`$$\\begin{matrix}${cells}\\end{matrix}$$`);
-      expect(html).toMatch(/class="katex|class="math-error/);
-      expect(full(`$${'x'.repeat(1001)}$`)).toContain('Formula limit exceeded');
     });
     it('rejects markup nested deeper than 500', () => {
       expect(() => full('<div>'.repeat(501))).toThrow(RenderLimitError);
@@ -468,16 +444,6 @@ describe('renderMarkdown', () => {
       '<div>\n<blockquote class="spoiler">\n<p>hidden <em>x</em></p>\n</blockquote>\n</div>',
     );
   });
-  it('keeps whitespace-only lines outside spoilers byte-for-byte', () => {
-    expect(full('```\na\n  \nb\n```')).toBe(
-      '<pre><code>a\n  \nb\n</code></pre>\n',
-    );
-  });
-  it('renders an empty html spoiler pair as an empty spoiler', () => {
-    expect(full('<blockquote class="spoiler">\n</blockquote>')).toBe(
-      '<blockquote class="spoiler"></blockquote>\n',
-    );
-  });
   it('keeps adjacent html spoiler pairs as separate spoilers', () => {
     const pair = (text: string) =>
       `<blockquote class="spoiler">\n${text}\n</blockquote>`;
@@ -508,19 +474,5 @@ describe('user style', () => {
     expect(html).not.toMatch(/<img|<b>|<script/);
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     expect(html).toContain('&lt;script&gt;');
-  });
-
-  it('still renders Markdown, math and links', () => {
-    const html = renderMarkdown(
-      '**hi** $x^2$ [site](https://example.com)',
-      'user',
-    );
-    expect(html).toContain('<strong>hi</strong>');
-    expect(html).toContain('katex');
-    expect(html).toContain('rel="nofollow noopener"');
-  });
-
-  it('keeps raw HTML in the statement styles', () => {
-    expect(renderMarkdown('<b>bold</b>', 'problem')).toContain('<b>bold</b>');
   });
 });

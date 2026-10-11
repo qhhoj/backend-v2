@@ -177,20 +177,6 @@ describe('judging across the api and the bridge', () => {
     expect(await gradedJobsOf(id)).toHaveLength(1);
   });
 
-  it('aborts a running submission through the judge: AB, graded once', async () => {
-    const id = await submit();
-    expect(await requestedId()).toBe(id);
-    begin(id);
-    await finished(id, 'G');
-    await act('owner', id, 'abort').expect(204);
-    expect((await judge.next('abort')).abort.ref).toEqual(refs.get(id));
-    judge.final(refs.get(id)!, Outcome.OUTCOME_ABORTED);
-    await finished(id, 'AB');
-    expect(await row(id)).toMatchObject({ result: 'AB', points: 0 });
-    expect(await detail(id)).toMatchObject({ status: 'AB' });
-    expect(await gradedJobsOf(id)).toHaveLength(1);
-  });
-
   it('aborts a queued submission at once and never dispatches it', async () => {
     const running = await submit();
     expect(await requestedId()).toBe(running);

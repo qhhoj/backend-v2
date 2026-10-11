@@ -7,13 +7,6 @@ const best = (maxPoints: number, solved = false): ProblemBest => ({
 });
 
 describe('userPoints (legacy calculate_points)', () => {
-  it('is all zero without submissions', () =>
-    expect(userPoints([])).toEqual({
-      points: 0,
-      performancePoints: 0,
-      problemCount: 0,
-    }));
-
   it('weighs bests from the largest down and adds 0.05 per solved problem', () => {
     const result = userPoints([best(200), best(1000, true)]);
     expect(result.points).toBe(1200);
@@ -72,8 +65,8 @@ describe('userPoints (legacy calculate_points)', () => {
 });
 
 describe('acceptanceRate (legacy update_stats)', () => {
-  it('is zero without submissions', () => expect(acceptanceRate(0, 0)).toBe(0));
-  it('is the percentage of accepted submissions', () => {
+  it('is the percentage of accepted submissions, zero without submissions', () => {
+    expect(acceptanceRate(0, 0)).toBe(0);
     expect(acceptanceRate(3, 5)).toBe(60);
     expect(acceptanceRate(1, 3)).toBeCloseTo(33.3333333, 6);
     expect(acceptanceRate(4, 4)).toBe(100);

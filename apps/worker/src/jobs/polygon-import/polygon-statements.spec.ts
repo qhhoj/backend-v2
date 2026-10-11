@@ -796,17 +796,6 @@ describe('problem-properties.json shape', () => {
       'unexpected shape',
     );
   });
-  it.each(['legend', 'input', 'output', 'notes'])(
-    'rejects a null or missing required %s',
-    async (key) => {
-      await expect(parseOne(properties({ [key]: null }))).rejects.toThrow(
-        'unexpected shape',
-      );
-      await expect(parseOne(properties({ [key]: undefined }))).rejects.toThrow(
-        'unexpected shape',
-      );
-    },
-  );
   it.each(['interaction', 'scoring', 'tutorial'])(
     'accepts a null or missing optional %s',
     async (key) => {

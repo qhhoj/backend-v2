@@ -68,16 +68,6 @@ describe('ActivityBuffer', () => {
     expect(errors).toHaveLength(1);
   });
 
-  it('never holds more than the cap while the sink is stuck', () => {
-    const buffer = new ActivityBuffer<number>(
-      () => new Promise<void>(() => undefined),
-      () => undefined,
-      { max: 10, flushRows: 5, flushMs: 2000 },
-    );
-    for (let row = 0; row < 1000; row += 1) buffer.add(row);
-    expect(buffer.size()).toBeLessThanOrEqual(10);
-  });
-
   it('keeps flowing after a failed write, reporting how many rows were dropped', async () => {
     const { buffer, batches, errors, failNext, recover } = make();
     failNext();

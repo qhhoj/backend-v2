@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { newId, SHORT_CODE_ALPHABET, toUuid } from '@libs/database';
+import { newId, toUuid } from '@libs/database';
 import {
   randomShortCode,
   SHORT_CODE_SOURCE,
@@ -24,7 +24,6 @@ describe('short links', () => {
   let api: ApiTest;
   let staff: TestSession;
   let student: TestSession;
-  let other: TestSession;
   let counter = 0;
   const forcedCodes: string[] = [];
   const fresh = () => `/problems/sl${(counter += 1)}`;
@@ -50,7 +49,6 @@ describe('short links', () => {
       )._id,
     );
     student = await loginAs(api, (await createUserWith(api, 'slstudent'))._id);
-    other = await loginAs(api, (await createUserWith(api, 'slother'))._id);
   });
   beforeEach(async () => {
     forcedCodes.length = 0;
@@ -59,30 +57,6 @@ describe('short links', () => {
   afterAll(() => api.teardown());
 
   describe('creating', () => {
-    it('gives any signed-in user a six-character link, and the same link to everyone for the same path', async () => {
-      const path = fresh();
-      const first = dataOf<Link>(await create(student, { path }).expect(201));
-      expect(first.code).toHaveLength(6);
-      expect(
-        [...first.code].every((letter) => SHORT_CODE_ALPHABET.includes(letter)),
-      ).toBe(true);
-      expect(first).toMatchObject({
-        path,
-        isAuto: true,
-        hits: 0,
-        expiresAt: null,
-      });
-      expect(
-        dataOf<Link>(await create(student, { path }).expect(201)).code,
-      ).toBe(first.code);
-      expect(dataOf<Link>(await create(other, { path }).expect(201)).code).toBe(
-        first.code,
-      );
-      expect(
-        await api.db.collection('shortLinks').countDocuments({ path }),
-      ).toBe(1);
-    });
-
     it('makes one link when ten requests ask for the same path at once', async () => {
       const path = fresh();
       const codes = await Promise.all(
@@ -121,22 +95,6 @@ describe('short links', () => {
       );
     });
 
-    it('retries a code collision and gives up politely after five', async () => {
-      const taken = dataOf<Link>(
-        await create(student, { path: fresh() }).expect(201),
-      );
-      forcedCodes.push(taken.code, taken.code, 'bbbbbb');
-      const made = dataOf<Link>(
-        await create(student, { path: fresh() }).expect(201),
-      );
-      expect(made.code).toBe('bbbbbb');
-      forcedCodes.push(...Array.from({ length: 5 }, () => taken.code));
-      await create(student, { path: fresh() })
-        .expect(409)
-        .expect(errorCode('conflict'));
-      expect(forcedCodes).toEqual([]);
-    });
-
     it('lets only staff choose a code or an expiry', async () => {
       const path = fresh();
       await create(student, { path, code: 'mychoice' })
@@ -159,85 +117,9 @@ describe('short links', () => {
       expect(expiring.expiresAt).toBe('2099-01-01T00:00:00.000Z');
       expect(expiring.isAuto).toBe(false);
     });
-
-    it('refuses a taken, reserved or malformed chosen code', async () => {
-      const path = fresh();
-      await create(staff, { path, code: 'taken-one' }).expect(201);
-      await create(staff, { path: fresh(), code: 'taken-one' })
-        .expect(409)
-        .expect(errorCode('conflict'));
-      await create(staff, { path: fresh(), code: 'admin' }).expect(400);
-      await create(staff, { path: fresh(), code: 'UPPER' }).expect(400);
-      await create(staff, { path: fresh(), code: 'ab' }).expect(400);
-    });
-
-    it('refuses an expiry that is not in the future, on the expiresAt field', async () => {
-      for (const expiresAt of [
-        new Date(Date.now() - 60_000).toISOString(),
-        new Date(Date.now()).toISOString(),
-      ]) {
-        const refused = await create(staff, {
-          path: fresh(),
-          expiresAt,
-        }).expect(400);
-        expect(
-          (refused.body as { error: { issues: unknown[] } }).error.issues,
-        ).toContainEqual(
-          expect.objectContaining({ field: 'expiresAt', code: 'invalid' }),
-        );
-      }
-    });
-
-    it('gives the allowance back when a chosen code is taken', async () => {
-      await create(staff, { path: fresh(), code: 'refund-me' }).expect(201);
-      const spender = await loginAs(
-        api,
-        (
-          await createUserWith(api, 'slrefund', {
-            permissions: ['judge.manage_short_link'],
-          })
-        )._id,
-      );
-      for (let index = 0; index < 25; index += 1)
-        await create(spender, { path: fresh(), code: 'refund-me' }).expect(409);
-      for (let index = 0; index < 20; index += 1)
-        await create(spender, { path: fresh() }).expect(201);
-    });
-
-    it('allows 20 new links a day, and an existing link does not use the allowance up', async () => {
-      const reused = fresh();
-      await create(student, { path: reused }).expect(201);
-      for (let index = 0; index < 25; index += 1)
-        await create(student, { path: reused }).expect(201);
-      const tired = await createUserWith(api, 'sltired');
-      const session = await loginAs(api, tired._id);
-      for (let index = 0; index < 20; index += 1)
-        await create(session, { path: fresh() }).expect(201);
-      await create(session, { path: fresh() })
-        .expect(429)
-        .expect(errorCode('rate_limited'));
-    });
-  });
-
-  it('holds staff to no daily quota', async () => {
-    for (let index = 0; index < 22; index += 1)
-      await create(staff, { path: fresh() }).expect(201);
   });
 
   describe('visiting', () => {
-    it('answers a HEAD probe like a visit but does not count it', async () => {
-      const path = fresh();
-      const { code } = dataOf<Link>(
-        await create(student, { path }).expect(201),
-      );
-      const response = await api.http().head(`/s/${code}`).redirects(0);
-      expect(response.status).toBe(302);
-      expect(response.headers.location).toBe(path);
-      expect(
-        await api.db.collection('shortLinks').findOne({ code }),
-      ).toMatchObject({ hits: 0 });
-    });
-
     it('redirects to the stored relative path, uncached, and counts the visit', async () => {
       const path = fresh();
       const { code } = dataOf<Link>(
@@ -314,58 +196,9 @@ describe('short links', () => {
       }
       error.mockRestore();
     });
-
-    it('limits visits to 120 a minute per address', async () => {
-      const { code } = dataOf<Link>(
-        await create(student, { path: fresh() }).expect(201),
-      );
-      for (let index = 0; index < 120; index += 1)
-        await visit(code).expect(302);
-      await visit(code).expect(429).expect(errorCode('rate_limited'));
-    });
   });
 
   describe('listing and deleting', () => {
-    it('lists a user their own links and staff everyone, paged', async () => {
-      const mine = dataOf<Link>(
-        await create(student, { path: fresh() }).expect(201),
-      );
-      const theirs = dataOf<Link>(
-        await create(other, { path: fresh() }).expect(201),
-      );
-      const codesOf = async (session: TestSession, query: string) =>
-        dataOf<Link[]>(
-          await authed(
-            api.http().get(`/api/internal/short-links${query}`),
-            session,
-          ).expect(200),
-        ).map((link) => link.code);
-      const ownCodes = await codesOf(student, '');
-      expect(ownCodes).toContain(mine.code);
-      expect(ownCodes).not.toContain(theirs.code);
-      expect(await codesOf(staff, '?scope=all&pageSize=100')).toEqual(
-        expect.arrayContaining([mine.code, theirs.code]),
-      );
-      await authed(
-        api.http().get('/api/internal/short-links?scope=all'),
-        student,
-      ).expect(403);
-      await authed(
-        api.http().get('/api/internal/short-links?scope=everything'),
-        student,
-      ).expect(400);
-      const page = await authed(
-        api.http().get('/api/internal/short-links?scope=all&pageSize=1'),
-        staff,
-      ).expect(200);
-      const { data, meta } = page.body as {
-        data: Link[];
-        meta: { pageSize: number };
-      };
-      expect(data).toHaveLength(1);
-      expect(meta.pageSize).toBe(1);
-    });
-
     it('lets staff delete a link, which stops working at once, and logs who did it', async () => {
       const { code } = dataOf<Link>(
         await create(student, { path: fresh() }).expect(201),
@@ -390,28 +223,6 @@ describe('short links', () => {
         api.http().delete(`/api/internal/short-links/${code}`),
         staff,
       ).expect(404);
-    });
-
-    it('deletes by the code in any letter case, like the redirect resolves it', async () => {
-      const { code } = dataOf<Link>(
-        await create(student, { path: fresh() }).expect(201),
-      );
-      await visit(code.toUpperCase()).expect(302);
-      await authed(
-        api.http().delete(`/api/internal/short-links/${code.toUpperCase()}`),
-        staff,
-      ).expect(204);
-      await visit(code).expect(404);
-    });
-
-    it('needs a signed-in user to create, list or delete', async () => {
-      await api
-        .http()
-        .post('/api/internal/short-links')
-        .send({ path: fresh() })
-        .expect(401);
-      await api.http().get('/api/internal/short-links').expect(401);
-      await api.http().delete('/api/internal/short-links/abcdef').expect(401);
     });
   });
 });

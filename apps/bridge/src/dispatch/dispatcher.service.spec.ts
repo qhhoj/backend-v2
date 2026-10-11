@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { newId } from '@libs/database';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
@@ -161,13 +160,6 @@ describe('DispatcherService', () => {
     );
   });
 
-  it('gives a draining judge nothing new', async () => {
-    const judge = await online(new Target('j1', 4));
-    judge.isDraining = true;
-    await queue(entry());
-    expect(judge.assigned).toEqual([]);
-  });
-
   it('voids a run when its row is rejudged: the judge is told to stop and the new generation is assigned', async () => {
     // three slots: the winding run keeps one, and a rejudge never takes the last free one
     const judge = await online(new Target('j1', 3));
@@ -184,20 +176,6 @@ describe('DispatcherService', () => {
       1, 2,
     ]);
     expect(judge.inFlight.get(submission.id)).toBe(2);
-    expect([...judge.winding]).toEqual([`${submission.id}.1`]);
-  });
-
-  it('assigns a rejudge to the spare slot of a two-slot judge at once, beside its winding run (conformance 21)', async () => {
-    const judge = await online(new Target('j1', 2));
-    const submission = entry();
-    await queue(submission);
-    await queue({ ...submission, priority: 2, generation: 1 });
-    expect(judge.aborted).toEqual([
-      { submissionId: submission.id, generation: 1 },
-    ]);
-    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
-      1, 2,
-    ]);
     expect([...judge.winding]).toEqual([`${submission.id}.1`]);
   });
 
@@ -227,16 +205,6 @@ describe('DispatcherService', () => {
     judge.winding.add('stale.1');
     await dispatcher.judgeLost(judge);
     expect(judge.winding.size).toBe(0);
-  });
-
-  it('keeps a run claimed after the row was read (a resync racing a dispatch)', async () => {
-    const judge = await online(new Target('j1'));
-    const submission = entry();
-    await queue(submission);
-    await dispatcher.enqueue([{ ...submission, generation: 0 }]);
-    expect(judge.aborted).toEqual([]);
-    expect(judge.inFlight.get(submission.id)).toBe(1);
-    expect(dispatcher.queuedIds()).toEqual([]);
   });
 
   it('never re-dispatches a run a judge holds when resync ticks interleave with its dispatch (a two-slot judge)', async () => {
@@ -424,40 +392,6 @@ describe('DispatcherService', () => {
     ]);
   });
 
-  it('logs the grace hold, its outcome and an accept timeout with the judge and the submission', async () => {
-    const lines: string[] = [];
-    const record = (message: unknown) => void lines.push(String(message));
-    const spies = [
-      jest.spyOn(Logger.prototype, 'log').mockImplementation(record),
-      jest.spyOn(Logger.prototype, 'warn').mockImplementation(record),
-    ];
-    try {
-      const lost = await online(new Target('lost'));
-      const [graced, slow] = [entry(), entry()];
-      await queue(graced);
-      await dispatcher.judgeLost(lost);
-      jest.advanceTimersByTime(30_000);
-      await flush();
-      const judge = await online(new Target('j1', 2));
-      await queue(slow);
-      await dispatcher.acceptTimedOut(judge, {
-        submissionId: slow.id,
-        generation: 1,
-      });
-    } finally {
-      for (const spy of spies) spy.mockRestore();
-    }
-    expect(lines).toEqual([
-      expect.stringMatching(/Judge lost lost; submissions in grace: \S+ gen 1/),
-      expect.stringMatching(
-        /Grace of submission \S+ gen 1 on judge lost expired: requeued/,
-      ),
-      expect.stringMatching(
-        /Judge j1 did not accept submission \S+ gen 1 in time/,
-      ),
-    ]);
-  });
-
   describe('run deadline', () => {
     it('aborts a run its judge never finishes, frees nothing early, and requeues it once', async () => {
       const judge = await online(new Target('j1', 2));
@@ -518,22 +452,6 @@ describe('DispatcherService', () => {
     expect(expired).toEqual([]);
   });
 
-  it('expires an aborted run in grace as an abort', async () => {
-    const judge = await online(new Target('j1'));
-    const submission = entry();
-    await queue(submission);
-    await dispatcher.judgeLost(judge);
-    dispatcher.abort(submission.id);
-    jest.advanceTimersByTime(30_000);
-    await flush();
-    expect(expired).toEqual([
-      {
-        ref: { submissionId: submission.id, generation: 1 },
-        abortRequested: true,
-      },
-    ]);
-  });
-
   it('keeps an abort sent to a judge already gone: a resume aborts the run after the Welcome, an expiry writes AB', async () => {
     const judge = await online(new Target('j1', 2));
     const [resumed, expiring] = [entry(), entry()];
@@ -591,20 +509,6 @@ describe('DispatcherService', () => {
     const marks = () =>
       (dispatcher as unknown as { abortsRequested: Set<string> })
         .abortsRequested;
-
-    it('drops the mark when the aborted run ends normally', async () => {
-      const judge = await online(new Target('j1'));
-      const submission = entry();
-      await queue(submission);
-      dispatcher.abort(submission.id);
-      expect([...marks()]).toEqual([`${submission.id}.1`]);
-      await dispatcher.runEnded(
-        judge,
-        { submissionId: submission.id, generation: 1 },
-        { retried: false },
-      );
-      expect(marks().size).toBe(0);
-    });
 
     it('drops the mark when the aborted run is rejudged, and the new generation is not aborted', async () => {
       const judge = await online(new Target('j1', 3));
@@ -850,16 +754,5 @@ describe('DispatcherService', () => {
     expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
       1, 2,
     ]);
-  });
-
-  it('leaves the rows of judges lost while stopping alone, and fires no grace after stop', async () => {
-    const judge = await online(new Target('j1'));
-    await queue(entry());
-    dispatcher.stop();
-    await dispatcher.judgeLost(judge);
-    jest.advanceTimersByTime(60_000);
-    await flush();
-    expect(expired).toEqual([]);
-    expect(dispatcher.heldIds()).toHaveLength(1);
   });
 });

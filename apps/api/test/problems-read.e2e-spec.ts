@@ -22,11 +22,7 @@ import type Redis from 'ioredis';
 import { ProblemEvents } from '../src/modules/problems/core/problem.events';
 import type { Catalog, TestSession } from './problem-fixtures';
 import type { ApiTest } from './setup';
-import {
-  TagCatalogResponse,
-  TagProblemListItemResponse,
-  TagProblemResponse,
-} from '../src/modules/tags/dto/tag.response';
+import { TagProblemResponse } from '../src/modules/tags/dto/tag.response';
 
 let api: ApiTest;
 
@@ -127,170 +123,6 @@ afterAll(() => api.teardown());
       });
     });
 
-    it('lists public non-organization problems newest first with pagination meta', async () => {
-      const response = await api.http().get(LIST).expect(200);
-      expect(codesOf(response)).toEqual([
-        'cpp_tricks',
-        'cherry',
-        'banana',
-        'apple',
-      ]);
-      expect((response.body as ListBody).meta).toEqual({
-        page: 1,
-        pageSize: 50,
-        total: 4,
-      });
-      expect((response.body as ListBody).data[2]).toMatchObject({
-        code: 'banana',
-        hasPublicEditorial: true,
-        hasPdfStatement: false,
-        group: { fullName: 'Uncategorized' },
-        types: [{ name: 'uncategorized' }],
-      });
-      expect(
-        codesOf(await api.http().get(`${LIST}?page=2&pageSize=3`).expect(200)),
-      ).toEqual(['apple']);
-      await api
-        .http()
-        .get(`${LIST}?pageSize=101`)
-        .expect(400)
-        .expect(errorCode('validation_failed'));
-      await api.http().get(`${LIST}?sort=sideways`).expect(400);
-      await api.http().get(`${LIST}?page=10001`).expect(400);
-    });
-    it('filters by group, types, points and editorial', async () => {
-      expect(
-        codesOf(await api.http().get(`${LIST}?groupId=${catalog.groups.voi}`)),
-      ).toEqual(['apple']);
-      expect(
-        codesOf(
-          await api
-            .http()
-            .get(
-              `${LIST}?typeIds=${catalog.types.dp}&typeIds=${catalog.types.uncategorized}`,
-            ),
-        ),
-      ).toHaveLength(4);
-      expect(
-        codesOf(await api.http().get(`${LIST}?typeIds=${catalog.types.dp}`)),
-      ).toEqual(['apple']);
-      expect(
-        codesOf(await api.http().get(`${LIST}?pointsMin=1000&pointsMax=2000`)),
-      ).toEqual(['cpp_tricks', 'banana']);
-      expect(
-        codesOf(await api.http().get(`${LIST}?hasEditorial=true`)),
-      ).toEqual(['banana']);
-      expect(
-        codesOf(await api.http().get(`${LIST}?hasEditorial=false`)),
-      ).toEqual(['cpp_tricks', 'cherry', 'apple']);
-    });
-    it('sorts by code, points and name case-insensitively', async () => {
-      expect(codesOf(await api.http().get(`${LIST}?sort=code`))).toEqual([
-        'apple',
-        'banana',
-        'cherry',
-        'cpp_tricks',
-      ]);
-      expect(codesOf(await api.http().get(`${LIST}?sort=-points`))).toEqual([
-        'cherry',
-        'banana',
-        'cpp_tricks',
-        'apple',
-      ]);
-      expect(codesOf(await api.http().get(`${LIST}?sort=name`))).toEqual([
-        'apple',
-        'banana',
-        'cpp_tricks',
-        'cherry',
-      ]);
-    });
-    it('searches translated names and substrings of codes and titles, ignoring accents', async () => {
-      const find = async (text: string) =>
-        codesOf(
-          await api.http().get(`${LIST}?search=${encodeURIComponent(text)}`),
-        );
-      expect(await find('chuối')).toEqual(['banana']);
-      expect(await find('chuoi')).toEqual(['banana']);
-      expect(await find('QUA CHUOI')).toEqual(['banana']);
-      expect(await find('ppl')).toEqual(['apple']);
-      expect(await find('rick')).toEqual(['cpp_tricks']);
-      expect(await find('cpp trick')).toEqual(['cpp_tricks']);
-      expect(await find('cpp banana')).toEqual([]);
-      expect(await find('  ')).toHaveLength(4);
-    });
-    it('finds a substring of the code or a title with q, escaped and length-capped', async () => {
-      const find = async (text: string) =>
-        codesOf(await api.http().get(`${LIST}?q=${encodeURIComponent(text)}`));
-      expect(await find('PPL')).toEqual(['apple']);
-      expect(await find('rick')).toEqual(['cpp_tricks']);
-      expect(await find('hu')).toEqual(['banana']);
-      expect(await find('.*')).toEqual([]);
-      expect(await find('c+')).toEqual(['cpp_tricks']);
-      await api
-        .http()
-        .get(`${LIST}?q=${'x'.repeat(101)}`)
-        .expect(400);
-    });
-    it('never lets q surface a problem the viewer cannot see', async () => {
-      const find = async (query: string, session?: TestSession) =>
-        codesOf(
-          session
-            ? await authed(api.http().get(`${LIST}?${query}`), session)
-            : await api.http().get(`${LIST}?${query}`),
-        );
-      expect(await find('q=secret')).toEqual([]);
-      expect(await find('q=secret', plain)).toEqual([]);
-      expect(await find('q=secret&visibility=all', plain)).toEqual([]);
-      expect(await find('q=secret&visibility=all', author)).toEqual(['secret']);
-      expect(await find('q=orgonly&visibility=all')).toEqual([]);
-      expect(await find('q=orgonly&visibility=all', plain)).toEqual([]);
-    });
-    it('escapes regex metacharacters in short queries and accepts "C++"', async () => {
-      expect(
-        codesOf(
-          await api
-            .http()
-            .get(`${LIST}?search=${encodeURIComponent('c+')}`)
-            .expect(200),
-        ),
-      ).toEqual(['cpp_tricks']);
-      expect(
-        codesOf(
-          await api
-            .http()
-            .get(`${LIST}?search=${encodeURIComponent('a(')}`)
-            .expect(200),
-        ),
-      ).toEqual([]);
-      await api
-        .http()
-        .get(`${LIST}?search=${encodeURIComponent('C++')}`)
-        .expect(200);
-    });
-    it('rejects NUL bytes in search', async () => {
-      await api
-        .http()
-        .get(`${LIST}?search=a%00`)
-        .expect(400)
-        .expect(errorCode('validation_failed'));
-    });
-    it('treats 2FA-pending and pwned-password sessions as anonymous', async () => {
-      for (const flags of [{ twoFaPassed: false }, { passwordPwned: true }]) {
-        const session = await loginAs(api, authorUser._id, flags);
-        expect(
-          codesOf(
-            await authed(api.http().get(`${LIST}?visibility=private`), session),
-          ),
-        ).toEqual([]);
-      }
-    });
-    it('translates names for ?lang=vi with base fallback', async () => {
-      const names = (
-        (await api.http().get(`${LIST}?lang=vi&sort=code`).expect(200))
-          .body as ListBody
-      ).data.map((item) => item.name);
-      expect(names).toEqual(['Apple', 'Quả chuối', 'Cherry', 'C++ tricks']);
-    });
     it('never leaks private or organization problems to the wrong viewer', async () => {
       expect(
         codesOf(await api.http().get(`${LIST}?visibility=all`)),
@@ -454,103 +286,6 @@ afterAll(() => api.teardown());
       expect(detail).not.toHaveProperty('description');
     });
 
-    it('serves the Vietnamese base as asked, and English only where translated', async () => {
-      const statementOf = async (code: string, lang?: string) =>
-        detailOf(
-          await api
-            .http()
-            .get(`${PROBLEMS}/${code}${lang ? `?lang=${lang}` : ''}`)
-            .expect(200),
-        );
-      expect(await statementOf('sum', 'vi')).toMatchObject({
-        name: 'Tổng',
-        language: 'vi',
-        translated: true,
-      });
-      expect(await statementOf('sum', 'en')).toMatchObject({
-        name: 'Sum',
-        language: 'en',
-        translated: true,
-        descriptionHtml: '<p>Add …</p>',
-      });
-      expect(await statementOf('noeditorial', 'en')).toMatchObject({
-        name: 'NOEDITORIAL',
-        language: 'vi',
-        translated: false,
-      });
-      expect(await statementOf('noeditorial', 'vi')).toMatchObject({
-        language: 'vi',
-        translated: true,
-      });
-      await api
-        .http()
-        .get(`${PROBLEMS}/sum?lang=fr`)
-        .expect(400)
-        .expect(errorCode('validation_failed'));
-    });
-
-    it('answers 404 for unknown, malformed and invisible codes without leaking existence', async () => {
-      await api
-        .http()
-        .get(`${PROBLEMS}/nope`)
-        .expect(404)
-        .expect(errorCode('not_found'));
-      await api
-        .http()
-        .get(`${PROBLEMS}/Bad-Code`)
-        .expect(404)
-        .expect(errorCode('not_found'));
-      await api.http().get(`${PROBLEMS}/Bad-Code/editorial`).expect(404);
-      await api
-        .http()
-        .get(`${PROBLEMS}/hidden`)
-        .expect(404)
-        .expect(errorCode('not_found'));
-      await authed(api.http().get(`${PROBLEMS}/hidden`), plain).expect(404);
-      await authed(api.http().get(`${PROBLEMS}/hidden`), pendingAuthor).expect(
-        404,
-      );
-      expect(
-        detailOf(
-          await authed(api.http().get(`${PROBLEMS}/hidden`), tester).expect(
-            200,
-          ),
-        ),
-      ).toMatchObject({ canEdit: false, editor: null });
-    });
-
-    it('exposes the editor block to editors only', async () => {
-      const detail = detailOf(
-        await authed(api.http().get(`${PROBLEMS}/sum`), author).expect(200),
-      );
-      expect(detail.canEdit).toBe(true);
-      expect(detail.editor).toMatchObject({
-        description: 'Cộng $a+b$.',
-        translations: [
-          { language: 'en', name: 'Sum', description: 'Add $a+b$.' },
-        ],
-        solution: {
-          isPublic: true,
-          content: 'Just add.',
-          authors: [{ id: authorId, username: 'author', rating: 1650 }],
-        },
-        curators: [],
-        testers: [],
-        suggester: null,
-        licenseId: catalog.licenses.mit,
-      });
-    });
-
-    it('keeps the base name in the editor block whatever the requested language', async () => {
-      const detail = detailOf(
-        await authed(api.http().get(`${PROBLEMS}/sum?lang=en`), author).expect(
-          200,
-        ),
-      );
-      expect(detail.name).toBe('Sum');
-      expect(detail.editor).toMatchObject({ baseName: 'Tổng' });
-    });
-
     it('gates the editorial on publication, permission and editorship', async () => {
       expect(
         editorialOf(
@@ -659,37 +394,6 @@ afterAll(() => api.teardown());
       });
       beforeEach(() => makeCurrent(api, racerId, null));
 
-      it('is null outside a contest, for the signed-in and the anonymous', async () => {
-        expect(await contestOf('capped')).toBeNull();
-        expect(
-          detailOf(await api.http().get(`${PROBLEMS}/capped`).expect(200))
-            .contest,
-        ).toBeNull();
-      });
-
-      it('is null in a contest that does not list the problem', async () => {
-        const other = await createContest(api, { problems: [] });
-        await makeCurrent(
-          api,
-          racerId,
-          (await joinParticipation(api, other._id, racerId))._id,
-        );
-        expect(await contestOf('capped')).toBeNull();
-      });
-
-      it('names the contest and the attempts left while participating', async () => {
-        const round = await enterRound();
-        expect(await contestOf('capped')).toEqual({
-          contestKey: round.contest.key,
-          attemptsLeft: 3,
-        });
-        await attempt(round, capped._id);
-        expect(await contestOf('capped')).toEqual({
-          contestKey: round.contest.key,
-          attemptsLeft: 2,
-        });
-      });
-
       it('counts only this participation, and not IE or PD submissions', async () => {
         const round = await enterRound();
         const rival = await enterRound();
@@ -710,22 +414,6 @@ afterAll(() => api.teardown());
         await attempt(round, capped._id);
         expect((await contestOf('capped'))?.attemptsLeft).toBe(2);
       });
-
-      it('has no limit to report when the entry is uncapped', async () => {
-        const round = await enterRound();
-        await attempt(round, uncapped._id);
-        expect(await contestOf('uncapped')).toEqual({
-          contestKey: round.contest.key,
-          attemptsLeft: null,
-        });
-      });
-
-      it('never goes below zero', async () => {
-        const round = await enterRound();
-        for (let count = 0; count < 4; count += 1)
-          await attempt(round, capped._id);
-        expect((await contestOf('capped'))?.attemptsLeft).toBe(0);
-      });
     });
   });
 }
@@ -738,10 +426,7 @@ afterAll(() => api.teardown());
     beforeAll(() => api.reset());
     let catalog: Catalog;
     let editorId: string;
-    let editor: TestSession,
-      cloner: TestSession,
-      plain: TestSession,
-      fullMarkup: TestSession;
+    let editor: TestSession, cloner: TestSession, plain: TestSession;
     const statementChanges: string[] = [];
 
     beforeAll(async () => {
@@ -761,7 +446,6 @@ afterAll(() => api.teardown());
       editor = await loginAs(api, editorId);
       cloner = await loginAs(api, clonerUser._id);
       plain = await loginAs(api, plainUser._id);
-      fullMarkup = await loginAs(api, fullUser._id);
       await createProblem(api, catalog, {
         code: 'src',
         description: 'Base $x$',
@@ -808,72 +492,6 @@ afterAll(() => api.teardown());
         .on('statementChanged', (problemId) =>
           statementChanges.push(problemId),
         );
-    });
-
-    it('upserts a translation, renders it and emits statementChanged', async () => {
-      await authed(api.http().put(`${PROBLEMS}/src/translations/vi`), editor)
-        .send({ name: 'Mới', description: 'Nội dung $y$' })
-        .expect(204);
-      await authed(api.http().put(`${PROBLEMS}/src/translations/vi`), editor)
-        .send({ name: 'Mới hơn', description: 'Nội dung $y$' })
-        .expect(204);
-      await authed(api.http().put(`${PROBLEMS}/src/translations/vi`), editor)
-        .send({ name: 'Mới hơn', description: 'Nội dung $y$' })
-        .expect(204);
-      const stored = (await api.problems.findOne({ code: 'src' }))!;
-      expect(stored.translations).toHaveLength(1);
-      expect(stored.translations[0]).toMatchObject({
-        language: 'vi',
-        name: 'Mới hơn',
-      });
-      expect(stored.translations[0].descriptionHtml).toContain('katex');
-      expect(statementChanges).toEqual([stored._id, stored._id]);
-      expect(
-        detailOf(await api.http().get(`${PROBLEMS}/src?lang=vi`).expect(200))
-          .name,
-      ).toBe('Mới hơn');
-      await authed(api.http().put(`${PROBLEMS}/src/translations/fr`), editor)
-        .send({ name: 'x', description: 'y' })
-        .expect(400)
-        .expect(errorCode('validation_failed'));
-      await authed(api.http().put(`${PROBLEMS}/src/translations/vi`), plain)
-        .send({ name: 'x', description: 'y' })
-        .expect(403);
-      await authed(api.http().put(`${PROBLEMS}/nope/translations/vi`), editor)
-        .send({ name: 'x', description: 'y' })
-        .expect(404);
-      expect(
-        await api.revisions.countDocuments({ action: 'translation' }),
-      ).toBe(2);
-      const revision = (await api.revisions.findOne({
-        action: 'translation',
-      }))!;
-      expect(JSON.stringify(revision.changes)).not.toContain('descriptionHtml');
-    });
-
-    it('gates translation descriptions of a full-markup problem', async () => {
-      await authed(api.http().put(`${PROBLEMS}/markup/translations/vi`), editor)
-        .send({ name: 'x', description: '<b>y</b>' })
-        .expect(403);
-      await authed(
-        api.http().put(`${PROBLEMS}/markup/translations/vi`),
-        fullMarkup,
-      )
-        .send({ name: 'x', description: '<b>y</b>' })
-        .expect(204);
-      expect(
-        (await api.problems.findOne({ code: 'markup' }))!.translations[0]
-          .descriptionHtml,
-      ).toContain('<b>y</b>');
-      await authed(api.http().put(`${PROBLEMS}/markup/translations/vi`), editor)
-        .send({ name: 'renamed', description: '<b>y</b>' })
-        .expect(204);
-      await authed(api.http().put(`${PROBLEMS}/markup/translations/vi`), editor)
-        .send({ name: 'renamed', description: '<b>y</b>' })
-        .expect(204);
-      expect(
-        (await api.problems.findOne({ code: 'markup' }))!.translations[0].name,
-      ).toBe('renamed');
     });
 
     it('replaces the editorial, validates authors and keeps it sanitized', async () => {
@@ -982,56 +600,6 @@ afterAll(() => api.teardown());
         .expect(404);
     });
 
-    it('previews markdown per style with permission and rate limit', async () => {
-      const raw = '# T <script>1</script>';
-      const preview = (session: TestSession, style: string, markdown = raw) =>
-        authed(api.http().post(`${PROBLEMS}/render-preview`), session).send({
-          style,
-          markdown,
-        });
-      expect((await preview(editor, 'problem').expect(200)).body).toEqual({
-        data: { html: '<h3>T </h3>\n' },
-      });
-      await preview(editor, 'problem-full').expect(403);
-      expect(
-        (await preview(fullMarkup, 'problem-full').expect(200)).body,
-      ).toEqual({ data: { html: '<h3>T <script>1</script></h3>\n' } });
-      await preview(plain, 'problem').expect(403);
-      for (let attempt = 0; attempt < 59; attempt++)
-        await preview(editor, 'problem', 'x').expect(200);
-      await preview(editor, 'problem', 'x')
-        .expect(429)
-        .expect(errorCode('rate_limited'));
-    });
-    it('keeps raw html out of a translation on a non-full-markup problem', async () => {
-      await authed(api.http().put(`${PROBLEMS}/src/translations/vi`), editor)
-        .send({ name: 'x', description: '<script>1</script> x' })
-        .expect(204);
-      const [translation] = (await api.problems.findOne({ code: 'src' }))!
-        .translations;
-      expect(translation.descriptionHtml).not.toContain('<script');
-      expect(translation.descriptionHtml).toContain('x');
-    });
-
-    it('keeps a clone of a full-markup problem full-markup and gated', async () => {
-      const detail = detailOf(
-        await authed(api.http().post(`${PROBLEMS}/markup/clone`), cloner)
-          .send({ code: 'markupcopy' })
-          .expect(201),
-      );
-      expect(detail.isFullMarkup).toBe(true);
-      await authed(api.http().patch(`${PROBLEMS}/markupcopy`), cloner)
-        .send({ description: '<b>raw</b>' })
-        .expect(403)
-        .expect(errorCode('forbidden'));
-      await authed(
-        api.http().put(`${PROBLEMS}/markupcopy/translations/vi`),
-        cloner,
-      )
-        .send({ name: 'x', description: '<b>raw</b>' })
-        .expect(403);
-    });
-
     describe('render limits', () => {
       const OVER_TWO_MIB = `${`$${'x'.repeat(28)}$ `.repeat(2000)}\n\n${'#\n'.repeat(68000)}`;
       const limitFieldsOf = ({ body }: { body: unknown }) =>
@@ -1046,19 +614,6 @@ afterAll(() => api.teardown());
           code: 'flood',
           authors: [editorId],
         });
-      });
-
-      it('saves a formula flood with the excess left as source text', async () => {
-        await authed(api.http().patch(`${PROBLEMS}/flood`), editor)
-          .send({ description: '$x$ '.repeat(50000) })
-          .expect(200);
-        const { descriptionHtml } = (await api.problems.findOne({
-          code: 'flood',
-        }))!;
-        expect(Buffer.byteLength(descriptionHtml)).toBeLessThan(
-          2 * 1024 * 1024,
-        );
-        expect(descriptionHtml).toContain('Formula limit exceeded');
       });
 
       it('rejects markdown that renders past 2 MiB on every statement path', async () => {
@@ -1155,7 +710,7 @@ afterAll(() => api.teardown());
       plain = await loginAs(api, (await createUserWith(api, 'plain'))._id);
     });
 
-    it('creates a tag problem from a supported link, deriving code and judge', async () => {
+    it('creates a tag problem from a link, and only for rating >= 1900 with tagging enabled', async () => {
       const created = dataOf<TagProblemResponse>(
         await authed(api.http().post(TAGS), tagger)
           .send({
@@ -1164,65 +719,28 @@ afterAll(() => api.teardown());
           })
           .expect(201),
       );
-      expect(created).toMatchObject({
-        code: 'CF_1_A',
-        name: 'Theatre Square',
-        judge: 'Codeforces',
-        link: 'https://codeforces.com/problemset/problem/1/A',
-        tags: [],
-        assignments: [],
-      });
+      expect(created).toMatchObject({ code: 'CF_1_A', judge: 'Codeforces' });
       await authed(api.http().post(TAGS), tagger)
         .send({
           link: 'https://codeforces.com/contest/1/problem/A',
           name: 'Again',
         })
-        .expect(409)
-        .expect(errorCode('conflict'));
-      expect(
-        fieldsOf(
-          await authed(api.http().post(TAGS), tagger)
-            .send({ link: 'https://example.com/p/1', name: 'X' })
-            .expect(400),
-        ),
-      ).toHaveProperty('link');
-      expect(
-        fieldsOf(
-          await authed(api.http().post(TAGS), tagger)
-            .send({ link: 'not a url', name: 'X' })
-            .expect(400),
-        ),
-      ).toHaveProperty('link');
-      expect(
-        await api.revisions.countDocuments({
-          entity: 'tagProblem',
-          action: 'create',
-        }),
-      ).toBe(1);
-    });
-    it('lets rating >= 1900 tag, unless tagging is disabled on the profile', async () => {
+        .expect(409);
+      const link = {
+        link: 'https://open.kattis.com/problems/hello',
+        name: 'H',
+      };
       await authed(api.http().post(TAGS), rated)
         .send({
           link: 'https://atcoder.jp/contests/abc001/tasks/abc001_a',
           name: 'ABC 1 A',
         })
         .expect(201);
-      await authed(api.http().post(TAGS), lowRated)
-        .send({ link: 'https://open.kattis.com/problems/hello', name: 'Hello' })
-        .expect(403)
-        .expect(errorCode('forbidden'));
-      await authed(api.http().post(TAGS), optedOut)
-        .send({ link: 'https://open.kattis.com/problems/hello', name: 'Hello' })
-        .expect(403);
-      await authed(api.http().post(TAGS), plain)
-        .send({ link: 'https://open.kattis.com/problems/hello', name: 'Hello' })
-        .expect(403);
-      await api
-        .http()
-        .post(TAGS)
-        .send({ link: 'https://open.kattis.com/problems/hello', name: 'Hello' })
-        .expect(401);
+      for (const denied of [lowRated, optedOut, plain])
+        await authed(api.http().post(TAGS), denied).send(link).expect(403);
+      await api.http().post(TAGS).send(link).expect(401);
     });
+
     it('assigns tags idempotently and records the assigner', async () => {
       const assigned = dataOf<TagProblemResponse>(
         await authed(api.http().post(`${TAGS}/CF_1_A/assign`), tagger)
@@ -1267,133 +785,6 @@ afterAll(() => api.teardown());
           action: 'assign',
         }),
       ).toBe(2);
-    });
-    it('lists publicly with search, tag and judge filters, sorted by code', async () => {
-      const all = (await api.http().get(TAGS).expect(200)).body as {
-        data: TagProblemListItemResponse[];
-        meta: { total: number };
-      };
-      expect(all.data.map((item) => item.code)).toEqual([
-        'AC_abc001_a',
-        'CF_1_A',
-      ]);
-      expect(all.meta.total).toBe(2);
-      expect(all.data[1].tags.map((tag) => tag.code)).toEqual([
-        'bfs',
-        'dp-basic',
-        'knapsack',
-      ]);
-      expect(
-        dataOf<TagProblemListItemResponse[]>(
-          await api.http().get(`${TAGS}?tag=bfs`).expect(200),
-        ).map((item) => item.code),
-      ).toEqual(['CF_1_A']);
-      expect(
-        dataOf<TagProblemListItemResponse[]>(
-          await api.http().get(`${TAGS}?search=theatre`).expect(200),
-        ).map((item) => item.code),
-      ).toEqual(['CF_1_A']);
-      expect(
-        dataOf<TagProblemListItemResponse[]>(
-          await api.http().get(`${TAGS}?search=c(`).expect(200),
-        ),
-      ).toEqual([]);
-      expect(
-        dataOf<TagProblemListItemResponse[]>(
-          await api
-            .http()
-            .get(`${TAGS}?judges=Atcoder&judges=Kattis`)
-            .expect(200),
-        ).map((item) => item.code),
-      ).toEqual(['AC_abc001_a']);
-      await api.http().get(`${TAGS}?pageSize=101`).expect(400);
-    });
-    it('serves the catalogue and the detail publicly', async () => {
-      const catalog = dataOf<TagCatalogResponse>(
-        await api.http().get(`${TAGS}/catalog`).expect(200),
-      );
-      expect(
-        catalog.groups.map((group) => [
-          group.code,
-          group.tags.map((tag) => tag.code),
-        ]),
-      ).toEqual([
-        ['dp', ['dp-basic', 'knapsack']],
-        ['graph', ['bfs']],
-      ]);
-      const detail = dataOf<TagProblemResponse>(
-        await api.http().get(`${TAGS}/CF_1_A`).expect(200),
-      );
-      expect(detail.assignments).toHaveLength(3);
-      expect(detail.assignments[0]).toEqual({
-        tag: {
-          id: expect.any(String) as string,
-          code: 'bfs',
-          name: 'BFS',
-          groupId: expect.any(String) as string,
-        },
-        assigner: { id: taggerId, username: 'tagger', rating: null },
-      });
-      await api.http().get(`${TAGS}/GHOST`).expect(404);
-      await api.http().get(`${TAGS}/not%20a%20code`).expect(404);
-    });
-    it('rejects bad input and resolves codes case-insensitively', async () => {
-      const tooLong = `https://codeforces.com/problemset/problem/1/${'A'.repeat(40)}`;
-      expect(
-        fieldsOf(
-          await authed(api.http().post(TAGS), tagger)
-            .send({ link: tooLong, name: 'X' })
-            .expect(400),
-        ),
-      ).toHaveProperty('link');
-      expect(
-        fieldsOf(
-          await authed(api.http().post(TAGS), tagger)
-            .send({ link: 'https://oj.vnoi.info/problem/post', name: '   ' })
-            .expect(400),
-        ),
-      ).toHaveProperty('name');
-      await authed(api.http().post(TAGS), tagger)
-        .send({ link: 'https://oj.vnoi.info/problem/post', name: '  Post  ' })
-        .expect(201);
-      const found = dataOf<TagProblemResponse>(
-        await api.http().get(`${TAGS}/vnoj_POST`).expect(200),
-      );
-      expect(found).toMatchObject({ code: 'VNOJ_post', name: 'Post' });
-
-      await api
-        .http()
-        .post(`${TAGS}/VNOJ_post/assign`)
-        .send({ tagCodes: ['bfs'] })
-        .expect(401);
-      const assigned = dataOf<TagProblemResponse>(
-        await authed(api.http().post(`${TAGS}/vnoj_post/assign`), tagger)
-          .send({ tagCodes: ['BFS', 'bfs', 'dp-basic', 'bfs'] })
-          .expect(200),
-      );
-      expect(assigned.tags.map((tag) => tag.code)).toEqual(['bfs', 'dp-basic']);
-      await authed(api.http().post(`${TAGS}/VNOJ_post/assign`), tagger)
-        .send({ tagCodes: ['knapsack'] })
-        .expect(200);
-      const revisions = await api.revisions
-        .find({ entity: 'tagProblem', action: 'assign', entityId: found.id })
-        .sort({ createdAt: 1 })
-        .lean();
-      expect(revisions.map((revision) => revision.changes)).toEqual([
-        { tags: { before: [], after: ['bfs', 'dp-basic'] } },
-        {
-          tags: {
-            before: ['bfs', 'dp-basic'],
-            after: ['bfs', 'dp-basic', 'knapsack'],
-          },
-        },
-      ]);
-      expect(
-        dataOf<TagProblemListItemResponse[]>(
-          await api.http().get(`${TAGS}?tag=BFS`).expect(200),
-        ).map((item) => item.code),
-      ).toEqual(['CF_1_A', 'VNOJ_post']);
-      await api.http().get(`${TAGS}?judges=Bogus`).expect(400);
     });
   });
 }

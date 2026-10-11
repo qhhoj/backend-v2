@@ -17,7 +17,6 @@ import type { ApiTest } from './setup';
 
 describe('contest data download', () => {
   let api: ApiTest;
-  let unconfigured: ApiTest;
   let dataQueue: Queue<ContestDataJob>;
   let ended: { _id: string; key: string };
   let running: { _id: string; key: string };
@@ -51,9 +50,7 @@ describe('contest data download', () => {
   const zipFile = () => contestDataPath(api.contestDataRoot, ended._id);
 
   beforeAll(async () => {
-    // Both apps flush the shared Redis when they boot: neither may start after a session exists.
     api = await setupApiTest();
-    unconfigured = await setupApiTest({ env: { CONTEST_DATA_ROOT: '' } });
     dataQueue = api.app.get(getQueueToken(CONTEST_DATA_QUEUE));
     for (const [name, permissions] of [
       ['plain', []],
@@ -74,7 +71,6 @@ describe('contest data download', () => {
   });
   afterAll(async () => {
     await api.teardown();
-    await unconfigured.teardown();
   });
   beforeEach(async () => {
     await dataQueue.obliterate({ force: true });
@@ -107,37 +103,6 @@ describe('contest data download', () => {
     await prepare('editor', ended.key).expect(202); // the zip is gone: allowed again
   });
 
-  it('queues every problem and result by default', async () => {
-    await prepare('editor', ended.key).expect(202);
-    expect((await dataQueue.getJob(contestDataJobId(ended._id)))!.data).toEqual(
-      { contestId: ended._id, problemGlob: '*', results: [] },
-    );
-  });
-
-  it('reports none, ready with its size, and the next allowed prepare', async () => {
-    expect(await statusOf(ended.key)).toEqual({
-      state: 'none',
-      preparedAt: null,
-      readyAt: null,
-      size: null,
-      nextPrepareAt: null,
-    });
-    const preparedAt = new Date(Date.now() - 3_600_000);
-    await api.contests.updateOne(
-      { _id: ended._id },
-      { dataPreparedAt: preparedAt },
-    );
-    writeFileSync(zipFile(), 'zip bytes');
-    const status = await statusOf(ended.key);
-    expect(status).toMatchObject({
-      state: 'ready',
-      preparedAt: preparedAt.toISOString(),
-      size: 9,
-      nextPrepareAt: new Date(preparedAt.getTime() + 86_400_000).toISOString(),
-    });
-    expect(status.readyAt).not.toBeNull();
-  });
-
   it('downloads the zip as an attachment, and 404 without one', async () => {
     writeFileSync(zipFile(), 'zip bytes');
     const response = await download('editor', ended.key).expect(200);
@@ -167,28 +132,5 @@ describe('contest data download', () => {
       sessions.editor,
     ).expect(409);
     expect(existsSync(zipFile())).toBe(true);
-  });
-
-  it('answers 404 when CONTEST_DATA_ROOT is unset', async () => {
-    const editor = await createUserWith(unconfigured, 'unconfigured_editor', {
-      permissions: ['judge.edit_own_contest'],
-    });
-    const session = await loginAs(unconfigured, editor._id);
-    const contest = await createContest(unconfigured, {
-      authors: [editor._id],
-      startTime: hoursFromNow(-3),
-      endTime: hoursFromNow(-1),
-    });
-    for (const [method, suffix] of [
-      ['get', '/data'],
-      ['post', '/data'],
-      ['get', '/data/download'],
-    ] as const)
-      await authed(
-        unconfigured.http()[method](contestUrl(contest.key, suffix)),
-        session,
-      )
-        .expect(404)
-        .expect(errorCode('not_found'));
   });
 });

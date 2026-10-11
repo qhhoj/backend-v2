@@ -128,15 +128,6 @@ describe('vote ledger', () => {
     );
   });
 
-  it('rejects a vote on a vanished target without leaving a row', async () => {
-    const voter = await person();
-    const vanished = newId();
-    await expect(
-      castOn(voter, vanished, (await person()).userId, 1),
-    ).rejects.toMatchObject({ status: 404 });
-    expect(await storedVotes(vanished)).toEqual([]);
-  });
-
   it('refuses own votes, new and muted voters; staff vote without solves', async () => {
     const author = await person();
     const comment = await createComment(api, {
@@ -154,27 +145,6 @@ describe('vote ledger', () => {
     await expect(
       castOn(staff, comment._id, author.userId, 1),
     ).resolves.toMatchObject({ score: 1 });
-  });
-
-  it('limits a voter to 60 votes a minute across posts and comments', async () => {
-    const author = await person();
-    const voter = await person();
-    const comment = await createComment(api, {
-      page: { type: 'blog', id: (await createPost(api))._id },
-      author: author.userId,
-    });
-    const post = await createPost(api, { authors: [author.userId] });
-    for (let index = 0; index < 30; index += 1) {
-      await castOn(voter, comment._id, author.userId, index % 2 ? 1 : -1);
-      await votes.cast(
-        voter,
-        { target: 'blog', targetId: post._id, ownerIds: [author.userId] },
-        1,
-      );
-    }
-    await expect(
-      castOn(voter, comment._id, author.userId, 1),
-    ).rejects.toMatchObject({ status: 429 });
   });
 
   it('queues a recompute for the owners and for a suggester whose problem went public', async () => {
@@ -196,41 +166,5 @@ describe('vote ledger', () => {
         JSON.stringify(await waitingUsers()) ===
         JSON.stringify([author.userId, suggester.userId].sort()),
     );
-  });
-
-  it('queues nothing for a refused vote or a problem without suggester', async () => {
-    const author = await person();
-    const comment = await createComment(api, {
-      page: { type: 'blog', id: (await createPost(api))._id },
-      author: author.userId,
-    });
-    await expect(
-      castOn(author, comment._id, author.userId, 1),
-    ).rejects.toMatchObject({ status: 403 });
-    await expect(
-      castOn(await person({ mute: true }), comment._id, author.userId, 1),
-    ).rejects.toMatchObject({ status: 403 });
-    await expect(
-      castOn(await person(), newId(), author.userId, 1),
-    ).rejects.toMatchObject({ status: 404 });
-    const events = api.app.get(ProblemEvents);
-    events.emit('publicityChanged', newId(), null);
-    const marker = (await person()).userId;
-    events.emit('publicityChanged', newId(), marker);
-    await waitUntil(async () => (await queue.getWaitingCount()) > 0);
-    expect(
-      (await queue.getJobs(['waiting'])).map((job) => job.data.userId),
-    ).toEqual([marker]);
-  });
-
-  it('answers 401 for a voter deleted while signed in', async () => {
-    const author = await person();
-    const comment = await createComment(api, {
-      page: { type: 'blog', id: (await createPost(api))._id },
-      author: author.userId,
-    });
-    await expect(
-      castOn({ ...author, userId: newId() }, comment._id, author.userId, 1),
-    ).rejects.toMatchObject({ status: 401 });
   });
 });

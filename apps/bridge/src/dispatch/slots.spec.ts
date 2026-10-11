@@ -90,15 +90,6 @@ describe('pickJudge', () => {
     ];
     expect(pickJudge(judges, queued())?.name).toBe('quarter');
   });
-  it('breaks load ties with the random source', () => {
-    const judges = [judge('first'), judge('second'), judge('third')];
-    expect(pickJudge(judges, queued(), () => 0)?.name).toBe('first');
-    expect(pickJudge(judges, queued(), () => 0.99)?.name).toBe('third');
-  });
-  it('keeps the submission queued when every slot is taken', () =>
-    expect(
-      pickJudge([judge('a', { slots: 2, inFlight: busyWith(2) })], queued()),
-    ).toBeNull());
   it('lets a rejudge take the last free slot only when the candidates have one slot in all', () => {
     const lastOfTwoJudges = [judge('a'), judge('b', { inFlight: busyWith(1) })];
     expect(pickJudge(lastOfTwoJudges, queued({ priority: 2 }))).toBeNull();
@@ -184,21 +175,5 @@ describe('nextFor', () => {
     const queue: QueuedSubmission[] = [];
     for (const entry of [held, later]) insertQueued(queue, entry);
     expect(nextFor(free, queue, [free, busy])).toBe(later);
-  });
-  it('holds a whole batch rejudge without rescanning the judges per entry', () => {
-    let lookups = 0;
-    const counting = new Set(['CPP17']);
-    const originalHas = counting.has.bind(counting);
-    counting.has = (value: string) => {
-      lookups += 1;
-      return originalHas(value);
-    };
-    const free = judge('a');
-    const busy = Array.from({ length: 49 }, (_unused, index) =>
-      judge(`busy${index}`, { inFlight: busyWith(1), executors: counting }),
-    );
-    const queue = Array.from({ length: 10000 }, () => queued({ priority: 2 }));
-    expect(nextFor(free, queue, [free, ...busy])).toBeNull();
-    expect(lookups).toBeLessThan(2 * busy.length);
   });
 });

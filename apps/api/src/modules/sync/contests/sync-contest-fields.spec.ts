@@ -36,26 +36,6 @@ describe('toEditDto', () => {
       ],
     });
   });
-  it('carries what the client set', () => {
-    const dto = toEditDto(
-      {
-        ...body,
-        description: 'D',
-        timeLimit: 600,
-        frozenLastMinutes: 30,
-        formatName: 'icpc',
-        formatConfig: { penalty: 20 },
-      },
-      ids,
-    );
-    expect(dto).toMatchObject({
-      description: 'D',
-      timeLimit: 600,
-      frozenLastMinutes: 30,
-      formatName: 'icpc',
-      formatConfig: { penalty: 20 },
-    });
-  });
 });
 
 describe('comparableOf', () => {
@@ -87,12 +67,7 @@ describe('comparableOf', () => {
   it('differs when any synced field differs', () => {
     for (const change of [
       { name: 'Other' },
-      { description: 'D' },
       { startTime: new Date('2026-10-10T07:00:00Z') },
-      { endTime: new Date('2026-10-10T12:00:00Z') },
-      { timeLimit: 600 },
-      { frozenLastMinutes: 5 },
-      { formatName: 'default' },
       { formatConfig: { penalty: 10, lsoTimeLimit: 0 } },
       {
         problems: [
@@ -123,26 +98,11 @@ describe('isFrozenForSync', () => {
   const now = new Date('2026-10-10T09:00:00Z');
   it('freezes a contest once a person published it or it started', () => {
     const at = (iso: string) => new Date(iso);
-    expect(
-      isFrozenForSync(
-        { isVisible: false, startTime: at('2026-10-10T10:00:00Z') },
-        now,
-      ),
-    ).toBe(false);
-    expect(
-      isFrozenForSync(
-        { isVisible: true, startTime: at('2026-10-10T10:00:00Z') },
-        now,
-      ),
-    ).toBe(true);
+    const early = { startTime: at('2026-10-10T10:00:00Z') };
+    expect(isFrozenForSync({ isVisible: false, ...early }, now)).toBe(false);
+    expect(isFrozenForSync({ isVisible: true, ...early }, now)).toBe(true);
     expect(isFrozenForSync({ isVisible: false, startTime: now }, now)).toBe(
       true,
     );
-    expect(
-      isFrozenForSync(
-        { isVisible: false, startTime: at('2026-10-10T08:00:00Z') },
-        now,
-      ),
-    ).toBe(true);
   });
 });

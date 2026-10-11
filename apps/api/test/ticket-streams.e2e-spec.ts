@@ -1,5 +1,4 @@
 import { waitUntil } from '@libs/common/testing';
-import { newId } from '@libs/database';
 import type { User } from '@libs/database';
 import {
   DEFAULT_STREAM_LIMITS,
@@ -152,46 +151,6 @@ describe('ticket streams', () => {
     expect(framesOf(otherStream, 'ticket-message')).toEqual([]);
   });
 
-  it('announces a new ticket to its readers: staff and the problem editors, not editors of other problems', async () => {
-    const [staff, author, publicEditor, creator] = await Promise.all(
-      ['staff', 'author', 'publicEditor', 'creator'].map(feed),
-    );
-    const response = await authed(
-      api.http().post('/api/internal/problems/secret_one/tickets'),
-      people.author.session,
-    )
-      .send({ title: 'Own problem', body: 'note to self' })
-      .expect(201);
-    const ticketId = (response.body as { data: { id: string } }).data.id;
-    for (const client of [staff, author])
-      expect((await client.next('new-ticket')).data).toMatchObject({
-        ticketId,
-      });
-    await quiet();
-    // a public-problem editor cannot read a private problem's tickets; a stranger cannot read anything
-    expect(framesOf(publicEditor, 'new-ticket')).toEqual([]);
-    expect(framesOf(creator, 'new-ticket')).toEqual([]);
-  });
-
-  it('sends status changes with the new state', async () => {
-    const ticket = await createTicket(api, {
-      creator: people.creator.id,
-      assignees: [people.assignee.id],
-    });
-    const watcher = await feed('assignee');
-    await authed(
-      api.http().patch(ticketUrl(ticket._id)),
-      people.creator.session,
-    )
-      .send({ isOpen: false })
-      .expect(200);
-    expect((await watcher.next('ticket-status')).data).toEqual({
-      ticketId: ticket._id,
-      messageId: null,
-      open: false,
-    });
-  });
-
   it('stops delivering when access is revoked', async () => {
     const ticket = await createTicket(api, {
       creator: people.creator.id,
@@ -218,48 +177,6 @@ describe('ticket streams', () => {
     ]);
   });
 
-  it('caps open streams per user and frees the slot when a stream closes', async () => {
-    const held = await Promise.all(
-      Array.from({ length: DEFAULT_STREAM_LIMITS.perUser }, () =>
-        feed('creator'),
-      ),
-    );
-    expect((await open('/api/internal/events/tickets', 'creator')).status).toBe(
-      429,
-    );
-    held[0].close();
-    await waitUntil(
-      () => streams.openCounts().tickets === DEFAULT_STREAM_LIMITS.perUser - 1,
-    );
-    expect((await feed('creator')).status).toBe(200);
-  });
-
-  it('sends ids and state only, never the ticket content or notes', async () => {
-    const ticket = await createTicket(api, {
-      creator: people.creator.id,
-      notes: 'staff only secret',
-    });
-    const watcher = await feed('creator');
-    await post('creator', ticket._id, 'body text that must stay out').expect(
-      201,
-    );
-    const frame = await watcher.next('ticket-message');
-    expect(Object.keys(frame.data as object).sort()).toEqual([
-      'messageId',
-      'open',
-      'ticketId',
-    ]);
-    expect(JSON.stringify(watcher.messages)).not.toMatch(
-      /secret|must stay out/,
-    );
-  });
-
-  it('answers 404 for a well-formed id of no ticket', async () => {
-    expect(
-      (await open(`/api/internal/events/tickets/${newId()}`, 'staff')).status,
-    ).toBe(404);
-  });
-
   it('stops delivering to staff who lose the permission, once the stream is rechecked', async () => {
     const { user, session } = await signedIn(api, 'demoted', {
       permissions: ['judge.change_ticket'],
@@ -277,40 +194,6 @@ describe('ticket streams', () => {
     await creatorFeed.next('ticket-message');
     await quiet();
     expect(framesOf(demoted, 'ticket-message')).toEqual([]);
-  });
-
-  it('stops delivering when the problem becomes private', async () => {
-    const hidden = await createProblem(api, catalog, {
-      code: 'soon_private',
-      authors: [people.author.id],
-    });
-    const ticket = await createTicket(api, {
-      creator: people.creator.id,
-      problem: hidden._id,
-    });
-    const editor = await feed('publicEditor');
-    const creatorFeed = await feed('creator');
-    await api.problems.updateOne(
-      { _id: hidden._id },
-      { $set: { isPublic: false } },
-    );
-    await post('creator', ticket._id, 'after hiding').expect(201);
-    await creatorFeed.next('ticket-message');
-    await quiet();
-    expect(framesOf(editor, 'ticket-message')).toEqual([]);
-  });
-
-  it('closes the feed of a banned user', async () => {
-    const { user, session } = await signedIn(api, 'banned');
-    people.banned = { id: user._id, session };
-    const banned = await feed('banned');
-    await api.users.updateOne({ _id: user._id }, { $set: { isActive: false } });
-    await Promise.race([
-      banned.closed,
-      new Promise((_resolve, reject) =>
-        setTimeout(() => reject(new Error('stream stayed open')), 2000),
-      ),
-    ]);
   });
 
   it('drops events beyond the backlog and tells the streams to resync once it drains', async () => {

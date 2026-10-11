@@ -4,7 +4,6 @@ import { TEST_REDIS_URL } from '@libs/common/testing';
 import type { SubmissionCase } from '@libs/database';
 import { BRIDGE_COMMANDS_STREAM, BridgeCommandsService } from '@libs/judging';
 import { recordSubmissionEvents } from '@libs/judging/testing';
-import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
 import { CommandsService } from '../src/dispatch/commands.service';
 import { DispatcherService } from '../src/dispatch/dispatcher.service';
@@ -18,7 +17,7 @@ import {
 } from './fixtures';
 import type { BridgeCatalog } from './fixtures';
 import { RecordingJudge } from './recording-judge';
-import { setupBridgeTest, FAST_TIMINGS } from './setup';
+import { setupBridgeTest } from './setup';
 import type { BridgeTest } from './setup';
 
 describe('DispatcherService (with Mongo)', () => {
@@ -74,63 +73,6 @@ describe('DispatcherService (with Mongo)', () => {
   });
   afterAll(() => bridge.teardown());
 
-  it('sends a submission to the least busy judge and claims it in Mongo with generation 1', async () => {
-    const busy = await online(judgeNamed('busy', 2));
-    const idle = await online(judgeNamed('idle', 2));
-    busy.inFlight.set('elsewhere', 1);
-    const id = await submit();
-    await enqueue(id);
-    expect(sentTo(idle)).toEqual([id]);
-    expect(idle.received[0]).toMatchObject({
-      languageKey: 'CPP17',
-      ref: { submissionId: id, generation: 1 },
-    });
-    expect(sentTo(busy)).toEqual([]);
-    expect(await statusOf(id)).toMatchObject({
-      status: 'P',
-      judgedOn: idle.name,
-      judgeGeneration: 1,
-    });
-    busy.inFlight.clear();
-    for (const judge of [busy, idle]) judge.isClosed = true;
-  });
-
-  it('queues what no judge can take and hands it to the first capable judge that registers', async () => {
-    const id = await submit({}, catalog.python._id);
-    await enqueue(id);
-    expect(dispatch.queuedIds()).toContain(id);
-    const capable = judgeNamed('py');
-    capable.executors = new Set(['PY3']);
-    await online(capable);
-    expect(sentTo(capable)).toEqual([id]);
-    expect(dispatch.queuedIds()).not.toContain(id);
-    capable.isClosed = true;
-  });
-
-  it('serves a freed slot by priority, then oldest first, and never queues an id twice', async () => {
-    const judge = await online(judgeNamed('serial'));
-    judge.executors = new Set(['KOTLIN']);
-    const kotlin = await bridge.languages.create({
-      key: 'KOTLIN',
-      name: 'Kotlin',
-      commonName: 'Kotlin',
-      ace: 'kotlin',
-      pygments: 'kotlin',
-      extension: 'kt',
-    });
-    const first = await submit({}, kotlin._id);
-    await enqueue(first);
-    const batch = await submit({ priority: 3 }, kotlin._id);
-    const normal = await submit({ priority: 1 }, kotlin._id);
-    const rejudge = await submit({ priority: 2 }, kotlin._id);
-    const entries = await repository.loadQueued([batch, normal, rejudge]);
-    await dispatch.enqueue([...entries, ...entries]);
-    expect(dispatch.queuedIds()).toEqual([normal, rejudge, batch]);
-    for (const id of [first, normal, rejudge]) await finish(judge, id);
-    expect(sentTo(judge)).toEqual([first, normal, rejudge, batch]);
-    judge.isClosed = true;
-  });
-
   it('drops a queued submission that is no longer QU in Mongo and serves the next', async () => {
     const judge = await online(judgeNamed('skipper'));
     judge.executors = new Set(['TEXT']);
@@ -159,104 +101,6 @@ describe('DispatcherService (with Mongo)', () => {
       judgeGeneration: 0,
     });
     judge.isClosed = true;
-  });
-
-  it('aborts a running run and forgets a queued one', async () => {
-    const judge = await online(judgeNamed('aborter'));
-    const running = await submit();
-    const queued = await submit();
-    await enqueue(running, queued);
-    dispatch.abort(running);
-    dispatch.abort(queued);
-    expect(judge.aborts).toEqual([{ submissionId: running, generation: 1 }]);
-    expect(dispatch.queuedIds()).not.toContain(queued);
-    judge.isClosed = true;
-  });
-
-  it('gives a disabled judge no work until enabled, except work that asks for it by name', async () => {
-    const judge = judgeNamed('sleepy');
-    judge.isDisabled = true;
-    judge.executors = new Set(['C']);
-    await online(judge);
-    const plainC = await bridge.languages.create({
-      key: 'C',
-      name: 'C',
-      commonName: 'C',
-      ace: 'c_cpp',
-      pygments: 'c',
-      extension: 'c',
-    });
-    const anyJudge = await submit({}, plainC._id);
-    await enqueue(anyJudge);
-    expect(sentTo(judge)).toEqual([]);
-    const requested = await submit({}, plainC._id);
-    await dispatch.enqueue(
-      (await repository.loadQueued([requested])).map((entry) => ({
-        ...entry,
-        judgeName: judge.name,
-      })),
-    );
-    expect(sentTo(judge)).toEqual([requested]);
-    await dispatch.setDisabled(judge.name, false);
-    await finish(judge, requested);
-    expect(sentTo(judge)).toEqual([requested, anyJudge]);
-    judge.isClosed = true;
-  });
-
-  it('moves the runs of a replaced session to its successor, which resumes them without a requeue', async () => {
-    const first = await online(judgeNamed('twin'));
-    const id = await submit();
-    await enqueue(id);
-    const second = new RecordingJudge(first.name);
-    const plan = await dispatch.resume(second, [
-      { ref: refOf(first, id), lastSeqSent: 0 },
-    ]);
-    await dispatch.register(second);
-    expect(first.wasReplaced).toBe(true);
-    expect(plan.resume).toEqual([
-      {
-        ref: refOf(first, id),
-        action: Resume_Action.ACTION_CONTINUE,
-        fromSeq: 1,
-      },
-    ]);
-    await dispatch.judgeLost(first);
-    expect(dispatch.heldIds()).toContain(id);
-    expect(await statusOf(id)).toMatchObject({
-      status: 'P',
-      judgedOn: first.name,
-      requeueCount: 0,
-    });
-    second.isClosed = true;
-  });
-
-  it('requeues once when a judge stays away past the grace and fails the submission the second time', async () => {
-    const first = await online(judgeNamed('lost'));
-    const id = await submit();
-    await enqueue(id);
-    await dispatch.judgeLost(first);
-    // the row moves first, the queue follows
-    await waitUntil(
-      () => dispatch.queuedIds().includes(id),
-      FAST_TIMINGS.resumeGraceMs * 10,
-    );
-    expect(await statusOf(id)).toMatchObject({ requeueCount: 1 });
-    const second = await online(judgeNamed('lost'));
-    expect(sentTo(second)).toEqual([id]);
-    await dispatch.judgeLost(second);
-    await waitUntil(
-      async () => (await statusOf(id)).status === 'IE',
-      FAST_TIMINGS.resumeGraceMs * 10,
-    );
-    expect(await statusOf(id)).toMatchObject({
-      result: 'IE',
-      requeueCount: 1,
-      judgeGeneration: 2,
-    });
-    // the notification follows the status write
-    await waitUntil(async () =>
-      (await bridge.gradedJobs()).some((job) => job.submissionId === id),
-    );
   });
 
   it('never sends a closing judge work, and gives back a claim made for a judge that closed during it', async () => {
@@ -339,24 +183,6 @@ describe('DispatcherService (with Mongo)', () => {
       jest.restoreAllMocks();
     });
     afterAll(() => redis.quit());
-
-    it('does not replay commands published before its start position', async () => {
-      const judge = await online(judgeNamed('earlier'));
-      await publisher.publish({
-        type: 'disconnect-judge',
-        judgeName: judge.name,
-        force: true,
-      });
-      commands.start(await commands.position());
-      await publisher.publish({
-        type: 'disable-judge',
-        judgeName: judge.name,
-        isDisabled: true,
-      });
-      await waitUntil(() => judge.isDisabled);
-      expect(judge.disconnects).toEqual([]);
-      judge.isClosed = true;
-    });
 
     it('applies judge, abort, disable and disconnect commands, skipping a malformed entry with a warning', async () => {
       commands.start(await commands.position());

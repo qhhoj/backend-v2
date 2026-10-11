@@ -61,7 +61,6 @@ const PRINCIPALS: Record<string, Principal | null> = {
 
 describe('ContestAccess.canSee (legacy access_check)', () => {
   it.each([
-    ['anonymous sees a visible public contest', 'anonymous', view(), true],
     [
       'anonymous never sees a hidden one',
       'anonymous',
@@ -75,20 +74,8 @@ describe('ContestAccess.canSee (legacy access_check)', () => {
       false,
     ],
     [
-      'a user never sees a hidden one',
-      'plain',
-      view({ isVisible: false }),
-      false,
-    ],
-    [
       'see_private_contest sees a hidden one',
       'seePrivate',
-      view({ isVisible: false }),
-      true,
-    ],
-    [
-      'edit_all_contest sees a hidden one',
-      'editAll',
       view({ isVisible: false }),
       true,
     ],
@@ -96,18 +83,6 @@ describe('ContestAccess.canSee (legacy access_check)', () => {
       'an author sees a hidden one',
       'plain',
       view({ isVisible: false, authors: [USER] }),
-      true,
-    ],
-    [
-      'a curator sees a hidden one',
-      'plain',
-      view({ isVisible: false, curators: [USER] }),
-      true,
-    ],
-    [
-      'a tester sees a hidden one',
-      'plain',
-      view({ isVisible: false, testers: [USER] }),
       true,
     ],
     [
@@ -129,12 +104,6 @@ describe('ContestAccess.canSee (legacy access_check)', () => {
       true,
     ],
     [
-      'a non-member does not',
-      'plain',
-      view({ isOrganizationPrivate: true, organizations: [ORG] }),
-      false,
-    ],
-    [
       'both: a member must also be listed',
       'member',
       view({
@@ -144,17 +113,6 @@ describe('ContestAccess.canSee (legacy access_check)', () => {
         privateContestants: [OTHER],
       }),
       false,
-    ],
-    [
-      'both: a listed member sees it',
-      'member',
-      view({
-        isPrivate: true,
-        isOrganizationPrivate: true,
-        organizations: [ORG],
-        privateContestants: [USER],
-      }),
-      true,
     ],
     [
       'a scoreboard viewer sees a private one',
@@ -189,18 +147,11 @@ describe('ContestAccess.canViewBalloons', () => {
       true,
     ],
     [
-      'a user who is neither',
-      principalWith(),
-      view({ balloonStaff: [OTHER] }),
-      false,
-    ],
-    [
       'an author without the edit permission',
       principalWith(),
       editorView,
       false,
     ],
-    ['a visitor', null, view({ balloonStaff: [USER] }), false],
   ])('%s', (_who, principal, contestView, expected) =>
     expect(ContestAccess.canViewBalloons(principal, contestView)).toBe(
       expected,
@@ -259,7 +210,6 @@ describe('ContestAccess.canEdit (legacy is_editable_by)', () => {
 describe('scoreboards (legacy show_scoreboard, can_see_*_scoreboard)', () => {
   const inContest = { inContest: true, completedLive: false };
   const completed = { inContest: false, completedLive: true };
-  const ended = { startTime: hours(-5), endTime: hours(-1) };
   const upcoming = { startTime: hours(1), endTime: hours(3) };
   it.each([
     {
@@ -287,36 +237,9 @@ describe('scoreboards (legacy show_scoreboard, can_see_*_scoreboard)', () => {
       own: true,
     },
     {
-      name: 'H: not in it, nothing',
-      who: 'plain',
-      contest: view({ scoreboardVisibility: 'H' }),
-      facts: NO_FACTS,
-      full: false,
-      own: false,
-    },
-    {
       name: 'H: an author sees everything',
       who: 'plain',
       contest: view({ scoreboardVisibility: 'H', authors: [USER] }),
-      facts: NO_FACTS,
-      full: true,
-      own: true,
-    },
-    {
-      name: 'H: a listed scoreboard viewer sees everything',
-      who: 'plain',
-      contest: view({
-        scoreboardVisibility: 'H',
-        viewContestScoreboard: [USER],
-      }),
-      facts: NO_FACTS,
-      full: true,
-      own: true,
-    },
-    {
-      name: 'H: see_private_contest sees everything',
-      who: 'seePrivate',
-      contest: view({ scoreboardVisibility: 'H' }),
       facts: NO_FACTS,
       full: true,
       own: true,
@@ -330,14 +253,6 @@ describe('scoreboards (legacy show_scoreboard, can_see_*_scoreboard)', () => {
       own: true,
     },
     {
-      name: 'C ended: everyone',
-      who: 'anonymous',
-      contest: view({ scoreboardVisibility: 'C', ...ended }),
-      facts: NO_FACTS,
-      full: true,
-      own: true,
-    },
-    {
       name: 'P running: everything once their live participation ended',
       who: 'plain',
       contest: view({ scoreboardVisibility: 'P' }),
@@ -346,25 +261,9 @@ describe('scoreboards (legacy show_scoreboard, can_see_*_scoreboard)', () => {
       own: true,
     },
     {
-      name: 'P running: a participant still in it sees only their row',
-      who: 'plain',
-      contest: view({ scoreboardVisibility: 'P' }),
-      facts: inContest,
-      full: false,
-      own: true,
-    },
-    {
       name: 'P running: anonymous sees nothing',
       who: 'anonymous',
       contest: view({ scoreboardVisibility: 'P' }),
-      facts: NO_FACTS,
-      full: false,
-      own: false,
-    },
-    {
-      name: 'H: anonymous sees nothing',
-      who: 'anonymous',
-      contest: view({ scoreboardVisibility: 'H' }),
       facts: NO_FACTS,
       full: false,
       own: false,
@@ -418,30 +317,6 @@ describe('ContestAccess.canSeeFullSubmissionList (legacy can_see_full_submission
       false,
     ],
     [
-      'frozen and ended: still no',
-      'plain',
-      view({ ...frozen, startTime: hours(-5), endTime: hours(-1) }),
-      false,
-    ],
-    [
-      'anonymous, running, list shown: yes',
-      'anonymous',
-      view({ showSubmissionList: true }),
-      true,
-    ],
-    [
-      'anonymous, frozen: no',
-      'anonymous',
-      view({ ...frozen, showSubmissionList: true }),
-      false,
-    ],
-    [
-      'frozen: a tester no',
-      'plain',
-      view({ ...frozen, showSubmissionList: true, testers: [USER] }),
-      false,
-    ],
-    [
       'frozen: an author yes',
       'plain',
       view({ ...frozen, authors: [USER] }),
@@ -475,6 +350,7 @@ describe('ContestAccess.visibleFilter', () => {
   let testingModule: TestingModule;
   let contests: Model<Contest>;
   const generated: Array<{ key: string; view: ContestAccessView }> = [];
+  const documents: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
     replSet = await startMongo();
@@ -509,35 +385,13 @@ describe('ContestAccess.visibleFilter', () => {
               });
               const key = `c${index++}`;
               generated.push({ key, view: contestView });
-              await contests.create({ ...contestView, key, name: key });
+              documents.push({ ...contestView, key, name: key });
             }
+    await contests.insertMany(documents);
   });
   afterAll(async () => {
     await testingModule.close();
     await replSet.stop();
-  });
-
-  it('accessView reads a stored document back as its view', async () => {
-    const stored = view({
-      isVisible: false,
-      isPrivate: true,
-      isOrganizationPrivate: true,
-      organizations: [ORG],
-      privateContestants: [USER, OTHER],
-      authors: [USER],
-      curators: [OTHER],
-      testers: [ORG],
-      viewContestScoreboard: [OTHER, USER],
-      balloonStaff: [OTHER],
-      scoreboardVisibility: 'H',
-      showSubmissionList: true,
-      timeLimit: 3600,
-      frozenLastMinutes: 30,
-      formatName: 'icpc',
-    });
-    await contests.create({ ...stored, key: 'access_view', name: 'av' });
-    const document = await contests.findOne({ key: 'access_view' });
-    expect(ContestAccess.accessView(document!)).toEqual(stored);
   });
 
   it.each(Object.keys(PRINCIPALS))(

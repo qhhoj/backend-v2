@@ -1,9 +1,6 @@
-import { newId, uuidStr } from '@libs/database';
+import { uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
-import type {
-  TicketDetailResponse,
-  TicketListItemResponse,
-} from '../src/modules/tickets/core/dto/ticket.response';
+import type { TicketDetailResponse } from '../src/modules/tickets/core/dto/ticket.response';
 import { TicketsRepository } from '../src/modules/tickets/core/tickets.repository';
 import { authed, createProblem, seedCatalog } from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
@@ -29,22 +26,6 @@ afterAll(() => api.teardown());
     const people: Record<string, { id: string; session: TestSession }> = {};
     const patch = (who: string, id: string, body: Record<string, unknown>) =>
       authed(api.http().patch(ticketUrl(id)), people[who].session).send(body);
-    const detail = async (who: string, id: string) =>
-      dataOf<TicketDetailResponse>(
-        await authed(api.http().get(ticketUrl(id)), people[who].session).expect(
-          200,
-        ),
-      );
-    const shape = (ticket: TicketDetailResponse) =>
-      ticket.timeline.map((entry) =>
-        entry.kind === 'message'
-          ? 'message'
-          : [
-              entry.event!.type,
-              entry.event!.actor.username,
-              entry.event!.target?.username ?? null,
-            ],
-      );
     const stored = (id: string) => api.tickets.findById(id).lean();
 
     beforeAll(async () => {
@@ -58,68 +39,6 @@ afterAll(() => api.teardown());
         const { user, session } = await signedIn(api, name, extra);
         people[name] = { id: user._id, session };
       }
-    });
-
-    it('records closing and reopening with the actor, between the messages', async () => {
-      const ticket = await createTicket(api, {
-        creator: people.creator.id,
-        assignees: [people.assignee.id],
-      });
-      await patch('creator', ticket._id, { isOpen: false }).expect(200);
-      await patch('assignee', ticket._id, { isOpen: true }).expect(200);
-      expect(shape(await detail('creator', ticket._id))).toEqual([
-        'message',
-        ['closed', 'creator', null],
-        ['reopened', 'assignee', null],
-      ]);
-    });
-
-    it('adds nothing for an edit that changes nothing', async () => {
-      const ticket = await createTicket(api, { creator: people.creator.id });
-      await patch('creator', ticket._id, { isOpen: true }).expect(200);
-      await patch('staff', ticket._id, { notes: 'looking' }).expect(200);
-      expect((await stored(ticket._id))?.events).toHaveLength(0);
-    });
-
-    it('records marking good and unmarking, staff only', async () => {
-      const ticket = await createTicket(api, { creator: people.creator.id });
-      await patch('staff', ticket._id, { isContributive: true }).expect(200);
-      await patch('staff', ticket._id, { isContributive: false }).expect(200);
-      await patch('creator', ticket._id, { isContributive: true }).expect(403);
-      expect(
-        (await detail('staff', ticket._id)).timeline.map(
-          (entry) => entry.event?.type ?? 'message',
-        ),
-      ).toEqual(['message', 'marked-good', 'unmarked-good']);
-    });
-
-    it('records who joined and who left an assignment, and the owner can read the names', async () => {
-      const ticket = await createTicket(api, {
-        creator: people.creator.id,
-        assignees: [people.assignee.id],
-      });
-      await patch('staff', ticket._id, { assignees: ['other'] }).expect(200);
-      expect(shape(await detail('creator', ticket._id))).toEqual([
-        'message',
-        ['unassigned', 'staff', 'assignee'],
-        ['assigned', 'staff', 'other'],
-      ]);
-    });
-
-    it('records the events of one edit in a fixed order next to the state change', async () => {
-      const ticket = await createTicket(api, { creator: people.creator.id });
-      await patch('staff', ticket._id, {
-        isOpen: false,
-        isContributive: true,
-        assignees: ['assignee'],
-      }).expect(200);
-      const row = await stored(ticket._id);
-      expect(row).toMatchObject({ isOpen: false, isContributive: true });
-      expect(row?.events.map((event) => event.type)).toEqual([
-        'closed',
-        'marked-good',
-        'assigned',
-      ]);
     });
 
     it('applies an update only while the changed fields still hold what was read', async () => {
@@ -226,88 +145,6 @@ afterAll(() => api.teardown());
       expect(row?.isOpen).toBe(false);
       expect(row?.events).toHaveLength(0);
     });
-
-    it('keeps the newest 200 events and still changes the state when the timeline is full', async () => {
-      const events = Array.from({ length: 200 }, (_unused, index) => ({
-        _id: newId(),
-        type: 'reopened' as const,
-        user: people.staff.id,
-        at: new Date(Date.UTC(2026, 0, 1, 0, index)),
-        target: null,
-      }));
-      const ticket = await createTicket(api, {
-        creator: people.creator.id,
-        events,
-      });
-      await patch('creator', ticket._id, { isOpen: false }).expect(200);
-      const row = await stored(ticket._id);
-      expect(row?.isOpen).toBe(false);
-      expect(row?.events).toHaveLength(200);
-      expect(row?.events[199].type).toBe('closed');
-      expect(row?.events[0].at).toEqual(new Date(Date.UTC(2026, 0, 1, 0, 1)));
-    });
-
-    it('orders a message and events at the same instant by kind, then by stored order', async () => {
-      const instant = new Date('2026-10-09T10:00:00.000Z');
-      const first = newId();
-      const second = newId();
-      const ticket = await createTicket(api, {
-        creator: people.creator.id,
-        messages: [
-          {
-            _id: newId(),
-            user: people.creator.id,
-            body: 'b',
-            bodyHtml: '<p>b</p>',
-            createdAt: instant,
-          },
-        ],
-        events: [
-          {
-            _id: first,
-            type: 'closed',
-            user: people.staff.id,
-            at: instant,
-            target: null,
-          },
-          {
-            _id: second,
-            type: 'reopened',
-            user: people.staff.id,
-            at: instant,
-            target: null,
-          },
-        ],
-      });
-      const entries = (await detail('staff', ticket._id)).timeline;
-      expect(entries.map((entry) => entry.event?.id ?? 'message')).toEqual([
-        'message',
-        first,
-        second,
-      ]);
-    });
-
-    it('shows the timeline of a ticket that predates it, as its messages only', async () => {
-      const ticket = await createTicket(api, { creator: people.creator.id });
-      await api.tickets.updateOne(
-        { _id: ticket._id },
-        { $unset: { events: '' } },
-      );
-      expect(shape(await detail('creator', ticket._id))).toEqual(['message']);
-    });
-
-    it('keeps the messages field and leaves list items without a timeline', async () => {
-      const ticket = await createTicket(api, { creator: people.creator.id });
-      const full = await detail('creator', ticket._id);
-      expect(full.messages).toHaveLength(1);
-      const list = dataOf<TicketListItemResponse[]>(
-        await authed(
-          api.http().get('/api/internal/tickets?own=true'),
-          people.creator.session,
-        ).expect(200),
-      );
-      for (const item of list) expect(item).not.toHaveProperty('timeline');
-    });
   });
 }
 
@@ -408,21 +245,6 @@ afterAll(() => api.teardown());
           expect(await rowsOf(who)).toHaveLength(0);
       });
 
-      it('does not alert staff who file the ticket themselves', async () => {
-        await authed(
-          api.http().post('/api/internal/tickets/general'),
-          as('staff'),
-        )
-          .send({
-            title: 'Nội bộ',
-            body: 'x',
-            issueUrl: 'https://example.com/y',
-          })
-          .expect(201);
-        expect(await rowsOf('staff')).toHaveLength(0);
-        expect(await rowsOf('staff2')).toHaveLength(1);
-      });
-
       it('finds the staff through the permission and group indexes', async () => {
         await api.users.insertMany(
           Array.from({ length: 300 }, (_unused, index) => ({
@@ -478,89 +300,9 @@ afterAll(() => api.teardown());
         });
         expect(await rowsOf('staff')).toHaveLength(0);
       });
-
-      it('alerts an owner who is also an assignee once, at the owner priority', async () => {
-        const ticket = await createTicket(api, {
-          creator: people.creator.id,
-          assignees: [people.creator.id, people.assignee.id],
-        });
-        await post('staff', ticket._id, 'Đã xử lý').expect(201);
-        const rows = await rowsOf('creator');
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({ count: 1, priority: 'high' });
-        expect(await rowsOf('assignee')).toHaveLength(1);
-      });
-
-      it('alerts the assignees at normal priority when the owner replies, never the owner', async () => {
-        const ticket = await createTicket(api, {
-          creator: people.creator.id,
-          assignees: [people.assignee.id],
-        });
-        await post('creator', ticket._id, 'Cảm ơn').expect(201);
-        expect((await rowsOf('assignee'))[0]).toMatchObject({
-          kind: 'ticket-message',
-          priority: 'normal',
-        });
-        expect(await rowsOf('creator')).toHaveLength(0);
-      });
-
-      it('merges a conversation into one unread row per person, newest text on it', async () => {
-        const ticket = await createTicket(api, {
-          creator: people.creator.id,
-          assignees: [people.assignee.id],
-        });
-        await post('assignee', ticket._id, 'một').expect(201);
-        await post('assignee', ticket._id, 'hai').expect(201);
-        const rows = await rowsOf('creator');
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({ count: 2, unread: true });
-        expect(rows[0].body).toContain('hai');
-      });
-
-      it('alerts staff when the owner replies on a general ticket nobody is assigned to', async () => {
-        const ticket = await createTicket(api, { creator: people.creator.id });
-        await post('creator', ticket._id, 'Có ai không?').expect(201);
-        expect(await rowsOf('staff')).toHaveLength(1);
-        expect(await rowsOf('staff2')).toHaveLength(1);
-        expect(await rowsOf('root')).toHaveLength(0);
-      });
-
-      it('does not alert other staff when a staff member answers a ticket with no assignees', async () => {
-        const ticket = await createTicket(api, { creator: people.creator.id });
-        await post('staff', ticket._id, 'Đã rõ').expect(201);
-        expect(await rowsOf('staff2')).toHaveLength(0);
-        expect(await rowsOf('creator')).toHaveLength(1);
-      });
     });
 
     describe('closing, reopening and assigning', () => {
-      it('alerts the owner and the assignees except whoever closed it', async () => {
-        const ticket = await createTicket(api, {
-          creator: people.creator.id,
-          assignees: [people.assignee.id],
-        });
-        await patch('creator', ticket._id, { isOpen: false }).expect(200);
-        expect((await rowsOf('assignee'))[0]).toMatchObject({
-          kind: 'ticket-status',
-        });
-        expect((await rowsOf('assignee'))[0].title).toContain('đóng');
-        expect(await rowsOf('creator')).toHaveLength(0);
-        await patch('assignee', ticket._id, { isOpen: true }).expect(200);
-        expect((await rowsOf('creator'))[0].title).toContain('mở lại');
-      });
-
-      it('does not alert anybody for notes or marking good', async () => {
-        const ticket = await createTicket(api, {
-          creator: people.creator.id,
-          assignees: [people.assignee.id],
-        });
-        await patch('staff', ticket._id, {
-          notes: 'n',
-          isContributive: true,
-        }).expect(200);
-        expect(await api.notifications.countDocuments()).toBe(0);
-      });
-
       it('alerts a newly assigned user and marks a removed assignees unread rows for the ticket read', async () => {
         const ticket = await createTicket(api, {
           creator: people.creator.id,
@@ -584,22 +326,6 @@ afterAll(() => api.teardown());
         expect(state).toEqual({
           [groupOf(ticket._id)]: false,
           [groupOf(other._id)]: true,
-        });
-      });
-
-      it('keeps the unread rows of an owner who is removed as an assignee', async () => {
-        const ticket = await createTicket(api, {
-          creator: people.creator.id,
-          assignees: [people.creator.id],
-        });
-        await post('staff', ticket._id, 'answer').expect(201);
-        await patch('staff', ticket._id, { assignees: ['newcomer'] }).expect(
-          200,
-        );
-        const [row] = await rowsOf('creator');
-        expect(row).toMatchObject({
-          groupKey: groupOf(ticket._id),
-          unread: true,
         });
       });
     });

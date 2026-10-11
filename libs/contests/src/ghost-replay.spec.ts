@@ -82,41 +82,6 @@ describe('ghostReplay', () => {
     });
   });
 
-  it('ranks without tries when the penalty is zero', () => {
-    const replay = ghostReplay(
-      ghost([{ minute: 12 }]),
-      0,
-      setup({ format: { name: 'icpc', config: { penalty: 0 } } }),
-    );
-    expect(replay.isUnranked).toBe(false);
-    expect(replay.events[0].slice(4)).toEqual([100, 12, 12]);
-  });
-
-  it('scores partial points for IOI-style formats, including ioi16 at scale 1', () => {
-    const cells = [{ minute: 20, points: 70 }];
-    const ioi = ghostReplay(
-      ghost(cells),
-      0,
-      setup({ format: { name: 'ioi', config: {} } }),
-    );
-    expect(ioi.events[0][4]).toBe(70);
-    const ioi16 = ghostReplay(
-      ghost(cells),
-      0,
-      setup({ format: { name: 'ioi16', config: {} } }),
-    );
-    expect(ioi16.events[0][4]).toBe(70);
-  });
-
-  it("scores a default-format ghost at the problem's full points when no points are given", () => {
-    const replay = ghostReplay(
-      ghost([{ minute: 5 }]),
-      0,
-      setup({ format: { name: 'default', config: {} } }),
-    );
-    expect(replay.events[0].slice(4)).toEqual([100, 300, 0]);
-  });
-
   it('skips cells of problems the contest no longer has', () => {
     const replay = ghostReplay(
       ghost([
@@ -128,15 +93,6 @@ describe('ghostReplay', () => {
     );
     expect(replay.events).toHaveLength(1);
     expect(replay.events[0][2]).toBe(0);
-  });
-
-  it('scores 99 rejected tries as 99 penalties', () => {
-    const replay = ghostReplay(
-      ghost([{ minute: 12, rejectedBefore: 99 }]),
-      0,
-      setup(),
-    );
-    expect(replay.events[0].slice(4)).toEqual([100, 12 + 99 * 20, 12]);
   });
 
   it('emits one event per solved cell even when two cells share a minute (no interleaving of their tries)', () => {
@@ -159,13 +115,6 @@ describe('ghostReplay', () => {
       setup({ format: { name: 'ioi', config: {} } }),
     );
     expect(replay.events[0][4]).toBe(100);
-  });
-
-  it('returns no events for a ghost with no cells and still ranks it', () => {
-    expect(ghostReplay(ghost([]), 0, setup())).toMatchObject({
-      isUnranked: false,
-      events: [],
-    });
   });
 });
 

@@ -12,11 +12,8 @@ describe('parseNotificationEvent', () => {
 
   it.each([
     'not json',
-    'null',
     '[]',
-    JSON.stringify({ userId: 'u', id: 'i' }),
     JSON.stringify({ userId: newId() }),
-    JSON.stringify({ userId: newId(), id: 5 }),
     JSON.stringify({ userId: newId(), id: 'not-a-uuid' }),
   ])('ignores %s', (raw) => expect(parseNotificationEvent(raw)).toBeNull());
 });

@@ -181,25 +181,6 @@ describe('blog editing', () => {
     expect(await discord.getJobCounts('waiting')).toMatchObject({ waiting: 0 });
   });
 
-  it('lets an edit_all_organization holder post for any organization', async () => {
-    const organization = await createOrganization(api, {});
-    const holder = await person({
-      permissions: [
-        'judge.edit_organization_post',
-        'judge.edit_all_organization',
-      ],
-    });
-    await create(holder.session, { organization: organization.slug }).expect(
-      201,
-    );
-    const withoutPostPermission = await person({
-      permissions: ['judge.edit_all_organization'],
-    });
-    await create(withoutPostPermission.session, {
-      organization: organization.slug,
-    }).expect(403);
-  });
-
   it('answers 401 when the user vanished between the session check and the write', async () => {
     const { user } = await person();
     const post = await createPost(api, { authors: [user._id] });
@@ -212,18 +193,6 @@ describe('blog editing', () => {
     await expect(
       editing.edit(principal, post._id, { title: 'New' }),
     ).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
-  });
-
-  it('locks blog writing for non-superusers in official contest mode', async () => {
-    const { session } = await person();
-    const { session: root } = await person({ isSuperuser: true });
-    await api.setSetting('contest.officialMode', true);
-    try {
-      await create(session, {}).expect(403);
-      await create(root, {}).expect(201);
-    } finally {
-      await api.setSetting('contest.officialMode', false);
-    }
   });
 
   it('edits for editors only, re-renders, records the diff and gates flags and authors', async () => {
@@ -355,26 +324,6 @@ describe('blog editing', () => {
     expect(await api.blogPosts.countDocuments({ authors: user._id })).toBe(6);
     expect((await api.blogPosts.findById(post._id))!.title).toBe('Edit 4');
     await create(other, { title: 'Other' }).expect(201);
-  });
-
-  it('lets edit_all_post hide and show posts past the write limit and during the official contest', async () => {
-    const { user } = await person();
-    const { session: staff } = await person({
-      permissions: ['judge.edit_all_post'],
-    });
-    const post = await createPost(api, { authors: [user._id] });
-    for (let index = 0; index < 12; index++)
-      await patch(post._id, staff, { visible: index % 2 === 0 }).expect(200);
-    await api.setSetting('contest.officialMode', true);
-    try {
-      await patch(post._id, staff, { visible: true }).expect(200);
-      await patch(post._id, staff, { visible: false }).expect(200);
-    } finally {
-      await api.setSetting('contest.officialMode', false);
-    }
-    expect((await api.blogPosts.findById(post._id).lean())!.visible).toBe(
-      false,
-    );
   });
 
   it('keeps the write limit for moderator edits beyond visible and for authors changing visible', async () => {

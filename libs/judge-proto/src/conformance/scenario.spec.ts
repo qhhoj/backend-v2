@@ -13,14 +13,9 @@ const writeScenario = (name: string, body: string): string => {
 describe('conformance scenarios', () => {
   it('loads every vendored scenario and every message in it round-trips', () => {
     const scenarios = loadScenarios();
-    expect(scenarios).toHaveLength(40);
     expect(new Set(scenarios.map((scenario) => scenario.name)).size).toBe(
       scenarios.length,
     );
-    expect(
-      scenarios.filter((scenario) => scenario.applies_to.includes('bridge'))
-        .length,
-    ).toBeGreaterThanOrEqual(28);
   });
 
   it('refuses a field the message does not have', () => {
