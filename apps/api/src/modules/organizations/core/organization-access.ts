@@ -31,6 +31,22 @@ const canAdminister = (
   principal: Principal | null,
   organization: OrganizationAccessView,
 ) => isAdmin(principal, organization) || editsAll(principal);
+/** Legacy organization `problem-create` view: an administrator who also holds `create_organization_problem` (the `Org Admin` role carries it). */
+const canCreateProblem = (
+  principal: Principal | null,
+  organization: OrganizationAccessView,
+) =>
+  principal !== null &&
+  canAdminister(principal, organization) &&
+  hasPermission(principal, 'judge.create_organization_problem');
+/** Legacy organization `contest-create` view: an administrator who also holds `create_private_contest`. */
+const canCreateContest = (
+  principal: Principal | null,
+  organization: OrganizationAccessView,
+) =>
+  principal !== null &&
+  canAdminister(principal, organization) &&
+  hasPermission(principal, 'judge.create_private_contest');
 /** Who may see the organization enumerated (lists, user pages, leaderboards): unlisted ones only their members and `edit_all_organization` (legacy leaked them through select2 and the sitemap). Its own page stays reachable by slug for anyone: unlisted is not private. */
 const canList = (
   principal: Principal | null,
@@ -69,6 +85,8 @@ export const OrganizationAccess = {
   isMember,
   isAdmin,
   canAdminister,
+  canCreateProblem,
+  canCreateContest,
   canList,
   listFilter,
   administeredFilter,

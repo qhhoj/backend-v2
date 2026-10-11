@@ -13,6 +13,7 @@ import {
 } from '@libs/problems';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { ContributionsModule } from '../contributions/contributions.module';
+import { OrganizationCreationModule } from '../organizations/creation/organization-creation.module';
 import { OrganizationQuotaModule } from '../organizations/quota/organization-quota.module';
 import { DiscordModule } from '../discord/discord.module';
 import { LanguagesAdminController } from './catalog/languages-admin.controller';
@@ -37,6 +38,8 @@ import { ProblemDataLifecycleService } from './data/problem-data-lifecycle.servi
 import { ProblemDataService } from './data/problem-data.service';
 import { ProblemDataStore } from './data/problem-data.store';
 import { ProblemDataUploadService } from './data/problem-data-upload.service';
+import { OrganizationProblemCreationController } from './editing/organization-problem-creation.controller';
+import { OrganizationProblemRules } from './editing/organization-problem-rules.service';
 import { ProblemEditingController } from './editing/problem-editing.controller';
 import { ProblemEditingService } from './editing/problem-editing.service';
 import { ProblemEditPolicyService } from './editing/problem-edit-policy.service';
@@ -93,6 +96,7 @@ const repositories = [
     ContestAccessModule,
     DiscordModule,
     OrganizationQuotaModule,
+    OrganizationCreationModule,
     AuthModule,
     PolygonApiModule,
     ExternalJudgeApiModule,
@@ -115,6 +119,7 @@ const repositories = [
     LicensesAdminController,
     ProblemBulkVisibilityController,
     ProblemEditingController,
+    OrganizationProblemCreationController,
     ProblemUploadsController,
     ProblemDataController,
     ProblemPdfController,
@@ -139,6 +144,7 @@ const repositories = [
     ProblemBulkVisibilityService,
     ProblemEditPolicyService,
     ProblemEditingService,
+    OrganizationProblemRules,
     ProblemStatementEditingService,
     ProblemCloneService,
     ProblemUploadsService,

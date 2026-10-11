@@ -34,7 +34,9 @@ import { ContestBulkService } from './bulk/contest-bulk.service';
 import { ContestDataController } from './data/contest-data.controller';
 import { ContestDataService } from './data/contest-data.service';
 import { ContestActionsService } from './editing/contest-actions.service';
+import { OrganizationCreationModule } from '../organizations/creation/organization-creation.module';
 import { ContestEditingController } from './editing/contest-editing.controller';
+import { OrganizationContestCreationController } from './editing/organization-contest-creation.controller';
 import { ContestEditFieldsService } from './editing/contest-edit-fields.service';
 import { ContestEditingService } from './editing/contest-editing.service';
 import { ContestRemovalRepository } from './editing/contest-removal.repository';
@@ -76,6 +78,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
 @Module({
   imports: [
     AuthModule,
+    OrganizationCreationModule,
     ContestAccessModule,
     BalloonsModule,
     ExportModule,
@@ -106,6 +109,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ContestBulkController,
     ContestDataController,
     ContestEditingController,
+    OrganizationContestCreationController,
     ContestParticipationController,
     ContestProblemOpsController,
     ContestPublishController,

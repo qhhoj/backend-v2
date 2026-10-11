@@ -1,4 +1,4 @@
-import { organizationPoints } from './organizations';
+import { organizationCodePrefix, organizationPoints } from './organizations';
 
 describe('organizationPoints', () => {
   it('weighs members best first by 0.95^i', () => {
@@ -21,4 +21,14 @@ describe('organizationPoints', () => {
       9,
     );
   });
+});
+
+describe('organizationCodePrefix', () => {
+  it.each([
+    ['ctqh2429', 'ctqh2429_'],
+    ['thpt-demo', 'thptdemo_'],
+    ['THPT_Demo.2', 'thptdemo2_'],
+  ])('%s gives %s', (slug, prefix) =>
+    expect(organizationCodePrefix(slug)).toBe(prefix),
+  );
 });

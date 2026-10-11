@@ -11,6 +11,9 @@ import { QuotaService } from '../../organizations/quota/quota.service';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
 import { LanguagesQuerier } from '../catalog/languages.querier';
+import type { CreationTarget } from '../../organizations/creation/organization-creation-rights.service';
+import { assertOrganizationCodePrefix } from './organization-code-prefix';
+import { OrganizationProblemRules } from './organization-problem-rules.service';
 import { ProblemEditPolicyService } from './problem-edit-policy.service';
 import {
   toFields,
@@ -92,16 +95,28 @@ export class ProblemEditingService {
     private readonly dataFiles: ProblemDataFilesService,
     private readonly discord: DiscordWebhooksService,
     private readonly quota: QuotaService,
+    private readonly organizationRules: OrganizationProblemRules,
   ) {}
 
+  /** `organization`: an organization create (`POST /organizations/:slug/problems`), which sets the organization fields itself and needs the code prefix. */
   async create(
     auth: AuthContext,
     dto: CreateProblemDto,
     mode: 'create' | 'suggest',
+    organization: CreationTarget | null = null,
   ): Promise<ProblemDetailResponse> {
     const { principal } = auth;
     const fields = toFields(dto);
-    this.policy.assertCreateGates(principal, dto, fields);
+    if (organization) {
+      assertOrganizationCodePrefix(
+        principal,
+        dto.code,
+        organization.codePrefix,
+      );
+      fields.organizations = [organization.id];
+      fields.isOrganizationPrivate = true;
+    }
+    this.policy.assertCreateGates(principal, dto, fields, organization?.id);
     await this.policy.assertReferences(dto);
     // Validation is done: spend now, refund if the insert fails (a taken code included).
     const problem = await this.quota.charged(
@@ -203,7 +218,15 @@ export class ProblemEditingService {
       unknown
     >;
     const fields = toFields(problemDto);
-    this.policy.assertFieldGates(principal, problemDto, fields, originalJson);
+    const waived = await this.organizationRules.forEdit(
+      principal,
+      original,
+      fields,
+    );
+    this.policy.assertFieldGates(principal, problemDto, fields, {
+      baseline: originalJson,
+      waived,
+    });
     await this.policy.assertReferences(problemDto);
     await this.assertDataDirectoryFree(fields, original);
     const isStatementRerendered = renderStatementsInto(

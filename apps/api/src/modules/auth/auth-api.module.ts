@@ -1,3 +1,4 @@
+import { OrganizationCreationModule } from '../organizations/creation/organization-creation.module';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { RateLimitService } from '@libs/common';
@@ -22,7 +23,7 @@ import { WebauthnController } from './two-factor/webauthn.controller';
 import { WebauthnService } from './two-factor/webauthn.service';
 
 @Module({
-  imports: [AuthModule, OrganizationsApiModule],
+  imports: [AuthModule, OrganizationsApiModule, OrganizationCreationModule],
   controllers: [
     AuthController,
     ImpersonationController,
