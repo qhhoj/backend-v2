@@ -52,10 +52,12 @@ const linkOf = (problemId: number, extra: Partial<PolygonLink> = {}) => ({
   ...extra,
 });
 const BUILT_AT = '2026-10-01T08:00:00.000Z';
-const pkg = (id: number, revision: number, state: string) => ({
+/** A full package's Linux row: the variant an import downloads. */
+const pkg = (id: number, revision: number, state: string, type = 'linux') => ({
   id,
   revision,
   state,
+  type,
   creationTimeSeconds: Date.parse(BUILT_AT) / 1000,
 });
 const API_KEY = 'polygon-key-7f3a';
@@ -374,6 +376,18 @@ describe('Polygon routes', () => {
     await post(`${POLYGON}/problems/3/import`, { code: 'none_one' })
       .expect(409)
       .expect(errorCode('polygon_package_not_ready'));
+    polygon.reply('problem.packages', {
+      result: [pkg(30, 3, 'READY', 'standard')],
+    });
+    const standardOnly = await post(`${POLYGON}/problems/1/import`, {
+      code: 'standard_one',
+    }).expect(409);
+    expect((standardOnly.body as { error: unknown }).error).toMatchObject({
+      code: 'polygon_package_not_ready',
+      message:
+        'Polygon problem 1 has no READY full package: its newest package 30 (revision 3) is a READY standard package, without the generated tests. Build a full package (with Linux tests) on Polygon first',
+    });
+    sharedProblems();
     await createProblem(api, catalog, {
       code: 'taken_link',
       polygonLink: linkOf(1) as never,

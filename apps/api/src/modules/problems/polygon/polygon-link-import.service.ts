@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import type { AuthContext } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { newId } from '@libs/database';
-import { latestPackageOf, PolygonClient, syncJobOf } from '@libs/problems';
+import {
+  latestPackageOf,
+  packageNotReadyReason,
+  PolygonClient,
+  syncJobOf,
+} from '@libs/problems';
 import type { LatestPackage, PolygonProblem } from '@libs/problems';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
@@ -23,7 +28,7 @@ export class PolygonLinkImportService {
     private readonly links: PolygonLinksRepository,
   ) {}
 
-  /** The zip import's checks first (permission, code, references), then Polygon's: shared, not linked yet, newest package READY. */
+  /** The zip import's checks first (permission, code, references), then Polygon's: shared, not linked yet, newest full package READY. */
   async importProblem(
     auth: AuthContext,
     polygonId: number,
@@ -52,7 +57,7 @@ export class PolygonLinkImportService {
     return { jobId };
   }
 
-  /** Re-applies the newest READY package (even the one already synced: a manual sync is also a repair) with the link's options. */
+  /** Re-applies the newest READY full package (even the one already synced: a manual sync is also a repair) with the link's options. */
   async sync(
     auth: AuthContext,
     code: string,
@@ -102,15 +107,14 @@ export class PolygonLinkImportService {
   }
 
   private async readyPackage(polygonId: number): Promise<ReadyPackage> {
-    const latest = latestPackageOf(
-      await askPolygon(() => this.polygon.packages(polygonId)),
-    );
+    const packages = await askPolygon(() => this.polygon.packages(polygonId));
+    const latest = latestPackageOf(packages);
     if (
       latest.state !== 'READY' ||
       latest.id === null ||
       latest.revision === null
     )
-      throw packageNotReady();
+      throw packageNotReady(polygonId, packageNotReadyReason(packages));
     return latest as ReadyPackage;
   }
 }

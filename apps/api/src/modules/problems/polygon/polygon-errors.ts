@@ -25,9 +25,10 @@ export async function askPolygon<Result>(
   }
 }
 
-export const packageNotReady = () =>
+/** `reason` names Polygon's newest package and its state (see `packageNotReadyReason`). */
+export const packageNotReady = (polygonId: number, reason: string) =>
   new AppError(
     'polygon_package_not_ready',
     409,
-    'The newest Polygon package is not READY; build a full package (with Linux tests) on Polygon first',
+    `Polygon problem ${polygonId} has no READY full package: ${reason}. Build a full package (with Linux tests) on Polygon first`,
   );

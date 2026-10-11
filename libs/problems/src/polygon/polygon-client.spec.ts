@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -93,6 +94,48 @@ describe('PolygonClient', () => {
       type: 'linux',
     });
     expect(progress.at(-1)).toEqual([zip.length, zip.length]);
+  });
+
+  it('signs the download over its method and every form field, type included', async () => {
+    polygon.reply('problem.package', { zip: Buffer.from('PK') });
+    await client().downloadPackage(
+      { problemId: 595937, packageId: 1500552 },
+      join(directory, 'package.zip'),
+      { maxBytes: 1024 },
+    );
+    const [{ method, params }] = polygon.calls;
+    const { apiSig, ...signed } = params;
+    expect(method).toBe('problem.package');
+    expect(Object.keys(signed).sort()).toEqual([
+      'apiKey',
+      'packageId',
+      'problemId',
+      'time',
+      'type',
+    ]);
+    const rand = apiSig.slice(0, 6);
+    const query = `apiKey=KEY&packageId=1500552&problemId=595937&time=${signed.time}&type=linux`;
+    expect(apiSig.slice(6)).toBe(
+      createHash('sha512')
+        .update(`${rand}/problem.package?${query}#SECRET`)
+        .digest('hex'),
+    );
+  });
+
+  it('names the package and the type when Polygon answers the download with HTTP 500', async () => {
+    polygon.reply('problem.package', { status: 500 });
+    const failure = await client()
+      .downloadPackage(
+        { problemId: 595937, packageId: 1500552 },
+        join(directory, 'package.zip'),
+        { maxBytes: 1024 },
+      )
+      .catch((error: PolygonApiError) => error);
+    expect(failure).toMatchObject({
+      code: 'polygon_unavailable',
+      message:
+        'Polygon answered problem.package for package 1500552 of problem 595937 (type linux) with HTTP 500',
+    });
   });
 
   it('refuses a package larger than the cap, and a JSON failure instead of a zip', async () => {

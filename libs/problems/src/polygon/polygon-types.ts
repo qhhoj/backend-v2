@@ -10,7 +10,10 @@ export interface PolygonProblem {
   modified?: boolean;
 }
 
-/** A package as `problem.packages` returns it. */
+/**
+ * One row of `problem.packages`. A full package is listed once per variant (`standard`, `linux`, `windows`) under
+ * one id; a standard package is listed once, as `standard`.
+ */
 export interface PolygonPackageInfo {
   id: number;
   revision: number;
@@ -44,11 +47,27 @@ const NO_PACKAGE: LatestPackage = {
   createdAt: null,
 };
 
-/** The newest package (highest revision, then highest id): an import takes it only when it is READY, so a fix still building is never skipped for an older build. */
+/**
+ * The variant the worker downloads. Only a full package has it, and only it holds every test with its answer: a
+ * standard package's zip lacks the generated tests, and Polygon answers HTTP 500 when asked for its `linux` variant.
+ */
+export const IMPORT_PACKAGE_TYPE = 'linux';
+
+const newestFirst = (left: PolygonPackageInfo, right: PolygonPackageInfo) =>
+  right.revision - left.revision || right.id - left.id;
+
+const isFull = (packages: PolygonPackageInfo[], id: number): boolean =>
+  packages.some((row) => row.id === id && row.type === IMPORT_PACKAGE_TYPE);
+
+/**
+ * The newest package an import can take (highest revision, then highest id). A READY package without the Linux
+ * variant is skipped, as it cannot be imported; a newer build still running or failed is never skipped for an older
+ * one, so an import takes the result only when it is READY.
+ */
 export function latestPackageOf(packages: PolygonPackageInfo[]): LatestPackage {
-  const newest = [...packages].sort(
-    (left, right) => right.revision - left.revision || right.id - left.id,
-  )[0];
+  const newest = packages
+    .filter((row) => row.state !== 'READY' || isFull(packages, row.id))
+    .sort(newestFirst)[0];
   if (!newest) return NO_PACKAGE;
   return {
     id: newest.id,
@@ -58,6 +77,15 @@ export function latestPackageOf(packages: PolygonPackageInfo[]): LatestPackage {
   };
 }
 
+/** Why `latestPackageOf` offers nothing READY, naming Polygon's newest package, its state and whether it is full. */
+export function packageNotReadyReason(packages: PolygonPackageInfo[]): string {
+  const newest = [...packages].sort(newestFirst)[0];
+  if (!newest) return 'it has no package';
+  const name = `package ${newest.id} (revision ${newest.revision})`;
+  if (newest.state === 'READY' && !isFull(packages, newest.id))
+    return `its newest ${name} is a READY standard package, without the generated tests`;
+  return `its newest ${name} is ${newest.state}`;
+}
 /** Vietnamese first, then English, then any language; null when no statement has a name. */
 export function statementTitleOf(
   statements: Record<string, PolygonStatement>,
