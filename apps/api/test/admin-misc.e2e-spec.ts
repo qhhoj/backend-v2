@@ -376,6 +376,67 @@ afterAll(() => api.teardown());
   });
 }
 
+// username suggestions
+{
+  const SUGGEST = (prefix: string) =>
+    `/api/internal/user-suggestions?prefix=${encodeURIComponent(prefix)}`;
+
+  describe('username suggestions', () => {
+    beforeAll(() => api.reset());
+    let viewer: TestSession;
+    const suggest = async (prefix: string, session = viewer) =>
+      dataOf<Array<{ id: string; username: string }>>(
+        await authed(api.http().get(SUGGEST(prefix)), session).expect(200),
+      );
+
+    beforeAll(async () => {
+      viewer = await loginAs(api, (await createUserWith(api, 'viewer'))._id);
+      for (const name of ['Zed12', 'zed03', 'zed01', 'zedbanned', 'azed'])
+        await createUserWith(api, name, {});
+      await api.users.updateOne(
+        { username: 'zedbanned' },
+        { banReason: 'spam', isActive: false, isUnlisted: true },
+      );
+      for (let index = 0; index < 12; index += 1)
+        await createUserWith(api, `many${String(index).padStart(2, '0')}`);
+    });
+
+    it('offers users by case-insensitive prefix in username order, banned ones too, with only id and username', async () => {
+      const found = await suggest('ZED');
+      expect(found.map((user) => user.username)).toEqual([
+        'zed01',
+        'zed03',
+        'Zed12',
+        'zedbanned',
+      ]);
+      expect(Object.keys(found[0]).sort()).toEqual(['id', 'username']);
+    });
+
+    it('offers at most ten users', async () => {
+      expect(await suggest('many')).toHaveLength(10);
+    });
+
+    it('refuses anonymous callers and a prefix that is not a username', async () => {
+      await api.http().get(SUGGEST('zed')).expect(401);
+      await authed(api.http().get(SUGGEST('a.*')), viewer).expect(400);
+      await authed(
+        api.http().get('/api/internal/user-suggestions'),
+        viewer,
+      ).expect(400);
+    });
+
+    it('limits each caller to 60 requests a minute, without slowing anyone else', async () => {
+      const busy = await loginAs(api, (await createUserWith(api, 'busy'))._id);
+      for (let index = 0; index < 60; index += 1) await suggest('zed', busy);
+      const refused = await authed(api.http().get(SUGGEST('zed')), busy)
+        .expect(429)
+        .expect(errorCode('rate_limited'));
+      expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
+      await suggest('zed');
+    });
+  });
+}
+
 // from judges.e2e-spec.ts
 {
   const JUDGES = '/api/internal/judges';

@@ -4,3 +4,6 @@ export const USER_DATA_PREPARE_WINDOW_SECONDS = 86_400;
 /** Staff credential changes (password sets and e-mail changes) per admin per hour, never given back: a stolen staff session cannot take over accounts in bulk. */
 export const ADMIN_CREDENTIAL_LIMIT = 10;
 export const ADMIN_CREDENTIAL_WINDOW_SECONDS = 3600;
+/** Username suggestions per user per minute: enough for typing in several pickers (the client debounces), too few to walk the whole user list. */
+export const USER_SUGGEST_LIMIT = 60;
+export const USER_SUGGEST_WINDOW_SECONDS = 60;

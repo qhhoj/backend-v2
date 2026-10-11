@@ -35,6 +35,9 @@ import { ProfileService } from './profile/profile.service';
 import { UserPagesController } from './pages/user-pages.controller';
 import { UserPagesRepository } from './pages/user-pages.repository';
 import { UserPagesService } from './pages/user-pages.service';
+import { UserSuggestionsController } from './suggestions/user-suggestions.controller';
+import { UserSuggestionsRepository } from './suggestions/user-suggestions.repository';
+import { UserSuggestionsService } from './suggestions/user-suggestions.service';
 
 @Module({
   imports: [
@@ -57,6 +60,7 @@ import { UserPagesService } from './pages/user-pages.service';
     UserEditingController,
     UserCreationController,
     AccessController,
+    UserSuggestionsController,
   ],
   providers: [
     LeaderboardsRepository,
@@ -76,6 +80,8 @@ import { UserPagesService } from './pages/user-pages.service';
     AccessRepository,
     GroupsAdminService,
     UserAccessService,
+    UserSuggestionsRepository,
+    UserSuggestionsService,
     RateLimitService,
   ],
   exports: [LeaderboardsRepository, UserPagesRepository],
