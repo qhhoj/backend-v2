@@ -24,7 +24,7 @@ const VERSION_TIMEOUT_MS = 10_000;
 const MINIMUM_MAJOR_VERSION = 3;
 
 /** Polygon's \bf, \it, \tt and \t are modern commands here (legacy TEX_MACROS). */
-export const TEX_MACROS = `
+const TEX_MACROS = `
 \\renewcommand{\\bf}{\\textbf}
 \\renewcommand{\\it}{\\textit}
 \\renewcommand{\\tt}{\\texttt}
@@ -32,7 +32,7 @@ export const TEX_MACROS = `
 `;
 
 /** Legacy PANDOC_FILTER, verbatim (quote normalisation, math delimiters, Codeforces-like code spans, dashes, center/epigraph divs). */
-export const PANDOC_FILTER = String.raw`
+const PANDOC_FILTER = String.raw`
 local function normalize_quote(text)
     -- These four quotes are disallowed characters.
     -- See DMOJ_PROBLEM_STATEMENT_DISALLOWED_CHARACTERS
@@ -185,13 +185,7 @@ end
 `;
 
 /** The statement is attacker-controlled TeX: `--sandbox` (pandoc >= 2.15) forbids \input, \include, \includegraphics and \verbatiminput from reading local files. It does NOT restrict Lua filters, so the filter must stay a trusted constant (PANDOC_FILTER), never derived from a package. */
-export const PANDOC_ARGUMENTS = [
-  '--sandbox',
-  '-f',
-  'latex',
-  '-t',
-  'gfm',
-] as const;
+const PANDOC_ARGUMENTS = ['--sandbox', '-f', 'latex', '-t', 'gfm'] as const;
 
 interface ProcessLimits {
   timeoutMs: number;

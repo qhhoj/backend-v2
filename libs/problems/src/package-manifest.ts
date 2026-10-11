@@ -14,8 +14,8 @@ import type {
 } from '@libs/database';
 import { safeFileName } from './file-names';
 
-export const PACKAGE_FORMAT = 'qhhoj-package';
-export const PACKAGE_FORMAT_VERSION = 1;
+const PACKAGE_FORMAT = 'qhhoj-package';
+const PACKAGE_FORMAT_VERSION = 1;
 
 export interface PackageStatement {
   language: StatementLanguage;
