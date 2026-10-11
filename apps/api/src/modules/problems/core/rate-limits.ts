@@ -13,3 +13,6 @@ export const PDF_FAIL_WINDOW_SECONDS = 10 * 60;
 /** Per user, every Polygon link check (preview or import); one that is not cached downloads a package from Polygon. */
 export const POLYGON_LINK_LIMIT = 20;
 export const POLYGON_LINK_WINDOW_SECONDS = 10 * 60;
+/** Per user, every search or verify on the external judge: each is a request to the remote service. */
+export const EXTERNAL_JUDGE_LOOKUP_LIMIT = 30;
+export const EXTERNAL_JUDGE_LOOKUP_WINDOW_SECONDS = 60;

@@ -15,8 +15,12 @@ import { CommentsService } from '../core/comments.service';
 import { CommentPageLinkResponse } from '../core/dto/comment.response';
 import { REPORT_LIMIT, REPORT_WINDOW_SECONDS } from '../core/rate-limits';
 import { CommentReportsRepository } from './comment-reports.repository';
-import type { ReportedCommentRow } from './comment-reports.repository';
+import type {
+  ReportedCommentRow,
+  ReportQueue,
+} from './comment-reports.repository';
 import type { CommentReportQueueItemResponse } from './dto/comment-report-queue-item.response';
+import type { BulkSettleOutcomeResponse } from './dto/bulk-settle-reports.dto';
 import type {
   ReportCommentDto,
   SettledReportStatus,
@@ -78,26 +82,32 @@ export class CommentReportsService {
     }
   }
 
-  /** Comments with open reports, newest report first; comments the moderator cannot read (page access, their running contest) are left out of the page (still counted in `total`). */
+  /** Comments with open reports, newest report first (`open`), or with settled reports, newest settlement first (`settled`); comments the moderator cannot read (page access, their running contest) are left out of the page (still counted in `total`). */
   async queue(
     principal: Principal,
     page: number,
+    queue: ReportQueue = 'open',
   ): Promise<Paginated<CommentReportQueueItemResponse>> {
     this.comments.assertOpen(principal);
-    const { items, total } = await this.reports.openComments(
+    const { items, total } = await this.reports.commentsIn(
+      queue,
       page,
       REPORT_QUEUE_PAGE_SIZE,
     );
     const ids = items.map((row) => row.commentId);
     const [rows, reports] = await Promise.all([
       this.commentRows.findByIds(ids),
-      this.reports.openOf(ids),
+      this.reports.reportsIn(queue, ids),
     ]);
     const [readable, summaryOf] = await Promise.all([
       this.comments.readablePagesOf(principal, rows),
       this.comments.summariesOf([
         ...rows.map((row) => row.author),
-        ...reports.map((report) => report.reporter),
+        ...reports.flatMap((report) =>
+          report.settledBy
+            ? [report.reporter, report.settledBy]
+            : [report.reporter],
+        ),
       ]),
     ]);
     const commentOf = new Map(rows.map((row) => [uuidStr(row._id), row]));
@@ -105,14 +115,20 @@ export class CommentReportsService {
       items.flatMap((row) => {
         const comment = commentOf.get(row.commentId);
         const pageInfo = readable.get(row.commentId);
-        if (!comment || !pageInfo) return [];
-        const open = reports.filter(
+        const ofComment = reports.filter(
           (report) => uuidStr(report.comment) === row.commentId,
         );
+        // Settled by someone else between the two reads: nothing left to show.
+        if (!comment || !pageInfo || !ofComment.length) return [];
         return [
           this.queueItem(
-            { row, comment, page: CommentPageLinkResponse.from(pageInfo) },
-            open,
+            {
+              queue,
+              row,
+              comment,
+              page: CommentPageLinkResponse.from(pageInfo),
+            },
+            ofComment,
             summaryOf,
           ),
         ];
@@ -134,12 +150,34 @@ export class CommentReportsService {
       throw new AppError('not_found', 404, 'No open reports on this comment');
   }
 
+  /** `settle` for each id in turn (duplicates once); each refusal is reported by its error code and never stops the rest. */
+  async settleMany(
+    principal: Principal,
+    ids: readonly string[],
+    outcome: SettledReportStatus,
+  ): Promise<BulkSettleOutcomeResponse[]> {
+    this.comments.assertOpen(principal);
+    const outcomes: BulkSettleOutcomeResponse[] = [];
+    for (const id of new Set(ids)) {
+      try {
+        await this.settle(principal, id, outcome);
+        outcomes.push({ id, code: null });
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        outcomes.push({ id, code: error.code });
+      }
+    }
+    return outcomes;
+  }
+
   private queueItem(
     {
+      queue,
       row,
       comment,
       page,
     }: {
+      queue: ReportQueue;
       row: ReportedCommentRow;
       comment: Comment;
       page: CommentPageLinkResponse;
@@ -148,23 +186,31 @@ export class CommentReportsService {
     summaryOf: ReadonlyMap<string, UserSummaryResponse>,
   ): CommentReportQueueItemResponse {
     const deleted = Boolean(comment.deletedAt);
+    const summary = (id: unknown) =>
+      id ? (summaryOf.get(uuidStr(id)) ?? null) : null;
     return {
       comment: {
         id: row.commentId,
         excerpt: deleted ? '' : excerpt(comment.body, EXCERPT_LENGTH),
-        author: summaryOf.get(uuidStr(comment.author)) ?? null,
+        author: summary(comment.author),
         hidden: comment.hidden,
         deleted,
       },
       page,
       reporterCount: reports.length,
       reports: reports.map((report) => ({
-        reporter: summaryOf.get(uuidStr(report.reporter)) ?? null,
+        reporter: summary(report.reporter),
         reason: report.reason,
         note: report.note,
         createdAt: report.createdAt,
+        status: report.status,
+        settledBy: summary(report.settledBy),
+        settledAt: report.settledAt,
       })),
-      lastReportedAt: row.lastReportedAt,
+      lastReportedAt: new Date(
+        Math.max(...reports.map((report) => report.createdAt.getTime())),
+      ),
+      lastSettledAt: queue === 'settled' ? row.lastAt : null,
     };
   }
 }

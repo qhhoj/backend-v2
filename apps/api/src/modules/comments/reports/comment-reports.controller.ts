@@ -12,13 +12,15 @@ import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
-import {
-  CommentIdParamDto,
-  CommentPageQueryDto,
-} from '../core/dto/comment-params.dto';
+import { CommentIdParamDto } from '../core/dto/comment-params.dto';
 import { CommentReportsService } from './comment-reports.service';
 import { CommentReportQueueItemResponse } from './dto/comment-report-queue-item.response';
 import {
+  BulkSettleOutcomeResponse,
+  BulkSettleReportsDto,
+} from './dto/bulk-settle-reports.dto';
+import {
+  CommentReportQueueQueryDto,
   ReportCommentDto,
   SettleCommentReportsDto,
 } from './dto/report-comment.dto';
@@ -53,20 +55,42 @@ export class CommentReportsController {
    * List reported comments
    *
    * @remarks
-   * Requires `judge.change_comment`. Returns the comments with open reports,
-   * the most recently reported first, 20 per page: an excerpt, the page link,
-   * how many users reported it, and each open report with its reason and
-   * note. Comments on pages the moderator cannot read are left out of the
-   * page.
+   * Requires `judge.change_comment`. With `status=open` (the default),
+   * returns the comments with open reports, the most recently reported
+   * first; with `status=settled`, the comments whose reports were resolved or
+   * dismissed, the most recently settled first. 20 per page: an excerpt, the
+   * page link, how many users reported it, and each report with its reason,
+   * note and, once settled, outcome and moderator. Comments on pages the
+   * moderator cannot read are left out of the page.
    */
   @RequirePermission('judge.change_comment')
   @ApiPaginatedResponse(CommentReportQueueItemResponse)
   @Get('reports')
   queue(
     @CurrentAuth() auth: AuthContext,
-    @Query() { page }: CommentPageQueryDto,
+    @Query() { page, status }: CommentReportQueueQueryDto,
   ): Promise<Paginated<CommentReportQueueItemResponse>> {
-    return this.reports.queue(auth.principal, page);
+    return this.reports.queue(auth.principal, page, status);
+  }
+
+  /**
+   * Settle the reports of several comments
+   *
+   * @remarks
+   * Requires `judge.change_comment`. Settles the open reports of up to 50
+   * comments with one `outcome`, each like the single settle. Returns one
+   * entry per distinct id: `code` is null when settled, or the error code
+   * that refused it (`not_found`: unreadable, or no open reports). A refusal
+   * never stops the rest.
+   */
+  @RequirePermission('judge.change_comment')
+  @Post('reports/settle')
+  @HttpCode(200)
+  settleMany(
+    @CurrentAuth() auth: AuthContext,
+    @Body() { ids, outcome }: BulkSettleReportsDto,
+  ): Promise<BulkSettleOutcomeResponse[]> {
+    return this.reports.settleMany(auth.principal, ids, outcome);
   }
 
   /**

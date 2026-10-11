@@ -34,6 +34,7 @@ import type {
 } from './submission-access';
 import { sourceFilename } from './source-file';
 import type { SourceFile } from './source-file';
+import { ExternalRunsRepository } from './external-runs.repository';
 import { SubmissionsRepository } from './submissions.repository';
 import type { SubmissionDocument } from './submissions.repository';
 
@@ -79,6 +80,7 @@ export class SubmissionsService {
     private readonly currentContest: CurrentContestService,
     private readonly viewers: ContestViewerService,
     private readonly contests: ContestsRepository,
+    private readonly externalRuns: ExternalRunsRepository,
   ) {}
 
   /** The viewer's current contest, resolved once per request and passed to `visible`, `viewable` and `filterFor`. */
@@ -162,6 +164,7 @@ export class SubmissionsService {
         ? null
         : await this.problems.caseCount(problem._id);
     const [owner] = await this.users.findByIds([uuidStr(submission.user)]);
+    const actions = this.actionsFor(principal, submission, canEdit);
     return SubmissionDetailResponse.withDetails(
       submission,
       {
@@ -174,7 +177,13 @@ export class SubmissionsService {
         showError: canEdit || submission.status !== 'IE',
         totalCases,
         lockedAfter: canEdit ? submission.lockedAfter : null,
-        actions: this.actionsFor(principal, submission, canEdit),
+        actions,
+        externalRun: actions.canRejudge
+          ? await this.externalRuns.current(
+              uuidStr(submission._id),
+              submission.judgeGeneration,
+            )
+          : null,
       },
     );
   }

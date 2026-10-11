@@ -386,6 +386,60 @@ describe('comment preview, post blocks, hidden listings, delete, reports, locate
       ).toBe(false);
       await settle(moderator, 'resolved').expect(404);
     });
+
+    it('settles many comments at once, one outcome per id, and lists them as settled, newest settlement first', async () => {
+      const { user: author } = await person();
+      const { session } = await person();
+      const { user: mod, session: moderator } = await person(MODERATOR);
+      const page = await createPost(api);
+      const first = await blogComment(page._id, author._id);
+      const second = await blogComment(page._id, author._id);
+      const unreported = await blogComment(page._id, author._id);
+      await report(first._id, session, { reason: 'spam' }).expect(204);
+      await report(second._id, session, { reason: 'abuse' }).expect(204);
+      const settleMany = (as: TestSession, ids: string[], outcome: string) =>
+        authed(
+          api.http().post('/api/internal/comments/reports/settle'),
+          as,
+        ).send({ ids, outcome });
+      await settleMany(session, [first._id], 'resolved').expect(403);
+
+      await settleMany(moderator, [first._id], 'resolved').expect(200);
+      const outcomes = dataOf<Array<{ id: string; code: string | null }>>(
+        await settleMany(
+          moderator,
+          [second._id, unreported._id, second._id, first._id],
+          'dismissed',
+        ).expect(200),
+      );
+      expect(outcomes).toEqual([
+        { id: second._id, code: null },
+        { id: unreported._id, code: 'not_found' },
+        { id: first._id, code: 'not_found' },
+      ]);
+
+      const settled = dataOf<CommentReportQueueItemResponse[]>(
+        await authed(
+          api.http().get('/api/internal/comments/reports?status=settled'),
+          moderator,
+        ).expect(200),
+      ).filter((entry) => [first._id, second._id].includes(entry.comment.id));
+      expect(settled.map((entry) => entry.comment.id)).toEqual([
+        second._id,
+        first._id,
+      ]);
+      expect(settled[1].reports[0]).toMatchObject({
+        status: 'resolved',
+        settledBy: { id: mod._id },
+      });
+      expect(settled[0].reports[0].status).toBe('dismissed');
+      expect(settled[0].lastSettledAt).not.toBeNull();
+      expect(
+        (await queue(moderator)).some((entry) =>
+          [first._id, second._id].includes(entry.comment.id),
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('locate', () => {

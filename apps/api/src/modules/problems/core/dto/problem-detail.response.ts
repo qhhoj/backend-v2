@@ -137,6 +137,11 @@ export class ProblemContestResponse {
   attemptsLeft!: number | null;
 }
 
+export class ProblemExternalJudgeBadgeResponse {
+  /** The external judge's OJ the problem is judged on (`CodeForces`, `QOJ`, ...). */
+  oj!: string;
+}
+
 export class ProblemDetailResponse {
   /** Problem id. */
   id!: string;
@@ -222,6 +227,8 @@ export class ProblemDetailResponse {
   viewerStatus!: ViewerStatus;
   /** The viewer's current contest when it lists this problem. */
   contest!: ProblemContestResponse | null;
+  /** Where the problem is judged when an external judge does it; null for judge-v2. */
+  externalJudge!: ProblemExternalJudgeBadgeResponse | null;
   /** Raw fields for the editor; null unless `canEdit`. */
   editor!: ProblemEditorResponse | null;
 
@@ -295,6 +302,9 @@ export class ProblemDetailResponse {
       canEdit: context.canEdit,
       viewerStatus: context.viewerStatus,
       contest: context.contest,
+      externalJudge: problem.externalJudge?.isActive
+        ? { oj: problem.externalJudge.oj }
+        : null,
       editor: context.canEdit
         ? ProblemEditorResponse.from(problem, summaries)
         : null,

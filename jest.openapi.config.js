@@ -1,17 +1,20 @@
-/** The main jest config with the swagger CLI plugin applied (same options as nest-cli.json; the plugin reads types, so isolatedModules is off), running only the OpenAPI specs. */
-const base = require('./package.json').jest;
+/**
+ * The OpenAPI specs (`*.openapi-spec.ts`) with the swagger CLI plugin applied (same options as nest-cli.json; the plugin
+ * reads types, so isolatedModules is off). Static: the document is built from stubbed controllers, and ioredis and
+ * mongodb-memory-server throw as in jest.config.js. Specs that boot the app are jest.openapi-db.config.js.
+ */
+const shared = require('./jest.shared');
 const [swagger] = require('./nest-cli.json').compilerOptions.plugins;
 
 module.exports = {
-  ...base,
-  globalSetup: require.resolve('./jest.openapi.require-redis'),
+  ...shared,
   // ESM-only and irrelevant to the schemas: swapped for a no-op plugin (the main suite exercises /api/docs).
   moduleNameMapper: {
-    ...base.moduleNameMapper,
+    ...shared.moduleNameMapper,
+    ...require('./test/no-services'),
     '^@scalar/fastify-api-reference$': require.resolve('./jest.scalar-stub'),
   },
-  testPathIgnorePatterns: ['/node_modules/'],
-  testRegex: '.*/(openapi\\.e2e-spec|[^/]+\\.openapi-spec)\\.ts$',
+  testRegex: '.*\\.openapi-spec\\.ts$',
   transform: {
     '^.+\\.ts$': [
       'ts-jest',

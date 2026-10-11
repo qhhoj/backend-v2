@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { isDuplicateKey } from '@libs/common';
+import { pageOf } from '@libs/community';
 import type { CommentPage } from '@libs/community';
 import { CommentLock } from '@libs/database';
 
@@ -31,5 +32,26 @@ export class CommentLocksRepository {
 
   async unlock(page: CommentPage): Promise<void> {
     await this.locks.deleteOne(filterOf(page)).exec();
+  }
+
+  /** One page of locked pages, the newest lock first (UUIDv7 ids sort by time). */
+  async page(
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: CommentPage[]; total: number }> {
+    const [rows, total] = await Promise.all([
+      this.locks
+        .find({}, { page: 1 })
+        .sort({ _id: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean<CommentLock[]>()
+        .exec(),
+      this.locks.estimatedDocumentCount().exec(),
+    ]);
+    return {
+      items: rows.map(pageOf),
+      total,
+    };
   }
 }

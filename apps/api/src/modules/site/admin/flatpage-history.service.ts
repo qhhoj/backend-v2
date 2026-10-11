@@ -35,12 +35,21 @@ export class FlatpageHistoryService {
   ) {}
 
   /** Stays readable after the page is deleted, so the id is not checked against live pages. */
-  async history(
+  history(
+    id: string,
+    page: number,
+  ): Promise<Paginated<FlatpageRevisionResponse>> {
+    return this.entityHistory('flatpage', id, page);
+  }
+
+  /** One entity's revisions, newest first, with their editors: flatpages and misc config keys share the shape. */
+  async entityHistory(
+    entity: 'flatpage' | 'miscConfig',
     id: string,
     page: number,
   ): Promise<Paginated<FlatpageRevisionResponse>> {
     const { items, total } = await this.revisions.page(
-      'flatpage',
+      entity,
       id,
       page,
       PAGE_SIZE,

@@ -1,5 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { COMMENT_REPORT_REASONS } from '@libs/database';
 import type { CommentReportReason } from '@libs/database';
 
@@ -32,4 +41,23 @@ export class SettleCommentReportsDto {
   })
   @IsIn(SETTLED_REPORT_STATUSES)
   outcome!: SettledReportStatus;
+}
+
+export const REPORT_QUEUES = ['open', 'settled'] as const;
+
+export class CommentReportQueueQueryDto {
+  /** 1-based page number. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page: number = 1;
+
+  /** `open` (the default): comments with open reports. `settled`: comments whose reports were resolved or dismissed, newest settlement first. */
+  @ApiPropertyOptional({ enum: REPORT_QUEUES, enumName: 'CommentReportQueue' })
+  @IsOptional()
+  @IsIn(REPORT_QUEUES)
+  status: (typeof REPORT_QUEUES)[number] = 'open';
 }

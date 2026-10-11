@@ -30,6 +30,7 @@ import {
 } from './dto/flatpage-revision.response';
 import {
   FlatpageIdParamDto,
+  FlatpageListQueryDto,
   PageListQueryDto,
   SiteIdParamDto,
 } from './dto/site-admin-params.dto';
@@ -48,15 +49,15 @@ export class FlatpagesAdminController {
    * List site pages
    *
    * @remarks
-   * Requires `flatpages.change_flatpage`. Returns a page of 50 pages with their URL, title and last update.
+   * Requires `flatpages.change_flatpage`. Returns a page of 50 pages with their URL, title and last update, by URL; `search` keeps pages whose URL or title contains it.
    */
   @ApiPaginatedResponse(FlatpageAdminListItemResponse)
   @RequirePermission('flatpages.change_flatpage')
   @Get()
   list(
-    @Query() { page }: PageListQueryDto,
+    @Query() { page, search }: FlatpageListQueryDto,
   ): Promise<Paginated<FlatpageAdminListItemResponse>> {
-    return this.pages.list(page);
+    return this.pages.list(page, search);
   }
 
   /**

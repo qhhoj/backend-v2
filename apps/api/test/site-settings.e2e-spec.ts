@@ -338,6 +338,12 @@ afterAll(() => api.teardown());
           }),
         },
         {
+          name: 'GET config/:key/revisions',
+          permission: 'judge.change_miscconfig',
+          status: 200,
+          prepare: () => ({ method: 'get', path: '/config/any/revisions' }),
+        },
+        {
           name: 'DELETE config/:key',
           permission: 'judge.change_miscconfig',
           status: 204,
@@ -539,6 +545,30 @@ afterAll(() => api.teardown());
         ]);
         expect(results.map(({ status }) => status)).toEqual([200, 200]);
         expect(await api.miscConfigs.countDocuments({ key: 'race' })).toBe(1);
+      });
+
+      it('records each real change of a key, and keeps the history past a delete', async () => {
+        const key = unique('notice');
+        await put(key, { value: 'first' }).expect(200);
+        await put(key, { value: 'first' }).expect(200);
+        await put(key, { value: 'second' }).expect(200);
+        await send('delete', `/config/${key}`, configEditor).expect(204);
+        const history = dataOf<
+          Array<{ action: string; changes: Record<string, unknown> }>
+        >(
+          await send('get', `/config/${key}/revisions`, configEditor).expect(
+            200,
+          ),
+        );
+        expect(history.map((row) => row.action)).toEqual([
+          'delete',
+          'edit',
+          'create',
+        ]);
+        expect(history[1].changes.value).toEqual({
+          before: 'first',
+          after: 'second',
+        });
       });
     });
   });
