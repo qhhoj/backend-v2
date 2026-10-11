@@ -45,6 +45,7 @@ afterAll(() => api.teardown());
       canRejudge: boolean;
       canReject: boolean;
       canLock: boolean;
+      canOverrideScore: boolean;
     };
   }
 
@@ -53,6 +54,7 @@ afterAll(() => api.teardown());
     canRejudge: false,
     canReject: false,
     canLock: false,
+    canOverrideScore: false,
   };
 
   describe('submission detail action flags', () => {
@@ -148,6 +150,7 @@ afterAll(() => api.teardown());
         canRejudge: true,
         canReject: true,
         canLock: true,
+        canOverrideScore: false,
       });
       expect(body.lockedAfter).toBeNull();
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
@@ -180,6 +183,7 @@ afterAll(() => api.teardown());
         canRejudge: false,
         canReject: true,
         canLock: true,
+        canOverrideScore: false,
       });
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`)
         .expect(409)

@@ -156,6 +156,7 @@ export interface SubmissionActions {
   canRejudge: boolean;
   canReject: boolean;
   canLock: boolean;
+  canOverrideScore: boolean;
 }
 
 /** Legacy `abort_submission`: `judge.abort_any_submission`, or the owner until an admin rejudges the submission. */
@@ -190,6 +191,22 @@ export const mayLockSubmission = (
 ): boolean =>
   canEditProblem && hasPermission(principal, 'judge.lock_submission');
 
+/** Legacy submission admin (`judge.change_submission`) with edit rights on the problem: the manual score override. */
+export const mayOverrideSubmissionScore = (
+  principal: Principal,
+  canEditProblem: boolean,
+): boolean =>
+  canEditProblem && hasPermission(principal, 'judge.change_submission');
+
+/** Queued, judged or a pending final submission: no manual score may replace what judging will write. */
+export const NOT_OVERRIDABLE_STATUSES: readonly SubmissionStatus[] = [
+  ...UNFINISHED_STATUSES,
+  'PD',
+];
+
+export const isScoreOverridable = (status: SubmissionStatus): boolean =>
+  !NOT_OVERRIDABLE_STATUSES.includes(status);
+
 /** A rejudge is refused for pending final-submission rows and for submissions a judge holds. */
 const isRejudgeableStatus = (status: SubmissionStatus): boolean =>
   status !== 'PD' && !IN_FLIGHT_STATUSES.includes(status);
@@ -212,5 +229,8 @@ export function submissionActions(
       mayRejectSubmission(principal, facts.canEditProblem) &&
       !UNFINISHED_STATUSES.includes(facts.status),
     canLock: mayLockSubmission(principal, facts.canEditProblem),
+    canOverrideScore:
+      mayOverrideSubmissionScore(principal, facts.canEditProblem) &&
+      isScoreOverridable(facts.status),
   };
 }

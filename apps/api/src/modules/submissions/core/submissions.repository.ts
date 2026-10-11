@@ -17,6 +17,8 @@ import {
   uuidStr,
 } from '@libs/database';
 import { effectsDue, JUDGE_COMMAND_BATCH, requeueUpdate } from '@libs/judging';
+import type { OverriddenScore } from '../actions/score-override';
+import { NOT_OVERRIDABLE_STATUSES } from './submission-access';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 const STATE_FIELDS = {
@@ -198,6 +200,25 @@ export class SubmissionsRepository {
             ...effectsDue(),
           },
         },
+      )
+      .exec();
+    return matchedCount === 1;
+  }
+
+  /** A manual verdict and score on a finished row (D, CE, IE, AB): it reads as graded, and its effects are due. False while it is queued, judged or a pending final submission, or once a judging after `judgeGeneration` was read has claimed it. */
+  async overrideScore(
+    id: string,
+    judgeGeneration: number,
+    fields: OverriddenScore & { lockedAfter?: Date },
+  ): Promise<boolean> {
+    const { matchedCount } = await this.submissions
+      .updateOne(
+        {
+          _id: id,
+          judgeGeneration,
+          status: { $nin: [...NOT_OVERRIDABLE_STATUSES] },
+        },
+        { $set: { status: 'D', ...fields, ...effectsDue() } },
       )
       .exec();
     return matchedCount === 1;

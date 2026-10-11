@@ -7072,6 +7072,19 @@
         ],
         "type": "object"
       },
+      "OverrideResult": {
+        "description": "The verdict to show. `AC` needs full points.",
+        "enum": [
+          "AC",
+          "IR",
+          "MLE",
+          "OLE",
+          "RTE",
+          "TLE",
+          "WA"
+        ],
+        "type": "string"
+      },
       "PackageBuildingResponse": {
         "properties": {
           "status": {
@@ -10485,6 +10498,39 @@
         },
         "type": "object"
       },
+      "ScoreOverrideDto": {
+        "properties": {
+          "comment": {
+            "description": "Why, kept in the submission's revision log; 1 to 500 characters.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "lock": {
+            "description": "true also locks it, so a later rejudge cannot discard the override. Default false.",
+            "type": "boolean"
+          },
+          "points": {
+            "description": "Points on the problem's scale, 0 to the problem's points (3 decimals); a problem without partial points takes only 0 or full.",
+            "minimum": 0,
+            "type": "number"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OverrideResult"
+              }
+            ],
+            "description": "The verdict to show. `AC` needs full points."
+          }
+        },
+        "required": [
+          "result",
+          "points",
+          "comment"
+        ],
+        "type": "object"
+      },
       "ScoreboardVisibility": {
         "description": "Who sees the scoreboard and when.",
         "enum": [
@@ -12447,6 +12493,10 @@
             "description": "Whether `POST` and `DELETE /submissions/{id}/lock` are allowed.",
             "type": "boolean"
           },
+          "canOverrideScore": {
+            "description": "Whether `PUT /submissions/{id}/score` is allowed.",
+            "type": "boolean"
+          },
           "canReject": {
             "description": "Whether `POST /submissions/{id}/reject` is allowed.",
             "type": "boolean"
@@ -12460,7 +12510,8 @@
           "canAbort",
           "canRejudge",
           "canReject",
-          "canLock"
+          "canLock",
+          "canOverrideScore"
         ],
         "type": "object"
       },
@@ -35440,6 +35491,61 @@
           }
         },
         "summary": "Rejudge one submission",
+        "tags": [
+          "Judging"
+        ]
+      }
+    },
+    "/api/internal/submissions/{id}/score": {
+      "put": {
+        "description": "Needs `judge.change_submission` and edit rights on the problem (403\n`forbidden`). Sets `result` (a graded verdict) and `points` on the\nproblem's scale; the case results stay as judged. User points, problem\nstatistics and contest results are recomputed as after a judging (an\n`ioi16` contest still scores batches from the judged cases). Sending the\nstored score again changes nothing. 400\n`points_above_problem`, `points_not_partial` (a problem without partial\npoints takes 0 or full) or `accepted_needs_full_points`. 409 `conflict`\nwhile the submission is queued or judged, or is a pending final\nsubmission; 409 `problem_deleted` when the problem is deleted. A rejudge\ndiscards the override unless `lock` locks the submission too. Logged as a\nsubmission revision with `comment`. Answers 204.",
+        "operationId": "SubmissionActionsController_overrideScore",
+        "parameters": [
+          {
+            "description": "Submission id.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoreOverrideDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Override a submission's verdict and score",
         "tags": [
           "Judging"
         ]

@@ -39,6 +39,8 @@ export const PERMISSIONS = [
   'judge.view_all_submission',
   'judge.resubmit_other',
   'judge.lock_submission',
+  // Legacy Django codename of the submission admin: here, the manual score override.
+  'judge.change_submission',
   'judge.change_judge',
   'judge.organization_admin',
   'judge.edit_all_organization',
