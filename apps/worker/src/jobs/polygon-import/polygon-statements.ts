@@ -32,7 +32,7 @@ export interface ProblemProperties {
 export type TexToMarkdown = (tex: string) => Promise<string>;
 export type ImageSaver = (bytes: Buffer, name: string) => Promise<string>;
 /** Re-hosted image bytes per import, all statements and the tutorial together: each image is capped, but a compressed package can hold thousands of them, and they are saved outside the problem's storage meter. */
-export const IMPORT_IMAGES_MAX_BYTES = 64 * 1024 * 1024;
+const IMPORT_IMAGES_MAX_BYTES = 64 * 1024 * 1024;
 
 /** `saveImage` that fails the import once the bytes it saved would pass `maxBytes`. */
 export function withImageBudget(
@@ -119,7 +119,7 @@ const srcMatch = (tag: string) =>
   countOf(SRC_ATTRIBUTE, tag) === 1 ? IMG_SRC.exec(tag) : null;
 
 /** Image bytes a visitor's browser will get: type from the bytes, SVG sanitized. The extension of `name` follows the sniffed type. */
-export function prepareImage(
+function prepareImage(
   bytes: Buffer,
   name: string,
 ): { content: Buffer; name: string } {

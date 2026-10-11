@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { Contest } from '@libs/database';
 
-export const SYNC_UPSERT_ACTIONS = ['created', 'updated', 'unchanged'] as const;
+const SYNC_UPSERT_ACTIONS = ['created', 'updated', 'unchanged'] as const;
 export type SyncUpsertAction = (typeof SYNC_UPSERT_ACTIONS)[number];
 
 export class SyncContestResponse {

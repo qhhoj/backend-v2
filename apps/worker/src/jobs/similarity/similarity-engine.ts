@@ -14,9 +14,9 @@ import type { SimilarityFamily } from './similarity-languages';
  * A child process also gives a kill switch for a pathological group, which nothing in-process can.
  * `ENGINE_HEAP_MB` caps the V8 heap only; native parser memory is outside it and bounded by the worker container (measured RSS 160 MB at 800 files).
  */
-export const ENGINE_HEAP_MB = 2048;
+const ENGINE_HEAP_MB = 2048;
 export const DEFAULT_MAX_FRAGMENTS_PER_PAIR = 50;
-export const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 /** The child's own deadline is a backstop for a dead worker: it must trail the parent's, which does the killing and the reporting. */
 const CHILD_DEADLINE_MARGIN_MS = 5000;
 const STDERR_TAIL_BYTES = 4 * 1024;

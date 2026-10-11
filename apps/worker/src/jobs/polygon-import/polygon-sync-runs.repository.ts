@@ -13,7 +13,7 @@ export type RunOutcome =
 type RunFields = Omit<PolygonSyncRun, '_id' | 'createdAt'>;
 
 /** The history row of one finished Polygon job; `problem` is the QHHOJ problem id, null when none exists. */
-export function syncRunOf(
+function syncRunOf(
   jobId: string,
   job: PolygonImportJob & { polygon: PolygonSource },
   outcome: RunOutcome,
