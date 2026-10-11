@@ -1,6 +1,7 @@
-// Tags the version in package.json as v<version> and pushes the tag; never publishes to npm.
-// Idempotent: a tag that exists locally or on origin is left alone. With GITHUB_TOKEN set it
-// also creates a GitHub Release whose notes are that version's CHANGELOG.md section.
+// Tags HEAD as v<version> through the GitHub REST API (a git push of a tag is refused when the commit's
+// workflow files differ from main's) and creates a GitHub Release whose notes are that version's
+// CHANGELOG.md section; never publishes to npm. Needs gh and GITHUB_TOKEN/GH_TOKEN.
+// Idempotent: a tag already at HEAD is left alone; a tag at another commit is an error.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,14 +10,24 @@ import { pathToFileURL } from 'node:url';
 
 const git = (args, cwd) =>
   execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+const gh = (args, cwd, options = {}) =>
+  (
+    execFileSync('gh', args, { cwd, encoding: 'utf8', ...options }) ?? ''
+  ).trim();
 
-function tagExists(tag, cwd) {
-  const local = git(['tag', '--list', tag], cwd);
-  const remote = git(
-    ['ls-remote', '--tags', 'origin', `refs/tags/${tag}`],
+const REPO = process.env.GITHUB_REPOSITORY ?? '{owner}/{repo}';
+
+/** The commit the remote tag points at, or '' when the tag does not exist. */
+function remoteTagSha(tag, cwd) {
+  return gh(
+    [
+      'api',
+      `repos/${REPO}/git/matching-refs/tags/${tag}`,
+      '--jq',
+      `.[] | select(.ref == "refs/tags/${tag}") | .object.sha`,
+    ],
     cwd,
   );
-  return local !== '' || remote !== '';
 }
 
 /** The CHANGELOG.md text under `## <version>`, up to the next `## ` heading. */
@@ -41,8 +52,7 @@ function createGithubRelease(tag, version, cwd) {
     notes,
     changelogSection(changelog, version) || `Release ${tag}`,
   );
-  execFileSync(
-    'gh',
+  gh(
     [
       'release',
       'create',
@@ -53,27 +63,42 @@ function createGithubRelease(tag, version, cwd) {
       '--notes-file',
       notes,
     ],
+    cwd,
     {
-      cwd,
       stdio: 'inherit',
     },
   );
 }
 
-/** Returns the tag it created, or null when `v<version>` already existed. */
-export function tagRelease(cwd = process.cwd(), env = process.env) {
+/** Returns the tag it created, or null when `v<version>` already pointed at HEAD. */
+export function tagRelease(cwd = process.cwd()) {
   const { version } = JSON.parse(
     readFileSync(join(cwd, 'package.json'), 'utf8'),
   );
   const tag = `v${version}`;
-  if (tagExists(tag, cwd)) {
-    console.log(`${tag} already exists, nothing to do`);
+  const sha = git(['rev-parse', 'HEAD'], cwd);
+  const existing = remoteTagSha(tag, cwd);
+  if (existing === sha) {
+    console.log(`${tag} already exists at ${sha}, nothing to do`);
     return null;
   }
-  git(['-c', 'tag.gpgSign=false', 'tag', tag], cwd);
-  git(['push', 'origin', `refs/tags/${tag}`], cwd);
+  if (existing) {
+    throw new Error(`${tag} already exists at ${existing}, not at ${sha}`);
+  }
+  gh(
+    [
+      'api',
+      `repos/${REPO}/git/refs`,
+      '-f',
+      `ref=refs/tags/${tag}`,
+      '-f',
+      `sha=${sha}`,
+    ],
+    cwd,
+    { stdio: ['ignore', 'ignore', 'inherit'] },
+  );
   console.log(`New tag: ${tag}`);
-  if (env.GITHUB_TOKEN) createGithubRelease(tag, version, cwd);
+  createGithubRelease(tag, version, cwd);
   return tag;
 }
 
