@@ -50,6 +50,14 @@ export class JudgesRepository {
     return matchedCount === 1;
   }
 
+  /** Deletes an offline judge; false when it is unknown or online. */
+  async deleteOffline(name: string): Promise<boolean> {
+    const { deletedCount } = await this.judges
+      .deleteOne({ name, online: false })
+      .exec();
+    return deletedCount === 1;
+  }
+
   /** Submit with `judgeId`: the judge is connected and runs the language (every judge sees the whole data root). */
   async isOnlineFor(name: string, languageKey: string): Promise<boolean> {
     return (

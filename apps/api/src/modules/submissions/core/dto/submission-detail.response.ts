@@ -66,6 +66,8 @@ export class SubmissionViewerResponse implements SubmissionActions {
   canRejudge!: boolean;
   /** Whether `POST /submissions/{id}/reject` is allowed. */
   canReject!: boolean;
+  /** Whether `POST` and `DELETE /submissions/{id}/lock` are allowed. */
+  canLock!: boolean;
 }
 
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
@@ -81,7 +83,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   judgedDate!: Date | null;
   /** When an admin last rejudged it; null if never. */
   rejudgedDate!: Date | null;
-  /** Rejudging is refused after this time. Editors only (the contest's lock setting is staff data); null for everyone else and when the submission never locks. */
+  /** Rejudging is refused after this time (a lock). Editors only (the contest's lock setting is staff data); null for everyone else and when the submission never locks. */
   lockedAfter!: Date | null;
   /** Which actions the caller may use on this submission. */
   viewer!: SubmissionViewerResponse;

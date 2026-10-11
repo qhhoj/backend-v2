@@ -1,8 +1,7 @@
-import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
+import { Controller, Delete, HttpCode, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
-import { BulkRejudgeDto, BulkRejudgeResponse } from './dto/bulk-rejudge.dto';
 import { SubmissionIdParamDto } from '../core/dto/submission-params.dto';
 import { SubmissionActionsService } from './submission-actions.service';
 
@@ -10,28 +9,6 @@ import { SubmissionActionsService } from './submission-actions.service';
 @Controller('api/internal/submissions')
 export class SubmissionActionsController {
   constructor(private readonly actions: SubmissionActionsService) {}
-
-  /**
-   * Rejudge many submissions of a problem
-   *
-   * @remarks
-   * Needs `judge.rejudge_submission` and edit rights on the problem named by
-   * `problem` (code). Matches the problem's submissions by optional `idFrom` and
-   * `idTo`, `languages` and `results`; submissions a judge currently holds and
-   * pending final-submission rows are skipped, and locked ones unless `force` is
-   * set. More than 10 matches also need `judge.rejudge_submission_lot` (403
-   * `forbidden`). With `dryRun` nothing changes and `count` and `allowed` report
-   * what would happen. Otherwise the matches are queued at batch priority and
-   * `count` is how many were reset.
-   */
-  @Post('rejudge')
-  @HttpCode(200)
-  bulkRejudge(
-    @CurrentAuth() auth: AuthContext,
-    @Body() dto: BulkRejudgeDto,
-  ): Promise<BulkRejudgeResponse> {
-    return this.actions.bulkRejudge(auth.principal, dto);
-  }
 
   /**
    * Abort a submission that is waiting or being judged
@@ -87,5 +64,39 @@ export class SubmissionActionsController {
     @Param() { id }: SubmissionIdParamDto,
   ): Promise<void> {
     return this.actions.reject(auth.principal, id);
+  }
+
+  /**
+   * Lock a submission
+   *
+   * @remarks
+   * Needs `judge.lock_submission` and edit rights on the problem (403
+   * `forbidden`). A locked submission is refused by a single rejudge (409
+   * `conflict`) and skipped by bulk rejudges unless they force it. Logged as a
+   * submission revision. Answers 204.
+   */
+  @Post(':id/lock')
+  @HttpCode(204)
+  lock(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { id }: SubmissionIdParamDto,
+  ): Promise<void> {
+    return this.actions.setLock(auth.principal, id, true);
+  }
+
+  /**
+   * Unlock a submission
+   *
+   * @remarks
+   * Same rights as locking. Clears the lock, including one a contest set, so the
+   * submission can be rejudged again. Answers 204.
+   */
+  @Delete(':id/lock')
+  @HttpCode(204)
+  unlock(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { id }: SubmissionIdParamDto,
+  ): Promise<void> {
+    return this.actions.setLock(auth.principal, id, false);
   }
 }

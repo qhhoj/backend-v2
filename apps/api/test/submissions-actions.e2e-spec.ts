@@ -284,7 +284,7 @@ describe('submission actions', () => {
               problem: 'acts',
             }).expect(200),
           ),
-        ).toEqual({ count: 1, dryRun: false, allowed: true });
+        ).toEqual({ count: 1, dryRun: false, allowed: true, sample: [] });
       });
     });
   });
@@ -323,6 +323,7 @@ describe('submission actions', () => {
         count: 11,
         dryRun: false,
         allowed: true,
+        sample: [],
       });
       expect(
         await api.submissions.countDocuments({ status: 'QU', priority: 3 }),
@@ -348,6 +349,7 @@ describe('submission actions', () => {
         count: 2100,
         dryRun: false,
         allowed: true,
+        sample: [],
       });
       const sizes = (await bridgeCommands(api)).map((command) =>
         command.type === 'judge' ? command.submissionIds.length : 0,
@@ -391,6 +393,7 @@ describe('submission actions', () => {
         count: 1,
         dryRun: false,
         allowed: true,
+        sample: [],
       });
       expect((await row(pending)).status).toBe('PD');
       expect((await row(finished)).status).toBe('QU');

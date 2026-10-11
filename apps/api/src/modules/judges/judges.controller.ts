@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -22,12 +23,17 @@ import {
   JudgeResponse,
 } from './dto/judge.response';
 import { JudgesService } from './judges.service';
+import { JudgeQueueResponse } from './queue/dto/judge-queue.response';
+import { JudgeQueueService } from './queue/judge-queue.service';
 
 @ApiTags('Admin: judges & languages')
 @RequirePermission('judge.change_judge')
 @Controller('api/internal/judges')
 export class JudgesController {
-  constructor(private readonly judges: JudgesService) {}
+  constructor(
+    private readonly judges: JudgesService,
+    private readonly queue: JudgeQueueService,
+  ) {}
 
   /**
    * List judge servers
@@ -40,6 +46,21 @@ export class JudgesController {
   @Get()
   list(): Promise<JudgeResponse[]> {
     return this.judges.list();
+  }
+
+  /**
+   * Get the judging queue's health
+   *
+   * @remarks
+   * Needs `judge.change_judge`. Counts queued (QU), handed-out (P) and grading
+   * (G) submissions; when the longest-waiting queued one was submitted or
+   * rejudged; queued counts per priority (0 contest, 1 normal, 2 rejudge, 3
+   * batch rejudge), per language with how many usable online judges run it (0
+   * means that language cannot drain), and per judge they are pinned to.
+   */
+  @Get('queue')
+  queueSummary(): Promise<JudgeQueueResponse> {
+    return this.queue.summary();
   }
 
   /**
@@ -72,6 +93,21 @@ export class JudgesController {
     @Body(new RefuseNullFieldsPipe()) dto: UpdateJudgeDto,
   ): Promise<JudgeResponse> {
     return this.judges.update(name, dto);
+  }
+
+  /**
+   * Delete a judge server
+   *
+   * @remarks
+   * Needs `judge.change_judge`. Only an offline judge can be deleted: 409
+   * `conflict` (issue `judge_online`) while it is connected, 404 `not_found` for
+   * an unknown name. Queued submissions pinned to it fall back to any judge.
+   * Answers 204.
+   */
+  @Delete(':name')
+  @HttpCode(204)
+  remove(@Param() { name }: JudgeNameParamDto): Promise<void> {
+    return this.judges.remove(name);
   }
 
   /**

@@ -203,6 +203,33 @@ export class SubmissionsRepository {
     return matchedCount === 1;
   }
 
+  /** The newest `limit` matches, without the error log. */
+  newest(
+    filter: FilterQuery<Submission>,
+    limit: number,
+  ): Promise<SubmissionDocument[]> {
+    return this.submissions
+      .find(filter, { error: 0 })
+      .sort({ _id: -1 })
+      .limit(limit)
+      .exec();
+  }
+
+  /** Distinct problem ids of the matches. */
+  async problemIdsOf(filter: FilterQuery<Submission>): Promise<string[]> {
+    const ids: unknown[] = await this.submissions
+      .distinct('problem', filter)
+      .exec();
+    return ids.map((id) => uuidStr(id));
+  }
+
+  /** Sets or clears the lock. */
+  async setLockedAfter(id: string, lockedAfter: Date | null): Promise<void> {
+    await this.submissions
+      .updateOne({ _id: id }, { $set: { lockedAfter } })
+      .exec();
+  }
+
   countMatching(filter: FilterQuery<Submission>): Promise<number> {
     return this.submissions.countDocuments(filter).exec();
   }

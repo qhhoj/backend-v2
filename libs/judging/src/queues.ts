@@ -74,6 +74,20 @@ export const enqueueRescore = async (
   );
 };
 
+/** `enqueueRescore` for many problems in one round trip (an admin bulk rescore). */
+export const enqueueRescores = async (
+  queue: Queue<ProblemRescoreJob>,
+  problemIds: readonly string[],
+): Promise<void> => {
+  await queue.addBulk(
+    problemIds.map((problemId) => ({
+      name: PROBLEM_RESCORE_JOB,
+      data: { problemId },
+      opts: { ...JOB_RETRY, ...JOB_RETENTION },
+    })),
+  );
+};
+
 /** Worker-internal: the scheduled sweep that recomputes what lost graded jobs left stale. */
 export const EFFECTS_SWEEP_QUEUE = 'effects-sweep';
 export const EFFECTS_SWEEP_JOB = 'sweep';

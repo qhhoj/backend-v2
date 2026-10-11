@@ -7,8 +7,8 @@ import { CONTEST_RESCORE_QUEUE, enqueueContestRescore } from '@libs/contests';
 import type { ContestRescoreJob } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
-import type { BulkRejudgeResponse } from '../../submissions/actions/dto/bulk-rejudge.dto';
-import { SubmissionActionsService } from '../../submissions/actions/submission-actions.service';
+import type { BulkRejudgeResponse } from '../../submissions/batch/dto/submission-batch.dto';
+import { SubmissionBatchService } from '../../submissions/batch/submission-batch.service';
 import type { ContestDocument } from '../core/contests.repository';
 import { ContestsService } from '../core/contests.service';
 import type { QueuedResponse } from '../core/dto/queued.response';
@@ -20,28 +20,25 @@ export class ContestProblemOpsService {
   constructor(
     private readonly contestsService: ContestsService,
     private readonly problems: ProblemsRepository,
-    private readonly submissionActions: SubmissionActionsService,
+    private readonly batches: SubmissionBatchService,
     @InjectQueue(CONTEST_RESCORE_QUEUE)
     private readonly rescores: Queue<ContestRescoreJob>,
   ) {}
 
-  /** The bulk-rejudge rules (limit, locked, in-flight, dry run) over the problem's submissions in this contest only. */
+  /** The bulk-rejudge rules (limit, locked, in-flight, dry run) over the problem's submissions in this contest only; logged like every batch. */
   async rejudge(
     principal: Principal,
     key: string,
     code: string,
     options: ContestProblemRejudgeDto,
   ): Promise<BulkRejudgeResponse> {
-    const { contest, problemId } = await this.contestProblem(
-      principal,
-      key,
-      code,
-    );
-    return this.submissionActions.contestProblemRejudge(
-      principal,
-      { contestId: contest._id, problemId },
-      options,
-    );
+    await this.contestProblem(principal, key, code);
+    return this.batches.rejudge(principal, {
+      contest: key,
+      problem: code,
+      force: options.force,
+      dryRun: options.dryRun,
+    });
   }
 
   /** Queues a rescore of the problem's contest submissions and of the participations that sent one. */

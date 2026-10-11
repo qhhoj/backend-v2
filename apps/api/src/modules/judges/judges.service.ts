@@ -79,6 +79,21 @@ export class JudgesService {
     return this.one(name);
   }
 
+  /** Legacy: only an offline judge may be deleted. Queued submissions pinned to it fall back to any judge at the bridge's next resync. */
+  async remove(name: string): Promise<void> {
+    if (
+      JUDGE_NAME_PATTERN.test(name) &&
+      (await this.judges.deleteOffline(name))
+    )
+      return;
+    await this.one(name);
+    throw conflictIssue(
+      'name',
+      'judge_online',
+      'Disconnect the judge before deleting it.',
+    );
+  }
+
   async disconnect(name: string, isForced: boolean): Promise<void> {
     await this.one(name);
     await this.commands.publish({

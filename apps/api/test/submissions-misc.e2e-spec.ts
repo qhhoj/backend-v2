@@ -1,7 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { SUBMISSION_GRADED_QUEUE } from '@libs/judging';
-import type { SubmissionGradedJob } from '@libs/judging';
+import { PROBLEM_RESCORE_QUEUE, SUBMISSION_GRADED_QUEUE } from '@libs/judging';
+import type { ProblemRescoreJob, SubmissionGradedJob } from '@libs/judging';
 import type { Submission } from '@libs/database';
 import {
   authed,
@@ -40,10 +40,20 @@ afterAll(() => api.teardown());
 
   interface DetailBody {
     lockedAfter: string | null;
-    viewer: { canAbort: boolean; canRejudge: boolean; canReject: boolean };
+    viewer: {
+      canAbort: boolean;
+      canRejudge: boolean;
+      canReject: boolean;
+      canLock: boolean;
+    };
   }
 
-  const NO_ACTIONS = { canAbort: false, canRejudge: false, canReject: false };
+  const NO_ACTIONS = {
+    canAbort: false,
+    canRejudge: false,
+    canReject: false,
+    canLock: false,
+  };
 
   describe('submission detail action flags', () => {
     beforeAll(() => api.reset());
@@ -94,6 +104,7 @@ afterAll(() => api.teardown());
               'judge.edit_own_problem',
               'judge.rejudge_submission',
               'judge.reject_submission',
+              'judge.lock_submission',
             ],
           },
         ],
@@ -136,6 +147,7 @@ afterAll(() => api.teardown());
         canAbort: false,
         canRejudge: true,
         canReject: true,
+        canLock: true,
       });
       expect(body.lockedAfter).toBeNull();
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
@@ -167,10 +179,31 @@ afterAll(() => api.teardown());
         canAbort: false,
         canRejudge: false,
         canReject: true,
+        canLock: true,
       });
       await post('manager', `${SUBMISSIONS}/${id}/rejudge`)
         .expect(409)
         .expect(errorCode('conflict'));
+    });
+
+    it('lets an editor with judge.lock_submission lock a submission against rejudges and unlock it again', async () => {
+      const id = await seed();
+      await post('manager', `${SUBMISSIONS}/${id}/lock`).expect(204);
+      expect((await detailOf('manager', id)).viewer.canRejudge).toBe(false);
+      await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(409);
+      await authed(
+        api.http().delete(`${SUBMISSIONS}/${id}/lock`),
+        sessions.manager,
+      ).expect(204);
+      expect((await detailOf('manager', id)).lockedAfter).toBeNull();
+      await post('manager', `${SUBMISSIONS}/${id}/rejudge`).expect(204);
+    });
+
+    it('refuses a lock to someone without edit rights on the problem, with 403', async () => {
+      const id = await seed();
+      await post('permitted', `${SUBMISSIONS}/${id}/lock`)
+        .expect(403)
+        .expect(errorCode('forbidden'));
     });
   });
 }
@@ -529,6 +562,7 @@ afterAll(() => api.teardown());
     count: number;
     dryRun: boolean;
     allowed: boolean;
+    sample: Array<{ id: string }>;
   }
 
   describe('bulk rejudge dry run', () => {
@@ -538,6 +572,7 @@ afterAll(() => api.teardown());
     let sessions: Record<string, TestSession>;
     let owner: string;
     let problemId: string;
+    const ids: Record<string, string> = {};
     const bulk = (who: string, body: object) =>
       authed(api.http().post(REJUDGE_PATH), sessions[who]).send({
         problem: 'dry',
@@ -590,9 +625,20 @@ afterAll(() => api.teardown());
             ],
           },
         ],
+        [
+          'siteWide',
+          {
+            permissions: ['judge.edit_all_problem', 'judge.rejudge_submission'],
+          },
+        ],
+        [
+          'contestEditor',
+          {
+            permissions: ['judge.edit_own_contest', 'judge.rejudge_submission'],
+          },
+        ],
       ];
       sessions = {};
-      const ids: Record<string, string> = {};
       for (const [name, extra] of roles) {
         ids[name] = (await createUserWith(api, name, extra))._id;
         sessions[name] = await loginAs(api, ids[name]);
@@ -620,7 +666,8 @@ afterAll(() => api.teardown());
       const body = dataOf<BulkRejudgeBody>(
         await bulk('manager', { dryRun: true }).expect(200),
       );
-      expect(body).toEqual({ count: 2, dryRun: true, allowed: true });
+      expect(body).toMatchObject({ count: 2, dryRun: true, allowed: true });
+      expect(body.sample).toHaveLength(2);
       expect(await statusesOf()).toEqual(['D', 'D']);
       expect(await bridgeCommands(api)).toEqual([]);
       expect(await graded.getJobs(['waiting'])).toEqual([]);
@@ -664,7 +711,7 @@ afterAll(() => api.teardown());
       const preview = dataOf<BulkRejudgeBody>(
         await bulk('manager', { dryRun: true }).expect(200),
       );
-      expect(preview).toEqual({
+      expect(preview).toMatchObject({
         count: BULK_REJUDGE_LIMIT + 1,
         dryRun: true,
         allowed: false,
@@ -680,7 +727,7 @@ afterAll(() => api.teardown());
         dataOf<BulkRejudgeBody>(
           await bulk('lot', { dryRun: true }).expect(200),
         ),
-      ).toEqual({
+      ).toMatchObject({
         count: BULK_REJUDGE_LIMIT + 1,
         dryRun: true,
         allowed: true,
@@ -693,9 +740,133 @@ afterAll(() => api.teardown());
       const body = dataOf<BulkRejudgeBody>(
         await bulk('manager', {}).expect(200),
       );
-      expect(body).toEqual({ count: 2, dryRun: false, allowed: true });
+      expect(body).toEqual({
+        count: 2,
+        dryRun: false,
+        allowed: true,
+        sample: [],
+      });
       expect(await statusesOf()).toEqual(['QU', 'QU']);
       expect(await bridgeCommands(api)).toHaveLength(1);
+    });
+
+    it('logs a real run with who ran it, and lists it as a recent batch', async () => {
+      await insertRows(1);
+      await bulk('manager', { results: ['AC'] }).expect(200);
+      const recent = dataOf<
+        Array<{ action: string; count: number; filter: object; user: object }>
+      >(
+        await authed(
+          api
+            .http()
+            .get(`${REJUDGE_PATH.replace('rejudge', 'batches/recent')}`),
+          sessions.manager,
+        ).expect(200),
+      );
+      expect(recent[0]).toMatchObject({
+        action: 'rejudge',
+        count: 1,
+        filter: { problem: 'dry', results: ['AC'] },
+        user: { username: 'manager' },
+      });
+    });
+
+    it('needs judge.edit_all_problem for a batch with no problem or contest', async () => {
+      await insertRows(1);
+      await authed(api.http().post(REJUDGE_PATH), sessions.manager)
+        .send({ dryRun: true })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      const body = dataOf<BulkRejudgeBody>(
+        await authed(api.http().post(REJUDGE_PATH), sessions.siteWide)
+          .send({ dryRun: true, user: 'owner' })
+          .expect(200),
+      );
+      expect(body.count).toBe(1);
+    });
+
+    it("lets a contest's editor rejudge its submissions only, and refuses a non-editor", async () => {
+      const contest = await createContest(api, {
+        authors: [ids.contestEditor],
+      });
+      await insertRows(1, { contest: contest._id });
+      await insertRows(2);
+      const body = dataOf<BulkRejudgeBody>(
+        await bulk('contestEditor', {
+          contest: contest.key,
+          dryRun: true,
+        }).expect(200),
+      );
+      expect(body.count).toBe(1);
+      await bulk('manager', { contest: contest.key, dryRun: true })
+        .expect(403)
+        .expect(errorCode('forbidden'));
+    });
+
+    it('filters by the judge that graded the submissions', async () => {
+      await insertRows(2, { judgedOn: 'alpha' });
+      await insertRows(1, { judgedOn: 'beta' });
+      const body = dataOf<BulkRejudgeBody>(
+        await bulk('manager', { judgedOn: 'alpha', dryRun: true }).expect(200),
+      );
+      expect(body.count).toBe(2);
+    });
+  });
+}
+
+// Bulk rescore
+{
+  const RESCORE_PATH = '/api/internal/submissions/rescore';
+
+  describe('bulk rescore', () => {
+    beforeAll(() => api.reset());
+    let catalog: Catalog;
+    let rescores: Queue<ProblemRescoreJob>;
+    let manager: TestSession;
+    let problemId: string;
+
+    beforeAll(async () => {
+      catalog = await seedCatalog(api);
+      rescores = api.app.get(getQueueToken(PROBLEM_RESCORE_QUEUE));
+      const managerId = (
+        await createUserWith(api, 'manager', {
+          permissions: ['judge.edit_own_problem', 'judge.rejudge_submission'],
+        })
+      )._id;
+      manager = await loginAs(api, managerId);
+      problemId = (
+        await createProblem(api, catalog, {
+          code: 'resc',
+          authors: [managerId],
+        })
+      )._id;
+      await api.submissions.insertMany(
+        ['D', 'D', 'QU'].map((status) => ({
+          user: managerId,
+          problem: problemId,
+          language: catalog.languages.cpp,
+          status,
+        })),
+      );
+    });
+
+    it('counts finished matches on a dry run and queues one problem rescore on a real run', async () => {
+      await rescores.obliterate({ force: true });
+      const send = (body: object) =>
+        authed(api.http().post(RESCORE_PATH), manager).send({
+          problem: 'resc',
+          ...body,
+        });
+      expect(dataOf(await send({ dryRun: true }).expect(200))).toEqual({
+        count: 2,
+        problems: 1,
+        contests: 0,
+        dryRun: true,
+      });
+      expect(await rescores.getJobs(['waiting'])).toEqual([]);
+      await send({}).expect(200);
+      const jobs = await rescores.getJobs(['waiting']);
+      expect(jobs.map((job) => job.data)).toEqual([{ problemId }]);
     });
   });
 }
