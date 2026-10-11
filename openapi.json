@@ -4619,6 +4619,15 @@
             "nullable": true,
             "type": "string"
           },
+          "failedStep": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonSyncStep"
+              }
+            ],
+            "description": "Where a failed job stopped: `checking` (before any work), a progress step, `saving` (the database write) or `finishing` (data files after the write); null unless failed, and for jobs that failed before it was recorded.",
+            "nullable": true
+          },
           "id": {
             "description": "Job id.",
             "type": "string"
@@ -4662,6 +4671,7 @@
         },
         "required": [
           "step",
+          "failedStep",
           "id",
           "state",
           "progress",
@@ -6401,6 +6411,12 @@
       },
       "PolygonLatestPackageResponse": {
         "properties": {
+          "createdAt": {
+            "description": "When Polygon started building it; null without a package.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
           "id": {
             "nullable": true,
             "type": "number"
@@ -6419,6 +6435,7 @@
         },
         "required": [
           "state",
+          "createdAt",
           "id",
           "revision"
         ],
@@ -6550,6 +6567,12 @@
           "owner": {
             "type": "string"
           },
+          "packageCreatedAt": {
+            "description": "Polygon's build time of that package; null for links made before it was recorded.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
           "packageId": {
             "type": "number"
           },
@@ -6560,6 +6583,11 @@
           "revision": {
             "description": "Revision and package the problem's content was last taken from.",
             "type": "number"
+          },
+          "title": {
+            "description": "Statement title taken from that package; null for links made before it was recorded.",
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -6569,6 +6597,8 @@
           "owner",
           "revision",
           "packageId",
+          "packageCreatedAt",
+          "title",
           "linkedAt",
           "lastSyncAt",
           "lastSyncError",
@@ -6671,10 +6701,140 @@
         ],
         "type": "object"
       },
+      "PolygonSyncPurpose": {
+        "enum": [
+          "link",
+          "sync"
+        ],
+        "type": "string"
+      },
       "PolygonSyncResult": {
         "enum": [
           "failed",
           "ok"
+        ],
+        "type": "string"
+      },
+      "PolygonSyncRunResponse": {
+        "properties": {
+          "code": {
+            "description": "Code the job imported into.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Why it failed, as shown to the requester; null when it succeeded.",
+            "nullable": true,
+            "type": "string"
+          },
+          "failedStep": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonSyncStep"
+              }
+            ],
+            "nullable": true
+          },
+          "finishedAt": {
+            "description": "When the job ended.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "Run id.",
+            "type": "string"
+          },
+          "packageCreatedAt": {
+            "description": "Polygon's build time of the package; null for jobs queued before it was recorded.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "packageId": {
+            "type": "number"
+          },
+          "polygonName": {
+            "description": "Polygon short name.",
+            "type": "string"
+          },
+          "polygonProblemId": {
+            "description": "Polygon problem id.",
+            "type": "number"
+          },
+          "problemId": {
+            "description": "Id of the QHHOJ problem; null when a first import failed before creating it.",
+            "nullable": true,
+            "type": "string"
+          },
+          "purpose": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonSyncPurpose"
+              }
+            ]
+          },
+          "requestedBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "Who started it (the linking user for an automatic sync); null when the account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonSyncResult"
+              }
+            ]
+          },
+          "revision": {
+            "type": "number"
+          },
+          "trigger": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonSyncTrigger"
+              }
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "trigger",
+          "result",
+          "failedStep",
+          "id",
+          "problemId",
+          "code",
+          "polygonProblemId",
+          "polygonName",
+          "revision",
+          "packageId",
+          "packageCreatedAt",
+          "requestedBy",
+          "error",
+          "finishedAt"
+        ],
+        "type": "object"
+      },
+      "PolygonSyncStep": {
+        "description": "Where a failed job stopped: `checking` (before any work), a progress step, `saving` (the database write) or `finishing` (data files after the write); null unless failed, and for jobs that failed before it was recorded.",
+        "enum": [
+          "checking",
+          "downloading",
+          "finishing",
+          "saving",
+          "statements",
+          "tests"
+        ],
+        "type": "string"
+      },
+      "PolygonSyncTrigger": {
+        "enum": [
+          "auto",
+          "manual"
         ],
         "type": "string"
       },
@@ -24862,6 +25022,89 @@
         ]
       }
     },
+    "/api/internal/polygon/syncs": {
+      "get": {
+        "description": "Needs `judge.import_polygon_package` and `judge.edit_all_problem` (the\nruns name every problem). Every finished Polygon import and sync job, newest\nfirst: problem code, Polygon problem, revision, package and its build time,\nfirst import or sync, manual or automatic, who started it, the result and,\nfor a failure, the step it stopped at and the error shown to the requester.\nPaged, default 20 per page (max 100). Errors: 403 `forbidden`.",
+        "operationId": "PolygonController_syncs",
+        "parameters": [
+          {
+            "description": "Page number, starting at 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Runs per page, 1-100.",
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/PolygonSyncRunResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the Polygon sync history of every problem",
+        "tags": [
+          "Problem editing"
+        ],
+        "x-enveloped": true
+      }
+    },
     "/api/internal/polygon/test": {
       "post": {
         "description": "Needs `judge.change_settings`. Calls Polygon's `problems.list` with the saved\nkey and secret and answers how many problems the account can read. Errors:\n409 `polygon_not_connected` (key or secret unset), 502\n`polygon_unauthorized` (wrong key or secret), 502 `polygon_clock_skew` (the\nserver clock is off by more than Polygon allows), 503 `polygon_unavailable`.",
@@ -27875,6 +28118,98 @@
         "tags": [
           "Problem editing"
         ]
+      }
+    },
+    "/api/internal/problems/{code}/polygon/syncs": {
+      "get": {
+        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Every finished Polygon import and sync job of the problem, newest\nfirst, also after an unlink: revision, package and its build time, first\nimport or sync, manual or automatic, who started it, the result and, for a\nfailure, the step it stopped at and the error shown to the requester. Paged,\ndefault 20 per page (max 100). Errors: 404 `not_found`, 403 `forbidden`.",
+        "operationId": "ProblemPolygonLinkController_syncs",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number, starting at 1.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Runs per page, 1-100.",
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/PolygonSyncRunResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List a problem's Polygon sync history",
+        "tags": [
+          "Problem editing"
+        ],
+        "x-enveloped": true
       }
     },
     "/api/internal/problems/{code}/purge-now": {
