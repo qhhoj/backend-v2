@@ -6,7 +6,10 @@ import { CONTRIBUTION_POINTS_QUEUE } from '@libs/community';
 import type { ContributionPointsJob } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { profileQueries } from '@libs/database/testing';
-import type { CommentPageResponse } from '../src/modules/comments/core/dto/comment.response';
+import type {
+  CommentDetailResponse,
+  CommentPageResponse,
+} from '../src/modules/comments/core/dto/comment.response';
 import type { CommentVoteEntryResponse } from '../src/modules/comments/moderation/dto/comment-vote-entry.response';
 import type { VoteResponse } from '../src/modules/contributions/dto/vote.response';
 import {
@@ -17,7 +20,12 @@ import {
   writer,
 } from './community-fixtures';
 import { clearRateLimits } from './contest-fixtures';
-import { authed, loginAs } from './problem-fixtures';
+import {
+  authed,
+  createProblem,
+  loginAs,
+  seedCatalog,
+} from './problem-fixtures';
 import type { TestSession } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -112,6 +120,42 @@ describe('comment votes and moderation', () => {
     await vote(comment._id, session, 1)
       .expect(429)
       .expect(errorCode('rate_limited'));
+  });
+
+  it('answers a hide on a problem page with the hidden comment, which the admin still lists as hidden', async () => {
+    const { user: author } = await person();
+    const { user: admin, session: adminSession } = await person({
+      isSuperuser: true,
+    });
+    const problem = await createProblem(api, await seedCatalog(api), {
+      code: 'hide_on_problem',
+    });
+    const comment = await createComment(api, {
+      page: { type: 'problem', id: problem._id },
+      author: author._id,
+    });
+    const answer = dataOf<CommentDetailResponse>(
+      await hide(comment._id, adminSession, true).expect(200),
+    );
+    expect(answer).toMatchObject({
+      id: comment._id,
+      hidden: true,
+      hiddenBy: { id: admin._id },
+      page: { type: 'problem', key: 'hide_on_problem' },
+    });
+    const listed = dataOf<CommentPageResponse>(
+      await authed(
+        api.http().get(commentPageUrl('problem', 'hide_on_problem')),
+        adminSession,
+      ).expect(200),
+    );
+    expect(
+      listed.comments.map(({ id, hidden, hiddenBy }) => ({
+        id,
+        hidden,
+        hiddenBy: hiddenBy?.id,
+      })),
+    ).toEqual([{ id: comment._id, hidden: true, hiddenBy: admin._id }]);
   });
 
   it('hides and unhides exactly the subtree and recomputes its authors', async () => {
