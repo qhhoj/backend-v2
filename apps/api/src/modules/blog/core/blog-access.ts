@@ -75,7 +75,7 @@ const authorTabFilter = (
     ? { authors: authorId, organization: null }
     : { authors: authorId, ...publishedPersonalFilter(now) };
 
-/** Legacy `OrganizationHome`: `edit_all_post` sees every post, admins visible or own ones, members published ones, anyone else none (null). */
+/** Legacy `OrganizationHome`: `edit_all_post` sees every post, admins published ones plus their own they may edit (legacy also listed other admins' scheduled ones), members published ones, anyone else none (null). */
 function organizationFilter(
   principal: Principal | null,
   organization: OrganizationAccessView,
@@ -86,11 +86,50 @@ function organizationFilter(
   if (has(principal, 'judge.edit_all_post'))
     return { ...base, visible: { $in: [true, false] } };
   if (principal && OrganizationAccess.canAdminister(principal, organization))
-    return { ...base, $or: [{ visible: true }, { authors: principal.userId }] };
+    return {
+      ...base,
+      $or: [
+        { visible: true, publishOn: { $lte: now } },
+        // Their own unpublished posts only while they may edit them (`canEdit`).
+        ...(OrganizationAccess.isAdmin(principal, organization) &&
+        has(principal, 'judge.edit_organization_post')
+          ? [{ authors: principal.userId }]
+          : []),
+      ],
+    };
   if (OrganizationAccess.isMember(principal, organization.id))
     return { ...base, visible: true, publishOn: { $lte: now } };
   return null;
 }
+
+/**
+ * "My drafts": the viewer's own drafts and scheduled posts that they may still edit. `organizationIds` are the
+ * organizations the viewer admins; organization posts count only with `edit_organization_post`, or any with
+ * `edit_all_post` (the `canEdit` rule).
+ */
+const ownDraftsFilter = (
+  principal: Principal,
+  organizationIds: readonly string[],
+  now: Date,
+): FilterQuery<BlogPost> => {
+  const editableOrganizations = has(principal, 'judge.edit_all_post')
+    ? {}
+    : {
+        organization: {
+          $in: [
+            null,
+            ...(has(principal, 'judge.edit_organization_post')
+              ? organizationIds
+              : []),
+          ],
+        },
+      };
+  return {
+    authors: principal.userId,
+    $or: [{ visible: false }, { publishOn: { $gt: now } }],
+    ...editableOrganizations,
+  };
+};
 
 export const BlogAccess = {
   accessView,
@@ -101,4 +140,5 @@ export const BlogAccess = {
   publishedPersonalFilter,
   authorTabFilter,
   organizationFilter,
+  ownDraftsFilter,
 };
