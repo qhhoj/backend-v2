@@ -1,7 +1,7 @@
 {
   "source": "judge-v2",
-  "tag": "proto-v1.1",
-  "commit": "a71558469eabc245a916faf37e10d82082f2ee1e",
+  "tag": "6e85951",
+  "commit": "6e85951428a463644fe14b9d486f5dc8a3c37dc4",
   "files": {
     "compat/v1.shape.json": "bef3e4481bc464a23127ab40a543c701e5fb2ea4a467f0328b9ab7218acaf55e",
     "conformance/matcher-cases.json": "328c8a084d23185ba634c5223becb48edc3a5a3dab277489612548d6d5d19eea",
@@ -91,7 +91,7 @@
     "golden/judge-pong.json": "d72c678ad9a9b5467e89f133b3a8e865ed34789965e2225bbfd4120c12b96019",
     "golden/judge-started.bin": "9a39f07f5a772697ebefba032cef9cd3e26b2c594a9f52fd1776805b9cda92c7",
     "golden/judge-started.json": "09b2cb8a3a8954c95c66f678d3c896b407aa408a16da86c56faa1b5d1e4267e0",
-    "qhhoj/judge/v1/judge.proto": "7394f7dae5744b1fefb29cc69c065363c828e2148d0cfe547a5942d296792471",
-    "version.json": "cc200f9acc052ea6136e4f347aa40089c0367f67c319e57ad3256e27dbfdde39"
+    "qhhoj/judge/v1/judge.proto": "c37ac13cc41bde72f51340fe6dc9cdd9cb34a6980b5cae3a94403de63681b086",
+    "version.json": "a17047ea2845ab8d5b907bac092b0149ecf9656425ce810a24e912e6028499fa"
   }
 }
