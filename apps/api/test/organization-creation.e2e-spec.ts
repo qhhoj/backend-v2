@@ -68,6 +68,9 @@ describe('creating problems and contests for an organization', () => {
       api.http().post(organizationUrl(slug, '/contests')),
       sessions[who],
     ).send(body);
+  const editorOf = (answer: { body: unknown }) =>
+    (answer.body as { data: { editor: { canPublishToMembers: boolean } } }).data
+      .editor;
   const storedProblem = (code: string) => api.problems.findOne({ code }).lean();
 
   beforeAll(async () => {
@@ -173,6 +176,11 @@ describe('creating problems and contests for an organization', () => {
         .send({ isPublic: true })
         .expect(200);
       expect((await storedProblem('thptdemo_bai1'))?.isPublic).toBe(true);
+      const detail = await authed(
+        api.http().get('/api/internal/problems/thptdemo_bai1'),
+        sessions.teacher,
+      ).expect(200);
+      expect(editorOf(detail).canPublishToMembers).toBe(true);
     });
 
     it('keeps the other staff gates on an organization create', async () => {
@@ -226,6 +234,11 @@ describe('creating problems and contests for an organization', () => {
         .send({ isPublic: true })
         .expect(403);
       expect((await storedProblem('thptdemo_shared'))?.isPublic).toBe(false);
+      const detail = await authed(
+        api.http().get('/api/internal/problems/thptdemo_shared'),
+        sessions.teacher,
+      ).expect(200);
+      expect(editorOf(detail).canPublishToMembers).toBe(false);
     });
 
     it('leaves the code of a problem that is not organization-private alone', async () => {
