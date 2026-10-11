@@ -20,7 +20,7 @@ export class ProblemBulkVisibilityController {
    * rights on each, every change writes a revision and rescores. With
    * `setDateToNow` a publish also sets the publication date to now (needs
    * `judge.edit_all_problem`). A refused problem is reported as `failed` with
-   * the PATCH's error code and does not stop the others. Limited to 20 runs per
+   * the PATCH's error code (`internal_error` for an unexpected failure) and does not stop the others. Limited to 20 runs per
    * hour per user (429 `rate_limited`).
    */
   @RequirePermission('judge.change_public_visibility')
