@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '@libs/auth';
 import { USER_DATA_QUEUE } from '@libs/community';
 import { RateLimitService } from '@libs/common';
+import { AuthApiModule } from '../auth/auth-api.module';
 import { BlogApiModule } from '../blog/blog-api.module';
 import { CommentsApiModule } from '../comments/comments-api.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
@@ -16,6 +17,13 @@ import { LeaderboardsService } from './leaderboards/leaderboards.service';
 import { UserAdminController } from './admin/user-admin.controller';
 import { UserAdminRepository } from './admin/user-admin.repository';
 import { UserAdminService } from './admin/user-admin.service';
+import { UserCreationController } from './creation/user-creation.controller';
+import { UserCreationService } from './creation/user-creation.service';
+import { UserRenameService } from './editing/user-rename.service';
+import { UserCredentialsService } from './editing/user-credentials.service';
+import { UserEditingController } from './editing/user-editing.controller';
+import { UserMembershipEditor } from './editing/user-membership-editor';
+import { UserProfileEditingService } from './editing/user-profile-editing.service';
 import { UserModerationController } from './moderation/user-moderation.controller';
 import { UserModerationService } from './moderation/user-moderation.service';
 import { ProfileController } from './profile/profile.controller';
@@ -27,6 +35,7 @@ import { UserPagesService } from './pages/user-pages.service';
 @Module({
   imports: [
     AuthModule,
+    AuthApiModule,
     BlogApiModule,
     CommentsApiModule,
     ContestAccessModule,
@@ -41,6 +50,8 @@ import { UserPagesService } from './pages/user-pages.service';
     UserModerationController,
     UserDataController,
     UserAdminController,
+    UserEditingController,
+    UserCreationController,
   ],
   providers: [
     LeaderboardsRepository,
@@ -52,6 +63,11 @@ import { UserPagesService } from './pages/user-pages.service';
     UserDataService,
     UserAdminRepository,
     UserAdminService,
+    UserProfileEditingService,
+    UserMembershipEditor,
+    UserRenameService,
+    UserCreationService,
+    UserCredentialsService,
     RateLimitService,
   ],
   exports: [LeaderboardsRepository, UserPagesRepository],

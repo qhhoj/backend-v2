@@ -2,9 +2,12 @@ import { CONTEST_CHEATING_BAN_REASON } from '../src/modules/contests/participati
 
 import { authed, createUserWith, loginAs } from './problem-fixtures';
 
+import { createOrganization } from './organization-fixtures';
+
 import {
   setupApiTest,
   errorCode,
+  issueCodes,
   createUser,
   sessionCookie,
   TEST_ENV,
@@ -642,6 +645,332 @@ afterAll(() => api.teardown());
       expect(
         listed.find((client) => client.id === created.id)?.revokedAt,
       ).not.toBeNull();
+    });
+  });
+}
+
+// staff user editing
+{
+  const USER = (name: string) => `/api/internal/admin/users/${name}`;
+  const OLD = 'correct horse battery';
+
+  describe('staff user editing', () => {
+    beforeAll(() => api.reset());
+    let editor: TestSession;
+    let admin: TestSession;
+    const setPassword = (
+      name: string,
+      body: Record<string, string>,
+      session = admin,
+    ) => authed(api.http().post(`${USER(name)}/password`), session).send(body);
+
+    beforeAll(async () => {
+      editor = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'editor', {
+            permissions: ['judge.change_profile'],
+          })
+        )._id,
+      );
+      admin = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'admin', {
+            permissions: ['judge.change_profile', 'auth.change_user'],
+          })
+        )._id,
+      );
+      await createUserWith(api, 'root', { isSuperuser: true });
+    });
+
+    it('needs change_profile to read, auth.change_user for credentials and e-mail, and a superuser to touch a superuser', async () => {
+      await createUserWith(api, 'carol');
+      const plain = await loginAs(
+        api,
+        (await createUserWith(api, 'plain'))._id,
+      );
+      await authed(api.http().get(`${USER('carol')}/profile`), plain).expect(
+        403,
+      );
+      await authed(api.http().get(`${USER('carol')}/profile`), editor).expect(
+        200,
+      );
+      await authed(api.http().patch(`${USER('carol')}/profile`), editor)
+        .send({ email: 'new@example.com' })
+        .expect(403)
+        .expect(issueCodes(['email_not_editable']));
+      await setPassword(
+        'carol',
+        { currentPassword: OLD, newPassword: 'fresh passphrase 1' },
+        editor,
+      ).expect(403);
+      await authed(
+        api.http().post(`${USER('carol')}/password-reset`),
+        editor,
+      ).expect(403);
+      await authed(api.http().get(`${USER('root')}/profile`), admin).expect(
+        403,
+      );
+      await authed(api.http().patch(`${USER('root')}/profile`), admin)
+        .send({ displayName: 'x' })
+        .expect(403);
+      await setPassword('admin', {
+        currentPassword: OLD,
+        newPassword: 'fresh passphrase 1',
+      }).expect(403);
+      const superuser = await loginAs(
+        api,
+        (await createUserWith(api, 'root2', { isSuperuser: true }))._id,
+      );
+      await authed(api.http().patch(`${USER('root')}/profile`), superuser)
+        .send({ displayName: 'Root' })
+        .expect(200);
+    });
+
+    it("requires the admin's own password, then revokes the user's sessions and API token and audits without the secret", async () => {
+      const target = await createUserWith(api, 'dave');
+      const targetSession = await loginAs(api, target._id);
+      const { token, hash } = generateApiToken(
+        target._id,
+        TEST_ENV.TOKEN_SECRET,
+      );
+      await api.users.updateOne({ _id: target._id }, { apiTokenHash: hash });
+      const fresh = 'brand new passphrase 7';
+
+      await setPassword('dave', {
+        currentPassword: 'wrong guess',
+        newPassword: fresh,
+      })
+        .expect(400)
+        .expect(errorCode('invalid_credentials'));
+      await setPassword('dave', {
+        currentPassword: OLD,
+        newPassword: 'dave1234',
+      })
+        .expect(400)
+        .expect(issueCodes(['password_similar_to_identity']));
+      await authed(
+        api.http().get('/api/internal/profile'),
+        targetSession,
+      ).expect(200);
+
+      await setPassword('dave', {
+        currentPassword: OLD,
+        newPassword: fresh,
+      }).expect(204);
+      await authed(
+        api.http().get('/api/internal/profile'),
+        targetSession,
+      ).expect(401);
+      await api
+        .http()
+        .get('/api/internal/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
+      await api
+        .http()
+        .post('/api/internal/auth/login')
+        .send({ username: 'dave', password: fresh })
+        .expect(200);
+      const stored = (await api.users.findById(target._id).lean())!.password;
+      const rows = await api.revisions
+        .find({
+          entity: 'user',
+          entityId: target._id,
+          action: 'staff_set_password',
+        })
+        .lean();
+      expect(rows).toHaveLength(1);
+      const serialized = JSON.stringify(rows[0]);
+      expect(serialized).not.toContain(fresh);
+      expect(serialized).not.toContain(stored);
+      expect(String(rows[0].userId)).toBe(
+        String((await api.users.findOne({ username: 'admin' }).lean())!._id),
+      );
+    });
+
+    it('keeps e-mails unique case-insensitively, normalises the domain and audits the changed fields', async () => {
+      const erin = await createUserWith(api, 'erin');
+      await createUserWith(api, 'frank', { email: 'Frank@Example.com' });
+      const patch = (body: object) =>
+        authed(api.http().patch(`${USER('erin')}/profile`), admin).send(body);
+      await patch({ email: 'frank@example.COM' })
+        .expect(400)
+        .expect(issueCodes(['email_taken']));
+      await patch({ email: 'not-an-address' })
+        .expect(400)
+        .expect(issueCodes(['email_invalid']));
+      await patch({ email: 'erin.new@example.com' })
+        .expect(400)
+        .expect(issueCodes(['password_required']));
+      await patch({
+        email: 'erin.new@example.com',
+        currentPassword: 'wrong guess',
+      })
+        .expect(400)
+        .expect(errorCode('invalid_credentials'));
+      const organization = await createOrganization(api);
+      const response = await patch({
+        currentPassword: OLD,
+        email: '  Erin.New@Example.COM ',
+        displayName: 'Erin E.',
+        organizations: [organization._id],
+      }).expect(200);
+      expect(dataOf<object>(response)).toMatchObject({
+        email: 'Erin.New@example.com',
+        displayName: 'Erin E.',
+        organizations: [{ slug: organization.slug }],
+      });
+      const row = (await api.revisions
+        .findOne({ entity: 'user', entityId: erin._id, action: 'staff_edit' })
+        .lean())!;
+      expect(Object.keys(row.changes).sort()).toEqual(
+        ['displayName', 'email', 'organizations'].sort(),
+      );
+    });
+
+    it('deactivates with auth.change_user only, signing the user out and never reclaimed as a stale signup; a banned account keeps its rank', async () => {
+      const ivan = await createUserWith(api, 'ivan');
+      const ivanSession = await loginAs(api, ivan._id);
+      const patch = (name: string, body: object, session = admin) =>
+        authed(api.http().patch(`${USER(name)}/profile`), session).send(body);
+      await patch('ivan', { isActive: false }, editor)
+        .expect(403)
+        .expect(issueCodes(['activation_not_editable']));
+      await patch('ivan', {
+        isActive: false,
+        displayRank: 'teacher',
+        mute: true,
+      }).expect(200);
+      expect(await api.users.findById(ivan._id).lean()).toMatchObject({
+        isActive: false,
+        displayRank: 'teacher',
+        mute: true,
+      });
+      await authed(api.http().get('/api/internal/profile'), ivanSession).expect(
+        401,
+      );
+      await patch('ivan', { displayRank: 'banned' }).expect(400);
+      await api.users.updateOne(
+        { _id: ivan._id },
+        { dateJoined: new Date('2020-01-01') },
+      );
+      await api
+        .http()
+        .post('/api/internal/auth/register')
+        .send({
+          username: 'ivan',
+          email: 'other@example.com',
+          password: 'a long passphrase 9',
+        })
+        .expect(400)
+        .expect(issueCodes(['username_taken']));
+      await patch('admin', { notes: 'x' }).expect(403);
+      await createUserWith(api, 'jack', {
+        banReason: 'spam',
+        displayRank: 'banned',
+        isActive: false,
+      });
+      await patch('jack', { isActive: true })
+        .expect(409)
+        .expect(issueCodes(['user_banned']));
+      await patch('jack', { displayRank: 'user' })
+        .expect(409)
+        .expect(issueCodes(['user_banned']));
+    });
+
+    it('renames, keeping the old name pointing at the profile, and refuses a taken name', async () => {
+      await createUserWith(api, 'kim');
+      await createUserWith(api, 'lee');
+      const rename = (name: string, username: string) =>
+        authed(api.http().post(`${USER(name)}/rename`), admin).send({
+          username,
+        });
+      await rename('kim', 'LEE')
+        .expect(400)
+        .expect(issueCodes(['username_taken']));
+      await rename('kim', 'kim_new').expect(200);
+      const page = await api.http().get('/api/internal/users/kim').expect(200);
+      expect(dataOf<{ username: string }>(page).username).toBe('kim_new');
+      await api
+        .http()
+        .post('/api/internal/auth/login')
+        .send({ username: 'kim_new', password: OLD })
+        .expect(200);
+    });
+
+    it('creates accounts row by row, with a generated password that signs in and an invite mail', async () => {
+      const creator = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'creator', {
+            permissions: ['auth.add_user'],
+          })
+        )._id,
+      );
+      await authed(api.http().post('/api/internal/admin/users'), admin)
+        .send({ users: [{ username: 'nope' }] })
+        .expect(403);
+      api.mailer.sent.length = 0;
+      const response = await authed(
+        api.http().post('/api/internal/admin/users'),
+        creator,
+      )
+        .send({
+          users: [
+            { username: 'pupil1', fullName: 'Pupil One' },
+            { username: 'PUPIL1' },
+            { username: 'pupil2', email: 'p2@example.com', invite: true },
+            { username: 'pupil3', password: '12345678' },
+          ],
+        })
+        .expect(201);
+      const rows = dataOf<
+        {
+          username: string;
+          status: string;
+          generatedPassword: string | null;
+          issues: { code: string }[];
+        }[]
+      >(response);
+      expect(rows.map((row) => row.status)).toEqual([
+        'created',
+        'rejected',
+        'created',
+        'rejected',
+      ]);
+      expect(rows[1].issues.map((issue) => issue.code)).toEqual([
+        'username_taken',
+      ]);
+      expect(rows[3].issues.map((issue) => issue.code)).toEqual([
+        'password_numeric',
+      ]);
+      expect(rows[2].generatedPassword).toBeNull();
+      expect(api.mailer.sent.map((mail) => mail.to)).toEqual([
+        'p2@example.com',
+      ]);
+      await api
+        .http()
+        .post('/api/internal/auth/login')
+        .send({ username: 'pupil1', password: rows[0].generatedPassword })
+        .expect(200);
+    });
+
+    it('mails a reset link to an active user', async () => {
+      await createUserWith(api, 'gina');
+      api.mailer.sent.length = 0;
+      await authed(
+        api.http().post(`${USER('gina')}/password-reset`),
+        admin,
+      ).expect(204);
+      expect(api.mailer.sent.map((mail) => mail.to)).toEqual([
+        'gina@example.com',
+      ]);
+      await createUserWith(api, 'henry', { isActive: false });
+      await authed(api.http().post(`${USER('henry')}/password-reset`), admin)
+        .expect(409)
+        .expect(issueCodes(['account_inactive']));
     });
   });
 }

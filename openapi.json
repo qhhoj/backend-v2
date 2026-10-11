@@ -4005,6 +4005,27 @@
         ],
         "type": "object"
       },
+      "CreateUsersDto": {
+        "properties": {
+          "organizationId": {
+            "description": "An organization every new account joins (a school import).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "users": {
+            "description": "Up to 100 accounts; each row is created or refused on its own.",
+            "items": {
+              "$ref": "#/components/schemas/NewUserDto"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "type": "object"
+      },
       "CreatedIntegrationClientResponse": {
         "properties": {
           "actsAs": {
@@ -4102,6 +4123,50 @@
         "required": [
           "judge",
           "authKey"
+        ],
+        "type": "object"
+      },
+      "CreatedUserResponse": {
+        "properties": {
+          "generatedPassword": {
+            "description": "A generated password, shown only in this response; null when the row gave one, sent an invite or was rejected.",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "The new account id; null when rejected.",
+            "nullable": true,
+            "type": "string"
+          },
+          "invited": {
+            "description": "Whether an invite mail was sent.",
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/UserRowIssueResponse"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "`created`, or `rejected` with `issues`.",
+            "enum": [
+              "created",
+              "rejected"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "status",
+          "id",
+          "generatedPassword",
+          "invited",
+          "issues"
         ],
         "type": "object"
       },
@@ -6168,6 +6233,37 @@
         },
         "required": [
           "body"
+        ],
+        "type": "object"
+      },
+      "NewUserDto": {
+        "properties": {
+          "email": {
+            "description": "E-mail address; required for an invite.",
+            "type": "string"
+          },
+          "fullName": {
+            "description": "Full name, up to 30 characters.",
+            "maxLength": 30,
+            "type": "string"
+          },
+          "invite": {
+            "description": "Mail a link to choose a password instead of setting one (needs `email`, no `password`).",
+            "type": "boolean"
+          },
+          "password": {
+            "description": "Initial password; it must pass the signup policy. Absent: one is generated (and returned once), unless `invite` is set.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "username": {
+            "description": "Login name: letters, digits and underscores, up to 30 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
         ],
         "type": "object"
       },
@@ -9664,7 +9760,6 @@
         "properties": {
           "email": {
             "description": "Email address for the activation link and password resets, up to 254 characters.",
-            "maxLength": 254,
             "type": "string"
           },
           "languageId": {
@@ -9685,8 +9780,6 @@
           },
           "username": {
             "description": "Desired login name: letters, digits and underscores, up to 30 characters.",
-            "maxLength": 30,
-            "pattern": "^\\w+$",
             "type": "string"
           }
         },
@@ -9694,6 +9787,30 @@
           "username",
           "email",
           "password"
+        ],
+        "type": "object"
+      },
+      "RenameUserDto": {
+        "properties": {
+          "username": {
+            "description": "The new login name: letters, digits and underscores, up to 30 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "type": "object"
+      },
+      "RenamedUserResponse": {
+        "properties": {
+          "username": {
+            "description": "The login name now.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
         ],
         "type": "object"
       },
@@ -9999,7 +10116,6 @@
         "properties": {
           "email": {
             "description": "Email address for the activation link and password resets, up to 254 characters.",
-            "maxLength": 254,
             "type": "string"
           }
         },
@@ -10161,6 +10277,27 @@
         },
         "required": [
           "tagIds"
+        ],
+        "type": "object"
+      },
+      "SetUserPasswordDto": {
+        "properties": {
+          "currentPassword": {
+            "description": "The account password, re-entered to confirm the change.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "newPassword": {
+            "description": "The user's new password; it must pass the password policy.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
         ],
         "type": "object"
       },
@@ -10878,8 +11015,6 @@
           },
           "username": {
             "description": "Desired login name: letters, digits and underscores, up to 30 characters.",
-            "maxLength": 30,
-            "pattern": "^\\w+$",
             "type": "string"
           }
         },
@@ -10976,6 +11111,18 @@
           "groups"
         ],
         "type": "object"
+      },
+      "StaffDisplayRank": {
+        "description": "Rank title shown beside the name; `banned` is set by the ban route only.",
+        "enum": [
+          "admin",
+          "daor",
+          "setter",
+          "staff",
+          "teacher",
+          "user"
+        ],
+        "type": "string"
       },
       "StaffUserResponse": {
         "properties": {
@@ -14142,6 +14289,79 @@
         },
         "type": "object"
       },
+      "UpdateUserByStaffDto": {
+        "properties": {
+          "about": {
+            "description": "About-me text in Markdown, rendered and sanitised on save.",
+            "maxLength": 65536,
+            "type": "string"
+          },
+          "allowTagging": {
+            "description": "Whether the user may tag problems they solved.",
+            "type": "boolean"
+          },
+          "currentPassword": {
+            "description": "Your own password; required with an `email` change, like a password set.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "displayName": {
+            "description": "Name shown in place of the username, up to 100 characters; empty shows the username.",
+            "maxLength": 100,
+            "type": "string"
+          },
+          "displayRank": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffDisplayRank"
+              }
+            ],
+            "description": "Rank title shown beside the name; `banned` is set by the ban route only."
+          },
+          "email": {
+            "description": "New e-mail address (needs `auth.change_user`); surrounding spaces are dropped and the domain lower-cased.",
+            "type": "string"
+          },
+          "fullName": {
+            "description": "The user's full name, up to 30 characters.",
+            "maxLength": 30,
+            "type": "string"
+          },
+          "isActive": {
+            "description": "Activate or deactivate the account (needs `auth.change_user`); deactivating signs the user out everywhere and revokes the API token. A banned account is unbanned through its own route.",
+            "type": "boolean"
+          },
+          "isUnlisted": {
+            "description": "Hidden from the leaderboards and member lists.",
+            "type": "boolean"
+          },
+          "leaveCurrentContest": {
+            "description": "`true` takes the user out of the contest they are in (legacy `current_contest` cleared).",
+            "type": "boolean"
+          },
+          "mute": {
+            "description": "Muted users cannot write comments or posts.",
+            "type": "boolean"
+          },
+          "notes": {
+            "description": "Notes for staff only, up to 4096 characters; never shown to the user.",
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "organizations": {
+            "description": "The complete, ordered list of organization ids the user belongs to.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "type": "object"
+      },
       "UploadedFileResponse": {
         "properties": {
           "url": {
@@ -14285,6 +14505,109 @@
           "size",
           "nextPrepareAt",
           "canPrepare"
+        ],
+        "type": "object"
+      },
+      "UserEditResponse": {
+        "properties": {
+          "about": {
+            "description": "About-me Markdown.",
+            "type": "string"
+          },
+          "allowTagging": {
+            "type": "boolean"
+          },
+          "banReason": {
+            "description": "Null unless banned.",
+            "nullable": true,
+            "type": "string"
+          },
+          "dateJoined": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "displayName": {
+            "description": "Staff-set name shown in place of the username; empty when unset.",
+            "type": "string"
+          },
+          "displayRank": {
+            "description": "Rank title such as `user`, `admin` or `banned`.",
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "fullName": {
+            "description": "The user's full name.",
+            "type": "string"
+          },
+          "hasTwoFactor": {
+            "description": "Whether TOTP or a security key is set up (reset through `reset-two-factor`).",
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inContest": {
+            "description": "Whether the user is in a contest now (it may have ended; cleared lazily).",
+            "type": "boolean"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isStaff": {
+            "type": "boolean"
+          },
+          "isSuperuser": {
+            "type": "boolean"
+          },
+          "isUnlisted": {
+            "type": "boolean"
+          },
+          "lastLogin": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "mute": {
+            "type": "boolean"
+          },
+          "notes": {
+            "description": "Staff-only notes; empty when unset.",
+            "type": "string"
+          },
+          "organizations": {
+            "description": "Memberships in the user's order.",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationSummaryResponse"
+            },
+            "type": "array"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "displayName",
+          "fullName",
+          "about",
+          "email",
+          "organizations",
+          "displayRank",
+          "isUnlisted",
+          "mute",
+          "allowTagging",
+          "notes",
+          "inContest",
+          "hasTwoFactor",
+          "isActive",
+          "isStaff",
+          "isSuperuser",
+          "banReason",
+          "dateJoined",
+          "lastLogin"
         ],
         "type": "object"
       },
@@ -14500,6 +14823,25 @@
           "siteTheme",
           "appearance",
           "languageId"
+        ],
+        "type": "object"
+      },
+      "UserRowIssueResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
         ],
         "type": "object"
       },
@@ -17552,6 +17894,365 @@
           "Admin: users"
         ],
         "x-enveloped": true
+      },
+      "post": {
+        "description": "Requires `auth.add_user` and a browser session. Creates up to 100 active accounts (no activation mail), optionally all in one organization (`organizationId`, 400 `validation_failed` issue `organization_unknown`). Each row is created or refused on its own, in request order: issues `username_invalid_characters`, `username_taken` (also a name repeated in the request), `email_invalid`, `email_taken`, `invite_needs_email_only` and the signup password policy codes on `password`.\nA row without a password gets a generated one, returned only in this response; a row with `invite` gets an unusable password and a reset-link mail (503 `mail_unavailable` for the whole request when mail is off). Every created account is a `user` revision `staff_create`.",
+        "operationId": "UserCreationController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUsersDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/CreatedUserResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create user accounts",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
+    "/api/internal/admin/users/{username}/password": {
+      "post": {
+        "description": "Requires `auth.change_user`, a browser session, and your own current password (`currentPassword`; wrong attempts share the 10 in 15 minutes budget with other password confirmations: 400 `invalid_credentials`, then 429 `rate_limited`). At most 10 credential changes (password sets and e-mail changes) per admin per hour (429 `rate_limited`).\nThe new password must pass the signup policy and not appear in a known breach (400 `validation_failed`, issues on `newPassword`). Signs the user out everywhere and revokes their API token; recorded as a `user` revision `staff_set_password` without the password.\nErrors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`, 409 `conflict` on a concurrent change. Returns 204.",
+        "operationId": "UserEditingController_setPassword",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserPasswordDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Set a user's password",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
+    "/api/internal/admin/users/{username}/password-reset": {
+      "post": {
+        "description": "Requires `auth.change_user` and a browser session. Mails the user the same link as the public reset form, sharing its per-address budget (3 per hour, then 429 `rate_limited`); recorded as a `user` revision `staff_send_reset_link`.\nErrors: 403 `forbidden` for yourself or a superuser unless you are one, 404 `not_found`, 409 `conflict` with issue `account_inactive` or `email_missing`, 503 `mail_unavailable` when mail is not configured. Returns 204.",
+        "operationId": "UserEditingController_sendResetLink",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a password reset link",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
+    "/api/internal/admin/users/{username}/profile": {
+      "get": {
+        "description": "Requires `judge.change_profile` and a browser session. Returns the display name, full name, about text, e-mail and organizations. Errors: 403 `forbidden` for a superuser unless you are one, 404 `not_found`.",
+        "operationId": "UserEditingController_get",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserEditResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a user's editable profile",
+        "tags": [
+          "Admin: users"
+        ]
+      },
+      "patch": {
+        "description": "Requires `judge.change_profile` and a browser session; changing `email` or `isActive` also needs `auth.change_user` (403 `forbidden`, issue `email_not_editable` or `activation_not_editable`), and an `email` change also your own `currentPassword` (400 `validation_failed` issue `password_required`, 400 `invalid_credentials`) and spends the credential budget shared with password sets (10 per admin per hour). An e-mail change keeps the user's sessions and reset links already sent: to recover a hijacked account, set a password. Not on yourself. Absent fields stay unchanged, `null` is refused; every check runs before the first write (a write that loses a race keeps the earlier ones, all audited). `organizations` replaces the whole ordered list (staff bypass the open-organization cap); deactivating signs the user out everywhere and revokes the API token. Every change is recorded as a `user` revision `staff_edit`.\nErrors: 400 `validation_failed` with issues `email_invalid`, `password_required`, `email_taken`, `organization_unknown`, `organization_admin_member` (the user administers a dropped organization); 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` with issue `user_banned` (a banned account keeps its rank and unlisting and is reactivated by unbanning), or when the memberships changed meanwhile or the e-mail is being registered.",
+        "operationId": "UserEditingController_update",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserByStaffDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UserEditResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Edit a user's profile",
+        "tags": [
+          "Admin: users"
+        ]
+      }
+    },
+    "/api/internal/admin/users/{username}/rename": {
+      "post": {
+        "description": "Requires `auth.change_user` and a browser session; not yourself. Changes the login name (a case-only change is allowed); the old name keeps opening the profile while no account holds it. Recorded as a `user` revision `staff_rename`.\nErrors: 400 `validation_failed` with issue `username_invalid_characters` or `username_taken`; 403 `forbidden` for yourself or a superuser unless you are one; 404 `not_found`; 409 `conflict` when renamed meanwhile.",
+        "operationId": "UserEditingController_rename",
+        "parameters": [
+          {
+            "description": "Username of the account; an unknown name gives 404.",
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameUserDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RenamedUserResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Rename a user",
+        "tags": [
+          "Admin: users"
+        ]
       }
     },
     "/api/internal/auth/2fa/totp/confirm": {
@@ -19029,8 +19730,6 @@
             "name": "username",
             "required": true,
             "schema": {
-              "maxLength": 30,
-              "pattern": "^\\w+$",
               "type": "string"
             }
           }

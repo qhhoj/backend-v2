@@ -2,8 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   createPasswordResetToken,
   hashPassword,
-  passwordProblems,
-  PWNED_PASSWORD_PROBLEM,
+  passwordIssues,
   passwordResetTokenValid,
   PwnedPasswordService,
   readPasswordResetToken,
@@ -70,6 +69,17 @@ export class PasswordResetService {
       );
   }
 
+  /** Staff-sent reset link for one known account; spends the same per-email budget as a public request, and mail failures reach the caller. */
+  async sendTo(user: UserDocument): Promise<void> {
+    assertMailAvailable(this.mailer);
+    await this.rateLimit.reserve(
+      [`password-reset:email:${user.email.trim().toLowerCase()}`],
+      PASSWORD_RESET_EMAIL_LIMIT,
+      PASSWORD_RESET_WINDOW_SECONDS,
+    );
+    await this.sendResetMail(user);
+  }
+
   private async sendResetMail(user: UserDocument): Promise<void> {
     const token = createPasswordResetToken(
       tokenOwner(user),
@@ -92,14 +102,14 @@ export class PasswordResetService {
       !passwordResetTokenValid(parsed, tokenOwner(user), this.env.tokenSecret)
     )
       throw invalidToken();
-    const problems = passwordProblems(newPassword, user);
-    if (await this.pwned.isPwned(newPassword))
-      problems.push(PWNED_PASSWORD_PROBLEM);
-    if (problems.length)
-      throw new ValidationFailedError(
-        'Password rejected',
-        problems.map((problem) => ({ field: 'newPassword', ...problem })),
-      );
+    const issues = await passwordIssues(
+      this.pwned,
+      newPassword,
+      user,
+      'newPassword',
+    );
+    if (issues.length)
+      throw new ValidationFailedError('Password rejected', issues);
     const changed = await this.users.updatePasswordIfUnchanged(
       user._id,
       user.password,

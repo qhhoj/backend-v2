@@ -74,8 +74,11 @@ export class UserPagesService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
+  /** A renamed account still answers to its old name while no account holds it; the response carries the current name. */
   private async userOf(username: string) {
-    const user = await this.users.findByUsername(username);
+    const user =
+      (await this.users.findByUsername(username)) ??
+      (await this.users.findByPreviousUsername(username));
     if (!user) throw notFound();
     return user;
   }
