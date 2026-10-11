@@ -50,6 +50,25 @@ export class PolygonClient {
     return found.find((problem) => problem.id === problemId) ?? null;
   }
 
+  /** The problem `owner/name` the account can read, or null (no such problem, or not shared). Polygon filters; the owner is matched here ignoring case, as a pasted handle may differ in case. */
+  async problemNamed(
+    owner: string,
+    name: string,
+  ): Promise<PolygonProblem | null> {
+    const found = await this.call<PolygonProblem[]>('problems.list', {
+      owner,
+      name,
+    });
+    return (
+      found.find(
+        (problem) =>
+          problem.name === name &&
+          problem.owner.toLowerCase() === owner.toLowerCase() &&
+          !problem.deleted,
+      ) ?? null
+    );
+  }
+
   packages(problemId: number): Promise<PolygonPackageInfo[]> {
     return this.call('problem.packages', { problemId: String(problemId) });
   }
@@ -59,25 +78,27 @@ export class PolygonClient {
   }
 
   /**
-   * The full package with tests generated for Linux (`type=linux`), streamed to `destination`. A failure answers JSON
-   * instead of a zip, or HTTP 500 when the package has no Linux variant (a standard package).
+   * A package streamed to `destination`: by default the full package with tests generated for Linux (`type=linux`);
+   * `standard` exists for every package. A failure answers JSON instead of a zip, or HTTP 500 when the package has
+   * no Linux variant (a standard package).
    */
   async downloadPackage(
     { problemId, packageId }: { problemId: number; packageId: number },
     destination: string,
-    options: { maxBytes: number; onProgress?: DownloadProgress },
+    options: {
+      maxBytes: number;
+      onProgress?: DownloadProgress;
+      type?: 'linux' | 'standard';
+    },
   ): Promise<void> {
     const method = 'problem.package';
+    const type = options.type ?? IMPORT_PACKAGE_TYPE;
     const response = await this.post(
       method,
-      {
-        problemId: String(problemId),
-        packageId: String(packageId),
-        type: IMPORT_PACKAGE_TYPE,
-      },
+      { problemId: String(problemId), packageId: String(packageId), type },
       DOWNLOAD_TIMEOUT_MS,
     );
-    const label = `${method} for package ${packageId} of problem ${problemId} (type ${IMPORT_PACKAGE_TYPE})`;
+    const label = `${method} for package ${packageId} of problem ${problemId} (type ${type})`;
     if (!response.ok || isJson(response)) await this.unwrap(label, response);
     await writeCappedBody(response, destination, options);
   }

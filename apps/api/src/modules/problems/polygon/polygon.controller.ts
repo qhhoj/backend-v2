@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Param,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
@@ -16,14 +8,13 @@ import { ImportJobStartedResponse } from '../imports/dto/import-job-started.resp
 import { PolygonProblemResponse } from './dto/polygon-problem.response';
 import {
   PolygonLinkImportDto,
-  PolygonProblemParamDto,
-  PolygonProblemsQueryDto,
+  PolygonProblemLinkDto,
 } from './dto/polygon-problems.dto';
 import { PolygonStatusResponse } from './dto/polygon-status.response';
 import { PolygonSyncRunResponse } from './dto/polygon-sync-run.response';
 import { PolygonSyncRunsQueryDto } from './dto/polygon-sync-runs.dto';
-import { PolygonCatalogService } from './polygon-catalog.service';
 import { PolygonLinkImportService } from './polygon-link-import.service';
+import { PolygonLinkResolver } from './polygon-link-resolver.service';
 import { PolygonSyncHistoryService } from './polygon-sync-history.service';
 
 @ApiTags('Problem editing')
@@ -32,7 +23,7 @@ import { PolygonSyncHistoryService } from './polygon-sync-history.service';
 export class PolygonController {
   constructor(
     private readonly polygon: PolygonClient,
-    private readonly catalog: PolygonCatalogService,
+    private readonly resolver: PolygonLinkResolver,
     private readonly linkImports: PolygonLinkImportService,
     private readonly history: PolygonSyncHistoryService,
   ) {}
@@ -55,25 +46,31 @@ export class PolygonController {
   }
 
   /**
-   * List the Polygon problems shared with the QHHOJ account
+   * Check a Polygon problem link and preview the problem
    *
    * @remarks
-   * Needs `judge.import_polygon_package`. Every problem the account can read,
-   * with its newest package (`READY`, `RUNNING`, `FAILED` or `NONE`), its
-   * statement title and the code of the QHHOJ problem already linked to it.
-   * `search` matches id, name, title or owner; `state` keeps one package state.
-   * The list is cached for 60 seconds and titles for a day per revision;
-   * `refresh=true` skips the list cache and is limited to 6 a minute per user.
-   * Errors: 409 `polygon_not_connected`, 502 `polygon_unauthorized`,
-   * `polygon_clock_skew` or `polygon_failed`, 503 `polygon_unavailable`,
-   * 429 `rate_limited`.
+   * Needs `judge.import_polygon_package`. The body takes the problem page
+   * address, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is
+   * the permission: the server finds `owner/name` among the problems shared
+   * with the QHHOJ account and compares the token with the `<problem url>` of
+   * the newest READY package's problem.xml (read once per problem, then
+   * cached). Answers the problem, its statement title and the newest full
+   * package. Each check, here or on import, counts towards 20 per 10 minutes
+   * per user. Errors: 400 `polygon_link_invalid` (not a problem link), 404
+   * `polygon_link_refused` (not shared with the account, or the token does not
+   * match: one answer for both), 409 `polygon_no_package` (no READY package to
+   * check against), `polygon_package_not_ready` (newest package not a READY
+   * full package), `polygon_already_linked` (names the QHHOJ problem, also as
+   * `linkedProblemCode`, only to a user who may edit it) or
+   * `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.
    */
-  @Get('problems')
-  problems(
+  @Post('resolve')
+  @HttpCode(200)
+  resolve(
     @CurrentAuth() auth: AuthContext,
-    @Query() query: PolygonProblemsQueryDto,
-  ): Promise<PolygonProblemResponse[]> {
-    return this.catalog.list(auth, query);
+    @Body() { link }: PolygonProblemLinkDto,
+  ): Promise<PolygonProblemResponse> {
+    return this.resolver.preview(auth, link);
   }
 
   /**
@@ -101,25 +98,25 @@ export class PolygonController {
    *
    * @remarks
    * Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a
-   * problem or write access to the problem to update it. The body takes the zip
-   * import's options (`code`, `mode`, authors, curators, group, types, points,
-   * statement languages, zero-point and main-solution switches) and `autoSync`.
-   * The server downloads the newest package itself and the same background job
-   * as the zip import applies it, then links the problem to Polygon. Answers 202
-   * with a `jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes
-   * queued, downloading, statements, tests, done or failed). Counts towards the
-   * 10 imports an hour per user. Errors: 400 `code_taken`, 404 `not_found` (not
-   * shared with the account), 409 `polygon_package_not_ready`,
-   * `polygon_already_linked` or `polygon_not_connected`, 502/503 Polygon errors,
-   * 429 `rate_limited`.
+   * problem or write access to the problem to update it. The body takes the
+   * problem `link` (checked again as on `POST /polygon/resolve`, with the same
+   * errors), the zip import's options (`code`, `mode`, authors, curators,
+   * group, types, points, statement languages, zero-point and main-solution
+   * switches) and `autoSync`. A created problem is private, with the importer
+   * as a curator. The server downloads the newest full package itself and the
+   * same background job as the zip import applies it, then links the problem
+   * to Polygon and records the import in the sync history. Answers 202 with a
+   * `jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes queued,
+   * downloading, statements, tests, done or failed). Counts towards the 10
+   * imports an hour per user. Errors: 400 `code_taken`, the link errors of
+   * `POST /polygon/resolve`, 429 `rate_limited`.
    */
-  @Post('problems/:polygonId/import')
+  @Post('import')
   @HttpCode(202)
   importProblem(
     @CurrentAuth() auth: AuthContext,
-    @Param() { polygonId }: PolygonProblemParamDto,
     @Body() body: PolygonLinkImportDto,
   ): Promise<ImportJobStartedResponse> {
-    return this.linkImports.importProblem(auth, polygonId, body);
+    return this.linkImports.importProblem(auth, body);
   }
 }

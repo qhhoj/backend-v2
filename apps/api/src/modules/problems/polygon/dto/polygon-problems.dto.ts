@@ -1,43 +1,18 @@
-import { PACKAGE_STATES } from '@libs/problems';
-import type { PackageState } from '@libs/problems';
+import { POLYGON_LINK_MAX_LENGTH } from '@libs/problems';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
-import {
-  IsBoolean,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
-import { toBoolean } from '../../core/dto/transforms';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PolygonImportQueryDto } from '../../imports/dto/problem-import.dto';
 
-export class PolygonProblemsQueryDto {
-  /** Case-insensitive match on id, name, title or owner. */
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
-  @ApiPropertyOptional({
-    enum: PACKAGE_STATES,
-    enumName: 'PolygonPackageState',
-  })
-  @IsOptional()
-  @IsIn(PACKAGE_STATES)
-  state?: PackageState;
-  /** Skip the 60-second cache; limited per user. */
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform(toBoolean)
-  @IsBoolean()
-  refresh: boolean = false;
+/** In the body only, so the link (whose `p…` part is the permission) never lands in a URL or an access log. */
+export class PolygonProblemLinkDto {
+  /** The problem page address, `https://polygon.codeforces.com/p…/owner/name`. */
+  @IsString() @MaxLength(POLYGON_LINK_MAX_LENGTH) link!: string;
 }
 
-export class PolygonProblemParamDto {
-  @Type(() => Number) @IsInt() @Min(1) polygonId!: number;
-}
-
-/** The zip import's options, as a JSON body, plus the auto-sync switch of the link. */
+/** The zip import's options, as a JSON body, plus the problem link and the auto-sync switch of the link. */
 export class PolygonLinkImportDto extends PolygonImportQueryDto {
+  /** The problem page address, `https://polygon.codeforces.com/p…/owner/name`. */
+  @IsString() @MaxLength(POLYGON_LINK_MAX_LENGTH) link!: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

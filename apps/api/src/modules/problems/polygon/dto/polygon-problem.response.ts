@@ -13,6 +13,7 @@ export class PolygonLatestPackageResponse {
   createdAt!: string | null;
 }
 
+/** A pasted link that passed every check: shared with the account, token verified, not linked, full package READY. */
 export class PolygonProblemResponse {
   /** Polygon problem id. */
   id!: number;
@@ -25,7 +26,6 @@ export class PolygonProblemResponse {
   revision!: number;
   /** The working copy has uncommitted changes. */
   modified!: boolean;
+  /** The newest full package, READY: the one an import takes. */
   latestPackage!: PolygonLatestPackageResponse;
-  /** Code of the QHHOJ problem already linked to it, or null. */
-  linkedProblemCode!: string | null;
 }

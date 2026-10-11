@@ -7164,6 +7164,11 @@
             "description": "Skip cases worth zero points.",
             "type": "boolean"
           },
+          "link": {
+            "description": "The problem page address, `https://polygon.codeforces.com/p…/owner/name`.",
+            "maxLength": 300,
+            "type": "string"
+          },
           "mainStatementLanguage": {
             "description": "Polygon language of the statement stored as the base statement.",
             "maxLength": 30,
@@ -7206,7 +7211,8 @@
           }
         },
         "required": [
-          "code"
+          "code",
+          "link"
         ],
         "type": "object"
       },
@@ -7313,6 +7319,19 @@
         ],
         "type": "string"
       },
+      "PolygonProblemLinkDto": {
+        "properties": {
+          "link": {
+            "description": "The problem page address, `https://polygon.codeforces.com/p…/owner/name`.",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "required": [
+          "link"
+        ],
+        "type": "object"
+      },
       "PolygonProblemResponse": {
         "properties": {
           "id": {
@@ -7320,12 +7339,12 @@
             "type": "number"
           },
           "latestPackage": {
-            "$ref": "#/components/schemas/PolygonLatestPackageResponse"
-          },
-          "linkedProblemCode": {
-            "description": "Code of the QHHOJ problem already linked to it, or null.",
-            "nullable": true,
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolygonLatestPackageResponse"
+              }
+            ],
+            "description": "The newest full package, READY: the one an import takes."
           },
           "modified": {
             "description": "The working copy has uncommitted changes.",
@@ -7355,8 +7374,7 @@
           "owner",
           "revision",
           "modified",
-          "latestPackage",
-          "linkedProblemCode"
+          "latestPackage"
         ],
         "type": "object"
       },
@@ -27806,103 +27824,11 @@
         ]
       }
     },
-    "/api/internal/polygon/problems": {
-      "get": {
-        "description": "Needs `judge.import_polygon_package`. Every problem the account can read,\nwith its newest package (`READY`, `RUNNING`, `FAILED` or `NONE`), its\nstatement title and the code of the QHHOJ problem already linked to it.\n`search` matches id, name, title or owner; `state` keeps one package state.\nThe list is cached for 60 seconds and titles for a day per revision;\n`refresh=true` skips the list cache and is limited to 6 a minute per user.\nErrors: 409 `polygon_not_connected`, 502 `polygon_unauthorized`,\n`polygon_clock_skew` or `polygon_failed`, 503 `polygon_unavailable`,\n429 `rate_limited`.",
-        "operationId": "PolygonController_problems",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/PolygonPackageState"
-            }
-          },
-          {
-            "description": "Skip the 60-second cache; limited per user.",
-            "in": "query",
-            "name": "refresh",
-            "required": false,
-            "schema": {
-              "default": false,
-              "type": "boolean"
-            }
-          },
-          {
-            "description": "Case-insensitive match on id, name, title or owner.",
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "maxLength": 100,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/PolygonProblemResponse"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "required": [
-                    "data"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
-            "headers": {
-              "Retry-After": {
-                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "summary": "List the Polygon problems shared with the QHHOJ account",
-        "tags": [
-          "Problem editing"
-        ]
-      }
-    },
-    "/api/internal/polygon/problems/{polygonId}/import": {
+    "/api/internal/polygon/import": {
       "post": {
-        "description": "Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a\nproblem or write access to the problem to update it. The body takes the zip\nimport's options (`code`, `mode`, authors, curators, group, types, points,\nstatement languages, zero-point and main-solution switches) and `autoSync`.\nThe server downloads the newest package itself and the same background job\nas the zip import applies it, then links the problem to Polygon. Answers 202\nwith a `jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes\nqueued, downloading, statements, tests, done or failed). Counts towards the\n10 imports an hour per user. Errors: 400 `code_taken`, 404 `not_found` (not\nshared with the account), 409 `polygon_package_not_ready`,\n`polygon_already_linked` or `polygon_not_connected`, 502/503 Polygon errors,\n429 `rate_limited`.",
+        "description": "Needs `judge.import_polygon_package`, plus `judge.add_problem` to create a\nproblem or write access to the problem to update it. The body takes the\nproblem `link` (checked again as on `POST /polygon/resolve`, with the same\nerrors), the zip import's options (`code`, `mode`, authors, curators,\ngroup, types, points, statement languages, zero-point and main-solution\nswitches) and `autoSync`. A created problem is private, with the importer\nas a curator. The server downloads the newest full package itself and the\nsame background job as the zip import applies it, then links the problem\nto Polygon and records the import in the sync history. Answers 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes queued,\ndownloading, statements, tests, done or failed). Counts towards the 10\nimports an hour per user. Errors: 400 `code_taken`, the link errors of\n`POST /polygon/resolve`, 429 `rate_limited`.",
         "operationId": "PolygonController_importProblem",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "polygonId",
-            "required": true,
-            "schema": {
-              "minimum": 1,
-              "type": "number"
-            }
-          }
-        ],
+        "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
@@ -27953,6 +27879,66 @@
           }
         },
         "summary": "Import a Polygon problem and link it",
+        "tags": [
+          "Problem editing"
+        ]
+      }
+    },
+    "/api/internal/polygon/resolve": {
+      "post": {
+        "description": "Needs `judge.import_polygon_package`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest full\npackage. Each check, here or on import, counts towards 20 per 10 minutes\nper user. Errors: 400 `polygon_link_invalid` (not a problem link), 404\n`polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not a READY\nfull package), `polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it) or\n`polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "operationId": "PolygonController_resolve",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolygonProblemLinkDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PolygonProblemResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Check a Polygon problem link and preview the problem",
         "tags": [
           "Problem editing"
         ]

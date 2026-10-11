@@ -16,8 +16,8 @@ import type { RenderStyle } from '@libs/render';
 import { PolygonImportError } from './polygon-import.error';
 import { resolveMemberPath } from './polygon-package';
 import type { PolygonPackage } from './polygon-package';
-import { childOf, descendant, descendants } from './polygon-xml';
-import type { XmlElement } from './polygon-xml';
+import { childOf, descendant, descendants } from '@libs/problems';
+import type { XmlElement } from '@libs/problems';
 
 export interface ProblemProperties {
   legend: string;

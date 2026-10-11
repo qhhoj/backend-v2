@@ -5,8 +5,8 @@ import type {
   JsonObject,
 } from '@libs/database';
 import { PolygonImportError } from './polygon-import.error';
-import { childOf, descendant } from './polygon-xml';
-import type { XmlElement } from './polygon-xml';
+import { childOf, descendant } from '@libs/problems';
+import type { XmlElement } from '@libs/problems';
 
 export interface PolygonAssets {
   grader: Grader;

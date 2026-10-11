@@ -32,3 +32,43 @@ export const packageNotReady = (polygonId: number, reason: string) =>
     409,
     `Polygon problem ${polygonId} has no READY full package: ${reason}. Build a full package (with Linux tests) on Polygon first`,
   );
+
+export const linkInvalid = () =>
+  new AppError(
+    'polygon_link_invalid',
+    400,
+    'Not a Polygon problem link: paste the address of the problem page, https://polygon.codeforces.com/p…/owner/name',
+  );
+
+/** One answer for "not shared with the account" and "wrong link token", so a guessed link learns nothing. */
+export const linkRefused = () =>
+  new AppError(
+    'polygon_link_refused',
+    404,
+    'The QHHOJ Polygon account cannot open this link: copy it again from the problem page on Polygon, and give the account READ access to the problem',
+  );
+
+/** The link is checked against the newest READY package, so without one it cannot be checked. */
+export const noPackage = () =>
+  new AppError(
+    'polygon_no_package',
+    409,
+    'The Polygon problem has no READY package to check the link against: build a full package (with Linux tests) on Polygon first',
+  );
+
+/** `code` is shown only to a user who may edit that QHHOJ problem. */
+export const alreadyLinked = (polygonId: number, code: string | null) =>
+  code === null
+    ? new AppError(
+        'polygon_already_linked',
+        409,
+        `Polygon problem ${polygonId} is already linked to a QHHOJ problem`,
+      )
+    : new AppError(
+        'polygon_already_linked',
+        409,
+        `Polygon problem ${polygonId} is already linked to ${code}`,
+        undefined,
+        undefined,
+        { linkedProblemCode: code },
+      );

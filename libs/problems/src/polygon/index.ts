@@ -6,3 +6,6 @@ export * from './polygon-link';
 export * from './polygon-signature';
 export * from './polygon-sync';
 export * from './polygon-types';
+export * from './polygon-xml';
+export * from './polygon-problem-link';
+export * from './polygon-package-token';

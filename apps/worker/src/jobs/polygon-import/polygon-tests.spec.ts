@@ -4,7 +4,7 @@ import { buildProblemXml } from '../../../test/polygon-fixtures';
 import { PolygonImportError } from './polygon-import.error';
 import { formatPathPattern, planTests } from './polygon-tests';
 import type { TestPlan } from './polygon-tests';
-import { parseXml } from './polygon-xml';
+import { parseXml } from '@libs/problems';
 
 const options = {
   ignoreZeroPointBatches: false,
