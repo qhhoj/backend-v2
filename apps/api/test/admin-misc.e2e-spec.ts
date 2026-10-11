@@ -26,6 +26,8 @@ import type { StaffUserResponse } from '../src/modules/users/admin/dto/staff-use
 
 import type { TestSession } from './problem-fixtures';
 
+import type { AuditFeedResponse } from '../src/modules/audit/dto/audit-entry.response';
+
 import {
   dataOf,
   bridgeCommands,
@@ -36,7 +38,7 @@ import { sha256, generateApiToken, PERMISSION_CATALOG } from '@libs/auth';
 
 import { getModelToken } from '@nestjs/mongoose';
 
-import { IntegrationClient } from '@libs/database';
+import { IntegrationClient, SettingRevision, newId } from '@libs/database';
 
 import type { Model } from 'mongoose';
 
@@ -1235,6 +1237,123 @@ afterAll(() => api.teardown());
       expect(
         await api.users.findOne({ username: 'root' }).lean(),
       ).toMatchObject({ isSuperuser: true, isActive: true });
+    });
+  });
+}
+
+// global change log
+{
+  const AUDIT = '/api/internal/admin/audit';
+
+  describe('global change log', () => {
+    let admin: TestSession;
+    let editorId: string;
+    let ids: string[];
+
+    beforeAll(() => api.reset());
+    beforeAll(async () => {
+      const adminUser = await createUserWith(api, 'auditor', {
+        permissions: ['judge.change_settings'],
+      });
+      admin = await loginAs(api, adminUser._id);
+      const editor = await createUserWith(api, 'editor');
+      editorId = editor._id;
+      const settings = api.app.get<Model<SettingRevision>>(
+        getModelToken(SettingRevision.name),
+      );
+      // Ids in write order, alternating between the two collections.
+      ids = Array.from({ length: 5 }, () => newId()).sort();
+      const revision = (id: string, userId: string | null) => ({
+        _id: id,
+        entity: 'user',
+        entityId: editor._id,
+        action: 'edit',
+        userId,
+        changes: { password: { before: 'old-hash', after: 'new-hash' } },
+        comment: '',
+      });
+      const setting = (id: string, actor: string | null) => ({
+        _id: id,
+        key: 'mail.from',
+        before: 'a@example.com',
+        after: 'b@example.com',
+        changedFields: ['value'],
+        actor,
+      });
+      await api.revisions.create([
+        revision(ids[0], editorId),
+        revision(ids[2], adminUser._id),
+        { ...revision(ids[4], null), entity: 'group', entityId: newId() },
+      ]);
+      await settings.create([
+        setting(ids[1], adminUser._id),
+        setting(ids[3], editorId),
+      ]);
+    });
+
+    const feed = async (query: Record<string, string | number>) => ({
+      body: dataOf<AuditFeedResponse>(
+        await authed(api.http().get(AUDIT).query(query), admin).expect(200),
+      ),
+    });
+
+    it('merges both collections newest first and pages without gaps or repeats', async () => {
+      const seen: string[] = [];
+      let before: string | null = null;
+      do {
+        const { body } = await feed({ limit: 2, ...(before && { before }) });
+        expect(body.items.length).toBeLessThanOrEqual(2);
+        seen.push(...body.items.map((item) => item.id));
+        before = body.nextBefore;
+      } while (before);
+      expect(seen).toEqual([...ids].reverse());
+    });
+
+    it('names the actor and object and returns field names, never values', async () => {
+      const { body } = await feed({ type: 'user' });
+      expect(body.items).toHaveLength(2);
+      expect(body.items[1]).toMatchObject({
+        actor: { id: editorId, username: 'editor' },
+        object: { id: editorId, label: 'editor', deleted: false },
+        changedFields: ['password'],
+      });
+      expect(JSON.stringify(body)).not.toContain('hash');
+      const groups = await feed({ type: 'group' });
+      expect(groups.body.items[0]).toMatchObject({
+        actor: null,
+        object: { label: null, deleted: true },
+      });
+    });
+
+    it('filters by actor across both collections, and an unknown actor gives an empty feed', async () => {
+      const { body } = await feed({ actor: 'EDITOR' });
+      expect(body.items.map((item) => item.id)).toEqual([ids[3], ids[0]]);
+      const settingsOnly = await feed({ actor: 'editor', type: 'setting' });
+      expect(settingsOnly.body.items).toEqual([
+        expect.objectContaining({
+          id: ids[3],
+          type: 'setting',
+          object: { id: 'mail.from', label: 'mail.from', deleted: false },
+        }),
+      ]);
+      const nobody = await feed({ actor: 'nobody' });
+      expect(nobody.body).toEqual({ items: [], nextBefore: null });
+    });
+
+    it('filters by time range', async () => {
+      const future = new Date(Date.now() + 60_000).toISOString();
+      const { body } = await feed({ from: future });
+      expect(body.items).toEqual([]);
+      const all = await feed({ to: future });
+      expect(all.body.items).toHaveLength(5);
+    });
+
+    it('is closed without judge.change_settings', async () => {
+      const viewer = await loginAs(
+        api,
+        (await createUserWith(api, 'viewer'))._id,
+      );
+      await authed(api.http().get(AUDIT), viewer).expect(403);
     });
   });
 }

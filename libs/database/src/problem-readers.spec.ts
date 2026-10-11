@@ -10,6 +10,10 @@ type Treatment = 'F' | 'S' | 'F+S';
  * Readers that go through `ProblemsRepository` (tags, comments, tickets, contests, judges, ...) inherit its filter and are not listed.
  */
 const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
+  'apps/api/src/modules/audit/audit-labels.repository.ts': [
+    'S',
+    'the change feed names every audited problem; a soft-deleted one keeps its code and reads as deleted',
+  ],
   'apps/api/src/modules/home/home.repository.ts': [
     'F',
     'the newest list and the problem count show live problems only',
@@ -121,6 +125,8 @@ const READ_PATTERNS = [
   /InjectModel\(\s*Problem\.name\s*\)/,
   /getModelToken\(\s*Problem\b/,
   /\bmodel\(\s*(?:Problem\.name|['"]Problem['"])/,
+  // A table of model names read later through `connection.model(...)`.
+  /\bmodel\s*:\s*Problem\.name\b/,
   /Model<Problem>/,
   /\bProblem\.collection\b/,
   // The collection by name: a `$lookup`/reference (`from:`, `foreign:`) or any call that takes it first, e.g. `connection.collection('problems')`, `lookup('problems', ...)`, `each('problems', ...)`.
