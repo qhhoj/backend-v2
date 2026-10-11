@@ -251,7 +251,7 @@ export class CommentsRepository {
     return modifiedCount === 1;
   }
 
-  /** The page's next `number`. A page without a counter is seeded with its comment count first (rows posted before numbering, numbered 1..count by the backfill); racing seeds collide on the unique page key and the loser just increments. */
+  /** The page's next `number`. A page without a counter is seeded with its comment count first (rows posted before numbering); racing seeds collide on the unique page key and the loser just increments. */
   async nextNumber(page: CommentPage): Promise<number> {
     const bumped = await this.bumpCounter(page);
     if (bumped !== null) return bumped;

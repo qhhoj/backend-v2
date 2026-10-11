@@ -73,8 +73,3 @@ export const canReplyAfter = (
 
 export const isCollapsed = (score: number): boolean =>
   score <= COMMENT_COLLAPSE_SCORE;
-
-/** One-off worker job numbering the comments posted before `Comment.number` existed (fixed job id: BullMQ keeps one). */
-export const COMMENT_NUMBERS_QUEUE = 'comment-numbers';
-export const COMMENT_NUMBERS_JOB = 'backfill';
-export const COMMENT_NUMBERS_JOB_ID = 'comment-numbers-backfill-v1';
