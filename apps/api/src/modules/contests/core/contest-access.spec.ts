@@ -345,7 +345,7 @@ describe('ContestAccess.canSeeFullSubmissionList (legacy can_see_full_submission
   );
 });
 
-describe('ContestAccess.visibleFilter', () => {
+describe('ContestAccess.visibleFilter and editableFilter', () => {
   let replSet: TestMongo;
   let testingModule: TestingModule;
   let contests: Model<Contest>;
@@ -418,6 +418,35 @@ describe('ContestAccess.visibleFilter', () => {
         .sort();
       expect(actual).toEqual(expected);
       expect(expected.length).toBeGreaterThan(0);
+    },
+  );
+
+  it.each(Object.keys(PRINCIPALS))(
+    'editableFilter matches exactly what canEdit allows for %s',
+    async (who) => {
+      const principal = PRINCIPALS[who];
+      const expected = generated
+        .filter(({ view: contestView }) =>
+          ContestAccess.canEdit(principal, contestView),
+        )
+        .map(({ key }) => key)
+        .sort();
+      const filter = ContestAccess.editableFilter(principal);
+      const actual = filter
+        ? (
+            await contests
+              .find({
+                $and: [
+                  { key: { $in: generated.map(({ key }) => key) } },
+                  filter,
+                ],
+              })
+              .lean()
+          )
+            .map((contest) => contest.key)
+            .sort()
+        : [];
+      expect(actual).toEqual(expected);
     },
   );
 });

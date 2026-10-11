@@ -64,6 +64,10 @@ export class OrganizationsRepository {
     return rows.map((row) => uuidStr(row._id));
   }
 
+  async exists(filter: FilterQuery<Organization>): Promise<boolean> {
+    return (await this.organizations.exists(filter).exec()) !== null;
+  }
+
   /** Through `{adminIds}`. */
   countAdminRoles(userId: string): Promise<number> {
     return this.organizations.countDocuments({ adminIds: userId }).exec();

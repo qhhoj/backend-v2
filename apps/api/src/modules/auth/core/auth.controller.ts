@@ -29,6 +29,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { CurrentPasswordDto } from './dto/current-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegenerateTokenResponse } from './dto/token.response';
+import { SessionResponses } from './session-responses.service';
 import { SessionResponse } from './dto/session.response';
 
 @ApiTags('Auth')
@@ -36,6 +37,7 @@ import { SessionResponse } from './dto/session.response';
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly sessionResponses: SessionResponses,
     private readonly sessions: SessionService,
     @Inject(ENV) private readonly env: Env,
   ) {}
@@ -63,21 +65,21 @@ export class AuthController {
       request.auth?.sessionId ?? null,
     );
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
-    return SessionResponse.from(user, principal, session);
+    return this.sessionResponses.of(user, principal, session);
   }
 
   /**
    * Get the current session and user
    *
    * @remarks
-   * Signed-in callers only (cookie session or API token); also served while a second factor or a password change is still pending. Returns the same shape as login: the user with their permission codenames, the CSRF token of the session, and the pending second-factor methods when `twoFactorRequired` is true.
+   * Signed-in callers only (cookie session or API token); also served while a second factor or a password change is still pending. Returns the same shape as login: the user with their permission codenames and `adminCapabilities`, the CSRF token of the session, and the pending second-factor methods when `twoFactorRequired` is true.
    * An API token has no session, so `csrfToken` is null for it.
    */
   @AllowBeforeTwoFactor()
   @AllowPwnedPassword()
   @Get('me')
-  me(@CurrentAuth() auth: AuthContext): SessionResponse {
-    return SessionResponse.from(auth.user, auth.principal, auth.session);
+  me(@CurrentAuth() auth: AuthContext): Promise<SessionResponse> {
+    return this.sessionResponses.of(auth.user, auth.principal, auth.session);
   }
 
   /**

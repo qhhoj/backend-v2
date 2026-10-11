@@ -73,6 +73,17 @@ const canEdit = (principal: Principal | null, contest: ContestAccessView) =>
   has(principal, 'judge.edit_all_contest') ||
   (has(principal, 'judge.edit_own_contest') && isEditor(principal, contest));
 
+/** Mongo filter with exactly `canEdit`'s semantics; null edits nothing, `{}` everything. */
+function editableFilter(
+  principal: Principal | null,
+): FilterQuery<Contest> | null {
+  if (has(principal, 'judge.edit_all_contest')) return {};
+  if (!principal || !has(principal, 'judge.edit_own_contest')) return null;
+  return {
+    $or: [{ authors: principal.userId }, { curators: principal.userId }],
+  };
+}
+
 /** The balloon screen: editors, and balloon volunteers (`balloonStaff`) the editors listed. Whether the contest has balloons on is the caller's check. */
 const canViewBalloons = (
   principal: Principal | null,
@@ -247,6 +258,7 @@ export const ContestAccess = {
   isEditor,
   isTester,
   canEdit,
+  editableFilter,
   canViewBalloons,
   canSee,
   visibleFilter,

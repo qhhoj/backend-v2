@@ -55,6 +55,8 @@ export class ProblemFilterQueryDto {
   @IsOptional() @IsUUID('7') authorId?: string;
   /** true: only suggested problems still awaiting review (a suggester set, not public, so pair it with `visibility=private` or `all`); false: only the rest. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() suggested?: boolean;
+  /** true: only problems the viewer may edit (the admin screen's index, with `visibility=all`), whatever contest the viewer is in; false: only the others. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() editable?: boolean;
   /** `public` (default): public problems; `private`: visible problems that are not public; `all`: both. */
   @ApiPropertyOptional()
   @IsOptional()

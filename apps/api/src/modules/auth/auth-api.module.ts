@@ -5,6 +5,7 @@ import { OrganizationsApiModule } from '../organizations/organizations-api.modul
 import { ActivationService } from './registration/activation.service';
 import { AuthController } from './core/auth.controller';
 import { AuthService } from './core/auth.service';
+import { SessionResponses } from './core/session-responses.service';
 import { ImpersonationController } from './impersonation/impersonation.controller';
 import { ImpersonationService } from './impersonation/impersonation.service';
 import { PasswordResetController } from './password-reset/password-reset.controller';
@@ -33,6 +34,7 @@ import { WebauthnService } from './two-factor/webauthn.service';
   ],
   providers: [
     AuthService,
+    SessionResponses,
     ImpersonationService,
     RegistrationService,
     ActivationService,

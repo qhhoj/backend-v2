@@ -239,6 +239,18 @@
         ],
         "type": "object"
       },
+      "AdminCapabilitiesResponse": {
+        "properties": {
+          "organizations": {
+            "description": "Whether the user may administer at least one organization: an admin of one, or a holder of `judge.edit_all_organization`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "organizations"
+        ],
+        "type": "object"
+      },
       "AdminCommentItemResponse": {
         "properties": {
           "comment": {
@@ -14388,6 +14400,14 @@
       },
       "UserResponse": {
         "properties": {
+          "adminCapabilities": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminCapabilitiesResponse"
+              }
+            ],
+            "description": "Object rights behind the admin screens, beside the permission codenames."
+          },
           "appearance": {
             "allOf": [
               {
@@ -14456,6 +14476,7 @@
           "isStaff",
           "isSuperuser",
           "permissions",
+          "adminCapabilities",
           "isTotpEnabled",
           "isWebauthnEnabled",
           "siteTheme",
@@ -18491,7 +18512,7 @@
     },
     "/api/internal/auth/me": {
       "get": {
-        "description": "Signed-in callers only (cookie session or API token); also served while a second factor or a password change is still pending. Returns the same shape as login: the user with their permission codenames, the CSRF token of the session, and the pending second-factor methods when `twoFactorRequired` is true.\nAn API token has no session, so `csrfToken` is null for it.",
+        "description": "Signed-in callers only (cookie session or API token); also served while a second factor or a password change is still pending. Returns the same shape as login: the user with their permission codenames and `adminCapabilities`, the CSRF token of the session, and the pending second-factor methods when `twoFactorRequired` is true.\nAn API token has no session, so `csrfToken` is null for it.",
         "operationId": "AuthController_me",
         "parameters": [],
         "responses": {
@@ -20314,7 +20335,7 @@
     },
     "/api/internal/contests": {
       "get": {
-        "description": "Returns one page of contests the viewer may see, each row carrying the\nsigned-in viewer's own state in it. Anonymous callers see only visible\ncontests that are neither private nor organization-private. Filters are\n`phase` (upcoming, running or ended), `tag`, `organization`, `rated`, and\n`search` or `q` (case-insensitive key or name substring, ANDed together).\nUpcoming contests are sorted soonest first, all other views newest first.\nPaged with `page` and `pageSize` (default 50, at most 100).",
+        "description": "Returns one page of contests the viewer may see, each row carrying the\nsigned-in viewer's own state in it. Anonymous callers see only visible\ncontests that are neither private nor organization-private. Filters are\n`phase` (upcoming, running or ended), `tag`, `organization`, `rated`, and\n`search` or `q` (case-insensitive key or name substring, ANDed together).\n`editable=true` keeps only the contests the viewer may edit.\nUpcoming contests are sorted soonest first, all other views newest first.\nPaged with `page` and `pageSize` (default 50, at most 100).",
         "operationId": "ContestsController_list",
         "parameters": [
           {
@@ -20373,6 +20394,15 @@
             "description": "Only rated (true) or unrated (false) contests.",
             "in": "query",
             "name": "rated",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "true: only contests the viewer may edit (the admin screen's index); false: only the others.",
+            "in": "query",
+            "name": "editable",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -25688,7 +25718,7 @@
     },
     "/api/internal/organizations": {
       "get": {
-        "description": "Returns one page of organizations the viewer may list. Unlisted\norganizations appear only to their members, their admins and holders of\n`judge.edit_all_organization`. `search` narrows by a case-insensitive\nsubstring of name, short name or slug; `open` and `unlisted` (true or\nfalse) keep only organizations in that state. Paged with `page` and\n`pageSize` (default 100, at most 100). Anonymous callers may use it.",
+        "description": "Returns one page of organizations the viewer may list. Unlisted\norganizations appear only to their members, their admins and holders of\n`judge.edit_all_organization`. `search` narrows by a case-insensitive\nsubstring of name, short name or slug; `open` and `unlisted` (true or\nfalse) keep only organizations in that state; `administered=true` keeps\nonly the organizations the viewer may administer (the admin screen's\nlist), `false` the others. Paged with `page` and `pageSize` (default 100,\nat most 100). Anonymous callers may use it.",
         "operationId": "OrganizationsController_list",
         "parameters": [
           {
@@ -25739,6 +25769,15 @@
             "description": "true: only unlisted organizations; false: only listed ones. Narrows what the viewer may already list.",
             "in": "query",
             "name": "unlisted",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "true: only organizations the viewer may administer (their admin, or every one with `judge.edit_all_organization`); false: only the others.",
+            "in": "query",
+            "name": "administered",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -28483,7 +28522,7 @@
     },
     "/api/internal/problems": {
       "get": {
-        "description": "Public. Returns one page of the problems the viewer may see, a signed-in\nviewer's own solved or attempted mark included. `visibility` narrows to\npublic, private or all visible problems (default public). `search` splits on\nspaces and needs every word inside the code or a title, ignoring case and\nVietnamese accents; `q` is a substring match on the code or any title; `sort`\ntakes `date`, `code`, `name`, `points`, `acRate` or `userCount`, with a\nleading `-` for descending (default `-date`). Paging: `page` from 1,\n`pageSize` 1-100 (default 50). While the viewer is in a contest, its\nproblems are listed even if private, and nothing is listed before the\ncontest starts.",
+        "description": "Public. Returns one page of the problems the viewer may see, a signed-in\nviewer's own solved or attempted mark included. `visibility` narrows to\npublic, private or all visible problems (default public); `editable=true`\nkeeps only the problems the viewer may edit (pair it with `visibility=all`\nfor private ones too). `search` splits on\nspaces and needs every word inside the code or a title, ignoring case and\nVietnamese accents; `q` is a substring match on the code or any title; `sort`\ntakes `date`, `code`, `name`, `points`, `acRate` or `userCount`, with a\nleading `-` for descending (default `-date`). Paging: `page` from 1,\n`pageSize` 1-100 (default 50). While the viewer is in a contest, its\nproblems are listed even if private, and nothing is listed before the\ncontest starts.",
         "operationId": "ProblemsController_list",
         "parameters": [
           {
@@ -28638,6 +28677,15 @@
             "description": "true: only suggested problems still awaiting review (a suggester set, not public, so pair it with `visibility=private` or `all`); false: only the rest.",
             "in": "query",
             "name": "suggested",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "true: only problems the viewer may edit (the admin screen's index, with `visibility=all`), whatever contest the viewer is in; false: only the others.",
+            "in": "query",
+            "name": "editable",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -29349,6 +29397,15 @@
             "description": "true: only suggested problems still awaiting review (a suggester set, not public, so pair it with `visibility=private` or `all`); false: only the rest.",
             "in": "query",
             "name": "suggested",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "true: only problems the viewer may edit (the admin screen's index, with `visibility=all`), whatever contest the viewer is in; false: only the others.",
+            "in": "query",
+            "name": "editable",
             "required": false,
             "schema": {
               "type": "boolean"

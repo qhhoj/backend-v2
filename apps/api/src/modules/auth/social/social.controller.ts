@@ -15,6 +15,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public, setSessionCookie } from '@libs/auth';
 import { ENV } from '@libs/common';
 import type { Env } from '@libs/common';
+import { SessionResponses } from '../core/session-responses.service';
 import { SessionResponse } from '../core/dto/session.response';
 import { SocialCompleteDto } from './dto/social-complete.dto';
 import { SocialProvidersResponse } from './dto/social-providers.response';
@@ -30,6 +31,7 @@ const PENDING_COOKIE = 'oauth_pending';
 export class SocialController {
   constructor(
     private readonly social: SocialService,
+    private readonly sessionResponses: SessionResponses,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -125,7 +127,7 @@ export class SocialController {
     );
     reply.clearCookie(PENDING_COOKIE, { path: STATE_COOKIE_PATH });
     setSessionCookie(reply, sessionId, this.env.cookieSecure);
-    return SessionResponse.from(user, principal, session);
+    return this.sessionResponses.of(user, principal, session);
   }
 
   private setFlowCookie(

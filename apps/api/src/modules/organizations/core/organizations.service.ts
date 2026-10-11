@@ -4,7 +4,7 @@ import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated, unique } from '@libs/common';
 import { competitionRanks } from '@libs/community';
-import { uuidStr } from '@libs/database';
+import { narrowTo, uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
 import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { MemberResponse } from './dto/member.response';
@@ -62,16 +62,34 @@ export class OrganizationsService {
     return organization;
   }
 
+  /** Whether the viewer may administer at least one organization (an admin of one, or `edit_all_organization`). */
+  async administersAny(principal: Principal): Promise<boolean> {
+    const filter = OrganizationAccess.administeredFilter(principal);
+    if (filter === null) return false;
+    return (
+      Object.keys(filter).length === 0 || this.organizations.exists(filter)
+    );
+  }
+
   /** Legacy `OrganizationList`, plus the viewer's own unlisted ones. Search and flags only narrow what the viewer may already list. */
   async list(
     principal: Principal | null,
     query: OrganizationListQueryDto,
   ): Promise<Paginated<OrganizationListItemResponse>> {
-    const { page, pageSize } = query;
+    const { page, pageSize, administered } = query;
+    const clauses = [
+      OrganizationAccess.listFilter(principal),
+      this.narrowing(query),
+    ];
+    if (administered !== undefined)
+      clauses.push(
+        narrowTo(
+          OrganizationAccess.administeredFilter(principal),
+          administered,
+        ),
+      );
     const { items, total } = await this.organizations.list(
-      {
-        $and: [OrganizationAccess.listFilter(principal), this.narrowing(query)],
-      },
+      { $and: clauses },
       page,
       pageSize,
     );
