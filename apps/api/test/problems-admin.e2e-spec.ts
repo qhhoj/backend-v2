@@ -6,6 +6,7 @@ import {
   seedCatalog,
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
+import { ProblemEditingService } from '../src/modules/problems/editing/problem-editing.service';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -89,6 +90,44 @@ describe('bulk visibility and change messages', () => {
     expect(revisions.map((revision) => revision.comment)).toEqual([
       'Round 12 is over',
     ]);
+  });
+
+  it('reports an unexpected failure on one problem and still applies and reports the others', async () => {
+    await createProblem(api, catalog, {
+      code: 'crashy',
+      isPublic: false,
+      curators: [publisherId],
+    });
+    await createProblem(api, catalog, {
+      code: 'after',
+      isPublic: false,
+      curators: [publisherId],
+    });
+    const editing = api.app.get(ProblemEditingService);
+    const original = editing.applyEdit.bind(editing);
+    const spy = jest
+      .spyOn(editing, 'applyEdit')
+      .mockImplementation((principal, code, patch) =>
+        code === 'crashy'
+          ? Promise.reject(new Error('disk on fire'))
+          : original(principal, code, patch),
+      );
+    try {
+      const result = dataOf<{ results: unknown[]; done: number }>(
+        await bulk(publisher, {
+          codes: ['crashy', 'after'],
+          isPublic: true,
+        }).expect(200),
+      );
+      expect(result.results).toEqual([
+        { code: 'crashy', outcome: 'failed', reason: 'internal_error' },
+        { code: 'after', outcome: 'done' },
+      ]);
+      const after = await api.problems.findOne({ code: 'after' }).lean();
+      expect(after?.isPublic).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('refuses setting the date without judge.edit_all_problem, per problem', async () => {

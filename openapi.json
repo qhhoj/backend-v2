@@ -30536,7 +30536,7 @@
     },
     "/api/internal/problems/bulk/visibility": {
       "post": {
-        "description": "Needs `judge.change_public_visibility`. Applies `isPublic` to each listed\nproblem exactly as `PATCH /problems/{code}` would: the caller needs edit\nrights on each, every change writes a revision and rescores. With\n`setDateToNow` a publish also sets the publication date to now (needs\n`judge.edit_all_problem`). A refused problem is reported as `failed` with\nthe PATCH's error code and does not stop the others. Limited to 20 runs per\nhour per user (429 `rate_limited`).",
+        "description": "Needs `judge.change_public_visibility`. Applies `isPublic` to each listed\nproblem exactly as `PATCH /problems/{code}` would: the caller needs edit\nrights on each, every change writes a revision and rescores. With\n`setDateToNow` a publish also sets the publication date to now (needs\n`judge.edit_all_problem`). A refused problem is reported as `failed` with\nthe PATCH's error code (`internal_error` for an unexpected failure) and does not stop the others. Limited to 20 runs per\nhour per user (429 `rate_limited`).",
         "operationId": "ProblemBulkVisibilityController_visibility",
         "parameters": [],
         "requestBody": {

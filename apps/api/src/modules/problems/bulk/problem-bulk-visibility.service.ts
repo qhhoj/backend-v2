@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
 import { AppError, RateLimitService } from '@libs/common';
 import { ProblemEditingService } from '../editing/problem-editing.service';
@@ -16,12 +16,14 @@ const BULK_WINDOW_SECONDS = 60 * 60;
 /** Legacy admin actions `make_public_and_update_publish_date` and `make_private`, one PATCH per problem so each keeps its gates, revision and rescore. */
 @Injectable()
 export class ProblemBulkVisibilityService {
+  private readonly logger = new Logger(ProblemBulkVisibilityService.name);
+
   constructor(
     private readonly editing: ProblemEditingService,
     private readonly rateLimit: RateLimitService,
   ) {}
 
-  /** Codes run one after another; a refused code is reported and the rest still apply. */
+  /** Codes run one after another; a refused or crashed code is reported and the rest still apply, so the answer always says which ones changed. */
   async run(
     principal: Principal,
     dto: BulkVisibilityDto,
@@ -57,7 +59,11 @@ export class ProblemBulkVisibilityService {
     } catch (error) {
       if (error instanceof AppError)
         return { code, outcome: 'failed', reason: error.code };
-      throw error;
+      this.logger.error(
+        `Bulk visibility failed on ${code}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return { code, outcome: 'failed', reason: 'internal_error' };
     }
   }
 }
