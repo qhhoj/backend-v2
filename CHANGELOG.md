@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.8.0
+
+### Minor Changes
+
+- 2d1748d: The session user gains `adminCapabilities.organizations`; `GET /problems` and `GET /contests` take `editable`, `GET /organizations` takes `administered`, so the admin screens can open to authors and organization admins who are not staff.
+- f56873c: Polygon import by link: `POST /polygon/resolve` checks a pasted problem link (its `p…` token against the `url` in the newest package's problem.xml) and previews the problem; `POST /polygon/import` takes the link in the body. `GET /polygon/problems` and `POST /polygon/problems/{polygonId}/import` are removed, with the shared-list cache. New errors `polygon_link_invalid`, `polygon_link_refused`, `polygon_no_package`; `polygon_already_linked` names the QHHOJ problem (and `linkedProblemCode`) only to its editors.
+
 ## 2.7.0
 
 ### Minor Changes
