@@ -17,7 +17,7 @@ export class RuntimesController {
    * left out) with online state, slots, slots in use, mean ping in milliseconds
    * and when they started, and every programming language with the compiler
    * version each judge has for it. Keys, addresses, builds and notes are never
-   * returned.
+   * returned. Cached for 3 seconds, shared by all callers.
    */
   @Public()
   @Get()

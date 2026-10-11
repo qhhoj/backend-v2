@@ -1,6 +1,7 @@
 import type { Language } from '@libs/database';
 import type { JudgesRepository, PublicJudgeRow } from '../judges.repository';
 import type { LanguagesQuerier } from '../../problems/catalog/languages.querier';
+import type Redis from 'ioredis';
 import { RuntimesService } from './runtimes.service';
 
 const judge = (extra: Partial<PublicJudgeRow>): PublicJudgeRow => ({
@@ -24,7 +25,18 @@ const language = (key: string, name: string): Language =>
     fileOnly: false,
   }) as Language;
 
-function serviceWith(judges: PublicJudgeRow[]) {
+function fakeRedis() {
+  const store = new Map<string, string>();
+  return {
+    get: (key: string) => Promise.resolve(store.get(key) ?? null),
+    set: (key: string, value: string) => {
+      store.set(key, value);
+      return Promise.resolve('OK');
+    },
+  } as unknown as Redis;
+}
+
+function serviceWith(judges: PublicJudgeRow[], redis = fakeRedis()) {
   return new RuntimesService(
     {
       listPublic: () => Promise.resolve(judges),
@@ -32,6 +44,7 @@ function serviceWith(judges: PublicJudgeRow[]) {
     {
       all: () => [language('PY3', 'Python 3'), language('CPP17', 'C++17')],
     } as unknown as LanguagesQuerier,
+    redis,
   );
 }
 
@@ -68,5 +81,17 @@ describe('RuntimesService', () => {
     const { languages } = await serviceWith([judge({})]).overview();
     expect(languages.map((entry) => entry.key)).toEqual(['CPP17', 'PY3']);
     expect(languages[1].versions).toEqual([]);
+  });
+
+  it('answers repeat calls from the shared cache without reading the judges again', async () => {
+    const list = jest.fn(() => Promise.resolve([judge({})]));
+    const service = new RuntimesService(
+      { listPublic: list } as unknown as JudgesRepository,
+      { all: () => [] } as unknown as LanguagesQuerier,
+      fakeRedis(),
+    );
+    await service.overview();
+    await service.overview();
+    expect(list).toHaveBeenCalledTimes(1);
   });
 });
