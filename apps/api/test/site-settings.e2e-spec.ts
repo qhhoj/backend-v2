@@ -125,6 +125,57 @@ afterAll(() => api.teardown());
       expect(error).not.toMatch(/secret\.example|tok-999/);
     });
 
+    it('edits the Discord webhooks one event at a time, showing only masked targets', async () => {
+      const HOOKS = '/api/internal/admin/discord-webhooks';
+      const rows = async (request: Test) =>
+        Object.fromEntries(
+          dataOf<
+            Array<{
+              event: string;
+              target: string | null;
+              usesDefault: boolean;
+            }>
+          >(await request.expect(200)).map(({ event, ...row }) => [event, row]),
+        );
+      await patch('discord.webhooks', {
+        default: 'https://discord.test/api/webhooks/tok-default',
+      }).expect(200);
+      const set = rows(
+        authed(api.http().put(`${HOOKS}/on_new_ticket`), admin).send({
+          url: 'https://discord.test/api/webhooks/tok-ticket',
+        }),
+      );
+      expect(await set).toMatchObject({
+        default: { target: 'discord.test/…ault', usesDefault: false },
+        on_new_ticket: { target: 'discord.test/…cket', usesDefault: false },
+        on_new_comment: { target: null, usesDefault: true },
+      });
+      expect(
+        JSON.stringify(await rows(authed(api.http().get(HOOKS), admin))),
+      ).not.toMatch(/tok-/);
+      expect(api.app.get(SettingsService).get('discord.webhooks')).toEqual({
+        default: 'https://discord.test/api/webhooks/tok-default',
+        on_new_ticket: 'https://discord.test/api/webhooks/tok-ticket',
+      });
+      expect(
+        await rows(authed(api.http().delete(`${HOOKS}/default`), admin)),
+      ).toMatchObject({
+        default: { target: null },
+        on_new_comment: { target: null, usesDefault: false },
+      });
+      await authed(api.http().post(`${HOOKS}/on_new_comment/test`), admin)
+        .expect(409)
+        .expect(errorCode('webhook_unset'));
+      await authed(
+        api.http().post(`${HOOKS}/on_new_ticket/test`),
+        admin,
+      ).expect(204);
+      const plain = await createUserWith(api, 'hooks-plain');
+      await authed(api.http().get(HOOKS), await loginAs(api, plain._id)).expect(
+        403,
+      );
+    });
+
     it('restores a revision: the value is back, the restore is a new revision and the querier sees it', async () => {
       await patch('pdf.renderTimeoutMs', 45_000).expect(200);
       const revisionsBefore = await revisionTotal('pdf.renderTimeoutMs');

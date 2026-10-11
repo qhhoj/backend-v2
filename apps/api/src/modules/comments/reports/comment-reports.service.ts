@@ -1,18 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import {
   AppError,
   isDuplicateKey,
   Paginated,
   RateLimitService,
-  unique,
 } from '@libs/common';
-import { excerpt, pageOf, pageRef } from '@libs/community';
+import { excerpt } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Comment, CommentReport } from '@libs/database';
-import { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
-import { CommentPagesService } from '../core/comment-pages.service';
+import type { UserSummaryResponse } from '../../problems/core/dto/user-summary.response';
 import { CommentsRepository } from '../core/comments.repository';
 import { CommentsService } from '../core/comments.service';
 import { CommentPageLinkResponse } from '../core/dto/comment.response';
@@ -35,8 +32,6 @@ export class CommentReportsService {
     private readonly reports: CommentReportsRepository,
     private readonly comments: CommentsService,
     private readonly commentRows: CommentsRepository,
-    private readonly pages: CommentPagesService,
-    private readonly users: UsersRepository,
     private readonly rateLimits: RateLimitService,
   ) {}
 
@@ -99,8 +94,8 @@ export class CommentReportsService {
       this.reports.openOf(ids),
     ]);
     const [readable, summaryOf] = await Promise.all([
-      this.pages.accessible(principal, rows.map(pageOf)),
-      this.summaries([
+      this.comments.readablePagesOf(principal, rows),
+      this.comments.summariesOf([
         ...rows.map((row) => row.author),
         ...reports.map((report) => report.reporter),
       ]),
@@ -109,13 +104,8 @@ export class CommentReportsService {
     return new Paginated(
       items.flatMap((row) => {
         const comment = commentOf.get(row.commentId);
-        const pageInfo = comment && readable.get(pageRef(pageOf(comment)));
-        if (
-          !comment ||
-          !pageInfo ||
-          this.comments.hidesThread(principal, pageInfo)
-        )
-          return [];
+        const pageInfo = readable.get(row.commentId);
+        if (!comment || !pageInfo) return [];
         const open = reports.filter(
           (report) => uuidStr(report.comment) === row.commentId,
         );
@@ -142,15 +132,6 @@ export class CommentReportsService {
     await this.comments.visibleComment(principal, id, { allowHidden: true });
     if (!(await this.reports.settle(id, outcome, principal.userId, now)))
       throw new AppError('not_found', 404, 'No open reports on this comment');
-  }
-
-  private async summaries(
-    userIds: readonly unknown[],
-  ): Promise<Map<string, UserSummaryResponse>> {
-    const users = await this.users.findByIds(unique(userIds.map(uuidStr)));
-    return new Map(
-      users.map((user) => [user._id, UserSummaryResponse.from(user)]),
-    );
   }
 
   private queueItem(

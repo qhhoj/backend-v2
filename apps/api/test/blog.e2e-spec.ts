@@ -182,6 +182,37 @@ afterAll(() => api.teardown());
       ]);
     });
 
+    it('lists organization posts and every post, searched by title or exact author', async () => {
+      const session = await moderator();
+      const author = await writer(api, `author${(userCount += 1)}`);
+      const organization = await createOrganization(api);
+      await createPost(api, {
+        title: 'Spam offer',
+        authors: [author._id],
+        publishOn: hoursFromNow(-2),
+      });
+      await createPost(api, {
+        title: 'club news',
+        organization: organization._id,
+        visible: false,
+        publishOn: hoursFromNow(-1),
+      });
+      expect(await titlesOf('state=organization', session)).toEqual([
+        'club news',
+      ]);
+      expect(await titlesOf('state=any', session)).toEqual([
+        'club news',
+        'Spam offer',
+      ]);
+      expect(await titlesOf('state=any&search=spam', session)).toEqual([
+        'Spam offer',
+      ]);
+      expect(
+        await titlesOf(`state=any&search=${author.username}`, session),
+      ).toEqual(['Spam offer']);
+      expect(await titlesOf('state=any&search=(', session)).toEqual([]);
+    });
+
     it('refuses users without edit_all_post and anonymous visitors', async () => {
       await listing('state=hidden', await plainUser()).expect(403);
       await api.http().get(`${MODERATION_URL}?state=hidden`).expect(401);

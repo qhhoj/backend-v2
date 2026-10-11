@@ -239,6 +239,56 @@
         ],
         "type": "object"
       },
+      "AdminCommentItemResponse": {
+        "properties": {
+          "comment": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReportedCommentResponse"
+              }
+            ],
+            "description": "The comment."
+          },
+          "createdAt": {
+            "description": "When it was posted, ISO 8601.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "hiddenBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummaryResponse"
+              }
+            ],
+            "description": "The moderator who hid it; null when visible or the account is gone.",
+            "nullable": true,
+            "type": "object"
+          },
+          "page": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommentPageLinkResponse"
+              }
+            ],
+            "description": "The page it belongs to."
+          }
+        },
+        "required": [
+          "comment",
+          "page",
+          "createdAt",
+          "hiddenBy"
+        ],
+        "type": "object"
+      },
+      "AdminCommentState": {
+        "enum": [
+          "all",
+          "hidden",
+          "visible"
+        ],
+        "type": "string"
+      },
       "AnnouncementPreviewDto": {
         "properties": {
           "description": {
@@ -525,6 +575,45 @@
         },
         "required": [
           "reason"
+        ],
+        "type": "object"
+      },
+      "BulkHideCommentsDto": {
+        "properties": {
+          "hidden": {
+            "description": "True to hide each comment with its replies, false to restore them.",
+            "type": "boolean"
+          },
+          "ids": {
+            "description": "Ids of the comments, at most 50; duplicates count once.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids",
+          "hidden"
+        ],
+        "type": "object"
+      },
+      "BulkHideOutcomeResponse": {
+        "properties": {
+          "code": {
+            "description": "Null when the change was made; otherwise the error code that refused it (`not_found`, `conflict`).",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "Id of the comment.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code"
         ],
         "type": "object"
       },
@@ -4202,6 +4291,57 @@
           }
         },
         "type": "object"
+      },
+      "DiscordEvent": {
+        "enum": [
+          "on_new_blogpost",
+          "on_new_comment",
+          "on_new_problem",
+          "on_new_suggested_problem",
+          "on_new_ticket",
+          "on_new_ticket_message"
+        ],
+        "type": "string"
+      },
+      "DiscordWebhookResponse": {
+        "properties": {
+          "event": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DiscordWebhookSlot"
+              }
+            ],
+            "description": "`default` or an event name."
+          },
+          "target": {
+            "description": "The URL's host and its last 4 characters (`discord.com/…a1b2`); null when this slot has no URL of its own.",
+            "nullable": true,
+            "type": "string"
+          },
+          "usesDefault": {
+            "description": "The event has no URL of its own and is sent to the `default` one; false for `default` itself and for unsent events.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "event",
+          "target",
+          "usesDefault"
+        ],
+        "type": "object"
+      },
+      "DiscordWebhookSlot": {
+        "description": "`default` or an event name.",
+        "enum": [
+          "default",
+          "on_new_blogpost",
+          "on_new_comment",
+          "on_new_problem",
+          "on_new_suggested_problem",
+          "on_new_ticket",
+          "on_new_ticket_message"
+        ],
+        "type": "string"
       },
       "DisqualifyDto": {
         "properties": {
@@ -9994,6 +10134,20 @@
         ],
         "type": "object"
       },
+      "SetWebhookDto": {
+        "properties": {
+          "url": {
+            "description": "The Discord webhook URL (https).",
+            "format": "uri",
+            "maxLength": 500,
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
       "SettingKey": {
         "description": "Setting key.",
         "enum": [
@@ -14477,6 +14631,410 @@
   },
   "openapi": "3.0.0",
   "paths": {
+    "/api/internal/admin/comments": {
+      "get": {
+        "description": "Requires `judge.change_comment`. Lists the comments of the whole site,\nnewest first, 30 per page, hidden ones included unless `state` narrows\nit: filter by body text `search` (deleted comments left out), the\nauthor's exact `author` username and the `pageType`. Comments on pages the moderator\ncannot read are left out of the page. A body search that runs too long\nfails with 422 `search_too_broad`.",
+        "operationId": "CommentAdminController_list",
+        "parameters": [
+          {
+            "description": "`visible`, `hidden` or `all` (default). Deleted comments are listed as placeholders, except in a body search.",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AdminCommentState"
+            }
+          },
+          {
+            "description": "Only comments on this kind of page.",
+            "in": "query",
+            "name": "pageType",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CommentPageType"
+            }
+          },
+          {
+            "description": "1-based page number.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Text the comment body contains (case-insensitive).",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Exact username of the author.",
+            "in": "query",
+            "name": "author",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/AdminCommentItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search every comment",
+        "tags": [
+          "Comments"
+        ],
+        "x-enveloped": true
+      }
+    },
+    "/api/internal/admin/comments/hidden": {
+      "post": {
+        "description": "Requires `judge.change_comment`. Applies the single-comment hide to each\nof up to 50 `ids` in turn (each with its replies, its revision and the\nmoderator recorded) and recomputes the authors' contribution points once.\nA refused comment does not stop the others: each id comes back with a\nnull `code`, or the error code that refused it (`not_found`,\n`conflict` when its parent is hidden).",
+        "operationId": "CommentAdminController_setHidden",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkHideCommentsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/BulkHideOutcomeResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Hide or unhide many comments",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/internal/admin/discord-webhooks": {
+      "get": {
+        "description": "Requires `judge.change_settings`. One row for `default` and each event:\nthe masked target of its own URL (host and last 4 characters; the URL\nitself is never returned), and whether it falls back to `default`.",
+        "operationId": "DiscordWebhooksAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/DiscordWebhookResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the Discord webhooks",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      }
+    },
+    "/api/internal/admin/discord-webhooks/{event}": {
+      "delete": {
+        "description": "Requires `judge.change_settings`. Removes the URL of `default` or one\nevent, keeping the others; an event without its own URL then uses\n`default`. Returns every row.",
+        "operationId": "DiscordWebhooksAdminController_remove",
+        "parameters": [
+          {
+            "description": "`default` or an event name.",
+            "in": "path",
+            "name": "event",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DiscordWebhookSlot"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/DiscordWebhookResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove one Discord webhook",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      },
+      "put": {
+        "description": "Requires `judge.change_settings`. Sets the URL of `default` or one event,\nkeeping the others, as a revision of the `discord.webhooks` setting.\nReturns every row. 400 `validation_failed` for a URL the setting refuses.",
+        "operationId": "DiscordWebhooksAdminController_set",
+        "parameters": [
+          {
+            "description": "`default` or an event name.",
+            "in": "path",
+            "name": "event",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DiscordWebhookSlot"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWebhookDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/DiscordWebhookResponse"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Set one Discord webhook",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      }
+    },
+    "/api/internal/admin/discord-webhooks/{event}/test": {
+      "post": {
+        "description": "Requires `judge.change_settings`. Queues a test embed for the event, sent\nto its own URL or else `default` like a real one; delivery happens in the\nbackground, so a bad URL shows in Discord (or the worker log), not here.\n409 `webhook_unset` when neither has a URL. Returns 204.",
+        "operationId": "DiscordWebhooksAdminController_test",
+        "parameters": [
+          {
+            "description": "An event name.",
+            "in": "path",
+            "name": "event",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DiscordEvent"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a test message",
+        "tags": [
+          "Admin: site & settings"
+        ]
+      }
+    },
     "/api/internal/admin/languages": {
       "get": {
         "description": "Needs `judge.change_language`. Returns every programming language of the\nsite, sorted by name, including editor, highlighting and file-size settings\nthat the public catalog omits.",
@@ -14934,7 +15492,7 @@
     },
     "/api/internal/admin/posts": {
       "get": {
-        "description": "Requires `judge.edit_all_post`. Returns posts by `state`: `hidden` (every\ndraft, personal or organization) or `scheduled` (visible posts whose\npublish time is still ahead), newest first. Paged with `page`.",
+        "description": "Requires `judge.edit_all_post`. Returns posts by `state`: `hidden` (every\ndraft, personal or organization), `scheduled` (visible posts whose\npublish time is still ahead), `organization` (every organization post) or\n`any` (every post), newest first. `search` keeps posts whose title contains it\nor with an author of that exact username. Paged with `page`.",
         "operationId": "BlogModerationController_list",
         "parameters": [
           {
@@ -14955,9 +15513,21 @@
             "required": true,
             "schema": {
               "enum": [
+                "any",
                 "hidden",
+                "organization",
                 "scheduled"
               ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Text the title contains (case-insensitive), or an author's exact username.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
               "type": "string"
             }
           }

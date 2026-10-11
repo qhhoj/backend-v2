@@ -19,8 +19,10 @@ export class BlogModerationController {
    *
    * @remarks
    * Requires `judge.edit_all_post`. Returns posts by `state`: `hidden` (every
-   * draft, personal or organization) or `scheduled` (visible posts whose
-   * publish time is still ahead), newest first. Paged with `page`.
+   * draft, personal or organization), `scheduled` (visible posts whose
+   * publish time is still ahead), `organization` (every organization post) or
+   * `any` (every post), newest first. `search` keeps posts whose title contains it
+   * or with an author of that exact username. Paged with `page`.
    */
   @ApiPaginatedResponse(PostListItemResponse)
   @Get()

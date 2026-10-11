@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError } from '@libs/common';
+import { AppError, unique } from '@libs/common';
 import type { CommentPageType } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
@@ -13,6 +13,7 @@ import { CommentPagesService } from '../core/comment-pages.service';
 import { CommentsRepository } from '../core/comments.repository';
 import { CommentsService } from '../core/comments.service';
 import type { CommentDetailResponse } from '../core/dto/comment.response';
+import type { BulkHideOutcomeResponse } from './dto/bulk-hide-comments.dto';
 import type { CommentVoteEntryResponse } from './dto/comment-vote-entry.response';
 
 /** `judge.change_comment` tools; every route still needs page access (404 otherwise) and is closed in official contest mode. */
@@ -36,9 +37,53 @@ export class CommentModerationService {
     isHidden: boolean,
   ): Promise<CommentDetailResponse> {
     this.comments.assertOpen(principal);
+    await this.contributions.refresh(
+      await this.applyHidden(principal, id, isHidden),
+    );
+    return this.comments.detail(principal, id);
+  }
+
+  /** `setHidden` on many comments: each id gets its own outcome (a refused one does not stop the rest), a comment already in that state is left alone, and one refused because its parent was still hidden is tried again after the others. The points are recomputed once, also when a write fails midway. */
+  async setHiddenMany(
+    principal: Principal,
+    ids: string[],
+    isHidden: boolean,
+  ): Promise<BulkHideOutcomeResponse[]> {
+    this.comments.assertOpen(principal);
+    const authors: string[] = [];
+    const codes = new Map<string, string | null>();
+    const attempt = async (id: string) => {
+      try {
+        authors.push(
+          ...(await this.applyHidden(principal, id, isHidden, true)),
+        );
+        codes.set(id, null);
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        codes.set(id, error.code);
+      }
+    };
+    try {
+      for (const id of unique(ids)) await attempt(id);
+      for (const [id, code] of codes)
+        if (code === 'conflict') await attempt(id);
+    } finally {
+      await this.contributions.refresh(unique(authors));
+    }
+    return [...codes].map(([id, code]) => ({ id, code }));
+  }
+
+  /** Hides or unhides one subtree and records the revision; returns the authors whose points changed. `skipUnchanged`: a comment already in that state is a no-op (no revision). */
+  private async applyHidden(
+    principal: Principal,
+    id: string,
+    isHidden: boolean,
+    skipUnchanged = false,
+  ): Promise<string[]> {
     const { comment } = await this.comments.visibleComment(principal, id, {
       allowHidden: true,
     });
+    if (skipUnchanged && comment.hidden === isHidden) return [];
     if (
       !isHidden &&
       comment.parentId &&
@@ -60,8 +105,7 @@ export class CommentModerationService {
       changes: { hidden: { before: comment.hidden, after: isHidden } },
       comment: '',
     });
-    await this.contributions.refresh(authors);
-    return this.comments.detail(principal, id);
+    return authors;
   }
 
   /** Legacy `CommentVotesAjax`. */

@@ -364,6 +364,26 @@ describe('blog editing', () => {
     }
   });
 
+  it('exempts one moderation flag sent alone by edit_all_post from the limit, still checking its own permission', async () => {
+    const { user } = await person();
+    const { session: staff } = await person({
+      permissions: ['judge.edit_all_post', 'judge.pin_post'],
+    });
+    const post = await createPost(api, { authors: [user._id] });
+    for (let index = 0; index < 12; index++)
+      await patch(post._id, staff, { sticky: index % 2 === 0 }).expect(200);
+    await patch(post._id, staff, { globalPost: true })
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    await api.setSetting('contest.officialMode', true);
+    try {
+      await patch(post._id, staff, { sticky: true }).expect(200);
+    } finally {
+      await api.setSetting('contest.officialMode', false);
+    }
+    expect((await api.blogPosts.findById(post._id).lean())!.sticky).toBe(true);
+  });
+
   it('deletes with delete_blogpost, taking comments, votes and the lock along and recomputing their authors', async () => {
     const { user, session } = await person();
     const { user: deleter, session: deleterSession } = await person({
