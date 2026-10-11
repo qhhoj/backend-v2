@@ -241,13 +241,31 @@
       },
       "AdminCapabilitiesResponse": {
         "properties": {
+          "contestCreation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreationScopeResponse"
+              }
+            ],
+            "description": "Where the user may create contests."
+          },
           "organizations": {
             "description": "Whether the user may administer at least one organization: an admin of one, or a holder of `judge.edit_all_organization`.",
             "type": "boolean"
+          },
+          "problemCreation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreationScopeResponse"
+              }
+            ],
+            "description": "Where the user may create problems."
           }
         },
         "required": [
-          "organizations"
+          "organizations",
+          "problemCreation",
+          "contestCreation"
         ],
         "type": "object"
       },
@@ -4708,6 +4726,23 @@
         ],
         "type": "object"
       },
+      "CreationScopeResponse": {
+        "properties": {
+          "organizations": {
+            "description": "For at least one organization they administer: `judge.create_organization_problem` or `judge.create_private_contest` (`GET /organizations?administered=true` lists them).",
+            "type": "boolean"
+          },
+          "site": {
+            "description": "Site-wide: `judge.add_problem` for problems, `judge.add_contest` for contests.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "site",
+          "organizations"
+        ],
+        "type": "object"
+      },
       "CreditActorResponse": {
         "properties": {
           "id": {
@@ -7483,6 +7518,10 @@
             "description": "Combined performance points of the members.",
             "type": "number"
           },
+          "problemCodePrefix": {
+            "description": "What the code of a problem created for the organization must start with (`thpt-demo` → `thptdemo_`).",
+            "type": "string"
+          },
           "shortName": {
             "description": "Short name shown beside members, at most 20 characters.",
             "type": "string"
@@ -7517,6 +7556,7 @@
           "memberCount",
           "performancePoints",
           "slots",
+          "problemCodePrefix",
           "aboutHtml",
           "about",
           "logoOverrideImage",
@@ -7550,6 +7590,10 @@
             "description": "Combined performance points of the members.",
             "type": "number"
           },
+          "problemCodePrefix": {
+            "description": "What the code of a problem created for the organization must start with (`thpt-demo` → `thptdemo_`).",
+            "type": "string"
+          },
           "shortName": {
             "description": "Short name shown beside members, at most 20 characters.",
             "type": "string"
@@ -7573,7 +7617,8 @@
           "isUnlisted",
           "memberCount",
           "performancePoints",
-          "slots"
+          "slots",
+          "problemCodePrefix"
         ],
         "type": "object"
       },
@@ -7877,6 +7922,14 @@
             "description": "The viewer is an admin or holds judge.edit_all_organization.",
             "type": "boolean"
           },
+          "canCreateContest": {
+            "description": "The viewer may create contests for the organization (`POST /organizations/{slug}/contests`): an administrator holding `judge.create_private_contest`.",
+            "type": "boolean"
+          },
+          "canCreateProblem": {
+            "description": "The viewer may create problems for the organization (`POST /organizations/{slug}/problems`): an administrator holding `judge.create_organization_problem`.",
+            "type": "boolean"
+          },
           "isMember": {
             "description": "The viewer belongs to the organization.",
             "type": "boolean"
@@ -7890,6 +7943,8 @@
         "required": [
           "isMember",
           "canAdminister",
+          "canCreateProblem",
+          "canCreateContest",
           "pendingRequestId"
         ],
         "type": "object"
@@ -29746,6 +29801,76 @@
         ]
       }
     },
+    "/api/internal/organizations/{slug}/contests": {
+      "post": {
+        "description": "Organization administrators (or `judge.edit_all_organization` holders)\nwho hold `judge.create_private_contest`; no `judge.add_contest` needed.\nThe contest is private to this organization: `organizations` and\n`isOrganizationPrivate` in the body are ignored and set by the server.\nEvery other rule of `POST /contests` applies: the creator becomes an\nauthor, gated fields stay gated, and the organization's quota is charged.\n404 for an unknown organization, 403 `forbidden` without the rights.",
+        "operationId": "OrganizationContestCreationController_create",
+        "parameters": [
+          {
+            "description": "Slug of the organization.",
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ContestDetailResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a contest for an organization",
+        "tags": [
+          "Contest editing"
+        ]
+      }
+    },
     "/api/internal/organizations/{slug}/join": {
       "post": {
         "description": "Adds the signed-in user to an organization that is open. A user may be in\nat most three open organizations (private ones do not count). Returns 204.\nRefusals are 409 `conflict` for a private organization (send a join\nrequest instead), an organization already joined, or the open-organization\ncap; 409 `organization_full` when the organization has no free slot; and\n403 `locked_in_official_contest` while an official contest locks it.",
@@ -30500,6 +30625,74 @@
           "Organizations"
         ],
         "x-enveloped": true
+      },
+      "post": {
+        "description": "Organization administrators (or `judge.edit_all_organization` holders)\nwho hold `judge.create_organization_problem`; no `judge.add_problem`\nneeded. The problem is private to this organization: `organizations` and\n`isOrganizationPrivate` in the body are ignored and set by the server, and\n`isPublic` (members only) needs no extra permission. The code must start\nwith the organization prefix — the slug's lowercase letters and digits\nfollowed by `_` — else 400 `organization_code_prefix` (superusers are\nexempt). Every other rule of `POST /problems` applies: the creator becomes\na curator, staff fields stay gated, and the organization's quota is\ncharged. 404 for an unknown organization, 403 `forbidden` without the\nrights.",
+        "operationId": "OrganizationProblemCreationController_create",
+        "parameters": [
+          {
+            "description": "Slug of the organization.",
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProblemDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProblemDetailResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a problem for an organization",
+        "tags": [
+          "Problem editing"
+        ]
       }
     },
     "/api/internal/organizations/{slug}/problems/bulk": {
