@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.6.0
+
+### Minor Changes
+
+- ae7e208: Polygon follow-ups: sync history (`GET /polygon/syncs`, `GET /problems/{code}/polygon/syncs`; one `polygonSyncRuns` row per finished Polygon job with requester, package, result, failed step and error); import job status gains `failedStep`; `polygon.apiKey` is now a sealed secret (reads `{set}`, the existing plain row keeps working until the next save, old revision rows are redacted); package responses gain `createdAt`, the link gains `title` and `packageCreatedAt`.
+
 ## 2.5.3
 
 ### Patch Changes
