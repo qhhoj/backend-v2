@@ -12,3 +12,4 @@ export * from './submission-events.service';
 export * from './publish-event';
 export * from './requeue';
 export * from './effects-due';
+export * from './external-judge';

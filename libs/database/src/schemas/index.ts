@@ -77,6 +77,7 @@ import {
   IntegrationClient,
   IntegrationClientSchema,
 } from './integration-client.schema';
+import { ExternalRun, ExternalRunSchema } from './external-run.schema';
 import { Judge, JudgeSchema } from './judge.schema';
 import { Language, LanguageSchema } from './language.schema';
 import { License, LicenseSchema } from './license.schema';
@@ -151,6 +152,8 @@ export * from './organization-usage.schema';
 export * from './organization.schema';
 export * from './problem-data.schema';
 export * from './polygon-link.schema';
+export * from './external-judge-link.schema';
+export * from './external-run.schema';
 export * from './polygon-sync-run.schema';
 export * from './problem-group.schema';
 export * from './problem-type.schema';
@@ -204,6 +207,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: ContestParticipation.name, schema: ContestParticipationSchema },
   { name: ContestSubmission.name, schema: ContestSubmissionSchema },
   { name: ContestTag.name, schema: ContestTagSchema },
+  { name: ExternalRun.name, schema: ExternalRunSchema },
   { name: Group.name, schema: GroupSchema },
   { name: IntegrationClient.name, schema: IntegrationClientSchema },
   { name: Judge.name, schema: JudgeSchema },

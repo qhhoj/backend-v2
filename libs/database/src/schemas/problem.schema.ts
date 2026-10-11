@@ -3,6 +3,10 @@ import { Schema as MongooseSchema } from 'mongoose';
 import { baseSchemaOptions, IdProp } from '../schema';
 import { ProblemData, ProblemDataSchema } from './problem-data.schema';
 import { PolygonLink, PolygonLinkSchema } from './polygon-link.schema';
+import {
+  ExternalJudgeLink,
+  ExternalJudgeLinkSchema,
+} from './external-judge-link.schema';
 
 const UUID = MongooseSchema.Types.UUID;
 
@@ -134,6 +138,9 @@ export class Problem {
   /** Set by an import from Polygon; a sync re-applies statement, tests, checker and limits from the linked problem. */
   @Prop({ type: PolygonLinkSchema, default: null })
   polygonLink!: PolygonLink | null;
+  /** Judged by a remote OJ through the external judge; null for a problem judge-v2 judges. */
+  @Prop({ type: ExternalJudgeLinkSchema, default: null })
+  externalJudge!: ExternalJudgeLink | null;
   /** Written by Mongoose `timestamps`; read by the organization problem list. */
   updatedAt!: Date;
   /** Soft delete: set while the problem is in its grace period, and afterwards on the tombstone. Absent while the problem is live (restore `$unset`s it), so `{deletedAt: null}` reads "live". */
@@ -155,6 +162,11 @@ ProblemSchema.index({ testers: 1 });
 ProblemSchema.index({ suggester: 1 });
 // The deleted list and the purge scan read it by range; live problems are not indexed.
 ProblemSchema.index({ deletedAt: 1 }, { sparse: true });
+/** The bridge reads the problems the external judge takes on every tick. */
+ProblemSchema.index(
+  { 'externalJudge.isActive': 1 },
+  { partialFilterExpression: { 'externalJudge.isActive': true } },
+);
 // Linked problems only: the Polygon list marks linked problems and auto-sync scans them.
 ProblemSchema.index(
   { 'polygonLink.problemId': 1 },
