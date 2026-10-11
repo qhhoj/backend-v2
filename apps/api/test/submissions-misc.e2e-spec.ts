@@ -416,9 +416,10 @@ afterAll(() => api.teardown());
         });
       await clearCache();
       const day = await stats();
-      expect(day.verdictsToday.slice(0, 1)).toEqual([
-        { result: 'TLE', count: 4 },
-      ]);
+      // earlier tests' rows may count as today too (it depends on the hour), so the order is checked, not the leader
+      expect(day.verdictsToday).toContainEqual({ result: 'TLE', count: 4 });
+      const counts = day.verdictsToday.map(({ count }) => count);
+      expect(counts).toEqual([...counts].sort((left, right) => right - left));
       expect(day.verdictsToday).toContainEqual({ result: 'CE', count: 1 });
       const counted = day.verdictsToday.reduce(
         (sum, { count }) => sum + count,
