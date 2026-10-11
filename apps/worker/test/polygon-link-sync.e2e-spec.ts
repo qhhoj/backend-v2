@@ -38,10 +38,12 @@ const fixtureNamed = (name: string, timeLimitMs = 1000): PolygonFixture => ({
   solution: null,
 });
 const BUILT_AT = '2026-10-01T08:00:00.000Z';
+/** A READY full package's Linux row: the variant a sync downloads. */
 const ready = (id: number, revision: number) => ({
   id,
   revision,
   state: 'READY',
+  type: 'linux',
   creationTimeSeconds: Date.parse(BUILT_AT) / 1000,
 });
 
@@ -312,7 +314,7 @@ describe('Polygon link, sync and auto-sync', () => {
       syncJob('broken', { packageId: 12, revision: 5 }, before.dataVersion),
     );
     expect(error).toBe(
-      `${POLYGON_ERROR_PREFIX}Polygon: problem.package: packageId: Package is not full`,
+      `${POLYGON_ERROR_PREFIX}Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full`,
     );
     expect(failedStep).toBe('downloading');
     const run = await runs.findOne({ jobId }).lean();
@@ -321,7 +323,8 @@ describe('Polygon link, sync and auto-sync', () => {
       packageId: 12,
       result: 'failed',
       failedStep: 'downloading',
-      error: 'Polygon: problem.package: packageId: Package is not full',
+      error:
+        'Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full',
     });
     expect(String(run!.problem)).toBe(String(before._id));
     const after = (await worker.problems.findOne({ code: 'broken' }))!.toObject(
@@ -334,7 +337,8 @@ describe('Polygon link, sync and auto-sync', () => {
     expect(after.polygonLink).toMatchObject({
       packageId: 10,
       lastSyncResult: 'failed',
-      lastSyncError: 'Polygon: problem.package: packageId: Package is not full',
+      lastSyncError:
+        'Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full',
       lastSyncPackageId: 12,
     });
   });

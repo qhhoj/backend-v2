@@ -5,6 +5,7 @@ import { writeCappedBody } from './polygon-download';
 import type { DownloadProgress } from './polygon-download';
 import { randomSalt, signPolygonParams } from './polygon-signature';
 import type { PolygonCredentials } from './polygon-signature';
+import { IMPORT_PACKAGE_TYPE } from './polygon-types';
 import type {
   PolygonPackageInfo,
   PolygonProblem,
@@ -57,7 +58,10 @@ export class PolygonClient {
     return this.call('problem.statements', { problemId: String(problemId) });
   }
 
-  /** The full package with tests generated for Linux (`type=linux`), streamed to `destination`. A failure answers JSON instead of a zip. */
+  /**
+   * The full package with tests generated for Linux (`type=linux`), streamed to `destination`. A failure answers JSON
+   * instead of a zip, or HTTP 500 when the package has no Linux variant (a standard package).
+   */
   async downloadPackage(
     { problemId, packageId }: { problemId: number; packageId: number },
     destination: string,
@@ -69,11 +73,12 @@ export class PolygonClient {
       {
         problemId: String(problemId),
         packageId: String(packageId),
-        type: 'linux',
+        type: IMPORT_PACKAGE_TYPE,
       },
       DOWNLOAD_TIMEOUT_MS,
     );
-    if (!response.ok || isJson(response)) await this.unwrap(method, response);
+    const label = `${method} for package ${packageId} of problem ${problemId} (type ${IMPORT_PACKAGE_TYPE})`;
+    if (!response.ok || isJson(response)) await this.unwrap(label, response);
     await writeCappedBody(response, destination, options);
   }
 
