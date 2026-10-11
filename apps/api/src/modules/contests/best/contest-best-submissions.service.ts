@@ -87,6 +87,7 @@ export class ContestBestSubmissionsService {
       ),
       page,
       pageSize,
+      { byContestPoints: true },
     );
     return new Paginated(await this.submissions.listItems(items), {
       page,
