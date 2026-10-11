@@ -30,10 +30,21 @@ describe('sanitizeStatementHtml', () => {
       '<math><maction actiontype="statusline#http://x" xlink:href="javascript:alert(1)"><mi>x</mi></maction></math>',
       '<math><maction actiontype="statusline#http://x"><mi>x</mi></maction></math>',
     ],
-    ['<iframe src="javascript:alert(1)"></iframe>', '<iframe></iframe>'],
+    [
+      '<iframe src="javascript:alert(1)"></iframe>',
+      '<iframe sandbox="allow-scripts allow-presentation" loading="lazy"></iframe>',
+    ],
     [
       '<iframe src="https://www.youtube.com/embed/x" allow="fullscreen"></iframe>',
-      '<iframe src="https://www.youtube.com/embed/x" allow="fullscreen"></iframe>',
+      '<iframe src="https://www.youtube.com/embed/x" sandbox="allow-scripts allow-same-origin allow-presentation" loading="lazy" allow="fullscreen"></iframe>',
+    ],
+    [
+      '<iframe src="https://other.test/page" sandbox="allow-top-navigation allow-same-origin" allow="camera; microphone; fullscreen"></iframe>',
+      '<iframe src="https://other.test/page" sandbox="allow-scripts allow-presentation" loading="lazy" allow="fullscreen"></iframe>',
+    ],
+    [
+      '<iframe src="/media/page.html" allow="camera"></iframe>',
+      '<iframe src="/media/page.html" sandbox="allow-scripts allow-presentation" loading="lazy"></iframe>',
     ],
     [
       '<object data="javascript:alert(1)"></object><style>body{display:none}</style>',

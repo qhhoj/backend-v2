@@ -1,6 +1,8 @@
 import sanitizeHtml from 'sanitize-html';
 import { LEGACY_STYLE_PROPERTIES } from './legacy-allow-list';
 import {
+  EMBED_SOURCE,
+  iframeAttributes,
   LEGACY_ATTRIBUTES,
   LEGACY_TAGS,
   STATEMENT_OPTIONS,
@@ -59,11 +61,6 @@ const cappedStyle = (style: string): string =>
     ? style
     : style.slice(0, style.lastIndexOf(';', MAX_STYLE_ATTRIBUTE_LENGTH) + 1);
 
-/** Embeds a blog post may carry (path-checked, not just host-checked). */
-const EMBED_SOURCE =
-  /^https:\/\/(www\.youtube\.com\/embed|www\.youtube-nocookie\.com\/embed|player\.vimeo\.com\/video)\/[\w-]+(\?[\w=&.%-]*)?$/;
-const EMBED_SANDBOX = 'allow-scripts allow-same-origin allow-presentation';
-
 /** Every author class gets `user-` (so `user-x` becomes `user-user-x`) and cannot hit the site's stylesheet; only the exact names the Markdown pipeline emits stay. KaTeX classes never reach this pass. */
 const PIPELINE_CLASSES = new Set([
   'spoiler',
@@ -98,26 +95,15 @@ const BLOG_OPTIONS: sanitizeHtml.IOptions = {
   allowedStyles: { '*': BLOG_STYLES },
   transformTags: {
     '*': (tagName, attributes) => {
-      const { allow, style, ...rest } = attributes;
+      const { style, ...rest } = attributes;
       return {
         tagName,
         attribs: {
-          ...rest,
+          ...(tagName === 'iframe' ? iframeAttributes(rest) : rest),
           ...(style === undefined ? {} : { style: cappedStyle(style) }),
           ...(attributes.class === undefined
             ? {}
             : { class: prefixedClasses(attributes.class) }),
-          ...(tagName === 'iframe'
-            ? {
-                sandbox: EMBED_SANDBOX,
-                loading: 'lazy',
-                ...(allow
-                  ?.split(';')
-                  .some((feature) => feature.trim() === 'fullscreen')
-                  ? { allow: 'fullscreen' }
-                  : {}),
-              }
-            : {}),
           ...(tagName === 'a' && attributes.target !== undefined
             ? { rel: 'nofollow noopener noreferrer' }
             : {}),
