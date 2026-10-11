@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# deploy/container/smoke.sh <image>: checks a built backend image. Needs docker, and Mongo (replica set rs0) and Redis on localhost.
-# SMOKE_MONGO_PORT and SMOKE_REDIS_PORT override the default ports 27017 and 6379.
+# deploy/container/smoke.sh [--static] <image>: checks a built backend image. Needs docker, and Mongo (replica set rs0)
+# and Redis on localhost; SMOKE_MONGO_PORT and SMOKE_REDIS_PORT override the default ports 27017 and 6379.
+# --static (what CI runs: no Mongo or Redis there) stops after the checks that boot nothing.
 set -euo pipefail
+static=false; [ "${1:-}" = --static ] && { static=true; shift; }
 image="${1:?image}"
 work="$(mktemp -d)"; trap 'docker rm -f qhhoj-smoke-api qhhoj-smoke-worker >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 
@@ -15,6 +17,7 @@ docker run --rm --entrypoint sh "$image" -c '
   prlimit --version >/dev/null
   node -e "require(\"playwright\").chromium.launch().then((b) => b.close())"
 '
+if $static; then echo "image ok (static)"; exit 0; fi
 
 mkdir -p "$work/srv/media" "$work/srv/problem-data" "$work/srv/pdf-cache" "$work/srv/contest-data" "$work/srv/user-data"
 chmod -R 777 "$work/srv"

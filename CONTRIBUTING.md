@@ -150,7 +150,7 @@ user-activity/
 - One exported responsibility per file; subdocument classes and small helper types may live with their owner
 - Scope: a file exporting a class is `<name>.<role>.ts` with role = class suffix (`IdMapRepository` -> `id-map.repository.ts`); function/type modules and entry points (`main.ts`, `index.ts`, `testing.ts`, `uuid.ts`, `schema.ts`, `crypto.ts`, `mapper.ts`, `bootstrap.ts`) use a plain noun
 - Exception: `pipes/validation.pipe.ts` exports `validationPipe` (default instance) and `createValidationPipe(overrides)`, not a class
-- Tests: unit specs `<file>.spec.ts` next to the file under test; app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
+- Tests: unit specs `<file>.spec.ts` next to the file under test (a spec that needs MongoDB or Redis is `<file>.db.spec.ts`, see Testing); app e2e specs in `apps/<app>/test/*.e2e-spec.ts`, library e2e specs next to their file (e.g. `libs/common/src/http-layer.e2e-spec.ts`)
 - Schemas are shared: `libs/database/src/schemas/<entity>.schema.ts` (not per feature)
 - Jobs: `@Processor(QUEUE[, { concurrency }]) extends WorkerHost` (`processor` = BullMQ consumer in `apps/worker`; env-driven concurrency is set in `onApplicationBootstrap`), one module per job; queue names and job data types live in `libs/problems/src/queues.ts` (problem jobs) and `libs/judging/src/queues.ts` (`submission-graded`, `problem-rescore`, `effects-sweep`, `similarity`) and `libs/contests/src/queues.ts` (`contest-rescore`, `contest-final-judge`, `contest-rating`, `contest-data`) and `libs/community/src/queues.ts` (`organization-points`, `user-data`, `contribution-points`, `discord-webhook`)
 - `QueueModule` (`@libs/common`) is the BullMQ root; feature modules add `BullModule.registerQueue({ name })`; connection options are a plain `{ url }`, never the shared `REDIS` client
@@ -249,9 +249,9 @@ user-activity/
 
 - `GET /api/internal/openapi.json` (raw JSON, no auth) is the contract the frontend generates its types from; `docs/decisions.md` has why
 - Response shapes are classes in `dto/*.response.ts`; the swagger CLI plugin (`nest-cli.json`) documents every `*.dto.ts` and `*.response.ts` from its types and comments, so a new route needs only its class, no decorators
-- A paginated route returns `Paginated<Item, Meta>` and carries `@ApiPaginatedResponse(Item)` (`{ data: Item[], meta: PageMetaResponse }`); a list without a total returns `Paginated<Item, HasMorePageMetaResponse>` with `@ApiHasMoreResponse(Item)`, a cursor list `Paginated<Item, CursorPageMetaResponse>` with `@ApiCursorResponse(Item)` (the meta type keeps the value and the decorator in step; `meta-contract.openapi-spec.ts` checks the sent keys); `@ApiTextResponse(type)` documents a raw text route; `@RawResponse()` marks routes that bypass the `{ data }` envelope (files, feeds); `envelopeResponses` wraps every other 2xx JSON schema in `{ data }`
+- A paginated route returns `Paginated<Item, Meta>` and carries `@ApiPaginatedResponse(Item)` (`{ data: Item[], meta: PageMetaResponse }`); a list without a total returns `Paginated<Item, HasMorePageMetaResponse>` with `@ApiHasMoreResponse(Item)`, a cursor list `Paginated<Item, CursorPageMetaResponse>` with `@ApiCursorResponse(Item)` (the meta type keeps the value and the decorator in step; `meta-contract.openapi-e2e-spec.ts` checks the sent keys); `@ApiTextResponse(type)` documents a raw text route; `@RawResponse()` marks routes that bypass the `{ data }` envelope (files, feeds); `envelopeResponses` wraps every other 2xx JSON schema in `{ data }`
 - Give `Record`, `unknown`, nullable-union and integer-bounded fields an explicit `@ApiProperty(...)` (the plugin cannot infer them); multipart bodies use `@ApiConsumes` + `@ApiBody`
-- `npm run test:openapi` runs `openapi.e2e-spec.ts` and every `apps/api/test/openapi/*.openapi-spec.ts` under `jest.openapi.config.js`, which applies the plugin; plain jest cannot (the plugin reads types, so `isolatedModules` must be off) and the main suite ignores them. It needs `TEST_REDIS_URL` (it fails at once without one). It fails for a JSON route without a response schema, an untyped parameter (`#/components/schemas/Object`), a bare object, a validated DTO property the document drops, a route without the `default` error response, or a shared enumeration spelled inline or under two names, so run it after adding or changing a route
+- `npm run test:openapi` runs every `apps/api/test/openapi/*.openapi-spec.ts` under `jest.openapi.config.js`, which applies the plugin; plain jest cannot (the plugin reads types, so `isolatedModules` must be off) and the main suite ignores them. These specs are static (stubbed controllers, no MongoDB or Redis) and run in CI; the ones that boot the app (`openapi.e2e-spec.ts`, `*.openapi-e2e-spec.ts`) run locally with `npm run test:openapi:db` (`jest.openapi-db.config.js`, needs `TEST_REDIS_URL`). It fails for a JSON route without a response schema, an untyped parameter (`#/components/schemas/Object`), a bare object, a validated DTO property the document drops, a route without the `default` error response, or a shared enumeration spelled inline or under two names, so run it after adding or changing a route
 - `openapi.json` at the repo root is the committed contract the frontend generates its types from. `npm run openapi:emit` rewrites it without starting a server or a database (controllers only, providers stubbed); CI (`openapi` job) fails, and prints the diff, when the committed file differs from a fresh emit. Run `npm run openapi:emit` and commit the file with every change that touches a DTO, a response class, a route or an enum
 - A class property with an initializer needs its type written out (`page: number = 1`, plus `@ApiPropertyOptional()` for an optional query value): the plugin cannot infer it and writes `Object`. A property typed with an alias of a union (`score!: VoteScore`) needs an explicit `@ApiProperty({ enum, enumName })` or it is dropped; give the enum from a `const` array rather than a union type (readable, and the plugin's order for a union is unstable); the emit also sorts every `enum` list, so order never shows in the contract. An enumeration used in three or more places gets an `enumName`. Free-form JSON is `OPAQUE_JSON_OBJECT` or `ANY_JSON_VALUE`
 - Never edit or hand-merge `openapi.json`. `.gitattributes` marks it `merge=binary`, so git never writes conflict markers into it: when two branches both changed it, re-emit after resolving the sources
@@ -484,7 +484,7 @@ Replaces MOSS. Code similarity per problem or contest with `@dodona/dolos-lib`.
 - Helpers (`@libs/database`): `newId()` new id string, `uuidStr(value)` Binary -> hex string, `toUuid(id)` string -> BSON `UUID` for raw driver queries
 - UUID arrays on hydrated docs (`user.groups`, ...): index access, spread and `toJSON()` give strings, but `.map/.filter/.flatMap/.slice` give raw buffers; map through `uuidStr` first
 - `@Schema({ ...baseSchemaOptions, collection: '<name>' })`: timestamps, no `__v`, `toJSON` returns `id` instead of `_id`
-- Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schema.spec.ts`); `ciIndex(schema, field, unique = true)`, e.g. `ciIndex(UserSchema, 'email', false)` for non-unique
+- Case-insensitive unique fields: `ciIndex(Schema, 'field')` and query with `.collation(CI)` (see `libs/database/src/schema.db.spec.ts`); `ciIndex(schema, field, unique = true)`, e.g. `ciIndex(UserSchema, 'email', false)` for non-unique
 - Catalog collections (languages, licenses, problem types and groups) are querier-backed and never deleted
 - `submissions`, `submissionSources` and `judges` are repository-backed
 - Register every schema in `SCHEMAS` (`libs/database/src/schemas/index.ts`) and export it there
@@ -538,35 +538,50 @@ One name per concept. Rename only where a term is ambiguous, and never rename a 
 
 ## Testing
 
+- CI never starts MongoDB or Redis; specs that need them run locally only. The file name says which kind a spec is:
+
+  | File                                           | Needs                                                   | Config                      | Runs                             |
+  | ---------------------------------------------- | ------------------------------------------------------- | --------------------------- | -------------------------------- |
+  | `<file>.spec.ts`                               | nothing: pure logic, static module metadata, temp files | `jest.config.js`            | `npm run test:unit`, CI          |
+  | `apps/api/test/openapi/*.openapi-spec.ts`      | nothing: document from stubbed controllers              | `jest.openapi.config.js`    | `npm run test:openapi`, CI       |
+  | `<file>.db.spec.ts`                            | MongoDB (`startMongo`) or Redis (`TEST_REDIS_URL`)      | `jest.db.config.js`         | `npm run test:db`, local         |
+  | `*.e2e-spec.ts`                                | a booted app or module with its databases               | `jest.db.config.js`         | `npm run test:db`, local         |
+  | `openapi.e2e-spec.ts`, `*.openapi-e2e-spec.ts` | the booted api                                          | `jest.openapi-db.config.js` | `npm run test:openapi:db`, local |
+
+- Unit specs must not connect: `jest.config.js` maps `ioredis` and `mongodb-memory-server` to stubs (`test/no-services/`) that throw on `new Redis()` or a server start, so a spec in the wrong place fails at once. Rename it `.db.spec.ts`; better, move the pure part (a filter builder, an ordering, a rule) into a function and test that in a unit spec
+- `npm test` runs all four (`test:unit`, `test:openapi`, `test:db`, `test:openapi:db`); run `npm run test:db` before a PR that touches a repository, schema, queue or module wiring
 - Unit: `<file>.spec.ts` next to the file under test; e2e: `apps/<app>/test/*.e2e-spec.ts` for apps, next to the file for libs
 - Mongo: `startMongo()` from `@libs/database/testing`: databases of the caller's own on the run's one in-memory replica set (`jest.global-setup.js`), dropped by `stop()`; without the global setup it starts a replica set of its own
 - HTTP: `createTestApp(moduleMetadata)` from `@libs/common/testing` (same pipes/filters/interceptor as prod)
-- The whole `npm test` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush): `podman compose up -d redis` (or `docker compose`)
-- Each jest worker flushes its own Redis db: `TEST_REDIS_URL`'s db plus `JEST_WORKER_ID - 1` (`redisUrlForWorker`, `@libs/common/testing`). A base db plus `--maxWorkers` must fit the server's `databases` (16 by default, 64 on the lane Redis); CI runs `--maxWorkers=2` on base db 14 (dbs 14 and 15)
+- `npm run test:db` needs Redis (`TEST_REDIS_URL`, default db 15, which tests flush): `podman compose up -d redis` (or `docker compose`)
+- Each jest worker flushes its own Redis db: `TEST_REDIS_URL`'s db plus `JEST_WORKER_ID - 1` (`redisUrlForWorker`, `@libs/common/testing`). A base db plus `--maxWorkers` must fit the server's `databases` (16 by default, 64 on the lane Redis)
 - Bridge e2e: `setupBridgeTest` (`apps/bridge/test/setup.ts`, millisecond `FAST_TIMINGS`, `restart()`), `FakeJudge` (real TCP), `RecordingJudge` (no socket); api specs read the command stream through `apps/api/test/submission-fixtures.ts`
 - Index use is asserted with `profileQueries` (`@libs/database/testing`): no `COLLSCAN`, documents examined bounded; worker effects fixtures in `apps/worker/test/effects-fixtures.ts`; SSE through `apps/api/test/sse-client.ts` (supertest cannot read streams); `recordSubmissionEvents` (`@libs/judging/testing`)
 - Worker: `setupWorkerTest` (`apps/worker/test/setup.ts`); zip fixtures via `buildZip` from `@libs/problems/testing`; `TEST_ENV` lives in `@libs/common/testing`
-- Playwright specs skip without Chromium; the pandoc spec skips locally and fails in CI without pandoc
+- Playwright specs skip without Chromium (CI installs none); the pandoc spec skips locally and fails in CI without pandoc
 - Similarity specs spawn the real engine (about 1 s each); they need the grammars compiled by `npm ci`
 - `test/fixtures/django.json` is a frozen generated fixture, never hand-edited.
 - `libs/<lib>/src/testing.ts` is the lib's only test-support entry (`@libs/<lib>/testing`), imported by specs and `apps/*/test` only; lint refuses it in production code. Keep it one file per lib; when it outgrows one screen, add a sibling file under `libs/<lib>/src/testing/` and re-export it from `testing.ts`, so the import path never changes.
 
 ## Commands
 
-| Command                 | Purpose                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `npm test`              | Jest, runs in band                                                            |
-| `npm run format`        | Prettier write on `apps/` and `libs/`                                         |
-| `npm run lint`          | ESLint (+ Prettier) on `apps/` and `libs/`                                    |
-| `npm run test:openapi`  | the OpenAPI coverage spec with the swagger plugin (see OpenAPI)               |
-| `npm run seed:e2e`      | idempotent dev/e2e seed (see Seed script)                                     |
-| `npm run typecheck`     | `tsc --noEmit`                                                                |
-| `npm run build`         | build `api`                                                                   |
-| `npx nest build worker` | build worker                                                                  |
-| `npx nest build bridge` | build bridge                                                                  |
-| `npx nest start api`    | run the API                                                                   |
-| `npx nest start bridge` | run the bridge                                                                |
-| `npx nest start worker` | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
+| Command                   | Purpose                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `npm test`                | every spec: unit, OpenAPI, then the DB-backed ones (needs Redis)              |
+| `npm run test:unit`       | unit specs only, no services (what CI runs)                                   |
+| `npm run test:db`         | `*.db.spec.ts` and `*.e2e-spec.ts`, in band (needs Redis; local only)         |
+| `npm run format`          | Prettier write on `apps/` and `libs/`                                         |
+| `npm run lint`            | ESLint (+ Prettier) on `apps/` and `libs/`                                    |
+| `npm run test:openapi`    | the static OpenAPI specs with the swagger plugin (see OpenAPI)                |
+| `npm run test:openapi:db` | the OpenAPI specs that boot the api (needs Redis; local only)                 |
+| `npm run seed:e2e`        | idempotent dev/e2e seed (see Seed script)                                     |
+| `npm run typecheck`       | `tsc --noEmit`                                                                |
+| `npm run build`           | build `api`                                                                   |
+| `npx nest build worker`   | build worker                                                                  |
+| `npx nest build bridge`   | build bridge                                                                  |
+| `npx nest start api`      | run the API                                                                   |
+| `npx nest start bridge`   | run the bridge                                                                |
+| `npx nest start worker`   | run the worker (from the repo root: KaTeX's CSS resolves from `node_modules`) |
 
 CI (`.github/workflows/ci.yml`): lint, typecheck, test, all four builds.
 
