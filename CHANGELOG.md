@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.17.3
+
+### Patch Changes
+
+- 8f2a59f: chore: remove unused profile settings (aceTheme, mathEngine, userScript, display badge) and the never-read vnojPoints prop
+- ebe0c8e: chore: remove unused exports and the stale navigation wording from the site docs and OpenAPI tag description.
+
 ## 2.17.2
 
 ### Patch Changes
