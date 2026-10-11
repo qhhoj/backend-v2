@@ -21,13 +21,13 @@ import {
   SOURCE_MAX_BYTES,
 } from '@libs/problems';
 import type {
-  ImportProgress,
   PdfRenderJob,
   PolygonImportJob,
   PolygonImportResult,
   PolygonSource,
 } from '@libs/problems';
 import type { Readable } from 'node:stream';
+import { ImportTracker } from './import-tracker';
 import { PandocService } from './pandoc.service';
 import { parseAssets } from './polygon-assets';
 import type { PolygonAssets } from './polygon-assets';
@@ -60,10 +60,6 @@ interface StagedFile {
   name: string;
   stagedPath: string;
 }
-
-/** Reports a step to the job's progress (best effort: a failed report never fails the import). */
-export type ReportProgress = (progress: ImportProgress) => Promise<void>;
-const noProgress: ReportProgress = () => Promise.resolve();
 
 interface ReadPackage {
   tests: PlannedTest[];
@@ -104,15 +100,15 @@ export class PolygonImportService {
   async import(
     jobId: string,
     job: PolygonImportJob,
-    report: ReportProgress = noProgress,
+    tracker = new ImportTracker(),
   ): Promise<PolygonImportResult> {
     const packagePath = this.dataFiles.importPackagePathOf(jobId);
     try {
       await this.pandoc.assertAvailable();
       const target = await this.repository.resolveTarget(job);
       await this.repository.assertFullMarkupWriter(job);
-      if (job.polygon) await this.download(jobId, job.polygon, report);
-      return await this.importPackage(packagePath, job, target, report);
+      if (job.polygon) await this.download(jobId, job.polygon, tracker);
+      return await this.importPackage(packagePath, job, target, tracker);
     } finally {
       await rm(packagePath, { force: true });
     }
@@ -122,15 +118,15 @@ export class PolygonImportService {
   private async download(
     jobId: string,
     source: PolygonSource,
-    report: ReportProgress,
+    tracker: ImportTracker,
   ): Promise<void> {
     const destination = await this.dataFiles.importPackagePath(jobId);
-    await report({ step: 'downloading', done: 0, total: null });
+    await tracker.progress({ step: 'downloading', done: 0, total: null });
     try {
       await this.polygon.downloadPackage(source, destination, {
         maxBytes: POLYGON_PACKAGE_MAX_BYTES,
         onProgress: (done, total) =>
-          void report({ step: 'downloading', done, total }),
+          void tracker.progress({ step: 'downloading', done, total }),
       });
     } catch (error) {
       if (error instanceof PolygonApiError)
@@ -147,21 +143,23 @@ export class PolygonImportService {
     packagePath: string,
     job: PolygonImportJob,
     target: ImportTarget,
-    report: ReportProgress,
+    tracker: ImportTracker,
   ): Promise<PolygonImportResult> {
     const pkg = await PolygonPackage.open(packagePath);
     const savedImages: string[] = [];
     const staged: StagedFile[] = [];
     let committed = false;
     try {
-      await report({ step: 'statements', done: null, total: null });
+      await tracker.progress({ step: 'statements', done: null, total: null });
       const read = await this.readPackage(pkg, job, savedImages);
-      await report({ step: 'tests', done: null, total: null });
+      await tracker.progress({ step: 'tests', done: null, total: null });
       staged.push(
         ...(await this.stageFiles(job.code, pkg, read.tests, read.assets)),
       );
+      tracker.enter('saving');
       const applied = await this.repository.apply(job, read.imported, target);
       committed = true;
+      tracker.enter('finishing');
       // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
       if (job.mode === 'update')
         await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);

@@ -1,3 +1,5 @@
+import { POLYGON_SYNC_STEPS } from '@libs/database';
+import type { PolygonSyncStep } from '@libs/database';
 import { IMPORT_STEPS } from '@libs/problems';
 import type { ImportStep } from '@libs/problems';
 import { ApiProperty } from '@nestjs/swagger';
@@ -32,4 +34,11 @@ export class ImportJobResponse {
   result!: ImportResultResponse | null;
   /** Only an import error written for the requester; any other failure is "Import failed". */
   error!: string | null;
+  /** Where a failed job stopped: `checking` (before any work), a progress step, `saving` (the database write) or `finishing` (data files after the write); null unless failed, and for jobs that failed before it was recorded. */
+  @ApiProperty({
+    enum: POLYGON_SYNC_STEPS,
+    enumName: 'PolygonSyncStep',
+    nullable: true,
+  })
+  failedStep!: PolygonSyncStep | null;
 }

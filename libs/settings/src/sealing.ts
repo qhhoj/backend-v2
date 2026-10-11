@@ -34,7 +34,7 @@ export function openSetting(
   const open = (sealed: unknown) =>
     JSON.parse(decrypt(sealed as string, key)) as unknown;
   try {
-    if (secret === true) return open(stored);
+    if (secret === true) return openWhole(definition, stored, open);
     if (secret === false) return stored;
     const fields = stored as Fields;
     return {
@@ -45,6 +45,21 @@ export function openSetting(
     };
   } catch {
     throw new SettingError(`Setting ${settingKey} cannot be opened`);
+  }
+}
+
+/** A whole-value secret; a setting that was plain before (`storedPlainBefore`) may still hold its unsealed string. */
+function openWhole(
+  definition: SettingDefinition<unknown>,
+  stored: unknown,
+  open: (sealed: unknown) => unknown,
+): unknown {
+  try {
+    return open(stored);
+  } catch (error) {
+    if (definition.storedPlainBefore && typeof stored === 'string')
+      return stored;
+    throw error;
   }
 }
 
@@ -73,6 +88,20 @@ export function redactSetting(
     ),
   };
 }
+
+/** A revision value as an admin may see it: rows written before the setting became secret (`storedPlainBefore`) hold the plain value and are redacted here. */
+export function shownRevisionValue(
+  definition: SettingDefinition<unknown>,
+  stored: unknown,
+): unknown {
+  if (!definition.storedPlainBefore || isRedactedSecret(stored)) return stored;
+  return redactSetting(definition, stored);
+}
+
+const isRedactedSecret = (value: unknown): boolean =>
+  isPlainObject(value) &&
+  Object.keys(value).length === 1 &&
+  typeof value.set === 'boolean';
 
 /** A revision's `before` without its sealed parts, ready to patch back; undefined for a whole-secret setting (nothing restorable is stored). The merge keeps the current secret, so a restore never brings back an old one. */
 export function restorableValue(

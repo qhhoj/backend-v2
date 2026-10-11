@@ -294,7 +294,10 @@ export class PolygonImportRepository {
       .updateOne(
         unchangedSinceQueued(job, problemId, target),
         {
-          $set: { ...changes, ...linkChanges(job, new Date()) },
+          $set: {
+            ...changes,
+            ...linkChanges(job, { title: statement.name, now: new Date() }),
+          },
           $inc: { dataVersion: 1 },
         },
         { session },
@@ -322,7 +325,9 @@ export class PolygonImportRepository {
       isFullMarkup: job.isFullMarkup,
       date: new Date(),
       dataVersion: 1,
-      polygonLink: job.polygon ? newLink(job, job.polygon, new Date()) : null,
+      polygonLink: job.polygon
+        ? newLink(job, job.polygon, { title: statement.name, now: new Date() })
+        : null,
       ...(await this.createCatalog(job, session)),
     };
     // `create` with a session takes an array.

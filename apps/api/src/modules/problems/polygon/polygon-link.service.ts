@@ -116,6 +116,8 @@ const linkView = (link: PolygonLink): PolygonLinkResponse => ({
   owner: link.owner,
   revision: link.revision,
   packageId: link.packageId,
+  packageCreatedAt: link.packageCreatedAt ?? null,
+  title: link.title ?? null,
   linkedAt: link.linkedAt,
   lastSyncAt: link.lastSyncAt,
   lastSyncResult: link.lastSyncResult,

@@ -1,12 +1,25 @@
 import type { PolygonLink } from '@libs/database';
 import type { PolygonImportJob, PolygonSource } from '@libs/problems';
 
+/** What a successful import learnt of the package beyond the job: the statement title it applied, and when. */
+export interface SyncedPackage {
+  title: string;
+  now: Date;
+}
+
 /** The fields of a successful sync attempt. */
-const syncedFields = (source: PolygonSource, now: Date) => ({
+const syncedFields = (
+  source: PolygonSource,
+  { title, now }: SyncedPackage,
+) => ({
   name: source.name,
   owner: source.owner,
   revision: source.revision,
   packageId: source.packageId,
+  packageCreatedAt: source.packageCreatedAt
+    ? new Date(source.packageCreatedAt)
+    : null,
+  title,
   lastSyncAt: now,
   lastSyncResult: 'ok' as const,
   lastSyncError: null,
@@ -17,12 +30,12 @@ const syncedFields = (source: PolygonSource, now: Date) => ({
 export function newLink(
   job: PolygonImportJob,
   source: PolygonSource,
-  now: Date,
+  synced: SyncedPackage,
 ): PolygonLink {
   return {
     problemId: source.problemId,
-    ...syncedFields(source, now),
-    linkedAt: now,
+    ...syncedFields(source, synced),
+    linkedAt: synced.now,
     linkedBy: job.requesterId,
     autoSync: source.autoSync,
     options: {
@@ -40,14 +53,14 @@ export function newLink(
 /** `$set` paths of the problem update: the whole link on `link`, only the revision and sync fields on `sync` (the switch and options stay). */
 export function linkChanges(
   job: PolygonImportJob,
-  now: Date,
+  synced: SyncedPackage,
 ): Record<string, unknown> {
   const source = job.polygon;
   if (!source) return {};
   if (source.purpose === 'link')
-    return { polygonLink: newLink(job, source, now) };
+    return { polygonLink: newLink(job, source, synced) };
   return Object.fromEntries(
-    Object.entries(syncedFields(source, now)).map(([field, value]) => [
+    Object.entries(syncedFields(source, synced)).map(([field, value]) => [
       `polygonLink.${field}`,
       value,
     ]),

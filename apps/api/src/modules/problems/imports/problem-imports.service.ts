@@ -122,6 +122,7 @@ export class ProblemImportsService {
       progress,
       result: job.returnvalue ?? null,
       error: job.failedReason ? shownReason(job.failedReason) : null,
+      failedStep: state === 'failed' ? (job.data.failedStep ?? null) : null,
     };
   }
 

@@ -80,6 +80,10 @@ import {
 import { Judge, JudgeSchema } from './judge.schema';
 import { Language, LanguageSchema } from './language.schema';
 import { License, LicenseSchema } from './license.schema';
+import {
+  PolygonSyncRun,
+  PolygonSyncRunSchema,
+} from './polygon-sync-run.schema';
 import { ProblemGroup, ProblemGroupSchema } from './problem-group.schema';
 import { Problem, ProblemSchema } from './problem.schema';
 import { ProblemType, ProblemTypeSchema } from './problem-type.schema';
@@ -147,6 +151,7 @@ export * from './organization-usage.schema';
 export * from './organization.schema';
 export * from './problem-data.schema';
 export * from './polygon-link.schema';
+export * from './polygon-sync-run.schema';
 export * from './problem-group.schema';
 export * from './problem-type.schema';
 export * from './problem.schema';
@@ -210,6 +215,7 @@ export const SCHEMAS: ModelDefinition[] = [
   { name: OrganizationCreditEntry.name, schema: OrganizationCreditEntrySchema },
   { name: OrganizationRequest.name, schema: OrganizationRequestSchema },
   { name: Organization.name, schema: OrganizationSchema },
+  { name: PolygonSyncRun.name, schema: PolygonSyncRunSchema },
   { name: ProblemGroup.name, schema: ProblemGroupSchema },
   { name: Problem.name, schema: ProblemSchema },
   { name: ProblemType.name, schema: ProblemTypeSchema },

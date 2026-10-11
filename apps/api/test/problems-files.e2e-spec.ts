@@ -196,6 +196,7 @@ afterAll(() => api.teardown());
           progress: null,
           result: null,
           error: null,
+          failedStep: null,
         },
       });
     });

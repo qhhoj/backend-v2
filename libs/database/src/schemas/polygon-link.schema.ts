@@ -30,6 +30,10 @@ export class PolygonLink {
   /** Revision and package the problem's content was last taken from. */
   @Prop({ required: true }) revision!: number;
   @Prop({ required: true }) packageId!: number;
+  /** Polygon's build time of that package; null for links written before it was recorded. */
+  @Prop({ type: Date, default: null }) packageCreatedAt!: Date | null;
+  /** Statement title the last successful import took from the package; null for links written before it was recorded. */
+  @Prop({ type: String, default: null }) title!: string | null;
   @Prop({ type: Date, required: true }) linkedAt!: Date;
   /** Requester of automatic syncs (their markup permission is checked as for a manual one). */
   @Prop({ type: UUID, required: true }) linkedBy!: string;

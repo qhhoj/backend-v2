@@ -8,12 +8,15 @@ import {
   redactSetting,
   restorableValue,
   sealSetting,
+  shownRevisionValue,
 } from './sealing';
 
 const key = encryptionKey('ab'.repeat(32));
 const smtp = SETTINGS['mail.smtpUrl'];
 const google = SETTINGS['auth.google'];
 const officialMode = SETTINGS['contest.officialMode'];
+const polygonKey = SETTINGS['polygon.apiKey'];
+const POLYGON_KEY = '0123456789abcdef0123456789abcdef01234567';
 const SMTP_URL = 'smtp://mailer:p4ssw0rd@mail.test:587';
 const client = {
   enabled: true,
@@ -103,6 +106,41 @@ describe('sealing', () => {
     expect(restorableValue(google, redacted)).toEqual({
       enabled: true,
       clientId: 'public-id',
+    });
+  });
+
+  describe('a setting that was stored plain before it became secret', () => {
+    it('seals new writes and opens them', () => {
+      const sealed = sealSetting(polygonKey, POLYGON_KEY, key);
+      expect(sealed).not.toContain(POLYGON_KEY);
+      expect(readSetting('polygon.apiKey', polygonKey, sealed, key)).toBe(
+        POLYGON_KEY,
+      );
+    });
+
+    it('reads a row written before as its plain value', () => {
+      expect(readSetting('polygon.apiKey', polygonKey, POLYGON_KEY, key)).toBe(
+        POLYGON_KEY,
+      );
+    });
+
+    it('still refuses a plain row of a setting that was always secret', () => {
+      expect(() => openSetting('mail.smtpUrl', smtp, SMTP_URL, key)).toThrow(
+        SettingError,
+      );
+    });
+
+    it('redacts the plain values of old revision rows and keeps redacted ones', () => {
+      expect(shownRevisionValue(polygonKey, POLYGON_KEY)).toEqual({
+        set: true,
+      });
+      expect(shownRevisionValue(polygonKey, '')).toEqual({ set: false });
+      expect(shownRevisionValue(polygonKey, { set: false })).toEqual({
+        set: false,
+      });
+      expect(shownRevisionValue(google, { clientId: 'x' })).toEqual({
+        clientId: 'x',
+      });
     });
   });
 

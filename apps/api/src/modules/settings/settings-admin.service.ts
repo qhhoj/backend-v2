@@ -7,6 +7,7 @@ import {
   SettingError,
   SETTING_KEYS,
   SettingsService,
+  shownRevisionValue,
 } from '@libs/settings';
 import type { SettingKey } from '@libs/settings';
 import { SettingResponse } from './dto/setting.response';
@@ -62,8 +63,15 @@ export class SettingsAdminService {
       page,
       pageSize,
     );
+    const definition = definitionOf(key)!;
     return new Paginated(
-      items.map((item) => SettingRevisionResponse.from(item)),
+      items.map((item) =>
+        SettingRevisionResponse.from({
+          ...item,
+          before: shownRevisionValue(definition, item.before),
+          after: shownRevisionValue(definition, item.after),
+        }),
+      ),
       { page, pageSize, total },
     );
   }

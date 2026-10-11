@@ -43,8 +43,10 @@ export class PolygonLinkImportService {
         owner: problem.owner,
         revision: latest.revision,
         packageId: latest.id,
+        packageCreatedAt: latest.createdAt,
         purpose: 'link',
         autoSync: body.autoSync,
+        trigger: 'manual',
       },
     });
     return { jobId };
@@ -66,6 +68,7 @@ export class PolygonLinkImportService {
       syncJobOf(problem, latest, {
         userId: auth.principal.userId,
         maxCases: maxTestcasesFor(auth.principal),
+        trigger: 'manual',
       }),
     );
     return { jobId };

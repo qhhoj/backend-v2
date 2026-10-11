@@ -43,6 +43,8 @@ import { PolygonController } from './polygon/polygon.controller';
 import { PolygonLinkImportService } from './polygon/polygon-link-import.service';
 import { PolygonLinkService } from './polygon/polygon-link.service';
 import { PolygonLinksRepository } from './polygon/polygon-links.repository';
+import { PolygonSyncHistoryService } from './polygon/polygon-sync-history.service';
+import { PolygonSyncRunsRepository } from './polygon/polygon-sync-runs.repository';
 import { ProblemPolygonLinkController } from './polygon/problem-polygon-link.controller';
 import { ProblemPdfController } from './pdf/problem-pdf.controller';
 import { ProblemPdfService } from './pdf/problem-pdf.service';
@@ -120,6 +122,8 @@ const repositories = [
     PolygonLinkImportService,
     PolygonLinkService,
     PolygonLinksRepository,
+    PolygonSyncRunsRepository,
+    PolygonSyncHistoryService,
     ProblemPdfService,
     ProblemLifecycleService,
     ProblemPackageService,

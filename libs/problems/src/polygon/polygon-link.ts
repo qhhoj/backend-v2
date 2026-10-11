@@ -1,3 +1,4 @@
+import type { PolygonSyncTrigger } from '@libs/database';
 /** Repeatable worker job that queues a sync for linked problems whose Polygon package moved on. */
 export const POLYGON_AUTOSYNC_QUEUE = 'polygon-autosync';
 export const POLYGON_AUTOSYNC_JOB = 'polygon-autosync';
@@ -28,10 +29,14 @@ export interface PolygonSource {
   owner: string;
   revision: number;
   packageId: number;
+  /** Polygon's build time of the package (ISO); absent on jobs queued before it was recorded. */
+  packageCreatedAt?: string | null;
   /** `link`: a first import, which (re)writes the whole link; `sync`: refreshes the revision and sync fields of the existing link. */
   purpose: 'link' | 'sync';
   /** Written on `link` only; a sync keeps the link's switch. */
   autoSync: boolean;
+  /** Who started it, for the sync history; absent (manual) on jobs queued before it was recorded. */
+  trigger?: PolygonSyncTrigger;
 }
 
 /** BullMQ ignores an `add` whose id is still kept, so one package is synced at most once per kept job. */

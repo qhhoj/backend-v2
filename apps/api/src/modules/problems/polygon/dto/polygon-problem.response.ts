@@ -8,6 +8,9 @@ export class PolygonLatestPackageResponse {
   revision!: number | null;
   @ApiProperty({ enum: PACKAGE_STATES, enumName: 'PolygonPackageState' })
   state!: PackageState;
+  /** When Polygon started building it; null without a package. */
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  createdAt!: string | null;
 }
 
 export class PolygonProblemResponse {

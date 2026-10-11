@@ -1,4 +1,4 @@
-import type { PolygonLink } from '@libs/database';
+import type { PolygonLink, PolygonSyncTrigger } from '@libs/database';
 import type { PolygonImportJob } from '../queues';
 import type { LatestPackage } from './polygon-types';
 
@@ -29,8 +29,8 @@ export function hasNewReadyPackage(
  */
 export function syncJobOf(
   problem: LinkedProblem,
-  latest: { id: number; revision: number },
-  requester: { userId: string; maxCases: number },
+  latest: { id: number; revision: number; createdAt: string | null },
+  requester: { userId: string; maxCases: number; trigger: PolygonSyncTrigger },
 ): PolygonImportJob {
   const link = problem.polygonLink;
   return {
@@ -47,8 +47,10 @@ export function syncJobOf(
       owner: link.owner,
       revision: latest.revision,
       packageId: latest.id,
+      packageCreatedAt: latest.createdAt,
       purpose: 'sync',
       autoSync: link.autoSync,
+      trigger: requester.trigger,
     },
   };
 }

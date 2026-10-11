@@ -59,6 +59,7 @@ export class PolygonAutoSyncService {
         syncJobOf(problem, latest, {
           userId: link.linkedBy,
           maxCases: link.options.maxCases,
+          trigger: 'auto',
         }),
         {
           jobId: autoSyncJobId(problem._id, latest.id),
