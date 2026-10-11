@@ -5,6 +5,7 @@ import {
   oauthClientType,
   oneOfType,
   optionalDatetimeType,
+  optionalServiceUrlType,
   optionalTextType,
   optionalUrlType,
   smtpUrlType,
@@ -182,6 +183,34 @@ export const SETTINGS = {
     default: '',
     description:
       'Polygon login of that account; setters add it as a READ co-author of their problem.',
+    secret: false,
+  }),
+  'externalJudge.baseUrl': define({
+    type: optionalServiceUrlType,
+    default: '',
+    description:
+      'Base URL of the PCD VJudge API that judges external (mirror) problems on remote OJs; empty: external judging is off.',
+    secret: false,
+  }),
+  'externalJudge.apiToken': define({
+    type: optionalTextType(500),
+    default: '',
+    description:
+      'Bearer token for externalJudge.baseUrl; empty: external judging is off.',
+    secret: true,
+  }),
+  'externalJudge.maxInFlight': define({
+    type: integerType(1, 50),
+    default: 5,
+    description:
+      'External submissions waiting on the remote OJ at once; the rest stay queued (also bounds a batch rejudge).',
+    secret: false,
+  }),
+  'externalJudge.maxWaitMinutes': define({
+    type: integerType(1, 240),
+    default: 30,
+    description:
+      'An external submission with no final result this long after it was sent ends as an internal error.',
     secret: false,
   }),
   'pdf.renderTimeoutMs': define({
