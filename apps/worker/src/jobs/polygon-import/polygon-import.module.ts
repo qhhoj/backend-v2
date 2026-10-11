@@ -1,6 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { PROBLEM_RESCORE_QUEUE } from '@libs/judging';
+import { JudgingModule, PROBLEM_RESCORE_QUEUE } from '@libs/judging';
 import { PDF_QUEUE, POLYGON_QUEUE, ProblemFilesModule } from '@libs/problems';
 import { PandocService } from './pandoc.service';
 import { PolygonImportProcessor } from './polygon-import.processor';
@@ -13,6 +13,7 @@ import { TestGenerationService } from './test-generation.service';
 
 @Module({
   imports: [
+    JudgingModule,
     ProblemFilesModule,
     BullModule.registerQueue(
       { name: POLYGON_QUEUE },

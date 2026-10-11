@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Readable } from 'node:stream';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { BridgeCommandsService } from '@libs/judging';
 import type { GenerationPlan } from '@libs/judging';
 import { PolygonImportError } from './polygon-import.error';
 import { TestGenerationRepository } from './test-generation.repository';
@@ -23,11 +24,14 @@ export const NO_JUDGE_TEXT =
 /** Asks the judges to generate the tests of a plan and waits for the result zip. */
 @Injectable()
 export class TestGenerationService {
-  constructor(private readonly repository: TestGenerationRepository) {}
+  constructor(
+    private readonly repository: TestGenerationRepository,
+    private readonly commands: BridgeCommandsService,
+  ) {}
 
   /**
    * Queues the plan with its bundle, polls the row until a judge finished it, and writes the result zip to
-   * `destination`. The bridge picks queued rows up on its own resync, so there is no nudge. Row and files are always
+   * `destination`. The `generate` command wakes the bridge; its resync picks up a lost command. Row and files are always
    * removed. Every failure is a `PolygonImportError` the requester can read.
    */
   async generate(
@@ -37,6 +41,7 @@ export class TestGenerationService {
   ): Promise<void> {
     const id = await this.repository.enqueue(plan, bundle);
     try {
+      await this.commands.generate(id);
       await this.waitForDone(id, plan);
       await this.repository.saveResult(id, destination);
     } finally {
