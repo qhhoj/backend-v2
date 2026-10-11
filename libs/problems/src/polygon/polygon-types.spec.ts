@@ -13,6 +13,7 @@ describe('latestPackageOf', () => {
       id: null,
       revision: null,
       state: 'NONE',
+      createdAt: null,
     });
   });
 
@@ -23,7 +24,15 @@ describe('latestPackageOf', () => {
         pkg(9, 4, 'FAILED'),
         pkg(7, 4, 'READY'),
       ]),
-    ).toEqual({ id: 9, revision: 4, state: 'FAILED' });
+    ).toMatchObject({ id: 9, revision: 4, state: 'FAILED' });
+  });
+
+  it("gives the build time from Polygon's seconds as an ISO time", () => {
+    expect(
+      latestPackageOf([
+        { ...pkg(3, 2, 'READY'), creationTimeSeconds: 1_760_000_000 },
+      ]).createdAt,
+    ).toBe('2025-10-09T08:53:20.000Z');
   });
 
   it('reads a pending build as RUNNING, so an older READY package is not offered while a newer one builds', () => {

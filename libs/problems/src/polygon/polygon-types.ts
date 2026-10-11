@@ -33,9 +33,16 @@ export interface LatestPackage {
   id: number | null;
   revision: number | null;
   state: PackageState;
+  /** When Polygon started building it, as an ISO string (it travels through Redis and job data as JSON). */
+  createdAt: string | null;
 }
 
-const NO_PACKAGE: LatestPackage = { id: null, revision: null, state: 'NONE' };
+const NO_PACKAGE: LatestPackage = {
+  id: null,
+  revision: null,
+  state: 'NONE',
+  createdAt: null,
+};
 
 /** The newest package (highest revision, then highest id): an import takes it only when it is READY, so a fix still building is never skipped for an older build. */
 export function latestPackageOf(packages: PolygonPackageInfo[]): LatestPackage {
@@ -47,6 +54,7 @@ export function latestPackageOf(packages: PolygonPackageInfo[]): LatestPackage {
     id: newest.id,
     revision: newest.revision,
     state: newest.state === 'PENDING' ? 'RUNNING' : newest.state,
+    createdAt: new Date(newest.creationTimeSeconds * 1000).toISOString(),
   };
 }
 

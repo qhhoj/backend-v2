@@ -1,5 +1,6 @@
 import type { PolygonLink } from '@libs/database';
 import { hasNewReadyPackage, syncJobOf } from './polygon-sync';
+import type { LatestPackage } from './polygon-types';
 
 const link: PolygonLink = {
   problemId: 42,
@@ -7,6 +8,8 @@ const link: PolygonLink = {
   owner: 'setter',
   revision: 3,
   packageId: 10,
+  packageCreatedAt: null,
+  title: 'Sum',
   linkedAt: new Date(0),
   linkedBy: 'linker',
   lastSyncAt: new Date(0),
@@ -25,20 +28,18 @@ const link: PolygonLink = {
   },
 };
 
+const latest = (
+  id: number | null,
+  revision: number | null,
+  state: LatestPackage['state'],
+): LatestPackage => ({ id, revision, state, createdAt: null });
+
 describe('hasNewReadyPackage', () => {
   it('wants a READY package other than the synced one', () => {
-    expect(
-      hasNewReadyPackage(link, { id: 11, revision: 4, state: 'READY' }),
-    ).toBe(true);
-    expect(
-      hasNewReadyPackage(link, { id: 10, revision: 3, state: 'READY' }),
-    ).toBe(false);
-    expect(
-      hasNewReadyPackage(link, { id: 11, revision: 4, state: 'RUNNING' }),
-    ).toBe(false);
-    expect(
-      hasNewReadyPackage(link, { id: null, revision: null, state: 'NONE' }),
-    ).toBe(false);
+    expect(hasNewReadyPackage(link, latest(11, 4, 'READY'))).toBe(true);
+    expect(hasNewReadyPackage(link, latest(10, 3, 'READY'))).toBe(false);
+    expect(hasNewReadyPackage(link, latest(11, 4, 'RUNNING'))).toBe(false);
+    expect(hasNewReadyPackage(link, latest(null, null, 'NONE'))).toBe(false);
   });
 
   it('does not retry a package whose sync failed, but tries the next one', () => {
@@ -47,12 +48,8 @@ describe('hasNewReadyPackage', () => {
       lastSyncResult: 'failed' as const,
       lastSyncPackageId: 11,
     };
-    expect(
-      hasNewReadyPackage(failed, { id: 11, revision: 4, state: 'READY' }),
-    ).toBe(false);
-    expect(
-      hasNewReadyPackage(failed, { id: 12, revision: 5, state: 'READY' }),
-    ).toBe(true);
+    expect(hasNewReadyPackage(failed, latest(11, 4, 'READY'))).toBe(false);
+    expect(hasNewReadyPackage(failed, latest(12, 5, 'READY'))).toBe(true);
   });
 });
 
@@ -60,8 +57,8 @@ describe('syncJobOf', () => {
   it('is an update naming no catalog field, with the link options and the given package', () => {
     const job = syncJobOf(
       { code: 'sum', isFullMarkup: false, dataVersion: 7, polygonLink: link },
-      { id: 11, revision: 4 },
-      { userId: 'requester', maxCases: 9999 },
+      { id: 11, revision: 4, createdAt: '2026-10-01T00:00:00.000Z' },
+      { userId: 'requester', maxCases: 9999, trigger: 'auto' },
     );
     expect(job).toEqual({
       requesterId: 'requester',
@@ -82,8 +79,10 @@ describe('syncJobOf', () => {
         owner: 'setter',
         revision: 4,
         packageId: 11,
+        packageCreatedAt: '2026-10-01T00:00:00.000Z',
         purpose: 'sync',
         autoSync: true,
+        trigger: 'auto',
       },
     });
     for (const field of ['authors', 'curators', 'groupId', 'typeIds', 'points'])

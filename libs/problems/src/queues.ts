@@ -1,4 +1,4 @@
-import type { StatementLanguage } from '@libs/database';
+import type { PolygonSyncStep, StatementLanguage } from '@libs/database';
 import type { PolygonSource } from './polygon/polygon-link';
 
 export const PDF_QUEUE = 'pdf-render';
@@ -44,6 +44,8 @@ export interface PolygonImportJob {
   expectedDataVersion?: number;
   /** Set when the worker downloads the package from Polygon instead of reading an uploaded one; the import then writes `polygonLink`. */
   polygon?: PolygonSource;
+  /** Written by the worker when the job fails: where it stopped. */
+  failedStep?: PolygonSyncStep;
 }
 
 export interface PolygonImportResult {

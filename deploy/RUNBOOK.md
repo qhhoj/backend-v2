@@ -65,9 +65,9 @@ Per judge machine, against the review stack (`qhhoj.target` running, bridge on 9
 
 ## Polygon account
 
-- Create (or reuse) one Polygon account for QHHOJ; in Polygon, Settings -> API keys, create a key. In QHHOJ admin settings (`judge.change_settings`) set `polygon.apiKey`, `polygon.apiSecret` (stored encrypted, never shown again) and `polygon.accountName` (its login), then "test connection" (`POST /api/internal/polygon/test`). `polygon_clock_skew` means the server clock is off: check `timedatectl` / NTP.
+- Create (or reuse) one Polygon account for QHHOJ; in Polygon, Settings -> API keys, create a key. In QHHOJ admin settings (`judge.change_settings`) set `polygon.apiKey` and `polygon.apiSecret` (both stored encrypted, never shown again; a key saved before 2026-10-11 stays readable and is sealed on the next save) and `polygon.accountName` (its login), then "test connection" (`POST /api/internal/polygon/test`). `polygon_clock_skew` means the server clock is off: check `timedatectl` / NTP.
 - Setters add `polygon.accountName` as a READ co-author of their problem and build a full package (with Linux tests); the problem then appears under "Import from Polygon" for staff with `judge.import_polygon_package`.
-- The worker downloads packages from `https://polygon.codeforces.com/api/` (outbound HTTPS from the worker host) and checks auto-sync problems every 10 minutes, skipping problems of a running contest. Emptying the key or secret disconnects; linked problems keep their content.
+- The worker downloads packages from `https://polygon.codeforces.com/api/` (outbound HTTPS from the worker host) and checks auto-sync problems every 10 minutes, skipping problems of a running contest. Emptying the key or secret disconnects; linked problems keep their content. Every finished import and sync (manual or automatic, ok or failed with the step it stopped at) is listed under `GET /api/internal/polygon/syncs` and per problem under `GET /api/internal/problems/{code}/polygon/syncs`.
 
 ## Deploy notes
 

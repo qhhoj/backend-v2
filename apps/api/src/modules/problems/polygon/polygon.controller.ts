@@ -10,6 +10,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse, Paginated } from '@libs/common';
 import { PolygonClient } from '@libs/problems';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
 import { PolygonProblemResponse } from './dto/polygon-problem.response';
@@ -19,8 +20,11 @@ import {
   PolygonProblemsQueryDto,
 } from './dto/polygon-problems.dto';
 import { PolygonStatusResponse } from './dto/polygon-status.response';
+import { PolygonSyncRunResponse } from './dto/polygon-sync-run.response';
+import { PolygonSyncRunsQueryDto } from './dto/polygon-sync-runs.dto';
 import { PolygonCatalogService } from './polygon-catalog.service';
 import { PolygonLinkImportService } from './polygon-link-import.service';
+import { PolygonSyncHistoryService } from './polygon-sync-history.service';
 
 @ApiTags('Problem editing')
 @RequirePermission('judge.import_polygon_package')
@@ -30,6 +34,7 @@ export class PolygonController {
     private readonly polygon: PolygonClient,
     private readonly catalog: PolygonCatalogService,
     private readonly linkImports: PolygonLinkImportService,
+    private readonly history: PolygonSyncHistoryService,
   ) {}
 
   /**
@@ -69,6 +74,26 @@ export class PolygonController {
     @Query() query: PolygonProblemsQueryDto,
   ): Promise<PolygonProblemResponse[]> {
     return this.catalog.list(auth, query);
+  }
+
+  /**
+   * List the Polygon sync history of every problem
+   *
+   * @remarks
+   * Needs `judge.import_polygon_package` and `judge.edit_all_problem` (the
+   * runs name every problem). Every finished Polygon import and sync job, newest
+   * first: problem code, Polygon problem, revision, package and its build time,
+   * first import or sync, manual or automatic, who started it, the result and,
+   * for a failure, the step it stopped at and the error shown to the requester.
+   * Paged, default 20 per page (max 100). Errors: 403 `forbidden`.
+   */
+  @ApiPaginatedResponse(PolygonSyncRunResponse)
+  @Get('syncs')
+  syncs(
+    @CurrentAuth() auth: AuthContext,
+    @Query() query: PolygonSyncRunsQueryDto,
+  ): Promise<Paginated<PolygonSyncRunResponse>> {
+    return this.history.all(auth, query);
   }
 
   /**

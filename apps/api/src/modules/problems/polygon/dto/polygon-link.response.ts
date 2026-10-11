@@ -11,6 +11,10 @@ export class PolygonLinkResponse {
   /** Revision and package the problem's content was last taken from. */
   revision!: number;
   packageId!: number;
+  /** Polygon's build time of that package; null for links made before it was recorded. */
+  packageCreatedAt!: Date | null;
+  /** Statement title taken from that package; null for links made before it was recorded. */
+  title!: string | null;
   linkedAt!: Date;
   lastSyncAt!: Date | null;
   @ApiProperty({

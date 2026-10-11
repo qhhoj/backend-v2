@@ -6,6 +6,7 @@ import { PandocService } from './pandoc.service';
 import { PolygonImportProcessor } from './polygon-import.processor';
 import { PolygonImportRepository } from './polygon-import.repository';
 import { PolygonImportService } from './polygon-import.service';
+import { PolygonSyncRunsRepository } from './polygon-sync-runs.repository';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PolygonImportService } from './polygon-import.service';
     PolygonImportProcessor,
     PolygonImportService,
     PolygonImportRepository,
+    PolygonSyncRunsRepository,
     PandocService,
   ],
 })

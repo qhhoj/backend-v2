@@ -1,6 +1,8 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { getModelToken } from '@nestjs/mongoose';
 import type { Job, Queue } from 'bullmq';
-import { newId } from '@libs/database';
+import type { Model } from 'mongoose';
+import { newId, PolygonSyncRun } from '@libs/database';
 import {
   autoSyncJobId,
   POLYGON_ERROR_PREFIX,
@@ -35,11 +37,12 @@ const fixtureNamed = (name: string, timeLimitMs = 1000): PolygonFixture => ({
   ],
   solution: null,
 });
+const BUILT_AT = '2026-10-01T08:00:00.000Z';
 const ready = (id: number, revision: number) => ({
   id,
   revision,
   state: 'READY',
-  creationTimeSeconds: 0,
+  creationTimeSeconds: Date.parse(BUILT_AT) / 1000,
 });
 
 describe('Polygon link, sync and auto-sync', () => {
@@ -47,6 +50,7 @@ describe('Polygon link, sync and auto-sync', () => {
   let processor: PolygonImportProcessor;
   let autoSync: PolygonAutoSyncService;
   let imports: Queue<PolygonImportJob>;
+  let runs: Model<PolygonSyncRun>;
   const polygon = new FakePolygon();
   let requesterId: string, groupId: string, otherGroupId: string;
   let typeId: string, otherLanguageId: string;
@@ -61,12 +65,21 @@ describe('Polygon link, sync and auto-sync', () => {
         progress.push(value);
         return Promise.resolve();
       },
+      updateData: (value: PolygonImportJob) => {
+        job.data = value;
+        return Promise.resolve();
+      },
     } as unknown as Job<PolygonImportJob>;
     const outcome = await processor.process(job).then(
       (result) => ({ result, error: null }),
       (error: Error) => ({ result: null, error: error.message }),
     );
-    return { ...outcome, steps: progress.map(({ step }) => step) };
+    return {
+      ...outcome,
+      jobId: job.id!,
+      failedStep: job.data.failedStep,
+      steps: progress.map(({ step }) => step),
+    };
   };
   const linkJob = (code: string, packageId: number): PolygonImportJob => ({
     requesterId,
@@ -90,6 +103,7 @@ describe('Polygon link, sync and auto-sync', () => {
       owner: 'setter',
       revision: 3,
       packageId,
+      packageCreatedAt: BUILT_AT,
       purpose: 'link',
       autoSync: true,
     },
@@ -133,6 +147,7 @@ describe('Polygon link, sync and auto-sync', () => {
     processor = worker.module.get(PolygonImportProcessor);
     autoSync = worker.module.get(PolygonAutoSyncService);
     imports = worker.module.get(getQueueToken(POLYGON_QUEUE));
+    runs = worker.module.get(getModelToken(PolygonSyncRun.name));
     await worker.setSetting('polygon.apiKey', 'KEY');
     await worker.setSetting('polygon.apiSecret', 'SECRET');
     groupId = (await worker.problemGroups.create({ name: 'A', fullName: 'A' }))
@@ -174,7 +189,7 @@ describe('Polygon link, sync and auto-sync', () => {
     polygon.reply('problem.package', {
       zip: buildPolygonPackage(fixtureNamed('Sum')),
     });
-    const { result, error, steps } = await runJob(linkJob('linked', 10));
+    const { result, error, steps, jobId } = await runJob(linkJob('linked', 10));
     expect(error).toBeNull();
     expect(result).toMatchObject({ code: 'linked' });
     expect(polygon.callsOf('problem.package')[0].params).toMatchObject({
@@ -198,8 +213,50 @@ describe('Polygon link, sync and auto-sync', () => {
       autoSync: true,
       lastSyncResult: 'ok',
       lastSyncPackageId: 10,
+      title: 'Sum',
+      packageCreatedAt: new Date(BUILT_AT),
       options: { mainStatementLanguage: 'english', maxCases: 300 },
     });
+    expect(await runs.find({ jobId }).lean()).toEqual([
+      expect.objectContaining({
+        code: 'linked',
+        polygonProblemId: POLYGON_ID,
+        revision: 3,
+        packageId: 10,
+        packageCreatedAt: new Date(BUILT_AT),
+        purpose: 'link',
+        trigger: 'manual',
+        result: 'ok',
+        failedStep: null,
+        error: null,
+      }),
+    ]);
+    expect(String((await runs.findOne({ jobId }).lean())!.problem)).toBe(
+      String(problem._id),
+    );
+  });
+
+  it('stores where a failed job stopped, on the job and in the history; a zip import has no history', async () => {
+    const { error, failedStep, jobId } = await runJob(
+      syncJob('never_linked', { packageId: 11, revision: 4 }, 0),
+    );
+    expect(error).toBe(
+      `${POLYGON_ERROR_PREFIX}problem with code never_linked not found`,
+    );
+    expect(failedStep).toBe('checking');
+    expect(await runs.findOne({ jobId }).lean()).toMatchObject({
+      problem: null,
+      result: 'failed',
+      failedStep: 'checking',
+      error: 'problem with code never_linked not found',
+    });
+    const zipRun = await runJob({
+      ...linkJob('zip_missing', 1),
+      mode: 'update',
+      polygon: undefined,
+    });
+    expect(zipRun.failedStep).toBe('checking');
+    expect(await runs.countDocuments({ jobId: zipRun.jobId })).toBe(0);
   });
 
   it('syncs statement, tests and limits from a newer package and keeps the QHHOJ-owned fields', async () => {
@@ -251,12 +308,22 @@ describe('Polygon link, sync and auto-sync', () => {
     polygon.reply('problem.package', {
       failed: 'packageId: Package is not full',
     });
-    const { error } = await runJob(
+    const { error, failedStep, jobId } = await runJob(
       syncJob('broken', { packageId: 12, revision: 5 }, before.dataVersion),
     );
     expect(error).toBe(
       `${POLYGON_ERROR_PREFIX}Polygon: problem.package: packageId: Package is not full`,
     );
+    expect(failedStep).toBe('downloading');
+    const run = await runs.findOne({ jobId }).lean();
+    expect(run).toMatchObject({
+      purpose: 'sync',
+      packageId: 12,
+      result: 'failed',
+      failedStep: 'downloading',
+      error: 'Polygon: problem.package: packageId: Package is not full',
+    });
+    expect(String(run!.problem)).toBe(String(before._id));
     const after = (await worker.problems.findOne({ code: 'broken' }))!.toObject(
       {
         getters: true,
@@ -345,7 +412,13 @@ describe('Polygon link, sync and auto-sync', () => {
         mode: 'update',
         requesterId,
         expectedDataVersion: problem.dataVersion,
-        polygon: { packageId: 20, revision: 6, purpose: 'sync' },
+        polygon: {
+          packageId: 20,
+          revision: 6,
+          purpose: 'sync',
+          trigger: 'auto',
+          packageCreatedAt: BUILT_AT,
+        },
       });
       expect(job?.data.points).toBeUndefined();
     });

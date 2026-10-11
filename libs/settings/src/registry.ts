@@ -19,6 +19,8 @@ export interface SettingDefinition<Value> {
   description: string;
   /** `true`: the whole value is encrypted at rest; a list: those top-level fields of an object value are. */
   secret: boolean | readonly string[];
+  /** The value was stored unsealed before it became a whole-value secret: a stored string that does not open is that plain value (the next write seals it), and old revision rows are redacted when read. */
+  storedPlainBefore?: true;
   /** How a PATCH combines with the stored value; absent: the patch replaces it. Method syntax keeps definitions assignable to `SettingDefinition<unknown>`. */
   combine?(current: Value, patch: unknown): unknown;
 }
@@ -155,7 +157,8 @@ export const SETTINGS = {
     default: '',
     description:
       'API key of the Polygon account QHHOJ imports problems with (Polygon, Settings, API keys); empty: Polygon is not connected (zip import still works).',
-    secret: false,
+    secret: true,
+    storedPlainBefore: true,
   }),
   'polygon.apiSecret': define({
     type: optionalTextType(100),

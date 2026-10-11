@@ -7,10 +7,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
+import { ApiPaginatedResponse, Paginated } from '@libs/common';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
 import { UpdatePolygonLinkDto } from './dto/polygon-link.dto';
@@ -18,8 +20,11 @@ import {
   PolygonLinkResponse,
   PolygonLinkStateResponse,
 } from './dto/polygon-link.response';
+import { PolygonSyncRunResponse } from './dto/polygon-sync-run.response';
+import { PolygonSyncRunsQueryDto } from './dto/polygon-sync-runs.dto';
 import { PolygonLinkImportService } from './polygon-link-import.service';
 import { PolygonLinkService } from './polygon-link.service';
+import { PolygonSyncHistoryService } from './polygon-sync-history.service';
 
 @ApiTags('Problem editing')
 @RequirePermission('judge.import_polygon_package')
@@ -28,6 +33,7 @@ export class ProblemPolygonLinkController {
   constructor(
     private readonly links: PolygonLinkService,
     private readonly linkImports: PolygonLinkImportService,
+    private readonly history: PolygonSyncHistoryService,
   ) {}
 
   /**
@@ -68,6 +74,27 @@ export class ProblemPolygonLinkController {
     @Param() { code }: ProblemCodeParamDto,
   ): Promise<ImportJobStartedResponse> {
     return this.linkImports.sync(auth, code);
+  }
+
+  /**
+   * List a problem's Polygon sync history
+   *
+   * @remarks
+   * Needs `judge.import_polygon_package` and write access to the problem's test
+   * data. Every finished Polygon import and sync job of the problem, newest
+   * first, also after an unlink: revision, package and its build time, first
+   * import or sync, manual or automatic, who started it, the result and, for a
+   * failure, the step it stopped at and the error shown to the requester. Paged,
+   * default 20 per page (max 100). Errors: 404 `not_found`, 403 `forbidden`.
+   */
+  @ApiPaginatedResponse(PolygonSyncRunResponse)
+  @Get('syncs')
+  syncs(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { code }: ProblemCodeParamDto,
+    @Query() query: PolygonSyncRunsQueryDto,
+  ): Promise<Paginated<PolygonSyncRunResponse>> {
+    return this.history.ofProblem(auth, code, query);
   }
 
   /**

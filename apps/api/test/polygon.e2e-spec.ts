@@ -1,9 +1,18 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { getModelToken } from '@nestjs/mongoose';
+import { Worker } from 'bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
+import type { Model } from 'mongoose';
 import { REDIS } from '@libs/common';
+import { waitUntil } from '@libs/common/testing';
+import { newId, PolygonSyncRun } from '@libs/database';
 import type { PolygonLink } from '@libs/database';
-import { POLYGON_FETCH, POLYGON_QUEUE } from '@libs/problems';
+import {
+  POLYGON_ERROR_PREFIX,
+  POLYGON_FETCH,
+  POLYGON_QUEUE,
+} from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { FakePolygon } from '@libs/problems/testing';
 import {
@@ -42,12 +51,14 @@ const linkOf = (problemId: number, extra: Partial<PolygonLink> = {}) => ({
   },
   ...extra,
 });
+const BUILT_AT = '2026-10-01T08:00:00.000Z';
 const pkg = (id: number, revision: number, state: string) => ({
   id,
   revision,
   state,
-  creationTimeSeconds: 0,
+  creationTimeSeconds: Date.parse(BUILT_AT) / 1000,
 });
+const API_KEY = 'polygon-key-7f3a';
 const dataOf = <Data>({ body }: { body: unknown }) =>
   (body as { data: Data }).data;
 
@@ -56,6 +67,7 @@ describe('Polygon routes', () => {
   let catalog: Catalog;
   let queue: Queue<PolygonImportJob>;
   let redis: Redis;
+  let runs: Model<PolygonSyncRun>;
   const polygon = new FakePolygon();
   let importer: TestSession, admin: TestSession, plain: TestSession;
   let importerId: string;
@@ -96,6 +108,7 @@ describe('Polygon routes', () => {
     catalog = await seedCatalog(api);
     queue = api.app.get(getQueueToken(POLYGON_QUEUE));
     redis = api.app.get(REDIS);
+    runs = api.app.get(getModelToken(PolygonSyncRun.name));
     importerId = (
       await createUserWith(api, 'importer', {
         permissions: [
@@ -115,7 +128,7 @@ describe('Polygon routes', () => {
       )._id,
     );
     plain = await loginAs(api, (await createUserWith(api, 'plain'))._id);
-    await api.setSetting('polygon.apiKey', 'KEY');
+    await api.setSetting('polygon.apiKey', API_KEY);
     await api.setSetting('polygon.apiSecret', 'SECRET');
     await api.setSetting('polygon.accountName', 'qhhoj');
   });
@@ -148,17 +161,25 @@ describe('Polygon routes', () => {
     expect(polygon.calls).toEqual([]);
   });
 
-  it('reports the connection without calling Polygon and never returns the secret', async () => {
+  it('reports the connection without calling Polygon and never returns the key or the secret', async () => {
     expect(dataOf(await get(`${POLYGON}/status`).expect(200))).toEqual({
       connected: true,
       accountName: 'qhhoj',
     });
-    const settings = dataOf<Array<{ key: string; value: unknown }>>(
-      await get('/api/internal/admin/settings', admin).expect(200),
-    );
-    const secret = settings.find((row) => row.key === 'polygon.apiSecret');
-    expect(JSON.stringify(settings)).not.toContain('SECRET');
-    expect(secret).toBeDefined();
+    const settings = dataOf<
+      Array<{ key: string; value: unknown; hasSecret: boolean }>
+    >(await get('/api/internal/admin/settings', admin).expect(200));
+    expect(JSON.stringify(settings)).not.toMatch(/SECRET|polygon-key-7f3a/);
+    for (const key of ['polygon.apiKey', 'polygon.apiSecret'])
+      expect(settings.find((row) => row.key === key)).toMatchObject({
+        hasSecret: true,
+        value: { set: true },
+      });
+    const revisions = await get(
+      '/api/internal/admin/settings/polygon.apiKey/revisions',
+      admin,
+    ).expect(200);
+    expect(JSON.stringify(revisions.body)).not.toContain(API_KEY);
     expect(polygon.calls).toEqual([]);
   });
 
@@ -201,7 +222,12 @@ describe('Polygon routes', () => {
         owner: 'alice',
         revision: 3,
         modified: false,
-        latestPackage: { id: 10, revision: 3, state: 'READY' },
+        latestPackage: {
+          id: 10,
+          revision: 3,
+          state: 'READY',
+          createdAt: BUILT_AT,
+        },
         linkedProblemCode: 'linked_sum',
       },
       {
@@ -211,12 +237,22 @@ describe('Polygon routes', () => {
         owner: 'bob',
         revision: 5,
         modified: true,
-        latestPackage: { id: 21, revision: 5, state: 'RUNNING' },
+        latestPackage: {
+          id: 21,
+          revision: 5,
+          state: 'RUNNING',
+          createdAt: BUILT_AT,
+        },
         linkedProblemCode: null,
       },
       expect.objectContaining({
         id: 3,
-        latestPackage: { id: null, revision: null, state: 'NONE' },
+        latestPackage: {
+          id: null,
+          revision: null,
+          state: 'NONE',
+          createdAt: null,
+        },
       }),
     ]);
     const callsAfterFirst = polygon.calls.length;
@@ -270,14 +306,20 @@ describe('Polygon routes', () => {
         owner: 'alice',
         revision: 3,
         packageId: 10,
+        packageCreatedAt: BUILT_AT,
         purpose: 'link',
         autoSync: true,
+        trigger: 'manual',
       },
     });
     const status = dataOf<{ step: string; progress: unknown }>(
       await get(`/api/internal/problems/imports/${job!.id}`).expect(200),
     );
-    expect(status).toMatchObject({ step: 'queued', progress: null });
+    expect(status).toMatchObject({
+      step: 'queued',
+      progress: null,
+      failedStep: null,
+    });
     await job!.updateProgress({ step: 'downloading', done: 5, total: 10 });
     expect(
       dataOf(
@@ -287,6 +329,41 @@ describe('Polygon routes', () => {
       step: 'downloading',
       progress: { step: 'downloading', done: 5, total: 10 },
     });
+  });
+
+  it('answers where a failed import stopped, with the error written for the requester', async () => {
+    const worker = new Worker<PolygonImportJob>(
+      POLYGON_QUEUE,
+      async (job) => {
+        await job.updateData({ ...job.data, failedStep: 'statements' });
+        throw new Error(`${POLYGON_ERROR_PREFIX}statement.tex is missing`);
+      },
+      { connection: queue.opts.connection },
+    );
+    try {
+      sharedProblems();
+      const { jobId } = dataOf<{ jobId: string }>(
+        await post(`${POLYGON}/problems/1/import`, {
+          code: 'fails_polygon',
+        }).expect(202),
+      );
+      await waitUntil(
+        async () => (await queue.getJob(jobId))?.failedReason !== undefined,
+        15_000,
+      );
+      expect(
+        dataOf(
+          await get(`/api/internal/problems/imports/${jobId}`).expect(200),
+        ),
+      ).toMatchObject({
+        state: 'failed',
+        step: 'failed',
+        failedStep: 'statements',
+        error: 'statement.tex is missing',
+      });
+    } finally {
+      await worker.close();
+    }
   });
 
   it('refuses an import whose newest package is not READY, an already linked problem and an unshared one', async () => {
@@ -308,6 +385,85 @@ describe('Polygon routes', () => {
       .expect(404)
       .expect(errorCode('not_found'));
     expect(await queue.count()).toBe(0);
+  });
+
+  it('lists the sync history per problem for its editors, and overall only with judge.edit_all_problem', async () => {
+    const mine = await createProblem(api, catalog, {
+      code: 'history_mine',
+      authors: [importerId],
+    });
+    const other = await createProblem(api, catalog, { code: 'history_other' });
+    const run = (problem: string, extra: Partial<PolygonSyncRun> = {}) => ({
+      _id: newId(),
+      problem,
+      code: problem === mine._id ? 'history_mine' : 'history_other',
+      polygonProblemId: 7,
+      polygonName: 'sum',
+      revision: 3,
+      packageId: 10,
+      packageCreatedAt: new Date(BUILT_AT),
+      purpose: 'sync',
+      trigger: 'manual',
+      requestedBy: importerId,
+      jobId: newId(),
+      result: 'ok',
+      ...extra,
+    });
+    await runs.create(run(mine._id));
+    await runs.create(run(other._id));
+    await runs.create(
+      run(mine._id, {
+        revision: 4,
+        trigger: 'auto',
+        result: 'failed',
+        failedStep: 'tests',
+        error: 'too many tests',
+      }),
+    );
+    const page = await get(
+      '/api/internal/problems/history_mine/polygon/syncs?pageSize=1',
+    ).expect(200);
+    expect((page.body as { meta: unknown }).meta).toMatchObject({
+      page: 1,
+      pageSize: 1,
+      total: 2,
+    });
+    expect(dataOf(page)).toEqual([
+      expect.objectContaining({
+        problemId: mine._id,
+        code: 'history_mine',
+        revision: 4,
+        packageCreatedAt: BUILT_AT,
+        trigger: 'auto',
+        requestedBy: expect.objectContaining({
+          username: 'importer',
+        }) as unknown,
+        result: 'failed',
+        failedStep: 'tests',
+        error: 'too many tests',
+      }),
+    ]);
+    await get('/api/internal/problems/history_other/polygon/syncs')
+      .expect(403)
+      .expect(errorCode('forbidden'));
+    await get(`${POLYGON}/syncs`).expect(403).expect(errorCode('forbidden'));
+    const auditor = await loginAs(
+      api,
+      (
+        await createUserWith(api, 'auditor', {
+          permissions: [
+            'judge.import_polygon_package',
+            'judge.edit_all_problem',
+          ],
+        })
+      )._id,
+    );
+    const all = dataOf<Array<{ code: string }>>(
+      await get(`${POLYGON}/syncs`, auditor).expect(200),
+    );
+    expect(all.map(({ code }) => code)).toEqual(
+      expect.arrayContaining(['history_mine', 'history_other']),
+    );
   });
 
   describe('a linked problem', () => {
@@ -390,6 +546,23 @@ describe('Polygon routes', () => {
         revisions.map((revision) => Object.keys(revision.changes)),
       ).toEqual([['polygonLink.autoSync'], ['polygonLink']]);
       await get(links()).expect(404).expect(errorCode('polygon_not_linked'));
+    });
+
+    it('shows the title and build time of the synced package and the build time of the newest one', async () => {
+      await api.problems.updateOne(
+        { code },
+        {
+          $set: {
+            'polygonLink.title': 'Tổng',
+            'polygonLink.packageCreatedAt': new Date(BUILT_AT),
+          },
+        },
+      );
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      expect(dataOf(await get(links()).expect(200))).toMatchObject({
+        link: { title: 'Tổng', packageCreatedAt: BUILT_AT },
+        latestPackage: { id: 11, createdAt: BUILT_AT },
+      });
     });
 
     it('still shows the link when Polygon cannot be asked', async () => {
