@@ -97,6 +97,51 @@ export function caseVisibility(
   };
 }
 
+/** What a list row shows of a submission's test results: every case, the batch summaries, or nothing. */
+export type ListCaseUnit = 'case' | 'batch';
+
+export interface ListCaseFacts {
+  ownerId: string;
+  /** The submission was made in a contest. */
+  inContest: boolean;
+  problem: SubmissionProblemView & {
+    testcaseResultVisibility: string;
+    testcaseVisibility: string;
+    allowViewFeedback: boolean;
+    isDeleted: boolean;
+  };
+  canEdit: boolean;
+}
+
+/**
+ * The submission page's case rule for one list row, kept narrower where a row cannot be checked cheaply: signed-in
+ * viewers only, `if-solved` counts as denied, and another user's contest submission shows nothing to anyone but the
+ * problem's editors and `judge.view_all_submission` (the detail page would also need the contest's list open and not
+ * frozen, which the list does not look up per row). Do not loosen this without adding that contest check.
+ */
+export function listCaseUnit(
+  principal: Principal | null,
+  { ownerId, inContest, problem, canEdit }: ListCaseFacts,
+): ListCaseUnit | null {
+  if (!principal || problem.isDeleted) return null;
+  const { cases } = caseVisibility(principal, problem, {
+    canEdit,
+    isInContest: false,
+  });
+  if (cases === 'none') return null;
+  const access = detailAccess(principal, {
+    ownerId,
+    problem,
+    canEdit,
+    isContestEditor: false,
+  });
+  if (access !== 'granted') return null;
+  const seesEveryRow =
+    canEdit || hasPermission(principal, 'judge.view_all_submission');
+  if (inContest && ownerId !== principal.userId && !seesEveryRow) return null;
+  return cases === 'all' ? 'case' : 'batch';
+}
+
 export interface BatchSummary {
   batch: number;
   status: CaseStatus;

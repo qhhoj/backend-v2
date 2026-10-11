@@ -24,15 +24,19 @@ import { SubmissionListItemResponse } from './dto/submission-list.response';
 import {
   caseVisibility,
   detailAccess,
+  listCaseUnit,
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
 import type {
   CaseVisibility,
   DetailAccess,
+  ListCaseUnit,
   SubmissionActions,
 } from './submission-access';
 import { sourceFilename } from './source-file';
+import { TEST_SUMMARY_CAP, testSummaryOf } from './test-summary';
+import type { TestSummary } from './test-summary';
 import type { SourceFile } from './source-file';
 import { ExternalRunsRepository } from './external-runs.repository';
 import { SubmissionsRepository } from './submissions.repository';
@@ -112,12 +116,16 @@ export class SubmissionsService {
       query.page,
       query.pageSize,
     );
-    return new Paginated(await this.listItems(items), { ...meta, total });
+    return new Paginated(await this.listItems(items, principal), {
+      ...meta,
+      total,
+    });
   }
 
-  /** List rows with their user, problem (deleted ones too) and language resolved in one read each. */
+  /** List rows with their user, problem (deleted ones too) and language resolved in one read each; with a `viewer`, each row also carries the test summary that viewer may see (see `listCaseUnit`). */
   async listItems(
     items: readonly Submission[],
+    viewer: Principal | null = null,
   ): Promise<SubmissionListItemResponse[]> {
     const [users, problems] = await Promise.all([
       this.users.findByIds(
@@ -131,13 +139,79 @@ export class SubmissionsService {
     const problemOf = new Map(
       problems.map((problem) => [problem._id, problem]),
     );
+    const summaries = viewer
+      ? await this.testSummaries(viewer, items, problemOf)
+      : new Map<string, TestSummary>();
     return items.map((submission) =>
-      SubmissionListItemResponse.from(submission, {
-        user: userOf.get(uuidStr(submission.user)),
-        problem: problemOf.get(uuidStr(submission.problem)),
-        language: this.languages.byId(uuidStr(submission.language)),
-      }),
+      SubmissionListItemResponse.from(
+        submission,
+        {
+          user: userOf.get(uuidStr(submission.user)),
+          problem: problemOf.get(uuidStr(submission.problem)),
+          language: this.languages.byId(uuidStr(submission.language)),
+        },
+        summaries.get(uuidStr(submission._id)) ?? null,
+      ),
     );
+  }
+
+  /** The rows' test summaries, keyed by submission id: cases are read only for rows whose unit is not null. */
+  private async testSummaries(
+    viewer: Principal,
+    items: readonly Submission[],
+    problemOf: ReadonlyMap<string, ProblemDocument>,
+  ): Promise<Map<string, TestSummary>> {
+    const units = new Map<string, { unit: ListCaseUnit; problemId: string }>();
+    for (const submission of items) {
+      const problemId = uuidStr(submission.problem);
+      const problem = problemOf.get(problemId);
+      const unit = problem && this.listCaseUnitOf(viewer, submission, problem);
+      if (unit) units.set(uuidStr(submission._id), { unit, problemId });
+    }
+    const caseProblems = unique(
+      [...units.values()]
+        .filter(({ unit }) => unit === 'case')
+        .map(({ problemId }) => problemId),
+    );
+    const [heads, caseCounts] = await Promise.all([
+      this.submissions.caseHeads([...units.keys()], TEST_SUMMARY_CAP),
+      this.problems.caseCounts(caseProblems),
+    ]);
+    const summaries = new Map<string, TestSummary>();
+    for (const [id, { unit, problemId }] of units) {
+      const read = heads.get(id) ?? { head: [], count: 0 };
+      summaries.set(
+        id,
+        testSummaryOf(
+          unit,
+          read.head,
+          read.count,
+          caseCounts.get(problemId) ?? null,
+        ),
+      );
+    }
+    return summaries;
+  }
+
+  private listCaseUnitOf(
+    viewer: Principal,
+    submission: Submission,
+    problem: ProblemDocument,
+  ): ListCaseUnit | null {
+    const view = ProblemAccess.accessView(problem);
+    return listCaseUnit(viewer, {
+      ownerId: uuidStr(submission.user),
+      inContest: submission.contest != null,
+      problem: {
+        ...view,
+        submissionSourceVisibility: problem.submissionSourceVisibility,
+        testcaseResultVisibility: problem.testcaseResultVisibility,
+        testcaseVisibility: problem.testcaseVisibility,
+        allowViewFeedback: problem.allowViewFeedback,
+        isDeleted: problem.deletedAt != null,
+      },
+      canEdit: ProblemAccess.canEdit(viewer, view),
+    });
   }
 
   async detail(

@@ -182,6 +182,80 @@ afterAll(() => api.teardown());
       });
     });
 
+    describe('GET /submissions test summaries', () => {
+      type Row = {
+        id: string;
+        testSummary: {
+          unit: string;
+          statuses: string[];
+          batches: (number | null)[];
+          more: number;
+          total: number | null;
+        } | null;
+      };
+      const summaryOf = async (who: string, code: string) => {
+        const rows = (
+          await as(who, `${SUBMISSIONS}?problem=${code}&user=owner`).expect(200)
+        ).body as { data: Row[] };
+        return rows.data.find((row) => row.id === owned[code])?.testSummary;
+      };
+
+      it('gives the viewer the cases or batches the submission page shows, and nothing otherwise', async () => {
+        expect(await summaryOf('owner', 'vis_a')).toEqual({
+          unit: 'case',
+          statuses: ['AC', 'AC', 'WA'],
+          batches: [null, 1, 1],
+          more: 0,
+          total: 0,
+        });
+        expect(await summaryOf('owner', 'res_b')).toEqual({
+          unit: 'batch',
+          statuses: ['WA'],
+          batches: [1],
+          more: 0,
+          total: null,
+        });
+        expect(await summaryOf('owner', 'res_s')).toBeNull();
+        expect(await summaryOf('anonymous', 'vis_a')).toBeNull();
+        expect(await summaryOf('other', 'vis_s')).toBeNull();
+        expect(await summaryOf('other', 'vis_a')).toMatchObject({
+          unit: 'case',
+        });
+        expect(await summaryOf('root', 'res_s')).toMatchObject({
+          unit: 'case',
+        });
+      });
+
+      it('caps a row at 100 cases and counts the rest', async () => {
+        const problem = await problemWith('many_cases');
+        const cases = Array.from({ length: 120 }, (_unused, index) => ({
+          ...CASES[0],
+          position: index + 1,
+        }));
+        owned.many_cases = (
+          await seedSubmission(api, {
+            user: ids.owner,
+            problem: problem._id,
+            language: catalog.languages.cpp,
+            cases,
+          })
+        )._id;
+        const summary = await summaryOf('owner', 'many_cases');
+        expect(summary?.statuses).toHaveLength(100);
+        expect(summary?.more).toBe(20);
+      });
+
+      it('leaves the best-submissions ranking without summaries', async () => {
+        const best = (
+          await as(
+            'owner',
+            '/api/internal/problems/vis_a/best-submissions',
+          ).expect(200)
+        ).body as { data: Row[] };
+        expect(best.data.every((row) => row.testSummary === null)).toBe(true);
+      });
+    });
+
     describe('GET /problems/:code/best-submissions', () => {
       const best = async (who: string, code: string, query = '') =>
         (

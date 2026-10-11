@@ -12915,6 +12915,16 @@
             ],
             "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end."
           },
+          "testSummary": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionTestSummaryResponse"
+              }
+            ],
+            "description": "The first test results, only on the submission lists and only when the viewer could see them on the submission page (signed in; another user's contest submission only for the problem's editors and `judge.view_all_submission`); null otherwise.",
+            "nullable": true,
+            "type": "object"
+          },
           "time": {
             "description": "Seconds (largest case).",
             "nullable": true,
@@ -12957,6 +12967,7 @@
           "caseTotal",
           "time",
           "memory",
+          "testSummary",
           "error",
           "currentTestcase",
           "isPretested",
@@ -13181,6 +13192,16 @@
             ],
             "description": "Judging state: `QU` queued, `P` processing, `G` grading, `D` done, `IE` internal error, `CE` compile error, `AB` aborted, `PD` pending final judging at contest end."
           },
+          "testSummary": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionTestSummaryResponse"
+              }
+            ],
+            "description": "The first test results, only on the submission lists and only when the viewer could see them on the submission page (signed in; another user's contest submission only for the problem's editors and `judge.view_all_submission`); null otherwise.",
+            "nullable": true,
+            "type": "object"
+          },
           "time": {
             "description": "Seconds (largest case).",
             "nullable": true,
@@ -13209,7 +13230,8 @@
           "casePoints",
           "caseTotal",
           "time",
-          "memory"
+          "memory",
+          "testSummary"
         ],
         "type": "object"
       },
@@ -13497,6 +13519,60 @@
           "QU"
         ],
         "type": "string"
+      },
+      "SubmissionTestSummaryResponse": {
+        "properties": {
+          "batches": {
+            "description": "Batch number of each entry, from 1; null for a case outside any batch. Same length as `statuses`.",
+            "items": {
+              "nullable": true,
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "more": {
+            "description": "Judged cases past the first 100, not in `statuses`.",
+            "type": "number"
+          },
+          "statuses": {
+            "description": "Verdict of each entry, at most 100: `AC`, `WA`, `TLE`, `MLE`, `OLE`, `IR`, `RTE` or `SC`. For `batch`, the first non-accepted case of each batch among the first 100 cases.",
+            "items": {
+              "enum": [
+                "AC",
+                "IR",
+                "MLE",
+                "OLE",
+                "RTE",
+                "SC",
+                "TLE",
+                "WA"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "The problem's test case count for `case` (the rest are not judged yet); null for `batch`.",
+            "nullable": true,
+            "type": "number"
+          },
+          "unit": {
+            "description": "`case`: one entry per test case in judging order; `batch`: one entry per batch (the problem shows only batch results).",
+            "enum": [
+              "batch",
+              "case"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "statuses",
+          "batches",
+          "more",
+          "total"
+        ],
+        "type": "object"
       },
       "SubmissionViewerResponse": {
         "properties": {

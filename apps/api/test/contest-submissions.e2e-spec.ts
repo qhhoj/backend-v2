@@ -274,6 +274,47 @@ describe('contest submissions and the freeze', () => {
     await get(`/api/internal/submissions/${bobId}`, 'alice').expect(200);
   });
 
+  it("shows another contestant's test results only to editors and view-all staff", async () => {
+    const { contest, aliceId, bobId } = await frozenScene('summary_p');
+    await api.contests.updateOne(
+      { _id: contest._id },
+      {
+        frozenLastMinutes: 0,
+        startTime: hoursFromNow(-5),
+        endTime: hoursFromNow(-1),
+      },
+    );
+    const cases = [
+      {
+        position: 1,
+        status: 'AC',
+        time: 0,
+        memory: 0,
+        points: 1,
+        total: 1,
+        batch: null,
+      },
+    ];
+    await api.submissions.updateMany(
+      { _id: { $in: [aliceId, bobId] } },
+      { cases },
+    );
+    const summaries = async (who: string) =>
+      Object.fromEntries(
+        dataOf<SubmissionListItemResponse[]>(
+          await get(contestUrl(contest.key, '/submissions'), who).expect(200),
+        ).map((row) => [row.id, row.testSummary?.statuses ?? null]),
+      );
+    expect(await summaries('alice')).toEqual({
+      [aliceId]: ['AC'],
+      [bobId]: null,
+    });
+    expect(await summaries('staff')).toEqual({
+      [aliceId]: ['AC'],
+      [bobId]: ['AC'],
+    });
+  });
+
   it('keeps a running unfrozen contest list to the viewer unless the contest shows it', async () => {
     const { contest, aliceId, bobId } = await frozenScene('open_p');
     await api.contests.updateOne(
