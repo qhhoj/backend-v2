@@ -24562,7 +24562,7 @@
     },
     "/api/internal/contests/{key}/problems/{code}/best-submissions": {
       "get": {
-        "description": "Public for visible contests. Same rows and order as the problem's best\nsubmissions (most points, then less time, less memory, the earlier\nsubmission; `page` from 1, `pageSize` 1-100, default 50), but only\nsubmissions made in the contest. While the ranking is frozen for the\nviewer, submissions made at or after the freeze are left out. 403\n`forbidden` unless the viewer may see the full ranking and the problem\nlist; 404 `not_found` for a problem the contest does not have.",
+        "description": "Public for visible contests. Same rows and order as the problem's best\nsubmissions (most points, then less time, less memory, the earlier\nsubmission; `page` from 1, `pageSize` 1-100, default 50), but only\nsubmissions made in the contest. Everyone's rows go to editors and to\nviewers the contest submission list is open to; other viewers get only\ntheir own. While the ranking is frozen for the viewer, submissions made at\nor after the freeze are left out. 403\n`forbidden` unless the viewer may see the full ranking and the problem\nlist; 404 `not_found` for a problem the contest does not have.",
         "operationId": "ContestBestSubmissionsController_list",
         "parameters": [
           {

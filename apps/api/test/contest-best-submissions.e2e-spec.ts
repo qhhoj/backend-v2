@@ -5,6 +5,8 @@ import {
   contestUrl,
   createContest,
   hoursFromNow,
+  joinParticipation,
+  makeCurrent,
 } from './contest-fixtures';
 import {
   authed,
@@ -121,8 +123,10 @@ describe('best submissions per contest problem', () => {
       date: hoursFromNow(-2),
     });
     const url = bestUrl(contest.key, problem.code);
-    expect(rowsOf(await get(url, 'carol').expect(200))).toEqual([beforeFreeze]);
-    expect(rowsOf(await get(url).expect(200))).toEqual([beforeFreeze]);
+    // A frozen board closes other users' rows; a viewer's own rows stop at the freeze.
+    expect(rowsOf(await get(url, 'alice').expect(200))).toEqual([beforeFreeze]);
+    expect(rowsOf(await get(url, 'bob').expect(200))).toEqual([]);
+    expect(rowsOf(await get(url, 'carol').expect(200))).toEqual([]);
     expect(rowsOf(await get(url, 'author').expect(200))).toEqual([
       afterFreeze,
       beforeFreeze,
@@ -157,5 +161,23 @@ describe('best submissions per contest problem', () => {
     await get(bestUrl(contest.key, 'best_stranger_p'), 'alice')
       .expect(404)
       .expect(errorCode('not_found'));
+  });
+
+  it("shows only the viewer's own rows while the contest's submission list is closed to them", async () => {
+    const { contest, problem, submit } = await endedScene('best_closed_p', {
+      startTime: hoursFromNow(-1),
+      endTime: hoursFromNow(2),
+    });
+    const mine = await submit('alice', { date: hoursFromNow(-0.5) });
+    await submit('bob', { date: hoursFromNow(-0.5) });
+    const participation = await joinParticipation(
+      api,
+      contest._id,
+      users.alice._id,
+    );
+    await makeCurrent(api, users.alice._id, participation._id);
+    const url = bestUrl(contest.key, problem.code);
+    expect(rowsOf(await get(url, 'alice').expect(200))).toEqual([mine]);
+    expect(rowsOf(await get(url, 'author').expect(200))).toHaveLength(2);
   });
 });

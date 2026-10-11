@@ -21,8 +21,10 @@ export class ContestBestSubmissionsController {
    * Public for visible contests. Same rows and order as the problem's best
    * submissions (most points, then less time, less memory, the earlier
    * submission; `page` from 1, `pageSize` 1-100, default 50), but only
-   * submissions made in the contest. While the ranking is frozen for the
-   * viewer, submissions made at or after the freeze are left out. 403
+   * submissions made in the contest. Everyone's rows go to editors and to
+   * viewers the contest submission list is open to; other viewers get only
+   * their own. While the ranking is frozen for the viewer, submissions made at
+   * or after the freeze are left out. 403
    * `forbidden` unless the viewer may see the full ranking and the problem
    * list; 404 `not_found` for a problem the contest does not have.
    */
