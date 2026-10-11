@@ -1,3 +1,4 @@
+import { organizationCodePrefix } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
@@ -19,6 +20,8 @@ export class OrganizationListItemResponse {
   performancePoints!: number;
   /** Most members the organization may have; null for no limit. */
   slots!: number | null;
+  /** What the code of a problem created for the organization must start with (`thpt-demo` → `thptdemo_`). */
+  problemCodePrefix!: string;
 
   static from(organization: Organization): OrganizationListItemResponse {
     return {
@@ -31,6 +34,7 @@ export class OrganizationListItemResponse {
       memberCount: organization.memberCount,
       performancePoints: organization.performancePoints,
       slots: organization.slots,
+      problemCodePrefix: organizationCodePrefix(organization.slug),
     };
   }
 }

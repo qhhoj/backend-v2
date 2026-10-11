@@ -270,6 +270,16 @@ describe('creating problems and contests for an organization', () => {
       });
     });
 
+    it('tells the code prefix of the organization', async () => {
+      const response = await authed(
+        api.http().get(organizationUrl('thpt-demo')),
+        sessions.teacher,
+      ).expect(200);
+      expect(response.body as unknown).toMatchObject({
+        data: { problemCodePrefix: 'thptdemo_' },
+      });
+    });
+
     it('reports the session creation scopes', async () => {
       const capabilitiesOf = async (who: string) => {
         const response = await authed(
