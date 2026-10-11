@@ -146,6 +146,8 @@ export class CommentPageResponse {
   postBlock!: CommentPostBlockResponse | null;
   /** Roots newest first, each followed by its replies in tree order: hidden ones only for moderators, deleted ones as placeholders. */
   comments!: CommentResponse[];
+  /** Roots whose thread has more than `COMMENT_THREAD_REPLY_LIMIT` (100) replies: only the first 100 in tree order are listed. */
+  truncatedThreads!: string[];
   /** Paging of the top-level threads. */
   pagination!: CommentPaginationResponse;
 }

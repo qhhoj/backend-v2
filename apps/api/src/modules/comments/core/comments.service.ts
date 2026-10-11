@@ -3,6 +3,7 @@ import { hasPermission, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, unique } from '@libs/common';
 import {
+  COMMENT_THREAD_REPLY_LIMIT,
   COMMENT_THREADS_PAGE_SIZE,
   officialModeLocks,
   pageOf,
@@ -60,16 +61,17 @@ export class CommentsService {
           COMMENT_THREADS_PAGE_SIZE,
           withHidden,
         );
-    const replies = await this.comments.replies(
-      roots.map((root) => uuidStr(root._id)),
-      withHidden,
+    const threads = await Promise.all(
+      roots.map(async (root) => ({
+        root,
+        ...(await this.comments.replies(
+          uuidStr(root._id),
+          withHidden,
+          COMMENT_THREAD_REPLY_LIMIT,
+        )),
+      })),
     );
-    const ordered = roots.flatMap((root) => [
-      root,
-      ...replies.filter(
-        (reply) => uuidStr(reply.threadId) === uuidStr(root._id),
-      ),
-    ]);
+    const ordered = threads.flatMap(({ root, replies }) => [root, ...replies]);
     const pageLocked = await this.locks.isLocked(pageInfo.page);
     const lock = this.lockOf(principal, pageInfo, pageLocked);
     const postBlock = await this.postBlock(principal, lock);
@@ -80,6 +82,9 @@ export class CommentsService {
       canComment: postBlock === null,
       postBlock: CommentPostBlockResponse.from(postBlock),
       comments: await this.respond(principal, ordered),
+      truncatedThreads: threads
+        .filter((thread) => thread.truncated)
+        .map(({ root }) => uuidStr(root._id)),
       pagination: {
         page: pageNumber,
         pageSize: COMMENT_THREADS_PAGE_SIZE,

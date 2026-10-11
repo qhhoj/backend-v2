@@ -114,19 +114,24 @@ export class CommentsRepository {
       .exec();
   }
 
-  /** Replies of the threads, in tree order, through `{threadId, hidden, path}`. The index is hinted (the planner otherwise sorts in memory over `{hidden, _id}`), and the roots are read along because a `parentId` filter would not use it. */
+  /** The first `limit` replies of a thread in tree order (a prefix, so every listed reply's parent is listed) and whether more exist, through `{threadId, hidden, path}`. The index is hinted (the planner otherwise sorts in memory over `{hidden, _id}`), and the root is read along because a `parentId` filter would not use it. */
   async replies(
-    threadIds: readonly string[],
+    threadId: string,
     includeHidden: boolean,
-  ): Promise<Comment[]> {
-    if (!threadIds.length) return [];
+    limit: number,
+  ): Promise<{ replies: Comment[]; truncated: boolean }> {
     const thread = await this.comments
-      .find({ threadId: { $in: threadIds }, ...hiddenFilter(includeHidden) })
+      .find({ threadId, ...hiddenFilter(includeHidden) })
       .sort({ path: 1 })
       .hint({ threadId: 1, hidden: 1, path: 1 })
+      .limit(limit + 2)
       .lean<Comment[]>()
       .exec();
-    return thread.filter((comment) => comment.parentId !== null);
+    const replies = thread.filter((comment) => comment.parentId !== null);
+    return {
+      replies: replies.slice(0, limit),
+      truncated: replies.length > limit,
+    };
   }
 
   /** Visible, undeleted comments per page id of one type. */
