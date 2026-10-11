@@ -101,6 +101,8 @@ describe('contest public ranking', () => {
       await api.http().get(publicUrl(link.token)).expect(200),
     );
     expect(shown.key).toBe(contest.key);
+    expect(shown.formatName).toBe(contest.formatName);
+    expect(shown.pointsPrecision).toBe(contest.pointsPrecision);
     expect(ranking.rows.map((row) => [row.user.username, row.score])).toEqual([
       ['alice', 200],
     ]);

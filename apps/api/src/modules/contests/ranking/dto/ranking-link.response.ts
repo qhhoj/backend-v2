@@ -1,4 +1,9 @@
-import type { ContestPublicRankingLink } from '@libs/database';
+import { ApiProperty } from '@nestjs/swagger';
+import { CONTEST_FORMAT_NAMES } from '@libs/database';
+import type {
+  ContestFormatName,
+  ContestPublicRankingLink,
+} from '@libs/database';
 import { isLinkValid } from '../ranking-link';
 import { RankingResponse } from './ranking.response';
 
@@ -40,6 +45,16 @@ export class PublicRankingContestResponse {
   startTime!: string;
   /** When the contest ends, ISO 8601. */
   endTime!: string;
+  @ApiProperty({ enum: CONTEST_FORMAT_NAMES, enumName: 'ContestFormatName' })
+  formatName!: ContestFormatName;
+  /** Format-specific options, as in the contest detail. */
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { oneOf: [{ type: 'number' }, { type: 'boolean' }] },
+  })
+  formatConfig!: Record<string, unknown>;
+  /** Decimal places shown in scores. */
+  pointsPrecision!: number;
 }
 
 export class PublicRankingResponse {

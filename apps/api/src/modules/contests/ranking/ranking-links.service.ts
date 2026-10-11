@@ -113,6 +113,9 @@ export class RankingLinksService {
         name: contest.name,
         startTime: contest.startTime.toISOString(),
         endTime: contest.endTime.toISOString(),
+        formatName: contest.formatName,
+        formatConfig: contest.formatConfig,
+        pointsPrecision: contest.pointsPrecision,
       },
       ranking: await this.rankings.board(contest, {
         withVirtual: false,
