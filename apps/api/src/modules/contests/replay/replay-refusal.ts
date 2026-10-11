@@ -1,7 +1,7 @@
 import { AppError } from '@libs/common';
 
 /** Field every replay issue is reported on. */
-export const REPLAY_ISSUE_FIELD = 'replay';
+const REPLAY_ISSUE_FIELD = 'replay';
 
 /** A refusal whose `issues[0].code` is stable and snake_case; the SPA never matches the English message. */
 export const replayRefusal = (
@@ -15,7 +15,7 @@ export const replayRefusal = (
   });
 
 /** Gives a refusal that has no `issues` (the viewer's 404 and 403, the rate limit's 429) one coded after its error code; headers such as `Retry-After` survive. */
-export const withIssueCode = (error: unknown): unknown => {
+const withIssueCode = (error: unknown): unknown => {
   if (!(error instanceof AppError) || error.extra?.issues) return error;
   return new AppError(
     error.code,

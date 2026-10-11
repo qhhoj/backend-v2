@@ -16,7 +16,7 @@ import { ContestsService } from '../core/contests.service';
 const NO_USER = '00000000-0000-0000-0000-000000000000';
 
 /** One contest problem's submissions, none made at or after the freeze when the viewer sees a frozen board. */
-export function contestBestFilter(
+function contestBestFilter(
   contestId: string,
   problemId: string,
   frozenAt: Date | null,
