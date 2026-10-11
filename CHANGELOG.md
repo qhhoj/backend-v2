@@ -1,5 +1,15 @@
 # qhhoj-backend
 
+## 2.17.0
+
+### Minor Changes
+
+- c32c6b5: Submission lists (`/submissions`, contest and organization lists) carry `testSummary`: the first 100 case verdicts (or batch verdicts) with the problem's case count, only for viewers who could see them on the submission page.
+
+### Patch Changes
+
+- c88575e: chore: remove unused exports in contests (replay refusal, best submissions, final-judge queue helpers).
+
 ## 2.16.1
 
 ### Patch Changes
