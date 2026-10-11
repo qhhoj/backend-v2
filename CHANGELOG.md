@@ -1,5 +1,16 @@
 # qhhoj-backend
 
+## 2.11.0
+
+### Minor Changes
+
+- 0334196: Add `GET /contests/{key}/problems/{code}/best-submissions` (best submission per user on a contest problem, contest submissions only, cut at the freeze, closed when the ranking is hidden) and `canSeeFullScoreboard` / `boardFrozenAt` on the contest viewer.
+
+### Patch Changes
+
+- e9eda16: release tags are created through the GitHub API, not git push
+- 2b77b79: Test: two superusers demoting or deactivating each other at once leave one active.
+
 ## 2.10.0
 
 ### Minor Changes
