@@ -1,5 +1,20 @@
 # qhhoj-backend
 
+## 2.7.0
+
+### Minor Changes
+
+- 427836a: Admin content: `GET /admin/comments` (search every comment) and `POST /admin/comments/hidden` (bulk hide); `/admin/posts` takes `search` and the `organization` and `any` states; `visible`, `sticky` or `globalPost` sent alone by `edit_all_post` skips the post write limit; `/admin/discord-webhooks` lists masked targets, sets or removes one event and queues a test message; a `discord.webhooks` patch now merges per event (null removes one).
+- be45e16: Contest admin: per-problem rejudge and rescore, contest delete, hand-edited participations (add, move start, delete, recompute), participation list filters (kind, disqualified, score sort), announcement edit and preview, pending final-submission count in the actions status.
+- 3918877: Admin judging: bulk rejudge filters by contest, user, ids, date range and judge (problem optional) with a dry-run sample; bulk rescore; recent batch log; submission lock/unlock; judge queue summary; delete an offline judge.
+- 304796f: Organization admin: change history (`GET /organizations/{slug}/revisions`; creates, edits with admins by username, member removals), about preview (`POST /organizations/render-preview`), staff points recalculation (`POST /organizations/{slug}/recalculate`), `search` on members and on the staff request queue, `open`/`unlisted` filters on the organization list, `decidedByUsername` on join requests, `slots` on organization list items, issue codes `admin_cap`, `admin_not_kickable`, `not_member`.
+- 8664659: Problems admin: `POST /problems/bulk/visibility` publishes or unpublishes up to 100 problems through the PATCH path (optional `setDateToNow`, per-code `done`/`unchanged`/`failed`); `PATCH /problems/{code}` takes `changeMessage` as the revision comment; `GET /problems` gains `authorId` and `suggested` filters and `authors` on each item; the editor block gains `ogImage`; create and edit for problem types, groups and licenses under `/admin/problem-types`, `/admin/problem-groups`, `/admin/licenses` (`judge.add_*`/`judge.change_*` for `problemtype`, `problemgroup`, `license`).
+- 4b856f8: Add `robots.txt`, cached sitemaps and link-preview tags for problem, contest, blog and user pages (`/api/internal/seo/*`, mapped by nginx); the public ranking response now carries the contest format.
+
+### Patch Changes
+
+- 0918cff: Classify the SEO repository in the problem-readers spec so backend CI passes again.
+
 ## 2.6.1
 
 ### Patch Changes
