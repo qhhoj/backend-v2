@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.19.0
+
+### Minor Changes
+
+- f5ea530: `editor.canPublishToMembers` on the problem detail: an organization creator may set `isPublic` on an organization-private problem.
+
 ## 2.18.0
 
 ### Minor Changes
