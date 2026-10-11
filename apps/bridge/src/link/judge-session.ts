@@ -312,6 +312,24 @@ export class JudgeSession implements DispatchTarget {
     this.ping();
     // outside the `try`: a failed dispatch must not drop a judge that is fully set up
     await this.services.dispatch.register(this);
+    await this.recordAddress();
+  }
+
+  /** Admin-page history only: a failed write is logged, never fatal to the session. */
+  private async recordAddress(): Promise<void> {
+    const { address } = this.identity;
+    if (!address || this.isClosed) return;
+    try {
+      await this.services.judges.recordAddress(
+        this.name,
+        address,
+        this.connectedAt,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Judge ${this.name}: address ${address} not recorded: ${(error as Error).message}`,
+      );
+    }
   }
 
   /** Resume decisions, Welcome, the aborts recorded during the grace, then the admin row. */

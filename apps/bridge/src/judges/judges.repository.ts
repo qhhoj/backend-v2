@@ -82,7 +82,7 @@ export class JudgesRepository {
     startTime: Date,
     details: SessionDetails,
   ): Promise<void> {
-    const { matchedCount } = await this.judges.updateOne(
+    await this.judges.updateOne(
       { name, startTime: { $not: { $gt: startTime } } },
       {
         $set: {
@@ -95,11 +95,9 @@ export class JudgesRepository {
         },
       },
     );
-    if (matchedCount === 1 && details.lastIp)
-      await this.recordAddress(name, details.lastIp, startTime);
   }
 
-  /** The admin page's address history: bumps the address's entry, or adds it and drops the least recently seen past the limit. The `$ne` filter keeps two racing Hellos from adding the same address twice. */
+  /** The admin page's address history, after the session is registered (it must not delay it): bumps the address's entry, or adds it and drops the least recently seen past the limit. The `$ne` filter keeps two racing Hellos from adding the same address twice. */
   async recordAddress(name: string, ip: string, at: Date): Promise<void> {
     const { matchedCount } = await this.judges.updateOne(
       { name, 'ipHistory.ip': ip },
