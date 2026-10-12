@@ -187,7 +187,11 @@ export class ProblemUploadsService {
       !hasPermission(principal, permission) &&
       !(await this.organizationRules.managesAsOrganization(principal, problem))
     )
-      throw new AppError('forbidden', 403, `Uploading requires ${permission}`);
+      throw new AppError(
+        'forbidden',
+        403,
+        `Changing this file requires ${permission}`,
+      );
     return problem;
   }
 
