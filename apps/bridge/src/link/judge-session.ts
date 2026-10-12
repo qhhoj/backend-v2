@@ -12,6 +12,7 @@ import type {
   AssignmentRef,
   Final,
   GenerateTests,
+  GradingStarted,
   JudgeError,
   JudgeMessage,
   Pong,
@@ -375,12 +376,8 @@ export class JudgeSession implements DispatchTarget {
         const log = clipBytes(body.compiled.log, MAX_LOG_BYTES);
         return this.handleRun(body.compiled, (key) => runs.compiled(key, log));
       }
-      case 'started': {
-        const { pretested } = body.started;
-        return this.handleRun(body.started, (key) =>
-          runs.started(key, pretested),
-        );
-      }
+      case 'started':
+        return this.onStarted(body.started);
       case 'cases': {
         const rows = caseRowsOf(body.cases.cases);
         return this.handleRun(body.cases, (key) => runs.cases(key, rows));
@@ -388,6 +385,16 @@ export class JudgeSession implements DispatchTarget {
       case 'final':
         return this.onFinal(body.final);
     }
+  }
+
+  /** A stored Started names the case count: the run's deadline is re-armed from it. */
+  private async onStarted(started: GradingStarted): Promise<void> {
+    const { pretested, caseCount } = started;
+    const handled = await this.handleRun(started, (key) =>
+      this.services.runs.started(key, pretested),
+    );
+    if (handled?.outcome === 'applied')
+      this.services.dispatch.runStarted(this, handled.ref, caseCount);
   }
 
   /** The Final is acked only after its write and graded job; the slot is then free. A RETRY frees it with a ban on this judge for the row until the next resync tick. A winding run's Final writes nothing and frees its slot; a stale Final (the row moved on) ends the run too; a Final resent for a run that already ended is re-acked. */

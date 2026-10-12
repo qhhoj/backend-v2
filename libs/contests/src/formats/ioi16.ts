@@ -1,4 +1,4 @@
-import type { ContestFormat, ProblemCell } from './format';
+import type { ContestFormat, ProblemCell, ScoringRow } from './format';
 import {
   parseKnownConfig,
   roundScore,
@@ -41,6 +41,10 @@ export function dataPoints(
   return total;
 }
 
+/** A row's batch points count only once its run graded every case (D); an AB, IE or in-flight run may have stopped inside a batch. */
+const gradedBatchPoints = (scored: ScoringRow): Record<string, number> =>
+  scored.status === 'D' ? (scored.batchPoints ?? {}) : {};
+
 /** Legacy `IOIContestFormat` (key `ioi16`): per batch the best across the participation's submissions, scaled by the contest points over the data's points; no times. A problem without data points scores 0 (legacy divided by zero). */
 export const ioi16Format: ContestFormat<Ioi16Config> = {
   parseConfig: (raw) => parseKnownConfig<Ioi16Config>(raw, { cumtime: false }),
@@ -53,7 +57,7 @@ export const ioi16Format: ContestFormat<Ioi16Config> = {
     for (const [problemId, problemRows] of rowsByProblem(rows)) {
       const best: Record<string, number> = {};
       for (const scored of problemRows)
-        for (const [batch, points] of Object.entries(scored.batchPoints ?? {}))
+        for (const [batch, points] of Object.entries(gradedBatchPoints(scored)))
           best[batch] = Math.max(best[batch] ?? points, points);
       const problem = problems.get(problemId);
       const scale = problem?.dataPoints

@@ -15,3 +15,7 @@ export const contestSubmissionPoints = (
     formatName === 'final_submission' ||
       (contestProblem.partial && problemPartial),
   );
+
+/** Formats that score a contest submission from its cases even on a non-partial problem (ioi16: per-batch credit; final_submission: partial points), so its run must judge every case. */
+export const scoresEveryCase = (formatName: FormatName): boolean =>
+  formatName === 'ioi16' || formatName === 'final_submission';

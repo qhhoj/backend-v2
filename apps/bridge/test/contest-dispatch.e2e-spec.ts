@@ -258,4 +258,33 @@ describe('contest submissions in the bridge', () => {
     await enqueue(id);
     expect(judge.received[0]).toMatchObject({ pretestsOnly: false });
   });
+
+  it.each([
+    ['ioi16', false],
+    ['final_submission', false],
+    ['default', true],
+  ] as const)(
+    'short-circuits a non-partial problem in a %s contest only when its score ignores the cases (%s)',
+    async (formatName, shortCircuit) => {
+      const { problem, contest, participation } = await contestWith({
+        formatName,
+        bannedJudges: [],
+      });
+      await bridge.problems.updateOne(
+        { _id: problem._id },
+        { $set: { partial: false } },
+      );
+      const live = await participation(0);
+      const { _id: id } = await seedContestSubmission(bridge, catalog, {
+        contest: contest._id,
+        participation: live._id,
+        problem: problem._id,
+      });
+      const judge = new RecordingJudge(`sc${formatName}${codes}`);
+      await online(judge);
+      await enqueue(id);
+      // ioi16 credits each batch on its own and FSO scores partially: a failed case must not skip the later ones.
+      expect(judge.received[0]).toMatchObject({ shortCircuit });
+    },
+  );
 });
