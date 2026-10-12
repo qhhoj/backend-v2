@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.24.0
+
+### Minor Changes
+
+- 2cf0e61: Problem detail: `io` (mode `stdio` or `file`, plus the input/output file names) so the statement page can show how a solution reads and writes.
+
 ## 2.23.1
 
 ### Patch Changes
