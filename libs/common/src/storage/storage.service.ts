@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { rm } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { ENV, type Env } from '../env/env';
 import { assertRealPathInside, writeFileAtomically } from './atomic-write';
@@ -47,6 +47,16 @@ export class StorageService {
       )
       ? relativePath
       : null;
+  }
+
+  /** Size of a stored file; 0 when it is gone. Any other disk error propagates. */
+  async bytesOf(relativePath: string): Promise<number> {
+    try {
+      return (await stat(this.resolveInside(relativePath))).size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+      throw error;
+    }
   }
 
   publicUrl(relativePath: string): string {

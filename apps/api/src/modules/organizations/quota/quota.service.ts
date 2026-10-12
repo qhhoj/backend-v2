@@ -36,7 +36,7 @@ export class QuotaService implements OnApplicationBootstrap {
     private readonly warnings: QuotaWarningNotifier,
   ) {}
 
-  /** The backfill flag lives in Redis only, so a Redis flush or restart silently turns `enforce` back into `warn`: say so at boot (re-run the backfill by removing the job `problem-databytes-backfill-v1` from the `problem-databytes` queue and restarting the worker). */
+  /** The backfill flag lives in Redis only, so a Redis flush or restart silently turns `enforce` back into `warn`: say so at boot (re-run the backfill by removing the job `PROBLEM_DATABYTES_JOB_ID` (`problem-databytes-backfill-v2`) from the `problem-databytes` queue and restarting the worker). */
   async onApplicationBootstrap(): Promise<void> {
     if (this.settings.get('quota.enforce') !== 'enforce') return;
     if ((await this.redis.get(QUOTA_BACKFILL_DONE_KEY)) !== '1')

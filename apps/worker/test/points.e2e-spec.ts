@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { Logger } from '@nestjs/common';
-import { REDIS } from '@libs/common';
+import { REDIS, StorageService } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import {
   childPath,
@@ -43,7 +43,7 @@ import type { ProblemSolversJob } from '@libs/problems';
 import { ProblemSolversService } from '../src/jobs/problem-solvers/problem-solvers.service';
 import { softDeleteWorker, undeleteWorker } from './deleted-problem-fixtures';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { ProblemDataBytesProcessor } from '../src/jobs/problem-databytes/problem-databytes.processor';
 import { ProblemDataBytesRepository } from '../src/jobs/problem-databytes/problem-databytes.repository';
 import { ProblemDataBytesService } from '../src/jobs/problem-databytes/problem-databytes.service';
@@ -579,6 +579,64 @@ afterAll(() => worker.teardown());
       await service.backfill();
       measuring.mockRestore();
       expect(await stored(code)).toBe(777);
+    });
+
+    it('measures the uploaded PDF statement and material, zero for a missing file or an external link', async () => {
+      const media = (relativePath: string, bytes: number) => {
+        const path = join(worker.mediaRoot, relativePath);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, Buffer.alloc(bytes));
+        return `/media/${relativePath}`;
+      };
+      const files = (code: string) =>
+        worker.problems
+          .findOne({ code }, { pdfStatementBytes: 1, materialBytes: 1 })
+          .lean();
+      const both = await seed(10, {
+        pdfStatementUrl: media(`pdf/${newId()}.pdf`, 300),
+        materialUrl: media(`materials/${newId()}/de.docx`, 70),
+      });
+      const missing = await seed(null, {
+        pdfStatementUrl: `/media/pdf/${newId()}.pdf`,
+        materialUrl: 'https://drive.example.com/de.zip',
+        pdfStatementBytes: 5,
+      });
+      await service.backfill();
+      expect(await files(both)).toMatchObject({
+        pdfStatementBytes: 300,
+        materialBytes: 70,
+      });
+      expect(await files(missing)).toMatchObject({
+        pdfStatementBytes: 0,
+        materialBytes: 0,
+      });
+    });
+
+    it('keeps the size an upload recorded while the file was being measured', async () => {
+      const pdf = `pdf/${newId()}.pdf`;
+      mkdirSync(join(worker.mediaRoot, 'pdf'), { recursive: true });
+      writeFileSync(join(worker.mediaRoot, pdf), Buffer.alloc(50));
+      const code = await seed(null, { pdfStatementUrl: `/media/${pdf}` });
+      const storage = worker.module.get(StorageService);
+      const real = storage.bytesOf.bind(storage);
+      const measuring = jest
+        .spyOn(storage, 'bytesOf')
+        .mockImplementation(async (target) => {
+          const size = await real(target);
+          if (target === pdf)
+            await worker.problems.updateOne(
+              { code },
+              { pdfStatementUrl: '/media/pdf/new.pdf', pdfStatementBytes: 9 },
+            );
+          return size;
+        });
+      await service.backfill();
+      measuring.mockRestore();
+      expect(
+        await worker.problems
+          .findOne({ code }, { pdfStatementBytes: 1 })
+          .lean(),
+      ).toMatchObject({ pdfStatementBytes: 9 });
     });
 
     it('marks the backfill done only when every problem was measured', async () => {
