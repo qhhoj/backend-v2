@@ -1,4 +1,3 @@
-import type { SubmissionResult } from '@libs/database';
 import type { ContestFormat, ProblemCell, ScoringRow } from './format';
 import {
   parseKnownConfig,
@@ -42,18 +41,9 @@ export function dataPoints(
   return total;
 }
 
-const UNGRADED_RESULTS: readonly (SubmissionResult | null)[] = [
-  null,
-  'IE',
-  'CE',
-  'AB',
-];
-
 /** A row's batch points count only once its run graded every case (D); an AB, IE or in-flight run may have stopped inside a batch. */
 const gradedBatchPoints = (scored: ScoringRow): Record<string, number> =>
-  scored.status === 'D' && !UNGRADED_RESULTS.includes(scored.result)
-    ? (scored.batchPoints ?? {})
-    : {};
+  scored.status === 'D' ? (scored.batchPoints ?? {}) : {};
 
 /** Legacy `IOIContestFormat` (key `ioi16`): per batch the best across the participation's submissions, scaled by the contest points over the data's points; no times. A problem without data points scores 0 (legacy divided by zero). */
 export const ioi16Format: ContestFormat<Ioi16Config> = {

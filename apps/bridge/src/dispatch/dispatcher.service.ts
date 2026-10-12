@@ -2,11 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { unique } from '@libs/common';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef, GenerationDone, Resume } from '@libs/judge-proto';
-import {
-  BRIDGE_TIMINGS,
-  runDeadlineMs,
-  startedRunDeadlineMs,
-} from '../bridge-timings';
+import { BRIDGE_TIMINGS } from '../bridge-timings';
 import type { BridgeTimings } from '../bridge-timings';
 import type { JudgeAccess } from '../judges/judges.repository';
 import type { ResumeCandidate } from '../link/messages';
@@ -16,6 +12,7 @@ import type { Claimed, GraceOutcome } from '../submissions/runs.service';
 import { SubmissionsRepository } from '../submissions/submissions.repository';
 import { GraceRegistry } from './grace';
 import type { GraceEntry } from './grace';
+import { RunDeadlines } from './run-deadlines';
 import {
   freeSlots,
   insertQueued,
@@ -71,10 +68,7 @@ export class DispatcherService {
   /** `windingKey`s of held runs the api aborted, until they leave their session: a run that enters grace carries the abort even when its Abort reached a stream already dead. */
   private readonly abortsRequested = new Set<string>();
   private stopped = false;
-  /** Per-run deadline timers by `windingKey`. */
-  private readonly deadlines = new Map<string, NodeJS.Timeout>();
-  /** Time limit (seconds) of each run with a deadline, by `windingKey`: its Started re-arms the deadline from it. */
-  private readonly runTimeLimits = new Map<string, number>();
+  private readonly deadlines: RunDeadlines;
 
   constructor(
     private readonly submissions: SubmissionsRepository,
@@ -82,6 +76,7 @@ export class DispatcherService {
     private readonly generations: GenerationsService,
     @Inject(BRIDGE_TIMINGS) private readonly timings: BridgeTimings,
   ) {
+    this.deadlines = new RunDeadlines(timings);
     this.grace = new GraceRegistry(
       timings.resumeGraceMs,
       (entry) => void this.graceExpired(entry),
@@ -232,11 +227,8 @@ export class DispatcherService {
     ref: AssignmentRef,
     timeLimitSeconds: number,
   ): void {
-    this.runTimeLimits.set(windingKey(ref), timeLimitSeconds);
-    this.startDeadline(
-      judge,
-      ref,
-      runDeadlineMs(this.timings, timeLimitSeconds),
+    this.deadlines.arm(windingKey(ref), timeLimitSeconds, () =>
+      this.onDeadline(judge, ref),
     );
   }
 
@@ -246,38 +238,18 @@ export class DispatcherService {
     ref: AssignmentRef,
     caseCount: number,
   ): void {
-    const timeLimit = this.runTimeLimits.get(windingKey(ref));
-    if (timeLimit === undefined) return;
     if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
-    this.startDeadline(
-      judge,
-      ref,
-      startedRunDeadlineMs(this.timings, timeLimit, caseCount),
+    this.deadlines.started(windingKey(ref), caseCount, () =>
+      this.onDeadline(judge, ref),
     );
   }
 
-  /** (Re)starts the run's deadline timer; `null` leaves the run without one. */
-  private startDeadline(
-    judge: DispatchTarget,
-    ref: AssignmentRef,
-    delay: number | null,
-  ): void {
-    if (delay === null) return;
-    const key = windingKey(ref);
-    clearTimeout(this.deadlines.get(key));
-    const timer = setTimeout(
-      () => void this.deadlineExpired(judge, ref),
-      delay,
-    );
-    timer.unref();
-    this.deadlines.set(key, timer);
+  private onDeadline(judge: DispatchTarget, ref: AssignmentRef): void {
+    void this.deadlineExpired(judge, ref);
   }
 
   private clearDeadline(ref: AssignmentRef): void {
-    const key = windingKey(ref);
-    clearTimeout(this.deadlines.get(key));
-    this.deadlines.delete(key);
-    this.runTimeLimits.delete(key);
+    this.deadlines.clear(windingKey(ref));
   }
 
   /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge); a run the user aborted ends AB. */
@@ -287,8 +259,7 @@ export class DispatcherService {
   ): Promise<void> {
     // read before `windDown` forgets it
     const abortRequested = this.abortsRequested.has(windingKey(ref));
-    this.clearDeadline(ref);
-    if (!this.windDown(judge, ref)) return;
+    if (!this.windDown(judge, ref)) return this.clearDeadline(ref);
     this.logger.warn(
       `Judge ${judge.name} did not finish submission ${runOf(ref)} before its deadline; aborted`,
     );
@@ -402,9 +373,7 @@ export class DispatcherService {
   stop(): void {
     this.stopped = true;
     this.grace.clear();
-    for (const timer of this.deadlines.values()) clearTimeout(timer);
-    this.deadlines.clear();
-    this.runTimeLimits.clear();
+    this.deadlines.clearAll();
     this.generations.stop();
   }
 
@@ -459,11 +428,12 @@ export class DispatcherService {
       // judge-v2 ends a dropped run with Final{ABORTED}; until then it holds a slot
       judge.winding.add(windingKey(ref));
       this.runs.forget(ref);
+      this.clearDeadline(ref);
       plan.resume.push({ ref, action: Resume_Action.ACTION_DROP, fromSeq: 0 });
       return;
     }
     judge.inFlight.set(ref.submissionId, ref.generation);
-    this.armDeadline(judge, ref, RESUMED_RUN_TIME_LIMIT_SECONDS);
+    this.resumeDeadline(judge, ref);
     plan.resume.push({
       ref,
       action: Resume_Action.ACTION_CONTINUE,
@@ -472,6 +442,13 @@ export class DispatcherService {
     if (!waiting?.abortRequested) return;
     this.abortsRequested.add(windingKey(ref));
     plan.abort.push(ref);
+  }
+
+  /** A resumed run gets its kept budget again from now; after a bridge restart the time limit is unknown and assumed. */
+  private resumeDeadline(judge: DispatchTarget, ref: AssignmentRef): void {
+    const onExpiry = () => this.onDeadline(judge, ref);
+    if (!this.deadlines.resume(windingKey(ref), onExpiry))
+      this.armDeadline(judge, ref, RESUMED_RUN_TIME_LIMIT_SECONDS);
   }
 
   /** A newer session of the same judge takes over (the registered one, or one still in its handshake): the old one's runs wait in grace for it to resume them. */
@@ -534,7 +511,7 @@ export class DispatcherService {
           this.abortsRequested.delete(windingKey(ref)),
         );
         held.push(runOf(ref));
-        this.clearDeadline(ref);
+        this.deadlines.pause(windingKey(ref));
       }
     }
     if (held.length)
@@ -563,6 +540,7 @@ export class DispatcherService {
   /** A failed write (Mongo) holds the run in grace again, so the retry still spends the requeue; the resync's stranded-run reset would not. A failed enqueue after a requeue is left to the resync (the row is QU). */
   private async graceExpired(entry: GraceEntry): Promise<void> {
     const { ref, judgeName } = entry;
+    this.clearDeadline(ref);
     let outcome: GraceOutcome;
     try {
       outcome = await this.runs.graceExpired(
