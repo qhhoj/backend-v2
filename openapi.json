@@ -9342,6 +9342,14 @@
             "description": "Problem id.",
             "type": "string"
           },
+          "io": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProblemIoResponse"
+              }
+            ],
+            "description": "How a solution reads and writes: stdin/stdout, or the named files."
+          },
           "isFullMarkup": {
             "description": "Whether the statement may contain unsanitized HTML.",
             "type": "boolean"
@@ -9493,6 +9501,7 @@
           "summary",
           "timeLimit",
           "memoryLimit",
+          "io",
           "points",
           "partial",
           "date",
@@ -9698,6 +9707,31 @@
         "required": [
           "connected",
           "link"
+        ],
+        "type": "object"
+      },
+      "ProblemIoResponse": {
+        "properties": {
+          "inputFile": {
+            "nullable": true,
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "file",
+              "stdio"
+            ],
+            "type": "string"
+          },
+          "outputFile": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "inputFile",
+          "outputFile"
         ],
         "type": "object"
       },

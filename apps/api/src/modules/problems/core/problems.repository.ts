@@ -88,6 +88,17 @@ export class ProblemsRepository {
       .exec();
   }
 
+  /** Only the two grader fields of the embedded (`select: false`) data: the statement page shows the I/O mode, never the cases or checker. */
+  async gradingIo(
+    problemId: string,
+  ): Promise<Pick<ProblemData, 'grader' | 'graderArgs'> | null> {
+    const row = await this.problems
+      .findOne({ _id: problemId }, { 'data.grader': 1, 'data.graderArgs': 1 })
+      .lean<{ data?: Pick<ProblemData, 'grader' | 'graderArgs'> }>()
+      .exec();
+    return row?.data ?? null;
+  }
+
   /** Test cases of a problem the caller already resolved (`C` rows: batch members included, `S`/`E` markers not), counted in the database so the 10000-row array never loads; it follows an id, so it does not filter. */
   async caseCount(problemId: string): Promise<number> {
     return (await this.caseCounts([problemId])).get(problemId) ?? 0;

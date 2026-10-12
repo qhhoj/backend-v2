@@ -6,7 +6,9 @@ import {
   createUserWith,
   loginAs,
   seedCatalog,
+  dataFixture,
   detailOf,
+  testCase,
   editorialOf,
 } from './problem-fixtures';
 import { errorCode, setupApiTest } from './setup';
@@ -284,6 +286,35 @@ afterAll(() => api.teardown());
         'PY3',
       ]);
       expect(detail).not.toHaveProperty('description');
+    });
+
+    it('exposes only the I/O mode and file names of the grading config', async () => {
+      await createProblem(api, catalog, {
+        code: 'fileio',
+        data: dataFixture({
+          checker: 'bridged',
+          customChecker: 'secret-chk.cpp',
+          grader: 'standard',
+          graderArgs: {
+            io_method: 'file',
+            io_input_file: 'BAI.INP',
+            io_output_file: 'BAI.OUT',
+          },
+          cases: [testCase({ type: 'C', input: 'a.in', output: 'a.out' })],
+        }),
+      });
+      const fileIo = detailOf(
+        await api.http().get(`${PROBLEMS}/fileio`).expect(200),
+      );
+      expect(fileIo.io).toEqual({
+        mode: 'file',
+        inputFile: 'BAI.INP',
+        outputFile: 'BAI.OUT',
+      });
+      expect(JSON.stringify(fileIo)).not.toMatch(/secret-chk|a\.in/);
+      expect(
+        detailOf(await api.http().get(`${PROBLEMS}/sum`).expect(200)).io,
+      ).toEqual({ mode: 'stdio', inputFile: null, outputFile: null });
     });
 
     it('gates the editorial on publication, permission and editorship', async () => {

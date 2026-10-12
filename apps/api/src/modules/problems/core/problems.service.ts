@@ -254,6 +254,7 @@ export class ProblemsService {
         (await this.viewerStatusesOf(principal, [problem._id])).get(
           problem._id,
         ) ?? null,
+      gradingIo: await this.repository.gradingIo(problem._id),
       contest: await this.contestContext(current, problem),
       people,
       types: this.types,

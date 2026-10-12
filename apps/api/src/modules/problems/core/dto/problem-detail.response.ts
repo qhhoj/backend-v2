@@ -23,6 +23,8 @@ import {
   ApiTestcaseResultVisibility,
   ApiTestcaseVisibility,
 } from './problem-visibility';
+import { ProblemIoResponse } from './problem-io.response';
+import type { GradingIoSource } from './problem-io.response';
 import { UserSummaryResponse } from './user-summary.response';
 import { VIEWER_MARKS, type ViewerStatus } from '../viewer-status.repository';
 
@@ -33,6 +35,7 @@ export interface ProblemDetailContext {
   canPublishToMembers: boolean;
   hasEditorial: boolean;
   viewerStatus: ViewerStatus;
+  gradingIo: GradingIoSource | null;
   contest: ProblemContestResponse | null;
   people: Map<string, UserDocument>;
   types: ProblemTypesQuerier;
@@ -190,6 +193,8 @@ export class ProblemDetailResponse {
   timeLimit!: number;
   /** Default memory limit in KiB. */
   memoryLimit!: number;
+  /** How a solution reads and writes: stdin/stdout, or the named files. */
+  io!: ProblemIoResponse;
   /** Points the problem is worth. */
   points!: number;
   /** Whether partial scores are given. */
@@ -284,6 +289,7 @@ export class ProblemDetailResponse {
       summary: problem.summary,
       timeLimit: problem.timeLimit,
       memoryLimit: problem.memoryLimit,
+      io: ProblemIoResponse.from(context.gradingIo),
       points: problem.points,
       partial: problem.partial,
       date: problem.date?.toISOString() ?? null,
