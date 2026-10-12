@@ -760,6 +760,61 @@ describe('problem data quota', () => {
     ]);
   });
 
+  describe('the PDF statement and the material', () => {
+    const pdfOf = (bytes: number) =>
+      Buffer.concat([Buffer.from('%PDF-'), Buffer.alloc(bytes - 5, 'x')]);
+    const uploadFile = (
+      code: string,
+      kind: 'statement' | 'material',
+      content: Buffer,
+    ) =>
+      authed(api.http().post(`${PROBLEMS}/${code}/${kind}`), author).attach(
+        'file',
+        content,
+        {
+          filename: kind === 'statement' ? 'de.pdf' : 'de.docx',
+          contentType: 'application/octet-stream',
+        },
+      );
+    const usedBytes = (organizationId: string) =>
+      api.app.get(ProblemsRepository).sumStoredBytes(organizationId);
+
+    it('count against the storage limit; a replaced or removed file gives its bytes back', async () => {
+      const { organization, problem } = await orgProblem(
+        {},
+        { quotaStorageBytes: 1000, adminIds: [authorId] },
+      );
+      await uploadFile(problem.code, 'statement', pdfOf(600)).expect(201);
+      expect(await usedBytes(organization._id)).toBe(600);
+      // 600 + 700 would not fit: only the 100 extra bytes of the replacement are charged.
+      await uploadFile(problem.code, 'statement', pdfOf(700)).expect(201);
+      expect(await usedBytes(organization._id)).toBe(700);
+      const refused = await uploadFile(
+        problem.code,
+        'material',
+        Buffer.alloc(400, 'x'),
+      )
+        .expect(403)
+        .expect(errorCode('quota_exceeded'));
+      expect(
+        (refused.body as { error: { details: unknown } }).error.details,
+      ).toEqual({ meter: 'storage', limit: 1000, used: 700, needed: 400 });
+      expect(
+        existsSync(join(api.mediaRoot, 'materials', String(problem._id))),
+      ).toBe(false);
+      await authed(
+        api.http().delete(`${PROBLEMS}/${problem.code}/statement`),
+        author,
+      ).expect(204);
+      expect(await usedBytes(organization._id)).toBe(0);
+      await uploadFile(problem.code, 'material', Buffer.alloc(400, 'x')).expect(
+        201,
+      );
+      expect(await usedBytes(organization._id)).toBe(400);
+      expect(await creditsOf(organization._id)).toBe(0);
+    });
+  });
+
   it('refuses a Polygon import to an organization problem over the storage limit, keeping no package and queuing no job', async () => {
     const { problem } = await orgProblem({}, { quotaStorageBytes: 20 });
     const before = (await polygon.getJobs(['waiting', 'active'])).length;

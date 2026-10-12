@@ -110,4 +110,6 @@ export class ProblemMetaResponse {
   licenses!: LicenseResponse[];
   /** Judge languages. */
   languages!: LanguageResponse[];
+  /** Extensions (lowercase, without the dot) a problem material upload may have. */
+  materialExtensions!: string[];
 }

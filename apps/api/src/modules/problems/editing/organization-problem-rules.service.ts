@@ -10,7 +10,7 @@ import { assertOrganizationCodePrefix } from './organization-code-prefix';
 import { MEMBERS_ONLY_VISIBILITY } from './problem-edit-policy.service';
 import type { ProblemDocument } from '../core/problems.repository';
 
-/** The organization rules of a problem edit: the code prefix and members-only publishing by organization creators. */
+/** The organization rules of a problem edit: the code prefix, members-only publishing and file uploads by organization creators. */
 @Injectable()
 export class OrganizationProblemRules {
   constructor(private readonly rights: OrganizationCreationRights) {}
@@ -38,6 +38,20 @@ export class OrganizationProblemRules {
       isOrganizationPrivate &&
       (await this.rights.createsProblemsInAll(principal, organizations));
     return mayPublishToMembers ? MEMBERS_ONLY_VISIBILITY : [];
+  }
+
+  /** Whether the viewer manages this problem as an administrator of its organizations: it is organization-private and they may create problems for every one of them (the rule of `canPublishToMembers`). */
+  async managesAsOrganization(
+    principal: Principal,
+    problem: Pick<ProblemDocument, 'isOrganizationPrivate' | 'organizations'>,
+  ): Promise<boolean> {
+    return (
+      problem.isOrganizationPrivate &&
+      (await this.rights.createsProblemsInAll(
+        principal,
+        problem.organizations.map(uuidStr),
+      ))
+    );
   }
 
   /** Existing codes are never re-checked: only a new code, or a new organization list, of an organization-private problem (a site problem merely listed under an organization keeps its code). */

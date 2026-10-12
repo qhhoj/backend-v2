@@ -9553,6 +9553,14 @@
             "description": "The viewer may set `isPublic` without `judge.change_public_visibility`: the problem is organization-private and they may create problems for every one of its organizations (it then only reaches members).",
             "type": "boolean"
           },
+          "canUploadMaterial": {
+            "description": "The viewer may upload or remove the material: `judge.upload_problem_material`, or `canPublishToMembers`.",
+            "type": "boolean"
+          },
+          "canUploadPdfStatement": {
+            "description": "The viewer may upload or remove the PDF statement: `judge.upload_file_statement`, or `canPublishToMembers` (an administrator of the problem's organizations).",
+            "type": "boolean"
+          },
           "curators": {
             "description": "Users who can edit the problem.",
             "items": {
@@ -9641,7 +9649,9 @@
           "allowedLanguageIds",
           "organizations",
           "ogImage",
-          "canPublishToMembers"
+          "canPublishToMembers",
+          "canUploadPdfStatement",
+          "canUploadMaterial"
         ],
         "type": "object"
       },
@@ -9863,6 +9873,13 @@
             },
             "type": "array"
           },
+          "materialExtensions": {
+            "description": "Extensions (lowercase, without the dot) a problem material upload may have.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "types": {
             "description": "Problem types.",
             "items": {
@@ -9875,7 +9892,8 @@
           "types",
           "groups",
           "licenses",
-          "languages"
+          "languages",
+          "materialExtensions"
         ],
         "type": "object"
       },
@@ -35148,8 +35166,51 @@
       }
     },
     "/api/internal/problems/{code}/material": {
+      "delete": {
+        "description": "The rights of the upload. Does nothing when there is none; on an\norganization problem its bytes leave the organization's storage.",
+        "operationId": "ProblemUploadsController_removeMaterial",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove the downloadable material of a problem",
+        "tags": [
+          "Problem editing"
+        ]
+      },
       "post": {
-        "description": "Needs `judge.upload_problem_material` and edit rights on the problem. Send\none multipart `file` of up to 20 MiB with an allowed extension (archives,\ndocuments, sources, plain images and data files; 400\n`material_type_not_allowed` otherwise). It replaces the previous material\nand returns its `url`. Shares the upload budget of 30 per hour per user.",
+        "description": "Needs edit rights on the problem and `judge.upload_problem_material`; an\nadministrator who may create problems for every organization of an\norganization-private problem needs no permission. Send one multipart\n`file` of up to 20 MiB with an extension listed in the meta's\n`materialExtensions` (400 `material_type_not_allowed` otherwise). It\nreplaces the previous material and returns its `url`. On an organization\nproblem the file counts against the organization's storage (403\n`quota_exceeded`). Shares the upload budget of 30 per hour per user.",
         "operationId": "ProblemUploadsController_uploadMaterial",
         "parameters": [
           {
@@ -35905,8 +35966,51 @@
       }
     },
     "/api/internal/problems/{code}/statement": {
+      "delete": {
+        "description": "The rights of the upload. Does nothing when there is none; on an\norganization problem its bytes leave the organization's storage.",
+        "operationId": "ProblemUploadsController_removeStatement",
+        "parameters": [
+          {
+            "description": "Problem code: lowercase letters, digits and underscores, 1 to 32 characters.",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove the PDF statement of a problem",
+        "tags": [
+          "Problem editing"
+        ]
+      },
       "post": {
-        "description": "Needs `judge.upload_file_statement` and edit rights on the problem. Send one\nmultipart `file`, a PDF of up to 5 MiB (400 `statement_not_pdf` otherwise).\nIt replaces the previous PDF statement and returns its `url`. Cached\npackages of the problem are dropped. Shares the upload budget of 30 per hour\nper user.",
+        "description": "Needs edit rights on the problem and `judge.upload_file_statement`; an\nadministrator who may create problems for every organization of an\norganization-private problem needs no permission. Send one multipart\n`file`, a PDF of up to 5 MiB (400 `statement_not_pdf` otherwise). It\nreplaces the previous PDF statement and returns its `url`. On an\norganization problem the file counts against the organization's storage\n(403 `quota_exceeded`; a replaced file's bytes are given back). Cached\npackages of the problem are dropped. Shares the upload budget of 30 per\nhour per user.",
         "operationId": "ProblemUploadsController_uploadStatement",
         "parameters": [
           {

@@ -226,7 +226,7 @@ export class QuotaService implements OnApplicationBootstrap {
     });
   }
 
-  /** The storage meter (see `QuotaLedger.assertStorage`); the caller sums `usedBytes` from the problems it owns (`ProblemsRepository.sumDataBytes`). */
+  /** The storage meter (see `QuotaLedger.assertStorage`); the caller sums `usedBytes` from the problems it owns (`ProblemsRepository.sumStoredBytes`). */
   assertStorage(
     organizationId: string,
     bytes: { usedBytes: number; addedBytes: number },
