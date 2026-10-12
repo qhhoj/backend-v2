@@ -4,7 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { ENV, unique } from '@libs/common';
 import type { Env } from '@libs/common';
-import { LIVE } from '@libs/contests';
+import { LIVE, scoresEveryCase } from '@libs/contests';
 import {
   Contest,
   ContestParticipation,
@@ -83,7 +83,7 @@ interface RunInputs extends JudgingInputs {
 /** `PROBLEM_LIMITS.memoryLimit.min` is 0; isolate needs a positive `--cg-mem` (preflight M4). */
 const MIN_MEMORY_LIMIT_KIB = 1024;
 
-/** The Assign for a claimed run: limits (a per-language override wins; memory at least 1 MiB), the data version, the source or its file, short-circuiting for non-partial problems, contest meta and the attempt number. Pure. */
+/** The Assign for a claimed run: limits (a per-language override wins; memory at least 1 MiB), the data version, the source or its file, short-circuiting for non-partial problems (not in a contest whose format scores every case), contest meta and the attempt number. Pure. */
 function assignRequest(
   queued: QueuedSubmission,
   submission: ClaimedSubmission,
@@ -107,7 +107,7 @@ function assignRequest(
       MIN_MEMORY_LIMIT_KIB,
       limit?.memoryLimit ?? problem.memoryLimit,
     ),
-    shortCircuit: !problem.partial,
+    shortCircuit: !problem.partial && !contestMeta?.scoresEveryCase,
     pretestsOnly: contestMeta?.pretestsOnly ?? false,
     inContest: contestMeta?.virtual ?? null,
     attemptNo: inputs.earlierAttempts + 1,
@@ -132,6 +132,8 @@ export interface ContestMeta {
   bannedJudges: string[];
   /** The contest's current `runPretestsOnly` and the problem's `isPretested` (legacy recomputed it on every judge, so a rejudge after the contest runs every test). */
   pretestsOnly: boolean;
+  /** The contest's format scores the submission from its cases even on a non-partial problem (`scoresEveryCase`): no short-circuit. */
+  scoresEveryCase: boolean;
 }
 
 /** Queue reads, claims and the run transitions that need no judge message (release, requeue, finish, resume, resync); the writes judge messages cause are `RunWritesRepository`'s. */
@@ -284,7 +286,7 @@ export class SubmissionsRepository {
               $in: unique(entries.map((entry) => uuidStr(entry.contest))),
             },
           },
-          { bannedJudges: 1, runPretestsOnly: 1, problems: 1 },
+          { bannedJudges: 1, runPretestsOnly: 1, problems: 1, formatName: 1 },
         )
         .lean(),
     ]);
@@ -313,6 +315,7 @@ export class SubmissionsRepository {
               bannedJudges: virtual <= LIVE ? contest.bannedJudges : [],
               pretestsOnly:
                 contest.runPretestsOnly && (problem?.isPretested ?? false),
+              scoresEveryCase: scoresEveryCase(contest.formatName),
             },
           ],
         ];

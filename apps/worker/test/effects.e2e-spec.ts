@@ -370,6 +370,61 @@ afterAll(() => worker.teardown());
       expect((await participationOf(participation._id)).score).toBe(60);
     });
 
+    it.each(['AB', 'IE'] as const)(
+      'gives no ioi16 batch credit from a %s run whose batch never finished',
+      async (verdict) => {
+        // Batch 1 = cases 1-2 (30 points), plain case 3 (20 points).
+        const problem = await seedProblem(worker, {
+          points: 1000,
+          partial: true,
+          data: {
+            cases: [
+              { type: 'S', points: 30 },
+              { type: 'C', points: 0 },
+              { type: 'E' },
+              { type: 'C', points: 20 },
+            ],
+          } as never,
+        });
+        const contest = await seedContest(worker, {
+          formatName: 'ioi16',
+          problems: [
+            {
+              ...CONTEST_PROBLEM_DEFAULTS,
+              problem: problem._id,
+              points: 100,
+              partial: true,
+              order: 0,
+            },
+          ],
+        });
+        const user = await seedUser(worker);
+        const participation = await seedParticipation(
+          worker,
+          contest._id,
+          user._id,
+        );
+        // The run stopped after case 1 (first case of batch 1): case 2 never ran.
+        const submission = await seedContestSubmission(
+          worker,
+          participation,
+          problem._id,
+          {
+            fields: {
+              status: verdict,
+              result: verdict,
+              points: 0,
+              cases: [
+                { position: 1, status: 'AC', points: 30, total: 30, batch: 1 },
+              ] as never,
+            },
+          },
+        );
+        await apply(submission);
+        expect((await participationOf(participation._id)).score).toBe(0);
+      },
+    );
+
     it('collapses 50 graded jobs of one participation into a few recomputes', async () => {
       const { problem, participation } = await contestOn({});
       const submissions = [];

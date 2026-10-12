@@ -111,6 +111,7 @@ describe('JudgeSession', () => {
     resume: record('resume', { resume: [], abort: [] }),
     register: record('register'),
     runEnded: record('runEnded'),
+    runStarted: record('runStarted'),
     windDown: record('windDown'),
     windingEnded: record('windingEnded'),
     acceptTimedOut: record('acceptTimedOut'),
@@ -278,6 +279,26 @@ describe('JudgeSession', () => {
       expect.objectContaining({ code: status.INVALID_ARGUMENT }),
     ]);
   });
+
+  it.each([
+    ['applied', true],
+    ['duplicate', false],
+  ] as const)(
+    'passes the case count of a %s Started to the dispatcher only when stored',
+    async (result, isPassed) => {
+      const ref = run(newId());
+      await holding(ref);
+      outcome = result;
+      await receive(
+        JudgeMessage.fromPartial({
+          body: { $case: 'started', started: { ref, seq: 2, caseCount: 400 } },
+        }),
+      );
+      expect(calls.runStarted).toEqual(
+        isPassed ? [[session, ref, 400]] : undefined,
+      );
+    },
+  );
 
   it.each([
     ['duplicate', 'ack', undefined],

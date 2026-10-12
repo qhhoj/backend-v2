@@ -2,7 +2,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { unique } from '@libs/common';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef, GenerationDone, Resume } from '@libs/judge-proto';
-import { BRIDGE_TIMINGS, runDeadlineMs } from '../bridge-timings';
+import {
+  BRIDGE_TIMINGS,
+  runDeadlineMs,
+  startedRunDeadlineMs,
+} from '../bridge-timings';
 import type { BridgeTimings } from '../bridge-timings';
 import type { JudgeAccess } from '../judges/judges.repository';
 import type { ResumeCandidate } from '../link/messages';
@@ -69,6 +73,8 @@ export class DispatcherService {
   private stopped = false;
   /** Per-run deadline timers by `windingKey`. */
   private readonly deadlines = new Map<string, NodeJS.Timeout>();
+  /** Time limit (seconds) of each run with a deadline, by `windingKey`: its Started re-arms the deadline from it. */
+  private readonly runTimeLimits = new Map<string, number>();
 
   constructor(
     private readonly submissions: SubmissionsRepository,
@@ -226,29 +232,62 @@ export class DispatcherService {
     ref: AssignmentRef,
     timeLimitSeconds: number,
   ): void {
-    const delay = runDeadlineMs(this.timings, timeLimitSeconds);
+    this.runTimeLimits.set(windingKey(ref), timeLimitSeconds);
+    this.startDeadline(
+      judge,
+      ref,
+      runDeadlineMs(this.timings, timeLimitSeconds),
+    );
+  }
+
+  /** The judge's applied Started names the case count: the run's deadline restarts from now with an allowance per case (never shorter than the Assign's), so a long legitimate run is not taken away. */
+  runStarted(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+    caseCount: number,
+  ): void {
+    const timeLimit = this.runTimeLimits.get(windingKey(ref));
+    if (timeLimit === undefined) return;
+    if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
+    this.startDeadline(
+      judge,
+      ref,
+      startedRunDeadlineMs(this.timings, timeLimit, caseCount),
+    );
+  }
+
+  /** (Re)starts the run's deadline timer; `null` leaves the run without one. */
+  private startDeadline(
+    judge: DispatchTarget,
+    ref: AssignmentRef,
+    delay: number | null,
+  ): void {
     if (delay === null) return;
-    this.clearDeadline(ref);
+    const key = windingKey(ref);
+    clearTimeout(this.deadlines.get(key));
     const timer = setTimeout(
       () => void this.deadlineExpired(judge, ref),
       delay,
     );
     timer.unref();
-    this.deadlines.set(windingKey(ref), timer);
+    this.deadlines.set(key, timer);
   }
 
   private clearDeadline(ref: AssignmentRef): void {
     const key = windingKey(ref);
     clearTimeout(this.deadlines.get(key));
     this.deadlines.delete(key);
+    this.runTimeLimits.delete(key);
   }
 
-  /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge). */
+  /** The judge still holds the run: its slot winds down (freed by the judge's `Final{ABORTED}`), the judge is told to stop, and the run is requeued once, internal error the second time (same as a lost judge); a run the user aborted ends AB. */
   private async deadlineExpired(
     judge: DispatchTarget,
     ref: AssignmentRef,
   ): Promise<void> {
-    this.deadlines.delete(windingKey(ref));
+    // read before `windDown` forgets it
+    const abortRequested = this.abortsRequested.has(windingKey(ref));
+    this.clearDeadline(ref);
     if (!this.windDown(judge, ref)) return;
     this.logger.warn(
       `Judge ${judge.name} did not finish submission ${runOf(ref)} before its deadline; aborted`,
@@ -257,7 +296,7 @@ export class DispatcherService {
     await this.graceExpired({
       ref,
       judgeName: judge.name,
-      abortRequested: false,
+      abortRequested,
     });
   }
 
@@ -365,6 +404,7 @@ export class DispatcherService {
     this.grace.clear();
     for (const timer of this.deadlines.values()) clearTimeout(timer);
     this.deadlines.clear();
+    this.runTimeLimits.clear();
     this.generations.stop();
   }
 

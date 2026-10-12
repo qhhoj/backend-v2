@@ -1,6 +1,7 @@
 import { newId } from '@libs/database';
 import { Resume_Action } from '@libs/judge-proto';
 import type { AssignmentRef } from '@libs/judge-proto';
+import { DEFAULT_BRIDGE_TIMINGS } from '../bridge-timings';
 import type { BridgeTimings } from '../bridge-timings';
 import type { AssignRequest } from '../submissions/assign-request';
 import type { RunsService } from '../submissions/runs.service';
@@ -429,6 +430,64 @@ describe('DispatcherService', () => {
       expect(judge.winding.size).toBe(1);
       // requeued once: handed out again as a new generation
       expect(judge.inFlight.get(hung.id)).toBe(2);
+    });
+
+    it('ends a user-aborted run as AB when its judge never answers the abort before the deadline', async () => {
+      const judge = await online(new Target('j1', 2));
+      const hung = entry();
+      await queue(hung);
+      dispatcher.abort(hung.id);
+      expect(judge.aborted).toEqual([{ submissionId: hung.id, generation: 1 }]);
+      jest.advanceTimersByTime(RUN_DEADLINE_MS);
+      await flush();
+      expect(expired).toEqual([
+        {
+          ref: { submissionId: hung.id, generation: 1 },
+          abortRequested: true,
+        },
+      ]);
+      // not handed out again
+      expect(judge.inFlight.has(hung.id)).toBe(false);
+    });
+
+    it('lets a legitimate long run finish under the production timings: 400 cases at the 2 s limit, each TLE at its 2.5 s cap', async () => {
+      // judge-v2 runs cases one by one; a partial problem (no short-circuit) runs all of them. CPU-bound TLE stops at TL + 0.5 s.
+      const CASES = 400;
+      const perCaseMs = (2 + 0.5) * 1000;
+      dispatcher.stop();
+      dispatcher = new DispatcherService(
+        submissions,
+        runs,
+        NO_GENERATIONS,
+        DEFAULT_BRIDGE_TIMINGS,
+      );
+      const judge = await online(new Target('j1', 1));
+      const long = entry();
+      await queue(long);
+      const ref = { submissionId: long.id, generation: 1 };
+      dispatcher.runStarted(judge, ref, CASES);
+      jest.advanceTimersByTime(CASES * perCaseMs);
+      await flush();
+      expect(judge.aborted).toEqual([]);
+      expect(expired).toEqual([]);
+      // still a deadline: 10 min + 400 × (3 × 2 + 1 + 5) s from Started
+      jest.advanceTimersByTime(600_000 + CASES * 12_000 - CASES * perCaseMs);
+      await flush();
+      expect(judge.aborted).toEqual([ref]);
+      expect(expired).toEqual([{ ref, abortRequested: false }]);
+    });
+
+    it('ignores a Started of a run its judge no longer holds', async () => {
+      const judge = await online(new Target('j1', 2));
+      const done = entry();
+      await queue(done);
+      const ref = { submissionId: done.id, generation: 1 };
+      await dispatcher.runEnded(judge, ref, { retried: false });
+      dispatcher.runStarted(judge, ref, 10_000);
+      jest.advanceTimersByTime(RUN_DEADLINE_MS * 1000);
+      await flush();
+      expect(judge.aborted).toEqual([]);
+      expect(expired).toEqual([]);
     });
 
     it('does nothing for a run that ended in time', async () => {

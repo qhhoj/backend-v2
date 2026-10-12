@@ -10,7 +10,7 @@ export interface BridgeTimings {
   acceptMs: number;
   /** A lost judge's runs wait this long for it to reconnect and resume them before they are requeued. */
   resumeGraceMs: number;
-  /** A run still held this long after Assign, whatever pings say, is taken from its judge and requeued (IE the second time): `runMarginMs` + the problem's time limit × `runCaseBudget` (the bridge does not know the case count, so this is a generous per-case allowance). */
+  /** A run still held this long after Assign, whatever pings say, is taken from its judge and requeued (IE the second time): `runMarginMs` + the problem's time limit × `runCaseBudget` (a generous per-case allowance until the judge's Started names the case count; then `startedRunDeadlineMs`). */
   runMarginMs: number;
   runCaseBudget: number;
   /** A queued submission pinned to a judge that has not been connected this long after it was submitted falls back to any judge. */
@@ -52,4 +52,20 @@ export function runDeadlineMs(
   const deadline =
     timings.runMarginMs + timeLimitSeconds * 1000 * timings.runCaseBudget;
   return Number.isFinite(deadline) && deadline > 0 ? deadline : null;
+}
+
+/** Per case on top of judge-v2's wall limit: checker, interactor and file I/O. */
+const CASE_OVERHEAD_SECONDS = 5;
+
+/** Deadline of one run from its Started, which names the case count: `runMarginMs` + per case judge-v2's wall limit (3 × TL + 1 s, sandbox spec) and an overhead; never shorter than `runDeadlineMs`. */
+export function startedRunDeadlineMs(
+  timings: Pick<BridgeTimings, 'runMarginMs' | 'runCaseBudget'>,
+  timeLimitSeconds: number,
+  caseCount: number,
+): number | null {
+  const assigned = runDeadlineMs(timings, timeLimitSeconds);
+  if (assigned === null) return null;
+  const perCaseMs = (3 * timeLimitSeconds + 1 + CASE_OVERHEAD_SECONDS) * 1000;
+  const started = timings.runMarginMs + caseCount * perCaseMs;
+  return Number.isFinite(started) ? Math.max(assigned, started) : assigned;
 }
