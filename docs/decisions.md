@@ -172,6 +172,9 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - Every isolate run starts from a fresh `--init` box — isolate 2.6 keeps the cgroup's peak memory and OOM flag across runs in one box, which would turn every case after an MLE into MLE.
 - Languages no judge runs are removed from every problem before the switch (`prune-languages --keep <fleet list>`, cutover T3b) and their rows disabled, never deleted — a submission in them is refused at submit time instead of waiting in QU forever, and old submissions (GAS32 included) keep their language.
 - Parity with DMOJ (cutover T5, `scripts/judge/parity`): any case or batch worth 0 points that fails skips every later case, also a 0-point sample in `test_cases` (DMOJ's documented rule, pinned by `par_zero_sample`); a full run grades `pretest_test_cases` first (a plain pretest worth 0, so the same rule applies; a pretest batch keeps its points), then `test_cases` — DMOJ's observed behaviour, pinned by `par_pre`. Accepted differences, judge-v2 kept: an uncaught exception is RTE, not DMOJ's IR (spec §8); memory over the limit is MLE from the cgroup, not DMOJ's RLIMIT_AS `bad_alloc` RTE; a testlib checker's message is the case feedback; testlib `quitp` partial points are a 0..1 fraction of the case.
+- Short-circuit (2026-10-13): a non-partial problem short-circuits except in an ioi16 or final_submission contest, which score from every case (per-batch credit, partial points).
+- Run deadline (2026-10-13): Assign arms margin + TL × 100; the run's stored Started re-arms it to margin + case count × (3·TL + 1 + 5) s (judge-v2's wall limit plus overhead). The budget survives a judge resume within one bridge process. A user-aborted run hitting it ends AB.
+- ioi16 batch credit (2026-10-13): only a D submission's cases count; AB/IE/in-flight rows may stop inside a batch.
 
 ## Effects and realtime
 
