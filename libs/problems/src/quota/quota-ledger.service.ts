@@ -11,7 +11,7 @@ import {
 } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { QUOTA_BACKFILL_DONE_KEY } from '../quota-queues';
-import { sumDataBytesByOrganization } from './organization-storage';
+import { sumStoredBytesByOrganization } from './organization-storage';
 import type {
   EffectiveLimits,
   PricedCharge,
@@ -144,9 +144,9 @@ export class QuotaLedger {
     return true;
   }
 
-  /** Bytes the organization's private problems hold (see `sumDataBytesByOrganization`). */
+  /** Bytes the organization's private problems hold (see `sumStoredBytesByOrganization`). */
   async usedStorageBytes(organizationId: string): Promise<number> {
-    const sums = await sumDataBytesByOrganization(this.problems, [
+    const sums = await sumStoredBytesByOrganization(this.problems, [
       organizationId,
     ]);
     return sums.get(organizationId) ?? 0;

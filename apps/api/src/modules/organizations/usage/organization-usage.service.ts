@@ -83,7 +83,7 @@ export class OrganizationUsageService {
   ): Promise<Paginated<UsageOverviewRowResponse>> {
     const month = this.quota.monthKeyOf(new Date());
     const { rows, total } = await this.repository.overview(month, query);
-    const bytes = await this.problems.sumDataBytesByOrganization(
+    const bytes = await this.problems.sumStoredBytesByOrganization(
       rows.map((row) => row.id),
     );
     return new Paginated(
@@ -108,7 +108,7 @@ export class OrganizationUsageService {
     organization: OrganizationDocument,
   ): Promise<OrganizationUsageResponse> {
     const [usedBytes, recent] = await Promise.all([
-      this.problems.sumDataBytes(organization._id),
+      this.problems.sumStoredBytes(organization._id),
       this.repository.recentEntries(organization._id),
     ]);
     const snapshot = await this.quota.snapshot(organization._id, usedBytes);

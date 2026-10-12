@@ -143,6 +143,10 @@ export class Problem {
   @Prop({ default: 0 }) dataVersion!: number;
   /** Bytes in the problem's data directory. Recompute-and-set after every data write and by the `problem-databytes` job; the storage meter sums it. */
   @Prop({ default: 0, min: 0 }) dataBytes!: number;
+  /** Bytes of the uploaded PDF statement (0 when none); set with `pdfStatementUrl`, the storage meter adds it. */
+  @Prop({ default: 0, min: 0 }) pdfStatementBytes!: number;
+  /** Bytes of the uploaded material (0 when none); set with `materialUrl`, the storage meter adds it. */
+  @Prop({ default: 0, min: 0 }) materialBytes!: number;
   /** Set by an import from Polygon; a sync re-applies statement, tests, checker and limits from the linked problem. */
   @Prop({ type: PolygonLinkSchema, default: null })
   polygonLink!: PolygonLink | null;

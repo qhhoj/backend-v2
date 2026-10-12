@@ -8,7 +8,7 @@ import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
 import { problemChargeSubject } from './problem-charge-subject';
 
-/** The storage meter for problem data: what an organization already holds (sum of `dataBytes`) against what a write adds. */
+/** The storage meter for problem files: what an organization already holds (`dataBytes` plus the PDF statement and material bytes) against what a write adds. */
 @Injectable()
 export class ProblemStorageQuota {
   constructor(
@@ -32,16 +32,16 @@ export class ProblemStorageQuota {
   ): Promise<void> {
     if (organizationId === null) return;
     await this.quota.assertStorage(organizationId, {
-      usedBytes: await this.problems.sumDataBytes(organizationId),
+      usedBytes: await this.problems.sumStoredBytes(organizationId),
       addedBytes: write.addedBytes,
     });
   }
 
-  /** After a data write: warns the organization's admins once it passes 80% of storage. Never throws (see `QuotaService.afterStorageWrite`). */
+  /** After a file write: warns the organization's admins once it passes 80% of storage. Never throws (see `QuotaService.afterStorageWrite`). */
   async afterWrite(organizationId: string | null): Promise<void> {
     if (organizationId === null) return;
     await this.quota.afterStorageWrite(organizationId, () =>
-      this.problems.sumDataBytes(organizationId),
+      this.problems.sumStoredBytes(organizationId),
     );
   }
 

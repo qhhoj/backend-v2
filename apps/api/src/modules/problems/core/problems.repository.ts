@@ -16,7 +16,7 @@ import type {
   SourceChecks,
 } from '@libs/database';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
-import { sumDataBytesByOrganization } from '@libs/problems';
+import { sumStoredBytesByOrganization } from '@libs/problems';
 
 export type ProblemDocument = HydratedDocument<Problem>;
 
@@ -407,15 +407,15 @@ export class ProblemsRepository {
       .exec();
   }
 
-  async sumDataBytes(organizationId: string): Promise<number> {
-    const sums = await this.sumDataBytesByOrganization([organizationId]);
+  async sumStoredBytes(organizationId: string): Promise<number> {
+    const sums = await this.sumStoredBytesByOrganization([organizationId]);
     return sums.get(organizationId) ?? 0;
   }
 
-  /** See `sumDataBytesByOrganization`: bytes per organization over its private problems, by the charged (first) organization. */
-  sumDataBytesByOrganization(
+  /** See `sumStoredBytesByOrganization`: bytes per organization over its private problems, by the charged (first) organization. */
+  sumStoredBytesByOrganization(
     organizationIds: readonly string[],
   ): Promise<Map<string, number>> {
-    return sumDataBytesByOrganization(this.problems, organizationIds);
+    return sumStoredBytesByOrganization(this.problems, organizationIds);
   }
 }

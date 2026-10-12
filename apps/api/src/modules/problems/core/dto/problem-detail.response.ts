@@ -33,6 +33,10 @@ export interface ProblemDetailContext {
   canEdit: boolean;
   /** See `ProblemEditorResponse.canPublishToMembers`. */
   canPublishToMembers: boolean;
+  /** See `ProblemEditorResponse.canUploadPdfStatement`. */
+  canUploadPdfStatement: boolean;
+  /** See `ProblemEditorResponse.canUploadMaterial`. */
+  canUploadMaterial: boolean;
   hasEditorial: boolean;
   viewerStatus: ViewerStatus;
   gradingIo: GradingIoSource | null;
@@ -43,6 +47,9 @@ export interface ProblemDetailContext {
   licenses: LicensesQuerier;
   languages: LanguagesQuerier;
 }
+
+type EditorRight =
+  'canPublishToMembers' | 'canUploadPdfStatement' | 'canUploadMaterial';
 
 type Summaries = (ids: unknown[]) => UserSummaryResponse[];
 
@@ -107,26 +114,26 @@ export class ProblemEditorResponse {
   ogImage!: string;
   /** The viewer may set `isPublic` without `judge.change_public_visibility`: the problem is organization-private and they may create problems for every one of its organizations (it then only reaches members). */
   canPublishToMembers!: boolean;
+  /** The viewer may upload or remove the PDF statement: `judge.upload_file_statement`, or `canPublishToMembers` (an administrator of the problem's organizations). */
+  canUploadPdfStatement!: boolean;
+  /** The viewer may upload or remove the material: `judge.upload_problem_material`, or `canPublishToMembers`. */
+  canUploadMaterial!: boolean;
 
   /** The editor block for a viewer who may edit; null for everyone else. */
   static forViewer(
     problem: ProblemDocument,
     summaries: Summaries,
-    context: Pick<ProblemDetailContext, 'canEdit' | 'canPublishToMembers'>,
+    context: Pick<ProblemDetailContext, 'canEdit' | EditorRight>,
   ): ProblemEditorResponse | null {
     return context.canEdit
-      ? ProblemEditorResponse.from(
-          problem,
-          summaries,
-          context.canPublishToMembers,
-        )
+      ? ProblemEditorResponse.from(problem, summaries, context)
       : null;
   }
 
   static from(
     problem: ProblemDocument,
     summaries: Summaries,
-    canPublishToMembers: boolean,
+    rights: Pick<ProblemDetailContext, EditorRight>,
   ): ProblemEditorResponse {
     const { solution } = problem;
     return {
@@ -154,7 +161,9 @@ export class ProblemEditorResponse {
       allowedLanguageIds: problem.allowedLanguages.map(uuidStr),
       organizations: problem.organizations.map(uuidStr),
       ogImage: problem.ogImage,
-      canPublishToMembers,
+      canPublishToMembers: rights.canPublishToMembers,
+      canUploadPdfStatement: rights.canUploadPdfStatement,
+      canUploadMaterial: rights.canUploadMaterial,
     };
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission, UsersRepository } from '@libs/auth';
-import type { Principal } from '@libs/auth';
+import type { Permission, Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
 import {
   compareLanguages,
@@ -10,6 +10,7 @@ import {
 } from '@libs/database';
 import type { Problem, StatementLanguage } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { MATERIAL_EXTENSIONS } from '@libs/problems';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import type { CurrentParticipation } from '../../contests/core/current-contest.service';
 import { ParticipationsRepository } from '../../contests/core/participations.repository';
@@ -128,6 +129,7 @@ export class ProblemsService {
         .all()
         .sort(compareLanguages)
         .map((language) => LanguageResponse.from(language)),
+      materialExtensions: [...MATERIAL_EXTENSIONS],
     };
   }
 
@@ -238,17 +240,24 @@ export class ProblemsService {
         (user) => [user._id, user],
       ),
     );
+    const canPublishToMembers =
+      canEdit &&
+      principal !== null &&
+      problem.isOrganizationPrivate &&
+      (await this.creationRights.createsProblemsInAll(
+        principal,
+        problem.organizations.map(uuidStr),
+      ));
+    const mayUpload = (permission: Permission) =>
+      canEdit &&
+      (canPublishToMembers ||
+        (principal !== null && hasPermission(principal, permission)));
     return ProblemDetailResponse.from(problem, {
       lang,
       canEdit,
-      canPublishToMembers:
-        canEdit &&
-        principal !== null &&
-        problem.isOrganizationPrivate &&
-        (await this.creationRights.createsProblemsInAll(
-          principal,
-          problem.organizations.map(uuidStr),
-        )),
+      canPublishToMembers,
+      canUploadPdfStatement: mayUpload('judge.upload_file_statement'),
+      canUploadMaterial: mayUpload('judge.upload_problem_material'),
       hasEditorial: this.editorialReadable(principal, problem, scope),
       viewerStatus:
         (await this.viewerStatusesOf(principal, [problem._id])).get(

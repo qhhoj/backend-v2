@@ -948,6 +948,144 @@ afterAll(() => api.teardown());
         .expect(errorCode('rate_limited'));
     });
   });
+
+  describe('problem files of an organization problem', () => {
+    /** The `Org Admin` role's problem rights: neither upload permission. */
+    const TEACHER_RIGHTS = [
+      'judge.create_organization_problem',
+      'judge.edit_own_problem',
+    ];
+    let teacher: TestSession;
+    const mediaPath = (url: string) =>
+      join(api.mediaRoot, url.replace('/media/', ''));
+    const uploadPdf = (code: string) =>
+      authed(api.http().post(`${PROBLEMS}/${code}/statement`), teacher).attach(
+        'file',
+        PDF,
+        { filename: 'de.pdf', contentType: 'application/pdf' },
+      );
+    const uploadMaterial = (code: string, filename = 'de.docx') =>
+      authed(api.http().post(`${PROBLEMS}/${code}/material`), teacher).attach(
+        'file',
+        Buffer.from('docx'),
+        { filename, contentType: 'application/octet-stream' },
+      );
+    const editorOf = async (code: string) =>
+      (
+        (
+          await authed(api.http().get(`${PROBLEMS}/${code}`), teacher).expect(
+            200,
+          )
+        ).body as {
+          data: {
+            editor: {
+              canUploadPdfStatement: boolean;
+              canUploadMaterial: boolean;
+            };
+          };
+        }
+      ).data.editor;
+
+    beforeAll(async () => {
+      await api.reset();
+      const catalog = await seedCatalog(api);
+      const teacherId = (
+        await createUserWith(api, 'teacher', { permissions: TEACHER_RIGHTS })
+      )._id;
+      teacher = await loginAs(api, teacherId);
+      const own = await createOrganization(api, {
+        slug: 'thpt-own',
+        adminIds: [teacherId],
+      });
+      const foreign = await createOrganization(api, { slug: 'thpt-foreign' });
+      const authored = { authors: [teacherId], isPublic: false };
+      await createProblem(api, catalog, {
+        code: 'thptown_a',
+        ...authored,
+        isOrganizationPrivate: true,
+        organizations: [own._id],
+      });
+      await createProblem(api, catalog, {
+        code: 'thptforeign_a',
+        ...authored,
+        isOrganizationPrivate: true,
+        organizations: [foreign._id],
+      });
+      await createProblem(api, catalog, { code: 'sitea', ...authored });
+    });
+
+    it('lets an administrator of the organization upload, replace and remove the PDF and material without the upload permissions', async () => {
+      expect(await editorOf('thptown_a')).toMatchObject({
+        canUploadPdfStatement: true,
+        canUploadMaterial: true,
+      });
+      const first = urlOf(await uploadPdf('thptown_a').expect(201));
+      const second = urlOf(await uploadPdf('thptown_a').expect(201));
+      expect(existsSync(mediaPath(first))).toBe(false);
+      const material = urlOf(await uploadMaterial('thptown_a').expect(201));
+      expect(material).toMatch(/\/de\.docx$/);
+      await authed(
+        api.http().delete(`${PROBLEMS}/thptown_a/statement`),
+        teacher,
+      ).expect(204);
+      await authed(
+        api.http().delete(`${PROBLEMS}/thptown_a/material`),
+        teacher,
+      ).expect(204);
+      const stored = await api.problems.findOne({ code: 'thptown_a' }).lean();
+      expect(stored).toMatchObject({
+        pdfStatementUrl: null,
+        pdfStatementBytes: 0,
+        materialUrl: null,
+        materialBytes: 0,
+      });
+      expect(existsSync(mediaPath(second))).toBe(false);
+      expect(existsSync(mediaPath(material))).toBe(false);
+      await authed(
+        api.http().delete(`${PROBLEMS}/thptown_a/statement`),
+        teacher,
+      ).expect(204);
+    });
+
+    it.each([
+      ['another organization', 'thptforeign_a'],
+      ['the site', 'sitea'],
+    ])(
+      'keeps the upload permissions for a problem of %s it can edit',
+      async (_owner, code) => {
+        expect(await editorOf(code)).toMatchObject({
+          canUploadPdfStatement: false,
+          canUploadMaterial: false,
+        });
+        await uploadPdf(code).expect(403).expect(errorCode('forbidden'));
+        await uploadMaterial(code).expect(403).expect(errorCode('forbidden'));
+        await authed(
+          api.http().delete(`${PROBLEMS}/${code}/statement`),
+          teacher,
+        )
+          .expect(403)
+          .expect(errorCode('forbidden'));
+        expect(
+          await api.problems
+            .findOne({ code }, { pdfStatementUrl: 1, materialUrl: 1 })
+            .lean(),
+        ).toMatchObject({ pdfStatementUrl: null, materialUrl: null });
+      },
+    );
+
+    it('lists the accepted material extensions in the editor meta', async () => {
+      const { materialExtensions } = (
+        (await authed(api.http().get(`${PROBLEMS}/meta`), teacher).expect(200))
+          .body as { data: { materialExtensions: string[] } }
+      ).data;
+      expect(materialExtensions).toEqual(
+        expect.arrayContaining(['docx', 'pdf', 'zip', 'png']),
+      );
+      expect(materialExtensions).not.toContain('html');
+      await uploadMaterial('thptown_a', 'slides.pptx').expect(201);
+      await uploadMaterial('thptown_a', 'page.html').expect(400);
+    });
+  });
 }
 
 // from problems-pdf.e2e-spec.ts

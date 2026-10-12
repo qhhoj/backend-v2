@@ -29,6 +29,16 @@ export const isPdf = (content: Buffer): boolean =>
 export const SVG_MAX_BYTES = 512 * 1024;
 /** A statement image upload, or an image of a Polygon package. */
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/** A problem's PDF statement upload. */
+export const STATEMENT_PDF_MAX_BYTES = 5 * 1024 * 1024;
+/** A problem's downloadable material upload. */
+export const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
+/** Material file extensions: archives, documents, test data, sources and plain images; never anything a browser would run or render as markup. */
+export const MATERIAL_EXTENSIONS: readonly string[] = (
+  'zip 7z rar tar gz tgz bz2 xz pdf txt md csv in out ans ' +
+  'c cpp cc h hpp py java pas kt rs go doc docx xls xlsx ppt pptx odt ' +
+  'png jpg jpeg gif'
+).split(' ');
 /** A checker, grader or generator source. */
 export const SOURCE_MAX_BYTES = 1024 * 1024;
 const SVG_MAX_TAGS = 20000;

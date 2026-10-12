@@ -1,8 +1,8 @@
-import { Controller, Param, Post, Req } from '@nestjs/common';
+import { Controller, Delete, HttpCode, Param, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { ApiFileUpload } from '@libs/common';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
 import { UploadedFileResponse } from './dto/uploaded-file.response';
@@ -37,13 +37,16 @@ export class ProblemUploadsController {
    * Upload the PDF statement of a problem
    *
    * @remarks
-   * Needs `judge.upload_file_statement` and edit rights on the problem. Send one
-   * multipart `file`, a PDF of up to 5 MiB (400 `statement_not_pdf` otherwise).
-   * It replaces the previous PDF statement and returns its `url`. Cached
-   * packages of the problem are dropped. Shares the upload budget of 30 per hour
-   * per user.
+   * Needs edit rights on the problem and `judge.upload_file_statement`; an
+   * administrator who may create problems for every organization of an
+   * organization-private problem needs no permission. Send one multipart
+   * `file`, a PDF of up to 5 MiB (400 `statement_not_pdf` otherwise). It
+   * replaces the previous PDF statement and returns its `url`. On an
+   * organization problem the file counts against the organization's storage
+   * (403 `quota_exceeded`; a replaced file's bytes are given back). Cached
+   * packages of the problem are dropped. Shares the upload budget of 30 per
+   * hour per user.
    */
-  @RequirePermission('judge.upload_file_statement')
   @ApiFileUpload()
   @Post(':code/statement')
   uploadStatement(
@@ -58,13 +61,15 @@ export class ProblemUploadsController {
    * Upload the downloadable material of a problem
    *
    * @remarks
-   * Needs `judge.upload_problem_material` and edit rights on the problem. Send
-   * one multipart `file` of up to 20 MiB with an allowed extension (archives,
-   * documents, sources, plain images and data files; 400
-   * `material_type_not_allowed` otherwise). It replaces the previous material
-   * and returns its `url`. Shares the upload budget of 30 per hour per user.
+   * Needs edit rights on the problem and `judge.upload_problem_material`; an
+   * administrator who may create problems for every organization of an
+   * organization-private problem needs no permission. Send one multipart
+   * `file` of up to 20 MiB with an extension listed in the meta's
+   * `materialExtensions` (400 `material_type_not_allowed` otherwise). It
+   * replaces the previous material and returns its `url`. On an organization
+   * problem the file counts against the organization's storage (403
+   * `quota_exceeded`). Shares the upload budget of 30 per hour per user.
    */
-  @RequirePermission('judge.upload_problem_material')
   @ApiFileUpload()
   @Post(':code/material')
   uploadMaterial(
@@ -73,5 +78,37 @@ export class ProblemUploadsController {
     @Req() request: FastifyRequest,
   ): Promise<UploadedFileResponse> {
     return this.uploads.uploadMaterial(auth, code, request);
+  }
+
+  /**
+   * Remove the PDF statement of a problem
+   *
+   * @remarks
+   * The rights of the upload. Does nothing when there is none; on an
+   * organization problem its bytes leave the organization's storage.
+   */
+  @Delete(':code/statement')
+  @HttpCode(204)
+  removeStatement(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { code }: ProblemCodeParamDto,
+  ): Promise<void> {
+    return this.uploads.removeFile(auth, code, 'pdfStatementUrl');
+  }
+
+  /**
+   * Remove the downloadable material of a problem
+   *
+   * @remarks
+   * The rights of the upload. Does nothing when there is none; on an
+   * organization problem its bytes leave the organization's storage.
+   */
+  @Delete(':code/material')
+  @HttpCode(204)
+  removeMaterial(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { code }: ProblemCodeParamDto,
+  ): Promise<void> {
+    return this.uploads.removeFile(auth, code, 'materialUrl');
   }
 }
