@@ -204,6 +204,26 @@ export class DispatcherService {
     await this.offerWork(judge);
   }
 
+  /** The judge answered an Assign with SLOTS_FULL: it never took the run, so the run goes back to QU without spending its requeue, kept away from that judge until the next resync tick (the bridge's slot count was wrong; this is a safety net); a run the user aborted meanwhile ends AB. The session and its other runs go on. */
+  async slotsRefused(judge: DispatchTarget, ref: AssignmentRef): Promise<void> {
+    if (judge.inFlight.get(ref.submissionId) !== ref.generation) return;
+    const abortRequested = this.abortsRequested.has(windingKey(ref));
+    judge.inFlight.delete(ref.submissionId);
+    this.abortsRequested.delete(windingKey(ref));
+    this.clearDeadline(ref);
+    this.logger.warn(
+      `Judge ${judge.name} had no free slot for submission ${runOf(ref)}; ${abortRequested ? 'aborted' : 'requeued'}`,
+    );
+    if (abortRequested)
+      return this.graceExpired({ ref, judgeName: judge.name, abortRequested });
+    if (!(await this.runs.release(ref, judge.name)))
+      return this.runs.forget(ref);
+    const rows = await this.submissions.loadQueued([ref.submissionId]);
+    await this.enqueue(
+      rows.map((row) => ({ ...row, retryBannedJudges: [judge.name] })),
+    );
+  }
+
   /** The bridge let go of a held run (accept timeout, rejudge void, stale write): judge-v2 frees a slot only when the run's process returns, so the run keeps its slot as `winding` until the judge's `Final` for it. False when the judge does not hold that generation. */
   windDown(judge: DispatchTarget, ref: AssignmentRef): boolean {
     if (!this.keepSlotWinding(judge, ref)) return false;

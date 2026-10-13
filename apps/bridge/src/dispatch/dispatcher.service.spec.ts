@@ -814,6 +814,36 @@ describe('DispatcherService', () => {
     expect(judge.aborted).toHaveLength(1);
   });
 
+  it('sends a run refused with SLOTS_FULL back to the queue unspent, away from that judge until the next resync tick', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    const ref = { submissionId: submission.id, generation: 1 };
+    await dispatcher.slotsRefused(judge, ref);
+    expect(judge.aborted).toEqual([]);
+    expect(judge.inFlight.size).toBe(0);
+    expect(published).toEqual([submission.id]);
+    expect(judge.assigned).toHaveLength(1);
+    expect(dispatcher.queuedIds()).toEqual([submission.id]);
+    await dispatcher.slotsRefused(judge, ref);
+    await dispatcher.clearRetryBans();
+    expect(judge.assigned.map((request) => request.ref.generation)).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it('ends a run refused with SLOTS_FULL as AB when the user aborted it meanwhile', async () => {
+    const judge = await online(new Target('j1'));
+    const submission = entry();
+    await queue(submission);
+    dispatcher.abort(submission.id);
+    const ref = { submissionId: submission.id, generation: 1 };
+    await dispatcher.slotsRefused(judge, ref);
+    expect(expired).toEqual([{ ref, abortRequested: true }]);
+    expect(published).toEqual([]);
+    expect(dispatcher.queuedIds()).toEqual([]);
+  });
+
   it('keeps a RETRY away from the judge that answered it until the next resync tick', async () => {
     const judge = await online(new Target('j1'));
     const submission = entry();

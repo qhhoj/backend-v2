@@ -115,6 +115,7 @@ describe('JudgeSession', () => {
     windDown: record('windDown'),
     windingEnded: record('windingEnded'),
     acceptTimedOut: record('acceptTimedOut'),
+    slotsRefused: record('slotsRefused'),
     judgeLost: record('judgeLost'),
     isStopped: () => false,
   };
@@ -238,6 +239,50 @@ describe('JudgeSession', () => {
     ]);
     jest.advanceTimersByTime(TIMINGS.acceptMs);
     expect(calls.acceptTimedOut).toBeUndefined();
+  });
+
+  it('hands a run the judge refused with SLOTS_FULL back to the dispatcher and keeps the session', async () => {
+    const ref = run(newId());
+    await holding(ref);
+    await receive(
+      JudgeMessage.fromPartial({
+        body: {
+          $case: 'error',
+          error: {
+            code: ErrorCode.ERROR_CODE_SLOTS_FULL,
+            message: 'full',
+            ref,
+          },
+        },
+      }),
+    );
+    expect(calls.slotsRefused).toEqual([[session, ref]]);
+    expect(session.isClosed).toBe(false);
+    jest.advanceTimersByTime(TIMINGS.acceptMs);
+    await settle();
+    expect(calls.acceptTimedOut).toBeUndefined();
+  });
+
+  it('frees the slot of a winding run the judge refused with SLOTS_FULL, and ignores one it never had', async () => {
+    await online();
+    const released = run(newId());
+    session.winding.add(`${released.submissionId}.1`);
+    const slotsFull = (ref: AssignmentRef) =>
+      JudgeMessage.fromPartial({
+        body: {
+          $case: 'error',
+          error: {
+            code: ErrorCode.ERROR_CODE_SLOTS_FULL,
+            message: 'full',
+            ref,
+          },
+        },
+      });
+    await receive(slotsFull(released));
+    expect(calls.windingEnded).toEqual([[session, released]]);
+    await receive(slotsFull(run(newId())));
+    expect(calls.slotsRefused).toBeUndefined();
+    expect(session.isClosed).toBe(false);
   });
 
   it('keeps the accept clock of a run when an older generation of its submission is aborted', async () => {
