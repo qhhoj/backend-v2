@@ -1,5 +1,16 @@
 # qhhoj-backend
 
+## 2.27.0
+
+### Minor Changes
+
+- c1db3af: Polygon: `judge.import_polygon_package` is removed and its holders get the new `judge.sync_polygon_problem` (migrated on worker boot). Imports need only the rights of the change (create or test data write access); sync, auto-sync and link changes need the new permission plus test data write access; the link state and its history need only the write access. Syncs of organization-private problems are checked against the organization's storage; turning auto-sync on makes the switcher the user it runs as.
+
+### Patch Changes
+
+- a8e4197: Judging: ioi16 credits batches only from fully graded (D) runs; non-partial problems in ioi16/final_submission contests are judged without short-circuit; a run's deadline is re-armed from its Started case count and kept across a judge resume; a user-aborted run hitting its deadline ends AB.
+- c518225: Problem data: saving `nobigmath` or cases graded with different checkers is refused with a field error (judge-v2 answered every submission UNSUPPORTED). Bridge: SLOTS_FULL on an Assign sends that run back to QU without spending its requeue, kept off that judge until the next resync tick, instead of ending the session; a late SLOTS_FULL for a released run frees its slot.
+
 ## 2.26.0
 
 ### Minor Changes
