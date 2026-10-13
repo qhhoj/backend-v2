@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.28.1
+
+### Patch Changes
+
+- 4ec28b5: Polygon: a package download answered with an HTTP error is 502 `polygon_package_unavailable`; unreachable Polygon and error pages are logged with their cause or status.
+
 ## 2.28.0
 
 ### Minor Changes
