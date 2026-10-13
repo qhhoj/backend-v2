@@ -1,6 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SettingsService } from '@libs/settings';
 import { failureOf, PolygonApiError } from './polygon-api.error';
+import type { PolygonErrorCode } from './polygon-api.error';
 import { writeCappedBody } from './polygon-download';
 import type { DownloadProgress } from './polygon-download';
 import { randomSalt, signPolygonParams } from './polygon-signature';
@@ -19,10 +20,14 @@ export type PolygonFetch = typeof fetch;
 
 const CALL_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
+/** How much of an error page the log keeps: enough to tell a Cloudflare page from a Polygon one. */
+const LOGGED_BODY_CHARS = 160;
 
 /** Signed access to the one Polygon account in the `polygon.*` settings; read methods only. */
 @Injectable()
 export class PolygonClient {
+  private readonly logger = new Logger(PolygonClient.name);
+
   constructor(
     @Inject(SettingsService)
     private readonly settings: Pick<SettingsService, 'get'>,
@@ -99,7 +104,8 @@ export class PolygonClient {
       DOWNLOAD_TIMEOUT_MS,
     );
     const label = `${method} for package ${packageId} of problem ${problemId} (type ${type})`;
-    if (!response.ok || isJson(response)) await this.unwrap(label, response);
+    if (!response.ok || !isArchive(response))
+      await this.unwrap(label, response, 'polygon_package_unavailable');
     await writeCappedBody(response, destination, options);
   }
 
@@ -135,31 +141,33 @@ export class PolygonClient {
         redirect: 'error',
         signal: AbortSignal.timeout(timeoutMs),
       });
-    } catch {
-      throw new PolygonApiError(
-        'polygon_unavailable',
-        `Polygon did not answer ${method}`,
-      );
+    } catch (error) {
+      const message = `Polygon did not answer ${method}: ${fetchFailureOf(error)}`;
+      this.logger.warn(message);
+      throw new PolygonApiError('polygon_unavailable', message);
     }
   }
 
-  /** `result` of an OK envelope; a FAILED one (Polygon sends it with HTTP 200 or 400) or any other body throws. */
+  /**
+   * `result` of an OK envelope; a FAILED one (Polygon sends it with HTTP 200 or 400, as text/html) or any other body
+   * throws. Any other body (an HTTP error page from Polygon or Cloudflare) is `unreadable`, logged with its status.
+   */
   private async unwrap<Result>(
     method: string,
     response: Response,
+    unreadable: PolygonErrorCode = 'polygon_unavailable',
   ): Promise<Result> {
-    const envelope = (await response.json().catch(() => null)) as {
-      status?: string;
-      comment?: unknown;
-      result?: Result;
-    } | null;
+    const body = await response.text().catch(() => '');
+    const envelope = envelopeOf<Result>(body);
     if (envelope?.status === 'OK') return envelope.result as Result;
     if (envelope?.status === 'FAILED')
       throw failureOf(method, envelope.comment);
-    throw new PolygonApiError(
-      'polygon_unavailable',
-      `Polygon answered ${method} with HTTP ${response.status}`,
+    const contentType = response.headers.get('content-type') ?? 'no type';
+    const message = `Polygon answered ${method} with HTTP ${response.status}`;
+    this.logger.warn(
+      `${message} (${contentType}): ${body.replace(/\s+/g, ' ').slice(0, LOGGED_BODY_CHARS)}`,
     );
+    throw new PolygonApiError(unreadable, message);
   }
 
   private credentials(): PolygonCredentials | null {
@@ -169,5 +177,31 @@ export class PolygonClient {
   }
 }
 
-const isJson = (response: Response): boolean =>
-  (response.headers.get('content-type') ?? '').includes('json');
+/** A package answers as a zip; Polygon's FAILED envelope comes as JSON or text/html, whatever the status. */
+const isArchive = (response: Response): boolean => {
+  const type = response.headers.get('content-type') ?? '';
+  return !type.includes('json') && !type.startsWith('text/');
+};
+
+function envelopeOf<Result>(
+  body: string,
+): { status?: string; comment?: unknown; result?: Result } | null {
+  try {
+    return JSON.parse(body) as { status?: string; result?: Result };
+  } catch {
+    return null;
+  }
+}
+
+/** Why `fetch` threw: a timeout (a DOMException, not always an `Error` here), or the network error code (ENOTFOUND, ECONNRESET, a TLS code...). */
+function fetchFailureOf(error: unknown): string {
+  const { name, message, cause } = (error ?? {}) as {
+    name?: unknown;
+    message?: unknown;
+    cause?: { code?: unknown; message?: unknown };
+  };
+  if (name === 'TimeoutError') return 'timed out';
+  if (typeof cause?.code === 'string') return cause.code;
+  if (typeof cause?.message === 'string') return cause.message;
+  return typeof message === 'string' ? message : 'unknown error';
+}
