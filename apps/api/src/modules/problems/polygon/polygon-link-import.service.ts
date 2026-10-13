@@ -3,7 +3,11 @@ import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { newId } from '@libs/database';
-import { PolygonClient, syncJobOf } from '@libs/problems';
+import {
+  POLYGON_SYNC_PERMISSION,
+  PolygonClient,
+  syncJobOf,
+} from '@libs/problems';
 import type { ReadyPackage } from '@libs/problems';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
@@ -30,7 +34,7 @@ export class PolygonLinkImportService {
     auth: AuthContext,
     { link, ...body }: PolygonLinkImportDto,
   ): Promise<ImportJobStartedResponse> {
-    assertMaySync(auth, body.autoSync);
+    assertMayChangeLink(auth, body.autoSync || body.mode === 'update');
     const job = await this.imports.prepare(auth, body);
     const { problem, latest } = await this.resolver.resolve(
       auth,
@@ -88,15 +92,12 @@ export class PolygonLinkImportService {
   }
 }
 
-/** Auto-sync runs as the linking user and needs `judge.import_polygon_package` on every run (the worker re-checks it), so an organization creator without it may not turn it on. */
-function assertMaySync(auth: AuthContext, autoSync: boolean): void {
-  if (
-    autoSync &&
-    !hasPermission(auth.principal, 'judge.import_polygon_package')
-  )
+/** Auto-sync runs as the linking user and needs the sync permission on every run (the worker re-checks it), and an update replaces the problem's link, so both need it; an importer without it creates a linked problem with `autoSync` false. */
+function assertMayChangeLink(auth: AuthContext, changesLink: boolean): void {
+  if (changesLink && !hasPermission(auth.principal, POLYGON_SYNC_PERMISSION))
     throw new AppError(
       'forbidden',
       403,
-      'Auto-sync requires judge.import_polygon_package',
+      `Auto-sync and linking an existing problem require ${POLYGON_SYNC_PERMISSION}`,
     );
 }

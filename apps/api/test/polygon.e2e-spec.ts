@@ -141,7 +141,7 @@ describe('Polygon routes', () => {
     importerId = (
       await createUserWith(api, 'importer', {
         permissions: [
-          'judge.import_polygon_package',
+          'judge.sync_polygon_problem',
           'judge.add_problem',
           'judge.edit_own_problem',
         ],
@@ -174,7 +174,7 @@ describe('Polygon routes', () => {
   });
   afterAll(() => api.teardown());
 
-  it('refuses every route without the permission', async () => {
+  it('refuses every route without the creation rights or the sync permission', async () => {
     await get(`${POLYGON}/status`, plain).expect(403);
     await post(`${POLYGON}/resolve`, { link: SUM_LINK }, plain).expect(403);
     await post(
@@ -366,10 +366,7 @@ describe('Polygon routes', () => {
         api,
         (
           await createUserWith(api, 'outsider', {
-            permissions: [
-              'judge.import_polygon_package',
-              'judge.edit_own_problem',
-            ],
+            permissions: ['judge.add_problem', 'judge.edit_own_problem'],
           })
         )._id,
       );
@@ -572,10 +569,7 @@ describe('Polygon routes', () => {
       api,
       (
         await createUserWith(api, 'auditor', {
-          permissions: [
-            'judge.import_polygon_package',
-            'judge.edit_all_problem',
-          ],
+          permissions: ['judge.edit_all_problem'],
         })
       )._id,
     );
@@ -670,7 +664,10 @@ describe('Polygon routes', () => {
         .sort({ createdAt: 1 });
       expect(
         revisions.map((revision) => Object.keys(revision.changes)),
-      ).toEqual([['polygonLink.autoSync'], ['polygonLink']]);
+      ).toEqual([
+        ['polygonLink.autoSync', 'polygonLink.linkedBy'],
+        ['polygonLink'],
+      ]);
       await get(links()).expect(404).expect(errorCode('polygon_not_linked'));
     });
 
@@ -697,14 +694,49 @@ describe('Polygon routes', () => {
         latestPackage: null,
       });
     });
+
+    it('shows the link and its history to an editor without judge.sync_polygon_problem, who may not sync or change it', async () => {
+      const editorId = (
+        await createUserWith(api, `editor_${counter}`, {
+          permissions: ['judge.edit_own_problem'],
+        })
+      )._id;
+      const editor = await loginAs(api, editorId);
+      await api.problems.updateOne(
+        { code },
+        { $set: { curators: [editorId] } },
+      );
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      await get(links(), editor).expect(200);
+      await get(`${links()}/syncs`, editor).expect(200);
+      await post(`${links()}/sync`, {}, editor)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      await authed(api.http().patch(links()), editor)
+        .send({ autoSync: true })
+        .expect(403);
+      await authed(api.http().delete(links()), editor).expect(403);
+      expect((await queue.getJobCounts('waiting')).waiting).toBe(0);
+      expect(
+        (await api.problems.findOne({ code }))!.polygonLink,
+      ).not.toBeNull();
+    });
+
+    it('runs auto-sync as the user who switched it on', async () => {
+      await authed(api.http().patch(links()), importer)
+        .send({ autoSync: true })
+        .expect(200);
+      const { polygonLink } = (await api.problems.findOne({ code }))!;
+      expect(uuidStr(polygonLink!.linkedBy)).toBe(importerId);
+    });
   });
 
   describe('an organization problem creator without the import permission', () => {
     let teacher: TestSession;
-    let organizationId: string;
+    let teacherId: string, organizationId: string;
 
     beforeAll(async () => {
-      const teacherId = (
+      teacherId = (
         await createUserWith(api, 'polyteacher', {
           permissions: [
             'judge.create_organization_problem',
@@ -747,7 +779,7 @@ describe('Polygon routes', () => {
       });
     });
 
-    it('may not turn on auto-sync or use the sync routes, which need judge.import_polygon_package', async () => {
+    it('may not turn on auto-sync without judge.sync_polygon_problem', async () => {
       sharedProblems();
       await post(
         `${POLYGON}/import`,
@@ -762,9 +794,31 @@ describe('Polygon routes', () => {
         .expect(403)
         .expect(errorCode('forbidden'));
       await get(`${POLYGON}/syncs`, teacher).expect(403);
-      await post('/api/internal/problems/any/polygon/sync', {}, teacher).expect(
-        403,
-      );
+    });
+
+    it('reads the link of its organization problem but may not sync it', async () => {
+      await createProblem(api, catalog, {
+        code: 'thptpoly_linked',
+        curators: [teacherId],
+        isOrganizationPrivate: true,
+        organizations: [organizationId],
+        polygonLink: linkOf(900) as never,
+      });
+      const links = '/api/internal/problems/thptpoly_linked/polygon';
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      await get(links, teacher).expect(200);
+      await get(`${links}/syncs`, teacher).expect(200);
+      await post(`${links}/sync`, {}, teacher)
+        .expect(403)
+        .expect(errorCode('forbidden'));
+      sharedProblems();
+      await post(
+        `${POLYGON}/import`,
+        { link: SUM_LINK, code: 'thptpoly_linked', mode: 'update' },
+        teacher,
+      )
+        .expect(403)
+        .expect(errorCode('forbidden'));
     });
   });
 });

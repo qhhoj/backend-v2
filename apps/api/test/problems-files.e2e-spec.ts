@@ -92,16 +92,13 @@ afterAll(() => api.teardown());
       queue = api.app.get(getQueueToken(POLYGON_QUEUE));
       importerId = (
         await createUserWith(api, 'importer', {
-          permissions: [
-            'judge.import_polygon_package',
-            'judge.edit_own_problem',
-          ],
+          permissions: ['judge.edit_own_problem'],
         })
       )._id;
       importer = await loginAs(api, importerId);
       creatorId = (
         await createUserWith(api, 'creator', {
-          permissions: ['judge.import_polygon_package', 'judge.add_problem'],
+          permissions: ['judge.add_problem'],
         })
       )._id;
       creator = await loginAs(api, creatorId);
@@ -109,7 +106,7 @@ afterAll(() => api.teardown());
         api,
         (
           await createUserWith(api, 'other', {
-            permissions: ['judge.import_polygon_package'],
+            permissions: ['judge.add_problem'],
           })
         )._id,
       );
@@ -224,11 +221,7 @@ afterAll(() => api.teardown());
         api,
         (
           await createUserWith(api, 'mass', {
-            permissions: [
-              'judge.import_polygon_package',
-              'judge.add_problem',
-              'judge.create_mass_testcases',
-            ],
+            permissions: ['judge.add_problem', 'judge.create_mass_testcases'],
           })
         )._id,
       );
@@ -243,7 +236,7 @@ afterAll(() => api.teardown());
     });
     it('shows a job only to its requester and a superuser', async () => {
       const jobId = jobIdOf(await upload('code=seen', creator).expect(202));
-      await statusOf(jobId, plain).expect(403);
+      await statusOf(jobId, plain).expect(404);
       await statusOf(jobId, otherImporter).expect(404);
       await statusOf(jobId, admin).expect(200);
       await statusOf(UNKNOWN_ID, creator).expect(404);
@@ -327,9 +320,8 @@ afterAll(() => api.teardown());
       expect(storedPackages()).toHaveLength(before);
     });
     describe('into an organization', () => {
-      /** The `Org Admin` role's problem rights plus the import permission, without `judge.add_problem`. */
+      /** The `Org Admin` role's problem rights, without `judge.add_problem`. */
       const TEACHER_RIGHTS = [
-        'judge.import_polygon_package',
         'judge.create_organization_problem',
         'judge.edit_own_problem',
       ];
@@ -391,7 +383,7 @@ afterAll(() => api.teardown());
         expect(storedPackages()).toHaveLength(before);
       });
 
-      describe('without judge.import_polygon_package', () => {
+      describe('an organization problem creator', () => {
         let orgOnly: TestSession;
 
         beforeAll(async () => {
@@ -424,18 +416,15 @@ afterAll(() => api.teardown());
           await statusOf(jobId, orgOnly).expect(200);
         });
 
-        it('may not import a site problem, update a problem or import into another organization', async () => {
+        it('updates a problem it may edit, with no Polygon permission', async () => {
+          await upload('code=orgonly_own&mode=update', orgOnly).expect(202);
+        });
+
+        it('may not import a site problem or into another organization', async () => {
           const before = storedPackages().length;
           await upload('code=orgonly_site', orgOnly)
             .expect(403)
             .expect(errorCode('forbidden'));
-          await upload('code=orgonly_own&mode=update', orgOnly)
-            .expect(403)
-            .expect(errorCode('forbidden'));
-          await upload(
-            'code=orgonly_own&mode=update&organization=thpt-only',
-            orgOnly,
-          ).expect(403);
           await upload('code=thptdemo_x&organization=thpt-demo', orgOnly)
             .expect(403)
             .expect(errorCode('forbidden'));
@@ -496,8 +485,8 @@ afterAll(() => api.teardown());
       ]);
       expect(storedPackages()).toHaveLength(before);
     });
-    it('needs judge.import_polygon_package', async () => {
-      await upload('code=x4', plain).expect(403);
+    it('needs the right to create the problem', async () => {
+      await upload('code=x4', plain).expect(403).expect(errorCode('forbidden'));
       await api.http().post(`${IMPORTS}?code=x4`).expect(401);
     });
     it('shows an import error as is and hides any other failure reason', async () => {

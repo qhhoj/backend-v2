@@ -1,6 +1,10 @@
+import type { Permission } from '@libs/auth';
 import type { PolygonLink, PolygonSyncTrigger } from '@libs/database';
 import type { PolygonImportJob } from '../queues';
 import type { LatestPackage, ReadyPackage } from './polygon-types';
+
+/** Syncing a linked problem (now or automatically) and changing its link, on top of write access to its test data; the api gates the routes with it and the worker re-checks it on every sync. */
+export const POLYGON_SYNC_PERMISSION: Permission = 'judge.sync_polygon_problem';
 
 /** The problem fields a sync job is built from. */
 export interface LinkedProblem {

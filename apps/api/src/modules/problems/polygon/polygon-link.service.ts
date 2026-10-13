@@ -51,6 +51,7 @@ export class PolygonLinkService {
     return { link: linkView(polygonLink), latestPackage };
   }
 
+  /** Switching auto-sync on makes the caller the user it runs as, so the worker re-checks their rights; a repeated switch changes nothing. */
   async setAutoSync(
     auth: AuthContext,
     code: string,
@@ -58,16 +59,22 @@ export class PolygonLinkService {
   ): Promise<PolygonLinkResponse> {
     const problem = await this.problemOf(auth, code);
     const { polygonLink } = linkedProblem(problem);
+    const runAs =
+      autoSync && !polygonLink.autoSync ? auth.principal.userId : undefined;
     if (
       !(await this.links.setAutoSync(
         problem._id,
         polygonLink.problemId,
         autoSync,
+        runAs,
       ))
     )
       throw linkChanged();
     await this.audit(auth, problem, {
       'polygonLink.autoSync': { before: polygonLink.autoSync, after: autoSync },
+      ...(runAs && {
+        'polygonLink.linkedBy': { before: polygonLink.linkedBy, after: runAs },
+      }),
     });
     return linkView({ ...polygonLink, autoSync });
   }
@@ -89,7 +96,7 @@ export class PolygonLinkService {
     });
   }
 
-  /** Link routes need the same access as an import over the problem. */
+  /** Link routes need the same access as an import over the problem; the controller adds `judge.sync_polygon_problem` where the route changes something. */
   private problemOf(auth: AuthContext, code: string): Promise<ProblemDocument> {
     return this.imports.importableProblem(auth.principal, code);
   }

@@ -628,7 +628,6 @@ describe('problem data quota', () => {
       await createUserWith(api, 'dqauthor', {
         permissions: [
           'judge.edit_own_problem',
-          'judge.import_polygon_package',
           'judge.create_organization_problem',
         ],
       })

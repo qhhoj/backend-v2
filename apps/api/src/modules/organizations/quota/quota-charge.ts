@@ -1,16 +1,8 @@
-export interface ChargeSubject {
-  isOrganizationPrivate?: boolean;
-  organizations?: readonly string[];
-}
+import { chargedOrganization } from '@libs/problems';
+import type { ChargeSubject } from '@libs/problems';
 
-/** The organization a creation is charged to: the first listed one of an organization-private subject. Superusers and subjects with no organization are exempt (null). */
-export function chargedOrganization(
-  principal: { isSuperuser: boolean },
-  subject: ChargeSubject,
-): string | null {
-  if (principal.isSuperuser || !subject.isOrganizationPrivate) return null;
-  return subject.organizations?.[0] ?? null;
-}
+export { chargedOrganization };
+export type { ChargeSubject };
 
 /** The organization an edit newly scopes a contest or problem to: the one the edited subject is charged to, if the stored subject was not charged to any (public, or no organization). A subject that already had a charged organization is never charged again. */
 export function newlyChargedOrganization(

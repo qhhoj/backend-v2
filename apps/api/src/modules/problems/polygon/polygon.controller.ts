@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { CurrentAuth, RequirePermission } from '@libs/auth';
+import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, Paginated } from '@libs/common';
 import { PolygonClient } from '@libs/problems';
@@ -18,7 +18,7 @@ import { PolygonLinkImportService } from './polygon-link-import.service';
 import { PolygonLinkResolver } from './polygon-link-resolver.service';
 import { PolygonSyncHistoryService } from './polygon-sync-history.service';
 
-/** Status, resolve and import also serve organization problem creators (see `ProblemImportsService.assertMayImport`); every other route needs `judge.import_polygon_package`. */
+/** Status and resolve serve anyone who may create a problem or sync one (`ProblemImportsService.assertMayUsePolygon`); an import needs the rights of the change it makes, like the zip import. */
 @ApiTags('Problem editing')
 @Controller('api/internal/polygon')
 export class PolygonController {
@@ -34,7 +34,7 @@ export class PolygonController {
    * Get whether the Polygon account is connected
    *
    * @remarks
-   * Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). `connected` is true when both the API
+   * Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. `connected` is true when both the API
    * key and secret are set in the admin settings; `accountName` is the Polygon
    * login setters add as a READ co-author (empty when unset). No call to Polygon
    * is made. The secret is never returned.
@@ -43,7 +43,7 @@ export class PolygonController {
   async status(
     @CurrentAuth() auth: AuthContext,
   ): Promise<PolygonStatusResponse> {
-    await this.imports.assertMayImport(auth.principal);
+    await this.imports.assertMayUsePolygon(auth.principal);
     return {
       connected: this.polygon.isConnected(),
       accountName: this.polygon.accountName(),
@@ -54,7 +54,7 @@ export class PolygonController {
    * Check a Polygon problem link and preview the problem
    *
    * @remarks
-   * Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). The body takes the problem page
+   * Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page
    * address, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is
    * the permission: the server finds `owner/name` among the problems shared
    * with the QHHOJ account and compares the token with the `<problem url>` of
@@ -75,7 +75,7 @@ export class PolygonController {
     @CurrentAuth() auth: AuthContext,
     @Body() { link }: PolygonProblemLinkDto,
   ): Promise<PolygonProblemResponse> {
-    await this.imports.assertMayImport(auth.principal);
+    await this.imports.assertMayUsePolygon(auth.principal);
     return this.resolver.preview(auth, link);
   }
 
@@ -83,15 +83,13 @@ export class PolygonController {
    * List the Polygon sync history of every problem
    *
    * @remarks
-   * Needs `judge.import_polygon_package` and `judge.edit_all_problem` (the
-   * runs name every problem). Every finished Polygon import and sync job, newest
+   * Needs `judge.edit_all_problem` (the runs name every problem). Every finished Polygon import and sync job, newest
    * first: problem code, Polygon problem, revision, package and its build time,
    * first import or sync, manual or automatic, who started it, the result and,
    * for a failure, the step it stopped at and the error shown to the requester.
    * Paged, default 20 per page (max 100). Errors: 403 `forbidden`.
    */
   @ApiPaginatedResponse(PolygonSyncRunResponse)
-  @RequirePermission('judge.import_polygon_package')
   @Get('syncs')
   syncs(
     @CurrentAuth() auth: AuthContext,
@@ -104,10 +102,10 @@ export class PolygonController {
    * Import a Polygon problem and link it
    *
    * @remarks
-   * The rights of the zip import (`POST /problems/imports`): an organization
-   * problem creator without `judge.import_polygon_package` may only create
-   * for an organization, and may not turn on `autoSync` (403 `forbidden`; a
-   * sync needs that permission). The body takes the
+   * The rights of the zip import (`POST /problems/imports`); `autoSync` on and
+   * `mode` update (which replaces the problem's link) also need
+   * `judge.sync_polygon_problem` (else 403 `forbidden`), so without it send
+   * `autoSync` false to create a linked problem. The body takes the
    * problem `link` (checked again as on `POST /polygon/resolve`, with the same
    * errors), the zip import's options (`code`, `mode`, `organization`,
    * authors, curators, group, types, points, statement languages, zero-point

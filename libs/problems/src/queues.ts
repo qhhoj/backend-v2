@@ -40,7 +40,7 @@ export interface PolygonImportJob {
   points?: number;
   /** Create only: the organization the new problem is private to (api checked the creator's rights, code prefix and quota). */
   organizationId?: string;
-  /** Create only: the organization whose quota meters the import (`organizationId` unless the requester is a superuser). The worker checks a downloaded package against its storage. */
+  /** Create only: the organization whose quota meters the import (`organizationId` unless the requester is a superuser). The worker checks a downloaded package against its storage; an update's organization is read from the problem when the job runs. */
   meteredOrganizationId?: string;
   /** The credits the api spent when it queued the create; the worker gives them back if the import fails before its write committed. */
   charge?: SpentCharge;

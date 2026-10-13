@@ -31877,7 +31877,7 @@
     },
     "/api/internal/polygon/import": {
       "post": {
-        "description": "The rights of the zip import (`POST /problems/imports`): an organization\nproblem creator without `judge.import_polygon_package` may only create\nfor an organization, and may not turn on `autoSync` (403 `forbidden`; a\nsync needs that permission). The body takes the\nproblem `link` (checked again as on `POST /polygon/resolve`, with the same\nerrors), the zip import's options (`code`, `mode`, `organization`,\nauthors, curators, group, types, points, statement languages, zero-point\nand main-solution switches) and `autoSync`. A created problem is private,\nwith the importer as a curator; with `organization` it belongs to that\norganization as in the zip import (its creation rights replace\n`judge.add_problem`, code prefix, credits). The server downloads the newest full package itself and the\nsame background job as the zip import applies it, then links the problem\nto Polygon and records the import in the sync history. Answers 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes queued,\ndownloading, statements, tests, done or failed). Counts towards the 10\nimports an hour per user. Errors: 400 `code_taken`, the link errors of\n`POST /polygon/resolve`, 429 `rate_limited`.",
+        "description": "The rights of the zip import (`POST /problems/imports`); `autoSync` on and\n`mode` update (which replaces the problem's link) also need\n`judge.sync_polygon_problem` (else 403 `forbidden`), so without it send\n`autoSync` false to create a linked problem. The body takes the\nproblem `link` (checked again as on `POST /polygon/resolve`, with the same\nerrors), the zip import's options (`code`, `mode`, `organization`,\nauthors, curators, group, types, points, statement languages, zero-point\nand main-solution switches) and `autoSync`. A created problem is private,\nwith the importer as a curator; with `organization` it belongs to that\norganization as in the zip import (its creation rights replace\n`judge.add_problem`, code prefix, credits). The server downloads the newest full package itself and the\nsame background job as the zip import applies it, then links the problem\nto Polygon and records the import in the sync history. Answers 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}` (its `step` goes queued,\ndownloading, statements, tests, done or failed). Counts towards the 10\nimports an hour per user. Errors: 400 `code_taken`, the link errors of\n`POST /polygon/resolve`, 429 `rate_limited`.",
         "operationId": "PolygonController_importProblem",
         "parameters": [],
         "requestBody": {
@@ -31937,7 +31937,7 @@
     },
     "/api/internal/polygon/resolve": {
       "post": {
-        "description": "Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not READY),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it) or\n`polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not READY),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it) or\n`polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
         "operationId": "PolygonController_resolve",
         "parameters": [],
         "requestBody": {
@@ -31997,7 +31997,7 @@
     },
     "/api/internal/polygon/status": {
       "get": {
-        "description": "Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). `connected` is true when both the API\nkey and secret are set in the admin settings; `accountName` is the Polygon\nlogin setters add as a READ co-author (empty when unset). No call to Polygon\nis made. The secret is never returned.",
+        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. `connected` is true when both the API\nkey and secret are set in the admin settings; `accountName` is the Polygon\nlogin setters add as a READ co-author (empty when unset). No call to Polygon\nis made. The secret is never returned.",
         "operationId": "PolygonController_status",
         "parameters": [],
         "responses": {
@@ -32047,7 +32047,7 @@
     },
     "/api/internal/polygon/syncs": {
       "get": {
-        "description": "Needs `judge.import_polygon_package` and `judge.edit_all_problem` (the\nruns name every problem). Every finished Polygon import and sync job, newest\nfirst: problem code, Polygon problem, revision, package and its build time,\nfirst import or sync, manual or automatic, who started it, the result and,\nfor a failure, the step it stopped at and the error shown to the requester.\nPaged, default 20 per page (max 100). Errors: 403 `forbidden`.",
+        "description": "Needs `judge.edit_all_problem` (the runs name every problem). Every finished Polygon import and sync job, newest\nfirst: problem code, Polygon problem, revision, package and its build time,\nfirst import or sync, manual or automatic, who started it, the result and,\nfor a failure, the step it stopped at and the error shown to the requester.\nPaged, default 20 per page (max 100). Errors: 403 `forbidden`.",
         "operationId": "PolygonController_syncs",
         "parameters": [
           {
@@ -33106,7 +33106,7 @@
     },
     "/api/internal/problems/imports": {
       "post": {
-        "description": "Needs `judge.import_polygon_package`; creating a problem also needs\n`judge.add_problem`, updating needs write access to the problem's test data.\nWithout `judge.import_polygon_package`, an organization problem creator\nmay only create for an organization (`organization` required, no\n`update`; else 403 `forbidden`).\nSend the Polygon package as a multipart `file` (a zip with `problem.xml` at\nits root, up to 512 MiB) and the options in the query string: `code`, `mode`\n(`create` or `update`), `organization`, authors, curators, group, types,\npoints, statement language mapping and the zero-point and main-solution\nswitches. A create with `organization` (a slug) makes the problem private\nto that organization under the rules of\n`POST /organizations/{slug}/problems` instead of `judge.add_problem`: its\nrights (404 unknown organization, 403 `forbidden`), the code prefix (400\n`organization_code_prefix`), its credits (spent when the job is queued,\nkept if the job fails later) and its storage. The package\nis checked, then imported by a background job; the answer is 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}`. Limited to 10 imports\nper hour per user. Errors: 400 `code_taken`, 400 for a bad package\n(`no_problem_xml` or a zip error code), 403 `quota_exceeded`, 413\n`file_too_large`, 429 `rate_limited`.",
+        "description": "Needs the rights of the change: creating a problem needs\n`judge.add_problem` (or, with `organization`, that organization's creation\nrights), updating needs write access to the problem's test data (else 403\n`forbidden`). No Polygon-specific permission.\nSend the Polygon package as a multipart `file` (a zip with `problem.xml` at\nits root, up to 512 MiB) and the options in the query string: `code`, `mode`\n(`create` or `update`), `organization`, authors, curators, group, types,\npoints, statement language mapping and the zero-point and main-solution\nswitches. A create with `organization` (a slug) makes the problem private\nto that organization under the rules of\n`POST /organizations/{slug}/problems` instead of `judge.add_problem`: its\nrights (404 unknown organization, 403 `forbidden`), the code prefix (400\n`organization_code_prefix`), its credits (spent when the job is queued,\nkept if the job fails later) and its storage. The package\nis checked, then imported by a background job; the answer is 202 with a\n`jobId` to poll at `GET /problems/imports/{jobId}`. Limited to 10 imports\nper hour per user. Errors: 400 `code_taken`, 400 for a bad package\n(`no_problem_xml` or a zip error code), 403 `quota_exceeded`, 413\n`file_too_large`, 429 `rate_limited`.",
         "operationId": "ProblemImportsController_start",
         "parameters": [
           {
@@ -33331,7 +33331,7 @@
     },
     "/api/internal/problems/imports/{jobId}": {
       "get": {
-        "description": "Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). Returns the job state (`waiting`,\n`active`, `completed`, `failed`, ...), the imported problem when completed,\nand the error written for the requester when it failed. Only the user who\nstarted the job, or a superuser, can read it; anyone else gets the same 404\n`not_found` as for an unknown id. Finished jobs stay readable for a day.",
+        "description": "Returns the job state (`waiting`,\n`active`, `completed`, `failed`, ...), the imported problem when completed,\nand the error written for the requester when it failed. Only the user who\nstarted the job, or a superuser, can read it; anyone else gets the same 404\n`not_found` as for an unknown id. Finished jobs stay readable for a day.",
         "operationId": "ProblemImportsController_status",
         "parameters": [
           {
@@ -35529,7 +35529,7 @@
     },
     "/api/internal/problems/{code}/polygon": {
       "delete": {
-        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Removes the link only; statement, tests and every other field stay.\nWrites a problem revision. Answers 204. Errors: 404 `polygon_not_linked`,\n409 `conflict` when the link changed meanwhile.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Removes the link only; statement, tests and every other field stay.\nWrites a problem revision. Answers 204. Errors: 404 `polygon_not_linked`,\n409 `conflict` when the link changed meanwhile.",
         "operationId": "ProblemPolygonLinkController_unlink",
         "parameters": [
           {
@@ -35572,7 +35572,7 @@
         ]
       },
       "get": {
-        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Returns the link (Polygon id, synced revision and package, last sync\ntime, result and error, auto-sync switch) and Polygon's newest package,\nwhich is null when Polygon cannot be asked. Errors: 404 `not_found`, 404\n`polygon_not_linked`, 403 `forbidden`.",
+        "description": "Needs write access to the problem's test data. Returns the link (Polygon id, synced revision and package, last sync\ntime, result and error, auto-sync switch) and Polygon's newest package,\nwhich is null when Polygon cannot be asked. Errors: 404 `not_found`, 404\n`polygon_not_linked`, 403 `forbidden`.",
         "operationId": "ProblemPolygonLinkController_state",
         "parameters": [
           {
@@ -35630,7 +35630,7 @@
         ]
       },
       "patch": {
-        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. With `autoSync` on, the worker checks Polygon every 10 minutes and\nsyncs a newer READY package, except while a contest using the problem is\nrunning. Writes a problem revision. Errors: 404 `polygon_not_linked`, 409\n`conflict` when the link changed meanwhile.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. With `autoSync` on, the worker checks Polygon every 10 minutes and\nsyncs a newer READY package as the user who switched it on, except while a\ncontest using the problem is running; each run needs that user to still\nhold the permission and the write access, else it fails and is recorded on\nthe link. Writes a problem revision. Errors: 404 `polygon_not_linked`, 409\n`conflict` when the link changed meanwhile.",
         "operationId": "ProblemPolygonLinkController_update",
         "parameters": [
           {
@@ -35700,7 +35700,7 @@
     },
     "/api/internal/problems/{code}/polygon/sync": {
       "post": {
-        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial, tests, checker and limits are overwritten; code,\npoints, group, types, authors, curators and allowed languages are kept.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`. Counts towards the 10 imports an hour per\nuser. Errors: 404 `polygon_not_linked`, 409 `polygon_package_not_ready`,\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial, tests, checker and limits are overwritten; code,\npoints, group, types, authors, curators and allowed languages are kept.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`. The worker checks the package against the\nstorage of the organization an organization-private problem is charged to\n(the package size minus the test data it replaces). Counts towards the 10 imports an hour per\nuser. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409\n`polygon_package_not_ready`,\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
         "operationId": "ProblemPolygonLinkController_sync",
         "parameters": [
           {
@@ -35760,7 +35760,7 @@
     },
     "/api/internal/problems/{code}/polygon/syncs": {
       "get": {
-        "description": "Needs `judge.import_polygon_package` and write access to the problem's test\ndata. Every finished Polygon import and sync job of the problem, newest\nfirst, also after an unlink: revision, package and its build time, first\nimport or sync, manual or automatic, who started it, the result and, for a\nfailure, the step it stopped at and the error shown to the requester. Paged,\ndefault 20 per page (max 100). Errors: 404 `not_found`, 403 `forbidden`.",
+        "description": "Needs write access to the problem's test data. Every finished Polygon import and sync job of the problem, newest\nfirst, also after an unlink: revision, package and its build time, first\nimport or sync, manual or automatic, who started it, the result and, for a\nfailure, the step it stopped at and the error shown to the requester. Paged,\ndefault 20 per page (max 100). Errors: 404 `not_found`, 403 `forbidden`.",
         "operationId": "ProblemPolygonLinkController_syncs",
         "parameters": [
           {

@@ -67,9 +67,9 @@ export const PERMISSION_CATALOG: Record<
     category: 'problems',
     label: 'See organization problems',
   },
-  'judge.import_polygon_package': {
+  'judge.sync_polygon_problem': {
     category: 'problems',
-    label: 'Import Polygon packages',
+    label: 'Sync problems from Polygon',
   },
   'judge.delete_problem': { category: 'problems', label: 'Delete problems' },
   'judge.add_tagproblem': { category: 'problems', label: 'Tag problems' },
