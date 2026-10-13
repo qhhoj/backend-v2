@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.28.0
+
+### Minor Changes
+
+- 80e2299: Profile: `bitRoam` `{ on, count }` (count 1-5, default `{ on: false, count: 1 }`) stores the roaming-Bits preference; PATCH replaces it whole. Included in the user data export.
+
 ## 2.27.0
 
 ### Minor Changes
