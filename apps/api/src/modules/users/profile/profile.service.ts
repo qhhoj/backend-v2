@@ -8,7 +8,7 @@ import {
   INTERACT_MIN_PROBLEM_COUNT,
   officialModeLocks,
 } from '@libs/community';
-import { uuidStr } from '@libs/database';
+import { DEFAULT_BIT_ROAM, uuidStr } from '@libs/database';
 import type { User } from '@libs/database';
 import { SettingsService } from '@libs/settings';
 import { OrganizationAccess } from '../../organizations/core/organization-access';
@@ -35,9 +35,6 @@ const appearanceChange = (
           glow: appearance.glow,
         },
       };
-
-/** Accounts saved before the field existed. */
-const DEFAULT_BIT_ROAM = { on: false, count: 1 };
 
 /** Plain values, not the DTO instance, go to Mongo. Absent means unchanged. */
 const bitRoamChange = (bitRoam: UpdateProfileDto['bitRoam']): Partial<User> =>
@@ -204,7 +201,7 @@ export class ProfileService {
       languageId: user.languageId && uuidStr(user.languageId),
       siteTheme: user.siteTheme,
       appearance: user.appearance ?? null,
-      bitRoam: user.bitRoam ?? DEFAULT_BIT_ROAM,
+      bitRoam: user.bitRoam ?? { ...DEFAULT_BIT_ROAM },
       organizations: organizations.map((organization) => ({
         ...OrganizationSummaryResponse.from(organization),
         isOpen: organization.isOpen,

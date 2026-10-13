@@ -20,6 +20,9 @@ export class SocialAuth {
   @Prop({ type: Object, default: {} }) extraData!: Record<string, unknown>;
 }
 
+/** Roaming Bits until the user chooses: off, one Bit. Also what accounts saved before the field read as. */
+export const DEFAULT_BIT_ROAM = { on: false, count: 1 } as const;
+
 @Schema({ ...baseSchemaOptions, collection: 'users' })
 export class User {
   @IdProp() _id!: string;
@@ -56,7 +59,7 @@ export class User {
   @Prop({ type: Object, default: null })
   appearance!: { accent: string; glass: number; glow: number } | null;
   /** Roaming Bits on every page (frontend `features/bit-roam`): switch and count 1-5. Validated by `BitRoamDto`. */
-  @Prop({ type: Object, default: () => ({ on: false, count: 1 }) })
+  @Prop({ type: Object, default: () => ({ ...DEFAULT_BIT_ROAM }) })
   bitRoam!: { on: boolean; count: number };
   @Prop({ type: Date, default: null }) lastAccess!: Date | null;
   @Prop({ type: String, default: null }) ip!: string | null;
