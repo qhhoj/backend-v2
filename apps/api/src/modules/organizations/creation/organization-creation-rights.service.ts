@@ -61,18 +61,19 @@ export class OrganizationCreationRights {
     principal: Principal,
     organizationIds: readonly string[],
   ): Promise<boolean> {
-    const rows = await this.organizations
-      .find({ _id: { $in: organizationIds }, ...LIVE }, ACCESS_FIELDS)
-      .lean<Organization[]>()
-      .exec();
+    const rows = await this.liveAccessRows(organizationIds);
+    return rows.length > 0 && this.createsProblemsInRows(principal, rows);
+  }
+
+  /** Whether every one of these ids is a live organization the viewer may create problems for: an unknown or deleted id refuses (moving a problem between organizations). */
+  async createsProblemsInEach(
+    principal: Principal,
+    organizationIds: readonly string[],
+  ): Promise<boolean> {
+    const rows = await this.liveAccessRows(organizationIds);
     return (
-      rows.length > 0 &&
-      rows.every((row) =>
-        OrganizationAccess.canCreateProblem(
-          principal,
-          OrganizationAccess.accessView(row),
-        ),
-      )
+      rows.length === new Set(organizationIds).size &&
+      this.createsProblemsInRows(principal, rows)
     );
   }
 
@@ -125,6 +126,27 @@ export class OrganizationCreationRights {
           hasPermission(principal, 'judge.create_private_contest'),
       },
     };
+  }
+
+  private liveAccessRows(
+    organizationIds: readonly string[],
+  ): Promise<Organization[]> {
+    return this.organizations
+      .find({ _id: { $in: organizationIds }, ...LIVE }, ACCESS_FIELDS)
+      .lean<Organization[]>()
+      .exec();
+  }
+
+  private createsProblemsInRows(
+    principal: Principal,
+    rows: Organization[],
+  ): boolean {
+    return rows.every((row) =>
+      OrganizationAccess.canCreateProblem(
+        principal,
+        OrganizationAccess.accessView(row),
+      ),
+    );
   }
 
   private async target(

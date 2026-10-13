@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { stat } from 'node:fs/promises';
 import type { Principal } from '@libs/auth';
+import { uuidStr } from '@libs/database';
+import type { Problem } from '@libs/database';
 import { ProblemDataFilesService } from '@libs/problems';
 import { chargedOrganization } from '../../organizations/quota/quota-charge';
 import { QuotaService } from '../../organizations/quota/quota.service';
@@ -23,6 +25,27 @@ export class ProblemStorageQuota {
     problem: ProblemDocument,
   ): string | null {
     return chargedOrganization(principal, problemChargeSubject(problem));
+  }
+
+  /** An edit that changes the organization a problem is charged to (a move) must fit the new one's storage with every byte the problem holds. */
+  async assertMoveFits(
+    principal: Pick<Principal, 'isSuperuser'>,
+    problem: ProblemDocument,
+    fields: Partial<Problem>,
+  ): Promise<void> {
+    const before = this.organizationOf(principal, problem);
+    const after = chargedOrganization(principal, {
+      isOrganizationPrivate:
+        fields.isOrganizationPrivate ?? problem.isOrganizationPrivate,
+      organizations: (fields.organizations ?? problem.organizations).map(
+        uuidStr,
+      ),
+    });
+    if (after === null || after === before) return;
+    await this.assertFits(after, {
+      addedBytes:
+        problem.dataBytes + problem.pdfStatementBytes + problem.materialBytes,
+    });
   }
 
   /** `addedBytes` is the growth: the new bytes minus the bytes the write replaces. */

@@ -111,7 +111,7 @@ export class ProblemEditPolicyService {
     this.assertFieldGates(principal, dto, fields, { baseline, waived });
   }
 
-  /** A gate fires only when the request changes the value (compared with the stored document, or the defaults on create); `waived` permission gates are skipped. */
+  /** A gate fires only when the request changes the value (compared with the stored document, or the defaults on create); `waived` gates (permission or staff) are skipped. */
   assertFieldGates(
     principal: Principal,
     dto: UpdateProblemDto,
@@ -142,7 +142,9 @@ export class ProblemEditPolicyService {
     const isFullMarkup = fields.isFullMarkup ?? baseline.isFullMarkup;
     if (isFullMarkup && changes('description'))
       this.assertFullMarkupWriter(principal);
-    const staffChanges = STAFF_FIELDS.filter(changes);
+    const staffChanges = STAFF_FIELDS.filter(
+      (field) => changes(field) && !waived.includes(field),
+    );
     if (
       staffChanges.length &&
       !hasPermission(principal, 'judge.edit_all_problem')
