@@ -731,6 +731,40 @@
         ],
         "type": "object"
       },
+      "BitRoamDto": {
+        "properties": {
+          "count": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "count",
+          "on"
+        ],
+        "type": "object"
+      },
+      "BitRoamResponse": {
+        "properties": {
+          "count": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "count",
+          "on"
+        ],
+        "type": "object"
+      },
       "BulkContestResponse": {
         "properties": {
           "done": {
@@ -10045,6 +10079,14 @@
             "nullable": true,
             "type": "object"
           },
+          "bitRoam": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BitRoamResponse"
+              }
+            ],
+            "description": "Roaming Bits: off with one Bit until the user turns them on."
+          },
           "firstName": {
             "description": "Display first name.",
             "type": "string"
@@ -10078,6 +10120,7 @@
           "languageId",
           "siteTheme",
           "appearance",
+          "bitRoam",
           "organizations"
         ],
         "type": "object"
@@ -15787,6 +15830,14 @@
             "description": "The whole look replaces the stored one; `null` clears it (the site's look).",
             "nullable": true,
             "type": "object"
+          },
+          "bitRoam": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BitRoamDto"
+              }
+            ],
+            "description": "Replaces the stored switch and count."
           },
           "firstName": {
             "description": "Display first name, up to 30 characters.",

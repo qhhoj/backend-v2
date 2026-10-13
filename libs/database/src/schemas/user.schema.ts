@@ -55,6 +55,9 @@ export class User {
   /** The user's own look (accent preset, glass 0-100, glow 0-100); null = the site's look. Validated by `AppearanceDto`. */
   @Prop({ type: Object, default: null })
   appearance!: { accent: string; glass: number; glow: number } | null;
+  /** Roaming Bits on every page (frontend `features/bit-roam`): switch and count 1-5. Validated by `BitRoamDto`. */
+  @Prop({ type: Object, default: () => ({ on: false, count: 1 }) })
+  bitRoam!: { on: boolean; count: number };
   @Prop({ type: Date, default: null }) lastAccess!: Date | null;
   @Prop({ type: String, default: null }) ip!: string | null;
   @Prop({ type: [UUID], default: [] }) organizations!: string[];

@@ -98,6 +98,7 @@ describe('user data export', () => {
         'displayRank',
         'email',
         'appearance',
+        'bitRoam',
         'firstName',
         'language',
         'lastLogin',

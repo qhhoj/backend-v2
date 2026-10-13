@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsObject,
@@ -53,6 +54,23 @@ export class AppearanceDto {
   @ApiProperty(PERCENT_SCHEMA) @IsInt() @Min(0) @Max(100) glow!: number;
 }
 
+/** Most roaming Bits a viewer may ask for (the frontend caps phones lower). */
+export const BIT_ROAM_MAX_COUNT = 5;
+export const BIT_ROAM_COUNT_SCHEMA = {
+  type: 'integer',
+  minimum: 1,
+  maximum: BIT_ROAM_MAX_COUNT,
+} as const;
+
+export class BitRoamDto {
+  @IsBoolean() on!: boolean;
+  @ApiProperty(BIT_ROAM_COUNT_SCHEMA)
+  @IsInt()
+  @Min(1)
+  @Max(BIT_ROAM_MAX_COUNT)
+  count!: number;
+}
+
 /** Legacy `ProfileForm` fields; every one optional. */
 export class UpdateProfileDto {
   /** About-me text in Markdown, rendered and sanitised on save. */
@@ -74,6 +92,12 @@ export class UpdateProfileDto {
   @ValidateNested()
   @Type(() => AppearanceDto)
   appearance?: AppearanceDto | null;
+  /** Replaces the stored switch and count. */
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => BitRoamDto)
+  bitRoam?: BitRoamDto;
   /** The current memberships reordered or shortened. */
   @IsOptional()
   @IsArray()

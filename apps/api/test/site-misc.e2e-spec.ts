@@ -305,6 +305,44 @@ describe('profile', () => {
     expect(cleared.siteTheme).toBe('dark');
   });
 
+  it('keeps roaming Bits off with one Bit until set, stores 1-5 and refuses other counts', async () => {
+    const { user, patch, get } = await person();
+    expect(dataOf<ProfileResponse>(await get().expect(200)).bitRoam).toEqual({
+      on: false,
+      count: 1,
+    });
+
+    const saved = dataOf<ProfileResponse>(
+      await patch({ bitRoam: { on: true, count: 5 } }).expect(200),
+    );
+    expect(saved.bitRoam).toEqual({ on: true, count: 5 });
+    expect((await api.users.findOne({ _id: user._id }))!.bitRoam).toEqual({
+      on: true,
+      count: 5,
+    });
+
+    // Off keeps the count; another field leaves both alone.
+    await patch({ bitRoam: { on: false, count: 3 } }).expect(200);
+    const untouched = dataOf<ProfileResponse>(
+      await patch({ siteTheme: 'dark' }).expect(200),
+    );
+    expect(untouched.bitRoam).toEqual({ on: false, count: 3 });
+
+    for (const bitRoam of [
+      { on: true, count: 0 },
+      { on: true, count: 6 },
+      { on: true, count: 2.5 },
+      { on: 'yes', count: 2 },
+      { on: true },
+      null,
+    ])
+      await patch({ bitRoam }).expect(400);
+    expect(dataOf<ProfileResponse>(await get().expect(200)).bitRoam).toEqual({
+      on: false,
+      count: 3,
+    });
+  });
+
   it('reorders and leaves organizations, never adds one, never drops one it administers', async () => {
     const { user, patch } = await person();
     const [first, second, third] = [

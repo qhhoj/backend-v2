@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PERCENT_SCHEMA } from './profile.dto';
+import { BIT_ROAM_COUNT_SCHEMA, PERCENT_SCHEMA } from './profile.dto';
 import type { OrganizationSummaryResponse } from '../../../organizations/core/dto/organization.response';
 
 export class ProfileOrganizationResponse implements OrganizationSummaryResponse {
@@ -26,6 +26,11 @@ export class AppearanceResponse {
   @ApiProperty(PERCENT_SCHEMA) glow!: number;
 }
 
+export class BitRoamResponse {
+  on!: boolean;
+  @ApiProperty(BIT_ROAM_COUNT_SCHEMA) count!: number;
+}
+
 export class ProfileResponse {
   /** About-me text in Markdown. */
   about!: string;
@@ -41,6 +46,8 @@ export class ProfileResponse {
   siteTheme!: string;
   /** Custom accent and glass settings; null for the site look. */
   appearance!: AppearanceResponse | null;
+  /** Roaming Bits: off with one Bit until the user turns them on. */
+  bitRoam!: BitRoamResponse;
   /** Organizations the user belongs to, in display order. */
   organizations!: ProfileOrganizationResponse[];
 }

@@ -41,6 +41,7 @@ const PROFILE_FIELDS = {
   aceTheme: 1,
   siteTheme: 1,
   appearance: 1,
+  bitRoam: 1,
   mathEngine: 1,
   userScript: 1,
   points: 1,

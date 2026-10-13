@@ -36,6 +36,15 @@ const appearanceChange = (
         },
       };
 
+/** Accounts saved before the field existed. */
+const DEFAULT_BIT_ROAM = { on: false, count: 1 };
+
+/** Plain values, not the DTO instance, go to Mongo. Absent means unchanged. */
+const bitRoamChange = (bitRoam: UpdateProfileDto['bitRoam']): Partial<User> =>
+  bitRoam === undefined
+    ? {}
+    : { bitRoam: { on: bitRoam.on, count: bitRoam.count } };
+
 @Injectable()
 export class ProfileService {
   constructor(
@@ -61,10 +70,12 @@ export class ProfileService {
     dto: UpdateProfileDto,
   ): Promise<ProfileResponse> {
     const user = (await this.users.findById(principal.userId))!;
-    const { about, firstName, organizations, appearance, ...fields } = dto;
+    const { about, firstName, organizations, appearance, bitRoam, ...fields } =
+      dto;
     const changes: Partial<User> = {
       ...fields,
       ...appearanceChange(appearance),
+      ...bitRoamChange(bitRoam),
       ...this.firstNameChange(principal, user, firstName),
       ...this.aboutChange(principal, user, about),
     };
@@ -193,6 +204,7 @@ export class ProfileService {
       languageId: user.languageId && uuidStr(user.languageId),
       siteTheme: user.siteTheme,
       appearance: user.appearance ?? null,
+      bitRoam: user.bitRoam ?? DEFAULT_BIT_ROAM,
       organizations: organizations.map((organization) => ({
         ...OrganizationSummaryResponse.from(organization),
         isOpen: organization.isOpen,
