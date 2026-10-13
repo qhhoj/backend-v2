@@ -4,6 +4,7 @@ import { AppError, invalidField } from '@libs/common';
 import type { DataFileKind } from '@libs/database';
 import {
   checkerArgsProblem,
+  judgeRefusal,
   graderArgsProblem,
   ProblemDataFilesService,
 } from '@libs/problems';
@@ -50,6 +51,8 @@ export class ProblemDataService {
       );
     this.assertArgsSize(dto);
     this.assertArgsFit(dto);
+    const refusal = judgeRefusal(dto);
+    if (refusal) throw invalidField(refusal.field, refusal.message);
     const { data: previous, version } = await this.store.loadData(problem);
     const { stored, archiveFiles } = await this.store.withDataWrite(
       problem,

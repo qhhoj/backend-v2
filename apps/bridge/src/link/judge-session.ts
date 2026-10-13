@@ -489,10 +489,20 @@ export class JudgeSession implements DispatchTarget {
     if (!this.aborted.has(windingKey(ref))) this.abort(ref);
   }
 
-  private onJudgeError(error: JudgeError): void {
-    if (error.code === ErrorCode.ERROR_CODE_SLOTS_FULL)
-      throw new ProtocolError(`the judge reports SLOTS_FULL: ${error.message}`);
-    this.logger.warn(`${this.name} reports ${error.code}: ${error.message}`);
+  /** SLOTS_FULL means the judge never took that run: a held one goes back to the queue, a winding one (released or voided while the Assign was on the wire) frees its slot, as its Final will never come. */
+  private async onJudgeError(error: JudgeError): Promise<void> {
+    if (error.code !== ErrorCode.ERROR_CODE_SLOTS_FULL)
+      return this.logger.warn(
+        `${this.name} reports ${error.code}: ${error.message}`,
+      );
+    const ref = refOf(error.ref);
+    this.clearAcceptTimer(ref);
+    if (this.holds(ref)) return this.services.dispatch.slotsRefused(this, ref);
+    if (this.winding.has(windingKey(ref)))
+      return this.services.dispatch.windingEnded(this, ref);
+    this.logger.warn(
+      `${this.name} reports SLOTS_FULL for ${ref.submissionId}, which it does not hold`,
+    );
   }
 
   private ping(): void {

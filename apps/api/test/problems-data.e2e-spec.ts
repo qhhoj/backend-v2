@@ -225,6 +225,25 @@ afterAll(() => api.teardown());
       }).expect(400);
     });
 
+    it('refuses settings the judge would answer with an internal error', async () => {
+      const refused = async (
+        extra: Record<string, unknown>,
+        cases: unknown[] = [plainCase(1)],
+      ) => fieldsOf(await put('sum', editor, config(cases, extra)).expect(400));
+      expect(await refused({ nobigmath: true })).toHaveProperty('nobigmath');
+      expect(
+        await refused({}, [
+          plainCase(1),
+          { ...plainCase(2), checker: 'floats' },
+        ]),
+      ).toHaveProperty(['cases.1.checker']);
+      await put(
+        'sum',
+        editor,
+        config([{ ...plainCase(1), checker: 'standard' }]),
+      ).expect(200);
+    });
+
     it('refuses an unauthorised or oversized body before validating its cases', async () => {
       const body = config(bulkCases(9999));
       const median = async (send: () => Promise<number>) => {
@@ -374,7 +393,7 @@ afterAll(() => api.teardown());
 // A problem migrated from the old site: Mongo holds the legacy rows, the data directory holds the legacy init.yml.
 {
   const PROBLEMS = '/api/internal/problems';
-  /** The old site's init.yml for the rows below: pretest, a batch, a case-level checker and a custom checker. */
+  /** The old site's init.yml for the rows below: pretest, a batch and a custom checker (a case-level checker is refused: the judge grades one checker per problem). */
   const LEGACY_INIT = [
     'archive: tests.zip',
     'pretest_test_cases:',
@@ -391,10 +410,6 @@ afterAll(() => api.teardown());
     '- in: sub2/1.in',
     '  out: sub2/1.out',
     '  points: 60',
-    '  checker:',
-    '    name: floats',
-    '    args:',
-    '      precision: 6',
     'checker:',
     '  name: bridged',
     '  args:',
@@ -418,8 +433,6 @@ afterAll(() => api.teardown());
       input: 'sub2/1.in',
       output: 'sub2/1.out',
       points: 60,
-      checker: 'floats',
-      checkerArgs: { precision: 6 },
     }),
   ];
   const ARCHIVE_NAMES = [
