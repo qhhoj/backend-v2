@@ -5,7 +5,10 @@ import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { fieldDiff, ProblemDataFilesService } from '@libs/problems';
 import { DiscordWebhooksService } from '@libs/community';
-import { chargedOrganization } from '../../organizations/quota/quota-charge';
+import {
+  chargedOrganization,
+  newlyChargedOrganization,
+} from '../../organizations/quota/quota-charge';
 import { QuotaService } from '../../organizations/quota/quota.service';
 import { CreateProblemDto, UpdateProblemDto } from './dto/problem-edit.dto';
 import { ProblemDetailResponse } from '../core/dto/problem-detail.response';
@@ -20,6 +23,8 @@ import {
   withoutRenderedHtml,
 } from './problem-edit-fields';
 import { ProblemEvents } from '../core/problem.events';
+import { problemChargeSubject } from '../quota/problem-charge-subject';
+import { ProblemStorageQuota } from '../quota/problem-storage-quota.service';
 import { renderField, styleOf } from './problem-markup';
 import {
   ProblemsRepository,
@@ -95,6 +100,7 @@ export class ProblemEditingService {
     private readonly discord: DiscordWebhooksService,
     private readonly quota: QuotaService,
     private readonly organizationRules: OrganizationProblemRules,
+    private readonly storage: ProblemStorageQuota,
   ) {}
 
   /** `organization`: an organization create (`POST /organizations/:slug/problems`), which sets the organization fields itself and needs the code prefix. */
@@ -209,7 +215,7 @@ export class ProblemEditingService {
       original,
       originalJson.translations as Problem['translations'],
     );
-    await withCodeTaken(() => this.repository.update(original._id, fields));
+    await this.saveCharged(principal, original, fields);
     const updated = await this.repository.findById(original._id);
     if (!updated) throw new AppError('not_found', 404, 'No such problem');
     const changes = fieldDiff(
@@ -224,6 +230,25 @@ export class ProblemEditingService {
         changeMessage?.trim() || DEFAULT_EDIT_COMMENT,
       );
     return { updated, isChanged };
+  }
+
+  /** A move into an organization (see `newlyChargedOrganization`) pays the problem credit like a create, refunded when the save fails; a new charged organization must fit the problem's bytes. */
+  private async saveCharged(
+    principal: Principal,
+    original: ProblemDocument,
+    fields: ProblemFields,
+  ): Promise<void> {
+    await this.storage.assertMoveFits(principal, original, fields);
+    const charged = newlyChargedOrganization(
+      principal,
+      problemChargeSubject(original),
+      fields,
+    );
+    await this.quota.charged(
+      charged,
+      { kind: 'problem', userId: principal.userId, ref: original.code },
+      () => withCodeTaken(() => this.repository.update(original._id, fields)),
+    );
   }
 
   /** A rename must not adopt the leftover test data directory of a deleted problem. */

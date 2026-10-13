@@ -4329,7 +4329,7 @@
             "type": "array"
           },
           "authors": {
-            "description": "Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem`.",
+            "description": "Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem` (the organization fields only on create, see `organizations`).",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -4381,7 +4381,7 @@
             "type": "boolean"
           },
           "isOrganizationPrivate": {
-            "description": "Whether only members of `organizations` can see the problem.",
+            "description": "Whether only members of `organizations` can see the problem. Gated like `organizations`.",
             "type": "boolean"
           },
           "isPublic": {
@@ -4419,7 +4419,7 @@
             "type": "string"
           },
           "organizations": {
-            "description": "Ids of the organizations the problem is private to (with `isOrganizationPrivate`).",
+            "description": "Ids of the organizations the problem is private to (with `isOrganizationPrivate`). On create it needs `judge.edit_all_problem`; on update the organization rules of `PATCH /problems/{code}` apply instead.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -15623,7 +15623,7 @@
             "type": "array"
           },
           "authors": {
-            "description": "Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem`.",
+            "description": "Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem` (the organization fields only on create, see `organizations`).",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -15680,7 +15680,7 @@
             "type": "boolean"
           },
           "isOrganizationPrivate": {
-            "description": "Whether only members of `organizations` can see the problem.",
+            "description": "Whether only members of `organizations` can see the problem. Gated like `organizations`.",
             "type": "boolean"
           },
           "isPublic": {
@@ -15718,7 +15718,7 @@
             "type": "string"
           },
           "organizations": {
-            "description": "Ids of the organizations the problem is private to (with `isOrganizationPrivate`).",
+            "description": "Ids of the organizations the problem is private to (with `isOrganizationPrivate`). On create it needs `judge.edit_all_problem`; on update the organization rules of `PATCH /problems/{code}` apply instead.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -33986,7 +33986,7 @@
         ]
       },
       "patch": {
-        "description": "Needs edit rights on the problem (404 `not_found` when it is invisible to\nthe caller, 403 `forbidden` when visible but not editable). Send only the\nfields to change; `licenseId` and `date` accept null, other fields refuse\nit. The same permission gates as on creation apply to the fields they\nprotect. Changing the description re-renders the statement; changing the\ncode moves the test data directory (400 `data_directory_taken` if one\nexists) and changing points, partial scoring or organization privacy\nrescores the problem. Writes a revision and returns the updated problem.",
+        "description": "Needs edit rights on the problem (404 `not_found` when it is invisible to\nthe caller, 403 `forbidden` when visible but not editable). Send only the\nfields to change; `licenseId` and `date` accept null, other fields refuse\nit. The same permission gates as on creation apply to the fields they\nprotect. Changing the description re-renders the statement; changing the\ncode moves the test data directory (400 `data_directory_taken` if one\nexists) and changing points, partial scoring or organization privacy\nrescores the problem. Writes a revision and returns the updated problem.\nWithout `judge.edit_all_problem`, `organizations` and\n`isOrganizationPrivate` (a move) need the organization problem creation\nrights in every organization added or removed (403\n`organization_rights`) and `judge.add_problem` to leave every organization\nfor the site (403 `site_problem_rights`). The code is never renamed: a move\nof an organization-private problem needs a code with the new first\norganization's prefix in the same request (400 `organization_code_prefix`,\nsuperusers exempt). A move into an organization spends its problem\ncredits and must fit its storage (403 `quota_exceeded`).",
         "operationId": "ProblemEditingController_edit",
         "parameters": [
           {

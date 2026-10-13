@@ -1,21 +1,40 @@
 import { Injectable } from '@nestjs/common';
+import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { sameJson } from '@libs/common';
+import { AppError, sameJson } from '@libs/common';
 import { organizationCodePrefix } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
 import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 import type { CreateProblemDto } from './dto/problem-edit.dto';
 import { assertOrganizationCodePrefix } from './organization-code-prefix';
+import {
+  leavesForSite,
+  ORGANIZATION_RIGHTS_ISSUE,
+  organizationsToAuthorize,
+  SITE_PROBLEM_RIGHTS_ISSUE,
+} from './organization-move';
+import type { OrganizationScope } from './organization-move';
 import { MEMBERS_ONLY_VISIBILITY } from './problem-edit-policy.service';
 import type { ProblemDocument } from '../core/problems.repository';
 
-/** The organization rules of a problem edit: the code prefix, members-only publishing and file uploads by organization creators. */
+/** The staff gates an authorized organization move skips (`STAFF_FIELDS` of the edit policy). */
+const ORGANIZATION_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
+  'organizations',
+  'isOrganizationPrivate',
+];
+
+const refusal = (code: string, message: string) =>
+  new AppError('forbidden', 403, message, undefined, undefined, {
+    issues: [{ field: 'organizations', code, message }],
+  });
+
+/** The organization rules of a problem edit: moving between organizations, the code prefix, members-only publishing and file uploads by organization creators. */
 @Injectable()
 export class OrganizationProblemRules {
   constructor(private readonly rights: OrganizationCreationRights) {}
 
-  /** Checks the prefix when the code or the organizations change, and returns the gates the editor may skip. */
+  /** Authorizes an organization move, checks the prefix when the code or the organizations change, and returns the gates the editor may skip. */
   async forEdit(
     principal: Principal,
     original: ProblemDocument,
@@ -26,6 +45,10 @@ export class OrganizationProblemRules {
     );
     const isOrganizationPrivate =
       fields.isOrganizationPrivate ?? original.isOrganizationPrivate;
+    const moveWaiver = await this.authorizeMove(principal, scopeOf(original), {
+      organizations,
+      isOrganizationPrivate,
+    });
     if (isOrganizationPrivate)
       await this.assertPrefixOnChange(
         principal,
@@ -37,7 +60,40 @@ export class OrganizationProblemRules {
       fields.isPublic !== undefined &&
       isOrganizationPrivate &&
       (await this.rights.createsProblemsInAll(principal, organizations));
-    return mayPublishToMembers ? MEMBERS_ONLY_VISIBILITY : [];
+    return [
+      ...moveWaiver,
+      ...(mayPublishToMembers ? MEMBERS_ONLY_VISIBILITY : []),
+    ];
+  }
+
+  /**
+   * A change of the organization fields by an editor without `judge.edit_all_problem` (who keeps the staff gate's full
+   * rights): the organization creation rule in every organization it adds or removes, and `judge.add_problem` to leave
+   * them all for the site. Returns the staff gates it opens; 403 with an issue code on `organizations` otherwise.
+   */
+  private async authorizeMove(
+    principal: Principal,
+    before: OrganizationScope,
+    after: OrganizationScope,
+  ): Promise<ReadonlyArray<keyof CreateProblemDto>> {
+    if (
+      sameJson(before, after) ||
+      hasPermission(principal, 'judge.edit_all_problem')
+    )
+      return [];
+    const needed = organizationsToAuthorize(before, after);
+    const isSiteMove = leavesForSite(before, after);
+    if (!(await this.rights.createsProblemsInEach(principal, needed)))
+      throw refusal(
+        ORGANIZATION_RIGHTS_ISSUE,
+        'Adding or removing an organization needs the right to create problems in it',
+      );
+    if (isSiteMove && !hasPermission(principal, 'judge.add_problem'))
+      throw refusal(
+        SITE_PROBLEM_RIGHTS_ISSUE,
+        'Moving a problem out of every organization onto the site requires judge.add_problem',
+      );
+    return ORGANIZATION_FIELDS;
   }
 
   /** Whether the viewer manages this problem as an administrator of its organizations: it is organization-private and they may create problems for every one of them (the rule of `canPublishToMembers`). */
@@ -54,7 +110,7 @@ export class OrganizationProblemRules {
     );
   }
 
-  /** Existing codes are never re-checked: only a new code, or a new organization list, of an organization-private problem (a site problem merely listed under an organization keeps its code). */
+  /** Existing codes are never re-checked: only a new code, a new organization list, or a flip to private, of an organization-private problem (a site problem merely listed under an organization keeps its code). A move never renames: the same save must carry a code with the new prefix. */
   private async assertPrefixOnChange(
     principal: Principal,
     original: ProblemDocument,
@@ -66,7 +122,10 @@ export class OrganizationProblemRules {
     const isRelisted =
       fields.organizations !== undefined &&
       !sameJson(organizations, original.organizations.map(uuidStr));
-    if (principal.isSuperuser || !(isRenamed || isRelisted)) return;
+    const becamePrivate =
+      fields.isOrganizationPrivate === true && !original.isOrganizationPrivate;
+    if (principal.isSuperuser || !(isRenamed || isRelisted || becamePrivate))
+      return;
     const slug = await this.rights.firstSlug(organizations);
     if (slug !== null)
       assertOrganizationCodePrefix(
@@ -76,3 +135,8 @@ export class OrganizationProblemRules {
       );
   }
 }
+
+const scopeOf = (problem: ProblemDocument): OrganizationScope => ({
+  organizations: problem.organizations.map(uuidStr),
+  isOrganizationPrivate: problem.isOrganizationPrivate,
+});

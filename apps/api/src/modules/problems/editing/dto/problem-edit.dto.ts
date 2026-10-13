@@ -118,7 +118,7 @@ export class CreateProblemDto {
   @IsOptional() @IsBoolean() isManuallyManaged?: boolean;
   /** Whether the statement may contain unsanitized HTML. Changing it needs `judge.problem_full_markup`. */
   @IsOptional() @IsBoolean() isFullMarkup?: boolean;
-  /** Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem`. */
+  /** Author user ids. This field and the ones below up to `date` need `judge.edit_all_problem` (the organization fields only on create, see `organizations`). */
   @IsOptional() @IsUUID('7', { each: true }) authors?: string[];
   /** Curator user ids; curators can edit the problem. */
   @IsOptional() @IsUUID('7', { each: true }) curators?: string[];
@@ -126,9 +126,9 @@ export class CreateProblemDto {
   @IsOptional() @IsUUID('7', { each: true }) bannedUsers?: string[];
   /** Ids of languages solutions may use; defaults to the languages flagged for new problems. */
   @IsOptional() @IsUUID('7', { each: true }) allowedLanguages?: string[];
-  /** Ids of the organizations the problem is private to (with `isOrganizationPrivate`). */
+  /** Ids of the organizations the problem is private to (with `isOrganizationPrivate`). On create it needs `judge.edit_all_problem`; on update the organization rules of `PATCH /problems/{code}` apply instead. */
   @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];
-  /** Whether only members of `organizations` can see the problem. */
+  /** Whether only members of `organizations` can see the problem. Gated like `organizations`. */
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
   /** Image URL used for link previews, up to 150 characters. */
   @IsOptional() @IsString() @MaxLength(150) ogImage?: string;
