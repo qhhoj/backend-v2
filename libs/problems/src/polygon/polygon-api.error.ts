@@ -5,6 +5,7 @@ export const POLYGON_ERROR_CODES = [
   'polygon_clock_skew',
   'polygon_unavailable',
   'polygon_failed',
+  'polygon_package_unavailable',
   'polygon_package_too_large',
 ] as const;
 export type PolygonErrorCode = (typeof POLYGON_ERROR_CODES)[number];

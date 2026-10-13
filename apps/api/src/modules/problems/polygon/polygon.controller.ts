@@ -67,7 +67,9 @@ export class PolygonController {
    * check against), `polygon_package_not_ready` (newest package not READY),
    * `polygon_already_linked` (names the QHHOJ problem, also as
    * `linkedProblemCode`, only to a user who may edit it) or
-   * `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.
+   * `polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon
+   * answered the package download with an HTTP error), other 502/503 Polygon
+   * errors, 429 `rate_limited`.
    */
   @Post('resolve')
   @HttpCode(200)

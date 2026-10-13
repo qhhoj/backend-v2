@@ -312,6 +312,13 @@ describe('Polygon routes', () => {
         .expect(errorCode('polygon_link_refused'));
     });
 
+    it('says the package cannot be downloaded, not that Polygon is unreachable, when Polygon answers the download with an HTTP error', async () => {
+      sharedProblems().reply('problem.package', { status: 500 });
+      await resolve(SUM_LINK)
+        .expect(502)
+        .expect(errorCode('polygon_package_unavailable'));
+    });
+
     it('refuses a malformed link before asking Polygon', async () => {
       sharedProblems();
       for (const link of [

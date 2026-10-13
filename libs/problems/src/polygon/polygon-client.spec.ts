@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import { fakeSettings } from '@libs/settings/testing';
 import { FakePolygon } from '../testing';
 import { PolygonApiError } from './polygon-api.error';
@@ -65,13 +66,75 @@ describe('PolygonClient', () => {
     expect(await failureCode(client().problems())).toBe(code);
   });
 
-  it('reports an HTTP error page or a network failure as unavailable', async () => {
-    polygon.reply('problems.list', { status: 503 });
-    expect(await failureCode(client().problems())).toBe('polygon_unavailable');
-    const offline = new PolygonClient(fakeSettings(CONNECTED), () =>
-      Promise.reject(new TypeError('fetch failed')),
-    );
-    expect(await failureCode(offline.problems())).toBe('polygon_unavailable');
+  describe('when Polygon cannot be reached or answers an error page', () => {
+    let warnings: string[];
+    beforeEach(() => {
+      warnings = [];
+      jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(
+          (message: unknown) => void warnings.push(String(message)),
+        );
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    const failureOf = (promise: Promise<unknown>) =>
+      promise.then(
+        () => null,
+        (error: PolygonApiError) => ({
+          code: error.code,
+          message: error.message,
+        }),
+      );
+    const offline = (reason: Error) =>
+      new PolygonClient(fakeSettings(CONNECTED), () => Promise.reject(reason));
+
+    it.each([
+      [
+        new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } }),
+        'ENOTFOUND',
+      ],
+      [
+        new TypeError('fetch failed', {
+          cause: { code: 'UND_ERR_CONNECT_TIMEOUT' },
+        }),
+        'UND_ERR_CONNECT_TIMEOUT',
+      ],
+      [
+        new DOMException('The operation timed out.', 'TimeoutError'),
+        'timed out',
+      ],
+      [
+        new TypeError('fetch failed', {
+          cause: new Error('unexpected redirect'),
+        }),
+        'unexpected redirect',
+      ],
+    ])('names the network failure %#: %s', async (reason, named) => {
+      expect(await failureOf(offline(reason).problems())).toEqual({
+        code: 'polygon_unavailable',
+        message: `Polygon did not answer problems.list: ${named}`,
+      });
+      expect(warnings).toEqual([
+        `Polygon did not answer problems.list: ${named}`,
+      ]);
+    });
+
+    it('logs the status, type and start of an error page, never the signed request', async () => {
+      polygon.reply('problems.list', {
+        status: 403,
+        contentType: 'text/html; charset=UTF-8',
+        page: '<!DOCTYPE html>\n<title>Just a moment...</title>',
+      });
+      expect(await failureOf(client().problems())).toEqual({
+        code: 'polygon_unavailable',
+        message: 'Polygon answered problems.list with HTTP 403',
+      });
+      expect(warnings).toEqual([
+        'Polygon answered problems.list with HTTP 403 (text/html; charset=UTF-8): <!DOCTYPE html> <title>Just a moment...</title>',
+      ]);
+      expect(warnings.join()).not.toMatch(/KEY|SECRET|apiSig/);
+    });
   });
 
   it('downloads the linux package to the destination and reports the bytes', async () => {
@@ -122,7 +185,8 @@ describe('PolygonClient', () => {
     );
   });
 
-  it('names the package and the type when Polygon answers the download with HTTP 500', async () => {
+  it('reports a download Polygon answers with an HTTP error as the package being unavailable, naming it', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     polygon.reply('problem.package', { status: 500 });
     const failure = await client()
       .downloadPackage(
@@ -132,10 +196,28 @@ describe('PolygonClient', () => {
       )
       .catch((error: PolygonApiError) => error);
     expect(failure).toMatchObject({
-      code: 'polygon_unavailable',
+      code: 'polygon_package_unavailable',
       message:
         'Polygon answered problem.package for package 1500552 of problem 595937 (type linux) with HTTP 500',
     });
+    jest.restoreAllMocks();
+  });
+
+  it('reads a FAILED envelope Polygon sends as text/html with HTTP 200 instead of saving it as the package', async () => {
+    polygon.reply('problem.package', {
+      failed: 'apiKey: Incorrect API key',
+      status: 200,
+      contentType: 'text/html;charset=UTF-8',
+    });
+    const destination = join(directory, 'package.zip');
+    expect(
+      await failureCode(
+        client().downloadPackage({ problemId: 1, packageId: 1 }, destination, {
+          maxBytes: 1024,
+        }),
+      ),
+    ).toBe('polygon_unauthorized');
+    expect(() => readFileSync(destination)).toThrow();
   });
 
   it('refuses a package larger than the cap, and a JSON failure instead of a zip', async () => {

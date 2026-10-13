@@ -9,6 +9,7 @@ const STATUS: Record<PolygonErrorCode, number> = {
   polygon_clock_skew: 502,
   polygon_failed: 502,
   polygon_unavailable: 503,
+  polygon_package_unavailable: 502,
   polygon_package_too_large: 413,
 };
 

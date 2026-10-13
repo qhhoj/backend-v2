@@ -209,12 +209,12 @@ function zip64Tail(layout: ZipLayout, options: ZipTestOptions): Buffer {
   return Buffer.concat([record, locator]);
 }
 
-/** What a fake Polygon method answers: an OK `result`, a FAILED `comment`, a package zip, or a bare HTTP status. */
+/** What a fake Polygon method answers: an OK `result`, a FAILED `comment` (with Polygon's HTTP status and type), a package zip, or an HTTP error page. */
 export type FakePolygonReply =
   | { result: unknown }
-  | { failed: string }
+  | { failed: string; status?: number; contentType?: string }
   | { zip: Buffer }
-  | { status: number };
+  | { status: number; page?: string; contentType?: string };
 
 /** A stand-in for Polygon's HTTP API, given to the client as its `fetch`; it records every call's method and form fields. */
 export class FakePolygon {
@@ -271,13 +271,20 @@ const responseOf = (reply: FakePolygonReply): Response => {
         'content-length': String(reply.zip.length),
       },
     });
-  if ('status' in reply) return new Response('busy', { status: reply.status });
-  const body =
-    'result' in reply
-      ? { status: 'OK', result: reply.result }
-      : { status: 'FAILED', comment: reply.failed };
-  return new Response(JSON.stringify(body), {
-    status: 'failed' in reply ? 400 : 200,
+  if ('status' in reply && !('failed' in reply))
+    return new Response(reply.page ?? 'busy', {
+      status: reply.status,
+      headers: { 'content-type': reply.contentType ?? 'text/plain' },
+    });
+  if ('failed' in reply)
+    return new Response(
+      JSON.stringify({ status: 'FAILED', comment: reply.failed }),
+      {
+        status: reply.status ?? 400,
+        headers: { 'content-type': reply.contentType ?? 'application/json' },
+      },
+    );
+  return new Response(JSON.stringify({ status: 'OK', result: reply.result }), {
     headers: { 'content-type': 'application/json' },
   });
 };
