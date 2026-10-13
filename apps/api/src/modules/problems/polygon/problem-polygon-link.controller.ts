@@ -13,6 +13,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, Paginated } from '@libs/common';
+import { POLYGON_SYNC_PERMISSION } from '@libs/problems';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
 import { UpdatePolygonLinkDto } from './dto/polygon-link.dto';
@@ -26,8 +27,8 @@ import { PolygonLinkImportService } from './polygon-link-import.service';
 import { PolygonLinkService } from './polygon-link.service';
 import { PolygonSyncHistoryService } from './polygon-sync-history.service';
 
+/** Every route needs write access to the problem's test data; the ones that change the problem or its link also need `judge.sync_polygon_problem`. */
 @ApiTags('Problem editing')
-@RequirePermission('judge.import_polygon_package')
 @Controller('api/internal/problems/:code/polygon')
 export class ProblemPolygonLinkController {
   constructor(
@@ -40,8 +41,7 @@ export class ProblemPolygonLinkController {
    * Get a problem's Polygon link
    *
    * @remarks
-   * Needs `judge.import_polygon_package` and write access to the problem's test
-   * data. Returns the link (Polygon id, synced revision and package, last sync
+   * Needs write access to the problem's test data. Returns the link (Polygon id, synced revision and package, last sync
    * time, result and error, auto-sync switch) and Polygon's newest package,
    * which is null when Polygon cannot be asked. Errors: 404 `not_found`, 404
    * `polygon_not_linked`, 403 `forbidden`.
@@ -58,15 +58,19 @@ export class ProblemPolygonLinkController {
    * Sync a linked problem from Polygon
    *
    * @remarks
-   * Needs `judge.import_polygon_package` and write access to the problem's test
+   * Needs `judge.sync_polygon_problem` and write access to the problem's test
    * data. Queues the import job in sync mode on the newest READY package:
    * statement, tutorial, tests, checker and limits are overwritten; code,
    * points, group, types, authors, curators and allowed languages are kept.
    * The result is recorded on the link. Answers 202 with a `jobId` to poll at
-   * `GET /problems/imports/{jobId}`. Counts towards the 10 imports an hour per
-   * user. Errors: 404 `polygon_not_linked`, 409 `polygon_package_not_ready`,
+   * `GET /problems/imports/{jobId}`. The worker checks the package against the
+   * storage of the organization an organization-private problem is charged to
+   * (the package size minus the test data it replaces). Counts towards the 10 imports an hour per
+   * user. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409
+   * `polygon_package_not_ready`,
    * 409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.
    */
+  @RequirePermission(POLYGON_SYNC_PERMISSION)
   @Post('sync')
   @HttpCode(202)
   sync(
@@ -80,8 +84,7 @@ export class ProblemPolygonLinkController {
    * List a problem's Polygon sync history
    *
    * @remarks
-   * Needs `judge.import_polygon_package` and write access to the problem's test
-   * data. Every finished Polygon import and sync job of the problem, newest
+   * Needs write access to the problem's test data. Every finished Polygon import and sync job of the problem, newest
    * first, also after an unlink: revision, package and its build time, first
    * import or sync, manual or automatic, who started it, the result and, for a
    * failure, the step it stopped at and the error shown to the requester. Paged,
@@ -101,12 +104,15 @@ export class ProblemPolygonLinkController {
    * Switch a problem's Polygon auto-sync
    *
    * @remarks
-   * Needs `judge.import_polygon_package` and write access to the problem's test
+   * Needs `judge.sync_polygon_problem` and write access to the problem's test
    * data. With `autoSync` on, the worker checks Polygon every 10 minutes and
-   * syncs a newer READY package, except while a contest using the problem is
-   * running. Writes a problem revision. Errors: 404 `polygon_not_linked`, 409
+   * syncs a newer READY package as the user who switched it on, except while a
+   * contest using the problem is running; each run needs that user to still
+   * hold the permission and the write access, else it fails and is recorded on
+   * the link. Writes a problem revision. Errors: 404 `polygon_not_linked`, 409
    * `conflict` when the link changed meanwhile.
    */
+  @RequirePermission(POLYGON_SYNC_PERMISSION)
   @Patch()
   update(
     @CurrentAuth() auth: AuthContext,
@@ -120,11 +126,12 @@ export class ProblemPolygonLinkController {
    * Unlink a problem from Polygon
    *
    * @remarks
-   * Needs `judge.import_polygon_package` and write access to the problem's test
+   * Needs `judge.sync_polygon_problem` and write access to the problem's test
    * data. Removes the link only; statement, tests and every other field stay.
    * Writes a problem revision. Answers 204. Errors: 404 `polygon_not_linked`,
    * 409 `conflict` when the link changed meanwhile.
    */
+  @RequirePermission(POLYGON_SYNC_PERMISSION)
   @Delete()
   @HttpCode(204)
   unlink(

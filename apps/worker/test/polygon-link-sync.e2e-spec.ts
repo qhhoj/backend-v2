@@ -183,7 +183,7 @@ describe('Polygon link, sync and auto-sync', () => {
         password: '!',
         isActive: true,
         permissions: [
-          'judge.import_polygon_package',
+          'judge.sync_polygon_problem',
           'judge.edit_own_problem',
           'judge.add_problem',
         ],
@@ -370,7 +370,7 @@ describe('Polygon link, sync and auto-sync', () => {
   it.each([
     ['is deactivated', { isActive: false }, null],
     [
-      'loses the import permission',
+      'loses the sync permission',
       { permissions: ['judge.edit_own_problem'] },
       null,
     ],
@@ -380,7 +380,7 @@ describe('Polygon link, sync and auto-sync', () => {
       { authors: [], curators: [] },
     ],
   ])(
-    'refuses a sync, before downloading, once the linking user %s',
+    'refuses a sync, before downloading, once the requesting user %s',
     async (_case, userChange, problemChange) => {
       const code = `lost_${newId().slice(-8)}`;
       const before = await linked(code);
@@ -394,7 +394,7 @@ describe('Polygon link, sync and auto-sync', () => {
           syncJob(code, { packageId: 11, revision: 4 }, before.dataVersion),
         );
         expect(error).toBe(
-          `${POLYGON_ERROR_PREFIX}the linking user may no longer sync this problem`,
+          `${POLYGON_ERROR_PREFIX}the requesting user may no longer sync this problem`,
         );
         expect(polygon.calls).toEqual([]);
       } finally {
@@ -563,6 +563,43 @@ describe('Polygon link, sync and auto-sync', () => {
         'create',
         'setter',
       );
+    });
+
+    it('meters a sync of an organization-private problem by the package size less the test data it replaces', async () => {
+      await worker.organizations.updateOne(
+        { _id: organizationId },
+        { quotaStorageBytes: 100 },
+      );
+      const before = await linked('org_synced');
+      await worker.problems.updateOne(
+        { code: 'org_synced' },
+        {
+          isOrganizationPrivate: true,
+          organizations: [organizationId],
+          dataBytes: 0,
+        },
+      );
+      polygon.reply('problem.package', {
+        zip: buildPolygonPackage(fixtureNamed('Sum2')),
+      });
+      const sync = () =>
+        runJob(
+          syncJob(
+            'org_synced',
+            { packageId: 11, revision: 4 },
+            before.dataVersion,
+          ),
+        );
+      const refused = await sync();
+      expect(refused.error).toMatch(
+        /^polygon-import: the organization's storage is full: \d+ of 100 bytes used, the package needs \d+ more$/,
+      );
+      expect(await creditsUsed()).toBeUndefined();
+      await worker.problems.updateOne(
+        { code: 'org_synced' },
+        { dataBytes: 10_000_000 },
+      );
+      expect((await sync()).error).toBeNull();
     });
 
     it('gives the credits of one job back once, and none after the write committed', async () => {

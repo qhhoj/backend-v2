@@ -29,11 +29,10 @@ export class ProblemImportsController {
    * Import a Polygon package as a new or existing problem
    *
    * @remarks
-   * Needs `judge.import_polygon_package`; creating a problem also needs
-   * `judge.add_problem`, updating needs write access to the problem's test data.
-   * Without `judge.import_polygon_package`, an organization problem creator
-   * may only create for an organization (`organization` required, no
-   * `update`; else 403 `forbidden`).
+   * Needs the rights of the change: creating a problem needs
+   * `judge.add_problem` (or, with `organization`, that organization's creation
+   * rights), updating needs write access to the problem's test data (else 403
+   * `forbidden`). No Polygon-specific permission.
    * Send the Polygon package as a multipart `file` (a zip with `problem.xml` at
    * its root, up to 512 MiB) and the options in the query string: `code`, `mode`
    * (`create` or `update`), `organization`, authors, curators, group, types,
@@ -65,18 +64,17 @@ export class ProblemImportsController {
    * Get the state of a Polygon import job
    *
    * @remarks
-   * Needs `judge.import_polygon_package`, or the right to create problems for an organization (`judge.create_organization_problem` and an administered organization). Returns the job state (`waiting`,
+   * Returns the job state (`waiting`,
    * `active`, `completed`, `failed`, ...), the imported problem when completed,
    * and the error written for the requester when it failed. Only the user who
    * started the job, or a superuser, can read it; anyone else gets the same 404
    * `not_found` as for an unknown id. Finished jobs stay readable for a day.
    */
   @Get(':jobId')
-  async status(
+  status(
     @CurrentAuth() auth: AuthContext,
     @Param() { jobId }: ImportJobParamDto,
   ): Promise<ImportJobResponse> {
-    await this.imports.assertMayImport(auth.principal);
     return this.imports.status(auth, jobId);
   }
 }

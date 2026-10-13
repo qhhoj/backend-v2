@@ -124,7 +124,7 @@ export class PolygonImportService {
       await this.repository.assertFullMarkupWriter(job);
       if (job.polygon) {
         await this.download(jobId, job.polygon, tracker);
-        await this.quota.assertPackageFits(job, packagePath);
+        await this.quota.assertPackageFits(job, target, packagePath);
       }
       return await this.importPackage(packagePath, job, target, tracker);
     } finally {

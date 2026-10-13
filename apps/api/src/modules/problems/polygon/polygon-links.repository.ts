@@ -17,16 +17,22 @@ export class PolygonLinksRepository {
       .exec();
   }
 
-  /** Writes the switch only while the problem is still linked to the same Polygon problem; false when it is not. */
+  /** Writes the switch only while the problem is still linked to the same Polygon problem; false when it is not. `runAs` becomes the user auto-sync runs as (`linkedBy`). */
   async setAutoSync(
     problemId: string,
     polygonId: number,
     autoSync: boolean,
+    runAs?: string,
   ): Promise<boolean> {
     const { matchedCount } = await this.problems
       .updateOne(
         { _id: problemId, 'polygonLink.problemId': polygonId },
-        { $set: { 'polygonLink.autoSync': autoSync } },
+        {
+          $set: {
+            'polygonLink.autoSync': autoSync,
+            ...(runAs && { 'polygonLink.linkedBy': runAs }),
+          },
+        },
       )
       .exec();
     return matchedCount === 1;

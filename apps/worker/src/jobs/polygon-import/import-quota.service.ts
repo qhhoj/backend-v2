@@ -4,22 +4,26 @@ import type { PolygonSyncStep } from '@libs/database';
 import { QuotaLedger, quotaRefusalOf } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
 import { PolygonImportError } from './polygon-import.error';
+import type { ImportTarget } from './polygon-import.repository';
 
-/** The organization quota of a create the api queued: the storage check of a package downloaded here, and the refund of the credits the api spent when the import fails. */
+/** The organization quota of a Polygon download: the storage check of a package downloaded here (a create or an update, such as a sync), and the refund of the credits the api spent on a create when the import fails. */
 @Injectable()
 export class ImportQuota {
   constructor(private readonly ledger: QuotaLedger) {}
 
-  /** The api checked an uploaded package; a package downloaded from Polygon is checked here, once its size is known. The refusal is written for the requester. */
+  /** The api checked an uploaded package; a package downloaded from Polygon is checked here, once its size is known, as the zip import does: the package size, less the test data it replaces on an update. The refusal is written for the requester. */
   async assertPackageFits(
     job: PolygonImportJob,
+    target: ImportTarget,
     packagePath: string,
   ): Promise<void> {
-    const organizationId = job.meteredOrganizationId;
-    if (job.mode !== 'create' || !organizationId) return;
+    const organizationId = target
+      ? target.storageOrganizationId
+      : job.meteredOrganizationId;
+    if (!organizationId) return;
     const write = {
       usedBytes: await this.ledger.usedStorageBytes(organizationId),
-      addedBytes: (await stat(packagePath)).size,
+      addedBytes: (await stat(packagePath)).size - (target?.dataBytes ?? 0),
     };
     try {
       await this.ledger.assertStorage(organizationId, write);
