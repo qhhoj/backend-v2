@@ -88,11 +88,11 @@ export class ProblemEditingController {
    * `isOrganizationPrivate` (a move) need the organization problem creation
    * rights in every organization added or removed (403
    * `organization_rights`) and `judge.add_problem` to leave every organization
-   * for the site (403 `site_problem_rights`). The code is never renamed: a move
-   * of an organization-private problem needs a code with the new first
-   * organization's prefix in the same request (400 `organization_code_prefix`,
-   * superusers exempt). A move into an organization spends its problem
-   * credits and must fit its storage (403 `quota_exceeded`).
+   * for the site (403 `site_problem_rights`). A move keeps the code; only a
+   * new code of an organization-private problem must carry its first
+   * organization's prefix (400 `organization_code_prefix`, superusers
+   * exempt). A move into an organization spends its problem credits and must
+   * fit its storage (403 `quota_exceeded`).
    */
   @Patch(':code')
   edit(

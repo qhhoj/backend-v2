@@ -78,12 +78,22 @@ describe('OrganizationProblemRules.forEdit: moving a problem between organizatio
       ).resolves.toEqual(ORGANIZATION_FIELDS);
     });
 
-    it('refuses with organization_code_prefix when the code keeps the old prefix (never renamed for the editor)', async () => {
+    it('keeps the old code on a move (no prefix check without a new code)', async () => {
+      await expect(
+        forEdit(
+          original,
+          { organizations: [BETA] },
+          { creates: [ALPHA, BETA] },
+        ),
+      ).resolves.toEqual(ORGANIZATION_FIELDS);
+    });
+
+    it('refuses a new code typed in the same save without the new first organization prefix', async () => {
       expect(
         await issueOf(
           forEdit(
             original,
-            { organizations: [BETA] },
+            { organizations: [BETA], code: 'alpha_bai2' },
             { creates: [ALPHA, BETA] },
           ),
         ),
@@ -146,11 +156,21 @@ describe('OrganizationProblemRules.forEdit: moving a problem between organizatio
         await issueOf(
           forEdit(
             problem('alpha_bai1', [ALPHA, BETA]),
-            { organizations: [BETA, ALPHA], code: 'beta_bai1' },
+            { organizations: [BETA, ALPHA] },
             { creates: [BETA] },
           ),
         ),
       ).toBe('403 organization_rights');
+    });
+
+    it('keeps the code on a reorder with rights in both', async () => {
+      await expect(
+        forEdit(
+          problem('alpha_bai1', [ALPHA, BETA]),
+          { organizations: [BETA, ALPHA] },
+          { creates: [ALPHA, BETA] },
+        ),
+      ).resolves.toEqual(ORGANIZATION_FIELDS);
     });
   });
 
@@ -179,16 +199,14 @@ describe('OrganizationProblemRules.forEdit: moving a problem between organizatio
       ).toBe('403 organization_rights');
     });
 
-    it('checks the prefix when a listed site problem only flips to private', async () => {
-      expect(
-        await issueOf(
-          forEdit(
-            problem('bai1', [ALPHA], false),
-            { isOrganizationPrivate: true },
-            { creates: [ALPHA] },
-          ),
+    it('keeps the code when a listed site problem only flips to private', async () => {
+      await expect(
+        forEdit(
+          problem('bai1', [ALPHA], false),
+          { isOrganizationPrivate: true },
+          { creates: [ALPHA] },
         ),
-      ).toBe('400 organization_code_prefix');
+      ).resolves.toEqual(ORGANIZATION_FIELDS);
     });
   });
 
@@ -243,12 +261,12 @@ describe('OrganizationProblemRules.forEdit: moving a problem between organizatio
       ).resolves.toEqual([]);
     });
 
-    it('still applies the prefix to a non-superuser judge.edit_all_problem holder', async () => {
+    it('still applies the prefix to a new code of a non-superuser judge.edit_all_problem holder', async () => {
       expect(
         await issueOf(
           forEdit(
             problem('alpha_bai1', [ALPHA]),
-            { organizations: [BETA] },
+            { organizations: [BETA], code: 'bai2' },
             { permissions: ['judge.edit_all_problem'] },
           ),
         ),

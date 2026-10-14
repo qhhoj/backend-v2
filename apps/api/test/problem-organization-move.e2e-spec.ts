@@ -112,13 +112,19 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
     expect(await creditsOf(ids.beta)).toBe(0);
   });
 
-  it('refuses the move with organization_code_prefix while the code keeps the old prefix, changing nothing', async () => {
+  it('moves a problem to another organization keeping its code, and checks only a new code against the new prefix', async () => {
     await problem('alpha_two', [ids.alpha]);
-    await patch('owner', 'alpha_two', { organizations: [ids.beta] })
+    await patch('owner', 'alpha_two', {
+      organizations: [ids.beta],
+      code: 'alpha_two_renamed',
+    })
       .expect(400)
       .expect(issueCodes(['organization_code_prefix']));
+    await patch('owner', 'alpha_two', { organizations: [ids.beta] }).expect(
+      200,
+    );
     expect(await stored('alpha_two')).toEqual({
-      organizations: [ids.alpha],
+      organizations: [ids.beta],
       isOrganizationPrivate: true,
     });
   });
