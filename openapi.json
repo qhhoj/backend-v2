@@ -13037,7 +13037,7 @@
             "type": "string"
           },
           "error": {
-            "description": "Compile log or compiler warnings; the judge's internal error message only for editors.",
+            "description": "Compile log or compiler warnings; an internal error's message (it can quote jury data) only for the problem's editors, null for everyone else, the submitter included.",
             "nullable": true,
             "type": "string"
           },
@@ -38346,7 +38346,7 @@
     },
     "/api/internal/submissions/{id}/score": {
       "put": {
-        "description": "Needs `judge.change_submission` and edit rights on the problem (403\n`forbidden`). Sets `result` (a graded verdict) and `points` on the\nproblem's scale; the case results stay as judged. User points, problem\nstatistics and contest results are recomputed as after a judging (an\n`ioi16` contest still scores batches from the judged cases). Sending the\nstored score again changes nothing. 400\n`points_above_problem`, `points_not_partial` (a problem without partial\npoints takes 0 or full) or `accepted_needs_full_points`. 409 `conflict`\nwhile the submission is queued or judged, or is a pending final\nsubmission; 409 `problem_deleted` when the problem is deleted. A rejudge\ndiscards the override unless `lock` locks the submission too. Logged as a\nsubmission revision with `comment`. Answers 204.",
+        "description": "Needs `judge.change_submission` and edit rights on the problem (403\n`forbidden`). Sets `result` (a graded verdict) and `points` on the\nproblem's scale; the case results stay as judged. An internal error's\nmessage moves from the submission to the revision log. User points, problem\nstatistics and contest results are recomputed as after a judging (an\n`ioi16` contest still scores batches from the judged cases). Sending the\nstored score again changes nothing. 400\n`points_above_problem`, `points_not_partial` (a problem without partial\npoints takes 0 or full) or `accepted_needs_full_points`. 409 `conflict`\nwhile the submission is queued or judged, or is a pending final\nsubmission; 409 `problem_deleted` when the problem is deleted. A rejudge\ndiscards the override unless `lock` locks the submission too. Logged as a\nsubmission revision with `comment`. Answers 204.",
         "operationId": "SubmissionActionsController_overrideScore",
         "parameters": [
           {

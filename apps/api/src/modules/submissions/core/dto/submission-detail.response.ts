@@ -92,7 +92,7 @@ export class SubmissionExternalRunResponse {
 }
 
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
-  /** Compile log or compiler warnings; the judge's internal error message only for editors. */
+  /** Compile log or compiler warnings; an internal error's message (it can quote jury data) only for the problem's editors, null for everyone else, the submitter included. */
   error!: string | null;
   /** Number of the case being judged while the submission runs; null unless the viewer sees every case result (it would tell where judging stopped). */
   currentTestcase!: number | null;
@@ -122,14 +122,15 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
     refs: SubmissionRefs,
     {
       visibility,
-      showError,
+      error,
       totalCases,
       lockedAfter,
       actions,
       externalRun,
     }: {
       visibility: CaseVisibility;
-      showError: boolean;
+      /** `shownError` for this viewer. */
+      error: string | null;
       totalCases: number | null;
       lockedAfter: Date | null;
       actions: SubmissionActions;
@@ -138,7 +139,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   ): SubmissionDetailResponse {
     return {
       ...SubmissionListItemResponse.from(submission, refs),
-      error: showError ? submission.error : null,
+      error,
       currentTestcase:
         visibility.cases === 'all' ? submission.currentTestcase : null,
       isPretested: submission.isPretested,

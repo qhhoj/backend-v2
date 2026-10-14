@@ -240,7 +240,7 @@ export class SubmissionsRepository {
   async overrideScore(
     id: string,
     judgeGeneration: number,
-    fields: OverriddenScore & { lockedAfter?: Date },
+    fields: OverriddenScore & { lockedAfter?: Date; error?: null },
   ): Promise<boolean> {
     const { matchedCount } = await this.submissions
       .updateOne(

@@ -5,6 +5,7 @@ import {
   caseVisibility,
   detailAccess,
   listCaseUnit,
+  shownError,
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
@@ -215,6 +216,30 @@ describe('batchSummaries', () => {
       { batch: 1, status: 'TLE', points: 0, total: 3 },
       { batch: 2, status: 'AC', points: 1, total: 1 },
     ]));
+});
+
+describe('shownError', () => {
+  const JURY = "checker failed with exit code 3: FAIL jury's answer is 8";
+
+  it.each([
+    ['an internal error', { status: 'IE', result: 'IE' }],
+    ['a row whose verdict is still IE', { status: 'D', result: 'IE' }],
+  ] as const)(
+    'hides %s from a viewer who cannot edit the problem, shows it to one who can',
+    (_name, row) => {
+      expect(shownError({ ...row, error: JURY }, false)).toBeNull();
+      expect(shownError({ ...row, error: JURY }, true)).toBe(JURY);
+    },
+  );
+
+  it.each([
+    ['a compile log', { status: 'CE', result: 'CE' }],
+    ['compiler warnings on a graded row', { status: 'D', result: 'WA' }],
+  ] as const)('shows %s to every viewer', (_name, row) => {
+    expect(shownError({ ...row, error: 'main.cpp:1: error' }, false)).toBe(
+      'main.cpp:1: error',
+    );
+  });
 });
 
 describe('staffOnlyFilter', () => {

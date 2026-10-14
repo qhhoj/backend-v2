@@ -22,6 +22,7 @@ import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsService } from '../../problems/core/problems.service';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
 import {
+  isInternalError,
   isSubmissionLocked,
   mayAbortSubmission,
   mayLockSubmission,
@@ -33,10 +34,37 @@ import { SubmissionsRepository } from '../core/submissions.repository';
 import { SubmissionsService } from '../core/submissions.service';
 import type { ScoreOverrideDto } from './dto/score-override.dto';
 import { overriddenScore } from './score-override';
+import type { OverriddenScore } from './score-override';
 
 /** `ProblemAccess.canEdit` on the problem, the edit half of every manage check. */
 const editsProblem = (principal: Principal, problem: Problem): boolean =>
   ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem));
+
+/** What a score override writes and logs. The row will read as graded, so `shownError` would show an internal error's message to everyone: the message moves off the row into the revision, which only staff read. */
+const overrideWrites = (
+  submission: Submission,
+  score: OverriddenScore,
+  lockedAfter: Date | undefined,
+) => {
+  const internalError = isInternalError(submission) ? submission.error : null;
+  return {
+    fields: {
+      ...score,
+      ...(lockedAfter && { lockedAfter }),
+      ...(internalError !== null && { error: null }),
+    },
+    changes: {
+      result: { before: submission.result, after: score.result },
+      points: { before: submission.points, after: score.points },
+      ...(lockedAfter && {
+        lockedAfter: { before: submission.lockedAfter, after: lockedAfter },
+      }),
+      ...(internalError !== null && {
+        error: { before: internalError, after: null },
+      }),
+    },
+  };
+};
 
 const cannotManageProblem = (): AppError =>
   new AppError(
@@ -176,11 +204,13 @@ export class SubmissionActionsService {
       submission.caseTotal === score.caseTotal &&
       !lockedAfter;
     if (isUnchanged) return;
+    const { fields, changes } = overrideWrites(submission, score, lockedAfter);
     if (
-      !(await this.submissions.overrideScore(id, submission.judgeGeneration, {
-        ...score,
-        ...(lockedAfter && { lockedAfter }),
-      }))
+      !(await this.submissions.overrideScore(
+        id,
+        submission.judgeGeneration,
+        fields,
+      ))
     )
       throw new AppError(
         'conflict',
@@ -192,13 +222,7 @@ export class SubmissionActionsService {
       entityId: id,
       action: 'override_score',
       userId: principal.userId,
-      changes: {
-        result: { before: submission.result, after: score.result },
-        points: { before: submission.points, after: score.points },
-        ...(lockedAfter && {
-          lockedAfter: { before: submission.lockedAfter, after: lockedAfter },
-        }),
-      },
+      changes,
       comment: dto.comment,
     });
     await this.notifyGraded(submission);

@@ -81,7 +81,8 @@ export class SubmissionActionsController {
    * @remarks
    * Needs `judge.change_submission` and edit rights on the problem (403
    * `forbidden`). Sets `result` (a graded verdict) and `points` on the
-   * problem's scale; the case results stay as judged. User points, problem
+   * problem's scale; the case results stay as judged. An internal error's
+   * message moves from the submission to the revision log. User points, problem
    * statistics and contest results are recomputed as after a judging (an
    * `ioi16` contest still scores batches from the judged cases). Sending the
    * stored score again changes nothing. 400

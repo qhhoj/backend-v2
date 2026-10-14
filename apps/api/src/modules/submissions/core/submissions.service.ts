@@ -25,6 +25,7 @@ import {
   caseVisibility,
   detailAccess,
   listCaseUnit,
+  shownError,
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
@@ -248,7 +249,7 @@ export class SubmissionsService {
       },
       {
         visibility,
-        showError: canEdit || submission.status !== 'IE',
+        error: shownError(submission, canEdit),
         totalCases,
         lockedAfter: canEdit ? submission.lockedAfter : null,
         actions,
