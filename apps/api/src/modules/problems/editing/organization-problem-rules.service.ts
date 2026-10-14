@@ -34,7 +34,7 @@ const refusal = (code: string, message: string) =>
 export class OrganizationProblemRules {
   constructor(private readonly rights: OrganizationCreationRights) {}
 
-  /** Authorizes an organization move, checks the prefix when the code or the organizations change, and returns the gates the editor may skip. */
+  /** Authorizes an organization move, checks the prefix of a new code, and returns the gates the editor may skip. */
   async forEdit(
     principal: Principal,
     original: ProblemDocument,
@@ -110,7 +110,7 @@ export class OrganizationProblemRules {
     );
   }
 
-  /** Existing codes are never re-checked: only a new code, a new organization list, or a flip to private, of an organization-private problem (a site problem merely listed under an organization keeps its code). A move never renames: the same save must carry a code with the new prefix. */
+  /** Only a new code of an organization-private problem must carry the prefix of its (new) first organization. Existing codes are never re-checked: a move between organizations, a flip to private or a reorder keeps the code (user decision 2026-10-14). */
   private async assertPrefixOnChange(
     principal: Principal,
     original: ProblemDocument,
@@ -118,14 +118,7 @@ export class OrganizationProblemRules {
     organizations: string[],
   ): Promise<void> {
     const code = fields.code ?? original.code;
-    const isRenamed = code !== original.code;
-    const isRelisted =
-      fields.organizations !== undefined &&
-      !sameJson(organizations, original.organizations.map(uuidStr));
-    const becamePrivate =
-      fields.isOrganizationPrivate === true && !original.isOrganizationPrivate;
-    if (principal.isSuperuser || !(isRenamed || isRelisted || becamePrivate))
-      return;
+    if (principal.isSuperuser || code === original.code) return;
     const slug = await this.rights.firstSlug(organizations);
     if (slug !== null)
       assertOrganizationCodePrefix(
