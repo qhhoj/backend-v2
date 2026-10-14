@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.29.1
+
+### Patch Changes
+
+- 4482cc9: Moving a problem between organizations keeps its code: the organization prefix is checked only for a new code (and on create and import), not on a move, a flip to private or a reorder.
+
 ## 2.29.0
 
 ### Minor Changes
