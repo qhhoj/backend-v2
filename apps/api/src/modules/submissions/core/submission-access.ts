@@ -3,6 +3,7 @@ import type { Principal } from '@libs/auth';
 import { IN_FLIGHT_STATUSES, UNFINISHED_STATUSES } from '@libs/database';
 import type {
   CaseStatus,
+  Submission,
   SubmissionCase,
   SubmissionStatus,
 } from '@libs/database';
@@ -96,6 +97,20 @@ export function caseVisibility(
       (problem.testcaseVisibility === 'C' && !isInContest),
   };
 }
+
+/** An internal error's `error` is the judge's own message, which can quote jury data (a checker's `FAIL` line). */
+export const isInternalError = ({
+  status,
+  result,
+}: Pick<Submission, 'status' | 'result'>): boolean =>
+  status === 'IE' || result === 'IE';
+
+/** The only gate on a submission's `error` text: an internal error's message reaches the problem's editors alone (`ProblemAccess.canEdit`, the staff-actions rule), even the submitter sees null; a compile log or compiler warnings reach whoever may see the submission. */
+export const shownError = (
+  submission: Pick<Submission, 'status' | 'result' | 'error'>,
+  canEdit: boolean,
+): string | null =>
+  canEdit || !isInternalError(submission) ? submission.error : null;
 
 /** What a list row shows of a submission's test results: every case, the batch summaries, or nothing. */
 export type ListCaseUnit = 'case' | 'batch';
