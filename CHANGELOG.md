@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.29.2
+
+### Patch Changes
+
+- 7e33f05: Internal-error messages (they can quote jury data) reach only the problem's editors: one `shownError` gate on the submission `error`, and a score override moves the message from the row to its revision.
+
 ## 2.29.1
 
 ### Patch Changes
