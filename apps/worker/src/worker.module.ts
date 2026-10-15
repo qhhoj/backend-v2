@@ -28,6 +28,7 @@ import { SourceCheckModule } from './jobs/source-check/source-check.module';
 import { PolygonImportModule } from './jobs/polygon-import/polygon-import.module';
 import { PolygonAutoSyncModule } from './jobs/polygon-autosync/polygon-autosync.module';
 import { PermissionRenameModule } from './jobs/permission-rename/permission-rename.module';
+import { IeOverrideCleanupModule } from './jobs/ie-override-cleanup/ie-override-cleanup.module';
 import { ProblemRescoreModule } from './jobs/problem-rescore/problem-rescore.module';
 import { ProblemSolversModule } from './jobs/problem-solvers/problem-solvers.module';
 import { SubmissionEffectsModule } from './jobs/submission-effects/submission-effects.module';
@@ -56,6 +57,7 @@ import { NotificationTrimModule } from './jobs/notification-trim/notification-tr
     SourceCheckModule,
     PolygonAutoSyncModule,
     PermissionRenameModule,
+    IeOverrideCleanupModule,
     ProblemDataBytesModule,
     SubmissionEffectsModule,
     EffectsSweepModule,
