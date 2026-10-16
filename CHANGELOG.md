@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.29.4
+
+### Patch Changes
+
+- 9ca5921: Worker boot empties contest summaries that hold the old site's format options as JSON (copying an option the stored format config lacks), and logs found/cleared counts and the contest keys.
+
 ## 2.29.3
 
 ### Patch Changes
