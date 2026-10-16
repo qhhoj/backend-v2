@@ -76,6 +76,7 @@ Decisions that still hold in the code, with the reason. Conventions and how-tos 
 - `check-files` (referenced problem data and media exist, never escaping their roots) and `check-integrity` (references, counts, rating coverage against the legacy source) are the post-recompute gates; the cutover runbook in `deploy/RUNBOOK.md` fixes their order.
 - The migrator never loads `Env` — it reads `process.env` directly and a job fails with `<NAME> is required` (see the README env table).
 - `migrator audit` runs read-only pre-import checks (zero dates, invalid JSON, case-only duplicates, unsupported hashes, WebAuthn rows); the id map is looked up per batch, never cached whole, and failed commands exit 1 — the legacy dump has 13M-row log tables and cutover scripts must see failures.
+- Contest summary cleanup (2026-10-16): the worker boot routine `ContestSummaryCleanupService` (one-off, idempotent) empties a contest `summary` that is a JSON object of legacy format options (`cumtime`, `penalty`, `LSO`, ...) and copies only a key the stored `formatConfig` lacks; a stored key, default included, always wins. Why: an organiser typed the options into the old site's summary box (its `format_config` stayed NULL) and the migrator copied the summary verbatim, so the hero and link previews showed raw JSON; the old site ranked with the defaults, so a finished contest's ranking must not change. The migrator was removed in #20 and never re-runs, so there is no import code left to fix.
 
 ## Problems
 
