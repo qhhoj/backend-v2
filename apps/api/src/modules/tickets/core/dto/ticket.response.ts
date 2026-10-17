@@ -65,6 +65,8 @@ export class TicketPermissionsResponse {
   markGood!: boolean;
   /** The caller may change the assignees. */
   assign!: boolean;
+  /** The caller may take the ticket on themselves or hand it back (`POST`/`DELETE /tickets/{id}/claim`). */
+  claim!: boolean;
 }
 
 /** A state change of the ticket, shown between the messages. */

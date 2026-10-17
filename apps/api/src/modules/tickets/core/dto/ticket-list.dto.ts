@@ -6,11 +6,12 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Length,
   Max,
   Min,
 } from 'class-validator';
 import { toArray } from '@libs/common';
-import { toBoolean } from '../../../problems/core/dto/transforms';
+import { toBoolean, trim } from '../../../problems/core/dto/transforms';
 
 export class TicketPageQueryDto {
   /** 1-based page number. */
@@ -31,6 +32,15 @@ export class TicketListQueryDto extends TicketPageQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() awaiting?: boolean;
   /** true limits the list to tickets the caller filed or is assigned to. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() own?: boolean;
+  /** true limits the list to tickets about what the caller authors, curates or suggested (their problems), whatever else they may read. */
+  @IsOptional() @Transform(toBoolean) @IsBoolean() aboutMine?: boolean;
+  /** Text in the title (case-insensitive), or the exact username of the creator. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  // eslint-disable-next-line id-length -- the wire name, shared with the problem and contest lists
+  q?: string;
   /** Usernames of ticket creators; repeat the parameter, at most 10. */
   @IsOptional()
   @Transform(toArray)
