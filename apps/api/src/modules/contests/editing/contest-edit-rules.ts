@@ -80,7 +80,7 @@ export function assertWindow(principal: Principal, contest: Contest): void {
     );
 }
 
-/** A gate fires only when the request changes the value; making a contest visible needs `change_contest_visibility`, or `create_private_contest` for a private one (legacy `save_model`). */
+/** A gate fires only when the request changes the value (legacy `get_readonly_fields`); then the visibility rules. */
 export function assertGates(
   principal: Principal,
   fields: Partial<Contest>,
@@ -98,17 +98,37 @@ export function assertGates(
         403,
         `Changing ${field === 'accessCodeHash' ? 'accessCode' : field} requires ${permission}`,
       );
+  assertVisibility(principal, fields, baseline, merged);
+}
+
+/**
+ * Showing a contest to everyone needs `change_contest_visibility`: making it visible (or, for a private one,
+ * `create_private_contest`; legacy `save_model`), and opening a visible private contest to everyone.
+ */
+function assertVisibility(
+  principal: Principal,
+  fields: Partial<Contest>,
+  baseline: Record<string, unknown>,
+  merged: Contest,
+): void {
+  if (hasPermission(principal, 'judge.change_contest_visibility')) return;
+  const isPrivate = merged.isPrivate || merged.isOrganizationPrivate;
   if (
     fields.isVisible === true &&
     baseline.isVisible !== true &&
-    !hasPermission(principal, 'judge.change_contest_visibility')
-  ) {
-    const privately = merged.isPrivate || merged.isOrganizationPrivate;
-    if (!privately || !hasPermission(principal, 'judge.create_private_contest'))
-      throw new AppError(
-        'forbidden',
-        403,
-        'Making a contest visible requires judge.change_contest_visibility',
-      );
-  }
+    (!isPrivate || !hasPermission(principal, 'judge.create_private_contest'))
+  )
+    throw new AppError(
+      'forbidden',
+      403,
+      'Making a contest visible requires judge.change_contest_visibility',
+    );
+  const wasPrivate =
+    baseline.isPrivate === true || baseline.isOrganizationPrivate === true;
+  if (merged.isVisible && wasPrivate && !isPrivate)
+    throw new AppError(
+      'forbidden',
+      403,
+      'Making a visible private contest public requires judge.change_contest_visibility',
+    );
 }

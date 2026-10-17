@@ -9,9 +9,12 @@ import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import {
+  leavesForSite,
   ORGANIZATION_RIGHTS_ISSUE,
+  organizationRightsRefusal,
   organizationsToAuthorize,
-} from '../../problems/editing/organization-move';
+  SITE_CONTEST_RIGHTS_ISSUE,
+} from '../../organizations/creation/organization-move';
 import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 import { ContestTagsQuerier } from '../tags/contest-tags.querier';
 import type { ContestDocument } from '../core/contests.repository';
@@ -245,19 +248,22 @@ export class ContestEditFieldsService {
   }
 
   /**
-   * An editor without `judge.edit_all_contest` adds, removes or flips only organizations they may create contests for
-   * (the organization creation rule, as for problems): an organization administrator never moves a contest into another
-   * organization. 403 with `organization_rights` on `organizations` otherwise.
+   * An editor who creates contests only for organizations (no `judge.add_contest` or `judge.edit_all_contest`) adds,
+   * removes or flips only organizations they may create contests for (the organization creation rule, as for problems),
+   * and never moves a contest out of every organization onto the site. Site contest creators keep choosing any
+   * organization, as in legacy. `current` is null for a new contest (create and clone). 403 with an issue code on
+   * `organizations` otherwise.
    */
-  private async assertOrganizationRights(
+  async assertOrganizationRights(
     principal: Principal,
     fields: Partial<Contest>,
-    current: ContestDocument | null,
+    current: Pick<Contest, 'organizations' | 'isOrganizationPrivate'> | null,
   ): Promise<void> {
     if (
       (fields.organizations === undefined &&
         fields.isOrganizationPrivate === undefined) ||
-      hasPermission(principal, 'judge.edit_all_contest')
+      hasPermission(principal, 'judge.edit_all_contest') ||
+      hasPermission(principal, 'judge.add_contest')
     )
       return;
     const before = {
@@ -276,21 +282,14 @@ export class ContestEditFieldsService {
       needed.length &&
       !(await this.rights.createsContestsInEach(principal, needed))
     )
-      throw new AppError(
-        'forbidden',
-        403,
+      throw organizationRightsRefusal(
+        ORGANIZATION_RIGHTS_ISSUE,
         'Adding or removing an organization needs the right to create contests in it',
-        undefined,
-        undefined,
-        {
-          issues: [
-            {
-              field: 'organizations',
-              code: ORGANIZATION_RIGHTS_ISSUE,
-              message: 'No right to create contests in this organization.',
-            },
-          ],
-        },
+      );
+    if (leavesForSite(before, after))
+      throw organizationRightsRefusal(
+        SITE_CONTEST_RIGHTS_ISSUE,
+        'Moving a contest out of every organization onto the site requires judge.add_contest',
       );
   }
 

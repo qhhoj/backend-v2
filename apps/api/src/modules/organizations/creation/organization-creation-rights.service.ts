@@ -28,6 +28,13 @@ export interface CreationScope {
 }
 
 const LIVE = { deletedAt: null };
+
+/** Whether the rule allows the viewer in every one of these organization rows. */
+const allowedInRows = (
+  principal: Principal,
+  rows: Organization[],
+  rule: CreateRule,
+) => rows.every((row) => rule(principal, OrganizationAccess.accessView(row)));
 /** What `OrganizationAccess.accessView` reads. */
 const ACCESS_FIELDS = { _id: 1, isUnlisted: 1, adminIds: 1 };
 
@@ -62,7 +69,10 @@ export class OrganizationCreationRights {
     organizationIds: readonly string[],
   ): Promise<boolean> {
     const rows = await this.liveAccessRows(organizationIds);
-    return rows.length > 0 && this.createsProblemsInRows(principal, rows);
+    return (
+      rows.length > 0 &&
+      allowedInRows(principal, rows, OrganizationAccess.canCreateProblem)
+    );
   }
 
   /** Whether every one of these ids is a live organization the viewer may create problems for: an unknown or deleted id refuses (moving a problem between organizations). */
@@ -157,19 +167,7 @@ export class OrganizationCreationRights {
     const rows = await this.liveAccessRows(organizationIds);
     return (
       rows.length === new Set(organizationIds).size &&
-      rows.every((row) => rule(principal, OrganizationAccess.accessView(row)))
-    );
-  }
-
-  private createsProblemsInRows(
-    principal: Principal,
-    rows: Organization[],
-  ): boolean {
-    return rows.every((row) =>
-      OrganizationAccess.canCreateProblem(
-        principal,
-        OrganizationAccess.accessView(row),
-      ),
+      allowedInRows(principal, rows, rule)
     );
   }
 

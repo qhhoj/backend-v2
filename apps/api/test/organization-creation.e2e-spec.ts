@@ -1,6 +1,7 @@
 import { uuidStr } from '@libs/database';
 import { createOrganization, organizationUrl } from './organization-fixtures';
-import { hoursFromNow } from './contest-fixtures';
+import type { Contest } from '@libs/database';
+import { createContest, hoursFromNow } from './contest-fixtures';
 import {
   authed,
   createUserWith,
@@ -297,6 +298,8 @@ describe('creating problems and contests for an organization', () => {
 
   describe("another organization's contests and problems", () => {
     let rivalId: string;
+    let setterId: string;
+    let setterOrganizationId: string;
     const patchContestAs = (who: string, key: string, body: object) =>
       authed(
         api.http().patch(`/api/internal/contests/${key}`),
@@ -318,6 +321,17 @@ describe('creating problems and contests for an organization', () => {
         adminIds: [outsiderId],
       });
       rivalId = uuidStr(rival._id);
+      setterId = await person('setter', {
+        permissions: [...ORG_ADMIN_RIGHTS, 'judge.clone_contest'],
+      });
+      await person('siteSetter', {
+        permissions: ['judge.add_contest', 'judge.create_private_contest'],
+      });
+      const setterOrganization = await createOrganization(api, {
+        slug: 'setterorg',
+        adminIds: [setterId],
+      });
+      setterOrganizationId = uuidStr(setterOrganization._id);
     });
 
     it('refuses an organization administrator moving their contest into an organization they do not administer', async () => {
@@ -347,6 +361,9 @@ describe('creating problems and contests for an organization', () => {
         name: 'Kiểm tra giữa kỳ',
         organizations: [organizationId],
       }).expect(200);
+      expect((await api.contests.findOne({ key }).lean())?.name).toBe(
+        'Kiểm tra giữa kỳ',
+      );
     });
 
     it("hides an organization's contest and problem from another organization's administrator, who cannot edit them", async () => {
@@ -369,6 +386,81 @@ describe('creating problems and contests for an organization', () => {
       expect((await storedProblem('thptdemo_foreign'))?.name).toBe(
         'Tổng hai số',
       );
+    });
+
+    /** A contest stored directly (as staff would leave it), with `teacher` and `setter` as authors. */
+    const staffContest = (key: string, overrides: Partial<Contest>) =>
+      createContest(api, {
+        key,
+        isVisible: false,
+        isOrganizationPrivate: true,
+        authors: [teacherId, setterId],
+        ...overrides,
+      });
+
+    it('refuses removing an organization the editor does not administer', async () => {
+      await staffContest('kt_remove_rival', {
+        organizations: [organizationId, rivalId],
+      });
+      await patchContestAs('teacher', 'kt_remove_rival', {
+        organizations: [organizationId],
+      })
+        .expect(403)
+        .expect(issueCodes(['organization_rights']));
+      expect(await storedOrganizations('kt_remove_rival')).toEqual([
+        organizationId,
+        rivalId,
+      ]);
+    });
+
+    it('refuses an organization administrator taking a contest out of every organization onto the site', async () => {
+      const key = await teacherContest('kt_to_site');
+      await patchContestAs('teacher', key, { isOrganizationPrivate: false })
+        .expect(403)
+        .expect(issueCodes(['site_contest_rights']));
+      expect(
+        (await api.contests.findOne({ key }).lean())?.isOrganizationPrivate,
+      ).toBe(true);
+    });
+
+    it('refuses opening a visible private contest to everyone without judge.change_contest_visibility', async () => {
+      await staffContest('kt_visible', {
+        organizations: [setterOrganizationId],
+        isVisible: true,
+      });
+      await patchContestAs('setter', 'kt_visible', {
+        isOrganizationPrivate: false,
+      })
+        .expect(403)
+        .expect(({ body }: { body: { error: { message: string } } }) =>
+          expect(body.error.message).toMatch(/change_contest_visibility/),
+        );
+      expect(
+        (await api.contests.findOne({ key: 'kt_visible' }).lean())
+          ?.isOrganizationPrivate,
+      ).toBe(true);
+    });
+
+    it('lets a site contest creator list any organization, as in legacy', async () => {
+      await authed(
+        api.http().post('/api/internal/contests'),
+        sessions.siteSetter,
+      )
+        .send(contestBody('kt_site_rival', { organizations: [rivalId] }))
+        .expect(201);
+      expect(await storedOrganizations('kt_site_rival')).toEqual([rivalId]);
+    });
+
+    it('refuses cloning a contest into an organization the cloner does not administer', async () => {
+      await staffContest('kt_clone_src', { organizations: [rivalId] });
+      await authed(
+        api.http().post('/api/internal/contests/kt_clone_src/clone'),
+        sessions.setter,
+      )
+        .send({ key: 'kt_clone_copy' })
+        .expect(403)
+        .expect(issueCodes(['organization_rights']));
+      expect(await api.contests.findOne({ key: 'kt_clone_copy' })).toBeNull();
     });
 
     it('lets a superuser move a contest into any organization', async () => {

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, sameJson } from '@libs/common';
+import { sameJson } from '@libs/common';
 import { organizationCodePrefix } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
@@ -11,10 +11,11 @@ import { assertOrganizationCodePrefix } from './organization-code-prefix';
 import {
   leavesForSite,
   ORGANIZATION_RIGHTS_ISSUE,
+  organizationRightsRefusal,
   organizationsToAuthorize,
   SITE_PROBLEM_RIGHTS_ISSUE,
-} from './organization-move';
-import type { OrganizationScope } from './organization-move';
+} from '../../organizations/creation/organization-move';
+import type { OrganizationScope } from '../../organizations/creation/organization-move';
 import { MEMBERS_ONLY_VISIBILITY } from './problem-edit-policy.service';
 import type { ProblemDocument } from '../core/problems.repository';
 
@@ -23,11 +24,6 @@ const ORGANIZATION_FIELDS: ReadonlyArray<keyof CreateProblemDto> = [
   'organizations',
   'isOrganizationPrivate',
 ];
-
-const refusal = (code: string, message: string) =>
-  new AppError('forbidden', 403, message, undefined, undefined, {
-    issues: [{ field: 'organizations', code, message }],
-  });
 
 /** The organization rules of a problem edit: moving between organizations, the code prefix, members-only publishing and file uploads by organization creators. */
 @Injectable()
@@ -84,12 +80,12 @@ export class OrganizationProblemRules {
     const needed = organizationsToAuthorize(before, after);
     const isSiteMove = leavesForSite(before, after);
     if (!(await this.rights.createsProblemsInEach(principal, needed)))
-      throw refusal(
+      throw organizationRightsRefusal(
         ORGANIZATION_RIGHTS_ISSUE,
         'Adding or removing an organization needs the right to create problems in it',
       );
     if (isSiteMove && !hasPermission(principal, 'judge.add_problem'))
-      throw refusal(
+      throw organizationRightsRefusal(
         SITE_PROBLEM_RIGHTS_ISSUE,
         'Moving a problem out of every organization onto the site requires judge.add_problem',
       );

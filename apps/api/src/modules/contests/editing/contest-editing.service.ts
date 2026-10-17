@@ -78,6 +78,16 @@ const publishTarget = (contest: Contest): PublishTarget => ({
   publishAfterEnd: contest.publishAfterEnd,
 });
 
+/** Matches the contest only while its organization fields are still `contest`'s; an empty list also matches a legacy row without the field. */
+function unchangedOrganizations(contest: Contest): FilterQuery<Contest> {
+  return {
+    ...(contest.organizations.length
+      ? { organizations: contest.organizations }
+      : { 'organizations.0': { $exists: false } }),
+    isOrganizationPrivate: contest.isOrganizationPrivate ? true : { $ne: true },
+  };
+}
+
 @Injectable()
 export class ContestEditingService {
   private readonly logger = new Logger(ContestEditingService.name);
@@ -128,6 +138,14 @@ export class ContestEditingService {
       };
     void [_id, createdAt, updatedAt];
     const ids = (values: readonly string[]) => values.map(uuidStr);
+    await this.editFields.assertOrganizationRights(
+      principal,
+      {
+        organizations: ids(copied.organizations),
+        isOrganizationPrivate: copied.isOrganizationPrivate,
+      },
+      null,
+    );
     const contest = await this.insert(principal, {
       ...copied,
       ...(startTime && shiftedWindow(copied, new Date(startTime))),
@@ -210,7 +228,12 @@ export class ContestEditingService {
   ): Promise<ContestDetailResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
     const fields = await this.editFields.toFields(principal, dto, contest);
-    await this.applyFields(principal, contest, fields);
+    // The organization rights were checked against these stored values, so the save holds only while they are unchanged.
+    const touchesOrganizations =
+      fields.organizations !== undefined ||
+      fields.isOrganizationPrivate !== undefined;
+    const guard = touchesOrganizations ? unchangedOrganizations(contest) : {};
+    await this.applyFields(principal, contest, fields, guard);
     return this.contestsService.detail(principal, key);
   }
 
