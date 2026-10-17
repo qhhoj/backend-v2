@@ -18,6 +18,11 @@ import type {
 
 export type TicketDocument = HydratedDocument<Ticket>;
 
+/** What a new ticket is about: a problem or contest by id, or a page by url (stored as a `generalIssues` row). */
+export type NewTicketLink =
+  | { type: 'problem' | 'contest'; id: string }
+  | { type: 'general'; issueUrl: string };
+
 /** Message and timeline arrays hold up to 500 and 200 rows: only the detail loads them. */
 const WITHOUT_MESSAGES = { messages: 0, events: 0 } as const;
 /** List rows carry neither messages, timeline nor staff notes. */
@@ -26,7 +31,13 @@ const LIST_PROJECTION = { messages: 0, events: 0, notes: 0 } as const;
 export type TicketChanges = Partial<
   Pick<
     Ticket,
-    'isOpen' | 'isContributive' | 'notes' | 'assignees' | 'title' | 'linkedItem'
+    | 'isOpen'
+    | 'isContributive'
+    | 'notes'
+    | 'assignees'
+    | 'title'
+    | 'linkedItem'
+    | 'contest'
   >
 >;
 
@@ -115,13 +126,12 @@ export class TicketsRepository {
   /** A general ticket's issue row and the ticket commit together. */
   async create(
     fields: Omit<Partial<Ticket>, 'linkedItem'>,
-    link:
-      { type: 'problem'; id: string } | { type: 'general'; issueUrl: string },
+    link: NewTicketLink,
   ): Promise<TicketDocument> {
     let created!: TicketDocument;
     await this.connection.transaction(async (session) => {
       const linkedItem =
-        link.type === 'problem'
+        link.type !== 'general'
           ? { type: link.type, id: link.id }
           : {
               type: link.type,

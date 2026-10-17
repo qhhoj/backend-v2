@@ -14,6 +14,8 @@ export const TICKET_ASSIGNEES_MAX = 20;
 export const ticketPath = (id: string): string => `/ticket/${id}`;
 export const problemPath = (code: string): string =>
   `/problem/${encodeURIComponent(code)}`;
+export const contestPath = (key: string): string =>
+  `/contests/${encodeURIComponent(key)}`;
 
 /** Legacy `Message: ` prefix, then the first 100 code points of the whole line. */
 export const ticketMessageDescription = (body: string): string =>
