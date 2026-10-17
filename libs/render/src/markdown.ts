@@ -21,6 +21,13 @@ import {
   isUserAuthored,
   RenderStyle,
 } from './styles';
+import {
+  problemReferenceRule,
+  renderProblemReference,
+} from './problem-reference';
+import type { ProblemLinks } from './problem-reference';
+
+export type { ProblemLinks } from './problem-reference';
 import { renderUserReference, userReferenceRule } from './user-reference';
 
 export { renderMath } from './math';
@@ -30,6 +37,8 @@ type RenderEnv = {
   budget: MathBudget;
   /** The `blog` style only: formulas wait here (KaTeX HTML is trusted) while the author's HTML is sanitized. */
   deferredMath?: { nonce: string; formulas: string[] };
+  /** `#C` problem references: label → href; absent, `#C` stays text. */
+  problemLinks?: ProblemLinks;
 };
 
 /** A slot element standing for the formula; sanitizing leaves it alone and `spliceMath` replaces it. */
@@ -89,6 +98,11 @@ function createMarkdown({
   markdown.inline.ruler.before('escape', 'math_inline', mathInlineRule);
   markdown.inline.ruler.before('strikethrough', 'math_tilde', mathTildeRule);
   markdown.inline.ruler.before('link', 'user_reference', userReferenceRule);
+  markdown.inline.ruler.before(
+    'link',
+    'problem_reference',
+    problemReferenceRule,
+  );
   markdown.block.ruler.before('blockquote', 'spoiler', spoilerRule, {
     alt: ['paragraph', 'reference', 'blockquote', 'list'],
   });
@@ -101,6 +115,7 @@ function createMarkdown({
       formulaHtml(env as RenderEnv, tex, displayMode),
     );
   markdown.renderer.rules.user_reference = renderUserReference;
+  markdown.renderer.rules.problem_reference = renderProblemReference;
   // eslint-disable-next-line no-restricted-syntax -- markdown-it's renderer rule signature
   markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
     const token = tokens[index];
@@ -135,10 +150,15 @@ const assertWithinMarkupLimits = (html: string): void => {
     );
 };
 
-/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. The `blog` style sanitizes the author's HTML with formulas held aside (KaTeX output is trusted and spliced in afterwards, never sharing the author's sanitizer pass). Throws `RenderLimitError` when the markup is too large or too deeply nested. */
-export function renderMarkdown(text: string, style: RenderStyle): string {
+/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. The `blog` style sanitizes the author's HTML with formulas held aside (KaTeX output is trusted and spliced in afterwards, never sharing the author's sanitizer pass). Throws `RenderLimitError` when the markup is too large or too deeply nested. `problemLinks` turns `#C` into a link to the problem labelled C. */
+export function renderMarkdown(
+  text: string,
+  style: RenderStyle,
+  { problemLinks }: { problemLinks?: ProblemLinks } = {},
+): string {
   const env: RenderEnv = {
     budget: createMathBudget(isUserAuthored(style)),
+    problemLinks,
     ...(style === 'blog'
       ? {
           deferredMath: {

@@ -8,17 +8,25 @@ import {
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
 
 export class TicketLinkResponse {
-  /** problem for a ticket about a problem, general for a site issue. */
+  /** problem for a ticket about a problem, general for a site issue, contest for a question to a contest's organisers. */
   @ApiProperty({ enum: TICKET_LINK_TYPES })
   type!: TicketLinkType;
-  /** Id of the problem or issue. */
+  /** Id of the problem, issue or contest. */
   id!: string;
-  /** The problem code; null for a general issue and for a deleted problem. */
+  /** The problem code or contest key; null for a general issue and for a deleted problem or contest. */
   key!: string | null;
-  /** The problem name, or the issue url. */
+  /** The problem or contest name, or the issue url. */
   title!: string;
-  /** SPA path for a problem, the absolute url for a general issue; empty when the problem is gone. */
+  /** SPA path for a problem or contest, the absolute url for a general issue; empty when the problem or contest is gone. */
   url!: string;
+}
+
+/** The contest a ticket was filed from. */
+export class TicketContestResponse {
+  /** Contest key. */
+  key!: string;
+  /** Contest name. */
+  name!: string;
 }
 
 export class TicketListItemResponse {
@@ -32,6 +40,8 @@ export class TicketListItemResponse {
   assignees!: UserSummaryResponse[];
   /** What the ticket is about. */
   link!: TicketLinkResponse;
+  /** The contest it was filed from, whose editors read it; null outside a contest. */
+  contest!: TicketContestResponse | null;
   /** False once the ticket is closed. */
   isOpen!: boolean;
   /**

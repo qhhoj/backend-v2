@@ -71,8 +71,18 @@ afterAll(() => api.teardown());
         problem: problem._id,
       });
       await softDelete(api, problem._id);
-      const links = await api.app.get(TicketContextService).links([ticket]);
-      expect(links.get(ticket._id)).toEqual({
+      const subjects = await api.app.get(TicketContextService).subjects(
+        {
+          userId: creator.id,
+          username: 'creator',
+          isSuperuser: false,
+          isStaff: false,
+          permissions: new Set(),
+          organizationIds: [],
+        },
+        [ticket],
+      );
+      expect(subjects.get(ticket._id)?.link).toEqual({
         type: 'problem',
         id: problem._id,
         key: null,

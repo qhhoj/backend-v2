@@ -1,4 +1,5 @@
 import type { Principal } from '@libs/auth';
+import type { ContestAccessView } from '../../contests/core/contest-access';
 import type { ProblemAccessView } from '../../problems/core/problem-access';
 import { TicketAccess } from './ticket-access';
 import type { TicketAccessView } from './ticket-access';
@@ -24,10 +25,33 @@ const problem = (
   suggester: null,
   ...extra,
 });
+const contest = (
+  extra: Partial<ContestAccessView> = {},
+): ContestAccessView => ({
+  isVisible: true,
+  isPrivate: false,
+  isOrganizationPrivate: false,
+  organizations: [],
+  privateContestants: [],
+  authors: [],
+  curators: [],
+  testers: [],
+  viewContestScoreboard: [],
+  balloonStaff: [],
+  scoreboardVisibility: 'V',
+  showSubmissionList: false,
+  startTime: new Date(0),
+  endTime: new Date(1),
+  timeLimit: null,
+  frozenLastMinutes: 0,
+  formatName: 'default',
+  ...extra,
+});
 const view = (extra: Partial<TicketAccessView> = {}): TicketAccessView => ({
   creator: 'creator',
   assignees: ['assignee'],
   problem: null,
+  contest: null,
   ...extra,
 });
 
@@ -54,6 +78,31 @@ describe('TicketAccess', () => {
         principalWith(['judge.edit_own_problem']),
         view({ problem: problem() }),
       ),
+    ).toBe(false);
+  });
+
+  it('reads: an editor of the contest the ticket was filed from, not its testers or other contestants', () => {
+    const editOwn = ['judge.edit_own_contest'];
+    const filed = view({
+      contest: contest({
+        authors: ['author'],
+        curators: ['curator'],
+        testers: ['me'],
+      }),
+    });
+    expect(TicketAccess.canSee(principalWith(editOwn, 'author'), filed)).toBe(
+      true,
+    );
+    expect(TicketAccess.canSee(principalWith(editOwn, 'curator'), filed)).toBe(
+      true,
+    );
+    expect(TicketAccess.canSee(principalWith(editOwn), filed)).toBe(false);
+    expect(TicketAccess.canSee(principalWith([], 'author'), filed)).toBe(false);
+    expect(
+      TicketAccess.canSee(principalWith(['judge.edit_all_contest']), filed),
+    ).toBe(true);
+    expect(
+      TicketAccess.canSee(principalWith(['judge.edit_all_contest']), view()),
     ).toBe(false);
   });
 

@@ -2,14 +2,17 @@ import { hasPermission } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import type { Ticket } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { ContestAccess } from '../../contests/core/contest-access';
+import type { ContestAccessView } from '../../contests/core/contest-access';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import type { ProblemAccessView } from '../../problems/core/problem-access';
 
-/** What the access rules read: plain strings, the linked problem's access view (null for a general ticket). */
+/** What the access rules read: plain strings, the linked problem's access view (null when not about a problem) and the contest it was filed from (null outside a contest). */
 export interface TicketAccessView {
   creator: string;
   assignees: string[];
   problem: ProblemAccessView | null;
+  contest: ContestAccessView | null;
 }
 
 const isStaff = (principal: Principal): boolean =>
@@ -17,12 +20,13 @@ const isStaff = (principal: Principal): boolean =>
 const isAssignee = (principal: Principal, view: TicketAccessView): boolean =>
   view.assignees.includes(principal.userId);
 
-/** Legacy `TicketMixin.get_object`: `change_ticket`, the creator, an assignee, or an editor of the linked problem. */
+/** Legacy `TicketMixin.get_object`: `change_ticket`, the creator, an assignee, or an editor of the linked problem; new: an editor of the contest it was filed from. */
 const canSee = (principal: Principal, view: TicketAccessView): boolean =>
   isStaff(principal) ||
   view.creator === principal.userId ||
   isAssignee(principal, view) ||
-  (view.problem !== null && ProblemAccess.canEdit(principal, view.problem));
+  (view.problem !== null && ProblemAccess.canEdit(principal, view.problem)) ||
+  (view.contest !== null && ContestAccess.canEdit(principal, view.contest));
 
 /** Spec: notes are edited by assignees and staff only (every reader sees them). */
 const canEditNotes = (principal: Principal, view: TicketAccessView): boolean =>
