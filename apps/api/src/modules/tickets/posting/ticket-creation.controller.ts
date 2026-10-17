@@ -4,7 +4,12 @@ import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { TicketProblemParamDto } from '../core/dto/ticket-params.dto';
 import { TicketDetailResponse } from '../core/dto/ticket.response';
-import { NewGeneralTicketDto, NewTicketDto } from './dto/new-ticket.dto';
+import { ContestKeyParamDto } from '../../contests/core/dto/contest-params.dto';
+import {
+  NewContestTicketDto,
+  NewGeneralTicketDto,
+  NewTicketDto,
+} from './dto/new-ticket.dto';
 import { TicketCreationService } from './ticket-creation.service';
 
 @ApiTags('Tickets')
@@ -47,5 +52,25 @@ export class TicketCreationController {
     @Body() body: NewGeneralTicketDto,
   ): Promise<TicketDetailResponse> {
     return this.creation.general(auth.principal, body);
+  }
+
+  /**
+   * Ask a contest's organisers
+   *
+   * @remarks
+   * Opens a ticket filed from a contest the caller can see (404 `not_found`
+   * otherwise): about the contest, or about one of its problems given by
+   * `problem` code (404 when it is not a problem of the contest the caller can
+   * see). The assignees are the contest's authors and curators, and its editors
+   * can read it. Same limits, refusals and notifications as filing a ticket
+   * about a problem.
+   */
+  @Post('contests/:key/tickets')
+  forContest(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key }: ContestKeyParamDto,
+    @Body() body: NewContestTicketDto,
+  ): Promise<TicketDetailResponse> {
+    return this.creation.forContest(auth.principal, key, body);
   }
 }

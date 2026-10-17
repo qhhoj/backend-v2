@@ -9,7 +9,6 @@ import { UserSummaryResponse } from '../../problems/core/dto/user-summary.respon
 import type {
   TicketDetailResponse,
   TicketTimelineEventResponse,
-  TicketLinkResponse,
   TicketListItemResponse,
   TicketMessageResponse,
   TicketTimelineEntryResponse,
@@ -17,6 +16,7 @@ import type {
 import { TicketAccess } from './ticket-access';
 import type { TicketAccessView } from './ticket-access';
 import { TicketContextService } from './ticket-context.service';
+import type { TicketSubject } from './ticket-context.service';
 import type { TicketDocument } from './tickets.repository';
 
 type People = Map<string, UserSummaryResponse>;
@@ -29,12 +29,15 @@ export class TicketResponsesService {
     private readonly context: TicketContextService,
   ) {}
 
-  async items(tickets: TicketDocument[]): Promise<TicketListItemResponse[]> {
-    const [people, links] = await Promise.all([
+  async items(
+    principal: Principal,
+    tickets: TicketDocument[],
+  ): Promise<TicketListItemResponse[]> {
+    const [people, subjects] = await Promise.all([
       this.people(tickets),
-      this.context.links(tickets),
+      this.context.subjects(principal, tickets),
     ]);
-    return tickets.map((ticket) => this.item(ticket, people, links));
+    return tickets.map((ticket) => this.item(ticket, people, subjects));
   }
 
   async detail(
@@ -42,9 +45,9 @@ export class TicketResponsesService {
     ticket: TicketDocument,
     view: TicketAccessView,
   ): Promise<TicketDetailResponse> {
-    const [people, links] = await Promise.all([
+    const [people, subjects] = await Promise.all([
       this.people([ticket]),
-      this.context.links([ticket]),
+      this.context.subjects(principal, [ticket]),
     ]);
     const can = {
       editNotes: TicketAccess.canEditNotes(principal, view),
@@ -55,7 +58,7 @@ export class TicketResponsesService {
       this.message(message, people),
     );
     return {
-      ...this.item(ticket, people, links),
+      ...this.item(ticket, people, subjects),
       notes: ticket.notes,
       can,
       messages,
@@ -77,9 +80,10 @@ export class TicketResponsesService {
   private item(
     ticket: TicketDocument,
     people: People,
-    links: Map<string, TicketLinkResponse>,
+    subjects: Map<string, TicketSubject>,
   ): TicketListItemResponse {
     const id = uuidStr(ticket._id);
+    const subject = subjects.get(id)!;
     return {
       id,
       title: ticket.title,
@@ -87,7 +91,8 @@ export class TicketResponsesService {
       assignees: ticket.assignees.map((assignee) =>
         this.person(people, uuidStr(assignee)),
       ),
-      link: links.get(id)!,
+      link: subject.link,
+      contest: subject.contest,
       isOpen: ticket.isOpen,
       isContributive: ticket.isContributive,
       messageCount: ticket.messageCount,

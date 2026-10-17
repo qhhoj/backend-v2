@@ -1,5 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsString, IsUrl, Length, MaxLength } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsUrl,
+  Length,
+  MaxLength,
+} from 'class-validator';
 import {
   TICKET_BODY_MAX_LENGTH,
   TICKET_ISSUE_URL_MAX_LENGTH,
@@ -34,4 +40,14 @@ export class NewGeneralTicketDto extends NewTicketDto {
   })
   @MaxLength(TICKET_ISSUE_URL_MAX_LENGTH)
   issueUrl!: string;
+}
+
+/** A question to a contest's organisers; `problem` narrows it to one of the contest's problems. */
+export class NewContestTicketDto extends NewTicketDto {
+  /** Code of one of the contest's problems the question is about; omit for the contest as a whole. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  problem?: string;
 }

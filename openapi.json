@@ -7206,6 +7206,32 @@
         ],
         "type": "object"
       },
+      "NewContestTicketDto": {
+        "properties": {
+          "body": {
+            "description": "Message text in Markdown.",
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "problem": {
+            "description": "Code of one of the contest's problems the question is about; omit for the contest as a whole.",
+            "maxLength": 100,
+            "type": "string"
+          },
+          "title": {
+            "description": "Ticket title.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "type": "object"
+      },
       "NewGeneralTicketDto": {
         "properties": {
           "body": {
@@ -14464,6 +14490,23 @@
         ],
         "type": "string"
       },
+      "TicketContestResponse": {
+        "properties": {
+          "key": {
+            "description": "Contest key.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Contest name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "type": "object"
+      },
       "TicketDetailResponse": {
         "properties": {
           "assignees": {
@@ -14480,6 +14523,16 @@
               }
             ],
             "description": "What the caller may do with the ticket."
+          },
+          "contest": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TicketContestResponse"
+              }
+            ],
+            "description": "The contest it was filed from, whose editors read it; null outside a contest.",
+            "nullable": true,
+            "type": "object"
           },
           "createdAt": {
             "description": "When the ticket was filed, ISO 8601.",
@@ -14552,6 +14605,7 @@
           "creator",
           "assignees",
           "link",
+          "contest",
           "isOpen",
           "isContributive",
           "messageCount",
@@ -14617,28 +14671,29 @@
       "TicketLinkResponse": {
         "properties": {
           "id": {
-            "description": "Id of the problem or issue.",
+            "description": "Id of the problem, issue or contest.",
             "type": "string"
           },
           "key": {
-            "description": "The problem code; null for a general issue and for a deleted problem.",
+            "description": "The problem code or contest key; null for a general issue and for a deleted problem or contest.",
             "nullable": true,
             "type": "string"
           },
           "title": {
-            "description": "The problem name, or the issue url.",
+            "description": "The problem or contest name, or the issue url.",
             "type": "string"
           },
           "type": {
-            "description": "problem for a ticket about a problem, general for a site issue.",
+            "description": "problem for a ticket about a problem, general for a site issue, contest for a question to a contest's organisers.",
             "enum": [
+              "contest",
               "general",
               "problem"
             ],
             "type": "string"
           },
           "url": {
-            "description": "SPA path for a problem, the absolute url for a general issue; empty when the problem is gone.",
+            "description": "SPA path for a problem or contest, the absolute url for a general issue; empty when the problem or contest is gone.",
             "type": "string"
           }
         },
@@ -14659,6 +14714,16 @@
               "$ref": "#/components/schemas/UserSummaryResponse"
             },
             "type": "array"
+          },
+          "contest": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TicketContestResponse"
+              }
+            ],
+            "description": "The contest it was filed from, whose editors read it; null outside a contest.",
+            "nullable": true,
+            "type": "object"
           },
           "createdAt": {
             "description": "When the ticket was filed, ISO 8601.",
@@ -14713,6 +14778,7 @@
           "creator",
           "assignees",
           "link",
+          "contest",
           "isOpen",
           "isContributive",
           "messageCount",
@@ -27945,6 +28011,154 @@
         "x-enveloped": true
       }
     },
+    "/api/internal/contests/{key}/tickets": {
+      "get": {
+        "description": "Returns the questions and problem tickets filed from a contest: all of\nthem for staff and the contest's editors, otherwise only the caller's own.\nFails with 404 `not_found` when the caller cannot see the contest. Paged\nwith `page`.",
+        "operationId": "TicketsController_contestList",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "1-based page number.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/TicketListItemResponse"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMetaResponse"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the tickets filed from a contest",
+        "tags": [
+          "Tickets"
+        ],
+        "x-enveloped": true
+      },
+      "post": {
+        "description": "Opens a ticket filed from a contest the caller can see (404 `not_found`\notherwise): about the contest, or about one of its problems given by\n`problem` code (404 when it is not a problem of the contest the caller can\nsee). The assignees are the contest's authors and curators, and its editors\ncan read it. Same limits, refusals and notifications as filing a ticket\nabout a problem.",
+        "operationId": "TicketCreationController_forContest",
+        "parameters": [
+          {
+            "description": "Key of the contest.",
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewContestTicketDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TicketDetailResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Ask a contest's organisers",
+        "tags": [
+          "Tickets"
+        ]
+      }
+    },
     "/api/internal/contributors": {
       "get": {
         "description": "Public. Pages of users ranked by contribution points, with the same entry shape as the user leaderboard.",
@@ -39174,7 +39388,7 @@
     },
     "/api/internal/tickets": {
       "get": {
-        "description": "Returns tickets the caller may read: their own and those assigned to them,\ntickets of problems they can edit, and every ticket for holders of\n`judge.change_ticket`. Filter with `open`, `awaiting` (open tickets whose\nnewest message is not from staff), `own` (only tickets they filed\nor are assigned to), and repeated `user` and `assignee` usernames (at most\n10 each; unknown names match nothing). Paged with `page`.",
+        "description": "Returns tickets the caller may read: their own and those assigned to them,\ntickets of problems they can edit, tickets filed from contests they can\nedit, and every ticket for holders of\n`judge.change_ticket`. Filter with `open`, `awaiting` (open tickets whose\nnewest message is not from staff), `own` (only tickets they filed\nor are assigned to), and repeated `user` and `assignee` usernames (at most\n10 each; unknown names match nothing). Paged with `page`.",
         "operationId": "TicketsController_list",
         "parameters": [
           {
@@ -39408,7 +39622,7 @@
     },
     "/api/internal/tickets/{id}": {
       "get": {
-        "description": "Returns the ticket with its messages, notes, assignees and timeline.\nReadable by its creator, its assignees, editors of the linked problem and\nstaff. Fails with 404 `not_found` for an unknown id and 403 `forbidden`\nfor a ticket the caller may not read.",
+        "description": "Returns the ticket with its messages, notes, assignees and timeline.\nReadable by its creator, its assignees, editors of the linked problem,\neditors of the contest it was filed from and staff. Fails with 404 `not_found` for an unknown id and 403 `forbidden`\nfor a ticket the caller may not read.",
         "operationId": "TicketsController_detail",
         "parameters": [
           {

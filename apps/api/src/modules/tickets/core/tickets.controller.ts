@@ -4,6 +4,7 @@ import { CurrentAuth } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse } from '@libs/common';
 import type { Paginated } from '@libs/common';
+import { ContestKeyParamDto } from '../../contests/core/dto/contest-params.dto';
 import { TicketListQueryDto, TicketPageQueryDto } from './dto/ticket-list.dto';
 import {
   TicketIdParamDto,
@@ -25,7 +26,8 @@ export class TicketsController {
    *
    * @remarks
    * Returns tickets the caller may read: their own and those assigned to them,
-   * tickets of problems they can edit, and every ticket for holders of
+   * tickets of problems they can edit, tickets filed from contests they can
+   * edit, and every ticket for holders of
    * `judge.change_ticket`. Filter with `open`, `awaiting` (open tickets whose
    * newest message is not from staff), `own` (only tickets they filed
    * or are assigned to), and repeated `user` and `assignee` usernames (at most
@@ -59,12 +61,31 @@ export class TicketsController {
   }
 
   /**
+   * List the tickets filed from a contest
+   *
+   * @remarks
+   * Returns the questions and problem tickets filed from a contest: all of
+   * them for staff and the contest's editors, otherwise only the caller's own.
+   * Fails with 404 `not_found` when the caller cannot see the contest. Paged
+   * with `page`.
+   */
+  @ApiPaginatedResponse(TicketListItemResponse)
+  @Get('contests/:key/tickets')
+  contestList(
+    @CurrentAuth() auth: AuthContext,
+    @Param() { key }: ContestKeyParamDto,
+    @Query() query: TicketPageQueryDto,
+  ): Promise<Paginated<TicketListItemResponse>> {
+    return this.tickets.contestList(auth.principal, key, query);
+  }
+
+  /**
    * Get a ticket
    *
    * @remarks
    * Returns the ticket with its messages, notes, assignees and timeline.
-   * Readable by its creator, its assignees, editors of the linked problem and
-   * staff. Fails with 404 `not_found` for an unknown id and 403 `forbidden`
+   * Readable by its creator, its assignees, editors of the linked problem,
+   * editors of the contest it was filed from and staff. Fails with 404 `not_found` for an unknown id and 403 `forbidden`
    * for a ticket the caller may not read.
    */
   @Get('tickets/:id')
