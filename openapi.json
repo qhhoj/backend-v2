@@ -4255,16 +4255,12 @@
       "CreateOrganizationRequestDto": {
         "properties": {
           "reason": {
-            "description": "Why the user wants to join; must not be blank.",
+            "default": "",
+            "description": "Why the user wants to join; optional (trimmed, empty when not given).",
             "maxLength": 4096,
-            "minLength": 1,
-            "pattern": "\\S",
             "type": "string"
           }
         },
-        "required": [
-          "reason"
-        ],
         "type": "object"
       },
       "CreatePostDto": {
@@ -7755,7 +7751,7 @@
             "type": "string"
           },
           "reason": {
-            "description": "The reason the requester gave.",
+            "description": "The reason the requester gave; empty when none.",
             "type": "string"
           },
           "state": {

@@ -17,7 +17,8 @@ export class OrganizationRequest {
   @Prop({ type: UUID, required: true }) user!: string;
   @Prop({ type: String, enum: ORGANIZATION_REQUEST_STATES, default: 'P' })
   state!: OrganizationRequestState;
-  @Prop({ required: true, minlength: 1, maxlength: REQUEST_REASON_MAX_LENGTH })
+  /** Optional since 2026-10-18: empty when the requester gave none. */
+  @Prop({ type: String, default: '', maxlength: REQUEST_REASON_MAX_LENGTH })
   reason!: string;
   @Prop({ type: UUID, default: null }) decidedBy!: string | null;
   @Prop({ type: Date, default: null }) decidedAt!: Date | null;

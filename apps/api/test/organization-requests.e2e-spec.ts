@@ -160,8 +160,27 @@ afterAll(() => api.teardown());
           }).expect(409),
         ),
       ).toBe('already_member');
+    });
+
+    it('takes a request without a reason (absent, blank or null) as an empty reason, and refuses an over-long one', async () => {
+      const closed = await createOrganization(api, { isOpen: false });
+      const bodies: object[] = [{}, { reason: '   ' }, { reason: null }];
+      const reasons: string[] = [];
+      for (const body of bodies) {
+        const { session } = await person();
+        const taken = dataOf<OrganizationRequestResponse>(
+          await post(
+            organizationUrl(closed.slug, '/requests'),
+            session,
+            body,
+          ).expect(201),
+        );
+        reasons.push(taken.reason);
+      }
+      expect(reasons).toEqual(['', '', '']);
+      const { session } = await person();
       await post(organizationUrl(closed.slug, '/requests'), session, {
-        reason: '',
+        reason: 'x'.repeat(4097),
       }).expect(400);
     });
 
