@@ -8,9 +8,11 @@ import { REDIS } from '@libs/common';
 
 import { rankingCacheKeys } from '@libs/contests';
 
-import type { ContestParticipation, User } from '@libs/database';
+import type { Contest, ContestParticipation, User } from '@libs/database';
 
 import { profileQueries } from '@libs/database/testing';
+
+import type { ContestDetailResponse } from '../src/modules/contests/core/dto/contest-detail.response';
 
 import type { RankingResponse } from '../src/modules/contests/ranking/dto/ranking.response';
 
@@ -512,5 +514,114 @@ describe('contest ranking', () => {
       .send({ scoreboardCacheTimeout: 30 })
       .expect(200);
     expect((await ranking(contest.key)).rows[0].score).toBe(500);
+  });
+  describe('rating changes', () => {
+    const ended = (hoursAgo: number, extra: Partial<Contest> = {}) =>
+      createContest(api, {
+        isRated: true,
+        startTime: hoursFromNow(-hoursAgo - 2),
+        endTime: hoursFromNow(-hoursAgo),
+        authors: [users.author._id],
+        problems: [contestProblem(problems[0]._id, 0)],
+        ...extra,
+      });
+    /** One live row with the rating the rating job would have stored for it. */
+    const rated = async (
+      contest: { _id: string; endTime: Date },
+      user: string,
+      rating: number | null,
+    ) => {
+      const row = await joinParticipation(
+        api,
+        contest._id,
+        users[user]._id,
+        results(100),
+      );
+      if (rating !== null)
+        await api.ratings.create({
+          user: users[user]._id,
+          contest: contest._id,
+          participation: row._id,
+          contestEndTime: contest.endTime,
+          rank: 1,
+          rating,
+          mean: rating,
+          performance: rating,
+          lastRated: new Date(),
+        });
+      return row;
+    };
+    const changeOf = (board: RankingResponse, name: string) =>
+      board.rows.find((row) => row.user.username === name)?.ratingChange;
+    const detail = async (key: string, who: string) =>
+      dataOf<ContestDetailResponse>(
+        await authed(api.http().get(contestUrl(key)), sessions[who]).expect(
+          200,
+        ),
+      );
+
+    it('gives each rated row its rating and the change from the rating before this contest only', async () => {
+      const earlier = await ended(72);
+      const contest = await ended(24);
+      const later = await ended(4);
+      await rated(earlier, 'alice', 1500);
+      await rated(contest, 'alice', 1542);
+      await rated(contest, 'bob', 1400);
+      await rated(contest, 'carol', null);
+      await rated(later, 'alice', 1600);
+      const board = await ranking(contest.key);
+      expect(changeOf(board, 'alice')).toEqual({ rating: 1542, delta: 42 });
+      // A first rating has no change, as on the profile chart.
+      expect(changeOf(board, 'bob')).toEqual({ rating: 1400, delta: null });
+      expect(changeOf(board, 'carol')).toBeNull();
+      expect((await ranking(later.key)).rows[0].ratingChange).toEqual({
+        rating: 1600,
+        delta: 58,
+      });
+      expect((await detail(contest.key, 'alice')).viewer.ratingChange).toEqual({
+        rating: 1542,
+        delta: 42,
+      });
+      expect(
+        (await detail(contest.key, 'carol')).viewer.ratingChange,
+      ).toBeNull();
+    });
+
+    it('orders contests that end together by id, as the rating job does', async () => {
+      const end = hoursFromNow(-30);
+      const [first, second] = [
+        '00000000-0000-4000-8000-0000000000a1',
+        '00000000-0000-4000-8000-0000000000a2',
+      ];
+      const one = await ended(30, { _id: first, endTime: end });
+      const two = await ended(30, { _id: second, endTime: end });
+      await rated(two, 'dan', 1700);
+      await rated(one, 'dan', 1650);
+      expect(changeOf(await ranking(one.key), 'dan')).toEqual({
+        rating: 1650,
+        delta: null,
+      });
+      expect(changeOf(await ranking(two.key), 'dan')).toEqual({
+        rating: 1700,
+        delta: 50,
+      });
+    });
+
+    it('hides rating changes on a frozen board and on an unrated contest, but not from editors', async () => {
+      const frozen = await ended(6, {
+        formatName: 'icpc',
+        frozenLastMinutes: 30,
+      });
+      await rated(frozen, 'erin', 1300);
+      expect(changeOf(await ranking(frozen.key), 'erin')).toBeNull();
+      expect((await detail(frozen.key, 'erin')).viewer.ratingChange).toBeNull();
+      expect(changeOf(await ranking(frozen.key, 'author'), 'erin')).toEqual({
+        rating: 1300,
+        delta: null,
+      });
+      const unrated = await ended(6, { isRated: false });
+      await rated(unrated, 'erin', 1350);
+      expect(changeOf(await ranking(unrated.key), 'erin')).toBeNull();
+    });
   });
 });

@@ -11,6 +11,7 @@ import type {
   ScoreboardVisibility,
 } from '@libs/database';
 import { UserSummaryResponse } from '../../../problems/core/dto/user-summary.response';
+import { RatingChangeResponse } from '../../rating/dto/rating-change.response';
 import type { ProblemLimits } from '../contest-problem-limits';
 import { ApiProblemCell } from './api-problem-cells';
 import {
@@ -121,7 +122,12 @@ export class ContestViewerResponse extends ContestListViewerResponse {
   canSeeFullScoreboard!: boolean;
   /** When the ranking froze for this viewer; null when it has not, never does, or the viewer edits the contest (editors see it live). */
   boardFrozenAt!: Date | null;
+  /** What this contest did to the viewer's rating (live participation); null until ratings are applied, while the board is frozen for the viewer, or when unrated. */
+  ratingChange!: RatingChangeResponse | null;
 }
+
+/** The viewer fields every contest read needs; `ratingChange` is read only for the detail. */
+export type ContestViewerAccess = Omit<ContestViewerResponse, 'ratingChange'>;
 
 /** One contest problem's output-prefix override (null: the judge default). */
 export class ContestProblemOutputPrefixResponse {
