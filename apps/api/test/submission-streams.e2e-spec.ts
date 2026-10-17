@@ -118,19 +118,36 @@ describe('submission event streams', () => {
   });
   afterAll(() => api.teardown());
 
-  it('gates like the detail: 401 anonymous, 404 unknown or invisible, 403 without detail rights', async () => {
+  it('gates like the result page: 404 unknown or invisible, open to visitors and to viewers without source access', async () => {
     const visible = await seed('stream_a');
     const hidden = await seed('stream_hidden');
-    const anonymous = await open(null, `${EVENTS}/${visible._id}`);
-    expect(anonymous.status).toBe(401);
-    expect(await errorOf(anonymous)).toBe('unauthorized');
     for (const id of [hidden._id, newId(), 'not-an-id']) {
       const missing = await open('owner', `${EVENTS}/${id}`);
       expect(missing.status).toBe(404);
     }
-    const stranger = await open('other', `${EVENTS}/${visible._id}`);
-    expect(stranger.status).toBe(403);
-    expect(await errorOf(stranger)).toBe('solve_first');
+    const visitorOnHidden = await open(null, `${EVENTS}/${hidden._id}`);
+    expect(visitorOnHidden.status).toBe(404);
+    // `other` has not solved the problem, so the source stays closed to them; the result is not.
+    for (const who of [null, 'other']) {
+      const watcher = await open(who, `${EVENTS}/${visible._id}`);
+      expect(watcher.status).toBe(200);
+      await watcher.next('state');
+    }
+  });
+
+  it("closes a visitor's stream once the problem becomes invisible", async () => {
+    const flipped = await seed('stream_flip');
+    const visitor = await open(null, `${EVENTS}/${flipped._id}`);
+    await visitor.next('state');
+    await api.problems.updateOne(
+      { _id: problems.stream_flip },
+      { isPublic: false },
+    );
+    await visitor.closed;
+    await api.problems.updateOne(
+      { _id: problems.stream_flip },
+      { isPublic: true },
+    );
   });
 
   it('sends test-case progress only to viewers who see every case result', async () => {
