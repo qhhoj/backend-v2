@@ -3,14 +3,14 @@ import type { Principal } from '@libs/auth';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { TicketAccess } from '../core/ticket-access';
 import { TicketsRepository } from '../core/tickets.repository';
-import { TicketsService } from '../core/tickets.service';
+import { TicketContextService } from '../core/ticket-context.service';
 import type { TicketSummaryResponse } from './dto/ticket-summary.response';
 
 @Injectable()
 export class TicketSummaryService {
   constructor(
     private readonly tickets: TicketsRepository,
-    private readonly lists: TicketsService,
+    private readonly context: TicketContextService,
   ) {}
 
   async summary(principal: Principal): Promise<TicketSummaryResponse> {
@@ -27,6 +27,8 @@ export class TicketSummaryService {
   /** Only problem editors own problems; everyone else is spared the lookup on every badge poll. */
   private async countAboutMine(principal: Principal): Promise<number> {
     if (ProblemAccess.editableFilter(principal) === null) return 0;
-    return this.tickets.countOpen(await this.lists.aboutMine(principal.userId));
+    return this.tickets.countOpen(
+      await this.context.aboutMineFilter(principal.userId),
+    );
   }
 }

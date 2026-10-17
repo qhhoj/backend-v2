@@ -50,7 +50,7 @@ export class TicketClaimsService {
   ) {}
 
   claim(principal: Principal, ticketId: string): Promise<TicketDetailResponse> {
-    return this.change(principal, ticketId, claimed);
+    return this.change(principal, ticketId, claimed, { openOnly: true });
   }
 
   release(
@@ -65,9 +65,10 @@ export class TicketClaimsService {
     principal: Principal,
     ticketId: string,
     next: AssigneesChange,
+    { openOnly = false } = {},
   ): Promise<TicketDetailResponse> {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++)
-      if (await this.tryChange(principal, ticketId, next))
+      if (await this.tryChange(principal, ticketId, next, openOnly))
         return this.detail(principal, ticketId);
     throw new AppError(
       'conflict',
@@ -81,6 +82,7 @@ export class TicketClaimsService {
     principal: Principal,
     ticketId: string,
     next: AssigneesChange,
+    openOnly: boolean,
   ): Promise<boolean> {
     const { ticket, view } = await this.context.accessible(principal, ticketId);
     if (!TicketAccess.canClaim(principal, view))
@@ -89,6 +91,8 @@ export class TicketClaimsService {
         403,
         'Only staff and editors of the problem can take a ticket',
       );
+    if (openOnly && !ticket.isOpen)
+      throw new AppError('ticket_closed', 409, 'Reopen the ticket first');
     const assignees = next(principal.userId, view.assignees);
     if (assignees === null) throw alreadyClaimed();
     if (sameMembers(assignees, view.assignees)) return true;
@@ -131,9 +135,10 @@ export class TicketClaimsService {
     principal: Principal,
     ticketId: string,
   ): Promise<TicketDetailResponse> {
-    const fresh = (await this.tickets.findById(ticketId, {
+    const fresh = await this.tickets.findById(ticketId, {
       withMessages: true,
-    }))!;
+    });
+    if (!fresh) throw new AppError('not_found', 404, 'No such ticket');
     return this.responses.detail(
       principal,
       fresh,

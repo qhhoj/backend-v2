@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
-import { AppError, escapeRegExp, Paginated } from '@libs/common';
+import { AppError, Paginated } from '@libs/common';
 import { TICKETS_PAGE_SIZE } from '@libs/community';
 import type { Ticket } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
+import { diacriticInsensitivePattern } from '../../problems/core/vietnamese-fold';
 import type {
   TicketDetailResponse,
   TicketListItemResponse,
@@ -54,26 +55,17 @@ export class TicketsService {
       clauses.push({ user: { $in: await this.idsOf(query.user) } });
     if (query.assignee)
       clauses.push({ assignees: { $in: await this.idsOf(query.assignee) } });
-    if (query.aboutMine) clauses.push(await this.aboutMine(principal.userId));
+    if (query.aboutMine)
+      clauses.push(await this.context.aboutMineFilter(principal.userId));
     if (query.q) clauses.push(await this.matching(query.q));
     return this.page(query.page, allOf(clauses));
   }
 
-  /** Tickets linked to the user's own problems (`ProblemAccess.editorOfFilter`), an index read on `linkedItem.id`. */
-  async aboutMine(userId: string): Promise<FilterQuery<Ticket>> {
-    return {
-      'linkedItem.type': 'problem',
-      'linkedItem.id': {
-        $in: await this.problems.visibleIds(
-          ProblemAccess.editorOfFilter(userId),
-        ),
-      },
-    };
-  }
-
-  /** The title holds the text, or the creator's username is the text. */
+  /** The title holds the text (as the problem search reads it: no case, no accents), or the creator's username is the text. A scan of the title, fine at ticket volumes. */
   private async matching(text: string): Promise<FilterQuery<Ticket>> {
-    const title = { title: { $regex: escapeRegExp(text), $options: 'i' } };
+    const title = {
+      title: { $regex: diacriticInsensitivePattern(text), $options: 'i' },
+    };
     const creators = await this.idsOf([text]);
     return creators.length
       ? { $or: [title, { user: { $in: creators } }] }
