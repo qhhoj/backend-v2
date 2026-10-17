@@ -274,6 +274,35 @@ describe('contest CRUD', () => {
   });
 
   describe('list and detail', () => {
+    it('counts the participations for an editor and writes a drifted count back', async () => {
+      const contest = await createContest(api, {
+        authors: [users.codeless._id],
+        userCount: 0,
+        virtualCount: 5,
+      });
+      await joinParticipation(api, contest._id, users.dave._id);
+      await joinParticipation(api, contest._id, users.erin._id);
+      await joinParticipation(api, contest._id, users.frank._id, {
+        virtual: 1,
+      });
+      await joinParticipation(api, contest._id, users.plain._id, {
+        virtual: -1,
+      });
+
+      expect(await detail(contest.key, 'plain')).toMatchObject({
+        userCount: 0,
+        virtualCount: 5,
+      });
+      expect(await detail(contest.key, 'codeless')).toMatchObject({
+        userCount: 2,
+        virtualCount: 1,
+      });
+      expect(await detail(contest.key)).toMatchObject({
+        userCount: 2,
+        virtualCount: 1,
+      });
+    });
+
     it('names the organizations an organization-private contest is restricted to, hiding unlisted ones from non-members', async () => {
       const listed = await createOrganization(api, { slug: 'tagged_open' }, [
         users.dave._id,

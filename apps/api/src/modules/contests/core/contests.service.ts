@@ -19,6 +19,7 @@ import { ContestViewerService } from './contest-viewer.service';
 import type { ContestViewer } from './contest-viewer.service';
 import { ContestsRepository } from './contests.repository';
 import type { ContestDocument } from './contests.repository';
+import { ParticipationsRepository } from './participations.repository';
 import {
   ContestDetailResponse,
   ContestSettingsResponse,
@@ -100,6 +101,7 @@ const editorRowOf = (
 export class ContestsService {
   constructor(
     private readonly contests: ContestsRepository,
+    private readonly participations: ParticipationsRepository,
     private readonly viewers: ContestViewerService,
     private readonly problemFacts: ContestProblemFactsService,
     private readonly organizations: ContestOrganizationsService,
@@ -177,6 +179,7 @@ export class ContestsService {
     const contest = await this.visibleContest(principal, key);
     const viewerFacts = await this.viewers.viewerOf(principal, contest, now);
     const viewer = this.viewerResponseOf(principal, contest, viewerFacts, now);
+    if (viewer.canEdit) await this.refreshCounts(contest);
     const [authors, settingsUsers, problems, organizations] = await Promise.all(
       [
         this.users.findByIds(ContestAccess.accessView(contest).authors),
@@ -195,6 +198,22 @@ export class ContestsService {
       viewer,
       settingsUsers,
     });
+  }
+
+  /**
+   * An editor reads the participant counts from the rows themselves: the stored counts drift when rows are written outside
+   * the participation services (seeds, imports). A drift is written back, so the lists and the public page follow.
+   */
+  private async refreshCounts(contest: ContestDocument): Promise<void> {
+    const counts = await this.participations.countsOf(uuidStr(contest._id));
+    if (
+      counts.userCount === contest.userCount &&
+      counts.virtualCount === contest.virtualCount
+    )
+      return;
+    await this.contests.setCounts(uuidStr(contest._id), counts);
+    contest.userCount = counts.userCount;
+    contest.virtualCount = counts.virtualCount;
   }
 
   /** The users the settings name, for editors only; nobody else reads them. */

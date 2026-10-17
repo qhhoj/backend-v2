@@ -37,6 +37,7 @@ import type {
   UpdateContestDto,
 } from './dto/contest-edit.dto';
 import { ContestEditFieldsService } from './contest-edit-fields.service';
+import { shiftedWindow } from './contest-clone-window';
 import {
   chargedOrganization,
   newlyChargedOrganization,
@@ -109,11 +110,12 @@ export class ContestEditingService {
     return this.contestsService.detail(principal, contest.key);
   }
 
-  /** Legacy `ContestClone`: settings and problems are copied, the cloner is the only author, and per-contest collections stay with the source. */
+  /** Legacy `ContestClone`: settings and problems are copied, the cloner is the only author, and per-contest collections stay with the source. A `startTime` moves the copy's whole window there. */
   async clone(
     principal: Principal,
     key: string,
     newKey: string,
+    startTime?: string,
   ): Promise<ContestDetailResponse> {
     const source = await this.contestsService.editableContest(principal, key);
     if (RESERVED_CONTEST_KEYS.includes(newKey))
@@ -127,6 +129,7 @@ export class ContestEditingService {
     const ids = (values: readonly string[]) => values.map(uuidStr);
     const contest = await this.insert(principal, {
       ...copied,
+      ...(startTime && shiftedWindow(copied, new Date(startTime))),
       key: newKey,
       isVisible: false,
       userCount: 0,
