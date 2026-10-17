@@ -258,7 +258,10 @@ describe('contest rating', () => {
 
     await ratings.rateFrom(first._id);
 
-    for (const key of [...rankingCacheKeys(first._id), ...rankingCacheKeys(second._id)])
+    for (const key of [
+      ...rankingCacheKeys(first._id),
+      ...rankingCacheKeys(second._id),
+    ])
       expect(await redis.exists(key)).toBe(0);
     for (const key of rankingCacheKeys(unrelated._id))
       expect(await redis.exists(key)).toBe(1);

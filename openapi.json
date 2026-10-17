@@ -3557,6 +3557,16 @@
             ],
             "nullable": true,
             "type": "string"
+          },
+          "ratingChange": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RatingChangeResponse"
+              }
+            ],
+            "description": "What this contest did to the viewer's rating (live participation); null until ratings are applied, while the board is frozen for the viewer, or when unrated.",
+            "nullable": true,
+            "type": "object"
           }
         },
         "required": [
@@ -3569,6 +3579,7 @@
           "canViewBalloons",
           "canSeeFullScoreboard",
           "boardFrozenAt",
+          "ratingChange",
           "isCurrent"
         ],
         "type": "object"
@@ -10799,6 +10810,16 @@
             "nullable": true,
             "type": "number"
           },
+          "ratingChange": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RatingChangeResponse"
+              }
+            ],
+            "description": "What this contest did to the participant's rating once ratings are applied; null before, for unrated rows and on a frozen board.",
+            "nullable": true,
+            "type": "object"
+          },
           "score": {
             "description": "Total score.",
             "type": "number"
@@ -10829,7 +10850,8 @@
           "isDisqualified",
           "score",
           "cumtime",
-          "tiebreaker"
+          "tiebreaker",
+          "ratingChange"
         ],
         "type": "object"
       },
@@ -10857,6 +10879,24 @@
           "username",
           "rating",
           "organization"
+        ],
+        "type": "object"
+      },
+      "RatingChangeResponse": {
+        "properties": {
+          "delta": {
+            "description": "The rating after this contest minus the one before it; null on the user's first rated contest.",
+            "nullable": true,
+            "type": "number"
+          },
+          "rating": {
+            "description": "The rating after this contest.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "rating",
+          "delta"
         ],
         "type": "object"
       },
