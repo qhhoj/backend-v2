@@ -23,6 +23,8 @@ import { ContestsService } from '../core/contests.service';
 import type { RankingResponse } from './dto/ranking.response';
 import { ParticipationsRepository } from '../core/participations.repository';
 import { RankingUsersRepository } from './ranking-users.repository';
+import { RatingChangesRepository } from '../rating/rating-changes.repository';
+import type { RatingChange } from '../rating/rating-changes.repository';
 import {
   ACCESS_CODE_IP_LIMIT,
   ACCESS_CODE_WINDOW_SECONDS,
@@ -79,6 +81,7 @@ export class ContestRankingService {
     private readonly viewers: ContestViewerService,
     private readonly participations: ParticipationsRepository,
     private readonly rankingUsers: RankingUsersRepository,
+    private readonly ratingChanges: RatingChangesRepository,
     private readonly problems: ProblemsRepository,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly rateLimit: RateLimitService,
@@ -199,6 +202,11 @@ export class ContestRankingService {
       unique(rows.map((row) => uuidStr(row.user))),
     );
     const problems = await this.problemColumns(contest, standings);
+    // Ratings are applied only to an unfrozen board; a frozen view never hints at the hidden result.
+    const ratingChanges =
+      isFrozenView || !contest.isRated
+        ? new Map<string, RatingChange>()
+        : await this.ratingChanges.ofContest(uuidStr(contest._id));
     return {
       frozen: isFrozenView,
       problems,
@@ -215,6 +223,7 @@ export class ContestRankingService {
           },
           virtual: row.virtual,
           ...standing,
+          ratingChange: ratingChanges.get(id) ?? null,
         };
       }),
     };

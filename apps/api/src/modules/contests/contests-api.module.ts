@@ -71,6 +71,7 @@ import { OfficialRankingController } from './ranking/official-ranking.controller
 import { OfficialRankingService } from './ranking/official-ranking.service';
 import { OfficialRankingsRepository } from './ranking/official-rankings.repository';
 import { RankingUsersRepository } from './ranking/ranking-users.repository';
+import { RatingChangesRepository } from './rating/rating-changes.repository';
 import { RankingLinksController } from './ranking/ranking-links.controller';
 import { RankingLinksRepository } from './ranking/ranking-links.repository';
 import { RankingLinksService } from './ranking/ranking-links.service';
@@ -153,6 +154,7 @@ import { RankingLinksService } from './ranking/ranking-links.service';
     ParticipationAdminService,
     RankingLinksRepository,
     RankingUsersRepository,
+    RatingChangesRepository,
     RankingLinksService,
     RateLimitService,
     SolverCountsService,

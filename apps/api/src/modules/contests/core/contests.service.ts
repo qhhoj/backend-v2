@@ -23,9 +23,13 @@ import { ParticipationsRepository } from './participations.repository';
 import {
   ContestDetailResponse,
   ContestSettingsResponse,
-  ContestViewerResponse,
   ParticipationSummaryResponse,
 } from './dto/contest-detail.response';
+import type {
+  ContestViewerAccess,
+  ContestViewerResponse,
+} from './dto/contest-detail.response';
+import { RatingChangesRepository } from '../rating/rating-changes.repository';
 import type {
   ContestListQueryDto,
   ContestListSort,
@@ -106,6 +110,7 @@ export class ContestsService {
     private readonly problemFacts: ContestProblemFactsService,
     private readonly organizations: ContestOrganizationsService,
     private readonly users: UsersRepository,
+    private readonly ratingChanges: RatingChangesRepository,
   ) {}
 
   /** Legacy `ContestList` over `get_visible_contests`; upcoming soonest first, the rest newest first unless `sort` says otherwise; each row carries the signed-in viewer's own state, and the editor block for contests they may edit. */
@@ -178,8 +183,12 @@ export class ContestsService {
   ): Promise<ContestDetailResponse> {
     const contest = await this.visibleContest(principal, key);
     const viewerFacts = await this.viewers.viewerOf(principal, contest, now);
-    const viewer = this.viewerResponseOf(principal, contest, viewerFacts, now);
-    if (viewer.canEdit) await this.refreshCounts(contest);
+    const access = this.viewerResponseOf(principal, contest, viewerFacts, now);
+    if (access.canEdit) await this.refreshCounts(contest);
+    const viewer: ContestViewerResponse = {
+      ...access,
+      ratingChange: await this.viewerRatingChange(contest, viewerFacts, access),
+    };
     const [authors, settingsUsers, problems, organizations] = await Promise.all(
       [
         this.users.findByIds(ContestAccess.accessView(contest).authors),
@@ -216,6 +225,17 @@ export class ContestsService {
     contest.virtualCount = counts.virtualCount;
   }
 
+  /** The viewer's live row once rated; never on a board still frozen for them (as the ranking's `ratingChange`). */
+  private viewerRatingChange(
+    contest: Contest,
+    viewer: ContestViewer,
+    access: ContestViewerAccess,
+  ): Promise<ContestViewerResponse['ratingChange']> {
+    if (!viewer.live || !contest.isRated || access.boardFrozenAt !== null)
+      return Promise.resolve(null);
+    return this.ratingChanges.ofParticipation(uuidStr(viewer.live._id));
+  }
+
   /** The users the settings name, for editors only; nobody else reads them. */
   private settingsUsers(
     contest: Contest,
@@ -229,7 +249,7 @@ export class ContestsService {
   /** Problems show to whoever is in the contest, edits or tests it, and to everyone once it ended. */
   isProblemListOpen(
     contest: Contest,
-    viewer: ContestViewerResponse,
+    viewer: ContestViewerAccess,
     now: Date,
   ): boolean {
     return (
@@ -246,7 +266,7 @@ export class ContestsService {
     contest: ContestDocument,
     viewer: ContestViewer,
     now: Date,
-  ): ContestViewerResponse {
+  ): ContestViewerAccess {
     const view = ContestAccess.accessView(contest);
     const canEdit = ContestAccess.canEdit(principal, view);
     return {
