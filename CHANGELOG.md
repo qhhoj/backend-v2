@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.30.0
+
+### Minor Changes
+
+- ccc3564: Contest clone takes an optional `startTime` that shifts the copy's window; an editor's contest detail recounts participants and repairs a drifted stored count.
+
 ## 2.29.4
 
 ### Patch Changes
