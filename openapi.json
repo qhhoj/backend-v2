@@ -13041,7 +13041,7 @@
             "type": "string"
           },
           "error": {
-            "description": "Compile log or compiler warnings; an internal error's message (it can quote jury data) only for the problem's editors, null for everyone else, the submitter included.",
+            "description": "Compile log or compiler warnings, only for a viewer who may read the source (`sourceAccess` granted: a compile log quotes the code); an internal error's message (it can quote jury data) only for the problem's editors, null for everyone else, the submitter included.",
             "nullable": true,
             "type": "string"
           },
@@ -13125,6 +13125,14 @@
             "description": "Verdict: `AC` accepted, `WA` wrong answer, `TLE` time limit, `MLE` memory limit, `OLE` output limit, `IR` invalid return, `RTE` runtime error, `CE` compile error, `IE` internal error, `SC` short circuited, `AB` aborted, `RJ` rejected; null while unjudged.",
             "nullable": true
           },
+          "sourceAccess": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionSourceAccess"
+              }
+            ],
+            "description": "Whether `GET /submissions/{id}/source` will answer: `granted`; `sign_in` for visitors; `solve_first` until the viewer solves the problem; `hidden` otherwise. Without source access, cases carry no feedback or output."
+          },
           "status": {
             "allOf": [
               {
@@ -13175,17 +13183,7 @@
         "required": [
           "status",
           "result",
-          "id",
-          "user",
-          "problem",
-          "language",
-          "date",
-          "points",
-          "casePoints",
-          "caseTotal",
-          "time",
-          "memory",
-          "testSummary",
+          "sourceAccess",
           "error",
           "currentTestcase",
           "isPretested",
@@ -13197,7 +13195,18 @@
           "cases",
           "batches",
           "externalRun",
-          "totalCases"
+          "totalCases",
+          "id",
+          "user",
+          "problem",
+          "language",
+          "date",
+          "points",
+          "casePoints",
+          "caseTotal",
+          "time",
+          "memory",
+          "testSummary"
         ],
         "type": "object"
       },
@@ -13571,6 +13580,16 @@
           "SC",
           "TLE",
           "WA"
+        ],
+        "type": "string"
+      },
+      "SubmissionSourceAccess": {
+        "description": "Whether `GET /submissions/{id}/source` will answer: `granted`; `sign_in` for visitors; `solve_first` until the viewer solves the problem; `hidden` otherwise. Without source access, cases carry no feedback or output.",
+        "enum": [
+          "granted",
+          "hidden",
+          "sign_in",
+          "solve_first"
         ],
         "type": "string"
       },
@@ -28190,7 +28209,7 @@
     },
     "/api/internal/events/submissions/{id}": {
       "get": {
-        "description": "Needs a signed-in user who may see the submission's detail (same access\nrules and 404 or 403 errors). Server-Sent Events (`text/event-stream`): a\n`state` event first with the current status, result and points, then\n`queued`, `processing`, `grading-begin` and `done` events, and `test-case`\nevents only when the viewer may see every case result. `resync` means events\nmay have been missed, so reload the submission. Heartbeat `: ping` every 15\nseconds. Access is re-checked every minute and the stream closes when it is\nlost. Open streams are capped per user and per client IP (429\n`rate_limited`).",
+        "description": "Public, with the submission detail's access rules (404 or 403 errors);\nthe source rule plays no part, as the events carry none of it. Server-Sent Events (`text/event-stream`): a\n`state` event first with the current status, result and points, then\n`queued`, `processing`, `grading-begin` and `done` events, and `test-case`\nevents only when the viewer may see every case result. `resync` means events\nmay have been missed, so reload the submission. Heartbeat `: ping` every 15\nseconds. Access is re-checked every minute and the stream closes when it is\nlost. Open streams are capped per user and per client IP (429\n`rate_limited`).",
         "operationId": "SubmissionStreamsController_submission",
         "parameters": [
           {
@@ -38067,7 +38086,7 @@
     },
     "/api/internal/submissions/{id}": {
       "get": {
-        "description": "Needs a signed-in user. The owner, problem editors and users with\n`judge.view_all_submission` always see it; others depend on the problem's\n`submissionSourceVisibility` (everyone, only after solving the problem, or\nowner and testers only). Test case results follow\n`testcaseResultVisibility`: every case, batch summaries only, or totals\nonly; feedback and program output have their own rules. `viewer` tells which\nof abort, rejudge and reject the caller may use. Errors: 404 `not_found`,\n403 `hidden`, 403 `solve_first` (solve the problem to see it) and 403\n`contest_running` (the contest's list is not open to the viewer yet).",
+        "description": "Public: the result (verdict, points, test case results) is open to anyone\nwho may see the submission's problem. Test case results follow\n`testcaseResultVisibility`: every case, batch summaries only, or totals\nonly. The source is not part of it: `sourceAccess` tells whether the source\nendpoint will answer (the owner, problem editors and\n`judge.view_all_submission` always; others by the problem's\n`submissionSourceVisibility`: everyone, only after solving the problem, or\nowner and testers only; never visitors). Checker feedback, program output\nand the compile log come only with source access, then by their own rules.\n`viewer` tells which of abort, rejudge and reject the caller may use (all\nfalse for visitors). Errors: 404 `not_found` and 403 `contest_running`\n(another user's contest submission while the contest's list is not open to\nthe viewer). Visitors are limited to 300 requests per IP per minute (429\n`rate_limited`).",
         "operationId": "SubmissionsController_detail",
         "parameters": [
           {
@@ -38405,7 +38424,7 @@
     },
     "/api/internal/submissions/{id}/source": {
       "get": {
-        "description": "Needs a signed-in user and follows the same access rules and errors as the\nsubmission detail. Returns the submitted source text; for a file-only\nlanguage it is the URL of the uploaded file.",
+        "description": "Needs a signed-in user with source access (the detail's `sourceAccess`\nis `granted`). Errors: 404 `not_found`, 403 `hidden`, 403 `solve_first`\n(solve the problem to see it) and 403 `contest_running`. Returns the submitted source text; for a file-only\nlanguage it is the URL of the uploaded file.",
         "operationId": "SubmissionsController_source",
         "parameters": [
           {

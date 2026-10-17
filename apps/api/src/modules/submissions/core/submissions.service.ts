@@ -26,6 +26,7 @@ import {
   detailAccess,
   listCaseUnit,
   shownError,
+  sourceAccessOf,
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
@@ -33,6 +34,7 @@ import type {
   CaseVisibility,
   DetailAccess,
   ListCaseUnit,
+  SourceAccess,
   SubmissionActions,
 } from './submission-access';
 import { sourceFilename } from './source-file';
@@ -53,6 +55,24 @@ export type SubmissionFilters = Pick<
 export interface ListScope {
   contestId?: string;
   userIds?: readonly string[];
+}
+
+/** What the access rules read about a submission the viewer may see (`visible`); a deleted problem has no contest gate and no editors. */
+interface SubmissionFacts {
+  submission: SubmissionDocument;
+  problem: ProblemDocument;
+  ownerId: string;
+  canEdit: boolean;
+  contest: ContestDocument | null;
+  isContestEditor: boolean;
+}
+
+/** A submission whose result page the viewer may open, with what they may read of its source. */
+export interface ReadableSubmission {
+  submission: SubmissionDocument;
+  problem: ProblemDocument;
+  canEdit: boolean;
+  source: SourceAccess;
 }
 
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
@@ -215,29 +235,23 @@ export class SubmissionsService {
     });
   }
 
+  /** The result page: open to whoever may see the submission (`readable`); feedback, output and the compile log only with source access (a compile log quotes the source). */
   async detail(
-    principal: Principal,
+    principal: Principal | null,
     id: string,
   ): Promise<SubmissionDetailResponse> {
     const scope = await this.viewerScope(principal);
-    const viewed = await this.viewable(principal, id, scope);
+    const viewed = await this.readable(principal, id, scope);
     const { problem, canEdit } = viewed;
+    const readsSource = viewed.source === 'granted';
     const visibility = problem.deletedAt
       ? NO_CASE_DETAIL
       : caseVisibility(principal, problem, {
           canEdit,
           isInContest: scope !== null,
+          readsSource,
         });
-    // Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them.
-    const submission =
-      visibility.cases === 'none'
-        ? viewed.submission
-        : ((await this.submissions.findById(id, { withCases: true })) ??
-          viewed.submission);
-    const totalCases =
-      visibility.cases === 'none'
-        ? null
-        : await this.problems.caseCount(problem._id);
+    const submission = await this.withCasesFor(viewed.submission, visibility);
     const [owner] = await this.users.findByIds([uuidStr(submission.user)]);
     const actions = this.actionsFor(principal, submission, canEdit);
     return SubmissionDetailResponse.withDetails(
@@ -249,8 +263,12 @@ export class SubmissionsService {
       },
       {
         visibility,
-        error: shownError(submission, canEdit),
-        totalCases,
+        error: readsSource ? shownError(submission, canEdit) : null,
+        sourceAccess: viewed.source,
+        totalCases:
+          visibility.cases === 'none'
+            ? null
+            : await this.problems.caseCount(problem._id),
         lockedAfter: canEdit ? submission.lockedAfter : null,
         actions,
         externalRun: actions.canRejudge
@@ -263,14 +281,27 @@ export class SubmissionsService {
     );
   }
 
+  /** Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them. */
+  private async withCasesFor(
+    submission: SubmissionDocument,
+    visibility: CaseVisibility,
+  ): Promise<SubmissionDocument> {
+    if (visibility.cases === 'none') return submission;
+    return (
+      (await this.submissions.findById(uuidStr(submission._id), {
+        withCases: true,
+      })) ?? submission
+    );
+  }
+
   /** The viewer's action flags, from the rules the action endpoints check. */
   private actionsFor(
-    principal: Principal,
+    principal: Principal | null,
     submission: SubmissionDocument,
     canEditProblem: boolean,
   ): SubmissionActions {
     return submissionActions(principal, {
-      isOwner: uuidStr(submission.user) === principal.userId,
+      isOwner: uuidStr(submission.user) === principal?.userId,
       status: submission.status,
       rejudgedDate: submission.rejudgedDate,
       lockedAfter: submission.lockedAfter,
@@ -278,17 +309,15 @@ export class SubmissionsService {
     });
   }
 
-  /** The detail rules for a live stream, and whether case progress may be shown (every case result visible). */
+  /** The result page's rules for a live stream (the source rule plays no part), and whether case progress may be shown (every case result visible). */
   async streamAccess(
-    principal: Principal,
+    principal: Principal | null,
     id: string,
   ): Promise<{ submission: SubmissionDocument; caseEvents: boolean }> {
     const scope = await this.viewerScope(principal);
-    const { submission, problem, canEdit } = await this.viewable(
-      principal,
-      id,
-      scope,
-    );
+    const facts = await this.factsOf(principal, id, scope);
+    await this.assertResultOpen(principal, facts);
+    const { submission, problem, canEdit } = facts;
     return {
       submission,
       caseEvents:
@@ -296,6 +325,7 @@ export class SubmissionsService {
         caseVisibility(principal, problem, {
           canEdit,
           isInContest: scope !== null,
+          readsSource: false,
         }).cases === 'all',
     };
   }
@@ -335,7 +365,7 @@ export class SubmissionsService {
 
   /** 404 for an unknown or malformed id or a problem the viewer cannot see, whoever owns the submission; a deleted problem's history is the exception for the owner and for `judge.view_all_submission`. */
   async visible(
-    principal: Principal,
+    principal: Principal | null,
     id: string,
     scope: ContestScope | null,
   ): Promise<{ submission: SubmissionDocument; problem: ProblemDocument }> {
@@ -354,15 +384,16 @@ export class SubmissionsService {
 
   /** A live problem must be visible to the viewer (source visibility A never exposes a private problem); a deleted or tombstoned one keeps its history for the submission's owner and for staff who see every submission. */
   private mayRead(
-    principal: Principal,
+    principal: Principal | null,
     submission: SubmissionDocument,
     problem: ProblemDocument,
     scope: ContestScope | null,
   ): boolean {
     if (problem.deletedAt)
       return (
-        uuidStr(submission.user) === principal.userId ||
-        hasPermission(principal, 'judge.view_all_submission')
+        principal !== null &&
+        (uuidStr(submission.user) === principal.userId ||
+          hasPermission(principal, 'judge.view_all_submission'))
       );
     return ProblemAccess.canSee(
       principal,
@@ -371,7 +402,24 @@ export class SubmissionsService {
     );
   }
 
-  /** `visible`, then 403 unless legacy `can_see_detail` lets the viewer in; another user's contest submission also needs the contest's full submission list (never during a freeze), unless the viewer edits the contest or the problem or sees every submission. `contest_running` means the contest's list is not open to the viewer yet: running, frozen, or an ended contest whose scoreboard stays hidden. */
+  /** `visible`, then the contest gate (`assertResultOpen`); `source` is legacy `can_see_detail` for signed-in viewers and `sign_in` for visitors. The result page's rule. */
+  async readable(
+    principal: Principal | null,
+    id: string,
+    scope: ContestScope | null,
+  ): Promise<ReadableSubmission> {
+    const facts = await this.factsOf(principal, id, scope);
+    await this.assertResultOpen(principal, facts);
+    const { submission, problem, canEdit } = facts;
+    return {
+      submission,
+      problem,
+      canEdit,
+      source: await this.sourceAccessFor(principal, facts),
+    };
+  }
+
+  /** The source rule (source, its raw and download links, similarity pairs: anything that shows code): 403 `hidden` when `detailAccess` denies it, then the contest gate, then 403 `solve_first` until an `if-solved` viewer solved the problem. Solving would not help while the contest list is closed, so that reason wins over `solve_first`; a denied viewer hears `hidden` either way. */
   async viewable(
     principal: Principal,
     id: string,
@@ -381,42 +429,99 @@ export class SubmissionsService {
     problem: ProblemDocument;
     canEdit: boolean;
   }> {
+    const facts = await this.factsOf(principal, id, scope);
+    if (this.detailAccessOf(principal, facts) === 'denied')
+      throw new AppError('hidden', 403, 'You cannot see this submission');
+    await this.assertResultOpen(principal, facts);
+    if ((await this.sourceAccessFor(principal, facts)) === 'solve_first')
+      throw new AppError(
+        'solve_first',
+        403,
+        'Solve this problem to see this submission',
+      );
+    const { submission, problem, canEdit } = facts;
+    return { submission, problem, canEdit };
+  }
+
+  private async factsOf(
+    principal: Principal | null,
+    id: string,
+    scope: ContestScope | null,
+  ): Promise<SubmissionFacts> {
     const { submission, problem } = await this.visible(principal, id, scope);
-    if (problem.deletedAt) return { submission, problem, canEdit: false };
-    const view = ProblemAccess.accessView(problem);
-    const canEdit = ProblemAccess.canEdit(principal, view);
     const ownerId = uuidStr(submission.user);
+    if (problem.deletedAt)
+      return {
+        submission,
+        problem,
+        ownerId,
+        canEdit: false,
+        contest: null,
+        isContestEditor: false,
+      };
     const contest = submission.contest
       ? await this.contests.findById(uuidStr(submission.contest))
       : null;
-    const isContestEditor =
-      contest !== null && this.editsContest(principal, contest);
-    const access = detailAccess(principal, {
+    return {
+      submission,
+      problem,
       ownerId,
-      problem: {
-        ...view,
-        submissionSourceVisibility: problem.submissionSourceVisibility,
-      },
-      canEdit,
-      isContestEditor,
-    });
-    // Solving would not help while the contest list is closed, so that reason wins over `solve_first`; a denied viewer hears `hidden` either way.
-    if (
-      access !== 'denied' &&
-      (await this.isContestListClosed(principal, {
-        contest,
-        ownerId,
-        canEdit,
-        isContestEditor,
-      }))
-    )
+      canEdit: ProblemAccess.canEdit(
+        principal,
+        ProblemAccess.accessView(problem),
+      ),
+      contest,
+      isContestEditor:
+        principal !== null &&
+        contest !== null &&
+        this.editsContest(principal, contest),
+    };
+  }
+
+  /** 403 `contest_running` for another user's contest submission while the contest's full list is not open to the viewer (running, frozen, or an ended contest whose scoreboard stays hidden), unless they edit the contest or the problem or see every submission. */
+  private async assertResultOpen(
+    principal: Principal | null,
+    facts: SubmissionFacts,
+  ): Promise<void> {
+    if (await this.isContestListClosed(principal, facts))
       throw new AppError(
         'contest_running',
         403,
         'You cannot see this submission yet',
       );
-    await this.assertDetailAllowed(principal, access, problem);
-    return { submission, problem, canEdit };
+  }
+
+  /** Legacy `can_see_detail`; only the owner and `judge.view_all_submission` get past `visible` on a deleted problem. */
+  private detailAccessOf(
+    principal: Principal,
+    { problem, ownerId, canEdit, isContestEditor }: SubmissionFacts,
+  ): DetailAccess {
+    if (problem.deletedAt) return 'granted';
+    return detailAccess(principal, {
+      ownerId,
+      problem: {
+        ...ProblemAccess.accessView(problem),
+        submissionSourceVisibility: problem.submissionSourceVisibility,
+      },
+      canEdit,
+      isContestEditor,
+    });
+  }
+
+  private async sourceAccessFor(
+    principal: Principal | null,
+    facts: SubmissionFacts,
+  ): Promise<SourceAccess> {
+    if (!principal) return sourceAccessOf(null, 'denied', false);
+    const access = this.detailAccessOf(principal, facts);
+    const hasSolved =
+      access === 'if-solved' &&
+      (await this.submissions.hasSolved(
+        principal.userId,
+        facts.problem._id,
+        facts.problem.points,
+      ));
+    return sourceAccessOf(principal, access, hasSolved);
   }
 
   private editsContest(
@@ -431,7 +536,7 @@ export class SubmissionsService {
 
   /** Another user's contest submission stays closed until the contest's full list is open to this viewer. */
   private async isContestListClosed(
-    principal: Principal,
+    principal: Principal | null,
     {
       contest,
       ownerId,
@@ -446,10 +551,11 @@ export class SubmissionsService {
   ): Promise<boolean> {
     if (
       contest === null ||
-      ownerId === principal.userId ||
+      ownerId === principal?.userId ||
       canEdit ||
       isContestEditor ||
-      hasPermission(principal, 'judge.view_all_submission')
+      (principal !== null &&
+        hasPermission(principal, 'judge.view_all_submission'))
     )
       return false;
     const now = new Date();
@@ -459,28 +565,6 @@ export class SubmissionsService {
       now,
       await this.viewers.viewerOf(principal, contest, now),
     );
-  }
-
-  private async assertDetailAllowed(
-    principal: Principal,
-    access: DetailAccess,
-    problem: ProblemDocument,
-  ): Promise<void> {
-    if (access === 'granted') return;
-    if (access === 'denied')
-      throw new AppError('hidden', 403, 'You cannot see this submission');
-    if (
-      !(await this.submissions.hasSolved(
-        principal.userId,
-        problem._id,
-        problem.points,
-      ))
-    )
-      throw new AppError(
-        'solve_first',
-        403,
-        'Solve this problem to see this submission',
-      );
   }
 
   /** Null when nothing can match (unknown user, invisible problem); other users' submissions of contests whose list the viewer may not see (a freeze, which outlives the contest) are left out (legacy `get_visible_problems`). */
