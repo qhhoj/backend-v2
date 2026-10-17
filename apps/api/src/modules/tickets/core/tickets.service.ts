@@ -158,13 +158,12 @@ export class TicketsService {
     return { $or: clauses };
   }
 
-  /** Tickets filed from contests the viewer edits: every contest ticket with `edit_all_contest` (one index read, no id list), else the edited contests' ids. */
+  /** Tickets filed from contests the viewer edits, by the ids of the existing ones (with `edit_all_contest`, every contest): a deleted contest's tickets are not listed. */
   private async editedContestsClause(
     principal: Principal,
   ): Promise<FilterQuery<Ticket>[]> {
     const editable = ContestAccess.editableFilter(principal);
     if (!editable) return [];
-    if (!Object.keys(editable).length) return [{ contest: { $ne: null } }];
     return [{ contest: { $in: await this.contests.idsMatching(editable) } }];
   }
 

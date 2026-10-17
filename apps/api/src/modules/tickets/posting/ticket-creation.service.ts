@@ -12,6 +12,7 @@ import { ContestAccess } from '../../contests/core/contest-access';
 import { contestScopeOf } from '../../contests/core/contest-scope';
 import { ContestsRepository } from '../../contests/core/contests.repository';
 import type { ContestDocument } from '../../contests/core/contests.repository';
+import { ContestViewerService } from '../../contests/core/contest-viewer.service';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import { DiscordWebhooksService } from '@libs/community';
 import { ProblemAccess } from '../../problems/core/problem-access';
@@ -48,6 +49,7 @@ export class TicketCreationService {
     private readonly problems: ProblemsRepository,
     private readonly currentContest: CurrentContestService,
     private readonly contests: ContestsRepository,
+    private readonly viewers: ContestViewerService,
     private readonly gate: TicketGateService,
     private readonly rateLimits: RateLimitService,
     private readonly context: TicketContextService,
@@ -119,22 +121,28 @@ export class TicketCreationService {
     });
   }
 
-  /** 404 unless the code names one of the contest's problems that the filer can see: as anywhere else, or as a contestant currently in this contest. */
+  /** 404 unless the contest's problem list is open to the filer (otherwise the answer would tell which problems it has) and the code names one of its problems that the filer can see: as anywhere else, or as a contestant currently in this contest. */
   private async contestProblemId(
     principal: Principal,
     contest: ContestDocument,
     code: string,
   ): Promise<string> {
-    const current = await this.currentContest.current(principal);
-    const scope =
-      current && uuidStr(current.contest._id) === uuidStr(contest._id)
-        ? contestScopeOf(contest, new Date())
-        : null;
-    const problem = await this.problems.findForAccessByCode(code);
+    const now = new Date();
+    const viewer = await this.viewers.viewerOf(principal, contest, now);
+    const listOpen = ContestAccess.isProblemListOpen(
+      principal,
+      ContestAccess.accessView(contest),
+      viewer,
+      now,
+    );
+    const problem = listOpen
+      ? await this.problems.findForAccessByCode(code)
+      : null;
     const view = problem && ProblemAccess.accessView(problem);
     const inContest =
       view !== null &&
       contest.problems.some((entry) => uuidStr(entry.problem) === view.id);
+    const scope = viewer.current ? contestScopeOf(contest, now) : null;
     if (!view || !inContest || !ProblemAccess.canSee(principal, view, scope))
       throw new AppError('not_found', 404, 'No such problem in this contest');
     return view.id;

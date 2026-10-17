@@ -3,12 +3,7 @@ import { UsersRepository } from '@libs/auth';
 import type { UserDocument } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { escapeRegExp, Paginated } from '@libs/common';
-import {
-  contestPhase,
-  frozenTime,
-  isFrozenFor,
-  liveStatusOf,
-} from '@libs/contests';
+import { frozenTime, isFrozenFor, liveStatusOf } from '@libs/contests';
 import { narrowTo, uuidStr } from '@libs/database';
 import type { Contest } from '@libs/database';
 import type { FilterQuery, SortOrder } from 'mongoose';
@@ -193,7 +188,12 @@ export class ContestsService {
       [
         this.users.findByIds(ContestAccess.accessView(contest).authors),
         this.settingsUsers(contest, viewer),
-        this.isProblemListOpen(contest, viewer, now)
+        ContestAccess.isProblemListOpen(
+          principal,
+          ContestAccess.accessView(contest),
+          viewerFacts,
+          now,
+        )
           ? this.problemFacts.factsFor(principal, contest, viewerFacts, now)
           : null,
         this.organizations.forContests(principal, [contest]),
@@ -244,21 +244,6 @@ export class ContestsService {
     return viewer.canEdit
       ? this.users.findByIds(ContestSettingsResponse.userIdsOf(contest))
       : Promise.resolve([]);
-  }
-
-  /** Problems show to whoever is in the contest, edits or tests it, and to everyone once it ended. */
-  isProblemListOpen(
-    contest: Contest,
-    viewer: ContestViewerAccess,
-    now: Date,
-  ): boolean {
-    return (
-      viewer.inContest ||
-      viewer.isEditor ||
-      viewer.canEdit ||
-      viewer.isTester ||
-      contestPhase(contest, now) === 'ended'
-    );
   }
 
   viewerResponseOf(

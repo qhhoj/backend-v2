@@ -1,4 +1,5 @@
-import type { User } from '@libs/database';
+import { newId } from '@libs/database';
+import type { Contest, User } from '@libs/database';
 import type { AnnouncementResponse } from '../src/modules/contests/announcements/dto/announcement.response';
 import type {
   TicketDetailResponse,
@@ -47,6 +48,7 @@ describe('contest tickets (questions to the organisers)', () => {
 
   let contestKey: string;
   let contestId: string;
+  let elsewhereId: string;
 
   beforeAll(async () => {
     api = await setupApiTest();
@@ -58,6 +60,7 @@ describe('contest tickets (questions to the organisers)', () => {
       ['curator', { permissions: EDIT_OWN }],
       ['otherAuthor', { permissions: EDIT_OWN }],
       ['staff', { permissions: ['judge.change_ticket'] }],
+      ['allContests', { permissions: ['judge.edit_all_contest'] }],
       ['muted', { mute: true }],
     ];
     for (const [name, extra] of roles) {
@@ -68,7 +71,8 @@ describe('contest tickets (questions to the organisers)', () => {
       code: 'ct_hidden',
       isPublic: false,
     });
-    await createProblem(api, catalog, { code: 'ct_elsewhere' });
+    elsewhereId = (await createProblem(api, catalog, { code: 'ct_elsewhere' }))
+      ._id;
     const contest = await createContest(api, {
       authors: [people.author.id],
       curators: [people.curator.id],
@@ -123,6 +127,19 @@ describe('contest tickets (questions to the organisers)', () => {
     const hidden = await createContest(api, { isVisible: false });
     await ask('contestant', hidden.key, {}).expect(404);
     await ask('muted', contestKey, {}).expect(403);
+  });
+
+  it('names no problem of a contest whose problem list is closed to the filer', async () => {
+    const upcoming = await createContest(api, {
+      authors: [people.author.id],
+      startTime: hoursFromNow(1),
+      endTime: hoursFromNow(3),
+      problems: [contestProblem(elsewhereId, 1)],
+    });
+    // A public problem, but the answer would tell that the contest has it.
+    await ask('rival', upcoming.key, { problem: 'ct_elsewhere' }).expect(404);
+    await ask('rival', upcoming.key, {}).expect(201);
+    await ask('author', upcoming.key, { problem: 'ct_elsewhere' }).expect(201);
   });
 
   it('lets a contestant read only their own; the contest editors and staff read every one', async () => {
@@ -207,34 +224,65 @@ describe('contest tickets (questions to the organisers)', () => {
       ).contest;
     expect(await read('author')).toEqual({ key: hidden.key, name: 'Contest' });
     expect(await read('rival')).toBeNull();
+    const question = await createTicket(api, {
+      creator: people.rival.id,
+      contest: hidden._id,
+      linkedItem: { type: 'contest', id: hidden._id },
+    });
+    const linkFor = async (who: string) =>
+      dataOf<TicketDetailResponse>(
+        await get(who, ticketUrl(question._id)).expect(200),
+      ).link;
+    expect((await linkFor('author')).key).toBe(hidden.key);
+    expect(await linkFor('rival')).toMatchObject({ key: null, url: '' });
   });
 
-  it('links #label in an announcement to the contest problem once the contest started', async () => {
-    const upcoming = await createContest(api, {
-      authors: [people.author.id],
+  it('lists the tickets of every existing contest to an editor of all contests, not of a deleted one', async () => {
+    const live = await createTicket(api, {
+      creator: people.rival.id,
+      contest: contestId,
+    });
+    const orphan = await createTicket(api, {
+      creator: people.rival.id,
+      contest: newId(),
+    });
+    const listed = await allTickets('allContests');
+    expect(listed).toContain(live._id);
+    expect(listed).not.toContain(orphan._id);
+  });
+
+  it('stores a #label link only once every viewer sees the problem codes', async () => {
+    const problems = (await api.contests.findById(contestId))!.problems;
+    const announce = async (key: string, description: string) =>
+      dataOf<AnnouncementResponse>(
+        await authed(
+          api.http().post(contestUrl(key, '/announcements')),
+          people.author.session,
+        )
+          .send({ title: 'Sửa đề', description })
+          .expect(201),
+      ).descriptionHtml;
+    const contestOf = (extra: Partial<Contest>) =>
+      createContest(api, { authors: [people.author.id], problems, ...extra });
+    const labelOnly = '<p><a class="problem-ref">#1</a>: n ≥ 0.</p>\n';
+    const upcoming = await contestOf({
       startTime: hoursFromNow(1),
       endTime: hoursFromNow(3),
-      problems: (await api.contests.findById(contestId))!.problems,
     });
-    const early = dataOf<AnnouncementResponse>(
-      await authed(
-        api.http().post(contestUrl(upcoming.key, '/announcements')),
-        people.author.session,
-      )
-        .send({ title: 'Sắp thi', description: 'Xem #1.' })
-        .expect(201),
+    expect(await announce(upcoming.key, '#1: n ≥ 0.')).toBe(labelOnly);
+    const hiddenBoard = await contestOf({ scoreboardVisibility: 'C' });
+    expect(await announce(hiddenBoard.key, '#1: n ≥ 0.')).toBe(labelOnly);
+    const ended = await contestOf({
+      scoreboardVisibility: 'H',
+      startTime: hoursFromNow(-3),
+      endTime: hoursFromNow(-1),
+    });
+    expect(await announce(ended.key, '#1: n ≥ 0.')).toContain(
+      '<a class="problem-ref" href="/problems/ct_hidden">#1</a>',
     );
-    expect(early.descriptionHtml).toBe('<p>Xem #1.</p>\n');
-    const announcement = dataOf<AnnouncementResponse>(
-      await authed(
-        api.http().post(contestUrl(contestKey, '/announcements')),
-        people.author.session,
-      )
-        .send({ title: 'Sửa đề', description: '#1: n ≥ 0. Xem `#1`, #2.' })
-        .expect(201),
-    );
-    expect(announcement.descriptionHtml).toBe(
-      '<p><a href="/problems/ct_hidden">#1</a>: n ≥ 0. Xem <code>#1</code>, #2.</p>\n',
+    // A visible board shows the codes from the start; labels beyond the contest's problems stay text.
+    expect(await announce(contestKey, '#1: n ≥ 0. Xem `#1`, #2.')).toBe(
+      '<p><a class="problem-ref" href="/problems/ct_hidden">#1</a>: n ≥ 0. Xem <code>#1</code>, #2.</p>\n',
     );
   });
 });

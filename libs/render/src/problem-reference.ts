@@ -4,44 +4,54 @@ import type MarkdownIt from 'markdown-it';
 const PROBLEM_REFERENCE = /^#([A-Za-z0-9]{1,8})(?![\w])/;
 const WORD_CHAR = /\w/;
 
-/** The `problemLinks` render option: problem label → href (a contest announcement's `#C`). */
-export type ProblemLinks = Readonly<Record<string, string>>;
+/** The class every `#C` anchor carries; one without an href is resolved by the reader's page from the problems that reader may see. */
+export const PROBLEM_REFERENCE_CLASS = 'problem-ref';
+
+/**
+ * The `problemLinks` render option (a contest announcement's `#C`): which words name a problem label, and the href of the
+ * labels whose problem codes may be stored in the HTML. A label without an href becomes a label-only anchor.
+ */
+export interface ProblemLinks {
+  isLabel(label: string): boolean;
+  hrefs: Readonly<Record<string, string>>;
+}
 
 const linksOf = (env: unknown): ProblemLinks | undefined =>
   (env as { problemLinks?: ProblemLinks }).problemLinks;
 
-/** The href of the `#C` reference `text` starts with, or null (no links given, or not a known label). */
+/** The `#C` reference `text` starts with: its length and href (null: label-only), or null when it names no label. */
 export function problemReferenceAt(
   text: string,
   env: unknown,
-): { length: number; href: string } | null {
+): { length: number; href: string | null } | null {
   const links = linksOf(env);
   const match = links && PROBLEM_REFERENCE.exec(text);
-  if (!links || !match || !Object.hasOwn(links, match[1])) return null;
-  return { length: match[0].length, href: links[match[1]] };
+  if (!links || !match || !links.isLabel(match[1])) return null;
+  const href = Object.hasOwn(links.hrefs, match[1])
+    ? links.hrefs[match[1]]
+    : null;
+  return { length: match[0].length, href };
 }
 
-/** `#C` names the contest's problem labelled C and becomes a link to it; an unknown label, a code span and a link's own text stay as written. */
+/** `#C` names the contest's problem labelled C and becomes an anchor; a word that is no label, a code span and a link's own text stay as written. */
 export function problemReferenceRule(
   state: MarkdownIt.StateInline,
   silent: boolean,
 ): boolean {
   if (state.src.charCodeAt(state.pos) !== 0x23 || state.linkLevel > 0)
     return false;
-  const links = linksOf(state.env);
-  if (!links) return false;
   if (state.pos > 0 && WORD_CHAR.test(state.src[state.pos - 1])) return false;
-  const match = PROBLEM_REFERENCE.exec(
+  const reference = problemReferenceAt(
     state.src.slice(state.pos, state.posMax),
+    state.env,
   );
-  const href = match && Object.hasOwn(links, match[1]) ? links[match[1]] : null;
-  if (!match || href === null) return false;
+  if (!reference) return false;
   if (!silent) {
     const token = state.push('problem_reference', 'a', 0);
-    token.content = match[0];
-    token.attrSet('href', href);
+    token.content = state.src.slice(state.pos, state.pos + reference.length);
+    if (reference.href !== null) token.attrSet('href', reference.href);
   }
-  state.pos += match[0].length;
+  state.pos += reference.length;
   return true;
 }
 
@@ -60,5 +70,8 @@ export const renderProblemReference = (
   index: number,
 ): string => {
   const token = tokens[index];
-  return `<a href="${escapeAttribute(String(token.attrGet('href') ?? ''))}">${token.content}</a>`;
+  const href = token.attrGet('href');
+  const hrefAttribute =
+    href === null ? '' : ` href="${escapeAttribute(String(href))}"`;
+  return `<a class="${PROBLEM_REFERENCE_CLASS}"${hrefAttribute}>${token.content}</a>`;
 };

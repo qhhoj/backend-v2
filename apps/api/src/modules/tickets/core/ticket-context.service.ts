@@ -65,7 +65,7 @@ export class TicketContextService {
     return { ticket, view };
   }
 
-  /** Display data of the linked items and contests, keyed by ticket id: one lookup per kind, however many tickets. A contest the reader cannot see is left out (a problem's editor reads its tickets from any contest). */
+  /** Display data of the linked items and contests, keyed by ticket id: one lookup per kind, however many tickets. A contest the reader cannot see is left out, as the filed-from contest and as the linked item (a problem's editor reads its tickets from any contest). */
   async subjects(
     principal: Principal,
     tickets: TicketDocument[],
@@ -83,16 +83,15 @@ export class TicketContextService {
     const found: Lookups = {
       problems: byId(problems),
       issues: byId(issues),
-      contests: byId(contests),
+      contests: byId(
+        contests.filter((contest) =>
+          ContestAccess.canSee(principal, ContestAccess.accessView(contest)),
+        ),
+      ),
     };
     return new Map(
       tickets.map((ticket) => {
-        const filedFrom = found.contests.get(contestIdOf(ticket) ?? '');
-        const contest =
-          filedFrom &&
-          ContestAccess.canSee(principal, ContestAccess.accessView(filedFrom))
-            ? filedFrom
-            : null;
+        const contest = found.contests.get(contestIdOf(ticket) ?? '');
         const subject: TicketSubject = {
           link: linkOf(ticket, found),
           contest: contest ? { key: contest.key, name: contest.name } : null,
@@ -106,13 +105,14 @@ export class TicketContextService {
 interface Lookups {
   problems: Map<string, { code: string; name: string }>;
   issues: Map<string, { issueUrl: string }>;
+  /** Only the contests the reader can see. */
   contests: Map<string, Contest>;
 }
 
 const byId = <T extends { _id: string }>(rows: T[]): Map<string, T> =>
   new Map(rows.map((row) => [uuidStr(row._id), row]));
 
-/** A deleted problem or contest keeps its type and id, with no key and no url. */
+/** A deleted problem, or a contest that is deleted or hidden from the reader, keeps its type and id, with no key and no url. */
 function linkOf(ticket: TicketDocument, found: Lookups): TicketLinkResponse {
   const { type } = ticket.linkedItem;
   const id = uuidStr(ticket.linkedItem.id);
@@ -141,5 +141,5 @@ function linkOf(ticket: TicketDocument, found: Lookups): TicketLinkResponse {
         title: contest.name,
         url: contestPath(contest.key),
       }
-    : { type, id, key: null, title: 'Deleted contest', url: '' };
+    : { type, id, key: null, title: 'Unavailable contest', url: '' };
 }

@@ -8,7 +8,7 @@ import {
   notifyAnnouncementFanout,
 } from '@libs/community';
 import type { NotificationFanoutJob } from '@libs/community';
-import { contestPhase, problemLabel } from '@libs/contests';
+import { contestPhase, isLabelShaped, problemLabel } from '@libs/contests';
 import { uuidStr } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import type { ProblemLinks } from '@libs/render';
@@ -146,7 +146,7 @@ export class ContestAnnouncementsService {
     );
   }
 
-  /** `#C` links to the contest's problem labelled C. */
+  /** `#C` is an anchor for the contest's problem labelled C. */
   private async render(
     contest: ContestDocument,
     text: string,
@@ -162,11 +162,25 @@ export class ContestAnnouncementsService {
     }
   }
 
-  /** Label → problem page of the contest's problems, labelled in contest order like the problem list. None before the start: the stored HTML must not reveal hidden problem codes. Resolved when the text is saved, so a later reorder does not move old links. */
-  private async problemLinks(
+  /**
+   * The contest's labels and, once its problem codes are public to its viewers (it ended, or its board is visible and it
+   * started), the problem page of each. Before that the HTML stores label-only anchors, which each reader's page resolves
+   * from the problems that reader may see. Resolved when the text is saved, so a later reorder does not move old links.
+   */
+  private async problemLinks(contest: ContestDocument): Promise<ProblemLinks> {
+    if (!areProblemCodesPublic(contest, new Date()))
+      return {
+        isLabel: (label) => isLabelShaped(label, contest.labelStyle),
+        hrefs: {},
+      };
+    const hrefs = await this.problemHrefs(contest);
+    return { isLabel: (label) => Object.hasOwn(hrefs, label), hrefs };
+  }
+
+  /** Label → problem page, labelled in contest order like the problem list. */
+  private async problemHrefs(
     contest: ContestDocument,
-  ): Promise<ProblemLinks | undefined> {
-    if (contestPhase(contest, new Date()) === 'upcoming') return undefined;
+  ): Promise<Record<string, string>> {
     const ordered = [...contest.problems].sort(
       (left, right) => left.order - right.order,
     );
@@ -176,13 +190,20 @@ export class ContestAnnouncementsService {
     const codeOf = new Map(
       summaries.map((summary) => [uuidStr(summary._id), summary.code]),
     );
-    const links: Record<string, string> = {};
+    const hrefs: Record<string, string> = {};
     ordered.forEach((entry, index) => {
       const code = codeOf.get(uuidStr(entry.problem));
       if (code)
-        links[problemLabel(index, contest.labelStyle)] =
+        hrefs[problemLabel(index, contest.labelStyle)] =
           `/problems/${encodeURIComponent(code)}`;
     });
-    return links;
+    return hrefs;
   }
+}
+
+/** Whether every viewer of the contest already sees its problem codes: after the end, or on a visible board once started. */
+function areProblemCodesPublic(contest: ContestDocument, now: Date): boolean {
+  const phase = contestPhase(contest, now);
+  if (phase === 'ended') return true;
+  return contest.scoreboardVisibility === 'V' && phase !== 'upcoming';
 }

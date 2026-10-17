@@ -37,7 +37,7 @@ type RenderEnv = {
   budget: MathBudget;
   /** The `blog` style only: formulas wait here (KaTeX HTML is trusted) while the author's HTML is sanitized. */
   deferredMath?: { nonce: string; formulas: string[] };
-  /** `#C` problem references: label → href; absent, `#C` stays text. */
+  /** `#C` problem references; absent, `#C` stays text. */
   problemLinks?: ProblemLinks;
 };
 
@@ -150,7 +150,7 @@ const assertWithinMarkupLimits = (html: string): void => {
     );
 };
 
-/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. The `blog` style sanitizes the author's HTML with formulas held aside (KaTeX output is trusted and spliced in afterwards, never sharing the author's sanitizer pass). Throws `RenderLimitError` when the markup is too large or too deeply nested. `problemLinks` turns `#C` into a link to the problem labelled C. */
+/** Statement Markdown → HTML; sanitized unless `style` is `problem-full`. The `blog` style sanitizes the author's HTML with formulas held aside (KaTeX output is trusted and spliced in afterwards, never sharing the author's sanitizer pass). Throws `RenderLimitError` when the markup is too large or too deeply nested. `problemLinks` turns `#C` into an anchor for the problem labelled C. */
 export function renderMarkdown(
   text: string,
   style: RenderStyle,
