@@ -31,6 +31,7 @@ describe('creating problems and contests for an organization', () => {
   let otherOrganizationId: string;
   const sessions: Record<string, TestSession> = {};
   let teacherId: string;
+  let outsiderId: string;
 
   const person = async (
     name: string,
@@ -79,7 +80,7 @@ describe('creating problems and contests for an organization', () => {
     teacherId = await person('teacher', { permissions: ORG_ADMIN_RIGHTS });
     const bareAdminId = await person('bareadmin');
     const memberId = await person('member', { permissions: ORG_ADMIN_RIGHTS });
-    await person('outsider', { permissions: ORG_ADMIN_RIGHTS });
+    outsiderId = await person('outsider', { permissions: ORG_ADMIN_RIGHTS });
     await person('editsall', {
       permissions: [...ORG_ADMIN_RIGHTS, 'judge.edit_all_organization'],
     });
@@ -291,6 +292,91 @@ describe('creating problems and contests for an organization', () => {
       await authed(api.http().post('/api/internal/contests'), sessions.teacher)
         .send(contestBody('sitewide'))
         .expect(403);
+    });
+  });
+
+  describe("another organization's contests and problems", () => {
+    let rivalId: string;
+    const patchContestAs = (who: string, key: string, body: object) =>
+      authed(
+        api.http().patch(`/api/internal/contests/${key}`),
+        sessions[who],
+      ).send(body);
+    const storedOrganizations = async (key: string) =>
+      (await api.contests.findOne({ key }).lean())?.organizations.map(uuidStr);
+    /** A contest of thpt-demo made by its administrator `teacher` through the organization route. */
+    const teacherContest = async (key: string) => {
+      await createContestAs('teacher', 'thpt-demo', contestBody(key)).expect(
+        201,
+      );
+      return key;
+    };
+
+    beforeAll(async () => {
+      const rival = await createOrganization(api, {
+        slug: 'rivalorg',
+        adminIds: [outsiderId],
+      });
+      rivalId = uuidStr(rival._id);
+    });
+
+    it('refuses an organization administrator moving their contest into an organization they do not administer', async () => {
+      const key = await teacherContest('kt_move_rival');
+      await patchContestAs('teacher', key, {
+        organizations: [organizationId, rivalId],
+      })
+        .expect(403)
+        .expect(issueCodes(['organization_rights']));
+      expect(await storedOrganizations(key)).toEqual([organizationId]);
+    });
+
+    it('lets them add another organization they also administer', async () => {
+      const key = await teacherContest('kt_move_other');
+      await patchContestAs('teacher', key, {
+        organizations: [organizationId, otherOrganizationId],
+      }).expect(200);
+      expect(await storedOrganizations(key)).toEqual([
+        organizationId,
+        otherOrganizationId,
+      ]);
+    });
+
+    it('keeps edits that leave the organizations alone open to the author', async () => {
+      const key = await teacherContest('kt_rename');
+      await patchContestAs('teacher', key, {
+        name: 'Kiểm tra giữa kỳ',
+        organizations: [organizationId],
+      }).expect(200);
+    });
+
+    it("hides an organization's contest and problem from another organization's administrator, who cannot edit them", async () => {
+      const key = await teacherContest('kt_foreign');
+      await patchContestAs('outsider', key, { name: 'Đổi tên' }).expect(404);
+      expect((await api.contests.findOne({ key }).lean())?.name).toBe(
+        'Kiểm tra',
+      );
+      await createProblemAs(
+        'teacher',
+        'thpt-demo',
+        problemBody('thptdemo_foreign'),
+      ).expect(201);
+      await authed(
+        api.http().patch('/api/internal/problems/thptdemo_foreign'),
+        sessions.outsider,
+      )
+        .send({ name: 'Đổi tên' })
+        .expect(404);
+      expect((await storedProblem('thptdemo_foreign'))?.name).toBe(
+        'Tổng hai số',
+      );
+    });
+
+    it('lets a superuser move a contest into any organization', async () => {
+      const key = await teacherContest('kt_root_move');
+      await patchContestAs('root', key, { organizations: [rivalId] }).expect(
+        200,
+      );
+      expect(await storedOrganizations(key)).toEqual([rivalId]);
     });
   });
 

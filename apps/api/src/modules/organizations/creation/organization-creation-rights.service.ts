@@ -66,14 +66,26 @@ export class OrganizationCreationRights {
   }
 
   /** Whether every one of these ids is a live organization the viewer may create problems for: an unknown or deleted id refuses (moving a problem between organizations). */
-  async createsProblemsInEach(
+  createsProblemsInEach(
     principal: Principal,
     organizationIds: readonly string[],
   ): Promise<boolean> {
-    const rows = await this.liveAccessRows(organizationIds);
-    return (
-      rows.length === new Set(organizationIds).size &&
-      this.createsProblemsInRows(principal, rows)
+    return this.allowsInEach(
+      principal,
+      organizationIds,
+      OrganizationAccess.canCreateProblem,
+    );
+  }
+
+  /** Whether every one of these ids is a live organization the viewer may create contests for: an unknown or deleted id refuses (moving a contest between organizations). */
+  createsContestsInEach(
+    principal: Principal,
+    organizationIds: readonly string[],
+  ): Promise<boolean> {
+    return this.allowsInEach(
+      principal,
+      organizationIds,
+      OrganizationAccess.canCreateContest,
     );
   }
 
@@ -135,6 +147,18 @@ export class OrganizationCreationRights {
       .find({ _id: { $in: organizationIds }, ...LIVE }, ACCESS_FIELDS)
       .lean<Organization[]>()
       .exec();
+  }
+
+  private async allowsInEach(
+    principal: Principal,
+    organizationIds: readonly string[],
+    rule: CreateRule,
+  ): Promise<boolean> {
+    const rows = await this.liveAccessRows(organizationIds);
+    return (
+      rows.length === new Set(organizationIds).size &&
+      rows.every((row) => rule(principal, OrganizationAccess.accessView(row)))
+    );
   }
 
   private createsProblemsInRows(
