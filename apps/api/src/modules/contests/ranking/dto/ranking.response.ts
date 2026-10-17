@@ -1,5 +1,6 @@
 import { ApiProblemCells } from '../../core/dto/api-problem-cells';
 import type { ProblemCell } from '@libs/contests';
+import { RatingChangeResponse } from '../../rating/dto/rating-change.response';
 
 export class RankingUserResponse {
   id!: string;
@@ -41,6 +42,8 @@ export class RankingRowResponse {
   /** Per problem id, the format's cell; the frozen cells while frozen. */
   @ApiProblemCells()
   cells!: Record<string, ProblemCell>;
+  /** What this contest did to the participant's rating once ratings are applied; null before, for unrated rows and on a frozen board. */
+  ratingChange!: RatingChangeResponse | null;
 }
 
 export class RankingResponse {

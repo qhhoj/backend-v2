@@ -1,10 +1,13 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import type Redis from 'ioredis';
+import { REDIS } from '@libs/common';
 import { waitUntil } from '@libs/common/testing';
 import {
   CONTEST_RATING_QUEUE,
   enqueueContestRating,
   MEAN_INIT,
+  rankingCacheKeys,
   recalculateRatings,
 } from '@libs/contests';
 import type { ContestRatingJob } from '@libs/contests';
@@ -238,6 +241,27 @@ describe('contest rating', () => {
       ratings: 3,
     });
     expect(await worker.ratings.countDocuments()).toBe(3);
+  });
+
+  it('purges the cached boards of every contest it re-rates, since board rows carry rating changes', async () => {
+    const redis = worker.module.get<Redis>(REDIS);
+    const [alice, bob] = await newUsers('cache_alice', 'cache_bob');
+    const first = await ratedContest(daysAgo(2));
+    const second = await ratedContest(daysAgo(1));
+    const unrelated = await ratedContest(daysAgo(3));
+    await join(first._id, alice._id, 200);
+    await join(second._id, bob._id, 100);
+    for (const key of [first, second, unrelated].flatMap((contest) =>
+      rankingCacheKeys(contest._id),
+    ))
+      await redis.set(key, '{}');
+
+    await ratings.rateFrom(first._id);
+
+    for (const key of [...rankingCacheKeys(first._id), ...rankingCacheKeys(second._id)])
+      expect(await redis.exists(key)).toBe(0);
+    for (const key of rankingCacheKeys(unrelated._id))
+      expect(await redis.exists(key)).toBe(1);
   });
 
   it('rates contests ending later after earlier ones, whatever order they were created in', async () => {
