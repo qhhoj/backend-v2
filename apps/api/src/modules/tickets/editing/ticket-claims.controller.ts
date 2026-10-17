@@ -19,8 +19,9 @@ export class TicketClaimsController {
    * `judge.change_ticket`, or an editor of the linked problem. A ticket the
    * caller already handles is returned unchanged. Fails with 409
    * `ticket_claimed` when someone else already handles it, also when two
-   * people claim at the same moment (exactly one wins). Reassigning a handled
-   * ticket is `PATCH /tickets/{id}` with `assignees` (staff).
+   * people claim at the same moment (exactly one wins), and with 409
+   * `ticket_closed` on a closed ticket. Reassigning a handled ticket is
+   * `PATCH /tickets/{id}` with `assignees` (staff).
    */
   @Post()
   @HttpCode(200)

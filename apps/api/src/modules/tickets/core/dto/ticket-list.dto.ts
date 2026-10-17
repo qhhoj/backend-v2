@@ -6,8 +6,9 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Length,
+  Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { toArray } from '@libs/common';
@@ -34,11 +35,12 @@ export class TicketListQueryDto extends TicketPageQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() own?: boolean;
   /** true limits the list to tickets about what the caller authors, curates or suggested (their problems), whatever else they may read. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() aboutMine?: boolean;
-  /** Text in the title (case-insensitive), or the exact username of the creator. */
+  /** Text in the title (ignoring case and Vietnamese accents), or the exact username of the creator; blank filters nothing. */
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @Length(1, 100)
+  @MaxLength(100)
+  @Matches(/^[^\0]*$/)
   // eslint-disable-next-line id-length -- the wire name, shared with the problem and contest lists
   q?: string;
   /** Usernames of ticket creators; repeat the parameter, at most 10. */

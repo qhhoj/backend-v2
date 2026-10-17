@@ -3,9 +3,10 @@ import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { contestPath, problemPath } from '@libs/community';
 import { uuidStr } from '@libs/database';
-import type { Contest, TicketLinkType } from '@libs/database';
+import type { Contest, Ticket, TicketLinkType } from '@libs/database';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestsRepository } from '../../contests/core/contests.repository';
+import type { FilterQuery } from 'mongoose';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type {
@@ -48,6 +49,18 @@ export class TicketContextService {
       assignees: ticket.assignees.map(uuidStr),
       problem: problem && ProblemAccess.accessView(problem),
       contest: contest ? ContestAccess.accessView(contest) : null,
+    };
+  }
+
+  /** Tickets linked to the user's own problems (`ProblemAccess.editorOfFilter`): the list's `aboutMine` and the summary's count. An index read on `linkedItem.id`. */
+  async aboutMineFilter(userId: string): Promise<FilterQuery<Ticket>> {
+    return {
+      'linkedItem.type': 'problem',
+      'linkedItem.id': {
+        $in: await this.problems.visibleIds(
+          ProblemAccess.editorOfFilter(userId),
+        ),
+      },
     };
   }
 

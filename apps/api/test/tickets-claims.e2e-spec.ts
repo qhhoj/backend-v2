@@ -76,6 +76,17 @@ describe('ticket claims, "about mine" and text search', () => {
     expect([people.staffA.id, people.staffB.id]).toContain(assignees[0]);
   });
 
+  it('refuses to claim a closed ticket', async () => {
+    const ticket = await createTicket(api, {
+      creator: people.creator.id,
+      isOpen: false,
+    });
+    await claim('staffA', ticket._id)
+      .expect(409)
+      .expect(errorCode('ticket_closed'));
+    expect(await assigneesOf(ticket._id)).toEqual([]);
+  });
+
   it('records the claim on the timeline', async () => {
     const ticket = await createTicket(api, { creator: people.creator.id });
     const answer = dataOf<TicketDetailResponse>(
@@ -195,7 +206,11 @@ describe('ticket claims, "about mine" and text search', () => {
     expect(await list('staffA', { q: 'outsider' })).toEqual([
       'Không nộp được bài',
     ]);
-    // a regex character is matched as text
+    expect(await list('staffA', { q: 'thieu gioi' })).toEqual([
+      'Bài trash_07 thiếu giới hạn',
+    ]);
+    // a regex character is matched as text, and a blank text filters nothing
     expect(await list('staffA', { q: '.*' })).toEqual([]);
+    expect((await list('staffA', { q: ' ' })).length).toBeGreaterThan(2);
   });
 });
