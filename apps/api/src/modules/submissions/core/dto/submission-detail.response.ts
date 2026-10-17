@@ -1,6 +1,11 @@
+import { ApiProperty } from '@nestjs/swagger';
 import type { CaseStatus, Submission, SubmissionCase } from '@libs/database';
-import { batchSummaries } from '../submission-access';
-import type { CaseVisibility, SubmissionActions } from '../submission-access';
+import { batchSummaries, SOURCE_ACCESS } from '../submission-access';
+import type {
+  CaseVisibility,
+  SourceAccess,
+  SubmissionActions,
+} from '../submission-access';
 import { SubmissionListItemResponse } from './submission-list.response';
 import type { SubmissionRefs } from './submission-list.response';
 
@@ -58,7 +63,7 @@ const caseResponse = (
   ...(visibility.output ? { output: testCase.output } : {}),
 });
 
-/** What the signed-in viewer may do here; each flag is the rule its action endpoint checks. */
+/** What the viewer may do here; each flag is the rule its action endpoint checks. All false for visitors. */
 export class SubmissionViewerResponse implements SubmissionActions {
   /** Whether `POST /submissions/{id}/abort` is allowed. */
   canAbort!: boolean;
@@ -92,8 +97,11 @@ export class SubmissionExternalRunResponse {
 }
 
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
-  /** Compile log or compiler warnings; an internal error's message (it can quote jury data) only for the problem's editors, null for everyone else, the submitter included. */
+  /** Compile log or compiler warnings, only for a viewer who may read the source (`sourceAccess` granted: a compile log quotes the code); an internal error's message (it can quote jury data) only for the problem's editors, null for everyone else, the submitter included. */
   error!: string | null;
+  /** Whether `GET /submissions/{id}/source` will answer: `granted`; `sign_in` for visitors; `solve_first` until the viewer solves the problem; `hidden` otherwise. Without source access, cases carry no feedback or output. */
+  @ApiProperty({ enum: SOURCE_ACCESS, enumName: 'SubmissionSourceAccess' })
+  sourceAccess!: SourceAccess;
   /** Number of the case being judged while the submission runs; null unless the viewer sees every case result (it would tell where judging stopped). */
   currentTestcase!: number | null;
   /** Whether only the pretests are judged (contest pretest mode). */
@@ -123,6 +131,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
     {
       visibility,
       error,
+      sourceAccess,
       totalCases,
       lockedAfter,
       actions,
@@ -131,6 +140,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       visibility: CaseVisibility;
       /** `shownError` for this viewer. */
       error: string | null;
+      sourceAccess: SourceAccess;
       totalCases: number | null;
       lockedAfter: Date | null;
       actions: SubmissionActions;
@@ -140,6 +150,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
     return {
       ...SubmissionListItemResponse.from(submission, refs),
       error,
+      sourceAccess,
       currentTestcase:
         visibility.cases === 'all' ? submission.currentTestcase : null,
       isPretested: submission.isPretested,

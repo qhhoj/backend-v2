@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { optionalPrincipal } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { uuidStr } from '@libs/database';
@@ -107,22 +108,28 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
 
   /** The caps first (429: refused clients skip the detail lookups), then the detail rules (404, 403), then the stream. `state` is read after the stream is registered, so an event published during the lookups is either in it or delivered after it; it may follow an event that already reached the stream, and clients treat the latest status as current. */
   async openSubmission(
-    auth: AuthContext,
+    auth: AuthContext | undefined,
     submissionId: string,
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> {
-    const release = this.hub.reserve(request.ip, auth.principal.userId);
+    const principal = optionalPrincipal(auth);
+    // A session short of its 2FA or password gate still counts against its user's cap.
+    const release = this.hub.reserve(
+      request.ip,
+      auth?.principal.userId ?? null,
+    );
     let entry: SubmissionStream;
     try {
       const { submission, caseEvents } = await this.submissions.streamAccess(
-        auth.principal,
+        principal,
         submissionId,
       );
       entry = this.register(
         this.hub.open(reply, release, {
           channel: this,
-          auth,
+          // A session short of its 2FA or password gates watches as a visitor.
+          auth: principal ? auth! : null,
           submissionId: uuidStr(submission._id),
           caseEvents,
         }),
@@ -187,13 +194,12 @@ export class SubmissionStreamsService implements EventChannel, OnModuleInit {
     if (listeners?.size === 0) this.bySubmission.delete(entry.submissionId);
   }
 
-  /** The detail rules again; a 403/404 closes the stream (the hub), an infrastructure error keeps it (logged) until the next tick. The feed has no rules. */
+  /** The detail rules again (a visitor's stream as a visitor; the hub closes a stream whose session ended); a 403/404 closes the stream (the hub), an infrastructure error keeps it (logged) until the next tick. The feed has no rules. */
   async recheck(
     entry: SubmissionStream,
     principal: Principal | null,
   ): Promise<void> {
     if (entry.submissionId === null) return;
-    if (!principal) return entry.stream.close();
     entry.caseEvents = (
       await this.submissions.streamAccess(principal, entry.submissionId)
     ).caseEvents;

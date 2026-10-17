@@ -6,6 +6,7 @@ import {
   detailAccess,
   listCaseUnit,
   shownError,
+  sourceAccessOf,
   staffOnlyFilter,
   submissionActions,
 } from './submission-access';
@@ -155,28 +156,31 @@ describe('caseVisibility', () => {
   };
   it('shows cases, batches or nothing by testcaseResultVisibility, everything to superusers', () => {
     expect(
-      caseVisibility(viewer(), shown, { canEdit: false, isInContest: false })
-        .cases,
+      caseVisibility(viewer(), shown, {
+        canEdit: false,
+        isInContest: false,
+        readsSource: true,
+      }).cases,
     ).toBe('all');
     expect(
       caseVisibility(
         viewer(),
         { ...shown, testcaseResultVisibility: 'B' },
-        { canEdit: false, isInContest: false },
+        { canEdit: false, isInContest: false, readsSource: true },
       ).cases,
     ).toBe('batches');
     expect(
       caseVisibility(
         viewer(),
         { ...shown, testcaseResultVisibility: 'S' },
-        { canEdit: false, isInContest: false },
+        { canEdit: false, isInContest: false, readsSource: true },
       ).cases,
     ).toBe('none');
     expect(
       caseVisibility(
         viewer({ isSuperuser: true }),
         { ...shown, testcaseResultVisibility: 'S' },
-        { canEdit: false, isInContest: false },
+        { canEdit: false, isInContest: false, readsSource: true },
       ).cases,
     ).toBe('all');
   });
@@ -196,9 +200,63 @@ describe('caseVisibility', () => {
         caseVisibility(
           viewer(),
           { ...shown, testcaseVisibility },
-          { canEdit, isInContest: inContest },
+          { canEdit, isInContest: inContest, readsSource: true },
         ).output,
       ).toBe(expected),
+  );
+});
+
+describe('caseVisibility without source access', () => {
+  const open = {
+    testcaseResultVisibility: 'B',
+    testcaseVisibility: 'A',
+    allowViewFeedback: true,
+  };
+  it.each([
+    ['a visitor', null],
+    ['a signed-in viewer', viewer()],
+    ['a superuser', viewer({ isSuperuser: true })],
+  ])(
+    'keeps the cases rule but drops feedback and output for %s',
+    (_who, principal) =>
+      expect(
+        caseVisibility(principal, open, {
+          canEdit: true,
+          isInContest: false,
+          readsSource: false,
+        }),
+      ).toEqual({
+        cases: principal?.isSuperuser ? 'all' : 'batches',
+        feedback: false,
+        output: false,
+      }),
+  );
+  it('gives a visitor the cases the problem shows', () =>
+    expect(
+      caseVisibility(
+        null,
+        { ...open, testcaseResultVisibility: 'S' },
+        { canEdit: false, isInContest: false, readsSource: false },
+      ).cases,
+    ).toBe('none'));
+});
+
+describe('sourceAccessOf', () => {
+  it.each([
+    ['granted', false, 'granted'],
+    ['if-solved', true, 'granted'],
+    ['if-solved', false, 'solve_first'],
+    ['denied', true, 'hidden'],
+    ['denied', false, 'hidden'],
+  ] as const)(
+    'a signed-in viewer with %s detail access (solved %s) reads the source: %s',
+    (access, hasSolved, expected) =>
+      expect(sourceAccessOf(viewer(), access, hasSolved)).toBe(expected),
+  );
+
+  it.each(['granted', 'if-solved', 'denied'] as const)(
+    'a visitor never reads the source (detail access %s)',
+    (access) => expect(sourceAccessOf(null, access, true)).toBe('sign_in'),
   );
 });
 
@@ -279,6 +337,21 @@ const EDITOR_PERMISSIONS = [
 ];
 
 describe('submissionActions', () => {
+  it('gives a visitor no action, even on facts that open every one to staff', () =>
+    expect(
+      submissionActions(
+        null,
+        actionFacts({ isOwner: true, status: 'QU', canEditProblem: true }),
+        NOW,
+      ),
+    ).toEqual({
+      canAbort: false,
+      canRejudge: false,
+      canReject: false,
+      canLock: false,
+      canOverrideScore: false,
+    }));
+
   it.each([
     {
       label: 'the owner of an unfinished submission may abort it',

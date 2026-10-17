@@ -142,6 +142,11 @@ describe('contest submissions and the freeze', () => {
       .expect(403)
       .expect(errorCode('contest_running'));
     await get(`/api/internal/submissions/${aliceId}`, 'alice').expect(200);
+    // A visitor gets the result page of a submission outside the contest, never one inside it.
+    await get(`/api/internal/submissions/${bobId}`)
+      .expect(403)
+      .expect(errorCode('contest_running'));
+    await get(`/api/internal/submissions/${bobOutside}`).expect(200);
     for (const who of ['author', 'staff']) {
       expect(
         idsOf(
@@ -192,7 +197,14 @@ describe('contest submissions and the freeze', () => {
       { submissionSourceVisibility: 'O' },
     );
     await get(`/api/internal/submissions/${bobId}`, 'author').expect(200);
+    await get(`/api/internal/submissions/${bobId}/source`, 'author').expect(
+      200,
+    );
     await get(`/api/internal/submissions/${bobId}`, 'alice')
+      .expect(403)
+      .expect(errorCode('contest_running'));
+    // The source never opens to alice, so she hears `hidden`, not "wait for the contest".
+    await get(`/api/internal/submissions/${bobId}/source`, 'alice')
       .expect(403)
       .expect(errorCode('hidden'));
   });

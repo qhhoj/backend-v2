@@ -8,6 +8,10 @@ import {
 } from './problem-fixtures';
 import type { Catalog, TestSession } from './problem-fixtures';
 import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
+import {
+  VISITOR_DETAIL_LIMIT,
+  visitorDetailKey,
+} from '../src/modules/submissions/core/rate-limits';
 import { dataOf, seedSubmission } from './submission-fixtures';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
@@ -315,35 +319,180 @@ afterAll(() => api.teardown());
     });
 
     describe('GET /submissions/:id', () => {
+      const sourceAccessOf = async (who: string, code: string) =>
+        dataOf<{ sourceAccess: string }>(
+          await as(who, `${SUBMISSIONS}/${owned[code]}`).expect(200),
+        ).sourceAccess;
+
       it.each([
         ['owner', 'vis_o', 200],
-        ['other', 'vis_a', 200],
-        ['other', 'vis_o', 403],
-        ['tester', 'vis_o', 200],
-        ['editor', 'vis_o', 200],
-        ['viewall', 'vis_o', 200],
-        ['other', 'vis_f', 403],
+        ['other', 'vis_o', 200],
+        ['other', 'vis_f', 200],
+        ['anonymous', 'vis_a', 200],
+        ['anonymous', 'vis_o', 200],
+        ['seer', 'priv_s', 200],
+        ['tester', 'priv', 200],
         // The problem must be visible too (user decision; legacy showed source-visibility-A submissions of private problems).
         ['other', 'priv', 404],
         ['owner', 'priv', 404],
-        ['tester', 'priv', 200],
-      ])('%s on %s → %i', async (who, code, status) => {
-        await as(who, `${SUBMISSIONS}/${owned[code]}`).expect(status);
+        ['anonymous', 'priv', 404],
+      ])(
+        'opens the result to whoever sees the problem: %s on %s → %i',
+        async (who, code, status) => {
+          await as(who, `${SUBMISSIONS}/${owned[code]}`).expect(status);
+        },
+      );
+
+      it.each([
+        ['owner', 'vis_o', 'granted'],
+        ['other', 'vis_a', 'granted'],
+        ['tester', 'vis_o', 'granted'],
+        ['editor', 'vis_o', 'granted'],
+        ['viewall', 'vis_o', 'granted'],
+        ['other', 'vis_o', 'hidden'],
+        // F follows the site setting, all-solved.
+        ['other', 'vis_f', 'solve_first'],
+        ['seer', 'priv_s', 'hidden'],
+        ['anonymous', 'vis_a', 'sign_in'],
+        ['anonymous', 'vis_o', 'sign_in'],
+      ])(
+        'tells %s on %s the source access: %s',
+        async (who, code, expected) => {
+          expect(await sourceAccessOf(who, code)).toBe(expected);
+        },
+      );
+
+      it('gives a visitor the verdict, points and cases but no action, feedback, output or compile log', async () => {
+        const problem = (await api.problems.findOne({ code: 'feed' }))!;
+        const compiled = await seedSubmission(api, {
+          user: ids.owner,
+          problem: problem._id,
+          language: catalog.languages.cpp,
+          result: 'WA',
+          cases: CASES,
+          error: 'main.cpp:1:5: warning: unused variable',
+        });
+        const path = `${SUBMISSIONS}/${uuidStr(compiled._id)}`;
+        const visitor = dataOf<{
+          result: string;
+          error: string | null;
+          cases: Array<Record<string, unknown>> | null;
+          viewer: Record<string, boolean>;
+        }>(await as('anonymous', path).expect(200));
+        expect(visitor.result).toBe('WA');
+        expect(visitor.error).toBeNull();
+        expect(visitor.cases?.map((testCase) => testCase.status)).toEqual([
+          'AC',
+          'AC',
+          'WA',
+        ]);
+        for (const testCase of visitor.cases ?? []) {
+          expect(testCase).not.toHaveProperty('feedback');
+          expect(testCase).not.toHaveProperty('output');
+        }
+        expect(Object.values(visitor.viewer)).not.toContain(true);
+        const owner = dataOf<{
+          error: string | null;
+          cases: Array<Record<string, unknown>> | null;
+        }>(await as('owner', path).expect(200));
+        expect(owner.error).toBe('main.cpp:1:5: warning: unused variable');
+        expect(owner.cases?.[0]).toMatchObject({
+          feedback: 'ok',
+          output: '42',
+        });
       });
 
+      it('limits visitors per IP, never signed-in viewers', async () => {
+        const redis = api.app.get<Redis>(REDIS);
+        const path = `${SUBMISSIONS}/${owned['vis_a']}`;
+        await as('anonymous', path).expect(200);
+        const [key] = await redis.keys(`rate:${visitorDetailKey('*')}`);
+        expect(Number(await redis.get(key))).toBeGreaterThan(0);
+        await redis.set(key, VISITOR_DETAIL_LIMIT, 'KEEPTTL');
+        try {
+          await as('anonymous', path)
+            .expect(429)
+            .expect(errorCode('rate_limited'));
+          await as('other', path).expect(200);
+        } finally {
+          await redis.del(key);
+        }
+      });
+
+      it('keeps feedback and output from a signed-in viewer without source access', async () => {
+        const problem = await problemWith('feed_o', {
+          allowViewFeedback: true,
+          testcaseVisibility: 'A',
+          submissionSourceVisibility: 'O',
+        });
+        const submission = await seedSubmission(api, {
+          user: ids.owner,
+          problem: problem._id,
+          language: catalog.languages.cpp,
+          cases: CASES,
+        });
+        const detail = dataOf<{
+          sourceAccess: string;
+          cases: Array<Record<string, unknown>> | null;
+        }>(
+          await as('other', `${SUBMISSIONS}/${uuidStr(submission._id)}`).expect(
+            200,
+          ),
+        );
+        expect(detail.sourceAccess).toBe('hidden');
+        expect(detail.cases?.[2]).toMatchObject({ status: 'WA', points: 0 });
+        expect(detail.cases?.[2]).not.toHaveProperty('feedback');
+        expect(detail.cases?.[2]).not.toHaveProperty('output');
+      });
+    });
+
+    describe('GET /submissions/:id/source', () => {
+      it.each([
+        ['owner', 'vis_o', 200],
+        ['other', 'vis_a', 200],
+        ['tester', 'vis_o', 200],
+        ['editor', 'vis_o', 200],
+        ['viewall', 'vis_o', 200],
+        ['other', 'vis_o', 403],
+        ['other', 'vis_f', 403],
+        ['seer', 'priv_s', 403],
+        ['other', 'priv', 404],
+        ['anonymous', 'vis_a', 401],
+      ])('%s on %s → %i', async (who, code, status) => {
+        await as(who, `${SUBMISSIONS}/${owned[code]}/source`).expect(status);
+      });
+
+      it.each(['raw', 'download'])(
+        'keeps the %s file behind the same rule',
+        async (kind) => {
+          const path = (code: string) =>
+            `${SUBMISSIONS}/${owned[code]}/source/${kind}`;
+          await as('anonymous', path('vis_a')).expect(401);
+          await as('other', path('vis_o'))
+            .expect(403)
+            .expect(errorCode('hidden'));
+          const ok = await as('other', path('vis_a')).expect(200);
+          expect(ok.text).toBe('// vis_a');
+        },
+      );
+
       it('says hidden, not solve_first, when solving would not help', () =>
-        as('other', `${SUBMISSIONS}/${owned['vis_o']}`)
+        as('other', `${SUBMISSIONS}/${owned['vis_o']}/source`)
           .expect(403)
           .expect(errorCode('hidden')));
 
       it('says hidden on a non-public problem the viewer can see but is no tester of', () =>
-        as('seer', `${SUBMISSIONS}/${owned['priv_s']}`)
+        as('seer', `${SUBMISSIONS}/${owned['priv_s']}/source`)
           .expect(403)
           .expect(errorCode('hidden')));
 
-      it('opens an all-solved submission once the viewer solved the problem with full points', async () => {
+      it('opens an all-solved source once the viewer solved the problem with full points', async () => {
         const path = `${SUBMISSIONS}/${owned['vis_s']}`;
+        const source = `${path}/source`;
         const problem = (await api.problems.findOne({ code: 'vis_s' }))!;
+        const accessNow = async () =>
+          dataOf<{ sourceAccess: string }>(await as('other', path).expect(200))
+            .sourceAccess;
         // Neither someone else's full-score AC nor the viewer's own full-score non-AC counts.
         await seedSubmission(api, {
           user: ids.tester,
@@ -359,7 +508,8 @@ afterAll(() => api.teardown());
           result: 'WA',
           points: 1000,
         });
-        await as('other', path).expect(403).expect(errorCode('solve_first'));
+        await as('other', source).expect(403).expect(errorCode('solve_first'));
+        expect(await accessNow()).toBe('solve_first');
         await seedSubmission(api, {
           user: ids.other,
           problem: problem._id,
@@ -367,7 +517,7 @@ afterAll(() => api.teardown());
           result: 'AC',
           points: 999,
         });
-        await as('other', path).expect(403);
+        await as('other', source).expect(403);
         await seedSubmission(api, {
           user: ids.other,
           problem: problem._id,
@@ -375,9 +525,12 @@ afterAll(() => api.teardown());
           result: 'AC',
           points: 1000,
         });
-        await as('other', path).expect(200);
+        await as('other', source).expect(200);
+        expect(await accessNow()).toBe('granted');
       });
+    });
 
+    describe('GET /submissions/:id cases', () => {
       it('loads cases only for a viewer who passed the check and sees them', async () => {
         const findById = jest.spyOn(
           api.app.get(SubmissionsRepository),
@@ -386,16 +539,20 @@ afterAll(() => api.teardown());
         const casesLoaded = () =>
           findById.mock.calls.filter(([, withCases]) => withCases).length;
         for (const [who, code, status] of [
-          ['other', 'vis_o', 403],
           ['other', 'priv', 404],
+          ['anonymous', 'priv', 404],
           ['owner', 'res_s', 200],
+          ['anonymous', 'res_s', 200],
         ] as const) {
           findById.mockClear();
           await as(who, `${SUBMISSIONS}/${owned[code]}`).expect(status);
           expect(casesLoaded()).toBe(0);
         }
-        await as('owner', `${SUBMISSIONS}/${owned['vis_a']}`).expect(200);
-        expect(casesLoaded()).toBe(1);
+        for (const who of ['owner', 'anonymous']) {
+          findById.mockClear();
+          await as(who, `${SUBMISSIONS}/${owned['vis_a']}`).expect(200);
+          expect(casesLoaded()).toBe(1);
+        }
         findById.mockRestore();
       });
 

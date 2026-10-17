@@ -23,6 +23,15 @@ const STAFF_ONLY_CODES: ReadonlySet<string> = new Set([
 
 export type DetailAccess = 'granted' | 'denied' | 'if-solved';
 
+/** Whether the viewer may read a submission's source: `sign_in` for visitors, `solve_first` until an `if-solved` viewer has solved the problem, `hidden` when `detailAccess` denies it. */
+export const SOURCE_ACCESS = [
+  'granted',
+  'sign_in',
+  'solve_first',
+  'hidden',
+] as const;
+export type SourceAccess = (typeof SOURCE_ACCESS)[number];
+
 export interface SubmissionProblemView extends ProblemAccessView {
   submissionSourceVisibility: string;
 }
@@ -67,34 +76,53 @@ export function detailAccess(
     : 'denied';
 }
 
+/** The source rule on top of `detailAccess`: never for visitors, and an `if-solved` grant needs the viewer's full-points AC (`hasSolved`). */
+export function sourceAccessOf(
+  principal: Principal | null,
+  access: DetailAccess,
+  hasSolved: boolean,
+): SourceAccess {
+  if (!principal) return 'sign_in';
+  if (access === 'granted' || (access === 'if-solved' && hasSolved))
+    return 'granted';
+  return access === 'if-solved' ? 'solve_first' : 'hidden';
+}
+
 export interface CaseVisibility {
   cases: 'all' | 'batches' | 'none';
   feedback: boolean;
   output: boolean;
 }
 
-/** Legacy status page: superusers and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, `isInContest`). */
+/** Legacy status page: superusers and `A` see every case, `B` batch summaries, `S` only the totals; feedback for superusers, editors or `allowViewFeedback`; program output unless `testcaseVisibility` is O (authors and editors only; A = always, C = outside contests, `isInContest`). Feedback and output describe what the code did on the jury's data, so a viewer who may not read the source (`readsSource` false, visitors included) gets neither. */
 export function caseVisibility(
-  principal: Principal,
+  principal: Principal | null,
   problem: {
     testcaseResultVisibility: string;
     testcaseVisibility: string;
     allowViewFeedback: boolean;
   },
-  { canEdit, isInContest }: { canEdit: boolean; isInContest: boolean },
+  {
+    canEdit,
+    isInContest,
+    readsSource,
+  }: { canEdit: boolean; isInContest: boolean; readsSource: boolean },
 ): CaseVisibility {
   return {
     cases:
-      principal.isSuperuser || problem.testcaseResultVisibility === 'A'
+      principal?.isSuperuser || problem.testcaseResultVisibility === 'A'
         ? 'all'
         : problem.testcaseResultVisibility === 'B'
           ? 'batches'
           : 'none',
-    feedback: principal.isSuperuser || canEdit || problem.allowViewFeedback,
+    feedback:
+      readsSource &&
+      (principal?.isSuperuser === true || canEdit || problem.allowViewFeedback),
     output:
-      canEdit ||
-      problem.testcaseVisibility === 'A' ||
-      (problem.testcaseVisibility === 'C' && !isInContest),
+      readsSource &&
+      (canEdit ||
+        problem.testcaseVisibility === 'A' ||
+        (problem.testcaseVisibility === 'C' && !isInContest)),
   };
 }
 
@@ -142,6 +170,7 @@ export function listCaseUnit(
   const { cases } = caseVisibility(principal, problem, {
     canEdit,
     isInContest: false,
+    readsSource: false,
   });
   if (cases === 'none') return null;
   const access = detailAccess(principal, {
@@ -271,12 +300,20 @@ export const isScoreOverridable = (status: SubmissionStatus): boolean =>
 const isRejudgeableStatus = (status: SubmissionStatus): boolean =>
   status !== 'PD' && !IN_FLIGHT_STATUSES.includes(status);
 
-/** The action flags a viewer may use on one submission; each is the rule its action endpoint checks. */
+/** The action flags a viewer may use on one submission; each is the rule its action endpoint checks. A visitor may use none. */
 export function submissionActions(
-  principal: Principal,
+  principal: Principal | null,
   facts: SubmissionActionFacts,
   now = new Date(),
 ): SubmissionActions {
+  if (!principal)
+    return {
+      canAbort: false,
+      canRejudge: false,
+      canReject: false,
+      canLock: false,
+      canOverrideScore: false,
+    };
   return {
     canAbort:
       UNFINISHED_STATUSES.includes(facts.status) &&
