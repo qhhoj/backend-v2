@@ -17,6 +17,8 @@ import { TicketSummaryService } from './alerts/ticket-summary.service';
 import { TicketGateService } from './core/ticket-gate.service';
 import { TicketContextService } from './core/ticket-context.service';
 import { TicketResponsesService } from './core/ticket-responses.service';
+import { TicketClaimsController } from './editing/ticket-claims.controller';
+import { TicketClaimsService } from './editing/ticket-claims.service';
 import { TicketUpdatesController } from './editing/ticket-updates.controller';
 import { TicketUpdatesService } from './editing/ticket-updates.service';
 import { TicketsController } from './core/tickets.controller';
@@ -46,6 +48,7 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     TicketCreationController,
     TicketMessagesController,
     TicketUpdatesController,
+    TicketClaimsController,
     TicketStreamsController,
     TicketSummaryController,
   ],
@@ -63,6 +66,7 @@ import { TicketStreamsService } from './streams/ticket-streams.service';
     TicketCreationService,
     TicketMessagesService,
     TicketUpdatesService,
+    TicketClaimsService,
     TicketSummaryService,
     TicketStaffRepository,
     TicketNotificationsService,

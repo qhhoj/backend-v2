@@ -39,6 +39,11 @@ const canMarkGood = (principal: Principal, view: TicketAccessView): boolean =>
 /** Legacy had no assignee editing outside the Django admin. */
 const canAssign = isStaff;
 
+/** Taking a ticket on oneself ("Nhận phiếu"): staff, or an editor of the linked problem (who already reads it). */
+const canClaim = (principal: Principal, view: TicketAccessView): boolean =>
+  isStaff(principal) ||
+  (view.problem !== null && ProblemAccess.canEdit(principal, view.problem));
+
 /** Legacy `own_ticket_filter`. */
 const ownFilter = (userId: string): FilterQuery<Ticket> => ({
   $or: [{ user: userId }, { assignees: userId }],
@@ -50,5 +55,6 @@ export const TicketAccess = {
   canEditNotes,
   canMarkGood,
   canAssign,
+  canClaim,
   ownFilter,
 };

@@ -209,6 +209,11 @@ export class TicketsRepository {
       .exec();
   }
 
+  /** Open tickets among `filter`. */
+  countOpen(filter: FilterQuery<Ticket>): Promise<number> {
+    return this.tickets.countDocuments({ ...filter, isOpen: true }).exec();
+  }
+
   /** See `AWAITING_STAFF`. */
   countAwaitingStaff(): Promise<number> {
     return this.tickets.countDocuments(TicketsRepository.AWAITING_STAFF).exec();
