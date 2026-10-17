@@ -8,6 +8,7 @@ import type { FilterQuery } from 'mongoose';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
+import { diacriticInsensitivePattern } from '../../problems/core/vietnamese-fold';
 import type {
   TicketDetailResponse,
   TicketListItemResponse,
@@ -54,7 +55,21 @@ export class TicketsService {
       clauses.push({ user: { $in: await this.idsOf(query.user) } });
     if (query.assignee)
       clauses.push({ assignees: { $in: await this.idsOf(query.assignee) } });
+    if (query.aboutMine)
+      clauses.push(await this.context.aboutMineFilter(principal.userId));
+    if (query.q) clauses.push(await this.matching(query.q));
     return this.page(query.page, allOf(clauses));
+  }
+
+  /** The title holds the text (as the problem search reads it: no case, no accents), or the creator's username is the text. A scan of the title, fine at ticket volumes. */
+  private async matching(text: string): Promise<FilterQuery<Ticket>> {
+    const title = {
+      title: { $regex: diacriticInsensitivePattern(text), $options: 'i' },
+    };
+    const creators = await this.idsOf([text]);
+    return creators.length
+      ? { $or: [title, { user: { $in: creators } }] }
+      : title;
   }
 
   /** Legacy `ProblemTicketListView`: editors see every ticket of the problem, other viewers of the problem their own; staff see all. */
