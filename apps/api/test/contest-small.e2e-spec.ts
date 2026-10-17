@@ -374,6 +374,34 @@ afterAll(() => api.teardown());
       ).toMatchObject({ isVisible: true, userCount: 5 });
     });
 
+    it('moves the copy to a new start, keeping its length and registration window', async () => {
+      const source = await createContest(api, {
+        authors: [users.cloner._id],
+        startTime: new Date('2026-10-16T03:40:00Z'),
+        endTime: new Date('2026-10-16T07:40:00Z'),
+        registrationEnd: new Date('2026-10-16T03:00:00Z'),
+      });
+      await clone('cloner', source.key, {
+        key: 'next_week',
+        startTime: '2026-10-23T12:40:00+07:00',
+      }).expect(201);
+      expect(
+        await api.contests.findOne({ key: 'next_week' }).lean(),
+      ).toMatchObject({
+        startTime: new Date('2026-10-23T05:40:00Z'),
+        endTime: new Date('2026-10-23T09:40:00Z'),
+        registrationStart: null,
+        registrationEnd: new Date('2026-10-23T05:00:00Z'),
+      });
+      await clone('cloner', source.key, {
+        key: 'bad_start',
+        startTime: 'next week',
+      }).expect(400);
+      expect(
+        await api.contests.findOne({ key: source.key }).lean(),
+      ).toMatchObject({ startTime: new Date('2026-10-16T03:40:00Z') });
+    });
+
     it('needs judge.clone_contest and edit rights, a free key and not a reserved one', async () => {
       const source = await createContest(api, {
         authors: [users.cloner._id, users.editorOnly._id],

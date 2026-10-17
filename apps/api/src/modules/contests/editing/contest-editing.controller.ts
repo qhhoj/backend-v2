@@ -106,17 +106,18 @@ export class ContestEditingController {
    * Requires `judge.clone_contest` and edit rights on the source. Copies
    * settings and problems to a new, hidden contest under the new key, with the
    * caller as its only author; participations, announcements and similar per-
-   * contest data stay with the source. Reserved keys fail with 400
-   * `key_reserved`.
+   * contest data stay with the source. With `startTime` the copy starts then,
+   * its end and registration window moved by the same amount. Reserved keys
+   * fail with 400 `key_reserved`.
    */
   @RequirePermission('judge.clone_contest')
   @Post(':key/clone')
   clone(
     @CurrentAuth() auth: AuthContext,
     @Param() { key }: ContestKeyParamDto,
-    @Body() { key: newKey }: CloneContestDto,
+    @Body() { key: newKey, startTime }: CloneContestDto,
   ): Promise<ContestDetailResponse> {
-    return this.editing.clone(auth.principal, key, newKey);
+    return this.editing.clone(auth.principal, key, newKey, startTime);
   }
 
   /**
