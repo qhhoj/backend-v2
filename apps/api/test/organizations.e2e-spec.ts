@@ -534,10 +534,10 @@ afterAll(() => api.teardown());
         { adminIds: [owner._id] },
         [member._id, other._id],
       );
-      await post(
-        organizationUrl(organization.slug, '/leave'),
-        ownerSession,
-      ).expect(409);
+      await post(organizationUrl(organization.slug, '/leave'), ownerSession)
+        .expect(409)
+        .expect(issueCode('last_admin'));
+      expect(await membershipsOf(owner._id)).toEqual([organization._id]);
       await post(organizationUrl(organization.slug, '/kick'), memberSession, {
         userId: other._id,
       }).expect(403);
@@ -586,6 +586,61 @@ afterAll(() => api.teardown());
         userId: fourth._id,
       }).expect(204);
       expect(await queuedFor()).toEqual([organization._id, organization._id]);
+    });
+
+    it('lets an administrator leave while another remains, giving up the rights in the history', async () => {
+      const { user: owner, session: ownerSession } = await person();
+      const { user: helper, session: helperSession } = await person();
+      const organization = await createOrganization(api, {
+        adminIds: [owner._id, helper._id],
+      });
+      await post(
+        organizationUrl(organization.slug, '/leave'),
+        helperSession,
+      ).expect(204);
+      expect(await membershipsOf(helper._id)).toEqual([]);
+      const stored = await api.organizations
+        .findById(organization._id)
+        .lean()
+        .exec();
+      expect(stored?.adminIds.map(uuidStr)).toEqual([owner._id]);
+      const history = dataOf<OrganizationRevisionResponse[]>(
+        await get(
+          organizationUrl(organization.slug, '/revisions'),
+          ownerSession,
+        ).expect(200),
+      );
+      expect(history[0]).toMatchObject({
+        action: 'edit',
+        editor: { username: helper.username },
+        changes: {
+          admins: {
+            before: [owner.username, helper.username].sort(),
+            after: [owner.username],
+          },
+        },
+      });
+      await post(organizationUrl(organization.slug, '/leave'), ownerSession)
+        .expect(409)
+        .expect(issueCode('last_admin'));
+    });
+
+    it('lets only one of the last two administrators leave when both try at once', async () => {
+      const { user: first, session: firstSession } = await person();
+      const { user: second, session: secondSession } = await person();
+      const organization = await createOrganization(api, {
+        adminIds: [first._id, second._id],
+      });
+      const url = organizationUrl(organization.slug, '/leave');
+      const statuses = (
+        await Promise.all([post(url, firstSession), post(url, secondSession)])
+      ).map((response) => response.status);
+      expect(statuses.sort()).toEqual([204, 409]);
+      const stored = await api.organizations
+        .findById(organization._id)
+        .lean()
+        .exec();
+      expect(stored?.adminIds).toHaveLength(1);
     });
 
     it('records edits, with admins by username, and kicks in a history only administrators read', async () => {

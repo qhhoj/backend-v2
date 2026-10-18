@@ -35,9 +35,12 @@ export class MembershipController {
    * Leave an organization
    *
    * @remarks
-   * Removes the signed-in user from the organization and returns 204. Admins
-   * cannot leave (409 `conflict`), nor can a user who is not a member. Locked
-   * during an official contest (403 `locked_in_official_contest`).
+   * Removes the signed-in user from the organization and returns 204. An
+   * administrator leaves while another administrator remains and gives up the
+   * rights too; the last one is refused (409 `conflict`, issue `last_admin`)
+   * and must make someone else an administrator first. A user who is not a
+   * member gets 409 `conflict`. Locked during an official contest (403
+   * `locked_in_official_contest`).
    */
   @Post(':slug/leave')
   @HttpCode(204)
