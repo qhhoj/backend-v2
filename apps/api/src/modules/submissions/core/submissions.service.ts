@@ -19,6 +19,7 @@ import {
   SubmissionDetailResponse,
   SubmissionSourceResponse,
 } from './dto/submission-detail.response';
+import type { SubmissionContestResponse } from './dto/submission-detail.response';
 import type { SubmissionListQueryDto } from './dto/submission-list.dto';
 import { SubmissionListItemResponse } from './dto/submission-list.response';
 import {
@@ -265,6 +266,16 @@ export class SubmissionsService {
     const submission = await this.withCasesFor(viewed.submission, visibility);
     const [owner] = await this.users.findByIds([uuidStr(submission.user)]);
     const actions = this.actionsFor(principal, submission, canEdit);
+    const [totalCases, externalRun, contest] = await Promise.all([
+      visibility.cases === 'none' ? null : this.problems.caseCount(problem._id),
+      actions.canRejudge
+        ? this.externalRuns.current(
+            uuidStr(submission._id),
+            submission.judgeGeneration,
+          )
+        : null,
+      this.contestOf(principal, submission),
+    ]);
     return SubmissionDetailResponse.withDetails(
       submission,
       {
@@ -276,20 +287,32 @@ export class SubmissionsService {
         visibility,
         error: readsSource ? shownError(submission, canEdit) : null,
         sourceAccess: viewed.source,
-        totalCases:
-          visibility.cases === 'none'
-            ? null
-            : await this.problems.caseCount(problem._id),
+        totalCases,
         lockedAfter: canEdit ? submission.lockedAfter : null,
         actions,
-        externalRun: actions.canRejudge
-          ? await this.externalRuns.current(
-              uuidStr(submission._id),
-              submission.judgeGeneration,
-            )
-          : null,
+        externalRun,
+        contest,
       },
     );
+  }
+
+  /** The submission's contest and its points there, under the contest's own visibility rule; a deleted problem keeps it too. */
+  private async contestOf(
+    principal: Principal | null,
+    submission: SubmissionDocument,
+  ): Promise<SubmissionContestResponse | null> {
+    if (!submission.contest) return null;
+    const id = uuidStr(submission._id);
+    const [contest, points] = await Promise.all([
+      this.contests.findById(uuidStr(submission.contest)),
+      this.submissions.contestPoints(id),
+    ]);
+    if (
+      !contest ||
+      !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
+    )
+      return null;
+    return { key: contest.key, name: contest.name, points };
   }
 
   /** Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them. */

@@ -105,6 +105,15 @@ export class SubmissionsRepository {
     return (withCases ? query.select('+cases') : query).exec();
   }
 
+  /** The points of its contest row; null for a submission outside a contest. */
+  async contestPoints(id: string): Promise<number | null> {
+    const row = await this.contestSubmissions
+      .findById(id, { points: 1 })
+      .lean<Pick<ContestSubmission, 'points'>>()
+      .exec();
+    return row?.points ?? null;
+  }
+
   /** Just what a stream's `state` shows. */
   findState(id: string): Promise<SubmissionState | null> {
     if (!isUuid(id)) return Promise.resolve(null);

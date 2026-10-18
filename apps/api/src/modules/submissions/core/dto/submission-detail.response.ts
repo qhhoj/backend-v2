@@ -96,6 +96,15 @@ export class SubmissionExternalRunResponse {
   submittedAt!: Date | null;
 }
 
+export class SubmissionContestResponse {
+  /** The contest's key. */
+  key!: string;
+  /** The contest's name. */
+  name!: string;
+  /** Points this submission scored in the contest (the case ratio of the contest problem's points, as the scoreboard counts them); null when the contest holds no row for it. */
+  points!: number | null;
+}
+
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
   /** Compile log or compiler warnings, only for a viewer who may read the source (`sourceAccess` granted: a compile log quotes the code); an internal error's message (it can quote jury data) only for the problem's editors, null for everyone else, the submitter included. */
   error!: string | null;
@@ -124,6 +133,8 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
   externalRun!: SubmissionExternalRunResponse | null;
   /** The problem's test case count; null whenever the viewer may not see case results. */
   totalCases!: number | null;
+  /** The contest it was submitted in, when the viewer may see that contest; null otherwise and outside a contest. */
+  contest!: SubmissionContestResponse | null;
 
   static withDetails(
     submission: Submission,
@@ -136,6 +147,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       lockedAfter,
       actions,
       externalRun,
+      contest,
     }: {
       visibility: CaseVisibility;
       /** `shownError` for this viewer. */
@@ -145,6 +157,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
       lockedAfter: Date | null;
       actions: SubmissionActions;
       externalRun: SubmissionExternalRunResponse | null;
+      contest: SubmissionContestResponse | null;
     },
   ): SubmissionDetailResponse {
     return {
@@ -171,6 +184,7 @@ export class SubmissionDetailResponse extends SubmissionListItemResponse {
           : null,
       externalRun,
       totalCases,
+      contest,
     };
   }
 }
