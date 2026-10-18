@@ -393,6 +393,42 @@ afterAll(() => api.teardown());
       );
     });
 
+    it('counts the submissions the viewer may see, as the submission list totals them', async () => {
+      const counted = await createUserWith(api, 'counted', {});
+      const open = await createProblem(api, catalog, { code: 'count_open' });
+      const closed = await createProblem(api, catalog, {
+        code: 'count_closed',
+        isPublic: false,
+      });
+      await submit(counted._id, open._id, { points: 1 });
+      await submit(counted._id, open._id, { points: 0, result: 'WA' });
+      await submit(counted._id, closed._id, { points: 1 });
+      const staff = await loginAs(
+        api,
+        (
+          await createUserWith(api, 'count_staff', {
+            permissions: ['judge.see_private_problem'],
+          })
+        )._id,
+      );
+      const countFor = async (session?: TestSession) =>
+        dataOf<UserPageResponse>(
+          await get('/api/internal/users/counted', session).expect(200),
+        ).submissionCount;
+      const listTotal = async (session?: TestSession) =>
+        (
+          (
+            await get('/api/internal/submissions?user=counted', session).expect(
+              200,
+            )
+          ).body as { meta: { total: number } }
+        ).meta.total;
+      expect(await countFor()).toBe(2);
+      expect(await countFor()).toBe(await listTotal());
+      expect(await countFor(staff)).toBe(3);
+      expect(await countFor(staff)).toBe(await listTotal(staff));
+    });
+
     it('shows the ban reason and superuser flag only to judges who may ban', async () => {
       await createUserWith(api, 'banned_page', {
         banReason: 'spam',

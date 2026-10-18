@@ -143,6 +143,17 @@ export class SubmissionsService {
     });
   }
 
+  /** The `total` that `list` reports for this scope with no filters, without reading rows (a user page's submission count). */
+  async count(principal: Principal | null, scope: ListScope): Promise<number> {
+    const filter = await this.filterFor(
+      principal,
+      {},
+      await this.viewerScope(principal),
+      scope,
+    );
+    return filter ? this.submissions.count(filter) : 0;
+  }
+
   /** List rows with their user, problem (deleted ones too) and language resolved in one read each; with a `viewer`, each row also carries the test summary that viewer may see (see `listCaseUnit`). */
   async listItems(
     items: readonly Submission[],

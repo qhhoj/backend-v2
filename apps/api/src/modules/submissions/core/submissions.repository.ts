@@ -147,6 +147,10 @@ export class SubmissionsRepository {
     return { items, total };
   }
 
+  count(filter: FilterQuery<Submission>): Promise<number> {
+    return this.submissions.countDocuments(filter).exec();
+  }
+
   /** The first `cap` cases (status and batch) and the stored case count of each submission, keyed by id, read in the database so the 10000-row arrays never load; a primary-key lookup. */
   async caseHeads(
     ids: readonly string[],

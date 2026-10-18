@@ -38,6 +38,8 @@ export class UserPageResponse {
   performancePoints!: number;
   /** Number of fully solved problems. */
   problemCount!: number;
+  /** Submissions of the user this viewer may see: the total of the submission list filtered to the user. */
+  submissionCount!: number;
   /** Points earned from community contributions. */
   contributionPoints!: number;
   /** Contest rating; null while unrated. */
