@@ -7,7 +7,7 @@ root="$(mktemp -d)"; fixtures="$(mktemp -d)"; trap 'rm -rf "$root" "$fixtures"' 
 good_host() {
   rm -rf "${root:?}"/* "${fixtures:?}"/*
   mkdir -p "$root/sys/fs/cgroup" "$root/sys/devices/system/cpu/smt" "$root/proc/sys/kernel" "$root/etc/qhhoj-judge" "$root/proc/self" \
-    "$root/usr/local/bin" "$root/usr/local/etc"
+    "$root/usr/local/bin" "$root/usr/local/etc" "$root/run/isolate" "$root/sys/fs/cgroup/isolate.slice/isolate.service"
   echo "cpuset cpu io memory pids" > "$root/sys/fs/cgroup/cgroup.controllers"
   printf 'Filename\tType\tSize\tUsed\tPriority\n' > "$root/proc/swaps"
   echo off > "$root/sys/devices/system/cpu/smt/control"
@@ -24,6 +24,9 @@ good_host() {
   echo "qhhoj-judge:x:990:990::/nonexistent:/usr/sbin/nologin" > "$root/etc/passwd"
   echo binary > "$root/usr/local/bin/isolate"; chmod 4755 "$root/usr/local/bin/isolate"
   printf 'box_root = /var/local/lib/isolate\nnum_boxes = 1000\ncg_root = auto:/run/isolate/cgroup\n' > "$root/usr/local/etc/isolate"
+  # isolate's cg keeper writes its cgroup to /run/isolate/cgroup; memory.peak exists from kernel 5.19
+  echo /sys/fs/cgroup/isolate.slice/isolate.service > "$root/run/isolate/cgroup"
+  echo 0 > "$root/sys/fs/cgroup/isolate.slice/isolate.service/memory.peak"
   # isolate 2.6's real wording and colours on a tuned host: only the ASLR check fails.
   printf 'Checking for cgroup support for memory.max ... \e[32mPASS\e[m\nChecking for kernel address space randomisation ... \e[31mFAIL\e[m\n\e[33mWARNING:\e[m address space randomisation is enabled.\necho 0 > /proc/sys/kernel/randomize_va_space\n' > "$fixtures/isolate-check-environment"
   printf 'table inet filter {\n\tchain output {\n\t\ttype filter hook output priority filter; policy drop;\n\t}\n}\n' > "$fixtures/nft-output"
