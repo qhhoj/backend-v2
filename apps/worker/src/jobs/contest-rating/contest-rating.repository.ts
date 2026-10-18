@@ -174,14 +174,20 @@ export class ContestRatingRepository {
     return { users: users.map(uuidStr), contests: contests.map(uuidStr) };
   }
 
-  /** Live, joined rows, with their contest-submission counts (one grouped read over `{participation, problem}`). */
+  /** Live, joined rows, with their contest-submission counts (one grouped read over `{participation, problem}`). Unlisted users who are not banned (staff and test accounts, owner decision Q3) are never rated and rank no one; banned users are unlisted too but stay, so a disqualified cheater keeps the last-place penalty. */
   async candidates(
     contestId: string,
     session: ClientSession,
   ): Promise<Candidate[]> {
+    const unrated = await this.unratedUsers(session);
     const rows = await this.participations
       .find(
-        { contest: contestId, virtual: LIVE, isRegistered: false },
+        {
+          contest: contestId,
+          virtual: LIVE,
+          isRegistered: false,
+          user: { $nin: unrated },
+        },
         { user: 1, score: 1, cumtime: 1, tiebreaker: 1, isDisqualified: 1 },
       )
       .session(session)
@@ -213,6 +219,14 @@ export class ContestRatingRepository {
       isDisqualified: row.isDisqualified,
       submissions: counts.get(uuidStr(row._id)) ?? 0,
     }));
+  }
+
+  /** Unlisted users who are not banned; few, so the `$nin` list stays small (the partial `isUnlisted` index serves it). */
+  private unratedUsers(session: ClientSession): Promise<unknown[]> {
+    return this.users
+      .distinct('_id', { isUnlisted: true, banReason: null })
+      .session(session)
+      .exec();
   }
 
   /** Users without a rating are absent. Every remaining rating of these users, newest first, through `{user, contestEndTime}`. */
