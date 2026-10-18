@@ -1,5 +1,27 @@
 # qhhoj-backend
 
+## 2.33.0
+
+### Minor Changes
+
+- 79fdad5: `POST /organizations/:slug/leave` lets an administrator leave while another administrator remains (dropping their admin rights, recorded in the history); the last administrator gets 409 with issue `last_admin`.
+- cde6b4b: Contest questions: `POST/GET /contests/:key/tickets` file and list tickets tied to a contest (optionally one of its problems by code); tickets carry `contest`, the `contest` link type exists, and the contest's editors read its tickets. Problem tickets filed from inside a contest are tied to it. Announcements render `#C` as `<a class="problem-ref">`: with the problem's href once its code is public to the contest's viewers (ended, or a visible board after the start), label-only before that for the reader's page to resolve.
+- cb91fbb: Signup (`POST /auth/register` and the social completion) defaults the account's language to C++17 when none is chosen.
+- 2f39d2c: `GET /submissions/:id` carries `contest`: the key and name of the contest it was submitted in, the points it scores there (worked out as the scoreboard stores them, so a read right after judging is already exact), and, for the submitter's own submission made within its run, the run minute as the scoreboard counts it. It is null outside a contest and for a viewer who may not see that contest.
+- 02a7955: Tickets: `POST`/`DELETE /tickets/{id}/claim` takes a ticket or hands it back (staff, editors of the linked problem and editors of the contest it was filed from; a second claimer gets 409 `ticket_claimed`, also when both click at once; a closed ticket 409 `ticket_closed`), `can.claim` on the detail, list filters `aboutMine` (tickets about the caller's own problems, and tickets filed from contests they author or curate) and `q` (title text ignoring accents, or creator username), and `aboutMineOpen` in the ticket summary.
+- 9cbb531: `GET /users/:username` returns `submissionCount`: the user's submissions the viewer may see, the same total as the submission list filtered to the user.
+
+### Patch Changes
+
+- ac5f3df: Contests: an editor who creates contests only for organizations (no `judge.add_contest` or `judge.edit_all_contest`) can add, remove or flip only organizations they may create contests for, on edit and on clone, and cannot move a contest out of every organization (403 `organization_rights` / `site_contest_rights` on `organizations`). Opening a visible private contest to everyone needs `judge.change_contest_visibility`. A save that changes organizations holds only while the stored organizations are unchanged (409 otherwise).
+- a7e4f46: Site contest creators (`judge.add_contest`) now scope a contest only to organizations they administer with `judge.create_private_contest`, on create, edit and clone (403 `organization_rights`). Before, they could scope a contest to any organization and charge that organization's credits. A contest that stays public may still list any organization. `judge.edit_all_contest` holders and superusers keep any organization.
+- 56b5128: An edit of `isVisible`, `isPrivate` or `isOrganizationPrivate` saves only while the stored three flags still match what the visibility gate checked (409 otherwise). Before, two concurrent edits that the gate allowed one at a time, such as showing a private contest and clearing the privacy of a hidden one, could combine to publish it without `judge.change_contest_visibility`.
+- d64f3b9: Setting or clearing a contest's `timeLimit` queues a contest rescore. When a limit is set, a live row's start moves from the contest start to its join time, so its cell times and cumulative time went stale. Changing one limit to another does not rescore.
+- 77517bd: Organizations: each row of `GET /organizations/:slug/problems` (and the tag write's answer) carries `canEdit`, whether the viewer may edit that problem, so the organization's problem list can show a pencil to its editor.
+- 1f92855: An edit that makes a public problem visible to everyone by leaving organization privacy (a move onto the site, or clearing `isOrganizationPrivate`) now needs `judge.change_public_visibility`, including for `judge.edit_all_problem` holders (403 `site_publish_rights`). Before, an organization admin with `judge.add_problem` could publish a members-only problem to the whole site. Without the permission, an edit of `isPublic` or `isOrganizationPrivate` saves only while both still match what its gates checked (409 otherwise).
+- 2bc8ee1: A rating run also purges the cached boards of contests whose ratings it deletes (a contest that stopped being rated), and a failed purge no longer fails the job once the ratings are committed: it logs a warning and the boards expire after `scoreboardCacheTimeout`.
+- 0bf8f53: Contest rating now leaves out unlisted users who are not banned (staff and test accounts). They get no rating row and no longer shift other participants' rank or rating change. Banned users are unlisted too but are still rated, so a disqualified cheater keeps the last-place penalty. Contests already rated keep their stored ratings until they are re-rated.
+
 ## 2.32.0
 
 ### Minor Changes
