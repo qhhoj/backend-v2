@@ -77,7 +77,7 @@ export class SubmissionBatchService {
         count: matching,
         dryRun: true,
         allowed,
-        sample: await this.sampleOf(filter),
+        sample: await this.sampleOf(principal, filter),
       };
     if (!allowed)
       throw new AppError(
@@ -143,9 +143,14 @@ export class SubmissionBatchService {
       await enqueueRescores(this.problemRescores, problemIds);
   }
 
-  private async sampleOf(filter: FilterQuery<Submission>) {
+  private async sampleOf(
+    principal: Principal,
+    filter: FilterQuery<Submission>,
+  ) {
     return this.lists.listItems(
       await this.submissions.newest(filter, SAMPLE_SIZE),
+      principal,
+      { testSummaries: false },
     );
   }
 

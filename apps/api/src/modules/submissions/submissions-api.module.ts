@@ -28,6 +28,7 @@ import { SubmissionStreamsService } from './streams/submission-streams.service';
 import { SubmissionSourceFileController } from './core/submission-source-file.controller';
 import { ExternalRunsRepository } from './core/external-runs.repository';
 import { SubmissionStatsService } from './core/submission-stats.service';
+import { SubmissionContestsService } from './core/submission-contests.service';
 import { SubmissionsController } from './core/submissions.controller';
 import { SubmissionsRepository } from './core/submissions.repository';
 import { SubmissionsService } from './core/submissions.service';
@@ -66,6 +67,7 @@ import { SubmissionsService } from './core/submissions.service';
     ExternalRunsRepository,
     SubmissionCreateService,
     SubmissionsService,
+    SubmissionContestsService,
     SubmissionStatsService,
     SubmissionActionsService,
     RateLimitService,

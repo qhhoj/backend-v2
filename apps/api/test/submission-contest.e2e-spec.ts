@@ -1,5 +1,9 @@
 import type { Contest, ContestParticipation } from '@libs/database';
+import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
+import { ParticipationsRepository } from '../src/modules/contests/core/participations.repository';
 import type { SubmissionDetailResponse } from '../src/modules/submissions/core/dto/submission-detail.response';
+import type { SubmissionListItemResponse } from '../src/modules/submissions/core/dto/submission-list.response';
+import { SubmissionsRepository } from '../src/modules/submissions/core/submissions.repository';
 import {
   contestProblem,
   createContest,
@@ -19,7 +23,7 @@ import { dataOf, seedSubmission } from './submission-fixtures';
 import { setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
-describe("a submission's contest on its result page", () => {
+describe("a submission's contest on its result page and in the lists", () => {
   let api: ApiTest;
   let catalog: Catalog;
   const sessions: Record<string, TestSession> = {};
@@ -45,17 +49,34 @@ describe("a submission's contest on its result page", () => {
     return dataOf<SubmissionDetailResponse>(response).contest;
   };
 
+  const SUBMISSIONS = '/api/internal/submissions';
+  /** The contest block of each row `path` lists, by submission id; `who` null asks as a visitor. */
+  const listedBy = async (who: string | null, path: string) => {
+    const request = api.http().get(path);
+    const response = await (who ? authed(request, sessions[who]) : request);
+    expect(response.status).toBe(200);
+    return new Map(
+      dataOf<SubmissionListItemResponse[]>(response).map((row) => [
+        row.id,
+        row.contest,
+      ]),
+    );
+  };
+
   const MINUTE_MS = 60_000;
   /** Alice's submission with 7 of 20 case points in an ended contest (a 100-point partial problem; `stored` is its contest row, null for none), 47.5 minutes after the start, by a live run that joined 30 minutes late; plus one of hers outside the contest. */
   const scene = async (
     code: string,
     {
       stored = 0,
+      worth = 100,
       extra = {},
       run = {},
       afterStart = 47.5 * MINUTE_MS,
     }: {
       stored?: number | null;
+      /** Points of the contest problem. */
+      worth?: number;
       extra?: Partial<Contest>;
       run?: Partial<ContestParticipation>;
       afterStart?: number;
@@ -68,7 +89,7 @@ describe("a submission's contest on its result page", () => {
       name: `Round ${code}`,
       startTime: start,
       endTime: hoursFromNow(-1),
-      problems: [contestProblem(problem._id, 0)],
+      problems: [contestProblem(problem._id, 0, { points: worth })],
       ...extra,
     });
     const participation = await joinParticipation(
@@ -168,5 +189,118 @@ describe("a submission's contest on its result page", () => {
       extra: { isVisible: false },
     });
     expect(await contestOf('alice', inContestId)).toBeNull();
+  });
+
+  describe('on the submission lists', () => {
+    it('gives an in-contest row the contest scale of its own contest and a practice row none, as the page does', async () => {
+      const { contest, inContestId, outsideId } = await scene('list_public');
+      const list = `${SUBMISSIONS}?problem=list_public`;
+      const own = await listedBy('alice', list);
+      expect(own.get(inContestId)).toEqual({
+        key: contest.key,
+        name: 'Round list_public',
+        points: 35,
+        minute: 47,
+      });
+      expect(own.get(outsideId)).toBeNull();
+      for (const viewer of ['staff', null])
+        expect((await listedBy(viewer, list)).get(inContestId)).toMatchObject({
+          points: 35,
+          minute: null,
+        });
+    });
+
+    it("scores each row on its own contest's scale, and keeps the stored points of a problem that left the contest", async () => {
+      const full = await scene('list_scale_a');
+      const small = await scene('list_scale_b', { worth: 40 });
+      const left = await scene('list_scale_c', {
+        extra: { problems: [] },
+        stored: 20,
+      });
+      const rows = await listedBy('alice', `${SUBMISSIONS}?user=alice`);
+      expect(rows.get(full.inContestId)?.points).toBe(35);
+      expect(rows.get(small.inContestId)?.points).toBe(14);
+      expect(rows.get(left.inContestId)?.points).toBe(20);
+    });
+
+    it('leaves a contest the viewer may not see out of the row, while the row stays listed', async () => {
+      const hidden = await scene('list_hidden', {
+        extra: { isVisible: false },
+      });
+      const secret = await scene('list_private', {
+        extra: { isPrivate: true, privateContestants: [users.alice._id] },
+      });
+      const hiddenRows = await listedBy(
+        'alice',
+        `${SUBMISSIONS}?problem=list_hidden`,
+      );
+      expect(hiddenRows.get(hidden.inContestId)).toBeNull();
+      const privateList = `${SUBMISSIONS}?problem=list_private`;
+      expect(
+        (await listedBy('alice', privateList)).get(secret.inContestId)?.key,
+      ).toBe(secret.contest.key);
+      for (const viewer of ['staff', null])
+        expect(
+          (await listedBy(viewer, privateList)).get(secret.inContestId),
+        ).toBeNull();
+    });
+
+    it("matches the page on every page and in the contest's own list", async () => {
+      const { contest, inContestId, outsideId } = await scene('list_parity');
+      for (const viewer of ['alice', 'staff', null]) {
+        const pages = new Map([
+          ...(await listedBy(
+            viewer,
+            `${SUBMISSIONS}?problem=list_parity&pageSize=1&page=1`,
+          )),
+          ...(await listedBy(
+            viewer,
+            `${SUBMISSIONS}?problem=list_parity&pageSize=1&page=2`,
+          )),
+        ]);
+        const scoped = await listedBy(
+          viewer,
+          `/api/internal/contests/${contest.key}/submissions`,
+        );
+        expect([...pages.keys()].sort()).toEqual(
+          [inContestId, outsideId].sort(),
+        );
+        expect([...scoped.keys()]).toEqual([inContestId]);
+        for (const id of pages.keys())
+          expect(pages.get(id)).toEqual(await contestOf(viewer, id));
+        expect(scoped.get(inContestId)).toEqual(
+          await contestOf(viewer, inContestId),
+        );
+      }
+    });
+
+    it('reads the contests of a page in a fixed number of lookups, however many rows it has', async () => {
+      await scene('list_batch_a');
+      const one = await scene('list_batch_b');
+      await scene('list_batch_c');
+      const lookups = [
+        jest.spyOn(api.app.get(ContestsRepository), 'findByIds'),
+        jest.spyOn(api.app.get(ContestsRepository), 'findById'),
+        jest.spyOn(api.app.get(SubmissionsRepository), 'contestRows'),
+        jest.spyOn(api.app.get(ParticipationsRepository), 'runsByIds'),
+      ];
+      const callsAfter = async (path: string) => {
+        lookups.forEach((spy) => spy.mockClear());
+        const rows = await listedBy('alice', path);
+        return { rows, calls: lookups.map((spy) => spy.mock.calls.length) };
+      };
+      try {
+        const single = await callsAfter(`${SUBMISSIONS}?problem=list_batch_b`);
+        const page = await callsAfter(`${SUBMISSIONS}?user=alice&pageSize=100`);
+        expect(single.rows.get(one.inContestId)).not.toBeNull();
+        expect(
+          [...page.rows.values()].filter(Boolean).length,
+        ).toBeGreaterThanOrEqual(3);
+        expect(page.calls).toEqual(single.calls);
+        expect(page.calls[1]).toBe(0);
+      } finally {
+        lookups.forEach((spy) => spy.mockRestore());
+      }
+    });
   });
 });
