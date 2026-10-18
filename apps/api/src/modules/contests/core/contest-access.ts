@@ -79,9 +79,12 @@ function editableFilter(
 ): FilterQuery<Contest> | null {
   if (has(principal, 'judge.edit_all_contest')) return {};
   if (!principal || !has(principal, 'judge.edit_own_contest')) return null;
-  return {
-    $or: [{ authors: principal.userId }, { curators: principal.userId }],
-  };
+  return editorOfFilter(principal.userId);
+}
+
+/** Mongo filter with `isEditor`'s semantics: the contests the user authors or curates. */
+function editorOfFilter(userId: string): { $or: FilterQuery<Contest>[] } {
+  return { $or: [{ authors: userId }, { curators: userId }] };
 }
 
 /** The balloon screen: editors, and balloon volunteers (`balloonStaff`) the editors listed. Whether the contest has balloons on is the caller's check. */
@@ -275,6 +278,7 @@ export const ContestAccess = {
   isTester,
   canEdit,
   editableFilter,
+  editorOfFilter,
   canViewBalloons,
   canSee,
   visibleFilter,

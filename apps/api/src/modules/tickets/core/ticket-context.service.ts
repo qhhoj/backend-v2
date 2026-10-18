@@ -52,15 +52,21 @@ export class TicketContextService {
     };
   }
 
-  /** Tickets linked to the user's own problems (`ProblemAccess.editorOfFilter`): the list's `aboutMine` and the summary's count. An index read on `linkedItem.id`. */
+  /**
+   * Tickets about what the user makes: linked to a problem they author, curate or suggested (`ProblemAccess.editorOfFilter`),
+   * or filed from a contest they author or curate (`ContestAccess.editorOfFilter`). The list's `aboutMine` and the summary's
+   * count; index reads on `linkedItem.id` and `contest`.
+   */
   async aboutMineFilter(userId: string): Promise<FilterQuery<Ticket>> {
+    const [problemIds, contestIds] = await Promise.all([
+      this.problems.visibleIds(ProblemAccess.editorOfFilter(userId)),
+      this.contests.idsMatching(ContestAccess.editorOfFilter(userId)),
+    ]);
     return {
-      'linkedItem.type': 'problem',
-      'linkedItem.id': {
-        $in: await this.problems.visibleIds(
-          ProblemAccess.editorOfFilter(userId),
-        ),
-      },
+      $or: [
+        { 'linkedItem.type': 'problem', 'linkedItem.id': { $in: problemIds } },
+        { contest: { $in: contestIds } },
+      ],
     };
   }
 

@@ -16,7 +16,8 @@ export class TicketClaimsController {
    *
    * @remarks
    * Makes the caller the ticket's handler ("Nhận phiếu"): staff with
-   * `judge.change_ticket`, or an editor of the linked problem. A ticket the
+   * `judge.change_ticket`, an editor of the linked problem, or an editor of
+   * the contest the ticket was filed from. A ticket the
    * caller already handles is returned unchanged. Fails with 409
    * `ticket_claimed` when someone else already handles it, also when two
    * people claim at the same moment (exactly one wins), and with 409

@@ -33,7 +33,7 @@ export class TicketListQueryDto extends TicketPageQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() awaiting?: boolean;
   /** true limits the list to tickets the caller filed or is assigned to. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() own?: boolean;
-  /** true limits the list to tickets about what the caller authors, curates or suggested (their problems), whatever else they may read. */
+  /** true limits the list to tickets about what the caller makes: problems they author, curate or suggested, and contests they author or curate (tickets filed from them), whatever else they may read. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() aboutMine?: boolean;
   /** Text in the title (ignoring case and Vietnamese accents), or the exact username of the creator; blank filters nothing. */
   @IsOptional()

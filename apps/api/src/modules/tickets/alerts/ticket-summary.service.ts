@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
+import { ContestAccess } from '../../contests/core/contest-access';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { TicketAccess } from '../core/ticket-access';
 import { TicketsRepository } from '../core/tickets.repository';
@@ -24,9 +25,13 @@ export class TicketSummaryService {
     return { assignedOpen, awaitingStaff, aboutMineOpen };
   }
 
-  /** Only problem editors own problems; everyone else is spared the lookup on every badge poll. */
+  /** Only problem and contest editors make anything; everyone else is spared the lookups on every badge poll. */
   private async countAboutMine(principal: Principal): Promise<number> {
-    if (ProblemAccess.editableFilter(principal) === null) return 0;
+    if (
+      ProblemAccess.editableFilter(principal) === null &&
+      ContestAccess.editableFilter(principal) === null
+    )
+      return 0;
     return this.tickets.countOpen(
       await this.context.aboutMineFilter(principal.userId),
     );
