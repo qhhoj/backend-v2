@@ -89,7 +89,7 @@ export class TicketClaimsService {
       throw new AppError(
         'forbidden',
         403,
-        'Only staff and editors of the problem can take a ticket',
+        'Only staff, editors of the problem and editors of the contest it was filed from can take a ticket',
       );
     if (openOnly && !ticket.isOpen)
       throw new AppError('ticket_closed', 409, 'Reopen the ticket first');

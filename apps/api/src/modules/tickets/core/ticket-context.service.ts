@@ -18,6 +18,12 @@ import type { TicketAccessView } from './ticket-access';
 import { TicketsRepository } from './tickets.repository';
 import type { TicketDocument } from './tickets.repository';
 
+/** `{}` clauses (staff see all) are dropped: an `$and` around them turns the unfiltered count into a collection scan. */
+export const allOf = (clauses: FilterQuery<Ticket>[]): FilterQuery<Ticket> => {
+  const narrowing = clauses.filter((clause) => Object.keys(clause).length);
+  return narrowing.length > 1 ? { $and: narrowing } : (narrowing[0] ?? {});
+};
+
 /** What a ticket shows about itself: the linked item, and the contest it was filed from. */
 export interface TicketSubject {
   link: TicketLinkResponse;
@@ -68,6 +74,31 @@ export class TicketContextService {
         { contest: { $in: contestIds } },
       ],
     };
+  }
+
+  /** Legacy `filter_visible_tickets`: own tickets plus tickets of problems the viewer edits; staff see all. The edited problems' ids are looked up (also for `edit_all_problem`, so a ticket of a deleted problem stays unreadable like in `canSee`), keeping the list an index read on `linkedItem.id`. New: tickets filed from contests the viewer edits, the same way. */
+  async visibleTo(principal: Principal): Promise<FilterQuery<Ticket>> {
+    if (TicketAccess.isStaff(principal)) return {};
+    const clauses: FilterQuery<Ticket>[] = [
+      TicketAccess.ownFilter(principal.userId),
+    ];
+    const editable = ProblemAccess.editableFilter(principal);
+    if (editable)
+      clauses.push({
+        'linkedItem.type': 'problem',
+        'linkedItem.id': { $in: await this.problems.visibleIds(editable) },
+      });
+    clauses.push(...(await this.editedContestsClause(principal)));
+    return { $or: clauses };
+  }
+
+  /** Tickets filed from contests the viewer edits, by the ids of the existing ones (with `edit_all_contest`, every contest): a deleted contest's tickets are not listed. */
+  private async editedContestsClause(
+    principal: Principal,
+  ): Promise<FilterQuery<Ticket>[]> {
+    const editable = ContestAccess.editableFilter(principal);
+    if (!editable) return [];
+    return [{ contest: { $in: await this.contests.idsMatching(editable) } }];
   }
 
   /** 404 for unknown or malformed ids, 403 for an existing ticket the viewer may not read (UUIDs are not guessable; legacy parity). */

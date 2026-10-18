@@ -4,7 +4,7 @@ import { ContestAccess } from '../../contests/core/contest-access';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { TicketAccess } from '../core/ticket-access';
 import { TicketsRepository } from '../core/tickets.repository';
-import { TicketContextService } from '../core/ticket-context.service';
+import { TicketContextService, allOf } from '../core/ticket-context.service';
 import type { TicketSummaryResponse } from './dto/ticket-summary.response';
 
 @Injectable()
@@ -25,15 +25,21 @@ export class TicketSummaryService {
     return { assignedOpen, awaitingStaff, aboutMineOpen };
   }
 
-  /** Only problem and contest editors make anything; everyone else is spared the lookups on every badge poll. */
+  /**
+   * The list's `aboutMine` count under the list's own visibility, so the badge never counts a ticket the list hides (a
+   * curator without `edit_own_contest`). Staff, who may make things without an edit right, and problem or contest
+   * editors are counted; everyone else is spared the lookups on every badge poll.
+   */
   private async countAboutMine(principal: Principal): Promise<number> {
-    if (
-      ProblemAccess.editableFilter(principal) === null &&
-      ContestAccess.editableFilter(principal) === null
-    )
-      return 0;
-    return this.tickets.countOpen(
-      await this.context.aboutMineFilter(principal.userId),
-    );
+    const mayMake =
+      TicketAccess.isStaff(principal) ||
+      ProblemAccess.editableFilter(principal) !== null ||
+      ContestAccess.editableFilter(principal) !== null;
+    if (!mayMake) return 0;
+    const [aboutMine, visible] = await Promise.all([
+      this.context.aboutMineFilter(principal.userId),
+      this.context.visibleTo(principal),
+    ]);
+    return this.tickets.countOpen(allOf([aboutMine, visible]));
   }
 }

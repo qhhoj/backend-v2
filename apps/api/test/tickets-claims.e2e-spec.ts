@@ -51,6 +51,8 @@ describe('ticket claims, "about mine" and text search', () => {
       ['contestAuthor', { permissions: ['judge.edit_own_contest'] }],
       ['contestCurator', { permissions: ['judge.edit_own_contest'] }],
       ['otherOrganiser', { permissions: ['judge.edit_own_contest'] }],
+      ['problemCurator', { permissions: ['judge.edit_own_problem'] }],
+      ['staffMaker', { permissions: ['judge.change_ticket'] }],
     ];
     for (const [name, extra] of accounts) {
       const { user, session } = await signedIn(api, name, extra);
@@ -260,5 +262,45 @@ describe('ticket claims, "about mine" and text search', () => {
       'Settled in my contest',
     ]);
     expect(await summaryOf('contestCurator')).toBe(1);
+  });
+
+  it('counts only what the list shows: a contest curator without the contest edit right is not counted for it', async () => {
+    const problem = await createProblem(api, catalog, {
+      code: 'curatorsown',
+      authors: [people.problemCurator.id],
+    });
+    const contest = await createContest(api, {
+      authors: [people.otherOrganiser.id],
+      curators: [people.problemCurator.id],
+    });
+    await createTicket(api, {
+      creator: people.creator.id,
+      problem: problem._id,
+      title: 'About my problem',
+    });
+    await createTicket(api, {
+      creator: people.creator.id,
+      contest: contest._id,
+      title: 'Asked in a contest I curate',
+    });
+    expect(await list('problemCurator', { aboutMine: 'true' })).toEqual([
+      'About my problem',
+    ]);
+    expect(await summaryOf('problemCurator')).toBe(1);
+  });
+
+  it('counts the tickets about what a staff member makes, though they hold no edit right', async () => {
+    const contest = await createContest(api, {
+      authors: [people.staffMaker.id],
+    });
+    await createTicket(api, {
+      creator: people.creator.id,
+      contest: contest._id,
+      title: 'Asked in the staff contest',
+    });
+    expect(
+      await list('staffMaker', { aboutMine: 'true', open: 'true' }),
+    ).toEqual(['Asked in the staff contest']);
+    expect(await summaryOf('staffMaker')).toBe(1);
   });
 });
