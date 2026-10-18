@@ -30238,7 +30238,7 @@
     },
     "/api/internal/organizations/{slug}/leave": {
       "post": {
-        "description": "Removes the signed-in user from the organization and returns 204. Admins\ncannot leave (409 `conflict`), nor can a user who is not a member. Locked\nduring an official contest (403 `locked_in_official_contest`).",
+        "description": "Removes the signed-in user from the organization and returns 204. An\nadministrator leaves while another administrator remains and gives up the\nrights too; the last one is refused (409 `conflict`, issue `last_admin`)\nand must make someone else an administrator first. A user who is not a\nmember gets 409 `conflict`. Locked during an official contest (403\n`locked_in_official_contest`).",
         "operationId": "MembershipController_leave",
         "parameters": [
           {

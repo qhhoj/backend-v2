@@ -11,7 +11,10 @@ import { SettingsService } from '@libs/settings';
 import { OrganizationAccess } from '../core/organization-access';
 import { OrganizationMembersRepository } from '../core/organization-members.repository';
 import { OrganizationPointsService } from '../core/organization-points.service';
-import { OrganizationsRepository } from '../core/organizations.repository';
+import {
+  OrganizationsRepository,
+  type OrganizationDocument,
+} from '../core/organizations.repository';
 import { OrganizationsService } from '../core/organizations.service';
 import { OrganizationRevisionsService } from '../editing/organization-revisions.service';
 
@@ -64,20 +67,49 @@ export class MembershipService {
     await this.points.refresh([organization._id]);
   }
 
-  /** Legacy `LeaveOrganization`: admins cannot leave. */
+  /**
+   * Legacy `LeaveOrganization`, except that an administrator may leave while another administrator remains (owner
+   * decision 2026-10-18); the last one is refused (`last_admin`) and must hand over first. Leaving gives up the
+   * administrator rights too, recorded in the organization's history; the admin role group is kept, as on any demotion.
+   */
   async leave(principal: Principal, slug: string): Promise<void> {
     assertNotLockedByOfficialMode(this.settings, principal);
     const organization = await this.organizationsService.bySlug(slug);
+    if (!(await this.members.isMember(principal.userId, organization._id)))
+      throw conflict('You are not in this organization');
     if (
       OrganizationAccess.isAdmin(
         principal,
         OrganizationAccess.accessView(organization),
       )
     )
-      throw conflict('Admins cannot leave their organization');
+      await this.stepDown(principal, organization);
     if (!(await this.members.remove(principal.userId, organization._id)))
       throw conflict('You are not in this organization');
     await this.points.refresh([organization._id]);
+  }
+
+  private async stepDown(
+    principal: Principal,
+    organization: OrganizationDocument,
+  ): Promise<void> {
+    if (
+      !(await this.organizations.removeAdminUnlessLast(
+        organization._id,
+        principal.userId,
+      ))
+    )
+      throw conflictIssue(
+        'user',
+        'last_admin',
+        'You are the only administrator; make someone else an administrator before you leave',
+      );
+    const { adminIds } = OrganizationAccess.accessView(organization);
+    await this.history.recordChange(principal, organization._id, {
+      action: 'edit',
+      before: { adminIds },
+      after: { adminIds: adminIds.filter((id) => id !== principal.userId) },
+    });
   }
 
   /** Legacy `KickUserWidgetView`: administrators remove members, never admins. */

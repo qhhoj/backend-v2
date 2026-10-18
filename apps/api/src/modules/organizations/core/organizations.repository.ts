@@ -114,6 +114,17 @@ export class OrganizationsRepository {
       .exec();
   }
 
+  /** Drops `userId` from the administrators only while another one remains, in one write (two last admins leaving at once cannot both go). False when nothing changed. */
+  async removeAdminUnlessLast(id: string, userId: string): Promise<boolean> {
+    const { modifiedCount } = await this.organizations
+      .updateOne(
+        { _id: id, ...LIVE, adminIds: userId, 'adminIds.1': { $exists: true } },
+        { $pull: { adminIds: userId } },
+      )
+      .exec();
+    return modifiedCount === 1;
+  }
+
   /** False when it was already deleted. */
   async markDeleted(id: string, deletedBy: string): Promise<boolean> {
     const { modifiedCount } = await this.organizations
