@@ -11129,7 +11129,7 @@
             "type": "string"
           },
           "languageId": {
-            "description": "The account's default programming language.",
+            "description": "The account's default programming language; C++17 when omitted.",
             "format": "uuid",
             "type": "string"
           },
@@ -12533,7 +12533,7 @@
       "SocialCompleteDto": {
         "properties": {
           "languageId": {
-            "description": "The account's default programming language.",
+            "description": "The account's default programming language; C++17 when omitted.",
             "format": "uuid",
             "type": "string"
           },
