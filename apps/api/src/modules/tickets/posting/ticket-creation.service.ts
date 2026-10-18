@@ -1,8 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import type { Principal } from '@libs/auth';
-import { AppError, RateLimitService } from '@libs/common';
-import { newTicketDescription, problemPath, ticketPath } from '@libs/community';
+import { AppError, RateLimitService, unique } from '@libs/common';
+import {
+  contestPath,
+  newTicketDescription,
+  problemPath,
+  ticketPath,
+} from '@libs/community';
 import { newId, uuidStr } from '@libs/database';
+import { ContestAccess } from '../../contests/core/contest-access';
+import { contestScopeOf } from '../../contests/core/contest-scope';
+import { ContestsRepository } from '../../contests/core/contests.repository';
+import type { ContestDocument } from '../../contests/core/contests.repository';
+import { ContestViewerService } from '../../contests/core/contest-viewer.service';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import { DiscordWebhooksService } from '@libs/community';
 import { ProblemAccess } from '../../problems/core/problem-access';
@@ -16,12 +26,20 @@ import { TicketContextService } from '../core/ticket-context.service';
 import { TicketGateService } from '../core/ticket-gate.service';
 import { TicketResponsesService } from '../core/ticket-responses.service';
 import { TicketsRepository } from '../core/tickets.repository';
-import type { TicketDocument } from '../core/tickets.repository';
+import type { NewTicketLink, TicketDocument } from '../core/tickets.repository';
 import { TicketEventsService } from '../streams/ticket-events.service';
-import type { NewGeneralTicketDto, NewTicketDto } from './dto/new-ticket.dto';
+import type {
+  NewContestTicketDto,
+  NewGeneralTicketDto,
+  NewTicketDto,
+} from './dto/new-ticket.dto';
 
-type TicketLink =
-  { type: 'problem'; id: string } | { type: 'general'; issueUrl: string };
+/** Where a new ticket goes: what it is about, who handles it, and the contest it was filed from (null outside one). */
+interface TicketTarget {
+  link: NewTicketLink;
+  assignees: string[];
+  contest: string | null;
+}
 
 /** Legacy `NewProblemTicketView`, `NewIssueTicketView` and `TicketForm`; ticket bodies use the `user` style (legacy `ticket`). */
 @Injectable()
@@ -30,6 +48,8 @@ export class TicketCreationService {
     private readonly tickets: TicketsRepository,
     private readonly problems: ProblemsRepository,
     private readonly currentContest: CurrentContestService,
+    private readonly contests: ContestsRepository,
+    private readonly viewers: ContestViewerService,
     private readonly gate: TicketGateService,
     private readonly rateLimits: RateLimitService,
     private readonly context: TicketContextService,
@@ -68,8 +88,64 @@ export class TicketCreationService {
     return this.file(principal, dto, {
       link: { type: 'problem', id: view.id },
       assignees,
+      contest: fromContest && current ? uuidStr(current.contest._id) : null,
       subjectLink: this.discord.link(problemPath(code)),
     });
+  }
+
+  /** A question to a contest's organisers, about the contest or one of its problems (by code). The contest must be visible to the filer, and the problem one of its problems the filer can see; assignees are the contest's authors and curators, and its editors read it. */
+  async forContest(
+    principal: Principal,
+    key: string,
+    dto: NewContestTicketDto,
+  ): Promise<TicketDetailResponse> {
+    await this.gate.assertCanWrite(principal);
+    const contest = await this.contests.findByKey(key);
+    if (
+      !contest ||
+      !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
+    )
+      throw new AppError('not_found', 404, 'No such contest');
+    const problemId = dto.problem
+      ? await this.contestProblemId(principal, contest, dto.problem)
+      : null;
+    return this.file(principal, dto, {
+      link: problemId
+        ? { type: 'problem', id: problemId }
+        : { type: 'contest', id: uuidStr(contest._id) },
+      assignees: unique([...contest.authors, ...contest.curators].map(uuidStr)),
+      contest: uuidStr(contest._id),
+      subjectLink: this.discord.link(
+        dto.problem ? problemPath(dto.problem) : contestPath(key),
+      ),
+    });
+  }
+
+  /** 404 unless the contest's problem list is open to the filer (otherwise the answer would tell which problems it has) and the code names one of its problems that the filer can see: as anywhere else, or as a contestant currently in this contest. */
+  private async contestProblemId(
+    principal: Principal,
+    contest: ContestDocument,
+    code: string,
+  ): Promise<string> {
+    const now = new Date();
+    const viewer = await this.viewers.viewerOf(principal, contest, now);
+    const listOpen = ContestAccess.isProblemListOpen(
+      principal,
+      ContestAccess.accessView(contest),
+      viewer,
+      now,
+    );
+    const problem = listOpen
+      ? await this.problems.findForAccessByCode(code)
+      : null;
+    const view = problem && ProblemAccess.accessView(problem);
+    const inContest =
+      view !== null &&
+      contest.problems.some((entry) => uuidStr(entry.problem) === view.id);
+    const scope = viewer.current ? contestScopeOf(contest, now) : null;
+    if (!view || !inContest || !ProblemAccess.canSee(principal, view, scope))
+      throw new AppError('not_found', 404, 'No such problem in this contest');
+    return view.id;
   }
 
   async general(
@@ -80,6 +156,7 @@ export class TicketCreationService {
     return this.file(principal, dto, {
       link: { type: 'general', issueUrl: dto.issueUrl },
       assignees: [],
+      contest: null,
       subjectLink: dto.issueUrl,
     });
   }
@@ -87,7 +164,7 @@ export class TicketCreationService {
   private async file(
     principal: Principal,
     dto: NewTicketDto,
-    target: { link: TicketLink; assignees: string[]; subjectLink: string },
+    target: TicketTarget & { subjectLink: string },
   ): Promise<TicketDetailResponse> {
     const { message, ticket } = await this.insert(principal, dto, target);
     await this.announce(principal, ticket, dto, {
@@ -105,7 +182,7 @@ export class TicketCreationService {
   private async insert(
     principal: Principal,
     dto: NewTicketDto,
-    target: { link: TicketLink; assignees: string[] },
+    target: TicketTarget,
   ): Promise<{
     message: { _id: string };
     ticket: Awaited<ReturnType<TicketsRepository['create']>>;
@@ -129,6 +206,7 @@ export class TicketCreationService {
           title: dto.title,
           user: principal.userId,
           assignees: target.assignees,
+          contest: target.contest,
           messages: [message],
           messageCount: 1,
           lastMessageAt: createdAt,

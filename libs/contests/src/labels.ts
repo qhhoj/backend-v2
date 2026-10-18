@@ -12,3 +12,12 @@ export function problemLabel(index: number, style: LabelStyle): string {
   }
   return label;
 }
+
+const LABEL_SHAPES: Record<LabelStyle, RegExp> = {
+  numeric: /^[1-9]\d{0,2}$/,
+  alpha: /^[A-Z]{1,3}$/,
+};
+
+/** Whether `text` has the shape of a label in `style`, without saying whether the contest has that many problems. */
+export const isLabelShaped = (text: string, style: LabelStyle): boolean =>
+  LABEL_SHAPES[style].test(text);

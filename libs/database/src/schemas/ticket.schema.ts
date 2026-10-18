@@ -4,10 +4,10 @@ import { baseSchemaOptions, IdProp } from '../schema';
 
 const UUID = MongooseSchema.Types.UUID;
 
-export const TICKET_LINK_TYPES = ['problem', 'general'] as const;
+export const TICKET_LINK_TYPES = ['problem', 'general', 'contest'] as const;
 export type TicketLinkType = (typeof TICKET_LINK_TYPES)[number];
 
-/** Legacy generic foreign key: a problem by id, or a `generalIssues` row. */
+/** Legacy generic foreign key: a problem by id, or a `generalIssues` row; new: a contest by id (a question to its organisers). */
 @Schema({ _id: false })
 export class TicketLinkRef {
   @Prop({ type: String, required: true, enum: [...TICKET_LINK_TYPES] })
@@ -63,6 +63,8 @@ export class Ticket {
   @Prop({ default: '' }) notes!: string;
   @Prop({ type: TicketLinkRefSchema, required: true })
   linkedItem!: TicketLinkRef;
+  /** The contest the ticket was filed from (a question to its organisers, or a problem ticket by one of its contestants); its editors read it. */
+  @Prop({ type: UUID, default: null }) contest!: string | null;
   /** A "good" ticket: worth 10 contribution points to its creator. */
   @Prop({ default: false }) isContributive!: boolean;
   @Prop({ default: true }) isOpen!: boolean;
@@ -82,10 +84,11 @@ export class Ticket {
 }
 
 export const TicketSchema = SchemaFactory.createForClass(Ticket);
-// Lists newest first: own tickets, assigned tickets, a problem's tickets, open tickets.
+// Lists newest first: own tickets, assigned tickets, a problem's tickets, a contest's tickets, open tickets.
 TicketSchema.index({ user: 1, _id: -1 });
 TicketSchema.index({ assignees: 1, _id: -1 });
 TicketSchema.index({ 'linkedItem.id': 1, _id: -1 });
+TicketSchema.index({ contest: 1, _id: -1 });
 TicketSchema.index({ isOpen: 1, _id: -1 });
 // Good tickets of a user (contribution points).
 TicketSchema.index({ user: 1, isContributive: 1 });

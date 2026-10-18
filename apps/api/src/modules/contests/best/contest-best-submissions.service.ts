@@ -58,7 +58,12 @@ export class ContestBestSubmissionsService {
     );
     if (
       !viewer.canSeeFullScoreboard ||
-      !this.contests.isProblemListOpen(contest, viewer, now)
+      !ContestAccess.isProblemListOpen(
+        principal,
+        ContestAccess.accessView(contest),
+        facts,
+        now,
+      )
     )
       throw new AppError(
         'forbidden',

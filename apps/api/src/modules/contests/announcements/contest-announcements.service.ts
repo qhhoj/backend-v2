@@ -8,7 +8,11 @@ import {
   notifyAnnouncementFanout,
 } from '@libs/community';
 import type { NotificationFanoutJob } from '@libs/community';
+import { contestPhase, isLabelShaped, problemLabel } from '@libs/contests';
+import { uuidStr } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
+import type { ProblemLinks } from '@libs/render';
+import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { AnnouncementsRepository } from './announcements.repository';
 import { ContestEventsService } from './contest-events.service';
 import { ContestsService } from '../core/contests.service';
@@ -32,6 +36,7 @@ export class ContestAnnouncementsService {
     private readonly announcements: AnnouncementsRepository,
     private readonly events: ContestEventsService,
     private readonly rateLimit: RateLimitService,
+    private readonly problems: ProblemsRepository,
     @InjectQueue(NOTIFICATION_FANOUT_QUEUE)
     private readonly fanout: Queue<NotificationFanoutJob>,
   ) {}
@@ -64,7 +69,7 @@ export class ContestAnnouncementsService {
     dto: CreateAnnouncementDto,
   ): Promise<AnnouncementResponse> {
     const contest = await this.contestsService.editableContest(principal, key);
-    const descriptionHtml = this.render(dto.description);
+    const descriptionHtml = await this.render(contest, dto.description);
     if (contest.pushAnnouncements) await this.spendPush(contest._id);
     const announcement = await this.announcements.create({
       contest: contest._id,
@@ -96,7 +101,7 @@ export class ContestAnnouncementsService {
     const updated = await this.announcements.updateInContest(contest._id, id, {
       title: dto.title,
       description: dto.description,
-      descriptionHtml: this.render(dto.description),
+      descriptionHtml: await this.render(contest, dto.description),
     });
     if (!updated) throw new AppError('not_found', 404, 'No such announcement');
     return AnnouncementResponse.from(updated);
@@ -108,8 +113,8 @@ export class ContestAnnouncementsService {
     key: string,
     description: string,
   ): Promise<{ html: string }> {
-    await this.contestsService.editableContest(principal, key);
-    return { html: this.render(description) };
+    const contest = await this.contestsService.editableContest(principal, key);
+    return { html: await this.render(contest, description) };
   }
 
   async remove(principal: Principal, key: string, id: string): Promise<void> {
@@ -141,9 +146,14 @@ export class ContestAnnouncementsService {
     );
   }
 
-  private render(text: string): string {
+  /** `#C` is an anchor for the contest's problem labelled C. */
+  private async render(
+    contest: ContestDocument,
+    text: string,
+  ): Promise<string> {
+    const problemLinks = await this.problemLinks(contest);
     try {
-      return renderMarkdown(text, 'problem');
+      return renderMarkdown(text, 'problem', { problemLinks });
     } catch (error) {
       if (!(error instanceof RenderLimitError)) throw error;
       throw new AppError('validation_failed', 400, error.message, {
@@ -151,4 +161,49 @@ export class ContestAnnouncementsService {
       });
     }
   }
+
+  /**
+   * The contest's labels and, once its problem codes are public to its viewers (it ended, or its board is visible and it
+   * started), the problem page of each. Before that the HTML stores label-only anchors, which each reader's page resolves
+   * from the problems that reader may see. Resolved when the text is saved, so a later reorder does not move old links.
+   */
+  private async problemLinks(contest: ContestDocument): Promise<ProblemLinks> {
+    if (!areProblemCodesPublic(contest, new Date()))
+      return {
+        isLabel: (label) => isLabelShaped(label, contest.labelStyle),
+        hrefs: {},
+      };
+    const hrefs = await this.problemHrefs(contest);
+    return { isLabel: (label) => Object.hasOwn(hrefs, label), hrefs };
+  }
+
+  /** Label → problem page, labelled in contest order like the problem list. */
+  private async problemHrefs(
+    contest: ContestDocument,
+  ): Promise<Record<string, string>> {
+    const ordered = [...contest.problems].sort(
+      (left, right) => left.order - right.order,
+    );
+    const summaries = await this.problems.findSummaries(
+      ordered.map((entry) => uuidStr(entry.problem)),
+    );
+    const codeOf = new Map(
+      summaries.map((summary) => [uuidStr(summary._id), summary.code]),
+    );
+    const hrefs: Record<string, string> = {};
+    ordered.forEach((entry, index) => {
+      const code = codeOf.get(uuidStr(entry.problem));
+      if (code)
+        hrefs[problemLabel(index, contest.labelStyle)] =
+          `/problems/${encodeURIComponent(code)}`;
+    });
+    return hrefs;
+  }
+}
+
+/** Whether every viewer of the contest already sees its problem codes: after the end, or on a visible board once started. */
+function areProblemCodesPublic(contest: ContestDocument, now: Date): boolean {
+  const phase = contestPhase(contest, now);
+  if (phase === 'ended') return true;
+  return contest.scoreboardVisibility === 'V' && phase !== 'upcoming';
 }

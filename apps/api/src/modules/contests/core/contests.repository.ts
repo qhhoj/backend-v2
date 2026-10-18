@@ -47,6 +47,11 @@ export class ContestsRepository {
       : Promise.resolve([]);
   }
 
+  /** Ids of the contests matching `filter` (an access filter such as `ContestAccess.editableFilter`). */
+  async idsMatching(filter: FilterQuery<Contest>): Promise<string[]> {
+    return (await this.contests.distinct('_id', filter).exec()).map(uuidStr);
+  }
+
   async idByKey(key: string): Promise<string | null> {
     const row = await this.contests.findOne({ key }, { _id: 1 }).lean().exec();
     return row ? uuidStr(row._id) : null;

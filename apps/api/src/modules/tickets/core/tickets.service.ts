@@ -3,8 +3,11 @@ import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, Paginated } from '@libs/common';
 import { TICKETS_PAGE_SIZE } from '@libs/community';
+import { uuidStr } from '@libs/database';
 import type { Ticket } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { ContestAccess } from '../../contests/core/contest-access';
+import { ContestsRepository } from '../../contests/core/contests.repository';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
@@ -36,6 +39,7 @@ export class TicketsService {
     private readonly context: TicketContextService,
     private readonly responses: TicketResponsesService,
     private readonly currentContest: CurrentContestService,
+    private readonly contests: ContestsRepository,
   ) {}
 
   /** Legacy `TicketList`: `own` replaces the visibility rule (it is narrower), the rest narrows it; `open` filters both ways (`true` open only, `false` closed only, absent both). */
@@ -54,7 +58,7 @@ export class TicketsService {
       clauses.push({ user: { $in: await this.idsOf(query.user) } });
     if (query.assignee)
       clauses.push({ assignees: { $in: await this.idsOf(query.assignee) } });
-    return this.page(query.page, allOf(clauses));
+    return this.page(principal, query.page, allOf(clauses));
   }
 
   /** Legacy `ProblemTicketListView`: editors see every ticket of the problem, other viewers of the problem their own; staff see all. */
@@ -85,10 +89,33 @@ export class TicketsService {
     };
     const seesAll = TicketAccess.isStaff(principal) || edits;
     return this.page(
+      principal,
       query.page,
       seesAll
         ? ofProblem
         : { $and: [ofProblem, TicketAccess.ownFilter(principal.userId)] },
+    );
+  }
+
+  /** The tickets filed from a contest: all of them for its editors and staff, otherwise only the caller's own. 404 when the caller cannot see the contest. */
+  async contestList(
+    principal: Principal,
+    key: string,
+    query: TicketPageQueryDto,
+  ): Promise<Paginated<TicketListItemResponse>> {
+    const contest = await this.contests.findByKey(key);
+    const view = contest && ContestAccess.accessView(contest);
+    if (!contest || !view || !ContestAccess.canSee(principal, view))
+      throw new AppError('not_found', 404, 'No such contest');
+    const ofContest: FilterQuery<Ticket> = { contest: uuidStr(contest._id) };
+    const seesAll =
+      TicketAccess.isStaff(principal) || ContestAccess.canEdit(principal, view);
+    return this.page(
+      principal,
+      query.page,
+      seesAll
+        ? ofContest
+        : { $and: [ofContest, TicketAccess.ownFilter(principal.userId)] },
     );
   }
 
@@ -103,18 +130,19 @@ export class TicketsService {
   }
 
   private async page(
+    principal: Principal,
     page: number,
     filter: FilterQuery<Ticket>,
   ): Promise<Paginated<TicketListItemResponse>> {
     const { rows, total } = await this.tickets.page(filter, page);
-    return new Paginated(await this.responses.items(rows), {
+    return new Paginated(await this.responses.items(principal, rows), {
       page,
       pageSize: TICKETS_PAGE_SIZE,
       total,
     });
   }
 
-  /** Legacy `filter_visible_tickets`: own tickets plus tickets of problems the viewer edits; staff see all. The edited problems' ids are looked up (also for `edit_all_problem`, so a ticket of a deleted problem stays unreadable like in `canSee`), keeping the list an index read on `linkedItem.id`. */
+  /** Legacy `filter_visible_tickets`: own tickets plus tickets of problems the viewer edits; staff see all. The edited problems' ids are looked up (also for `edit_all_problem`, so a ticket of a deleted problem stays unreadable like in `canSee`), keeping the list an index read on `linkedItem.id`. New: tickets filed from contests the viewer edits, the same way. */
   private async visibleTo(principal: Principal): Promise<FilterQuery<Ticket>> {
     if (TicketAccess.isStaff(principal)) return {};
     const clauses: FilterQuery<Ticket>[] = [
@@ -126,7 +154,17 @@ export class TicketsService {
         'linkedItem.type': 'problem',
         'linkedItem.id': { $in: await this.problems.visibleIds(editable) },
       });
+    clauses.push(...(await this.editedContestsClause(principal)));
     return { $or: clauses };
+  }
+
+  /** Tickets filed from contests the viewer edits, by the ids of the existing ones (with `edit_all_contest`, every contest): a deleted contest's tickets are not listed. */
+  private async editedContestsClause(
+    principal: Principal,
+  ): Promise<FilterQuery<Ticket>[]> {
+    const editable = ContestAccess.editableFilter(principal);
+    if (!editable) return [];
+    return [{ contest: { $in: await this.contests.idsMatching(editable) } }];
   }
 
   /** Unknown names match nothing. */

@@ -4,6 +4,7 @@ import type { Principal } from '@libs/auth';
 import { AppError, invalidField, unique } from '@libs/common';
 import { timelineEventsOf } from '@libs/community';
 import { uuidStr } from '@libs/database';
+import { ContestsRepository } from '../../contests/core/contests.repository';
 import { ContributionPointsService } from '../../contributions/contribution-points.service';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
 import { RevisionsRepository } from '../../problems/core/revisions.repository';
@@ -46,6 +47,7 @@ export class TicketUpdatesService {
     private readonly alerts: TicketNotificationsService,
     private readonly problems: ProblemsRepository,
     private readonly revisions: RevisionsRepository,
+    private readonly contests: ContestsRepository,
   ) {}
 
   async update(
@@ -131,10 +133,26 @@ export class TicketUpdatesService {
       if (
         ticket.linkedItem.type !== 'problem' ||
         uuidStr(ticket.linkedItem.id) !== linkedItem.id
-      )
+      ) {
         changes.linkedItem = linkedItem;
+        if (!(await this.staysInContest(ticket, linkedItem.id)))
+          changes.contest = null;
+      }
     }
     return changes;
+  }
+
+  /** A ticket moved to a problem outside the contest it was filed from leaves that contest (its editors stop reading it). */
+  private async staysInContest(
+    ticket: TicketDocument,
+    problemId: string,
+  ): Promise<boolean> {
+    if (!ticket.contest) return true;
+    const [contest] = await this.contests.findByIds([uuidStr(ticket.contest)]);
+    return (
+      contest?.problems.some((entry) => uuidStr(entry.problem) === problemId) ??
+      false
+    );
   }
 
   /** A live (not deleted) problem by code; 400 `problem_unknown` otherwise. */

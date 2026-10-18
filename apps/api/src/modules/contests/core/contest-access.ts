@@ -253,6 +253,22 @@ function canSeeFullSubmissionList(
   return contestPhase(contest, now) === 'ended' || contest.showSubmissionList;
 }
 
+/** Problems show to whoever is in the contest, edits or tests it, and to everyone once it ended. */
+function isProblemListOpen(
+  principal: Principal | null,
+  contest: ContestAccessView,
+  facts: ViewerFacts,
+  now: Date,
+): boolean {
+  return (
+    facts.inContest ||
+    isEditor(principal, contest) ||
+    canEdit(principal, contest) ||
+    isTester(principal, contest) ||
+    contestPhase(contest, now) === 'ended'
+  );
+}
+
 export const ContestAccess = {
   accessView,
   isEditor,
@@ -268,4 +284,5 @@ export const ContestAccess = {
   canSeeFullScoreboard,
   canSeeOwnScoreboard,
   canSeeFullSubmissionList,
+  isProblemListOpen,
 };
