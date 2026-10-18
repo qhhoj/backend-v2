@@ -73,8 +73,11 @@ describe("a submission's contest on its result page and in the lists", () => {
       extra = {},
       run = {},
       afterStart = 47.5 * MINUTE_MS,
+      awarded,
     }: {
       stored?: number | null;
+      /** The submission's own `points`, which the problem's best list ranks on. */
+      awarded?: number;
       /** Points of the contest problem. */
       worth?: number;
       extra?: Partial<Contest>;
@@ -110,6 +113,7 @@ describe("a submission's contest on its result page and in the lists", () => {
       result: 'WA',
       casePoints: 7,
       caseTotal: 20,
+      ...(awarded === undefined ? {} : { points: awarded }),
     });
     if (stored !== null)
       await api.contestSubmissions.create({
@@ -274,20 +278,65 @@ describe("a submission's contest on its result page and in the lists", () => {
       }
     });
 
+    describe('on the best lists', () => {
+      const bestPaths = (code: string, contestKey: string) => [
+        `/api/internal/problems/${code}/best-submissions`,
+        `/api/internal/contests/${contestKey}/problems/${code}/best-submissions`,
+      ];
+
+      it("gives the problem's and the contest's best row the contest block the page gives", async () => {
+        const { contest, inContestId } = await scene('list_best', {
+          stored: 35,
+          awarded: 35,
+        });
+        for (const path of bestPaths('list_best', contest.key))
+          for (const viewer of ['alice', 'staff', null]) {
+            const row = (await listedBy(viewer, path)).get(inContestId);
+            expect(row).toMatchObject({ key: contest.key, points: 35 });
+            expect(row).toEqual(await contestOf(viewer, inContestId));
+          }
+      });
+
+      it('leaves a contest the viewer may not see out of a best row, while the row stays listed', async () => {
+        const hidden = await scene('list_best_hidden', {
+          stored: 35,
+          awarded: 35,
+          extra: { isVisible: false },
+        });
+        const rows = await listedBy(
+          'alice',
+          `/api/internal/problems/list_best_hidden/best-submissions`,
+        );
+        expect(rows.has(hidden.inContestId)).toBe(true);
+        expect(rows.get(hidden.inContestId)).toBeNull();
+      });
+    });
+
     it('reads the contests of a page in a fixed number of lookups, however many rows it has', async () => {
       await scene('list_batch_a');
       const one = await scene('list_batch_b');
       await scene('list_batch_c');
-      const lookups = [
-        jest.spyOn(api.app.get(ContestsRepository), 'findByIds'),
-        jest.spyOn(api.app.get(ContestsRepository), 'findById'),
-        jest.spyOn(api.app.get(SubmissionsRepository), 'contestRows'),
-        jest.spyOn(api.app.get(ParticipationsRepository), 'runsByIds'),
-      ];
+      const lookups = {
+        contests: jest.spyOn(api.app.get(ContestsRepository), 'findByIds'),
+        contestPerRow: jest.spyOn(api.app.get(ContestsRepository), 'findById'),
+        contestRows: jest.spyOn(
+          api.app.get(SubmissionsRepository),
+          'contestRows',
+        ),
+        runs: jest.spyOn(api.app.get(ParticipationsRepository), 'runsByIds'),
+      };
       const callsAfter = async (path: string) => {
-        lookups.forEach((spy) => spy.mockClear());
+        Object.values(lookups).forEach((spy) => spy.mockClear());
         const rows = await listedBy('alice', path);
-        return { rows, calls: lookups.map((spy) => spy.mock.calls.length) };
+        return {
+          rows,
+          calls: Object.fromEntries(
+            Object.entries(lookups).map(([name, spy]) => [
+              name,
+              spy.mock.calls.length,
+            ]),
+          ),
+        };
       };
       try {
         const single = await callsAfter(`${SUBMISSIONS}?problem=list_batch_b`);
@@ -297,9 +346,9 @@ describe("a submission's contest on its result page and in the lists", () => {
           [...page.rows.values()].filter(Boolean).length,
         ).toBeGreaterThanOrEqual(3);
         expect(page.calls).toEqual(single.calls);
-        expect(page.calls[1]).toBe(0);
+        expect(page.calls.contestPerRow).toBe(0);
       } finally {
-        lookups.forEach((spy) => spy.mockRestore());
+        Object.values(lookups).forEach((spy) => spy.mockRestore());
       }
     });
   });
