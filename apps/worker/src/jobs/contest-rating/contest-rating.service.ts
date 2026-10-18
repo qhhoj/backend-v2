@@ -21,6 +21,9 @@ import type {
 type RatingRow = Omit<Rating, '_id'>;
 type RatingRun = { contests: number; ratings: number };
 
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 /** Legacy `Contest.rate` + `rate_contest`. The only writer of `ratings` and `users.rating`. */
 @Injectable()
 export class ContestRatingService {
@@ -43,14 +46,19 @@ export class ContestRatingService {
     return run;
   }
 
-  /** The ratings are committed by now: a Redis failure must not fail the job, the stale boards only live until `scoreboardCacheTimeout`. */
+  /** The ratings are committed by now: a Redis failure must not fail the job, the stale boards only live until `scoreboardCacheTimeout`. The warning names each board that stayed stale and why. */
   private async purgeBoards(contestIds: string[]): Promise<void> {
     const purges = await Promise.allSettled(
       contestIds.map((contestId) => purgeRankingCache(this.redis, contestId)),
     );
-    if (purges.some((purge) => purge.status === 'rejected'))
+    const failed = purges.flatMap((purge, index) =>
+      purge.status === 'rejected'
+        ? [`${contestIds[index]} (${messageOf(purge.reason)})`]
+        : [],
+    );
+    if (failed.length)
       this.logger.warn(
-        'Ratings applied; board cache not purged, expires after scoreboardCacheTimeout',
+        `Ratings applied; board cache not purged for ${failed.join(', ')}; expires after scoreboardCacheTimeout`,
       );
   }
 

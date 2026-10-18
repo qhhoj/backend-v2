@@ -366,33 +366,47 @@ describe('contest rating', () => {
       expect(await redis.exists(key)).toBe(0);
   });
 
-  it('reports the committed ratings when the board cache cannot be purged', async () => {
+  it('reports the committed ratings, naming the boards it could not purge and why', async () => {
     const redis = worker.module.get<Redis>(REDIS);
+    const [alice, bob] = await newUsers('user_41', 'user_42');
+    const first = await ratedContest(daysAgo(2));
+    const second = await ratedContest(daysAgo(1));
+    await join(first._id, alice._id, 200);
+    await join(second._id, bob._id, 100);
+    for (const key of [first, second].flatMap((contest) =>
+      rankingCacheKeys(contest._id),
+    ))
+      await redis.set(key, '{}');
+    const realDel = redis.del.bind(redis);
     const del = jest
       .spyOn(redis, 'del')
-      .mockRejectedValue(new Error('redis down'));
+      .mockImplementation(((...keys: string[]) =>
+        keys.some((key) => key.includes(second._id))
+          ? Promise.reject(new Error('redis down'))
+          : realDel(...keys)) as never);
     const warn = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
     try {
-      const [alice] = await newUsers('purge_alice');
-      const contest = await ratedContest(daysAgo(1));
-      await join(contest._id, alice._id, 100);
-
-      await expect(ratings.rateFrom(contest._id)).resolves.toEqual({
-        contests: 1,
-        ratings: 1,
+      await expect(ratings.rateFrom(first._id)).resolves.toEqual({
+        contests: 2,
+        ratings: 2,
       });
-      expect(
-        await worker.ratings.countDocuments({ contest: contest._id }),
-      ).toBe(1);
-      expect(warn).toHaveBeenCalledWith(
-        'Ratings applied; board cache not purged, expires after scoreboardCacheTimeout',
-      );
+
+      expect(await worker.ratings.countDocuments({})).toBe(2);
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0][0]);
+      expect(message).toContain(`${second._id} (redis down)`);
+      expect(message).not.toContain(first._id);
+      expect(message).toContain('expires after scoreboardCacheTimeout');
     } finally {
       del.mockRestore();
       warn.mockRestore();
     }
+    for (const key of rankingCacheKeys(first._id))
+      expect(await redis.exists(key)).toBe(0);
+    for (const key of rankingCacheKeys(second._id))
+      expect(await redis.exists(key)).toBe(1);
   });
 
   it('rates contests ending later after earlier ones, whatever order they were created in', async () => {
