@@ -71,6 +71,37 @@ function unchangedOrganizations(contest: Contest): FilterQuery<Contest> {
   };
 }
 
+/** The flags the visibility gate (`assertGates`) reads. */
+const VISIBILITY_FLAGS = [
+  'isVisible',
+  'isPrivate',
+  'isOrganizationPrivate',
+] as const;
+
+/** Matches a stored flag equal to `value`; false also matches a legacy row without the field. */
+const flagIs = (value: boolean) => (value ? true : { $ne: true });
+
+/**
+ * Stored flags the save must still find, so two concurrent edits can neither both charge (a charged edit saves only
+ * while the contest is still unscoped) nor combine into a publish the gate refused each alone (an edit of a
+ * visibility flag saves only while all three are as the gate read them, e.g. `isVisible` on a private contest and
+ * `isPrivate: false` on a hidden one). The loser gets a 409 and its charge is refunded.
+ */
+function pinnedFlags(
+  contest: Contest,
+  fields: Partial<Contest>,
+  isCharged: boolean,
+): FilterQuery<Contest> {
+  const pinned = VISIBILITY_FLAGS.some((flag) => fields[flag] !== undefined)
+    ? VISIBILITY_FLAGS
+    : isCharged
+      ? ['isOrganizationPrivate' as const]
+      : [];
+  return Object.fromEntries(
+    pinned.map((flag) => [flag, flagIs(contest[flag])]),
+  );
+}
+
 @Injectable()
 export class ContestEditingService {
   private readonly logger = new Logger(ContestEditingService.name);
@@ -229,11 +260,10 @@ export class ContestEditingService {
   ): Promise<void> {
     await this.assertFormatChangeAllowed(contest, fields);
     const charged = newlyChargedOrganization(principal, contest, fields);
-    // A charged edit saves only while the contest is still unscoped, so two concurrent edits cannot both charge: the loser gets a 409 and its charge is refunded.
-    const saveGuard =
-      charged === null
-        ? guard
-        : { ...guard, isOrganizationPrivate: contest.isOrganizationPrivate };
+    const saveGuard = {
+      ...pinnedFlags(contest, fields, charged !== null),
+      ...guard,
+    };
     // The re-check runs inside the charged work, so a save it undoes is refunded like any failed save.
     const updated = await this.quota.charged(
       charged,
