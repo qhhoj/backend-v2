@@ -30,6 +30,7 @@ afterAll(() => api.teardown());
     isArchived: boolean;
     updatedAt: string;
     tags: Array<{ slug: string }>;
+    canEdit: boolean;
   }
 
   describe('organization problems', () => {
@@ -100,6 +101,35 @@ afterAll(() => api.teardown());
         api.http().get(listUrl(world.organization.slug, '?archived=maybe')),
         world.member.session,
       ).expect(400);
+    });
+
+    it('marks the rows the viewer may edit, by the problem edit rule and not the organization role', async () => {
+      const world = await seedOrganizationWorld(api);
+      await api.users.updateOne(
+        { _id: world.admin.user._id },
+        { $set: { permissions: ['judge.edit_own_problem'] } },
+      );
+      const curated = await orgProblem([world.organization._id], {
+        curators: [world.admin.user._id],
+      });
+      const other = await orgProblem([world.organization._id]);
+      const editableAs = async (session: TestSession) =>
+        Object.fromEntries(
+          dataOf<Row[]>(
+            await authed(
+              api.http().get(listUrl(world.organization.slug)),
+              session,
+            ).expect(200),
+          ).map((row) => [row.code, row.canEdit]),
+        );
+      expect(await editableAs(world.admin.session)).toEqual({
+        [curated.code]: true,
+        [other.code]: false,
+      });
+      expect(await editableAs(world.member.session)).toEqual({
+        [curated.code]: false,
+        [other.code]: false,
+      });
     });
 
     it('archiving in one organization leaves the other organization and the public list alone', async () => {

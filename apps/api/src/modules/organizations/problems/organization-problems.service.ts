@@ -29,6 +29,10 @@ const searchClause = (text: string): FilterQuery<Problem> => {
   return { $or: [{ code: pattern }, { name: pattern }] };
 };
 
+/** The row's `canEdit`: the problem's own edit rule, not the organization role. */
+const canEditProblem = (principal: Principal, problem: Problem): boolean =>
+  ProblemAccess.canEdit(principal, ProblemAccess.accessView(problem));
+
 @Injectable()
 export class OrganizationProblemsService {
   constructor(
@@ -60,7 +64,7 @@ export class OrganizationProblemsService {
     const { items, total } = filter
       ? await this.problems.list(filter, { code: 1 }, page, pageSize)
       : { items: [], total: 0 };
-    const rows = await this.rowsOf(organization._id, items);
+    const rows = await this.rowsOf(principal, organization._id, items);
     return new Paginated(rows, { page, pageSize, total });
   }
 
@@ -94,6 +98,7 @@ export class OrganizationProblemsService {
   }
 
   private async rowsOf(
+    principal: Principal,
     organizationId: string,
     problems: ProblemDocument[],
   ): Promise<OrganizationProblemResponse[]> {
@@ -110,7 +115,12 @@ export class OrganizationProblemsService {
         const tag = tagsById.get(uuidStr(id));
         return tag ? [ProblemTagResponse.from(tag)] : [];
       });
-      return OrganizationProblemResponse.from(problem, link, tags);
+      return OrganizationProblemResponse.from(
+        problem,
+        link,
+        tags,
+        canEditProblem(principal, problem),
+      );
     });
   }
 
@@ -137,6 +147,7 @@ export class OrganizationProblemsService {
       problem,
       link,
       found.map((tag) => ProblemTagResponse.from(tag)),
+      canEditProblem(principal, problem),
     );
   }
 
