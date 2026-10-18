@@ -441,6 +441,56 @@ describe('creating problems and contests for an organization', () => {
       ).toBe(true);
     });
 
+    it('refuses making a contest private to no organization a site contest', async () => {
+      await staffContest('kt_no_org', { organizations: [] });
+      await patchContestAs('setter', 'kt_no_org', {
+        isOrganizationPrivate: false,
+      })
+        .expect(403)
+        .expect(issueCodes(['site_contest_rights']));
+      expect(
+        (await api.contests.findOne({ key: 'kt_no_org' }).lean())
+          ?.isOrganizationPrivate,
+      ).toBe(true);
+    });
+
+    it('refuses showing a contest made public while hidden, one step at a time', async () => {
+      await staffContest('kt_steps', {
+        organizations: [setterOrganizationId],
+        isOrganizationPrivate: false,
+        isPrivate: true,
+      });
+      await patchContestAs('setter', 'kt_steps', { isPrivate: false }).expect(
+        200,
+      );
+      await patchContestAs('setter', 'kt_steps', { isVisible: true })
+        .expect(403)
+        .expect(({ body }: { body: { error: { message: string } } }) =>
+          expect(body.error.message).toMatch(/change_contest_visibility/),
+        );
+      expect(
+        (await api.contests.findOne({ key: 'kt_steps' }).lean())?.isVisible,
+      ).toBe(false);
+    });
+
+    it('refuses opening a visible contest private to chosen users to everyone', async () => {
+      await staffContest('kt_visible_users', {
+        organizations: [setterOrganizationId],
+        isOrganizationPrivate: false,
+        isPrivate: true,
+        isVisible: true,
+      });
+      await patchContestAs('setter', 'kt_visible_users', { isPrivate: false })
+        .expect(403)
+        .expect(({ body }: { body: { error: { message: string } } }) =>
+          expect(body.error.message).toMatch(/change_contest_visibility/),
+        );
+      expect(
+        (await api.contests.findOne({ key: 'kt_visible_users' }).lean())
+          ?.isPrivate,
+      ).toBe(true);
+    });
+
     it('lets a site contest creator list any organization, as in legacy', async () => {
       await authed(
         api.http().post('/api/internal/contests'),

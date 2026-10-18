@@ -59,8 +59,12 @@ export function organizationsToAuthorize(
   return unique([...added, ...removed, ...flipped, ...reowned]);
 }
 
-/** The change takes an organization problem or contest out of every organization onto the site (needs the site create permission). */
+/**
+ * The change takes an organization-private problem or contest onto the site (needs the site create permission): it was
+ * private to organizations and is no longer private to any. Keyed on the stored flag, so one private to no organization
+ * (a staff leftover) cannot be made a site one either.
+ */
 export const leavesForSite = (
   before: OrganizationScope,
   after: OrganizationScope,
-): boolean => isOrganizationScoped(before) && !isOrganizationScoped(after);
+): boolean => before.isOrganizationPrivate && !isOrganizationScoped(after);
