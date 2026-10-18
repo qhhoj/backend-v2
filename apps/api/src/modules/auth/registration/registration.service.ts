@@ -33,6 +33,8 @@ import {
   USERNAME_CHECK_WINDOW_SECONDS,
 } from '../core/rate-limits';
 
+const DEFAULT_LANGUAGE_KEY = 'CPP17';
+
 @Injectable()
 export class RegistrationService {
   private readonly logger = new Logger(RegistrationService.name);
@@ -137,7 +139,7 @@ export class RegistrationService {
       email,
       password,
       isActive: false,
-      ...this.profileFields(body),
+      ...(await this.profileFields(body)),
     });
     let key: string;
     try {
@@ -159,18 +161,30 @@ export class RegistrationService {
     await this.announceMembership(user);
   }
 
-  /** The optional signup choices as user fields. */
-  profileFields({
+  /** The optional signup choices as user fields; no language chosen means C++17 (owner decision 2026-10-18). */
+  async profileFields({
     languageId,
     organizationId,
-  }: Pick<RegisterDto, 'languageId' | 'organizationId'>): Pick<
-    User,
-    'languageId' | 'organizations'
+  }: Pick<RegisterDto, 'languageId' | 'organizationId'>): Promise<
+    Pick<User, 'languageId' | 'organizations'>
   > {
     return {
-      languageId: languageId ?? null,
+      languageId: languageId ?? (await this.defaultLanguageId()),
       organizations: organizationId ? [organizationId] : [],
     };
+  }
+
+  /** Null when the catalog has no active C++17. */
+  private async defaultLanguageId(): Promise<string | null> {
+    const language = await this.languages
+      // A row stored before `isActive` existed has no field and is active (`isLanguageActive`).
+      .findOne(
+        { key: DEFAULT_LANGUAGE_KEY, isActive: { $ne: false } },
+        { _id: 1 },
+      )
+      .lean()
+      .exec();
+    return language ? uuidStr(language._id) : null;
   }
 
   /** Queues the organization's points recompute once the signup succeeded; never throws. */

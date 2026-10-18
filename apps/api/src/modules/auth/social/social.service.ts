@@ -172,7 +172,7 @@ export class SocialService {
           username,
           email: pending.email,
           password,
-          ...this.registration.profileFields(credentials),
+          ...(await this.registration.profileFields(credentials)),
           isActive: true,
           socialAuth: [
             { provider: pending.provider, uid: pending.uid, extraData: {} },

@@ -25,6 +25,6 @@ export class RegisterDto {
   /** An open, listed organization the new account joins. */
   @IsOptional() @IsUUID('7') organizationId?: string;
 
-  /** The account's default programming language. */
+  /** The account's default programming language; C++17 when omitted. */
   @IsOptional() @IsUUID('7') languageId?: string;
 }
