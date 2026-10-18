@@ -7,7 +7,7 @@ root="$(mktemp -d)"; fixtures="$(mktemp -d)"; trap 'rm -rf "$root" "$fixtures"' 
 good_host() {
   rm -rf "${root:?}"/* "${fixtures:?}"/*
   mkdir -p "$root/sys/fs/cgroup" "$root/sys/devices/system/cpu/smt" "$root/proc/sys/kernel" "$root/etc/qhhoj-judge" "$root/proc/self" \
-    "$root/usr/local/bin" "$root/usr/local/etc"
+    "$root/usr/local/bin" "$root/usr/local/etc" "$root/run/isolate" "$root/sys/fs/cgroup/isolate.slice/isolate.service"
   echo "cpuset cpu io memory pids" > "$root/sys/fs/cgroup/cgroup.controllers"
   printf 'Filename\tType\tSize\tUsed\tPriority\n' > "$root/proc/swaps"
   echo off > "$root/sys/devices/system/cpu/smt/control"
@@ -24,6 +24,9 @@ good_host() {
   echo "qhhoj-judge:x:990:990::/nonexistent:/usr/sbin/nologin" > "$root/etc/passwd"
   echo binary > "$root/usr/local/bin/isolate"; chmod 4755 "$root/usr/local/bin/isolate"
   printf 'box_root = /var/local/lib/isolate\nnum_boxes = 1000\ncg_root = auto:/run/isolate/cgroup\n' > "$root/usr/local/etc/isolate"
+  # isolate's cg keeper writes its cgroup to /run/isolate/cgroup; memory.peak exists from kernel 5.19
+  echo /sys/fs/cgroup/isolate.slice/isolate.service > "$root/run/isolate/cgroup"
+  echo 0 > "$root/sys/fs/cgroup/isolate.slice/isolate.service/memory.peak"
   # isolate 2.6's real wording and colours on a tuned host: only the ASLR check fails.
   printf 'Checking for cgroup support for memory.max ... \e[32mPASS\e[m\nChecking for kernel address space randomisation ... \e[31mFAIL\e[m\n\e[33mWARNING:\e[m address space randomisation is enabled.\necho 0 > /proc/sys/kernel/randomize_va_space\n' > "$fixtures/isolate-check-environment"
   printf 'table inet filter {\n\tchain output {\n\t\ttype filter hook output priority filter; policy drop;\n\t}\n}\n' > "$fixtures/nft-output"
@@ -63,6 +66,8 @@ expect_fail "no CA" 'rm "$root/etc/qhhoj-judge/bridge-ca.pem"'
 expect_fail "no user" 'echo > "$root/etc/passwd"'
 expect_fail "config writable" 'chmod 0664 "$root/etc/qhhoj-judge/config.toml"'
 expect_fail "isolate not setuid" 'chmod 0755 "$root/usr/local/bin/isolate"'
+expect_fail "no memory.peak (kernel before 5.19)" 'rm "$root/sys/fs/cgroup/isolate.slice/isolate.service/memory.peak"'
+expect_fail "no cgroup path from isolate's cg keeper" 'rm "$root/run/isolate/cgroup"'
 expect_fail "box_root on NFS" 'echo "site:/boxes /var/local/lib/isolate nfs4 rw 0 0" >> "$root/proc/self/mounts"'
 expect_fail "too few boxes for 7 default slots" 'sed -i "s/num_boxes = 1000/num_boxes = 13/" "$root/usr/local/etc/isolate"'
 expect_fail "too few boxes for box_base" 'sed -i "s/box_base = 0/box_base = 990/" "$root/etc/qhhoj-judge/config.toml"'
@@ -98,4 +103,6 @@ expect_pass "num_boxes = box_base + 2*slots" 'sed -i "s/num_boxes = 1000/num_box
 # An explicit slots value wins over the CPU count.
 expect_pass "slots = 2 needs only 4 boxes" 'printf "slots = 2\n" >> "$root/etc/qhhoj-judge/config.toml"; sed -i "s/num_boxes = 1000/num_boxes = 4/" "$root/usr/local/etc/isolate"'
 expect_pass "subid_user with 14 subuids and subgids" 'subid_host 14 14'
+expect_pass "a fixed cg_root with memory.peak" \
+  'sed -i "s|auto:/run/isolate/cgroup|/sys/fs/cgroup/isolate.slice/isolate.service|" "$root/usr/local/etc/isolate"; rm "$root/run/isolate/cgroup"'
 echo "check-host tests ok"
