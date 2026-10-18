@@ -1,5 +1,16 @@
 # qhhoj-backend
 
+## 2.34.0
+
+### Minor Changes
+
+- dadbd98: `GET /organizations?canCreate=problem|contest` lists the organizations the viewer may create that for (administrator, or `judge.edit_all_organization`, holding `judge.create_organization_problem` or `judge.create_private_contest`): the set the organization create routes accept. 401 when anonymous.
+- f6899b7: Submission list rows (`GET /submissions`, the contest, organization and best lists) carry `contest` ({key, name, points, minute}) like the submission detail, under the same `canSee` rule; null outside a contest and for a contest the viewer may not see.
+
+### Patch Changes
+
+- a32de32: The rating run's warning for a board it could not purge now names the affected contest ids and the failure reason.
+
 ## 2.33.0
 
 ### Minor Changes
