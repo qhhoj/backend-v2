@@ -1,4 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
@@ -265,6 +266,55 @@ describe('contest rating', () => {
       expect(await redis.exists(key)).toBe(0);
     for (const key of rankingCacheKeys(unrelated._id))
       expect(await redis.exists(key)).toBe(1);
+  });
+
+  it('purges the board of a contest that stopped being rated, whose ratings the run deletes', async () => {
+    const redis = worker.module.get<Redis>(REDIS);
+    const [alice, bob] = await newUsers('unrated_alice', 'unrated_bob');
+    const first = await ratedContest(daysAgo(2));
+    const second = await ratedContest(daysAgo(1));
+    await join(first._id, alice._id, 200);
+    await join(second._id, bob._id, 100);
+    await ratings.rateFrom(first._id);
+    await worker.contests.updateOne({ _id: second._id }, { isRated: false });
+    for (const key of rankingCacheKeys(second._id)) await redis.set(key, '{}');
+
+    await ratings.rateFrom(first._id);
+
+    expect(await worker.ratings.countDocuments({ contest: second._id })).toBe(
+      0,
+    );
+    for (const key of rankingCacheKeys(second._id))
+      expect(await redis.exists(key)).toBe(0);
+  });
+
+  it('reports the committed ratings when the board cache cannot be purged', async () => {
+    const redis = worker.module.get<Redis>(REDIS);
+    const del = jest
+      .spyOn(redis, 'del')
+      .mockRejectedValue(new Error('redis down'));
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const [alice] = await newUsers('purge_alice');
+      const contest = await ratedContest(daysAgo(1));
+      await join(contest._id, alice._id, 100);
+
+      await expect(ratings.rateFrom(contest._id)).resolves.toEqual({
+        contests: 1,
+        ratings: 1,
+      });
+      expect(
+        await worker.ratings.countDocuments({ contest: contest._id }),
+      ).toBe(1);
+      expect(warn).toHaveBeenCalledWith(
+        'Ratings applied; board cache not purged, expires after scoreboardCacheTimeout',
+      );
+    } finally {
+      del.mockRestore();
+      warn.mockRestore();
+    }
   });
 
   it('rates contests ending later after earlier ones, whatever order they were created in', async () => {
