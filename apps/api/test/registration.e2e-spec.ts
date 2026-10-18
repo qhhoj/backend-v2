@@ -1,7 +1,7 @@
 import { UsersRepository, hashPassword } from '@libs/auth';
 import { getModelToken } from '@nestjs/mongoose';
 import { REDIS } from '@libs/common';
-import { ActivationKey, CI } from '@libs/database';
+import { ActivationKey, CI, uuidStr } from '@libs/database';
 import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import { createUser, errorCode, setupApiTest } from './setup';
@@ -275,6 +275,33 @@ describe('registration extras', () => {
         ]);
       await register({ organizationId: 'not-a-uuid' }).expect(400);
       expect(await api.users.countDocuments({ username: 'newbie' })).toBe(0);
+    });
+
+    it('defaults the language to C++17 when none is chosen, and to none without an active C++17', async () => {
+      const languageOf = async (overrides: Record<string, unknown> = {}) => {
+        await api.users.deleteMany({ username: 'newbie' });
+        await api.app.get<Redis>(REDIS).flushdb();
+        await register(overrides).expect(204);
+        const user = await api.users.findOne({ username: 'newbie' }).lean();
+        return user?.languageId ? uuidStr(user.languageId) : null;
+      };
+      expect(await languageOf()).toBeNull();
+      const cpp = await api.languages.create({
+        key: 'CPP17',
+        name: 'C++17',
+        commonName: 'C++',
+        ace: 'c_cpp',
+        pygments: 'cpp',
+        extension: 'cpp',
+      });
+      const python = uuidStr(
+        (await api.languages.findOne({ key: 'PY3' }).lean())!._id,
+      );
+      expect(await languageOf()).toBe(cpp._id);
+      await api.languages.updateOne({ _id: cpp._id }, { isActive: false });
+      expect(await languageOf()).toBeNull();
+      await api.languages.updateOne({ _id: cpp._id }, { isActive: true });
+      expect(await languageOf({ languageId: python })).toBe(python);
     });
   });
 
