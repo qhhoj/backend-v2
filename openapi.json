@@ -14880,6 +14880,10 @@
             "description": "The caller may change the assignees.",
             "type": "boolean"
           },
+          "claim": {
+            "description": "The caller may take the ticket on themselves or hand it back (`POST`/`DELETE /tickets/{id}/claim`).",
+            "type": "boolean"
+          },
           "editNotes": {
             "description": "The caller may edit the notes.",
             "type": "boolean"
@@ -14892,12 +14896,17 @@
         "required": [
           "editNotes",
           "markGood",
-          "assign"
+          "assign",
+          "claim"
         ],
         "type": "object"
       },
       "TicketSummaryResponse": {
         "properties": {
+          "aboutMineOpen": {
+            "description": "Open tickets about the viewer's own problems and contests (the list's `aboutMine`); 0 unless the viewer may edit problems or contests.",
+            "type": "number"
+          },
           "assignedOpen": {
             "description": "Open tickets the viewer is assigned to.",
             "type": "number"
@@ -14909,7 +14918,8 @@
         },
         "required": [
           "assignedOpen",
-          "awaitingStaff"
+          "awaitingStaff",
+          "aboutMineOpen"
         ],
         "type": "object"
       },
@@ -39486,6 +39496,26 @@
             }
           },
           {
+            "description": "true limits the list to tickets about what the caller makes: problems they author, curate or suggested, and contests they author or curate (tickets filed from them), whatever else they may read.",
+            "in": "query",
+            "name": "aboutMine",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Text in the title (ignoring case and Vietnamese accents), or the exact username of the creator; blank filters nothing.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^[^\\0]*$",
+              "type": "string"
+            }
+          },
+          {
             "description": "Usernames of ticket creators; repeat the parameter, at most 10.",
             "in": "query",
             "name": "user",
@@ -39798,6 +39828,124 @@
           }
         },
         "summary": "Update a ticket",
+        "tags": [
+          "Tickets"
+        ]
+      }
+    },
+    "/api/internal/tickets/{id}/claim": {
+      "delete": {
+        "description": "Removes the caller from the ticket's handlers; the others stay. Same\nrights as taking it.",
+        "operationId": "TicketClaimsController_release",
+        "parameters": [
+          {
+            "description": "Id of the ticket.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TicketDetailResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Hand a ticket back",
+        "tags": [
+          "Tickets"
+        ]
+      },
+      "post": {
+        "description": "Makes the caller the ticket's handler (\"Nhận phiếu\"): staff with\n`judge.change_ticket`, an editor of the linked problem, or an editor of\nthe contest the ticket was filed from. A ticket the\ncaller already handles is returned unchanged. Fails with 409\n`ticket_claimed` when someone else already handles it, also when two\npeople claim at the same moment (exactly one wins), and with 409\n`ticket_closed` on a closed ticket. Reassigning a handled ticket is\n`PATCH /tickets/{id}` with `assignees` (staff).",
+        "operationId": "TicketClaimsController_claim",
+        "parameters": [
+          {
+            "description": "Id of the ticket.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TicketDetailResponse"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Any failure. `error.code` is a snake_case machine code; `fields` and `issues` appear on validation failures; some codes add members of their own (`banReason`).",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait before retrying; sent with 429 and 503.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Take a ticket",
         "tags": [
           "Tickets"
         ]
