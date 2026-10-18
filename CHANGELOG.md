@@ -1,5 +1,12 @@
 # qhhoj-backend
 
+## 2.32.0
+
+### Minor Changes
+
+- 20ec361: The reason of an organization join request is optional: `POST /organizations/:slug/requests` takes a missing, blank or null `reason` as an empty one (still at most 4096 characters).
+- 5226a1e: Ranking rows and the contest viewer carry `ratingChange` (`rating`, `delta` from the previous rating, null on a first rating) once a rated contest's ratings are applied; null on a frozen board. A rating run purges the cached boards of the contests it rates.
+
 ## 2.31.0
 
 ### Minor Changes
