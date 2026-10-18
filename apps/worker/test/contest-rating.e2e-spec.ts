@@ -153,6 +153,84 @@ describe('contest rating', () => {
     expect(await userRating(eve._id)).toBeNull();
   });
 
+  it('leaves unlisted users out of the rating: no rating row, and nobody else moves as if they had played', async () => {
+    const [alice, bob, alone, rival] = await newUsers(
+      'rate_unl_alice',
+      'rate_unl_bob',
+      'rate_unl_alone',
+      'rate_unl_rival',
+    );
+    const unlisted = await seedUser(worker, {
+      username: 'rate_unl_staff',
+      isUnlisted: true,
+    });
+    const withUnlisted = await ratedContest(minutesAgo(20));
+    await join(withUnlisted._id, alice._id, 300);
+    await join(withUnlisted._id, unlisted._id, 200);
+    await join(withUnlisted._id, bob._id, 100);
+    const without = await ratedContest(minutesAgo(10));
+    await join(without._id, alone._id, 300);
+    await join(without._id, rival._id, 100);
+
+    await ratings.rateFrom(withUnlisted._id);
+
+    const ratingsOf = async (contestId: string) =>
+      (await ratingRows(contestId))
+        .sort((left, right) => left.rank - right.rank)
+        .map(({ rank, rating, mean }) => ({ rank, rating, mean }));
+    expect(
+      (await ratingRows(withUnlisted._id)).map((row) => row.user).sort(),
+    ).toEqual([alice._id, bob._id].sort());
+    expect(await ratingsOf(withUnlisted._id)).toEqual(
+      await ratingsOf(without._id),
+    );
+    expect(await userRating(unlisted._id)).toBeNull();
+  });
+
+  it('still rates a banned user, who is unlisted too, so a disqualified cheater keeps the last-place penalty', async () => {
+    const [winner] = await newUsers('rate_ban_winner');
+    const cheater = await seedUser(worker, {
+      username: 'rate_ban_cheater',
+      isUnlisted: true,
+      banReason: 'cheating',
+    });
+    const contest = await ratedContest(minutesAgo(10));
+    await join(contest._id, winner._id, 100);
+    await join(contest._id, cheater._id, 300, { isDisqualified: true });
+
+    await ratings.rateFrom(contest._id);
+
+    const rows = (await ratingRows(contest._id)).sort(
+      (left, right) => left.rank - right.rank,
+    );
+    expect(rows.map((row) => row.user)).toEqual([winner._id, cheater._id]);
+  });
+
+  it('drops the rating row of a user made unlisted when the contest is re-rated', async () => {
+    const [alice, bob, staff] = await newUsers(
+      'rate_late_alice',
+      'rate_late_bob',
+      'rate_late_staff',
+    );
+    const contest = await ratedContest(minutesAgo(10));
+    for (const [user, score] of [
+      [alice, 300],
+      [staff, 200],
+      [bob, 100],
+    ] as const)
+      await join(contest._id, user._id, score);
+    await ratings.rateFrom(contest._id);
+    expect(await ratingRows(contest._id)).toHaveLength(3);
+
+    await worker.users.updateOne({ _id: staff._id }, { isUnlisted: true });
+    await ratings.rateFrom(contest._id);
+
+    expect(
+      (await ratingRows(contest._id)).map((row) => row.user).sort(),
+    ).toEqual([alice._id, bob._id].sort());
+    expect(await userRating(staff._id)).toBeNull();
+  });
+
   it('keeps a user below the floor out and rates a user at the floor', async () => {
     const [low, edge] = await newUsers('floor_low', 'floor_edge');
     const earlier = await ratedContest(daysAgo(30));
