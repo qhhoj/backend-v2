@@ -3721,11 +3721,11 @@
             "type": "boolean"
           },
           "isOrganizationPrivate": {
-            "description": "Only members of the listed organizations may see it.",
+            "description": "Only members of the listed organizations may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`.",
             "type": "boolean"
           },
           "isPrivate": {
-            "description": "Only the listed contestants may see it.",
+            "description": "Only the listed contestants may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`.",
             "type": "boolean"
           },
           "isRated": {
@@ -15243,11 +15243,11 @@
             "type": "boolean"
           },
           "isOrganizationPrivate": {
-            "description": "Only members of the listed organizations may see it.",
+            "description": "Only members of the listed organizations may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`.",
             "type": "boolean"
           },
           "isPrivate": {
-            "description": "Only the listed contestants may see it.",
+            "description": "Only the listed contestants may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`.",
             "type": "boolean"
           },
           "isRated": {
