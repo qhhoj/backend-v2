@@ -5,11 +5,17 @@ import { AppError, Paginated, unique } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import {
+  contestSubmissionPoints,
+  participationEnd,
+  participationStart,
+} from '@libs/contests';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestViewerService } from '../../contests/core/contest-viewer.service';
 import { ContestsRepository } from '../../contests/core/contests.repository';
 import type { ContestDocument } from '../../contests/core/contests.repository';
 import { CurrentContestService } from '../../contests/core/current-contest.service';
+import { ParticipationsRepository } from '../../contests/core/participations.repository';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import type { ContestScope } from '../../problems/core/problem-access';
@@ -19,6 +25,7 @@ import {
   SubmissionDetailResponse,
   SubmissionSourceResponse,
 } from './dto/submission-detail.response';
+import type { SubmissionContestResponse } from './dto/submission-detail.response';
 import type { SubmissionListQueryDto } from './dto/submission-list.dto';
 import { SubmissionListItemResponse } from './dto/submission-list.response';
 import {
@@ -75,6 +82,7 @@ export interface ReadableSubmission {
   source: SourceAccess;
 }
 
+const MINUTE_MS = 60_000;
 const STAFF_ONLY_MESSAGE = 'Only staff can filter by IE, QU, P, G, D or SC.';
 
 /** What a deleted problem's submission shows of its cases: nothing. */
@@ -106,6 +114,7 @@ export class SubmissionsService {
     private readonly viewers: ContestViewerService,
     private readonly contests: ContestsRepository,
     private readonly externalRuns: ExternalRunsRepository,
+    private readonly participations: ParticipationsRepository,
   ) {}
 
   /** The viewer's current contest, resolved once per request and passed to `visible`, `viewable` and `filterFor`. */
@@ -265,6 +274,16 @@ export class SubmissionsService {
     const submission = await this.withCasesFor(viewed.submission, visibility);
     const [owner] = await this.users.findByIds([uuidStr(submission.user)]);
     const actions = this.actionsFor(principal, submission, canEdit);
+    const [totalCases, externalRun, contest] = await Promise.all([
+      visibility.cases === 'none' ? null : this.problems.caseCount(problem._id),
+      actions.canRejudge
+        ? this.externalRuns.current(
+            uuidStr(submission._id),
+            submission.judgeGeneration,
+          )
+        : null,
+      this.contestOf(principal, submission, problem),
+    ]);
     return SubmissionDetailResponse.withDetails(
       submission,
       {
@@ -276,20 +295,69 @@ export class SubmissionsService {
         visibility,
         error: readsSource ? shownError(submission, canEdit) : null,
         sourceAccess: viewed.source,
-        totalCases:
-          visibility.cases === 'none'
-            ? null
-            : await this.problems.caseCount(problem._id),
+        totalCases,
         lockedAfter: canEdit ? submission.lockedAfter : null,
         actions,
-        externalRun: actions.canRejudge
-          ? await this.externalRuns.current(
-              uuidStr(submission._id),
-              submission.judgeGeneration,
-            )
-          : null,
+        externalRun,
+        contest,
       },
     );
+  }
+
+  /** The submission's contest, its points there and the run minute, under the contest's own visibility rule; a deleted problem keeps it too. The points are worked out as the worker stores them (`contestSubmissionPoints`), so a result read right after judging does not race the worker; a problem no longer in the contest keeps its stored points. */
+  private async contestOf(
+    principal: Principal | null,
+    submission: SubmissionDocument,
+    problem: ProblemDocument,
+  ): Promise<SubmissionContestResponse | null> {
+    if (!submission.contest) return null;
+    const [contest, row] = await Promise.all([
+      this.contests.findById(uuidStr(submission.contest)),
+      this.submissions.contestRow(uuidStr(submission._id)),
+    ]);
+    if (
+      !contest ||
+      !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
+    )
+      return null;
+    const contestProblem = contest.problems.find(
+      (entry) => uuidStr(entry.problem) === uuidStr(problem._id),
+    );
+    const points = contestProblem
+      ? contestSubmissionPoints(
+          submission,
+          contestProblem,
+          contest.formatName,
+          problem.partial,
+        )
+      : (row?.points ?? null);
+    const isOwn = principal?.userId === uuidStr(submission.user);
+    const minute =
+      isOwn && row
+        ? await this.runMinuteOf(
+            submission,
+            contest,
+            uuidStr(row.participation),
+          )
+        : null;
+    return { key: contest.key, name: contest.name, points, minute };
+  }
+
+  /** Whole minutes from the run's start (`participationStart`, the scoreboard's) to the submission; null outside that run. */
+  private async runMinuteOf(
+    submission: SubmissionDocument,
+    contest: ContestDocument,
+    participationId: string,
+  ): Promise<number | null> {
+    const participation = await this.participations.findById(participationId);
+    if (!participation) return null;
+    const start = participationStart(contest, participation);
+    const isWithin =
+      submission.date >= start &&
+      submission.date <= participationEnd(contest, participation);
+    return isWithin
+      ? Math.floor((submission.date.getTime() - start.getTime()) / MINUTE_MS)
+      : null;
   }
 
   /** Cases (up to 10000 rows) are loaded only for a viewer who passed the access check and sees them. */

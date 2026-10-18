@@ -13066,6 +13066,35 @@
         ],
         "type": "object"
       },
+      "SubmissionContestResponse": {
+        "properties": {
+          "key": {
+            "description": "The contest's key.",
+            "type": "string"
+          },
+          "minute": {
+            "description": "Whole minutes from the start of the run it was made in to the submission, as the scoreboard counts them (`participationStart`); only for the submitter's own submission made within that run, null otherwise.",
+            "nullable": true,
+            "type": "number"
+          },
+          "name": {
+            "description": "The contest's name.",
+            "type": "string"
+          },
+          "points": {
+            "description": "Points this submission scored in the contest (the case ratio of the contest problem's points, as the scoreboard counts them); null when the problem left the contest and no contest row holds them.",
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "points",
+          "minute"
+        ],
+        "type": "object"
+      },
       "SubmissionDetailResponse": {
         "properties": {
           "batches": {
@@ -13091,6 +13120,16 @@
             },
             "nullable": true,
             "type": "array"
+          },
+          "contest": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionContestResponse"
+              }
+            ],
+            "description": "The contest it was submitted in, when the viewer may see that contest; null otherwise and outside a contest.",
+            "nullable": true,
+            "type": "object"
           },
           "currentTestcase": {
             "description": "Number of the case being judged while the submission runs; null unless the viewer sees every case result (it would tell where judging stopped).",
@@ -13258,6 +13297,7 @@
           "batches",
           "externalRun",
           "totalCases",
+          "contest",
           "id",
           "user",
           "problem",
