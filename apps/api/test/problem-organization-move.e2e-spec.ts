@@ -239,7 +239,12 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
   it('judges the visibility, not the organizations: a public problem may leave every organization while it stays private, but not then drop the privacy', async () => {
     await problem('alpha_hidden', [ids.alpha]);
     await patch('siteowner', 'alpha_hidden', { organizations: [] }).expect(200);
+    // Without judge.add_problem a problem with no organization cannot go to the site at all; that gate runs first.
     await patch('owner', 'alpha_hidden', { isOrganizationPrivate: false })
+      .expect(403)
+      .expect(issueCodes(['site_problem_rights']));
+    // With judge.add_problem it may, but publishing still needs judge.change_public_visibility.
+    await patch('siteowner', 'alpha_hidden', { isOrganizationPrivate: false })
       .expect(403)
       .expect(issueCodes([SITE_PUBLISH_RIGHTS_ISSUE]));
     await api.http().get('/api/internal/problems/alpha_hidden').expect(404);
