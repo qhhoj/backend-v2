@@ -300,6 +300,8 @@ describe('creating problems and contests for an organization', () => {
     let rivalId: string;
     let setterId: string;
     let setterOrganizationId: string;
+    let siteSetterOrganizationId: string;
+    let siteSetterId: string;
     const patchContestAs = (who: string, key: string, body: object) =>
       authed(
         api.http().patch(`/api/internal/contests/${key}`),
@@ -324,9 +326,28 @@ describe('creating problems and contests for an organization', () => {
       setterId = await person('setter', {
         permissions: [...ORG_ADMIN_RIGHTS, 'judge.clone_contest'],
       });
-      await person('siteSetter', {
-        permissions: ['judge.add_contest', 'judge.create_private_contest'],
+      siteSetterId = await person('siteSetter', {
+        permissions: [
+          'judge.add_contest',
+          'judge.edit_own_contest',
+          'judge.create_private_contest',
+        ],
       });
+      await person('contestStaff', {
+        permissions: [
+          'judge.add_contest',
+          'judge.edit_all_contest',
+          'judge.create_private_contest',
+        ],
+      });
+      siteSetterOrganizationId = uuidStr(
+        (
+          await createOrganization(api, {
+            slug: 'sitesetterorg',
+            adminIds: [siteSetterId],
+          })
+        )._id,
+      );
       const setterOrganization = await createOrganization(api, {
         slug: 'setterorg',
         adminIds: [setterId],
@@ -491,14 +512,83 @@ describe('creating problems and contests for an organization', () => {
       ).toBe(true);
     });
 
-    it('lets a site contest creator list any organization, as in legacy', async () => {
+    it('scopes a site contest creator to the organizations they administer (owner decision Q1)', async () => {
       await authed(
         api.http().post('/api/internal/contests'),
         sessions.siteSetter,
       )
-        .send(contestBody('kt_site_rival', { organizations: [rivalId] }))
+        .send(
+          contestBody('kt_site_rival', {
+            organizations: [rivalId],
+            isOrganizationPrivate: true,
+          }),
+        )
+        .expect(403)
+        .expect(issueCodes(['organization_rights']));
+      expect(await api.contests.findOne({ key: 'kt_site_rival' })).toBeNull();
+      await authed(
+        api.http().post('/api/internal/contests'),
+        sessions.siteSetter,
+      )
+        .send(
+          contestBody('kt_site_own', {
+            organizations: [siteSetterOrganizationId],
+            isOrganizationPrivate: true,
+          }),
+        )
         .expect(201);
-      expect(await storedOrganizations('kt_site_rival')).toEqual([rivalId]);
+      await patchContestAs('siteSetter', 'kt_site_own', {
+        organizations: [siteSetterOrganizationId, rivalId],
+      })
+        .expect(403)
+        .expect(issueCodes(['organization_rights']));
+      await patchContestAs('siteSetter', 'kt_site_own', {
+        organizations: [],
+        isOrganizationPrivate: false,
+      }).expect(200);
+      expect(await storedOrganizations('kt_site_own')).toEqual([]);
+    });
+
+    it('lets a site contest creator name any organization on a contest that stays public, but not scope it there', async () => {
+      await authed(
+        api.http().post('/api/internal/contests'),
+        sessions.siteSetter,
+      )
+        .send(contestBody('kt_site_label', { organizations: [rivalId] }))
+        .expect(201);
+      await patchContestAs('siteSetter', 'kt_site_label', {
+        isOrganizationPrivate: true,
+      })
+        .expect(403)
+        .expect(issueCodes(['organization_rights']));
+      expect(
+        (await api.contests.findOne({ key: 'kt_site_label' }).lean())
+          ?.isOrganizationPrivate,
+      ).toBe(false);
+    });
+
+    it('refuses a site contest creator taking a contest out of an organization they do not administer', async () => {
+      await staffContest('kt_site_foreign', {
+        organizations: [rivalId],
+        authors: [siteSetterId],
+      });
+      await patchContestAs('siteSetter', 'kt_site_foreign', {
+        organizations: [],
+        isOrganizationPrivate: false,
+      })
+        .expect(403)
+        .expect(issueCodes(['organization_rights']));
+      expect(await storedOrganizations('kt_site_foreign')).toEqual([rivalId]);
+    });
+
+    it('lets a judge.edit_all_contest holder list any organization', async () => {
+      await authed(
+        api.http().post('/api/internal/contests'),
+        sessions.contestStaff,
+      )
+        .send(contestBody('kt_staff_rival', { organizations: [rivalId] }))
+        .expect(201);
+      expect(await storedOrganizations('kt_staff_rival')).toEqual([rivalId]);
     });
 
     it('refuses cloning a contest into an organization the cloner does not administer', async () => {

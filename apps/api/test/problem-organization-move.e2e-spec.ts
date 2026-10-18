@@ -184,6 +184,24 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
     expect(await stored('alpha_out')).toEqual(toSite);
   });
 
+  it('refuses making a problem private to no organization a site problem without judge.add_problem', async () => {
+    // What an organization's deletion leaves: private, with no organization left.
+    await createProblem(api, catalog, {
+      code: 'orphan_out',
+      organizations: [],
+      isOrganizationPrivate: true,
+      isPublic: false,
+      curators: [ids.member],
+    });
+    await patch('member', 'orphan_out', { isOrganizationPrivate: false })
+      .expect(403)
+      .expect(issueCodes(['site_problem_rights']));
+    expect(await stored('orphan_out')).toEqual({
+      organizations: [],
+      isOrganizationPrivate: true,
+    });
+  });
+
   it('keeps every right of a judge.edit_all_problem holder', async () => {
     await problem('alpha_staff', [ids.alpha]);
     await patch('staff', 'alpha_staff', {

@@ -236,7 +236,11 @@ describe('contest quota', () => {
     (await usage.findOne({ organization: organizationId }).lean())
       ?.creditsUsed ?? null;
   const limited = (credits: number) =>
-    createOrganization(api, { quotaMonthlyCredits: credits });
+    // The editor administers them: a contest is scoped only to organizations its editor administers.
+    createOrganization(api, {
+      quotaMonthlyCredits: credits,
+      adminIds: [editorId],
+    });
 
   beforeAll(async () => {
     await api.reset();
