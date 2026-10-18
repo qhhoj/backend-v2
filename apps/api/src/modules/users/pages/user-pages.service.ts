@@ -18,6 +18,7 @@ import { OrganizationSummaryResponse } from '../../organizations/core/dto/organi
 import { OrganizationsService } from '../../organizations/core/organizations.service';
 import { LanguagesQuerier } from '../../problems/catalog/languages.querier';
 import { ProblemGroupsQuerier } from '../../problems/catalog/problem-groups.querier';
+import { SubmissionsService } from '../../submissions/core/submissions.service';
 import { LeaderboardsRepository } from '../leaderboards/leaderboards.repository';
 import { ActivityQueryDto, PpBreakdownQueryDto } from './dto/user-page.dto';
 import type {
@@ -71,6 +72,7 @@ export class UserPagesService {
     private readonly languages: LanguagesQuerier,
     private readonly groups: ProblemGroupsQuerier,
     private readonly contestViewers: ContestViewerService,
+    private readonly submissions: SubmissionsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -90,14 +92,22 @@ export class UserPagesService {
     now = new Date(),
   ): Promise<UserPageResponse> {
     const user = await this.userOf(username);
-    const [above, ratingAbove, history, organizations] = await Promise.all([
-      this.leaderboards.countAbove('performancePoints', user.performancePoints),
-      user.rating === null
-        ? Promise.resolve(null)
-        : this.leaderboards.countAbove('rating', user.rating),
-      this.readableHistory(principal, user._id, now),
-      this.organizations.listedFor(principal, user.organizations.map(uuidStr)),
-    ]);
+    const [above, ratingAbove, history, organizations, submissionCount] =
+      await Promise.all([
+        this.leaderboards.countAbove(
+          'performancePoints',
+          user.performancePoints,
+        ),
+        user.rating === null
+          ? Promise.resolve(null)
+          : this.leaderboards.countAbove('rating', user.rating),
+        this.readableHistory(principal, user._id, now),
+        this.organizations.listedFor(
+          principal,
+          user.organizations.map(uuidStr),
+        ),
+        this.submissions.count(principal, { userIds: [user._id] }),
+      ]);
     return {
       id: user._id,
       username: user.username,
@@ -107,6 +117,7 @@ export class UserPagesService {
       points: user.points,
       performancePoints: user.performancePoints,
       problemCount: user.problemCount,
+      submissionCount,
       contributionPoints: user.contributionPoints,
       rating: user.rating,
       rank: above + 1,

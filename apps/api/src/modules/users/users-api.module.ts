@@ -9,6 +9,7 @@ import { CommentsApiModule } from '../comments/comments-api.module';
 import { ContestAccessModule } from '../contests/core/contest-access.module';
 import { OrganizationsApiModule } from '../organizations/organizations-api.module';
 import { ProblemsApiModule } from '../problems/problems-api.module';
+import { SubmissionsApiModule } from '../submissions/submissions-api.module';
 import { UserDataController } from './data/user-data.controller';
 import { UserDataService } from './data/user-data.service';
 import { LeaderboardsController } from './leaderboards/leaderboards.controller';
@@ -48,6 +49,7 @@ import { UserSuggestionsService } from './suggestions/user-suggestions.service';
     ContestAccessModule,
     OrganizationsApiModule,
     ProblemsApiModule,
+    SubmissionsApiModule,
     BullModule.registerQueue({ name: USER_DATA_QUEUE }),
   ],
   controllers: [

@@ -16575,6 +16575,10 @@
             "nullable": true,
             "type": "object"
           },
+          "submissionCount": {
+            "description": "Submissions of the user this viewer may see: the total of the submission list filtered to the user.",
+            "type": "number"
+          },
           "username": {
             "description": "Login name.",
             "type": "string"
@@ -16589,6 +16593,7 @@
           "points",
           "performancePoints",
           "problemCount",
+          "submissionCount",
           "contributionPoints",
           "rating",
           "rank",
