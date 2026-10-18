@@ -149,13 +149,13 @@ export class ContestRatingRepository {
   /**
    * Deletes every rating of a contest ending at or after `endTime`, plus every rating of `contestIds` whatever its stored end (an edited end time must never leave a stale row or collide with the re-insert).
    * Unbounded by design, like legacy `Contest.rate`: one range delete over the `contestEndTime` index inside the run's transaction.
-   * Returns the users who lost a rating.
+   * Returns the users who lost a rating and the contests whose ratings were deleted (their cached boards are stale).
    */
   async deleteFrom(
     endTime: Date,
     contestIds: string[],
     session: ClientSession,
-  ): Promise<string[]> {
+  ): Promise<{ users: string[]; contests: string[] }> {
     const filter = {
       $or: [
         { contestEndTime: { $gte: endTime } },
@@ -166,8 +166,12 @@ export class ContestRatingRepository {
       .distinct('user', filter)
       .session(session)
       .exec();
+    const contests = await this.ratings
+      .distinct('contest', filter)
+      .session(session)
+      .exec();
     await this.ratings.deleteMany(filter, { session }).exec();
-    return users.map(uuidStr);
+    return { users: users.map(uuidStr), contests: contests.map(uuidStr) };
   }
 
   /** Live, joined rows, with their contest-submission counts (one grouped read over `{participation, problem}`). */

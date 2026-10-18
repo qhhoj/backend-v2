@@ -39,10 +39,19 @@ export class ContestRatingService {
    */
   async rateFrom(contestId: string, now = new Date()): Promise<RatingRun> {
     const { boards, ...run } = await this.rateInTransaction(contestId, now);
-    await Promise.all(
-      boards.map((board) => purgeRankingCache(this.redis, board)),
-    );
+    await this.purgeBoards(boards);
     return run;
+  }
+
+  /** The ratings are committed by now: a Redis failure must not fail the job, the stale boards only live until `scoreboardCacheTimeout`. */
+  private async purgeBoards(contestIds: string[]): Promise<void> {
+    const purges = await Promise.allSettled(
+      contestIds.map((contestId) => purgeRankingCache(this.redis, contestId)),
+    );
+    if (purges.some((purge) => purge.status === 'rejected'))
+      this.logger.warn(
+        'Ratings applied; board cache not purged, expires after scoreboardCacheTimeout',
+      );
   }
 
   private rateInTransaction(
@@ -82,10 +91,11 @@ export class ContestRatingService {
         now,
         session,
       );
-      const boards = [target._id, ...contests.map((contest) => contest._id)];
-      const touched = new Set(
-        await this.repository.deleteFrom(start, boards, session),
-      );
+      const rerated = [target._id, ...contests.map((contest) => contest._id)];
+      const deleted = await this.repository.deleteFrom(start, rerated, session);
+      // Contests that stopped being rated lose their ratings too: their boards are stale as well.
+      const boards = [...new Set([...rerated, ...deleted.contests])];
+      const touched = new Set(deleted.users);
       const histories = new Map<string, RatingHistory>();
       let ratings = 0;
       for (const contest of contests) {
