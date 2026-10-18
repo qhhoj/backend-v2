@@ -16,6 +16,8 @@ export class OrganizationProblemResponse {
   updatedAt!: Date;
   /** The organization's tags on the problem. */
   tags!: ProblemTagResponse[];
+  /** Whether the viewer may edit the problem (the row's pencil to its editor). */
+  canEdit!: boolean;
 
   static from(
     problem: Pick<
@@ -24,6 +26,7 @@ export class OrganizationProblemResponse {
     >,
     link: { archived: boolean } | undefined,
     tags: ProblemTagResponse[],
+    canEdit: boolean,
   ): OrganizationProblemResponse {
     return {
       code: problem.code,
@@ -33,6 +36,7 @@ export class OrganizationProblemResponse {
       isArchived: link?.archived ?? false,
       updatedAt: problem.updatedAt,
       tags,
+      canEdit,
     };
   }
 }
