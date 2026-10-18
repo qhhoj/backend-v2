@@ -4,6 +4,7 @@ export * from './contest-export';
 export * from './contest-points';
 export * from './contest-time';
 export * from './scoring-context';
+export * from './scoring-fields';
 export * from './replay-events';
 export * from './labels';
 export * from './standings';
