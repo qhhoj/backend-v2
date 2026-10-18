@@ -1,9 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type Redis from 'ioredis';
 import type { ClientSession } from 'mongoose';
+import { REDIS } from '@libs/common';
 import {
   compareStandings,
   isFrozen,
   MEAN_INIT,
+  purgeRankingCache,
   RATING_INIT,
   recalculateRatings,
   tieRanks,
@@ -16,32 +19,46 @@ import type {
 } from './contest-rating.repository';
 
 type RatingRow = Omit<Rating, '_id'>;
+type RatingRun = { contests: number; ratings: number };
 
 /** Legacy `Contest.rate` + `rate_contest`. The only writer of `ratings` and `users.rating`. */
 @Injectable()
 export class ContestRatingService {
   private readonly logger = new Logger(ContestRatingService.name);
 
-  constructor(private readonly repository: ContestRatingRepository) {}
+  constructor(
+    private readonly repository: ContestRatingRepository,
+    @Inject(REDIS) private readonly redis: Redis,
+  ) {}
 
   /**
    * Deletes the ratings from the target's end on, re-rates every rated contest from there in end order and refreshes `users.rating`, in one transaction: a failure leaves the previous ratings.
    * The run starts at the earlier of the target's end and its stored ratings' end, then moves earlier until no contest with a rating stored at or after the start ends before it, so a contest whose end was moved (either way) keeps its ratings even when its own job has not run yet. Contests between its old and new positions stay stale only until that job runs.
    * Cost: each affected user's history is read once and extended in memory, so a run is linear in the ratings written. Production (16 rated contests, 461 ratings) takes about 1 s, far inside Mongo's 60 s transaction limit.
+   * After the commit, the cached boards of every contest whose ratings changed are purged: board rows carry each row's rating change.
    */
-  rateFrom(
+  async rateFrom(contestId: string, now = new Date()): Promise<RatingRun> {
+    const { boards, ...run } = await this.rateInTransaction(contestId, now);
+    await Promise.all(
+      boards.map((board) => purgeRankingCache(this.redis, board)),
+    );
+    return run;
+  }
+
+  private rateInTransaction(
     contestId: string,
-    now = new Date(),
-  ): Promise<{ contests: number; ratings: number }> {
+    now: Date,
+  ): Promise<RatingRun & { boards: string[] }> {
+    const none = { contests: 0, ratings: 0, boards: [] };
     return this.repository.inTransaction(async (session) => {
       const target = await this.repository.findContest(contestId, session);
-      if (!target) return { contests: 0, ratings: 0 };
+      if (!target) return none;
       // Ratings are derived from the live standings: a frozen board must not reveal them.
       if (isFrozen(target, now)) {
         this.logger.warn(
           `Contest ${contestId} is still frozen: not rated until the freeze is set to 0`,
         );
-        return { contests: 0, ratings: 0 };
+        return none;
       }
       const storedEnd = await this.repository.earliestRatingEnd(
         contestId,
@@ -59,18 +76,15 @@ export class ContestRatingService {
         earlier = await this.repository.earliestMovedEarlierEnd(start, session)
       )
         start = earlier;
-      if (start > now) return { contests: 0, ratings: 0 };
+      if (start > now) return none;
       const contests = await this.repository.ratedContestsFrom(
         start,
         now,
         session,
       );
+      const boards = [target._id, ...contests.map((contest) => contest._id)];
       const touched = new Set(
-        await this.repository.deleteFrom(
-          start,
-          [target._id, ...contests.map((contest) => contest._id)],
-          session,
-        ),
+        await this.repository.deleteFrom(start, boards, session),
       );
       const histories = new Map<string, RatingHistory>();
       let ratings = 0;
@@ -80,7 +94,7 @@ export class ContestRatingService {
         ratings += rows.length;
       }
       await this.repository.refreshUserRatings([...touched], session);
-      return { contests: contests.length, ratings };
+      return { contests: contests.length, ratings, boards };
     });
   }
 
