@@ -63,6 +63,46 @@ const CREATE_BASELINE: Partial<Record<keyof CreateProblemDto, unknown>> = {
   allowViewFeedback: false,
 };
 
+/** Issue code of a 403 on `isOrganizationPrivate`: the edit makes a public problem visible to everyone (it leaves organization privacy), which needs `judge.change_public_visibility`. */
+export const SITE_PUBLISH_RIGHTS_ISSUE = 'site_publish_rights';
+
+/** The flags `ProblemAccess.isSitePublic` reads, from a stored or default problem. */
+const visibilityOf = (problem: Record<string, unknown>) => ({
+  isPublic: problem.isPublic === true,
+  isOrganizationPrivate: problem.isOrganizationPrivate === true,
+});
+
+/** Whatever field flips it (a members-only publish, then leaving organization privacy), a problem turning visible to everyone needs `judge.change_public_visibility`, as a site create does; `judge.edit_all_problem` holders included. */
+function assertSitePublishGate(
+  principal: Principal,
+  baseline: Record<string, unknown>,
+  fields: Partial<Problem>,
+): void {
+  const before = visibilityOf(baseline);
+  const after = {
+    isPublic: fields.isPublic ?? before.isPublic,
+    isOrganizationPrivate:
+      fields.isOrganizationPrivate ?? before.isOrganizationPrivate,
+  };
+  if (
+    ProblemAccess.isSitePublic(after) &&
+    !ProblemAccess.isSitePublic(before) &&
+    !hasPermission(principal, 'judge.change_public_visibility')
+  ) {
+    const message =
+      'Making a problem visible to everyone requires judge.change_public_visibility';
+    throw new AppError('forbidden', 403, message, undefined, undefined, {
+      issues: [
+        {
+          field: 'isOrganizationPrivate',
+          code: SITE_PUBLISH_RIGHTS_ISSUE,
+          message,
+        },
+      ],
+    });
+  }
+}
+
 /** Who may edit a problem and which fields and references a request may set. */
 @Injectable()
 export class ProblemEditPolicyService {
@@ -128,6 +168,7 @@ export class ProblemEditPolicyService {
     const changes = (field: keyof CreateProblemDto) =>
       normalized[field] !== undefined &&
       !sameJson(comparable(normalized[field]), comparable(baseline[field]));
+    assertSitePublishGate(principal, baseline, fields);
     for (const [field, permission] of GATED_FIELDS)
       if (
         changes(field) &&

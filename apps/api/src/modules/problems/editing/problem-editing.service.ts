@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { hasPermission } from '@libs/auth';
 import type { AuthContext, Principal } from '@libs/auth';
 import { AppError, unique, ValidationFailedError } from '@libs/common';
 import { BASE_STATEMENT_LANGUAGE, uuidStr } from '@libs/database';
@@ -247,8 +248,41 @@ export class ProblemEditingService {
     await this.quota.charged(
       charged,
       { kind: 'problem', userId: principal.userId, ref: original.code },
-      () => withCodeTaken(() => this.repository.update(original._id, fields)),
+      () =>
+        withCodeTaken(() => this.guardedUpdate(principal, original, fields)),
     );
+  }
+
+  /**
+   * Without `judge.change_public_visibility`, an edit of a visibility flag saves only while both are as its gates
+   * read them, so two concurrent edits cannot combine into a site publish neither may make alone (a members-only
+   * `isPublic` and a privacy flip); the loser gets a 409 and its charge is refunded. A holder may publish anyway, so
+   * their edits (contest publish, bulk visibility) never conflict.
+   */
+  private async guardedUpdate(
+    principal: Principal,
+    original: ProblemDocument,
+    fields: ProblemFields,
+  ): Promise<void> {
+    const isGuarded =
+      (fields.isPublic !== undefined ||
+        fields.isOrganizationPrivate !== undefined) &&
+      !hasPermission(principal, 'judge.change_public_visibility');
+    // False also matches a legacy row without the field (the document reads the schema default).
+    const flagIs = (value: boolean) => (value ? true : { $ne: true });
+    const guard = isGuarded
+      ? {
+          isPublic: flagIs(original.isPublic),
+          isOrganizationPrivate: flagIs(original.isOrganizationPrivate),
+        }
+      : {};
+    const isSaved = await this.repository.update(original._id, fields, guard);
+    if (!isSaved && isGuarded)
+      throw new AppError(
+        'conflict',
+        409,
+        'The problem changed meanwhile; reload and save again',
+      );
   }
 
   /** A rename must not adopt the leftover test data directory of a deleted problem. */

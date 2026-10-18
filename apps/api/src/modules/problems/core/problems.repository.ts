@@ -231,8 +231,16 @@ export class ProblemsRepository {
     return row?.sourceChecks ?? null;
   }
 
-  async update(id: string, changes: Partial<Problem>): Promise<void> {
-    await this.problems.updateOne({ _id: id }, { $set: changes }).exec();
+  /** Writes `changes` while the problem still matches `guard`; false when it does not. */
+  async update(
+    id: string,
+    changes: Partial<Problem>,
+    guard: FilterQuery<Problem> = {},
+  ): Promise<boolean> {
+    const { matchedCount } = await this.problems
+      .updateOne({ ...guard, _id: id }, { $set: changes })
+      .exec();
+    return matchedCount === 1;
   }
 
   /** Makes the editorial public from `now` unless it is already released; false when it is missing or another writer released it first. */

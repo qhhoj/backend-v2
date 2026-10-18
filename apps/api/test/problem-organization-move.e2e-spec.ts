@@ -4,6 +4,8 @@ import { OrganizationUsage, uuidStr } from '@libs/database';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
+import { OrganizationProblemRules } from '../src/modules/problems/editing/organization-problem-rules.service';
+import { SITE_PUBLISH_RIGHTS_ISSUE } from '../src/modules/problems/editing/problem-edit-policy.service';
 import { createOrganization } from './organization-fixtures';
 import {
   authed,
@@ -39,14 +41,19 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
     sessions[name] = await loginAs(api, user._id);
     ids[name] = uuidStr(user._id);
   };
-  /** A problem every test person edits (curator), private to `organizations` when any is given. */
-  const problem = (code: string, organizations: string[], dataBytes = 0) =>
+  /** A problem every test person edits (curator), private to `organizations` when any is given; public (to its members, when private) unless `isPublic` is false. */
+  const problem = (
+    code: string,
+    organizations: string[],
+    { dataBytes = 0, isPublic = true } = {},
+  ) =>
     createProblem(api, catalog, {
       code,
       organizations,
       isOrganizationPrivate: organizations.length > 0,
       curators: Object.values(ids),
       dataBytes,
+      isPublic,
     });
   const patch = (who: string, code: string, body: object) =>
     authed(
@@ -73,12 +80,20 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
     await api.setSetting('quota.cost.problem', 10);
     await person('owner', ORG_ADMIN_RIGHTS);
     await person('siteowner', [...ORG_ADMIN_RIGHTS, 'judge.add_problem']);
+    await person('publisher', [
+      ...ORG_ADMIN_RIGHTS,
+      'judge.add_problem',
+      'judge.change_public_visibility',
+    ]);
     await person('member', ORG_ADMIN_RIGHTS);
     await person('staff', ['judge.edit_own_problem', 'judge.edit_all_problem']);
     await person('adder', ['judge.add_problem', 'judge.edit_own_problem']);
     const alpha = await createOrganization(
       api,
-      { slug: 'alpha', adminIds: [ids.owner, ids.siteowner] },
+      {
+        slug: 'alpha',
+        adminIds: [ids.owner, ids.siteowner, ids.publisher],
+      },
       [ids.member],
     );
     const beta = await createOrganization(api, {
@@ -167,7 +182,7 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
   });
 
   it('refuses a move into an organization whose storage the problem does not fit', async () => {
-    await problem('tiny_big', [ids.alpha], 100);
+    await problem('tiny_big', [ids.alpha], { dataBytes: 100 });
     await patch('owner', 'tiny_big', { organizations: [ids.tiny] })
       .expect(403)
       .expect(errorCode('quota_exceeded'));
@@ -175,7 +190,7 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
   });
 
   it('moves a problem onto the site only with judge.add_problem', async () => {
-    await problem('alpha_out', [ids.alpha]);
+    await problem('alpha_out', [ids.alpha], { isPublic: false });
     const toSite = { organizations: [], isOrganizationPrivate: false };
     await patch('owner', 'alpha_out', toSite)
       .expect(403)
@@ -202,8 +217,66 @@ describe('PATCH /problems/{code}: moving a problem between organizations', () =>
     });
   });
 
-  it('keeps every right of a judge.edit_all_problem holder', async () => {
-    await problem('alpha_staff', [ids.alpha]);
+  it.each([
+    ['siteowner', 'leaving every organization', { organizations: [] }],
+    ['siteowner', 'dropping organization privacy', {}],
+    ['staff', 'leaving every organization', { organizations: [] }],
+  ])(
+    'refuses %s publishing a members-public problem to the site by %s without judge.change_public_visibility',
+    async (who, _case, change) => {
+      const code = `alpha_pub_${who}_${Object.keys(change).length}`;
+      await problem(code, [ids.alpha]);
+      const toSite = { ...change, isOrganizationPrivate: false };
+      await patch(who, code, toSite)
+        .expect(403)
+        .expect(issueCodes([SITE_PUBLISH_RIGHTS_ISSUE]));
+      await api.http().get(`/api/internal/problems/${code}`).expect(404);
+      await patch('publisher', code, toSite).expect(200);
+      await api.http().get(`/api/internal/problems/${code}`).expect(200);
+    },
+  );
+
+  it('judges the visibility, not the organizations: a public problem may leave every organization while it stays private, but not then drop the privacy', async () => {
+    await problem('alpha_hidden', [ids.alpha]);
+    await patch('siteowner', 'alpha_hidden', { organizations: [] }).expect(200);
+    // Without judge.add_problem a problem with no organization cannot go to the site at all; that gate runs first.
+    await patch('owner', 'alpha_hidden', { isOrganizationPrivate: false })
+      .expect(403)
+      .expect(issueCodes(['site_problem_rights']));
+    // With judge.add_problem it may, but publishing still needs judge.change_public_visibility.
+    await patch('siteowner', 'alpha_hidden', { isOrganizationPrivate: false })
+      .expect(403)
+      .expect(issueCodes([SITE_PUBLISH_RIGHTS_ISSUE]));
+    await api.http().get('/api/internal/problems/alpha_hidden').expect(404);
+  });
+
+  it('refuses a move whose visibility changed after its gates ran, so two edits cannot combine into a site publish', async () => {
+    await problem('alpha_race', [ids.alpha], { isPublic: false });
+    const rules = api.app.get(OrganizationProblemRules);
+    const forEdit = rules.forEdit.bind(rules);
+    const spy = jest
+      .spyOn(rules, 'forEdit')
+      .mockImplementationOnce(async (...args) => {
+        const waived = await forEdit(...args);
+        // The concurrent members-only publish `{ isPublic: true }` lands after this edit's gates.
+        await api.problems.updateOne(
+          { code: 'alpha_race' },
+          { isPublic: true },
+        );
+        return waived;
+      });
+    try {
+      await patch('siteowner', 'alpha_race', { isOrganizationPrivate: false })
+        .expect(409)
+        .expect(errorCode('conflict'));
+    } finally {
+      spy.mockRestore();
+    }
+    await api.http().get('/api/internal/problems/alpha_race').expect(404);
+  });
+
+  it('keeps every organization right of a judge.edit_all_problem holder', async () => {
+    await problem('alpha_staff', [ids.alpha], { isPublic: false });
     await patch('staff', 'alpha_staff', {
       organizations: [],
       isOrganizationPrivate: false,
