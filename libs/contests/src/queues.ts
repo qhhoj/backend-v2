@@ -7,7 +7,7 @@ import type { FormatName } from './formats/format';
 
 export const CONTEST_RESCORE_QUEUE = 'contest-rescore';
 export const CONTEST_RESCORE_JOB = 'rescore';
-/** Recompute every contest submission's points and every participation of the contest. Enqueued by contest edits that change scoring (format, config, start and end times, freeze, precision, problems), disqualifications and problem rescores. An editor may narrow it to one problem or one participation (`ContestRescoreScope`). */
+/** Recompute every contest submission's points and every participation of the contest. Enqueued by contest edits that change scoring (format, config, start and end times, whether a time limit is set, freeze, precision, problems), disqualifications and problem rescores. An editor may narrow it to one problem or one participation (`ContestRescoreScope`). */
 export interface ContestRescoreJob extends ContestRescoreScope {
   contestId: string;
 }

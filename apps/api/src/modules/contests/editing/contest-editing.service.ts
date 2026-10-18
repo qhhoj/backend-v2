@@ -47,13 +47,14 @@ import { QuotaService } from '../../organizations/quota/quota.service';
 /** `GET /contests/current` shadows a contest with this key. */
 export const RESERVED_CONTEST_KEYS: readonly string[] = ['current'];
 
-/** What every participation's results depend on (legacy admin rescored on these and on the problem inlines); the times move the freeze window. */
+/** What every participation's results depend on (legacy admin rescored on these and on the problem inlines); the times move the freeze window, and setting or clearing the time limit moves a live row's start between the contest start and its join (its value scores nothing). */
 const scoringOf = (contest: Contest) =>
   JSON.stringify([
     contest.formatName,
     contest.formatConfig,
     contest.startTime,
     contest.endTime,
+    contest.timeLimit === null,
     contest.frozenLastMinutes,
     contest.pointsPrecision,
     contest.problems.map((entry) => [

@@ -767,6 +767,20 @@ describe('contest CRUD', () => {
       ).toEqual([contest._id]);
     });
 
+    it('queues a rescore when a time limit is set or cleared, since a live row then starts at its join, and not when it only changes', async () => {
+      const contest = await createContest(api, {
+        authors: [users.creator._id],
+      });
+      const queued = async () =>
+        (await rescores.getJobs(['waiting'])).map((job) => job.data.contestId);
+      await patch('creator', contest.key, { timeLimit: 3600 }).expect(200);
+      expect(await queued()).toEqual([contest._id]);
+      await patch('creator', contest.key, { timeLimit: 7200 }).expect(200);
+      expect(await queued()).toEqual([contest._id]);
+      await patch('creator', contest.key, { timeLimit: null }).expect(200);
+      expect(await queued()).toEqual([contest._id, contest._id]);
+    });
+
     it('leaves the re-rating of a moved end to the rescore: the edit queues a rescore and no rating itself', async () => {
       const rated = await createContest(api, { authors: [users.creator._id] });
       const unrated = await createContest(api, {
