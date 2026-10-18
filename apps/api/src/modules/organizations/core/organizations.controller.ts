@@ -32,8 +32,10 @@ export class OrganizationsController {
    * substring of name, short name or slug; `open` and `unlisted` (true or
    * false) keep only organizations in that state; `administered=true` keeps
    * only the organizations the viewer may administer (the admin screen's
-   * list), `false` the others. Paged with `page` and `pageSize` (default 100,
-   * at most 100). Anonymous callers may use it.
+   * list), `false` the others. `canCreate=problem` or `contest` keeps only the
+   * organizations the viewer may create that for (what the create routes
+   * accept), 401 when anonymous. Paged with `page` and `pageSize` (default
+   * 100, at most 100). Anonymous callers may use it without `canCreate`.
    */
   @ApiPaginatedResponse(OrganizationListItemResponse)
   @Get()

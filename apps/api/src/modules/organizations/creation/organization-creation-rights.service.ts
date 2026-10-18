@@ -5,9 +5,15 @@ import type { Principal } from '@libs/auth';
 import { AppError } from '@libs/common';
 import { organizationCodePrefix } from '@libs/community';
 import { CI, Organization, uuidStr } from '@libs/database';
-import type { Model } from 'mongoose';
-import { OrganizationAccess } from '../core/organization-access';
-import type { OrganizationAccessView } from '../core/organization-access';
+import type { FilterQuery, Model } from 'mongoose';
+import {
+  CREATION_PERMISSION,
+  OrganizationAccess,
+} from '../core/organization-access';
+import type {
+  CreationKind,
+  OrganizationAccessView,
+} from '../core/organization-access';
 
 type CreateRule = (
   principal: Principal | null,
@@ -124,8 +130,7 @@ export class OrganizationCreationRights {
 
   /** Whether the viewer may create problems for at least one organization: the session's `problemCreation.organizations`. */
   async createsOrganizationProblems(principal: Principal): Promise<boolean> {
-    if (!hasPermission(principal, 'judge.create_organization_problem'))
-      return false;
+    if (!hasPermission(principal, CREATION_PERMISSION.problem)) return false;
     return this.administersAny(principal);
   }
 
@@ -138,16 +143,29 @@ export class OrganizationCreationRights {
       problems: {
         site: hasPermission(principal, 'judge.add_problem'),
         organizations:
-          administers &&
-          hasPermission(principal, 'judge.create_organization_problem'),
+          administers && hasPermission(principal, CREATION_PERMISSION.problem),
       },
       contests: {
         site: hasPermission(principal, 'judge.add_contest'),
         organizations:
-          administers &&
-          hasPermission(principal, 'judge.create_private_contest'),
+          administers && hasPermission(principal, CREATION_PERMISSION.contest),
       },
     };
+  }
+
+  /**
+   * Mongo filter of the organizations the viewer may create `kind` for: the list twin of `problemTarget`/`contestTarget`
+   * (an administrator, or every organization with `judge.edit_all_organization`, who holds the kind's permission).
+   * Null for nothing: anonymous, or without the permission.
+   */
+  creatableFilter(
+    principal: Principal | null,
+    kind: CreationKind,
+  ): FilterQuery<Organization> | null {
+    return principal !== null &&
+      hasPermission(principal, CREATION_PERMISSION[kind])
+      ? OrganizationAccess.administeredFilter(principal)
+      : null;
   }
 
   private liveAccessRows(

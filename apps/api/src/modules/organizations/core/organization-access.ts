@@ -1,8 +1,18 @@
 import { hasPermission } from '@libs/auth';
-import type { Principal } from '@libs/auth';
+import type { Permission, Principal } from '@libs/auth';
 import { uuidStr } from '@libs/database';
 import type { Organization } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+
+/** What an administrator may create for an organization. */
+export const CREATION_KINDS = ['problem', 'contest'] as const;
+export type CreationKind = (typeof CREATION_KINDS)[number];
+
+/** The permission that, with administering the organization, lets a viewer create each kind there. */
+export const CREATION_PERMISSION: Record<CreationKind, Permission> = {
+  problem: 'judge.create_organization_problem',
+  contest: 'judge.create_private_contest',
+};
 
 export interface OrganizationAccessView {
   id: string;
@@ -38,7 +48,7 @@ const canCreateProblem = (
 ) =>
   principal !== null &&
   canAdminister(principal, organization) &&
-  hasPermission(principal, 'judge.create_organization_problem');
+  hasPermission(principal, CREATION_PERMISSION.problem);
 /** Legacy organization `contest-create` view: an administrator who also holds `create_private_contest`. */
 const canCreateContest = (
   principal: Principal | null,
@@ -46,7 +56,7 @@ const canCreateContest = (
 ) =>
   principal !== null &&
   canAdminister(principal, organization) &&
-  hasPermission(principal, 'judge.create_private_contest');
+  hasPermission(principal, CREATION_PERMISSION.contest);
 /** Who may see the organization enumerated (lists, user pages, leaderboards): unlisted ones only their members and `edit_all_organization` (legacy leaked them through select2 and the sitemap). Its own page stays reachable by slug for anyone: unlisted is not private. */
 const canList = (
   principal: Principal | null,

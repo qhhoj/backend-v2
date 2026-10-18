@@ -8,6 +8,7 @@ import {
 } from '@libs/community';
 import { ProblemsApiModule } from '../problems/problems-api.module';
 import { SubmissionsApiModule } from '../submissions/submissions-api.module';
+import { OrganizationCreationModule } from './creation/organization-creation.module';
 import { OrganizationEditingController } from './editing/organization-editing.controller';
 import { OrganizationEditingService } from './editing/organization-editing.service';
 import { OrganizationDeletionService } from './editing/organization-deletion.service';
@@ -51,6 +52,7 @@ import {
     ProblemsApiModule,
     SubmissionsApiModule,
     OrganizationQuotaModule,
+    OrganizationCreationModule,
     BullModule.registerQueue({ name: ORGANIZATION_POINTS_QUEUE }),
   ],
   controllers: [
