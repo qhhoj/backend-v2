@@ -1,12 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import { sha256, UsersRepository } from '@libs/auth';
+import { hasPermission, sha256, UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { AppError, invalidField, unique } from '@libs/common';
 import { FormatConfigError, parseFormatConfig } from '@libs/contests';
+import { uuidStr } from '@libs/database';
 import type { Contest, ContestProblem } from '@libs/database';
 import { renderMarkdown, RenderLimitError } from '@libs/render';
 import { ProblemAccess } from '../../problems/core/problem-access';
 import { ProblemsRepository } from '../../problems/core/problems.repository';
+import {
+  leavesForSite,
+  ORGANIZATION_RIGHTS_ISSUE,
+  organizationRightsRefusal,
+  organizationsToAuthorize,
+  SITE_CONTEST_RIGHTS_ISSUE,
+} from '../../organizations/creation/organization-move';
+import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 import { ContestTagsQuerier } from '../tags/contest-tags.querier';
 import type { ContestDocument } from '../core/contests.repository';
 import { NULLABLE_CONTEST_FIELDS } from './dto/contest-edit.dto';
@@ -189,6 +198,7 @@ export class ContestEditFieldsService {
     private readonly problems: ProblemsRepository,
     private readonly users: UsersRepository,
     private readonly tags: ContestTagsQuerier,
+    private readonly rights: OrganizationCreationRights,
   ) {}
 
   /** The DTO as stored fields, checked against `current` (null on create). */
@@ -219,6 +229,7 @@ export class ContestEditFieldsService {
       current ? current.toJSON() : CREATE_BASELINE,
       merged,
     );
+    await this.assertOrganizationRights(principal, fields, current);
     await this.assertUsers(fields);
     return fields;
   }
@@ -234,6 +245,52 @@ export class ContestEditFieldsService {
       (slug) => !stored.includes(slug) && !this.tags.hasSlug(slug),
     );
     if (unknown.length) throw unknownTags(unknown);
+  }
+
+  /**
+   * An editor who creates contests only for organizations (no `judge.add_contest` or `judge.edit_all_contest`) adds,
+   * removes or flips only organizations they may create contests for (the organization creation rule, as for problems),
+   * and never moves a contest out of every organization onto the site. Site contest creators keep choosing any
+   * organization, as in legacy. `current` is null for a new contest (create and clone). 403 with an issue code on
+   * `organizations` otherwise.
+   */
+  async assertOrganizationRights(
+    principal: Principal,
+    fields: Partial<Contest>,
+    current: Pick<Contest, 'organizations' | 'isOrganizationPrivate'> | null,
+  ): Promise<void> {
+    if (
+      (fields.organizations === undefined &&
+        fields.isOrganizationPrivate === undefined) ||
+      hasPermission(principal, 'judge.edit_all_contest') ||
+      hasPermission(principal, 'judge.add_contest')
+    )
+      return;
+    const before = {
+      organizations: (current?.organizations ?? []).map(uuidStr),
+      isOrganizationPrivate: current?.isOrganizationPrivate ?? false,
+    };
+    const after = {
+      organizations: (fields.organizations ?? before.organizations).map(
+        uuidStr,
+      ),
+      isOrganizationPrivate:
+        fields.isOrganizationPrivate ?? before.isOrganizationPrivate,
+    };
+    const needed = organizationsToAuthorize(before, after);
+    if (
+      needed.length &&
+      !(await this.rights.createsContestsInEach(principal, needed))
+    )
+      throw organizationRightsRefusal(
+        ORGANIZATION_RIGHTS_ISSUE,
+        'Adding or removing an organization needs the right to create contests in it',
+      );
+    if (leavesForSite(before, after))
+      throw organizationRightsRefusal(
+        SITE_CONTEST_RIGHTS_ISSUE,
+        'Moving a contest out of every organization onto the site requires judge.add_contest',
+      );
   }
 
   private async assertUsers(fields: Partial<Contest>): Promise<void> {

@@ -1,21 +1,31 @@
-import { unique } from '@libs/common';
+import { AppError, unique } from '@libs/common';
 
-/** A problem's organization fields, before or after an edit (ids as strings). */
+/** The organization rules of moving a problem or a contest between organizations, shared by both editors. */
+
+/** A problem's or contest's organization fields, before or after an edit (ids as strings). */
 export interface OrganizationScope {
   organizations: readonly string[];
   isOrganizationPrivate: boolean;
 }
 
-/** Issue code of a 403 on `organizations`: the editor lacks the organization creation rule in an organization the change adds or removes. */
+/** Issue code of a 403 on `organizations`: the editor lacks the organization creation rule (problems or contests) in an organization the change adds or removes. */
 export const ORGANIZATION_RIGHTS_ISSUE = 'organization_rights';
 /** Issue code of a 403 on `organizations`: leaving every organization for the site needs `judge.add_problem`. */
 export const SITE_PROBLEM_RIGHTS_ISSUE = 'site_problem_rights';
+/** Issue code of a 403 on `organizations`: leaving every organization for the site needs `judge.add_contest`. */
+export const SITE_CONTEST_RIGHTS_ISSUE = 'site_contest_rights';
+
+/** A 403 on `organizations` with one of the issue codes above. */
+export const organizationRightsRefusal = (code: string, message: string) =>
+  new AppError('forbidden', 403, message, undefined, undefined, {
+    issues: [{ field: 'organizations', code, message }],
+  });
 
 const without = (ids: readonly string[], removed: readonly string[]) =>
   ids.filter((id) => !removed.includes(id));
 
-/** An organization problem: private to at least one organization (what visibility, metering and the code prefix follow). */
-export const isOrganizationProblem = (scope: OrganizationScope): boolean =>
+/** An organization problem or contest: private to at least one organization (what visibility, metering and a problem's code prefix follow). */
+export const isOrganizationScoped = (scope: OrganizationScope): boolean =>
   scope.isOrganizationPrivate && scope.organizations.length > 0;
 
 /**
@@ -49,8 +59,12 @@ export function organizationsToAuthorize(
   return unique([...added, ...removed, ...flipped, ...reowned]);
 }
 
-/** The change takes an organization problem out of every organization onto the site (`judge.add_problem`, like a site create). */
+/**
+ * The change takes an organization-private problem or contest onto the site (needs the site create permission): it was
+ * private to organizations and is no longer private to any. Keyed on the stored flag, so one private to no organization
+ * (a staff leftover) cannot be made a site one either.
+ */
 export const leavesForSite = (
   before: OrganizationScope,
   after: OrganizationScope,
-): boolean => isOrganizationProblem(before) && !isOrganizationProblem(after);
+): boolean => before.isOrganizationPrivate && !isOrganizationScoped(after);
