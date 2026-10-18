@@ -45,13 +45,15 @@ describe("a submission's contest on its result page", () => {
     return dataOf<SubmissionDetailResponse>(response).contest;
   };
 
-  /** Alice's submission in an ended contest, scored `points` there (null: no contest row yet), plus one of hers outside it. */
+  /** Alice's submission with 7 of 20 case points in an ended contest (a 100-point partial problem; `stored` is its contest row, null for none), plus one of hers outside it. */
   const scene = async (
     code: string,
-    points: number | null,
-    extra: Partial<Contest> = {},
+    {
+      stored = 0,
+      extra = {},
+    }: { stored?: number | null; extra?: Partial<Contest> } = {},
   ) => {
-    const problem = await createProblem(api, catalog, { code });
+    const problem = await createProblem(api, catalog, { code, partial: true });
     const contest = await createContest(api, {
       name: `Round ${code}`,
       startTime: hoursFromNow(-3),
@@ -72,14 +74,17 @@ describe("a submission's contest on its result page", () => {
     const inContest = await seedSubmission(api, {
       ...fields,
       contest: contest._id,
+      result: 'WA',
+      casePoints: 7,
+      caseTotal: 20,
     });
-    if (points !== null)
+    if (stored !== null)
       await api.contestSubmissions.create({
         _id: inContest._id,
         participation: participation._id,
         contest: contest._id,
         problem: problem._id,
-        points,
+        points: stored,
       });
     const outside = await seedSubmission(api, fields);
     return {
@@ -90,47 +95,48 @@ describe("a submission's contest on its result page", () => {
     };
   };
 
-  it('names the contest and the points the submission scored there', async () => {
-    const { contest, inContestId, outsideId } = await scene(
-      'block_public',
-      35.5,
-    );
+  it("names the contest and scores the cases in the contest problem's points before the worker stores them", async () => {
+    const { contest, inContestId, outsideId } = await scene('block_public');
     expect(await contestOf('alice', inContestId)).toEqual({
       key: contest.key,
       name: 'Round block_public',
-      points: 35.5,
+      points: 35,
     });
     for (const viewer of ['staff', null])
-      expect((await contestOf(viewer, inContestId))?.points).toBe(35.5);
+      expect((await contestOf(viewer, inContestId))?.points).toBe(35);
     expect(await contestOf('alice', outsideId)).toBeNull();
   });
 
+  it('keeps the stored points of a problem that left the contest, null without a row', async () => {
+    const left = await scene('block_left', {
+      stored: 20,
+      extra: { problems: [] },
+    });
+    expect((await contestOf('alice', left.inContestId))?.points).toBe(20);
+    const unscored = await scene('block_no_row', {
+      stored: null,
+      extra: { problems: [] },
+    });
+    expect((await contestOf('alice', unscored.inContestId))?.points).toBeNull();
+  });
+
   it('keeps the contest of a submission whose problem was deleted', async () => {
-    const { contest, problemId, inContestId } = await scene(
-      'block_deleted',
-      20,
-    );
+    const { contest, problemId, inContestId } = await scene('block_deleted');
     await softDelete(api, problemId);
     expect((await contestOf('alice', inContestId))?.key).toBe(contest.key);
   });
 
-  it('names the contest with null points before its contest row exists', async () => {
-    const { inContestId } = await scene('block_no_row', null);
-    expect((await contestOf('alice', inContestId))?.points).toBeNull();
-  });
-
   it('leaves the contest out for a viewer who may not see the contest', async () => {
-    const { contest, inContestId } = await scene('block_private', 70, {
-      isPrivate: true,
-      privateContestants: [users.alice._id],
+    const { contest, inContestId } = await scene('block_private', {
+      extra: { isPrivate: true, privateContestants: [users.alice._id] },
     });
     expect(await contestOf('staff', inContestId)).toBeNull();
     expect((await contestOf('alice', inContestId))?.key).toBe(contest.key);
   });
 
   it('leaves out a hidden contest, even for its own participant', async () => {
-    const { inContestId } = await scene('block_hidden', 50, {
-      isVisible: false,
+    const { inContestId } = await scene('block_hidden', {
+      extra: { isVisible: false },
     });
     expect(await contestOf('alice', inContestId)).toBeNull();
   });

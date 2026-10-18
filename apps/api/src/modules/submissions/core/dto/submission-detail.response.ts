@@ -101,7 +101,7 @@ export class SubmissionContestResponse {
   key!: string;
   /** The contest's name. */
   name!: string;
-  /** Points this submission scored in the contest (the case ratio of the contest problem's points, as the scoreboard counts them); null when the contest holds no row for it. */
+  /** Points this submission scored in the contest (the case ratio of the contest problem's points, as the scoreboard counts them); null when the problem left the contest and no contest row holds them. */
   points!: number | null;
 }
 

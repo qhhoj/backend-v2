@@ -5,6 +5,7 @@ import { AppError, Paginated, unique } from '@libs/common';
 import { PROBLEM_CODE_PATTERN, uuidStr } from '@libs/database';
 import type { Submission } from '@libs/database';
 import type { FilterQuery } from 'mongoose';
+import { contestSubmissionPoints } from '@libs/contests';
 import { ContestAccess } from '../../contests/core/contest-access';
 import { ContestViewerService } from '../../contests/core/contest-viewer.service';
 import { ContestsRepository } from '../../contests/core/contests.repository';
@@ -274,7 +275,7 @@ export class SubmissionsService {
             submission.judgeGeneration,
           )
         : null,
-      this.contestOf(principal, submission),
+      this.contestOf(principal, submission, problem),
     ]);
     return SubmissionDetailResponse.withDetails(
       submission,
@@ -296,22 +297,30 @@ export class SubmissionsService {
     );
   }
 
-  /** The submission's contest and its points there, under the contest's own visibility rule; a deleted problem keeps it too. */
+  /** The submission's contest and its points there, under the contest's own visibility rule; a deleted problem keeps it too. The points are worked out as the worker stores them (`contestSubmissionPoints`), so a result read right after judging does not race the worker; a problem no longer in the contest keeps its stored points. */
   private async contestOf(
     principal: Principal | null,
     submission: SubmissionDocument,
+    problem: ProblemDocument,
   ): Promise<SubmissionContestResponse | null> {
     if (!submission.contest) return null;
-    const id = uuidStr(submission._id);
-    const [contest, points] = await Promise.all([
-      this.contests.findById(uuidStr(submission.contest)),
-      this.submissions.contestPoints(id),
-    ]);
+    const contest = await this.contests.findById(uuidStr(submission.contest));
     if (
       !contest ||
       !ContestAccess.canSee(principal, ContestAccess.accessView(contest))
     )
       return null;
+    const contestProblem = contest.problems.find(
+      (entry) => uuidStr(entry.problem) === uuidStr(problem._id),
+    );
+    const points = contestProblem
+      ? contestSubmissionPoints(
+          submission,
+          contestProblem,
+          contest.formatName,
+          problem.partial,
+        )
+      : await this.submissions.contestPoints(uuidStr(submission._id));
     return { key: contest.key, name: contest.name, points };
   }
 
