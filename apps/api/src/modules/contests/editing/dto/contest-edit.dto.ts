@@ -135,11 +135,11 @@ export class CreateContestDto {
   @IsOptional() @IsBoolean() disallowVirtual?: boolean;
   /** Whether the contest is shown to users who may see it. */
   @IsOptional() @IsBoolean() isVisible?: boolean;
-  /** Only the listed contestants may see it. */
+  /** Only the listed contestants may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`. */
   @IsOptional() @IsBoolean() isPrivate?: boolean;
   /** User ids allowed in a private contest. */
   @IsOptional() @IsUUID('7', { each: true }) privateContestants?: string[];
-  /** Only members of the listed organizations may see it. */
+  /** Only members of the listed organizations may see it. Clearing it on a visible contest that becomes public needs `judge.change_contest_visibility`. */
   @IsOptional() @IsBoolean() isOrganizationPrivate?: boolean;
   /** Organization ids tied to the contest. */
   @IsOptional() @IsUUID('7', { each: true }) organizations?: string[];

@@ -26,6 +26,7 @@ import {
 import type { Catalog, TestSession } from './problem-fixtures';
 import { dataOf, seedSubmission } from './submission-fixtures';
 import { createOrganization } from './organization-fixtures';
+import { ContestEditFieldsService } from '../src/modules/contests/editing/contest-edit-fields.service';
 import { errorCode, setupApiTest } from './setup';
 import type { ApiTest } from './setup';
 
@@ -83,7 +84,13 @@ describe('contest CRUD', () => {
       ],
       [
         'privateCreator',
-        { permissions: ['judge.add_contest', 'judge.create_private_contest'] },
+        {
+          permissions: [
+            'judge.add_contest',
+            'judge.edit_own_contest',
+            'judge.create_private_contest',
+          ],
+        },
       ],
       ['rater', { permissions: ['judge.add_contest', 'judge.contest_rating'] }],
       ['codeless', { permissions: ['judge.edit_own_contest'] }],
@@ -270,6 +277,68 @@ describe('contest CRUD', () => {
         isPrivate: true,
       }).expect(201);
       await create('creator', { isVisible: true, isPrivate: true }).expect(403);
+    });
+
+    it.each([
+      ['isPrivate', { isPrivate: true }, { isPrivate: false }],
+      [
+        'isOrganizationPrivate',
+        { isOrganizationPrivate: true },
+        { isOrganizationPrivate: false },
+      ],
+    ])(
+      'keeps a visible contest out of public view when %s is cleared without change_contest_visibility',
+      async (_case, privately, publicly) => {
+        const { key } = dataOf<{ key: string }>(
+          await create('privateCreator', {
+            isVisible: true,
+            ...privately,
+          }).expect(201),
+        );
+        await patch('privateCreator', key, publicly)
+          .expect(403)
+          .expect(errorCode('forbidden'));
+        await api.http().get(contestUrl(key)).expect(404);
+        await patch('privateCreator', key, { isVisible: false }).expect(200);
+        await patch('privateCreator', key, publicly).expect(200);
+        await patch('privateCreator', key, { isVisible: true }).expect(403);
+        await api.http().get(contestUrl(key)).expect(404);
+      },
+    );
+
+    it('lets a visible contest drop one privacy flag while the other still hides it', async () => {
+      const { key } = dataOf<{ key: string }>(
+        await create('privateCreator', {
+          isVisible: true,
+          isPrivate: true,
+          isOrganizationPrivate: true,
+        }).expect(201),
+      );
+      await patch('privateCreator', key, { isPrivate: false }).expect(200);
+      await patch('privateCreator', key, {
+        isOrganizationPrivate: false,
+      }).expect(403);
+    });
+
+    it('refuses a visibility edit whose flags changed after its gate ran, so two edits cannot combine into a publish', async () => {
+      const { key } = dataOf<{ key: string }>(
+        await create('privateCreator', { isPrivate: true }).expect(201),
+      );
+      const editFields = api.app.get(ContestEditFieldsService);
+      const toFields = editFields.toFields.bind(editFields);
+      const spy = jest
+        .spyOn(editFields, 'toFields')
+        .mockImplementationOnce(async (...args) => {
+          const fields = await toFields(...args);
+          // The concurrent edit `{ isVisible: true }` lands after this one's gate.
+          await api.contests.updateOne({ key }, { isVisible: true });
+          return fields;
+        });
+      await patch('privateCreator', key, { isPrivate: false })
+        .expect(409)
+        .expect(errorCode('conflict'));
+      spy.mockRestore();
+      await api.http().get(contestUrl(key)).expect(404);
     });
   });
 
