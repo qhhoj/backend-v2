@@ -7713,6 +7713,10 @@
       },
       "OrganizationProblemResponse": {
         "properties": {
+          "canEdit": {
+            "description": "Whether the viewer may edit the problem (the row's pencil to its editor).",
+            "type": "boolean"
+          },
           "code": {
             "description": "Problem code.",
             "type": "string"
@@ -7753,7 +7757,8 @@
           "isPublic",
           "isArchived",
           "updatedAt",
-          "tags"
+          "tags",
+          "canEdit"
         ],
         "type": "object"
       },
