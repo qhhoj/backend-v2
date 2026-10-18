@@ -13302,7 +13302,6 @@
           "batches",
           "externalRun",
           "totalCases",
-          "contest",
           "id",
           "user",
           "problem",
@@ -13313,7 +13312,8 @@
           "caseTotal",
           "time",
           "memory",
-          "testSummary"
+          "testSummary",
+          "contest"
         ],
         "type": "object"
       },
@@ -13470,6 +13470,16 @@
             "description": "Points available over all test cases.",
             "type": "number"
           },
+          "contest": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionContestResponse"
+              }
+            ],
+            "description": "The contest it was submitted in, when the viewer may see that contest; null otherwise and outside a contest.",
+            "nullable": true,
+            "type": "object"
+          },
           "date": {
             "description": "When the submission was made.",
             "format": "date-time",
@@ -13565,7 +13575,8 @@
           "caseTotal",
           "time",
           "memory",
-          "testSummary"
+          "testSummary",
+          "contest"
         ],
         "type": "object"
       },
