@@ -105,13 +105,14 @@ export class SubmissionsRepository {
     return (withCases ? query.select('+cases') : query).exec();
   }
 
-  /** The points of its contest row; null for a submission outside a contest. */
-  async contestPoints(id: string): Promise<number | null> {
-    const row = await this.contestSubmissions
-      .findById(id, { points: 1 })
-      .lean<Pick<ContestSubmission, 'points'>>()
+  /** Its contest row's stored points and participation; null for a submission outside a contest. */
+  contestRow(
+    id: string,
+  ): Promise<Pick<ContestSubmission, 'points' | 'participation'> | null> {
+    return this.contestSubmissions
+      .findById(id, { points: 1, participation: 1 })
+      .lean<Pick<ContestSubmission, 'points' | 'participation'>>()
       .exec();
-    return row?.points ?? null;
   }
 
   /** Just what a stream's `state` shows. */

@@ -103,6 +103,8 @@ export class SubmissionContestResponse {
   name!: string;
   /** Points this submission scored in the contest (the case ratio of the contest problem's points, as the scoreboard counts them); null when the problem left the contest and no contest row holds them. */
   points!: number | null;
+  /** Whole minutes from the start of the run it was made in to the submission, as the scoreboard counts them (`participationStart`); only for the submitter's own submission made within that run, null otherwise. */
+  minute!: number | null;
 }
 
 export class SubmissionDetailResponse extends SubmissionListItemResponse {
