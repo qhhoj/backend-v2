@@ -15,6 +15,7 @@ import {
   organizationsToAuthorize,
   SITE_CONTEST_RIGHTS_ISSUE,
 } from '../../organizations/creation/organization-move';
+import type { OrganizationScope } from '../../organizations/creation/organization-move';
 import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 import { ContestTagsQuerier } from '../tags/contest-tags.querier';
 import type { ContestDocument } from '../core/contests.repository';
@@ -192,6 +193,23 @@ function unknownTags(slugs: string[]): AppError {
   );
 }
 
+/** A contest's organization fields before and after an edit (ids as strings); `current` is null for a new contest. */
+function organizationChange(
+  fields: Partial<Contest>,
+  current: Pick<Contest, 'organizations' | 'isOrganizationPrivate'> | null,
+): { before: OrganizationScope; after: OrganizationScope } {
+  const before = {
+    organizations: (current?.organizations ?? []).map(uuidStr),
+    isOrganizationPrivate: current?.isOrganizationPrivate ?? false,
+  };
+  const after = {
+    organizations: (fields.organizations ?? before.organizations).map(uuidStr),
+    isOrganizationPrivate:
+      fields.isOrganizationPrivate ?? before.isOrganizationPrivate,
+  };
+  return { before, after };
+}
+
 @Injectable()
 export class ContestEditFieldsService {
   constructor(
@@ -248,11 +266,12 @@ export class ContestEditFieldsService {
   }
 
   /**
-   * An editor who creates contests only for organizations (no `judge.add_contest` or `judge.edit_all_contest`) adds,
-   * removes or flips only organizations they may create contests for (the organization creation rule, as for problems),
-   * and never moves a contest out of every organization onto the site. Site contest creators keep choosing any
-   * organization, as in legacy. `current` is null for a new contest (create and clone). 403 with an issue code on
-   * `organizations` otherwise.
+   * Without `judge.edit_all_contest`, an editor adds, removes or flips only organizations they may create contests for
+   * (the organization creation rule, as for problems), site contest creators included (owner decision Q1: a contest is
+   * scoped to, and charged to, only organizations its editor administers). A site creator's contest that stays public
+   * only lists organizations (no scope, no charge), so it may name any, as in legacy. Moving a contest out of every
+   * organization onto the site also needs `judge.add_contest`. `current` is null for a new contest (create and clone).
+   * 403 with an issue code on `organizations` otherwise.
    */
   async assertOrganizationRights(
     principal: Principal,
@@ -262,21 +281,17 @@ export class ContestEditFieldsService {
     if (
       (fields.organizations === undefined &&
         fields.isOrganizationPrivate === undefined) ||
-      hasPermission(principal, 'judge.edit_all_contest') ||
-      hasPermission(principal, 'judge.add_contest')
+      hasPermission(principal, 'judge.edit_all_contest')
     )
       return;
-    const before = {
-      organizations: (current?.organizations ?? []).map(uuidStr),
-      isOrganizationPrivate: current?.isOrganizationPrivate ?? false,
-    };
-    const after = {
-      organizations: (fields.organizations ?? before.organizations).map(
-        uuidStr,
-      ),
-      isOrganizationPrivate:
-        fields.isOrganizationPrivate ?? before.isOrganizationPrivate,
-    };
+    const { before, after } = organizationChange(fields, current);
+    const isSiteCreator = hasPermission(principal, 'judge.add_contest');
+    if (
+      isSiteCreator &&
+      !before.isOrganizationPrivate &&
+      !after.isOrganizationPrivate
+    )
+      return;
     const needed = organizationsToAuthorize(before, after);
     if (
       needed.length &&
@@ -286,7 +301,7 @@ export class ContestEditFieldsService {
         ORGANIZATION_RIGHTS_ISSUE,
         'Adding or removing an organization needs the right to create contests in it',
       );
-    if (leavesForSite(before, after))
+    if (leavesForSite(before, after) && !isSiteCreator)
       throw organizationRightsRefusal(
         SITE_CONTEST_RIGHTS_ISSUE,
         'Moving a contest out of every organization onto the site requires judge.add_contest',

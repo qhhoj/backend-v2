@@ -1,4 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { createOrganization } from './organization-fixtures';
 import type { Queue } from 'bullmq';
 import {
   CONTEST_FINAL_JUDGE_QUEUE,
@@ -36,7 +37,6 @@ import type { TestSession, Catalog } from './problem-fixtures';
 import { dataOf } from './submission-fixtures';
 import { setupApiTest, errorCode } from './setup';
 import type { ApiTest } from './setup';
-import { randomUUID } from 'node:crypto';
 import { sha256 } from '@libs/auth';
 import type { User } from '@libs/database';
 import type { OfficialRankingResponse } from '../src/modules/contests/ranking/dto/official-ranking.dto';
@@ -266,7 +266,14 @@ afterAll(() => api.teardown());
     beforeAll(async () => {
       finalJudges = api.app.get(getQueueToken(CONTEST_FINAL_JUDGE_QUEUE));
       for (const [name, permissions] of [
-        ['cloner', ['judge.clone_contest', 'judge.edit_own_contest']],
+        [
+          'cloner',
+          [
+            'judge.clone_contest',
+            'judge.edit_own_contest',
+            'judge.create_private_contest',
+          ],
+        ],
         ['editorOnly', ['judge.edit_own_contest']],
         ['cloneOutsider', ['judge.clone_contest']],
         ['other', []],
@@ -283,7 +290,15 @@ afterAll(() => api.teardown());
     beforeEach(() => finalJudges.obliterate({ force: true }));
 
     it('clones a contest hidden, with its problems and settings, the cloner as the only author', async () => {
-      const organizationId = randomUUID();
+      // The cloner administers it: a clone stays within the cloner's organizations.
+      const organizationId = uuidStr(
+        (
+          await createOrganization(api, {
+            slug: 'clonerorg',
+            adminIds: [users.cloner._id],
+          })
+        )._id,
+      );
       const source = await createContest(api, {
         authors: [users.cloner._id, users.other._id],
         curators: [users.other._id],
