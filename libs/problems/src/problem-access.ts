@@ -61,6 +61,11 @@ export interface ContestScope {
   problemIds: readonly string[];
 }
 
+/** Visible to everyone, visitors included (`visibleFilter(null)`): public and not organization-private, whose `isPublic` reaches only members. */
+const isSitePublic = (
+  problem: Pick<ProblemAccessView, 'isPublic' | 'isOrganizationPrivate'>,
+): boolean => problem.isPublic && !problem.isOrganizationPrivate;
+
 function canSee(
   principal: Principal | null,
   problem: ProblemAccessView,
@@ -73,9 +78,9 @@ function canSee(
   const has = (permission: Permission) =>
     principal !== null && hasPermission(principal, permission);
   // A public problem is never "suggesting", so the spec's "public & not suggesting" is just `isPublic`.
+  if (isSitePublic(problem)) return true;
   if (problem.isPublic) {
-    if (!problem.isOrganizationPrivate || has('judge.see_organization_problem'))
-      return true;
+    if (has('judge.see_organization_problem')) return true;
     if (
       principal &&
       problem.organizations.some((organizationId) =>
@@ -168,6 +173,7 @@ function editableFilter(
 
 export const ProblemAccess = {
   accessView,
+  isSitePublic,
   canSee,
   canEdit,
   visibleFilter,
