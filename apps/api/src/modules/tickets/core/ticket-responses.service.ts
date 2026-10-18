@@ -53,6 +53,7 @@ export class TicketResponsesService {
       editNotes: TicketAccess.canEditNotes(principal, view),
       markGood: TicketAccess.canMarkGood(principal, view),
       assign: TicketAccess.canAssign(principal),
+      claim: TicketAccess.canClaim(principal, view),
     };
     const messages = (ticket.messages ?? []).map((message) =>
       this.message(message, people),

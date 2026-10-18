@@ -3,4 +3,6 @@ export class TicketSummaryResponse {
   assignedOpen!: number;
   /** Open tickets whose newest message is not from staff; 0 unless the viewer holds `judge.change_ticket`. */
   awaitingStaff!: number;
+  /** Open tickets about the viewer's own problems and contests (the list's `aboutMine`); 0 unless the viewer may edit problems or contests. */
+  aboutMineOpen!: number;
 }

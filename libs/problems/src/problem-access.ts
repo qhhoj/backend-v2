@@ -142,6 +142,13 @@ function visibleFilter(
     : own;
 }
 
+/** Mongo filter with `isEditor`'s semantics: the problems the user authors, curates or suggested, whatever their permissions (a staff member's own problems). */
+function editorOfFilter(userId: string): { $or: FilterQuery<Problem>[] } {
+  return {
+    $or: [{ authors: userId }, { curators: userId }, { suggester: userId }],
+  };
+}
+
 /** Mongo filter with exactly `canEdit`'s semantics (legacy `get_editable_problems`), for the ticket list's "editor of the linked problem" leg; null edits nothing, `{}` everything. */
 function editableFilter(
   principal: Principal | null,
@@ -149,11 +156,8 @@ function editableFilter(
   if (!principal || !hasPermission(principal, 'judge.edit_own_problem'))
     return null;
   if (hasPermission(principal, 'judge.edit_all_problem')) return {};
-  const { userId } = principal;
   const clauses: FilterQuery<Problem>[] = [
-    { authors: userId },
-    { curators: userId },
-    { suggester: userId },
+    ...editorOfFilter(principal.userId).$or,
   ];
   if (hasPermission(principal, 'judge.edit_public_problem'))
     clauses.push({ isPublic: true });
@@ -168,4 +172,5 @@ export const ProblemAccess = {
   canEdit,
   visibleFilter,
   editableFilter,
+  editorOfFilter,
 };
