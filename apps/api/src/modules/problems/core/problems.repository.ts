@@ -50,11 +50,12 @@ const DELETED = { deletedAt: { $gt: new Date(0) } } as const;
 
 const RANDOM_ATTEMPTS = 2;
 
-/** `findSummariesIncludingDeleted`: what a submission row shows and what decides its test summary. */
+/** `findSummariesIncludingDeleted`: what a submission row shows and what decides its test summary and its contest points (`partial`). */
 const SUMMARY_PROJECTION = {
   code: 1,
   name: 1,
   points: 1,
+  partial: 1,
   deletedAt: 1,
   purgedAt: 1,
   isPublic: 1,

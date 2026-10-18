@@ -31,6 +31,11 @@ const STATE_FIELDS = {
   caseTotal: 1,
   currentTestcase: 1,
 } as const;
+/** What the contest block reads of a submission's contest row. */
+export type ContestRowFields = Pick<
+  ContestSubmission,
+  'points' | 'participation'
+>;
 export type SubmissionState = Pick<
   Submission,
   '_id' | keyof typeof STATE_FIELDS
@@ -105,14 +110,16 @@ export class SubmissionsRepository {
     return (withCases ? query.select('+cases') : query).exec();
   }
 
-  /** Its contest row's stored points and participation; null for a submission outside a contest. */
-  contestRow(
-    id: string,
-  ): Promise<Pick<ContestSubmission, 'points' | 'participation'> | null> {
-    return this.contestSubmissions
-      .findById(id, { points: 1, participation: 1 })
-      .lean<Pick<ContestSubmission, 'points' | 'participation'>>()
+  /** The contest rows (stored points and participation) of these submissions, keyed by submission id: one `_id` lookup; a submission outside a contest has none. */
+  async contestRows(
+    ids: readonly string[],
+  ): Promise<Map<string, ContestRowFields>> {
+    if (!ids.length) return new Map();
+    const rows = await this.contestSubmissions
+      .find({ _id: { $in: [...ids] } }, { points: 1, participation: 1 })
+      .lean<(ContestRowFields & { _id: unknown })[]>()
       .exec();
+    return new Map(rows.map((row) => [uuidStr(row._id), row]));
   }
 
   /** Just what a stream's `state` shows. */

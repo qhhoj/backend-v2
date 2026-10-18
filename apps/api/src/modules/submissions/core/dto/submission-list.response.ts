@@ -56,6 +56,17 @@ export class SubmissionTestSummaryResponse {
   total!: number | null;
 }
 
+export class SubmissionContestResponse {
+  /** The contest's key. */
+  key!: string;
+  /** The contest's name. */
+  name!: string;
+  /** Points this submission scored in the contest (the case ratio of the contest problem's points, as the scoreboard counts them); null when the problem left the contest and no contest row holds them. */
+  points!: number | null;
+  /** Whole minutes from the start of the run it was made in to the submission, as the scoreboard counts them (`participationStart`); only for the submitter's own submission made within that run, null otherwise. */
+  minute!: number | null;
+}
+
 /** The rows resolved for one submission; a missing one renders as null. */
 export interface SubmissionRefs {
   user: UserDocument | undefined;
@@ -96,11 +107,19 @@ export class SubmissionListItemResponse {
   memory!: number | null;
   /** The first test results, only on the submission lists and only when the viewer could see them on the submission page (signed in; another user's contest submission only for the problem's editors and `judge.view_all_submission`); null otherwise. */
   testSummary!: SubmissionTestSummaryResponse | null;
+  /** The contest it was submitted in, when the viewer may see that contest; null otherwise and outside a contest. */
+  contest!: SubmissionContestResponse | null;
 
   static from(
     submission: Submission,
     { user, problem, language }: SubmissionRefs,
-    testSummary: TestSummary | null = null,
+    {
+      testSummary = null,
+      contest = null,
+    }: {
+      testSummary?: TestSummary | null;
+      contest?: SubmissionContestResponse | null;
+    } = {},
   ): SubmissionListItemResponse {
     return {
       id: uuidStr(submission._id),
@@ -125,6 +144,7 @@ export class SubmissionListItemResponse {
       time: submission.time,
       memory: submission.memory,
       testSummary,
+      contest,
     };
   }
 }

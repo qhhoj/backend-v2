@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { FilterQuery, HydratedDocument, Model } from 'mongoose';
 import { AppError, escapeRegExp, isDuplicateKey } from '@libs/common';
 import { LIVE } from '@libs/contests';
+import type { ParticipationTimes } from '@libs/contests';
 import {
   Contest,
   ContestParticipation,
@@ -55,6 +56,22 @@ export class ParticipationsRepository {
     return isUuid(id)
       ? this.participations.findById(id).exec()
       : Promise.resolve(null);
+  }
+
+  /** The runs with these ids, keyed by id, with the fields that place a submission in time (`participationStart`); unknown and malformed ids are skipped. */
+  async runsByIds(
+    ids: readonly string[],
+  ): Promise<Map<string, ParticipationTimes>> {
+    const valid = ids.filter(isUuid);
+    if (!valid.length) return new Map();
+    const rows = await this.participations
+      .find(
+        { _id: { $in: valid } },
+        { virtual: 1, realStart: 1, isRegistered: 1 },
+      )
+      .lean<(ParticipationTimes & { _id: unknown })[]>()
+      .exec();
+    return new Map(rows.map((row) => [uuidStr(row._id), row]));
   }
 
   /** Legacy `get_contest_submission_count`: the participation's submissions to the problem, IE and PD excluded. */

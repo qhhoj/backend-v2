@@ -25,7 +25,10 @@ export class BestSubmissionsService {
     );
     if (!filter) throw new AppError('not_found', 404, 'No such problem');
     const { items, total } = await this.best.page(filter, page, pageSize);
-    return new Paginated(await this.submissions.listItems(items), {
+    const rows = await this.submissions.listItems(items, principal, {
+      testSummaries: false,
+    });
+    return new Paginated(rows, {
       page,
       pageSize,
       total,

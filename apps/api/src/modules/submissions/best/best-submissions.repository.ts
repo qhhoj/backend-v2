@@ -12,10 +12,11 @@ const BEST_FIRST = {
   _id: 1,
 } as const;
 
-/** What a list row shows; the source, error log and cases stay out of the grouping. */
+/** What a list row shows (`contest` is read for the row's contest block); the source, error log and cases stay out of the grouping. */
 const ROW_FIELDS = {
   user: 1,
   problem: 1,
+  contest: 1,
   language: 1,
   date: 1,
   status: 1,
