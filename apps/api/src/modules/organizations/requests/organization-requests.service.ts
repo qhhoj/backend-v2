@@ -101,7 +101,7 @@ export class OrganizationRequestsService {
       const request = await this.requests.create(
         organization._id,
         principal.userId,
-        reason,
+        reason ?? '', // `null` passes @IsOptional
       );
       return OrganizationRequestResponse.from(
         request,

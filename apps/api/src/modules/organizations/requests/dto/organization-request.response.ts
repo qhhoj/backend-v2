@@ -19,7 +19,7 @@ export class OrganizationRequestResponse {
     enumName: 'OrganizationRequestState',
   })
   state!: OrganizationRequestState;
-  /** The reason the requester gave. */
+  /** The reason the requester gave; empty when none. */
   reason!: string;
   /** When the request was filed, ISO 8601. */
   createdAt!: Date;

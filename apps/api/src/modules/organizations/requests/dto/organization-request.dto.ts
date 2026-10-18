@@ -7,8 +7,8 @@ import {
   IsOptional,
   IsString,
   Length,
-  Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import {
@@ -18,11 +18,13 @@ import {
 import type { OrganizationRequestState } from '@libs/database';
 
 export class CreateOrganizationRequestDto {
-  /** Why the user wants to join; must not be blank. */
+  /** Why the user wants to join; optional (trimmed, empty when not given). */
+  @ApiPropertyOptional({ maxLength: REQUEST_REASON_MAX_LENGTH })
+  @IsOptional()
+  @Transform(trim)
   @IsString()
-  @Length(1, REQUEST_REASON_MAX_LENGTH)
-  @Matches(/\S/, { message: 'Give a reason.' })
-  reason!: string;
+  @MaxLength(REQUEST_REASON_MAX_LENGTH)
+  reason: string = '';
 }
 
 export class OrganizationRequestListQueryDto {
