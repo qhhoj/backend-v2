@@ -16,7 +16,9 @@ import {
   OrganizationDetailResponse,
   OrganizationListItemResponse,
 } from './dto/organization.response';
+import { OrganizationCreationRights } from '../creation/organization-creation-rights.service';
 import { OrganizationAccess } from './organization-access';
+import type { CreationKind } from './organization-access';
 import { OrganizationMembersRepository } from './organization-members.repository';
 import { OrganizationRequestsRepository } from './organization-requests.repository';
 import { OrganizationsRepository } from './organizations.repository';
@@ -34,6 +36,7 @@ export class OrganizationsService {
     private readonly members: OrganizationMembersRepository,
     private readonly users: UsersRepository,
     private readonly requests: OrganizationRequestsRepository,
+    private readonly creation: OrganizationCreationRights,
   ) {}
 
   /** Legacy `PublicOrganizationMixin`: any organization by slug, unlisted ones included (they are only kept out of enumerations). */
@@ -67,7 +70,7 @@ export class OrganizationsService {
     principal: Principal | null,
     query: OrganizationListQueryDto,
   ): Promise<Paginated<OrganizationListItemResponse>> {
-    const { page, pageSize, administered } = query;
+    const { page, pageSize, administered, canCreate } = query;
     const clauses = [
       OrganizationAccess.listFilter(principal),
       this.narrowing(query),
@@ -79,6 +82,8 @@ export class OrganizationsService {
           administered,
         ),
       );
+    if (canCreate !== undefined)
+      clauses.push(this.creatable(principal, canCreate));
     const { items, total } = await this.organizations.list(
       { $and: clauses },
       page,
@@ -90,6 +95,20 @@ export class OrganizationsService {
       ),
       { page, pageSize, total },
     );
+  }
+
+  /** The organizations the viewer may create `kind` for (the creation policy's filter): an administrator's own are always listable, so it only narrows. */
+  private creatable(
+    principal: Principal | null,
+    kind: CreationKind,
+  ): FilterQuery<Organization> {
+    if (principal === null)
+      throw new AppError(
+        'unauthorized',
+        401,
+        'Sign in to list the organizations you can create for',
+      );
+    return narrowTo(this.creation.creatableFilter(principal, kind), true);
   }
 
   private narrowing({

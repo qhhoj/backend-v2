@@ -1,3 +1,4 @@
+import { organizationCodePrefix } from '@libs/community';
 import { uuidStr } from '@libs/database';
 import { createOrganization, organizationUrl } from './organization-fixtures';
 import type { Contest } from '@libs/database';
@@ -674,6 +675,180 @@ describe('creating problems and contests for an organization', () => {
         problemCreation: { site: true, organizations: true },
         contestCreation: { site: true, organizations: true },
       });
+    });
+  });
+
+  describe('the organizations the viewer may create in', () => {
+    /** Every live organization of this spec, whatever its listing. */
+    const liveSlugs = async () =>
+      (await api.organizations.find({ deletedAt: null }).lean())
+        .map((organization) => organization.slug)
+        .sort();
+    const EVERY = 'every live organization' as const;
+    const listFor = (who: string | null, query: object) => {
+      const request = api
+        .http()
+        .get('/api/internal/organizations')
+        .query({ pageSize: 100, ...query });
+      return who === null ? request : authed(request, sessions[who]);
+    };
+    const creatable = async (who: string, kind: 'problem' | 'contest') =>
+      (
+        (await listFor(who, { canCreate: kind }).expect(200)).body as {
+          data: { slug: string }[];
+        }
+      ).data
+        .map((organization) => organization.slug)
+        .sort();
+    const createIn = (
+      kind: 'problem' | 'contest',
+      who: string,
+      slug: string,
+    ) => {
+      const name = `eq_${who.toLowerCase()}`;
+      return kind === 'problem'
+        ? createProblemAs(
+            who,
+            slug,
+            problemBody(`${organizationCodePrefix(slug)}${name}`),
+          )
+        : createContestAs(
+            who,
+            slug,
+            contestBody(`${name}_${slug.replaceAll('-', '')}`),
+          );
+    };
+
+    beforeAll(async () => {
+      await createOrganization(api, {
+        slug: 'hiddenorg',
+        isUnlisted: true,
+        adminIds: [teacherId],
+      });
+      await createOrganization(api, {
+        slug: 'goneorg',
+        adminIds: [teacherId],
+        deletedAt: new Date(),
+      });
+    });
+
+    it.each([
+      [
+        'an administrator of two listed organizations and an unlisted one',
+        'teacher',
+        ['hiddenorg', 'otherorg', 'thpt-demo'],
+        ['hiddenorg', 'otherorg', 'thpt-demo'],
+      ],
+      [
+        'an administrator of another organization only',
+        'outsider',
+        ['rivalorg'],
+        ['rivalorg'],
+      ],
+      [
+        'an administrator without the creation permissions',
+        'bareadmin',
+        [],
+        [],
+      ],
+      ['a member who is not an administrator', 'member', [], []],
+      [
+        'a site contest creator who administers one organization',
+        'siteSetter',
+        [],
+        ['sitesetterorg'],
+      ],
+      [
+        'a judge.edit_all_organization holder with the permissions',
+        'editsall',
+        EVERY,
+        EVERY,
+      ],
+      ['a superuser', 'root', EVERY, EVERY],
+    ])('lists for %s', async (_who, who, problems, contests) => {
+      const resolve = async (slugs: string[] | typeof EVERY) =>
+        slugs === EVERY ? liveSlugs() : slugs;
+      expect(await creatable(who, 'problem')).toEqual(await resolve(problems));
+      expect(await creatable(who, 'contest')).toEqual(await resolve(contests));
+    });
+
+    it('keeps the other list filters working over the creatable ones', async () => {
+      const slugs = async (query: object) =>
+        (
+          (await listFor('teacher', query).expect(200)).body as {
+            data: { slug: string }[];
+          }
+        ).data.map((organization) => organization.slug);
+      expect(await slugs({ canCreate: 'contest', search: 'other' })).toEqual([
+        'otherorg',
+      ]);
+      expect(await slugs({ canCreate: 'contest', unlisted: 'true' })).toEqual([
+        'hiddenorg',
+      ]);
+    });
+
+    it('refuses an anonymous viewer and an unknown kind', async () => {
+      await listFor(null, { canCreate: 'contest' })
+        .expect(401)
+        .expect(errorCode('unauthorized'));
+      await listFor('teacher', { canCreate: 'post' }).expect(400);
+    });
+
+    it.each(['problem', 'contest'] as const)(
+      'matches the organizations the %s create route accepts, for every viewer and organization',
+      async (kind) => {
+        const live = await liveSlugs();
+        const outcomes: Record<string, Record<string, number>> = {};
+        const expected: typeof outcomes = {};
+        for (const who of [
+          'teacher',
+          'bareadmin',
+          'member',
+          'outsider',
+          'siteSetter',
+          'editsall',
+        ]) {
+          const allowed = await creatable(who, kind);
+          outcomes[who] = {};
+          expected[who] = {};
+          for (const slug of [...live, 'goneorg']) {
+            outcomes[who][slug] = (await createIn(kind, who, slug)).status;
+            if (allowed.includes(slug)) expected[who][slug] = 201;
+            else expected[who][slug] = slug === 'goneorg' ? 404 : 403;
+          }
+        }
+        expect(outcomes).toEqual(expected);
+      },
+    );
+
+    it('matches the organizations a site contest creator may scope a contest to on the site route', async () => {
+      const allowed = await creatable('siteSetter', 'contest');
+      const ids = new Map(
+        (await api.organizations.find({ deletedAt: null }).lean()).map(
+          (organization) => [organization.slug, uuidStr(organization._id)],
+        ),
+      );
+      const outcomes: Record<string, number> = {};
+      for (const slug of ids.keys())
+        outcomes[slug] = (
+          await authed(
+            api.http().post('/api/internal/contests'),
+            sessions.siteSetter,
+          ).send(
+            contestBody(`site_${slug.replaceAll('-', '')}`, {
+              organizations: [ids.get(slug)],
+              isOrganizationPrivate: true,
+            }),
+          )
+        ).status;
+      expect(outcomes).toEqual(
+        Object.fromEntries(
+          [...ids.keys()].map((slug) => [
+            slug,
+            allowed.includes(slug) ? 201 : 403,
+          ]),
+        ),
+      );
     });
   });
 });

@@ -11,6 +11,8 @@ import {
   Min,
 } from 'class-validator';
 import { toBoolean, trim } from '../../../problems/core/dto/transforms';
+import { CREATION_KINDS } from '../organization-access';
+import type { CreationKind } from '../organization-access';
 import { MEMBER_SORTS } from '../organization-members.repository';
 import type { MemberSort } from '../organization-members.repository';
 
@@ -33,6 +35,8 @@ export class OrganizationListQueryDto {
   @IsOptional() @Transform(toBoolean) @IsBoolean() unlisted?: boolean;
   /** true: only organizations the viewer may administer (their admin, or every one with `judge.edit_all_organization`); false: only the others. */
   @IsOptional() @Transform(toBoolean) @IsBoolean() administered?: boolean;
+  /** Only the organizations the viewer may create this for: the ones `POST /organizations/{slug}/problems` or `/contests` accept (an administrator, or every organization with `judge.edit_all_organization`, who holds `judge.create_organization_problem` or `judge.create_private_contest`). Needs a signed-in viewer (401 otherwise). */
+  @IsOptional() @IsIn(CREATION_KINDS) canCreate?: CreationKind;
   /** 1-based page number. */
   @ApiPropertyOptional()
   @IsOptional()
