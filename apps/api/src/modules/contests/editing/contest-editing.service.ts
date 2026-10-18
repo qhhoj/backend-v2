@@ -16,6 +16,7 @@ import {
   requestFinalJudge,
   rescheduleFinalJudge,
   reschedulePublish,
+  scoringKeyOf,
 } from '@libs/contests';
 import type {
   ContestFinalJudgeJob,
@@ -46,24 +47,6 @@ import { QuotaService } from '../../organizations/quota/quota.service';
 
 /** `GET /contests/current` shadows a contest with this key. */
 export const RESERVED_CONTEST_KEYS: readonly string[] = ['current'];
-
-/** What every participation's results depend on (legacy admin rescored on these and on the problem inlines); the times move the freeze window, and setting or clearing the time limit moves a live row's start between the contest start and its join (its value scores nothing). */
-const scoringOf = (contest: Contest) =>
-  JSON.stringify([
-    contest.formatName,
-    contest.formatConfig,
-    contest.startTime,
-    contest.endTime,
-    contest.timeLimit === null,
-    contest.frozenLastMinutes,
-    contest.pointsPrecision,
-    contest.problems.map((entry) => [
-      uuidStr(entry.problem),
-      entry.points,
-      entry.partial,
-      entry.order,
-    ]),
-  ]);
 
 const finalJudgeTarget = (contest: Contest): FinalJudgeTarget => ({
   id: uuidStr(contest._id),
@@ -265,7 +248,7 @@ export class ContestEditingService {
     await purgeRankingCache(this.redis, contest._id);
     await this.rescheduleEndJobs({ previous: contest, next: updated });
     // `endTime` is part of the scoring: the rescore's follow-up re-rates a contest that has ratings.
-    if (scoringOf(updated) !== scoringOf(contest))
+    if (scoringKeyOf(updated) !== scoringKeyOf(contest))
       void notifyContestRescore(this.rescores, contest._id, this.logger);
     if (
       fields.lockedAfter !== undefined &&

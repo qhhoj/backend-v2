@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { batchMinima, dataPoints } from '@libs/contests';
-import type { ParticipationScore, ScoringRow } from '@libs/contests';
+import {
+  batchMinima,
+  dataPoints,
+  SCORING_CONTEST_FIELDS,
+} from '@libs/contests';
+import type {
+  ParticipationScore,
+  ScoringContestField,
+  ScoringRow,
+} from '@libs/contests';
 import {
   Contest,
   ContestParticipation,
@@ -18,28 +26,10 @@ import type {
   SubmissionStatus,
 } from '@libs/database';
 
-export type ScoringContest = Pick<
-  Contest,
-  | '_id'
-  | 'formatName'
-  | 'formatConfig'
-  | 'startTime'
-  | 'endTime'
-  | 'timeLimit'
-  | 'frozenLastMinutes'
-  | 'pointsPrecision'
-  | 'problems'
->;
-const SCORING_CONTEST_FIELDS = {
-  formatName: 1,
-  formatConfig: 1,
-  startTime: 1,
-  endTime: 1,
-  timeLimit: 1,
-  frozenLastMinutes: 1,
-  pointsPrecision: 1,
-  problems: 1,
-} as const;
+export type ScoringContest = Pick<Contest, '_id' | ScoringContestField>;
+const SCORING_PROJECTION = Object.fromEntries(
+  SCORING_CONTEST_FIELDS.map((field) => [field, 1]),
+) as Record<ScoringContestField, 1>;
 
 interface JoinedRow {
   _id: unknown;
@@ -79,7 +69,7 @@ export class ContestResultsRepository {
   /** A migrated contest may lack `formatConfig`: it reads as `{}`. */
   async findContest(contestId: string): Promise<ScoringContest | null> {
     const contest = await this.contests
-      .findById(contestId, SCORING_CONTEST_FIELDS)
+      .findById(contestId, SCORING_PROJECTION)
       .lean<ScoringContest>()
       .exec();
     return contest && { ...contest, formatConfig: contest.formatConfig ?? {} };
