@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.34.1
+
+### Patch Changes
+
+- 413b41e: Organization storage quota: `QuotaLedger.assertStorage(organizationId, addedBytes)` reads the organization's stored bytes itself; the api and worker call sites no longer sum usage.
+
 ## 2.34.0
 
 ### Minor Changes
