@@ -8,7 +8,6 @@ import { OrganizationUsage } from '@libs/database';
 import { QuotaLedger, quotaExceeded } from '@libs/problems';
 import type {
   ChargeRequest,
-  EffectiveLimits,
   PricedCharge,
   SpentCharge,
   UsageKey,
@@ -22,7 +21,7 @@ import {
 } from './quota.constants';
 import type { QuotaSnapshot } from './quota.types';
 
-/** Monthly credits (atomic, refundable) and the storage meter of an organization; the primitives the worker shares live in `QuotaLedger`. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
+/** Monthly credits (atomic, refundable) of an organization, its 80% warnings and its usage snapshot; limits, enforce mode and the storage meter live in `QuotaLedger`. `warn` mode lets everything through but logs and counts, so a site can measure before it blocks. */
 @Injectable()
 export class QuotaService implements OnApplicationBootstrap {
   private readonly logger = new Logger(QuotaService.name);
@@ -45,22 +44,6 @@ export class QuotaService implements OnApplicationBootstrap {
       );
   }
 
-  isEnforcing(): Promise<boolean> {
-    return this.ledger.isEnforcing();
-  }
-
-  monthKeyOf(now: Date): string {
-    return this.ledger.monthKeyOf(now);
-  }
-
-  limitsFrom(row: Parameters<QuotaLedger['limitsFrom']>[0]): EffectiveLimits {
-    return this.ledger.limitsFrom(row);
-  }
-
-  limitsOf(organizationId: string): Promise<EffectiveLimits> {
-    return this.ledger.limitsOf(organizationId);
-  }
-
   priceOf(request: ChargeRequest): number {
     if (request.kind === 'problem')
       return this.settings.get('quota.cost.problem');
@@ -81,7 +64,7 @@ export class QuotaService implements OnApplicationBootstrap {
   ): Promise<Result> {
     const amount = organizationId === null ? 0 : this.priceOf(request);
     if (organizationId === null || amount === 0) return work(null);
-    const key = { organizationId, month: this.monthKeyOf(now) };
+    const key = { organizationId, month: this.ledger.monthKeyOf(now) };
     const charge = { ...request, amount };
     await this.spend(key, charge);
     let result: Result;
@@ -98,7 +81,9 @@ export class QuotaService implements OnApplicationBootstrap {
   /** The once-a-month 80% credit warning; it sits outside the refund `try`, so a failure here can never refund finished work, and it is caught so it never fails the request whose work is done. */
   private async warnIfCreditsNear(key: UsageKey): Promise<void> {
     try {
-      const { credits, unlimited } = await this.limitsOf(key.organizationId);
+      const { credits, unlimited } = await this.ledger.limitsOf(
+        key.organizationId,
+      );
       if (unlimited) return;
       const used = await this.creditsUsed(key);
       if (meterOf(used, credits).isNearLimit)
@@ -110,18 +95,18 @@ export class QuotaService implements OnApplicationBootstrap {
     }
   }
 
-  /** The storage meter's counterpart: called after a data write with the organization's new total (or a function reading it). Never throws: the write is done, a failed warning is only logged. */
+  /** The storage meter's counterpart: called after a data write, reads the organization's new total and warns its admins once it passes 80%. Never throws: the write is done, a failed warning is only logged. */
   async afterStorageWrite(
     organizationId: string,
-    usedBytes: number | (() => Promise<number>),
     now = new Date(),
   ): Promise<void> {
     try {
-      const used =
-        typeof usedBytes === 'number' ? usedBytes : await usedBytes();
-      const { storageBytes, unlimited } = await this.limitsOf(organizationId);
-      if (unlimited || !meterOf(used, storageBytes).isNearLimit) return;
-      const key = { organizationId, month: this.monthKeyOf(now) };
+      const { storageBytes, unlimited } =
+        await this.ledger.limitsOf(organizationId);
+      if (unlimited) return;
+      const used = await this.ledger.usedStorageBytes(organizationId);
+      if (!meterOf(used, storageBytes).isNearLimit) return;
+      const key = { organizationId, month: this.ledger.monthKeyOf(now) };
       await this.ensureUsageRow(key);
       await this.warnings.warnOnce(key, 'storage');
     } catch (error) {
@@ -133,10 +118,10 @@ export class QuotaService implements OnApplicationBootstrap {
 
   /** The atomic spend. (1) In enforce mode a price above the limit is refused up front. (2) An upsert with `$setOnInsert` only creates the month's row, so it can never hit a duplicate key on an over-limit month. (3) A guarded `$inc` without upsert applies the limit, including on the month's first spend; a miss is `quota_exceeded`. */
   private async spend(key: UsageKey, charge: PricedCharge): Promise<void> {
-    const { credits: limit, unlimited } = await this.limitsOf(
+    const { credits: limit, unlimited } = await this.ledger.limitsOf(
       key.organizationId,
     );
-    const enforcing = !unlimited && (await this.isEnforcing());
+    const enforcing = !unlimited && (await this.ledger.isEnforcing());
     if (enforcing && charge.amount > limit)
       throw await this.refusalFor(key, limit, charge.amount);
     await this.ensureUsageRow(key);
@@ -226,24 +211,17 @@ export class QuotaService implements OnApplicationBootstrap {
     });
   }
 
-  /** The storage meter (see `QuotaLedger.assertStorage`); the caller sums `usedBytes` from the problems it owns (`ProblemsRepository.sumStoredBytes`). */
-  assertStorage(
-    organizationId: string,
-    bytes: { usedBytes: number; addedBytes: number },
-  ): Promise<void> {
-    return this.ledger.assertStorage(organizationId, bytes);
-  }
-
+  /** The organization's month: credits and storage against their limits. */
   async snapshot(
     organizationId: string,
-    usedBytes: number,
     now = new Date(),
   ): Promise<QuotaSnapshot> {
-    const month = this.monthKeyOf(now);
-    const [limits, creditsUsed, enforcing] = await Promise.all([
-      this.limitsOf(organizationId),
+    const month = this.ledger.monthKeyOf(now);
+    const [limits, creditsUsed, usedBytes, enforcing] = await Promise.all([
+      this.ledger.limitsOf(organizationId),
       this.creditsUsed({ organizationId, month }),
-      this.isEnforcing(),
+      this.ledger.usedStorageBytes(organizationId),
+      this.ledger.isEnforcing(),
     ]);
     return {
       month,

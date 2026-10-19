@@ -144,24 +144,30 @@ export class QuotaLedger {
     return true;
   }
 
-  /** Bytes the organization's private problems hold (see `sumStoredBytesByOrganization`). */
+  /** The one reader of stored bytes: what the organization's private problems hold (see `sumStoredBytesByOrganization`). */
   async usedStorageBytes(organizationId: string): Promise<number> {
-    const sums = await sumStoredBytesByOrganization(this.problems, [
-      organizationId,
-    ]);
+    const sums = await this.usedStorageBytesOf([organizationId]);
     return sums.get(organizationId) ?? 0;
   }
 
-  /** The storage meter. `usedBytes` is the organization's current total, `addedBytes` what this write adds (negative or zero always fits). Enforce refuses with 403 `quota_exceeded`; warn logs. */
+  /** `usedStorageBytes` for a page of organizations; one with nothing stored is absent from the map. */
+  usedStorageBytesOf(
+    organizationIds: readonly string[],
+  ): Promise<Map<string, number>> {
+    return sumStoredBytesByOrganization(this.problems, organizationIds);
+  }
+
+  /** The storage meter: reads what the organization holds and checks that `addedBytes` (what this write adds; negative or zero always fits) stays within its limit. Enforce refuses with 403 `quota_exceeded`; warn logs. */
   async assertStorage(
     organizationId: string,
-    bytes: { usedBytes: number; addedBytes: number },
+    addedBytes: number,
   ): Promise<void> {
-    const { usedBytes, addedBytes } = bytes;
     if (addedBytes <= 0) return;
     const { storageBytes: limit, unlimited } =
       await this.limitsOf(organizationId);
-    if (unlimited || usedBytes + addedBytes <= limit) return;
+    if (unlimited) return;
+    const usedBytes = await this.usedStorageBytes(organizationId);
+    if (usedBytes + addedBytes <= limit) return;
     if (await this.isEnforcing())
       throw quotaExceeded({
         meter: 'storage',

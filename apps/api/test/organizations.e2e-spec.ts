@@ -28,7 +28,7 @@ import {
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { QUOTA_BACKFILL_DONE_KEY } from '../src/modules/organizations/quota/quota.constants';
-import { QuotaService } from '../src/modules/organizations/quota/quota.service';
+import { QuotaLedger } from '@libs/problems';
 import { seedOrganizationWorld } from './organization-problem-fixtures';
 import type { OrganizationWorld } from './organization-problem-fixtures';
 import { contestProblem, createContest } from './contest-fixtures';
@@ -189,7 +189,7 @@ afterAll(() => api.teardown());
       catalog = await seedCatalog(api);
       usage = api.app.get(getModelToken(OrganizationUsage.name));
       ledger = api.app.get(getModelToken(OrganizationCreditEntry.name));
-      month = api.app.get(QuotaService).monthKeyOf(new Date());
+      month = api.app.get(QuotaLedger).monthKeyOf(new Date());
     });
 
     it('shows an organization admin the credits, storage and recent spends', async () => {

@@ -1,6 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { REDIS } from '@libs/common';
 import { OrganizationCreditEntry, OrganizationUsage } from '@libs/database';
+import type { Problem } from '@libs/database';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
 import { QuotaService } from '../src/modules/organizations/quota/quota.service';
@@ -10,7 +11,7 @@ import { setupApiTest, errorCode } from './setup';
 import type { ApiTest } from './setup';
 import { ContestsRepository } from '../src/modules/contests/core/contests.repository';
 import { contestUrl, createContest, hoursFromNow } from './contest-fixtures';
-import { softDelete } from './deleted-problem-fixtures';
+import { softDelete, tombstone } from './deleted-problem-fixtures';
 import {
   authed,
   createProblem,
@@ -25,7 +26,11 @@ import { join } from 'node:path';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { NotificationsService } from '@libs/community';
-import { POLYGON_QUEUE, ProblemDataFilesService } from '@libs/problems';
+import {
+  POLYGON_QUEUE,
+  ProblemDataFilesService,
+  QuotaLedger,
+} from '@libs/problems';
 import { buildZip } from '@libs/problems/testing';
 import { ProblemsRepository } from '../src/modules/problems/core/problems.repository';
 import { ProblemDataStore } from '../src/modules/problems/data/problem-data.store';
@@ -187,26 +192,103 @@ describe('organization quota', () => {
   });
 
   describe('storage meter', () => {
-    it('refuses a write that passes the byte limit and names the numbers', async () => {
+    let catalog: Catalog;
+    let meter: QuotaLedger;
+    let counter = 0;
+    const storing = (organizationIds: string[], bytes: Partial<Problem>) => {
+      counter += 1;
+      return createProblem(api, catalog, {
+        code: `sm${counter}`,
+        isPublic: false,
+        isOrganizationPrivate: true,
+        organizations: organizationIds,
+        ...bytes,
+      });
+    };
+    /** An organization limited to 550 bytes that holds 500 (data, PDF statement and material). */
+    const holding500 = async (caps: Record<string, unknown> = {}) => {
       const organization = await createOrganization(api, {
         quotaStorageBytes: 550,
+        ...caps,
       });
+      const problem = await storing([organization._id], {
+        dataBytes: 300,
+        pdfStatementBytes: 150,
+        materialBytes: 50,
+      });
+      return { organizationId: organization._id, problem };
+    };
+
+    beforeAll(async () => {
+      catalog = await seedCatalog(api);
+      meter = api.app.get(QuotaLedger);
+    });
+
+    it('lets a write through under the limit and exactly at it', async () => {
+      const { organizationId } = await holding500();
+      expect(await meter.usedStorageBytes(organizationId)).toBe(500);
       await expect(
-        quota.assertStorage(organization._id, {
-          usedBytes: 500,
-          addedBytes: 100,
-        }),
+        meter.assertStorage(organizationId, 40),
+      ).resolves.toBeUndefined();
+      await expect(
+        meter.assertStorage(organizationId, 50),
+      ).resolves.toBeUndefined();
+    });
+
+    it('refuses a write past the limit with the storage issue and the numbers', async () => {
+      const { organizationId } = await holding500();
+      await expect(
+        meter.assertStorage(organizationId, 51),
       ).rejects.toMatchObject({
         code: 'quota_exceeded',
+        status: 403,
         extra: {
-          details: { meter: 'storage', limit: 550, used: 500, needed: 100 },
+          details: { meter: 'storage', limit: 550, used: 500, needed: 51 },
+          issues: [{ field: 'storage', code: 'quota_exceeded' }],
         },
       });
+    });
+
+    it('always lets a write through that adds nothing, even over the limit', async () => {
+      const { organizationId } = await holding500({ quotaStorageBytes: 100 });
       await expect(
-        quota.assertStorage(organization._id, {
-          usedBytes: 500,
-          addedBytes: 50,
-        }),
+        meter.assertStorage(organizationId, 0),
+      ).resolves.toBeUndefined();
+      await expect(
+        meter.assertStorage(organizationId, -10),
+      ).resolves.toBeUndefined();
+    });
+
+    it('charges a problem to its first organization only', async () => {
+      const { organizationId } = await holding500();
+      const other = await createOrganization(api);
+      await storing([other._id, organizationId], { dataBytes: 400 });
+      expect(await meter.usedStorageBytes(organizationId)).toBe(500);
+      expect(await meter.usedStorageBytes(other._id)).toBe(400);
+    });
+
+    it('keeps counting a deleted problem until its purge releases the bytes', async () => {
+      const { organizationId, problem } = await holding500();
+      await softDelete(api, problem._id);
+      await expect(
+        meter.assertStorage(organizationId, 100),
+      ).rejects.toMatchObject({ code: 'quota_exceeded' });
+      await tombstone(api, problem._id);
+      expect(await meter.usedStorageBytes(organizationId)).toBe(0);
+      await expect(
+        meter.assertStorage(organizationId, 100),
+      ).resolves.toBeUndefined();
+    });
+
+    it('lets an over-limit write through when unlimited or in warn mode', async () => {
+      const unlimited = await holding500({ quotaUnlimited: true });
+      await expect(
+        meter.assertStorage(unlimited.organizationId, 1000),
+      ).resolves.toBeUndefined();
+      const { organizationId } = await holding500();
+      await warn();
+      await expect(
+        meter.assertStorage(organizationId, 1000),
       ).resolves.toBeUndefined();
     });
   });
@@ -780,7 +862,7 @@ describe('problem data quota', () => {
         },
       );
     const usedBytes = (organizationId: string) =>
-      api.app.get(ProblemsRepository).sumStoredBytes(organizationId);
+      api.app.get(QuotaLedger).usedStorageBytes(organizationId);
 
     it('count against the storage limit; a replaced or removed file gives its bytes back', async () => {
       const { organization, problem } = await orgProblem(
@@ -919,6 +1001,24 @@ describe('quota 80 percent warning', () => {
   };
   const spend = (organizationId: string, now?: Date) =>
     quota.charged(organizationId, request, () => Promise.resolve(1), now);
+  let catalog: Catalog;
+  let counter = 0;
+  /** A private problem of the organization holding `dataBytes`; returns a setter for its size. */
+  const storing = async (organizationId: string, dataBytes: number) => {
+    counter += 1;
+    const problem = await createProblem(api, catalog, {
+      code: `qw${counter}`,
+      isPublic: false,
+      isOrganizationPrivate: true,
+      organizations: [organizationId],
+      dataBytes,
+    });
+    return (bytes: number) =>
+      api.problems.updateOne(
+        { _id: problem._id },
+        { $set: { dataBytes: bytes } },
+      );
+  };
 
   beforeAll(async () => {
     await api.reset();
@@ -926,6 +1026,7 @@ describe('quota 80 percent warning', () => {
       .spyOn(api.app.get(NotificationsService), 'notify')
       .mockImplementation(fake.notify as never);
     quota = api.app.get(QuotaService);
+    catalog = await seedCatalog(api);
     await api.setSetting('quota.cost.problem', 1);
   });
   beforeEach(() => {
@@ -958,13 +1059,16 @@ describe('quota 80 percent warning', () => {
       adminIds: [admin],
       quotaStorageBytes: 1000,
     });
-    await quota.afterStorageWrite(organization._id, 700);
+    const resize = await storing(organization._id, 700);
+    await quota.afterStorageWrite(organization._id);
     expect(sent).toHaveLength(0);
-    await quota.afterStorageWrite(organization._id, 850);
+    await resize(850);
+    await quota.afterStorageWrite(organization._id);
     expect(sent).toHaveLength(1);
     expect(sent[0].recipients).toEqual([admin]);
     expect(sent[0].draft.groupKey).toContain('storage');
-    await quota.afterStorageWrite(organization._id, 900);
+    await resize(900);
+    await quota.afterStorageWrite(organization._id);
     expect(sent).toHaveLength(1);
   });
 
@@ -981,20 +1085,25 @@ describe('quota 80 percent warning', () => {
     expect(
       await quota.creditsUsed({
         organizationId: organization._id,
-        month: quota.monthKeyOf(new Date()),
+        month: api.app.get(QuotaLedger).monthKeyOf(new Date()),
       }),
     ).toBe(1);
     reading.mockRestore();
+    await storing(organization._id, 900);
+    const meter = api.app.get(QuotaLedger);
     const limits = jest
-      .spyOn(quota, 'limitsOf')
+      .spyOn(meter, 'limitsOf')
       .mockRejectedValueOnce(new Error('mongo blip'));
     await expect(
-      quota.afterStorageWrite(organization._id, 900),
+      quota.afterStorageWrite(organization._id),
     ).resolves.toBeUndefined();
     limits.mockRestore();
-    const sizing = jest.fn().mockRejectedValueOnce(new Error('sum failed'));
+    const sizing = jest
+      .spyOn(meter, 'usedStorageBytes')
+      .mockRejectedValueOnce(new Error('sum failed'));
     await expect(
-      quota.afterStorageWrite(organization._id, sizing),
+      quota.afterStorageWrite(organization._id),
     ).resolves.toBeUndefined();
+    sizing.mockRestore();
   });
 });

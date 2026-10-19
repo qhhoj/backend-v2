@@ -8,6 +8,6 @@ import { QuotaService } from './quota.service';
 @Module({
   imports: [NotificationsModule, QuotaLedgerModule],
   providers: [QuotaService, QuotaWarningNotifier],
-  exports: [QuotaService],
+  exports: [QuotaService, QuotaLedgerModule],
 })
 export class OrganizationQuotaModule {}

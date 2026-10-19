@@ -2,9 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { UsersRepository } from '@libs/auth';
 import type { Principal } from '@libs/auth';
 import { Paginated } from '@libs/common';
+import { QuotaLedger } from '@libs/problems';
 import { uuidStr } from '@libs/database';
 import type { OrganizationCreditEntry } from '@libs/database';
-import { ProblemsRepository } from '../../problems/core/problems.repository';
 import type { OrganizationDocument } from '../core/organizations.repository';
 import { OrganizationsService } from '../core/organizations.service';
 import { QuotaService } from '../quota/quota.service';
@@ -44,7 +44,7 @@ export class OrganizationUsageService {
   constructor(
     private readonly organizations: OrganizationsService,
     private readonly quota: QuotaService,
-    private readonly problems: ProblemsRepository,
+    private readonly ledger: QuotaLedger,
     private readonly repository: OrganizationUsageRepository,
     private readonly users: UsersRepository,
   ) {}
@@ -81,14 +81,14 @@ export class OrganizationUsageService {
   async overview(
     query: UsageOverviewQueryDto,
   ): Promise<Paginated<UsageOverviewRowResponse>> {
-    const month = this.quota.monthKeyOf(new Date());
+    const month = this.ledger.monthKeyOf(new Date());
     const { rows, total } = await this.repository.overview(month, query);
-    const bytes = await this.problems.sumStoredBytesByOrganization(
+    const bytes = await this.ledger.usedStorageBytesOf(
       rows.map((row) => row.id),
     );
     return new Paginated(
       rows.map((row) => {
-        const limits = this.quota.limitsFrom(row);
+        const limits = this.ledger.limitsFrom(row);
         return {
           slug: row.slug,
           name: row.name,
@@ -107,11 +107,10 @@ export class OrganizationUsageService {
   private async respond(
     organization: OrganizationDocument,
   ): Promise<OrganizationUsageResponse> {
-    const [usedBytes, recent] = await Promise.all([
-      this.problems.sumStoredBytes(organization._id),
+    const [snapshot, recent] = await Promise.all([
+      this.quota.snapshot(organization._id),
       this.repository.recentEntries(organization._id),
     ]);
-    const snapshot = await this.quota.snapshot(organization._id, usedBytes);
     const caps = quotaOf(organization);
     return {
       organization: { slug: organization.slug, name: organization.name },
