@@ -21,12 +21,10 @@ export class ImportQuota {
       ? target.storageOrganizationId
       : job.meteredOrganizationId;
     if (!organizationId) return;
-    const write = {
-      usedBytes: await this.ledger.usedStorageBytes(organizationId),
-      addedBytes: (await stat(packagePath)).size - (target?.dataBytes ?? 0),
-    };
+    const addedBytes =
+      (await stat(packagePath)).size - (target?.dataBytes ?? 0);
     try {
-      await this.ledger.assertStorage(organizationId, write);
+      await this.ledger.assertStorage(organizationId, addedBytes);
     } catch (error) {
       const refusal = quotaRefusalOf(error);
       if (!refusal) throw error;

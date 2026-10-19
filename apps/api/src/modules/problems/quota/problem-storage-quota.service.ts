@@ -3,19 +3,18 @@ import { stat } from 'node:fs/promises';
 import type { Principal } from '@libs/auth';
 import { uuidStr } from '@libs/database';
 import type { Problem } from '@libs/database';
-import { ProblemDataFilesService } from '@libs/problems';
+import { ProblemDataFilesService, QuotaLedger } from '@libs/problems';
 import { chargedOrganization } from '../../organizations/quota/quota-charge';
 import { QuotaService } from '../../organizations/quota/quota.service';
-import { ProblemsRepository } from '../core/problems.repository';
 import type { ProblemDocument } from '../core/problems.repository';
 import { problemChargeSubject } from './problem-charge-subject';
 
-/** The storage meter for problem files: what an organization already holds (`dataBytes` plus the PDF statement and material bytes) against what a write adds. */
+/** The problem side of the storage meter (`QuotaLedger.assertStorage`): which organization a problem is charged to and the bytes a write adds. */
 @Injectable()
 export class ProblemStorageQuota {
   constructor(
+    private readonly ledger: QuotaLedger,
     private readonly quota: QuotaService,
-    private readonly problems: ProblemsRepository,
     private readonly dataFiles: ProblemDataFilesService,
   ) {}
 
@@ -54,18 +53,13 @@ export class ProblemStorageQuota {
     write: { addedBytes: number },
   ): Promise<void> {
     if (organizationId === null) return;
-    await this.quota.assertStorage(organizationId, {
-      usedBytes: await this.problems.sumStoredBytes(organizationId),
-      addedBytes: write.addedBytes,
-    });
+    await this.ledger.assertStorage(organizationId, write.addedBytes);
   }
 
   /** After a file write: warns the organization's admins once it passes 80% of storage. Never throws (see `QuotaService.afterStorageWrite`). */
   async afterWrite(organizationId: string | null): Promise<void> {
     if (organizationId === null) return;
-    await this.quota.afterStorageWrite(organizationId, () =>
-      this.problems.sumStoredBytes(organizationId),
-    );
+    await this.quota.afterStorageWrite(organizationId);
   }
 
   /** Size of the file an upload will replace (0 when there is none or it is gone). */
