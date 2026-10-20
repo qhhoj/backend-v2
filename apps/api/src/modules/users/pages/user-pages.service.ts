@@ -253,7 +253,7 @@ export class UserPagesService {
   }
 
   private async ppEntries(userId: string): Promise<PpEntryResponse[]> {
-    const key = `user-pp:${userId}`;
+    const key = `user-pp:v2:${userId}`;
     const cached = await this.redis.get(key);
     if (cached) return JSON.parse(cached) as PpEntryResponse[];
     const rows = await this.pages.ppBreakdown(
@@ -277,6 +277,7 @@ export class UserPagesService {
           caseTotal: row.submission.caseTotal,
           result: row.submission.result,
           language: language?.shortName || language?.key || '',
+          languageKey: language?.key ?? null,
         },
       };
     });

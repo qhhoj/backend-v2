@@ -107,9 +107,11 @@ export class ContestStatsService {
       languages: [...new Set(byLanguage.map((row) => row.key))]
         .map((languageId) => {
           const count = countOf(byLanguage, languageId, null);
+          const language = this.languages.byId(languageId);
           return {
             languageId,
-            name: this.languages.byId(languageId)?.name ?? '',
+            name: language?.name ?? '',
+            languageKey: language?.key ?? null,
             count,
             acRate: percent(countOf(byLanguage, languageId, ['AC']), count),
           };

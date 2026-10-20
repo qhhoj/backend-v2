@@ -108,6 +108,8 @@ export class PpSubmissionResponse {
   result!: string | null;
   /** Short name of the programming language. */
   language!: string;
+  /** Language key such as `CPP17`; null if the language is gone. */
+  languageKey!: string | null;
 }
 
 export class PpEntryResponse {

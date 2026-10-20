@@ -350,10 +350,15 @@ afterAll(() => api.teardown());
         ['beta', '2', { AC: 1, WA: 0, CE: 0, TLE: 0, ERR: 0, RJ: 0 }, 1, 100],
       ]);
       expect(
-        body.languages.map(({ name, count, acRate }) => [name, count, acRate]),
+        body.languages.map(({ name, languageKey, count, acRate }) => [
+          name,
+          languageKey,
+          count,
+          acRate,
+        ]),
       ).toEqual([
-        ['C++17', 3, 200 / 3],
-        ['Python 3', 2, 0],
+        ['C++17', 'CPP17', 3, 200 / 3],
+        ['Python 3', 'PY3', 2, 0],
       ]);
     });
 
