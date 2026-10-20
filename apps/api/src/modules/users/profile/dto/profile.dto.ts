@@ -33,6 +33,7 @@ export const APPEARANCE_ACCENTS = [
   'sunset',
   'gold',
   'mono',
+  'red',
 ] as const;
 export type AppearanceAccent = (typeof APPEARANCE_ACCENTS)[number];
 /** The only profile field a PATCH may set to `null`: the site's look. */

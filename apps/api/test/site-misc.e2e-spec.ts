@@ -296,6 +296,20 @@ describe('profile', () => {
       }).expect(200),
     );
     expect(edge.appearance).toEqual({ accent: 'gold', glass: 100, glow: 100 });
+    const red = dataOf<ProfileResponse>(
+      await patch({
+        appearance: { accent: 'red', glass: 50, glow: 50 },
+      }).expect(200),
+    );
+    expect(red.appearance).toEqual({ accent: 'red', glass: 50, glow: 50 });
+
+    // An accent the frontend has no preset for is refused and changes nothing.
+    await patch({
+      appearance: { accent: 'crimson', glass: 50, glow: 50 },
+    }).expect(400);
+    expect(dataOf<ProfileResponse>(await get().expect(200)).appearance).toEqual(
+      { accent: 'red', glass: 50, glow: 50 },
+    );
 
     // null is the one way back to the site's look; mode (siteTheme) is not part of it.
     const cleared = dataOf<ProfileResponse>(
