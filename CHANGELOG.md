@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.34.3
+
+### Patch Changes
+
+- ef0cb00: Add `languageKey` to contest language stats and profile PP submission rows.
+
 ## 2.34.2
 
 ### Patch Changes
