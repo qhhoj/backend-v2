@@ -2760,6 +2760,11 @@
           "languageId": {
             "type": "string"
           },
+          "languageKey": {
+            "description": "Language key such as `CPP17`; null if the language is gone.",
+            "nullable": true,
+            "type": "string"
+          },
           "name": {
             "description": "Language name.",
             "type": "string"
@@ -2768,6 +2773,7 @@
         "required": [
           "languageId",
           "name",
+          "languageKey",
           "count",
           "acRate"
         ],
@@ -9109,6 +9115,11 @@
             "description": "Short name of the programming language.",
             "type": "string"
           },
+          "languageKey": {
+            "description": "Language key such as `CPP17`; null if the language is gone.",
+            "nullable": true,
+            "type": "string"
+          },
           "result": {
             "description": "Verdict code such as `AC`; null if none.",
             "nullable": true,
@@ -9121,7 +9132,8 @@
           "casePoints",
           "caseTotal",
           "result",
-          "language"
+          "language",
+          "languageKey"
         ],
         "type": "object"
       },

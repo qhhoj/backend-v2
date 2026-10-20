@@ -31,6 +31,8 @@ export class ContestLanguageStatsResponse {
   languageId!: string;
   /** Language name. */
   name!: string;
+  /** Language key such as `CPP17`; null if the language is gone. */
+  languageKey!: string | null;
   /** Submissions in this language. */
   count!: number;
   /** Percentage of `count`. */

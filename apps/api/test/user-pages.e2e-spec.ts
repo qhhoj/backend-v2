@@ -269,7 +269,7 @@ afterAll(() => api.teardown());
         points: 1000,
         scaledPoints: 1000,
         problem: { code: 'pp_a' },
-        submission: { id: best._id, language: 'CPP17' },
+        submission: { id: best._id, language: 'CPP17', languageKey: 'CPP17' },
       });
       expect(
         (response.body as { meta: { hasMore: boolean } }).meta.hasMore,
@@ -338,7 +338,7 @@ afterAll(() => api.teardown());
         { startTime: hoursFromNow(-5), endTime: hoursFromNow(-1) },
       );
       // The breakdown is cached per user for ten minutes.
-      await api.app.get<Redis>(REDIS).del(`user-pp:${racer._id}`);
+      await api.app.get<Redis>(REDIS).del(`user-pp:v2:${racer._id}`);
       for (const session of [undefined, viewer])
         expect(await shown(session)).toEqual({
           solved: ['race_c', 'race_p'],
