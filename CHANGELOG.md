@@ -1,5 +1,11 @@
 # qhhoj-backend
 
+## 2.34.2
+
+### Patch Changes
+
+- f3d23c7: Accept `red` as an appearance accent.
+
 ## 2.34.1
 
 ### Patch Changes
