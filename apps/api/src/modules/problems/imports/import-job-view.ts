@@ -56,6 +56,7 @@ const resultOf = (
         problemId: result.problemId,
         code: result.code,
         summary: result.summary ?? null,
+        localEdits: result.localEdits ?? null,
         attention: result.attention ?? null,
       }
     : null;

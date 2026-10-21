@@ -12,6 +12,8 @@ import {
 import type { ReadyPackage } from '@libs/problems';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
 import { ProblemImportsService } from '../imports/problem-imports.service';
+import type { ImportJob } from '../imports/import-queue';
+import { SyncPolygonProblemDto } from './dto/polygon-link.dto';
 import { PolygonLinkImportDto } from './dto/polygon-problems.dto';
 import { askPolygon } from './polygon-errors';
 import { linkedProblem } from './polygon-link.service';
@@ -63,30 +65,31 @@ export class PolygonLinkImportService {
     return { jobId };
   }
 
-  /** Re-applies the newest READY package (full or standard; even the one already synced: a manual sync is also a repair) with the link's options. A sync of that package already queued or running (manual or automatic) is answered with its job instead of a second one, and spends nothing. */
+  /** Re-applies the newest READY package (full or standard; even the one already synced: a manual sync is also a repair) with the link's options; `overwriteLocalEdits` also replaces the settings edited on QHHOJ since the last import. A sync of that package already queued or running (manual or automatic) is answered with its job instead of a second one, and spends nothing. */
   async sync(
     auth: AuthContext,
     code: string,
+    { overwriteLocalEdits = false }: SyncPolygonProblemDto,
   ): Promise<ImportJobStartedResponse> {
     const document = await this.imports.importableProblem(auth.principal, code);
     const problem = linkedProblem(document);
     const latest = await this.latestReadyOf(problem.polygonLink.problemId);
     const jobId = syncJobId(document._id, latest.id);
-    if (await this.imports.isUnfinished(jobId)) return { jobId };
+    const running = await this.imports.unfinishedJob(jobId);
+    if (running) return joinedSync(running, overwriteLocalEdits);
     await assertOptionsFit(
       this.polygon,
       problem.polygonLink.problemId,
       problem.polygonLink.options,
     );
     await this.imports.reserveImport(auth);
-    await this.imports.enqueue(
-      auth,
-      jobId,
-      syncJobOf(problem, latest, {
+    await this.imports.enqueue(auth, jobId, {
+      ...syncJobOf(problem, latest, {
         userId: auth.principal.userId,
         trigger: 'manual',
       }),
-    );
+      ...(overwriteLocalEdits && { overwriteLocalEdits }),
+    });
     return { jobId };
   }
 
@@ -96,6 +99,20 @@ export class PolygonLinkImportService {
       await askPolygon(() => this.polygon.packages(polygonId)),
     );
   }
+}
+
+/** A queued sync that keeps the local edits would silently drop an `overwriteLocalEdits` request, so that one is refused until it ends. */
+function joinedSync(
+  running: ImportJob,
+  overwriteLocalEdits: boolean,
+): ImportJobStartedResponse {
+  if (overwriteLocalEdits && !running.data.overwriteLocalEdits)
+    throw new AppError(
+      'polygon_sync_queued',
+      409,
+      'A sync of this package that keeps the local edits is queued or running: overwrite them once it ends',
+    );
+  return { jobId: running.id ?? '' };
 }
 
 /** Auto-sync runs as the linking user and needs the sync permission on every run (the worker re-checks it), and an update replaces the problem's link, so both need it; an importer without it creates a linked problem with `autoSync` false. */

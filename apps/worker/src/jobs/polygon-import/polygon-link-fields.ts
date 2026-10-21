@@ -1,16 +1,21 @@
-import type { PolygonLink } from '@libs/database';
+import type {
+  PolygonLink,
+  SyncedSetting,
+  SyncedSettingFingerprints,
+} from '@libs/database';
 import type { PolygonImportJob, PolygonSource } from '@libs/problems';
 
-/** What a successful import learnt of the package beyond the job: the statement title it applied, and when. */
+/** What a successful import learnt of the package beyond the job: the statement title it applied, the package's editable settings, and when. */
 export interface SyncedPackage {
   title: string;
+  settings: SyncedSettingFingerprints;
   now: Date;
 }
 
 /** The fields of a successful sync attempt. */
 const syncedFields = (
   source: PolygonSource,
-  { title, now }: SyncedPackage,
+  { title, settings, now }: SyncedPackage,
 ) => ({
   name: source.name,
   owner: source.owner,
@@ -20,6 +25,7 @@ const syncedFields = (
     ? new Date(source.packageCreatedAt)
     : null,
   title,
+  importedSettings: settings,
   lastSyncAt: now,
   lastSyncResult: 'ok' as const,
   lastSyncError: null,
@@ -79,9 +85,14 @@ export const linkSummary = (link: PolygonLink | null | undefined) =>
       }
     : null;
 
-export function importComment(job: PolygonImportJob): string {
+/** Names the settings a sync kept as edited on QHHOJ. */
+export function importComment(
+  job: PolygonImportJob,
+  kept: SyncedSetting[] = [],
+): string {
   const source = job.polygon;
   if (!source) return `Imported from a Polygon package (${job.mode})`;
   const what = source.purpose === 'sync' ? 'Synced' : 'Imported';
-  return `${what} from Polygon problem ${source.problemId} (revision ${source.revision}, package ${source.packageId})`;
+  const keeping = kept.length ? `; kept local ${kept.join(', ')}` : '';
+  return `${what} from Polygon problem ${source.problemId} (revision ${source.revision}, package ${source.packageId})${keeping}`;
 }

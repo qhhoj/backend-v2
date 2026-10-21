@@ -23,7 +23,7 @@ import { assertOrganizationCodePrefix } from '../editing/organization-code-prefi
 import { ImportJobResponse } from './dto/import-job.response';
 import { importJobView } from './import-job-view';
 import {
-  isUnfinished,
+  unfinishedJob,
   jobsOf,
   queuePositionsOf,
   removeFinished,
@@ -135,9 +135,9 @@ export class ProblemImportsService {
     );
   }
 
-  /** True while the job is queued or running. */
-  isUnfinished(jobId: string): Promise<boolean> {
-    return isUnfinished(this.queue, jobId);
+  /** The job while it is queued or running; null otherwise. */
+  unfinishedJob(jobId: string): Promise<ImportJob | null> {
+    return unfinishedJob(this.queue, jobId);
   }
 
   /** The id of the queued or running import (a sync too) into `code`; null when none. */

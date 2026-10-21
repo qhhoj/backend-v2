@@ -152,6 +152,14 @@ export const EMPTY_TEST_CASE: Readonly<ProblemTestCase> = Object.freeze({
   outputLimit: null,
 });
 
+/** Every file in the data directory a configuration names. */
+export const dataFileNamesOf = (
+  data: Pick<ProblemData, DataFileKind | 'helperHeaders'>,
+): string[] => [
+  ...DATA_FILE_KINDS.flatMap((kind) => data[kind] ?? []),
+  ...(data.helperHeaders ?? []),
+];
+
 export const emptyProblemData = (): ProblemData => ({
   archive: null,
   generator: null,

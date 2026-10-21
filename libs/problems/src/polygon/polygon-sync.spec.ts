@@ -10,6 +10,7 @@ const link: PolygonLink = {
   packageId: 10,
   packageCreatedAt: null,
   title: 'Sum',
+  importedSettings: null,
   linkedAt: new Date(0),
   linkedBy: 'linker',
   lastSyncAt: new Date(0),

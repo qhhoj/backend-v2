@@ -37,7 +37,11 @@ export class PolygonImportProcessor extends WorkerHost {
     const tracker = new ImportTracker((progress) => this.report(job, progress));
     try {
       if (!job.id) throw new Error('A queued job always has an id');
-      const result = await this.imports.import(job.id, job.data, tracker);
+      const result = await this.imports.import(
+        { id: job.id, queuedAt: new Date(job.timestamp) },
+        job.data,
+        tracker,
+      );
       await this.recordSuccess(job, result);
       return result;
     } catch (error) {

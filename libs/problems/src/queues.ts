@@ -3,6 +3,7 @@ import type {
   PolygonSyncStep,
   StatementLanguage,
   StatementLanguageChoice,
+  SyncedSetting,
 } from '@libs/database';
 import type {
   ImportErrorParams,
@@ -74,6 +75,8 @@ export interface PolygonImportJob {
   maxCases: number;
   /** The problem's `dataVersion` when the import was queued (update only); the worker refuses if it moved since. */
   expectedDataVersion?: number;
+  /** Sync only: replace the settings edited on QHHOJ since the last import with the package's (`SYNCED_SETTINGS`); absent keeps them. */
+  overwriteLocalEdits?: boolean;
   /** Set when the worker downloads the package from Polygon instead of reading an uploaded one; the import then writes `polygonLink`. */
   polygon?: PolygonSource;
   /** Written by the worker when the job fails: where it stopped, and why as a code with its parameters. */
@@ -82,7 +85,7 @@ export interface PolygonImportJob {
   errorParams?: ImportErrorParams;
 }
 
-/** A limit as Polygon gives it and as QHHOJ stores it, clamped to the editor's range (seconds, or KiB). */
+/** A limit as Polygon gives it and as QHHOJ stores it: clamped to the editor's range, or the local value a sync kept (seconds, or KiB). */
 export interface ClampedLimit {
   polygon: number;
   applied: number;
@@ -92,7 +95,7 @@ export interface ClampedLimit {
 export interface ImportSummary {
   /** The package's checker (`std::wcmp.cpp`, or the source path of a custom one); null for an interactive problem without one. */
   polygonChecker: string | null;
-  /** What judges with it: `standard` (hcmp), `bridged` (the package's own testlib source) or, for an interactive problem, the interactor. */
+  /** What judges with it: `standard` (hcmp), `bridged` (the package's own testlib source) or, for an interactive problem, the interactor; a sync that kept the local checker shows that one. */
   checker: Checker;
   interactive: boolean;
   /** An interactive problem's checker that is not run (only the interactor decides). */
@@ -105,11 +108,19 @@ export interface ImportSummary {
   memoryLimit: ClampedLimit;
 }
 
+/** What a sync did with the settings the package would change: `kept` were edited on QHHOJ since the last import and stay; `updated` took the package's value (changed on Polygon, or local edits overwritten on request). Settings the package leaves as they are appear in neither. */
+export interface LocalEdits {
+  kept: SyncedSetting[];
+  updated: SyncedSetting[];
+}
+
 export interface PolygonImportResult {
   problemId: string;
   code: string;
   /** Absent on jobs that ended before it was recorded, and on a sync another sync had already applied. */
   summary?: ImportSummary;
+  /** Syncs only (absent on a first import and on jobs from before it was recorded). */
+  localEdits?: LocalEdits;
   /** Set when the import committed but a file step after it failed: the problem exists and needs a repair. */
   attention?: {
     code: 'imported_needs_attention';

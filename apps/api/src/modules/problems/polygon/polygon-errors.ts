@@ -30,19 +30,25 @@ export async function askPolygon<Result>(
   }
 }
 
-/** Names Polygon's newest package, also as `newestPackage` (id, revision, state RUNNING or FAILED, and Polygon's comment on it), so the setter sees why a build failed. */
+/** Names Polygon's newest package, also as `newestPackage` (id, revision, state RUNNING or FAILED, and Polygon's comment on it), so the setter sees why a build failed. Before the link's token was checked the comment is left out: it is the setter's text, and the caller has only shown they know the problem's name. */
 export const packageNotReady = (
   polygonId: number,
   packages: PolygonPackageInfo[],
-) =>
-  new AppError(
+  { tokenChecked }: { tokenChecked: boolean },
+) => {
+  const newest = newestPackageOf(packages);
+  return new AppError(
     'polygon_package_not_ready',
     409,
     `Polygon problem ${polygonId} has no READY package: ${packageNotReadyReason(packages)}. Build a package on Polygon first`,
     undefined,
     undefined,
-    { newestPackage: newestPackageOf(packages) },
+    {
+      newestPackage:
+        newest && !tokenChecked ? { ...newest, comment: null } : newest,
+    },
   );
+};
 
 /** Another request is reading this problem's package for its first link check; the first check of a large package can take minutes. */
 export const linkBeingChecked = () =>

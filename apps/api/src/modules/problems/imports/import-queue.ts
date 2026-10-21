@@ -8,13 +8,13 @@ export type ImportJob = Job<PolygonImportJob, PolygonImportResult>;
 const UNFINISHED: JobType[] = ['active', 'waiting', 'delayed', 'prioritized'];
 const FINISHED = new Set(['completed', 'failed']);
 
-/** True while the job with this id is queued or running. */
-export async function isUnfinished(
+/** The job with this id while it is queued or running; null otherwise. */
+export async function unfinishedJob(
   queue: ImportQueue,
   jobId: string,
-): Promise<boolean> {
+): Promise<ImportJob | null> {
   const job = await queue.getJob(jobId);
-  return Boolean(job && !FINISHED.has(await job.getState()));
+  return job && !FINISHED.has(await job.getState()) ? job : null;
 }
 
 /** A finished job is kept a day, and BullMQ ignores an `add` with its id meanwhile: a new sync of the same package replaces it. */

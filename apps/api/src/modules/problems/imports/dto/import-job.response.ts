@@ -2,11 +2,13 @@ import {
   CHECKERS,
   POLYGON_SYNC_PURPOSES,
   POLYGON_SYNC_STEPS,
+  SYNCED_SETTINGS,
 } from '@libs/database';
 import type {
   Checker,
   PolygonSyncPurpose,
   PolygonSyncStep,
+  SyncedSetting,
 } from '@libs/database';
 import { IMPORT_STEPS, POLYGON_IMPORT_ERROR_CODES } from '@libs/problems';
 import type {
@@ -20,7 +22,7 @@ import {
   ApiImportErrorParams,
 } from './import-error.decorators';
 
-/** A limit as Polygon gives it and as stored, clamped to the editor's range. */
+/** A limit as Polygon gives it and as stored: clamped to the editor's range, or the local value a sync kept. */
 export class ClampedLimitResponse {
   polygon!: number;
   applied!: number;
@@ -30,7 +32,7 @@ export class ClampedLimitResponse {
 export class ImportSummaryResponse {
   /** The package's checker (`std::wcmp.cpp`, or a custom checker's source path); null for an interactive problem without one. */
   polygonChecker!: string | null;
-  /** What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker); an interactive problem's interactor decides alone. */
+  /** What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem's interactor decides alone. */
   @ApiProperty({ enum: CHECKERS, enumName: 'Checker' })
   checker!: Checker;
   interactive!: boolean;
@@ -61,6 +63,24 @@ export class ImportAttentionResponse {
   message!: string;
 }
 
+/** What a sync did with the settings a setter may edit on QHHOJ (`checker`: type, arguments and source; `grader`: grader, arguments, interactor and header). Settings the package leaves as they are appear in neither list. */
+export class LocalEditsResponse {
+  /** Edited on QHHOJ since the last import: the problem keeps its value. */
+  @ApiProperty({
+    enum: SYNCED_SETTINGS,
+    enumName: 'SyncedSetting',
+    isArray: true,
+  })
+  kept!: SyncedSetting[];
+  /** Took the package's value: changed on Polygon, or a local edit overwritten on request. */
+  @ApiProperty({
+    enum: SYNCED_SETTINGS,
+    enumName: 'SyncedSetting',
+    isArray: true,
+  })
+  updated!: SyncedSetting[];
+}
+
 /** The imported problem, once the job completed. */
 export class ImportResultResponse {
   /** Id of the created or updated problem. */
@@ -69,6 +89,8 @@ export class ImportResultResponse {
   code!: string;
   /** Null for jobs from before it was recorded and for a sync another sync had already applied. */
   summary!: ImportSummaryResponse | null;
+  /** Syncs only; null for a first import and for jobs from before it was recorded. */
+  localEdits!: LocalEditsResponse | null;
   /** Set when the problem was imported but needs a repair. */
   attention!: ImportAttentionResponse | null;
 }

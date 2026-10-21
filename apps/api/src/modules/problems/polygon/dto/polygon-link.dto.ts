@@ -28,3 +28,9 @@ export class UpdatePolygonLinkDto {
   @IsOptional() @IsBoolean() ignoreZeroPointCases?: boolean;
   @IsOptional() @IsBoolean() appendMainSolution?: boolean;
 }
+
+/** The body is optional: a sync without one keeps the local edits. */
+export class SyncPolygonProblemDto {
+  /** Replace the time and memory limits, partial scoring, checker and grader settings edited on QHHOJ since the last import with the package's values; by default they are kept. */
+  @IsOptional() @IsBoolean() overwriteLocalEdits?: boolean;
+}
