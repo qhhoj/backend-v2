@@ -511,7 +511,7 @@ export class PolygonImportService {
     await this.runSteps(code, [
       ['dropping the cached PDFs', () => this.dropPdfs(code)],
     ]);
-    await this.sourceChecks.checkAfterImport(applied.problemId, read.imported.data);
+    await this.sourceChecks.checkAfterImport(applied.problemId, read.imported);
   }
 
   /** Measured under the data lock, after the files are in place. The import stands when measuring fails: the backfill and the next data write fix the number. */

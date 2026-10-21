@@ -15,7 +15,10 @@ export function importSummaryOf(
     polygonChecker: assets.polygonChecker,
     checker: data.checker,
     interactive,
-    checkerIgnored: interactive && assets.polygonChecker !== null,
+    checkerIgnored:
+      data.grader === 'interactive' &&
+      !data.interactiveChecker &&
+      assets.polygonChecker !== null,
     tests: plan.tests.length,
     cases: data.cases.filter((row) => row.type === 'C').length,
     batches: data.cases.filter((row) => row.type === 'S').length,

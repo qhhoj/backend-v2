@@ -96,6 +96,29 @@ describe('local edits', () => {
     expect(values.data.cases).toBe(incoming.data.cases);
   });
 
+  it('treats whether an interactive problem runs its checker as part of the grader', () => {
+    const interactive = (interactiveChecker: boolean) =>
+      state(
+        { sourceHashes: { customChecker: 'polygon-check', customGrader: 'i' } },
+        {
+          grader: 'interactive',
+          customGrader: 'interactor.cpp',
+          interactiveChecker,
+        },
+      );
+    expect(
+      editedSince(fingerprintsOf(interactive(true)), interactive(false)),
+    ).toEqual(['grader']);
+    expect(settingsNamedIn(['interactiveChecker'])).toEqual(['grader']);
+    const { values, localEdits } = mergeLocalEdits(
+      interactive(true),
+      { state: interactive(false), edited: ['grader'] },
+      false,
+    );
+    expect(localEdits.kept).toEqual(['grader']);
+    expect(values.data.interactiveChecker).toBe(false);
+  });
+
   it('reports nothing for an edit the package now agrees with', () => {
     const { localEdits } = mergeLocalEdits(
       state({ timeLimit: 4 }),

@@ -32,11 +32,11 @@ export class ClampedLimitResponse {
 export class ImportSummaryResponse {
   /** The package's checker (`std::wcmp.cpp`, or a custom checker's source path); null for an interactive problem without one. */
   polygonChecker!: string | null;
-  /** What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem's interactor decides alone. */
+  /** What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem runs it on what the interactor wrote. */
   @ApiProperty({ enum: CHECKERS, enumName: 'Checker' })
   checker!: Checker;
   interactive!: boolean;
-  /** An interactive problem's checker that is not run. */
+  /** An interactive problem whose checker is not run, because a sync kept a local grader where the interactor alone decides. */
   checkerIgnored!: boolean;
   /** Distinct tests. */
   tests!: number;

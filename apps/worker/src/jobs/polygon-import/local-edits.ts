@@ -15,6 +15,7 @@ const GRADER_FIELDS = [
   'graderArgs',
   'customGrader',
   'customHeader',
+  'interactiveChecker',
 ] as const;
 /** Judging options a Polygon package has no say in: a sync always keeps the problem's. */
 const LOCAL_ONLY_FIELDS = [
@@ -79,6 +80,8 @@ export function fingerprintsOf(
       data.graderArgs ?? {},
       data.customHeader,
       sourceHashes.customGrader,
+      // Only when set, so a record written before the field existed still matches an unedited problem.
+      ...(data.interactiveChecker ? ['interactiveChecker'] : []),
     ]),
   };
 }

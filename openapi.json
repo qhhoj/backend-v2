@@ -1510,7 +1510,7 @@
         "type": "object"
       },
       "Checker": {
-        "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem's interactor decides alone.",
+        "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem runs it on what the interactor wrote.",
         "enum": [
           "bridged",
           "easy",
@@ -6469,10 +6469,10 @@
                 "$ref": "#/components/schemas/Checker"
               }
             ],
-            "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem's interactor decides alone."
+            "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem runs it on what the interactor wrote."
           },
           "checkerIgnored": {
-            "description": "An interactive problem's checker that is not run.",
+            "description": "An interactive problem whose checker is not run, because a sync kept a local grader where the interactor alone decides.",
             "type": "boolean"
           },
           "interactive": {
