@@ -29,7 +29,7 @@ const withTimeLimit = (value: string, points = '1') =>
   `<problem><judging><testset name="tests"><time-limit>${value}</time-limit><memory-limit>1048576</memory-limit><input-path-pattern>t/%d</input-path-pattern><answer-path-pattern>t/%d.a</answer-path-pattern><tests><test points="${points}"/></tests></testset></judging></problem>`;
 
 describe('planTests', () => {
-  it('honours the requester testcase limit, counting expanded batch rows too', () => {
+  it('honours the requester testcase limit on distinct tests, not on dependency copies', () => {
     const tests = (count: number) => ({
       tests: Array.from({ length: count }, () => test(1)),
     });
@@ -41,9 +41,22 @@ describe('planTests', () => {
       tests: Array.from({ length: 150 }, () => test(1, 'g')),
       groups: [{ name: 'g', points: 10, policy: 'complete-group' as const }],
     };
-    expect(plan(batch, { maxCases: 9999 }).cases.length).toBeGreaterThan(150);
-    expect(() => plan(batch, { maxCases: 150 })).toThrow(
-      new PolygonImportError('expanded batch rows exceed the limit of 150'),
+    expect(plan(batch, { maxCases: 150 }).cases).toHaveLength(152);
+    const chain = {
+      tests: Array.from({ length: 160 }, (_item, index) =>
+        test(0, `g${Math.floor(index / 40)}`),
+      ),
+      groups: Array.from({ length: 4 }, (_item, index) => ({
+        name: `g${index}`,
+        points: 25,
+        policy: 'complete-group' as const,
+        dependencies: index ? [`g${index - 1}`] : [],
+      })),
+    };
+    const chained = plan(chain, { maxCases: 300 });
+    expect(chained.tests).toHaveLength(160);
+    expect(chained.cases.filter((row) => row.type === 'C')).toHaveLength(
+      40 + 80 + 120 + 160,
     );
   });
 
@@ -213,11 +226,11 @@ describe('planTests', () => {
       groups: [{ name: 'g0', points: 0, policy: 'complete-group' as const }],
     };
     expect(rows(plan(fixture).cases)).toEqual([
+      'C3:03.inp',
       'S0',
       'C:01.inp',
       'E',
       'C0:02.inp',
-      'C3:03.inp',
     ]);
     expect(
       rows(
@@ -227,6 +240,109 @@ describe('planTests', () => {
         }).cases,
       ),
     ).toEqual(['C3:03.inp']);
+  });
+
+  it('puts a 0-point sample case after every scored case, so its failure cannot stop them', () => {
+    const aplusb = plan({ tests: [test(0), test(1), test(1), test(1)] });
+    expect(rows(aplusb.cases)).toEqual([
+      'C1:02.inp',
+      'C1:03.inp',
+      'C1:04.inp',
+      'C0:01.inp',
+    ]);
+    const exampleGroup = plan({
+      tests: [test(0, 'ex'), test(1, 's1'), test(1, 's1')],
+      groups: [
+        { name: 'ex', points: 0, policy: 'each-test' },
+        { name: 's1', points: 2, policy: 'complete-group' },
+      ],
+    });
+    expect(rows(exampleGroup.cases)).toEqual([
+      'S2',
+      'C:02.inp',
+      'C:03.inp',
+      'E',
+      'C0:01.inp',
+    ]);
+  });
+
+  it('puts a 0-point samples batch after every scored batch and case', () => {
+    const result = plan({
+      tests: [
+        test(0, 'samples'),
+        test(0, 'samples'),
+        test(30, 's1'),
+        test(0, 's1'),
+        test(70, 's2'),
+        test(5),
+      ],
+      groups: [
+        { name: 'samples', points: 0, policy: 'complete-group' },
+        { name: 's1', points: 30, policy: 'complete-group' },
+        {
+          name: 's2',
+          points: 70,
+          policy: 'complete-group',
+          dependencies: ['s1'],
+        },
+      ],
+    });
+    expect(rows(result.cases)).toEqual([
+      'S30',
+      'C:03.inp',
+      'C:04.inp',
+      'E',
+      'S70',
+      'C:03.inp',
+      'C:04.inp',
+      'C:05.inp',
+      'E',
+      'C5:06.inp',
+      'S0',
+      'C:01.inp',
+      'C:02.inp',
+      'E',
+    ]);
+  });
+
+  it('refuses one-sided file io instead of judging it on stdin/stdout', () => {
+    expect(() =>
+      plan({ tests: [test(1)], judging: { inputFile: 'input.txt' } }),
+    ).toThrow(
+      new PolygonImportError(
+        'Polygon sets only the input file input.txt; QHHOJ needs both I/O files or neither',
+      ),
+    );
+    expect(() =>
+      plan({ tests: [test(1)], judging: { outputFile: 'output.txt' } }),
+    ).toThrow(
+      new PolygonImportError(
+        'Polygon sets only the output file output.txt; QHHOJ needs both I/O files or neither',
+      ),
+    );
+  });
+
+  it('refuses rescaled fractional points only for a custom checker that reads them as absolute', () => {
+    const fractional = { tests: [test(2.5), test(2.5), test(5)] };
+    const custom = { path: 'files/check.cpp' };
+    expect(() => plan({ ...fractional, checker: custom })).toThrow(
+      /fractional points with a custom checker/,
+    );
+    expect(
+      rows(
+        plan({ ...fractional, checker: custom, judging: { percent: true } })
+          .cases,
+      ),
+    ).toEqual(['C1:01.inp', 'C1:02.inp', 'C2:03.inp']);
+    expect(
+      rows(
+        plan({ ...fractional, checker: { name: 'std::rcmp6.cpp', ...custom } })
+          .cases,
+      ),
+    ).toEqual(['C1:01.inp', 'C1:02.inp', 'C2:03.inp']);
+    expect(
+      rows(plan({ tests: [test(2), test(3)], checker: custom }).cases),
+    ).toEqual(['C2:01.inp', 'C3:02.inp']);
   });
 
   it('reads file io from judging and rejects a testset without tests', () => {
@@ -314,7 +430,7 @@ describe('planTests', () => {
     );
   });
 
-  it('rejects a dependency chain whose expanded batch rows exceed the limit', () => {
+  it('rejects a dependency chain that expands past the judge case limit', () => {
     const groups = Array.from({ length: 20 }, (_item, index) => ({
       name: `g${index}`,
       points: 1,
@@ -325,7 +441,9 @@ describe('planTests', () => {
       test(0, `g${Math.floor(index / 50)}`),
     );
     expect(() => plan({ tests, groups })).toThrow(
-      new PolygonImportError('expanded batch rows exceed the limit of 9999'),
+      new PolygonImportError(
+        'batches with their dependencies expand to more than 10000 judged cases',
+      ),
     );
   });
 

@@ -15,7 +15,7 @@ import type { XmlElement } from '@libs/problems';
 import { PolygonImportError } from './polygon-import.error';
 import { languageKeyOf } from './polygon-languages';
 import { resolveMemberPath, shown } from './polygon-package';
-import { testNodesOf } from './polygon-tests';
+import { fileIoNamesOf, testNodesOf } from './polygon-tests';
 import type { PlannedTest, TestPlan } from './polygon-tests';
 
 const BYTES_PER_MIB = 1024 * 1024;
@@ -210,16 +210,6 @@ const limitsOf = (plan: TestPlan): GenerationLimits => ({
   maxUploadBytes: MAX_UPLOAD_BYTES,
 });
 
-/** Both names or neither, like the importer's init.yml. */
-function fileIoOf(root: XmlElement): { inputFile: string; outputFile: string } {
-  const judging = descendant(root, 'judging');
-  const inputFile = judging?.attributes['input-file'] ?? '';
-  const outputFile = judging?.attributes['output-file'] ?? '';
-  return inputFile && outputFile
-    ? { inputFile, outputFile }
-    : { inputFile: '', outputFile: '' };
-}
-
 /**
  * What a judge must run to turn a standard package into the tests of its full counterpart: the `tests` testset in
  * file order and the programs it needs. Pure; `hasMember` says whether the package holds a path. A package the judge
@@ -243,6 +233,6 @@ export function buildGenerationPlan(
     limits,
     programs: programsOf(root, tests, hasMember),
     tests,
-    ...fileIoOf(root),
+    ...fileIoNamesOf(root),
   };
 }

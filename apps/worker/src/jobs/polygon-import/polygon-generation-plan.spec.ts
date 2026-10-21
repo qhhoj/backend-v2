@@ -167,7 +167,7 @@ describe('buildGenerationPlan', () => {
     });
   });
 
-  it('passes the file names only when both are set', () => {
+  it('passes the file names when both are set and refuses only one', () => {
     expect(planOf()).toMatchObject({ inputFile: '', outputFile: '' });
     const both = planOf([
       [
@@ -176,10 +176,11 @@ describe('buildGenerationPlan', () => {
       ],
     ]);
     expect(both).toMatchObject({ inputFile: 'in.txt', outputFile: 'out.txt' });
-    const one = planOf([
-      ['input-file="" output-file=""', 'input-file="in.txt" output-file=""'],
-    ]);
-    expect(one).toMatchObject({ inputFile: '', outputFile: '' });
+    const one = () =>
+      planOf([
+        ['input-file="" output-file=""', 'input-file="in.txt" output-file=""'],
+      ]);
+    expect(one).toThrow(/QHHOJ needs both I\/O files or neither/);
   });
 
   it.each([
