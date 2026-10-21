@@ -105,6 +105,27 @@ describe('buildManifest', () => {
     });
     expect(JSON.stringify(manifest)).not.toContain('Cong hai so.');
   });
+
+  it('states whether an interactive problem runs its checker and the headers its sources compile with', () => {
+    const interactive = buildManifest(
+      problem({
+        data: withData([caseRow('1.in')], {
+          grader: 'interactive',
+          customGrader: 'interactor.cpp',
+          interactiveChecker: true,
+          helperHeaders: ['testlib.h', 'constraints.h'],
+        }),
+      }),
+    );
+    expect(interactive.data).toMatchObject({
+      interactiveChecker: true,
+      helperHeaders: ['testlib.h', 'constraints.h'],
+    });
+    // A row from before both fields existed reads as the legacy rule, no headers.
+    expect(
+      buildManifest(problem({ data: withData([caseRow('1.in')]) })).data,
+    ).toMatchObject({ interactiveChecker: false, helperHeaders: [] });
+  });
 });
 
 describe('packageKey', () => {
