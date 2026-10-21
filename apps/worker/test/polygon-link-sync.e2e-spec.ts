@@ -313,6 +313,45 @@ describe('Polygon link, sync and auto-sync', () => {
     });
   });
 
+  it('keeps the catalog of an update that names empty authors, curators and types', async () => {
+    const before = await linked('empty_update');
+    await worker.problems.updateOne(
+      { code: 'empty_update' },
+      { $set: { authors: [requesterId], curators: [requesterId] } },
+    );
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
+    });
+    const { error } = await runJob({
+      ...syncJob(
+        'empty_update',
+        { packageId: 11, revision: 4 },
+        before.dataVersion,
+      ),
+      authors: [],
+      curators: [],
+      typeIds: [],
+    });
+    expect(error).toBeNull();
+    const after = (await worker.problems.findOne({ code: 'empty_update' }))!;
+    expect(after.authors).toEqual([requesterId]);
+    expect(after.curators).toEqual([requesterId]);
+    expect(after.typeIds).toEqual([typeId]);
+  });
+
+  it('gives a create that names no types the default type', async () => {
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum')),
+    });
+    const { error } = await runJob({
+      ...linkJob('empty_create', 10),
+      typeIds: [],
+    });
+    expect(error).toBeNull();
+    const created = (await worker.problems.findOne({ code: 'empty_create' }))!;
+    expect(created.typeIds).toEqual([typeId]);
+  });
+
   it('records a failed sync on the link and leaves the problem as it was', async () => {
     const before = await linked('broken');
     polygon.reply('problem.package', {
