@@ -4,11 +4,12 @@ import { PolygonSyncRun, Problem } from '@libs/database';
 import type { PolygonSyncStep } from '@libs/database';
 import type { PolygonImportJob, PolygonSource } from '@libs/problems';
 import type { Model } from 'mongoose';
+import type { ImportFailure } from './import-failure';
 
 /** How a job ended: the problem it wrote, or where and why it stopped (the error as shown to the requester). */
 export type RunOutcome =
   | { result: 'ok'; problemId: string }
-  | { result: 'failed'; step: PolygonSyncStep; error: string };
+  | { result: 'failed'; step: PolygonSyncStep; failure: ImportFailure };
 
 type RunFields = Omit<PolygonSyncRun, '_id' | 'createdAt'>;
 
@@ -38,7 +39,9 @@ function syncRunOf(
     jobId,
     result: outcome.result,
     failedStep: failed ? outcome.step : null,
-    error: failed ? outcome.error : null,
+    error: failed ? outcome.failure.message : null,
+    errorCode: failed ? outcome.failure.code : null,
+    errorParams: failed ? outcome.failure.params : null,
   };
 }
 

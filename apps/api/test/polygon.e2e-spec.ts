@@ -1,6 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
-import { Worker } from 'bullmq';
+import { UnrecoverableError, Worker } from 'bullmq';
 import type { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import type { Model } from 'mongoose';
@@ -75,6 +75,11 @@ const TOKENS: Record<string, string> = { '1': 'p1Sum00', '2': 'p2Graph' };
 const linkTo = (owner: string, name: string, token: string) =>
   `https://polygon.codeforces.com/${token}/${owner}/${name}`;
 const SUM_LINK = linkTo('alice', 'sum', TOKENS['1']);
+/** `alice/sum` has an English and a Vietnamese statement: an import names the main one and maps the other. */
+const SUM_LANGUAGES = {
+  mainStatementLanguage: 'vietnamese',
+  statementLanguages: ['english=en'],
+};
 /** A package whose problem.xml records `token` in its url (no url when undefined). */
 const packageRecording = (token: string | undefined) =>
   buildZip([
@@ -579,6 +584,7 @@ describe('Polygon routes', () => {
       link: SUM_LINK,
       code: 'empty_lists',
       mode: 'update',
+      ...SUM_LANGUAGES,
       authors: [],
       curators: [],
       typeIds: [],
@@ -600,12 +606,19 @@ describe('Polygon routes', () => {
     expect(await queue.count()).toBe(0);
   });
 
-  it('answers where a failed import stopped, with the error written for the requester', async () => {
+  it('answers where a failed import stopped, with the error written for the requester and its code', async () => {
     const worker = new Worker<PolygonImportJob>(
       POLYGON_QUEUE,
       async (job) => {
-        await job.updateData({ ...job.data, failedStep: 'statements' });
-        throw new Error(`${POLYGON_ERROR_PREFIX}statement.tex is missing`);
+        await job.updateData({
+          ...job.data,
+          failedStep: 'statements',
+          errorCode: 'tutorial_language_required',
+          errorParams: { languages: ['english', 'vietnamese'] },
+        });
+        throw new UnrecoverableError(
+          `${POLYGON_ERROR_PREFIX}invalid main tutorial language (none)`,
+        );
       },
       { connection: queue.opts.connection },
     );
@@ -615,6 +628,7 @@ describe('Polygon routes', () => {
         await post(`${POLYGON}/import`, {
           link: SUM_LINK,
           code: 'fails_polygon',
+          ...SUM_LANGUAGES,
         }).expect(202),
       );
       await waitUntil(
@@ -626,14 +640,148 @@ describe('Polygon routes', () => {
           await get(`/api/internal/problems/imports/${jobId}`).expect(200),
         ),
       ).toMatchObject({
+        code: 'fails_polygon',
+        mode: 'create',
+        purpose: 'link',
         state: 'failed',
         step: 'failed',
+        queuePosition: null,
         failedStep: 'statements',
-        error: 'statement.tex is missing',
+        error: 'invalid main tutorial language (none)',
+        errorCode: 'tutorial_language_required',
+        errorParams: { languages: ['english', 'vietnamese'] },
+        retryable: false,
+        finishedAt: expect.any(String) as unknown,
       });
     } finally {
       await worker.close();
     }
+  });
+
+  it('refuses at queue time the language options and the test count the worker would refuse', async () => {
+    sharedProblems();
+    expect(
+      (
+        await post(`${POLYGON}/import`, {
+          link: SUM_LINK,
+          code: 'no_main',
+        }).expect(400)
+      ).body,
+    ).toMatchObject({
+      error: {
+        code: 'statement_language_required',
+        params: { languages: ['english', 'vietnamese'] },
+      },
+    });
+    polygon.reply('problem.tests', {
+      result: Array.from({ length: 301 }, (_unused, index) => ({ index })),
+    });
+    expect(
+      (
+        await post(`${POLYGON}/import`, {
+          link: SUM_LINK,
+          code: 'many_tests',
+          ...SUM_LANGUAGES,
+        }).expect(400)
+      ).body,
+    ).toMatchObject({
+      error: {
+        code: 'too_many_testcases',
+        params: { count: 301, limit: 300 },
+      },
+    });
+    expect(polygon.callsOf('problem.tests')[0].params).toMatchObject({
+      testset: 'tests',
+      noInputs: 'true',
+    });
+    expect(await queue.count()).toBe(0);
+  });
+
+  it('places waiting jobs in the order the worker takes them, automatic syncs last, and lists my jobs of the day', async () => {
+    const data = (code: string): PolygonImportJob =>
+      ({ requesterId: importerId, code, mode: 'create' }) as PolygonImportJob;
+    const first = newId();
+    const auto = newId();
+    const second = newId();
+    await queue.add('import', data('first'), { jobId: first });
+    await queue.add('sync', data('auto'), { jobId: auto, priority: 10 });
+    await queue.add('import', data('second'), { jobId: second });
+    const placeOf = async (jobId: string) =>
+      dataOf<{ queuePosition: number | null }>(
+        await get(`/api/internal/problems/imports/${jobId}`).expect(200),
+      ).queuePosition;
+    expect([
+      await placeOf(first),
+      await placeOf(second),
+      await placeOf(auto),
+    ]).toEqual([1, 2, 3]);
+    const mine = dataOf<Array<{ id: string; step: string }>>(
+      await get('/api/internal/problems/imports?mine=1').expect(200),
+    );
+    expect(
+      mine
+        .map(({ id }) => id)
+        .filter((id) => [first, auto, second].includes(id)),
+    ).toEqual([second, auto, first]);
+    expect(
+      dataOf(
+        await get('/api/internal/problems/imports?mine=1', plain).expect(200),
+      ),
+    ).toEqual([]);
+    await get('/api/internal/problems/imports').expect(400);
+  });
+
+  it('shows the conversion summary of a finished import and an import that needs a repair', async () => {
+    const summary = {
+      polygonChecker: 'std::wcmp.cpp',
+      checker: 'bridged',
+      interactive: false,
+      checkerIgnored: false,
+      tests: 3,
+      cases: 3,
+      batches: 0,
+      timeLimit: { polygon: 90, applied: 60 },
+      memoryLimit: { polygon: 262144, applied: 262144 },
+    };
+    const attention = {
+      code: 'imported_needs_attention',
+      params: {},
+      message: 'the problem was imported, but writing init.yml failed',
+    };
+    const worker = new Worker<PolygonImportJob>(
+      POLYGON_QUEUE,
+      (job) =>
+        Promise.resolve({
+          problemId: 'p',
+          code: job.data.code,
+          summary,
+          attention,
+        }),
+      { connection: queue.opts.connection },
+    );
+    const jobId = newId();
+    try {
+      await queue.add(
+        'import',
+        { requesterId: importerId, code: 'repair', mode: 'create' } as never,
+        { jobId },
+      );
+      await waitUntil(
+        async () => (await queue.getJob(jobId))?.finishedOn !== undefined,
+        15_000,
+      );
+    } finally {
+      await worker.close();
+    }
+    expect(
+      dataOf(await get(`/api/internal/problems/imports/${jobId}`).expect(200)),
+    ).toMatchObject({
+      state: 'completed',
+      step: 'done',
+      error: null,
+      errorCode: null,
+      result: { code: 'repair', summary, attention },
+    });
   });
 
   it('lists the sync history per problem for its editors, and overall only with judge.edit_all_problem', async () => {
@@ -859,6 +1007,99 @@ describe('Polygon routes', () => {
       await get(links()).expect(404).expect(errorCode('polygon_not_linked'));
     });
 
+    it('edits the saved options, which the next sync uses, writing a revision of the changed fields only', async () => {
+      const patch = (body: object) =>
+        authed(api.http().patch(links()), importer).send(body);
+      polygon.reply('problem.statements', {
+        result: {
+          english: { name: 'Sum' },
+          russian: { name: 'Сумма' },
+          vietnamese: { name: 'Tổng' },
+        },
+      });
+      expect(
+        dataOf(
+          await patch({
+            statementLanguages: ['vietnamese=vi', 'russian=skip'],
+            appendMainSolution: false,
+            ignoreZeroPointCases: true,
+            mainStatementLanguage: 'english',
+          }).expect(200),
+        ),
+      ).toMatchObject({
+        autoSync: false,
+        options: {
+          mainStatementLanguage: 'english',
+          statementLanguages: ['russian=skip', 'vietnamese=vi'],
+          appendMainSolution: false,
+          ignoreZeroPointCases: true,
+          ignoreZeroPointBatches: false,
+          maxCases: 300,
+        },
+      });
+      await patch({ appendMainSolution: false }).expect(200);
+      const problem = await api.problems.findOne({ code });
+      const revisions = await api.revisions.find({
+        entityId: problem!._id,
+        action: 'polygon_link',
+      });
+      expect(revisions.map((revision) => revision.changes)).toEqual([
+        {
+          'polygonLink.options.statementLanguages': {
+            before: { vietnamese: 'vi' },
+            after: { vietnamese: 'vi', russian: 'skip' },
+          },
+          'polygonLink.options.ignoreZeroPointCases': {
+            before: false,
+            after: true,
+          },
+          'polygonLink.options.appendMainSolution': {
+            before: true,
+            after: false,
+          },
+        },
+      ]);
+
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      const { jobId } = dataOf<{ jobId: string }>(
+        await post(`${links()}/sync`).expect(202),
+      );
+      expect((await queue.getJob(jobId))?.data).toMatchObject({
+        statementLanguages: { vietnamese: 'vi', russian: 'skip' },
+        ignoreZeroPointCases: true,
+        appendMainSolution: false,
+        maxCases: 300,
+      });
+    });
+
+    it('refuses options the package would fail with the sync code, and malformed ones, keeping the saved options', async () => {
+      const patch = (body: object) =>
+        authed(api.http().patch(links()), importer).send(body);
+      polygon.reply('problem.statements', {
+        result: {
+          english: { name: 'Sum' },
+          russian: { name: 'Сумма' },
+          vietnamese: { name: 'Tổng' },
+        },
+      });
+      expect(
+        (await patch({ statementLanguages: ['vietnamese=en'] }).expect(400))
+          .body,
+      ).toMatchObject({
+        error: {
+          code: 'statement_language_unmapped',
+          params: { language: 'russian' },
+        },
+      });
+      await patch({ statementLanguages: ['vietnamese=fr'] }).expect(400);
+      await patch({ maxCases: 9999 }).expect(400);
+      const { polygonLink } = (await api.problems.findOne({ code }))!;
+      expect(polygonLink!.options).toMatchObject({
+        statementLanguages: { vietnamese: 'vi' },
+        maxCases: 300,
+      });
+    });
+
     it('shows the title and build time of the synced package and the build time of the newest one', async () => {
       await api.problems.updateOne(
         { code },
@@ -874,6 +1115,43 @@ describe('Polygon routes', () => {
         link: { title: 'Tổng', packageCreatedAt: BUILT_AT },
         latestPackage: { id: 11, createdAt: BUILT_AT },
       });
+    });
+
+    it('shows the last sync failure with its code and parameters, and refuses a sync the link options would fail', async () => {
+      await api.problems.updateOne(
+        { code },
+        {
+          $set: {
+            'polygonLink.lastSyncResult': 'failed',
+            'polygonLink.lastSyncError': 'invalid site language for russian',
+            'polygonLink.lastSyncErrorCode': 'statement_language_unmapped',
+            'polygonLink.lastSyncErrorParams': { language: 'russian' },
+          },
+        },
+      );
+      polygon
+        .reply('problem.packages', { result: [pkg(11, 4, 'READY')] })
+        .reply('problem.statements', {
+          result: {
+            english: { name: 'Sum' },
+            russian: { name: 'Сумма' },
+            vietnamese: { name: 'Tổng' },
+          },
+        });
+      expect(dataOf(await get(links()).expect(200))).toMatchObject({
+        link: {
+          lastSyncResult: 'failed',
+          lastSyncErrorCode: 'statement_language_unmapped',
+          lastSyncErrorParams: { language: 'russian' },
+        },
+      });
+      expect((await post(`${links()}/sync`).expect(400)).body).toMatchObject({
+        error: {
+          code: 'statement_language_unmapped',
+          params: { language: 'russian' },
+        },
+      });
+      expect(await queue.count()).toBe(0);
     });
 
     it('still shows the link when Polygon cannot be asked', async () => {
@@ -956,7 +1234,12 @@ describe('Polygon routes', () => {
         .expect(errorCode('forbidden'));
       const response = await post(
         `${POLYGON}/import`,
-        { link: SUM_LINK, code: 'thptpoly_sum', organization: 'thpt-poly' },
+        {
+          link: SUM_LINK,
+          code: 'thptpoly_sum',
+          organization: 'thpt-poly',
+          ...SUM_LANGUAGES,
+        },
         teacher,
       ).expect(202);
       const job = await queue.getJob(dataOf<{ jobId: string }>(response).jobId);

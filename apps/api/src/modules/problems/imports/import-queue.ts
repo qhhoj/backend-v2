@@ -38,3 +38,34 @@ export async function unfinishedJobOf(
     jobs.sort((left, right) => right.timestamp - left.timestamp)[0] ?? null
   );
 }
+
+/** 1-based place of every queued job in the order the worker takes them: jobs without a priority oldest first, then prioritized ones (automatic syncs), behind the running ones. */
+export async function queuePositionsOf(
+  queue: ImportQueue,
+): Promise<Map<string, number>> {
+  const [active, waiting, prioritized] = await Promise.all([
+    queue.getActiveCount(),
+    queue.getWaiting(),
+    queue.getPrioritized(),
+  ]);
+  return new Map(
+    [...waiting, ...prioritized]
+      .filter((job): job is ImportJob => Boolean(job?.id))
+      .map((job, index) => [job.id!, active + index + 1]),
+  );
+}
+
+/** The jobs a user started that the queue still keeps (a day after they ended), newest first. */
+export async function jobsOf(
+  queue: ImportQueue,
+  userId: string,
+): Promise<ImportJob[]> {
+  const jobs = await queue.getJobs([...UNFINISHED, 'completed', 'failed']);
+  return jobs
+    .filter((job): job is ImportJob => job?.data.requesterId === userId)
+    .sort(
+      (left, right) =>
+        right.timestamp - left.timestamp ||
+        (right.id ?? '').localeCompare(left.id ?? ''),
+    );
+}

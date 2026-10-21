@@ -35,7 +35,11 @@ describe('planTests', () => {
     });
     expect(plan(tests(300), { maxCases: 300 }).tests).toHaveLength(300);
     expect(() => plan(tests(301), { maxCases: 300 })).toThrow(
-      new PolygonImportError('too many testcases'),
+      expect.objectContaining({
+        code: 'too_many_testcases',
+        params: { count: 301, limit: 300 },
+        message: 'too many testcases: 301, the limit is 300',
+      }),
     );
     const batch = {
       tests: Array.from({ length: 150 }, () => test(1, 'g')),
@@ -390,9 +394,7 @@ describe('planTests', () => {
 
   it('rejects more tests or groups than a problem may hold, before doing quadratic work', () => {
     const tests = Array.from({ length: 10_000 }, () => test(1));
-    expect(() => plan({ tests })).toThrow(
-      new PolygonImportError('too many testcases'),
-    );
+    expect(() => plan({ tests })).toThrow('too many testcases: 10000');
     const groups = Array.from({ length: 1001 }, (_item, index) => ({
       name: `g${index}`,
       points: 1,

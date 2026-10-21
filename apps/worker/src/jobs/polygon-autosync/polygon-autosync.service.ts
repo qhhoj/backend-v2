@@ -2,8 +2,10 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import {
+  AUTO_SYNC_PRIORITY,
   hasNewReadyPackage,
   latestPackageOf,
+  POLYGON_JOB_RETRY,
   POLYGON_QUEUE,
   PolygonClient,
   syncJobId,
@@ -58,6 +60,8 @@ export class PolygonAutoSyncService {
         'sync',
         syncJobOf(problem, latest, { userId: link.linkedBy, trigger: 'auto' }),
         {
+          ...POLYGON_JOB_RETRY,
+          priority: AUTO_SYNC_PRIORITY,
           jobId: syncJobId(problem._id, latest.id),
           removeOnComplete: KEEP,
           removeOnFail: KEEP,

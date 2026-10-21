@@ -9,3 +9,5 @@ export * from './polygon-types';
 export * from './polygon-xml';
 export * from './polygon-problem-link';
 export * from './polygon-package-token';
+export * from './polygon-import-errors';
+export * from './polygon-options-check';

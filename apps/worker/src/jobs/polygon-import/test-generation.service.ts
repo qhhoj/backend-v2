@@ -4,6 +4,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { TestGenerationFailure } from '@libs/database';
 import { BridgeCommandsService, featureOf } from '@libs/judging';
 import type { GenerationPlan } from '@libs/judging';
+import type { PolygonImportErrorCode } from '@libs/problems';
 import { PolygonImportError } from './polygon-import.error';
 import { TestGenerationRepository } from './test-generation.repository';
 import {
@@ -52,7 +53,7 @@ export class TestGenerationService {
       this.repository.saveResult(id, destination),
     );
     if (end.kind === 'done') return;
-    throw new PolygonImportError(endText(end, plan));
+    throw new PolygonImportError(endText(end, plan), END_CODES[end.kind]);
   }
 
   /**
@@ -105,6 +106,17 @@ export class TestGenerationService {
     );
   }
 }
+
+/** The error code of a generation that did not finish. */
+const END_CODES: Record<
+  Exclude<GenerationEnd, { kind: 'done' }>['kind'],
+  PolygonImportErrorCode
+> = {
+  cancelled: 'generation_failed',
+  failed: 'generation_failed',
+  timeout: 'generation_timeout',
+  'no-judge': 'generation_no_judge',
+};
 
 /** The requester's text for a generation that did not finish. */
 function endText(

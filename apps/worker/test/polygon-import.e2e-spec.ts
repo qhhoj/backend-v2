@@ -197,7 +197,21 @@ describe('PolygonImportProcessor', () => {
     const problem = await worker.problems
       .findOne({ code: 'sum' })
       .select('+data');
-    expect(result).toEqual({ problemId: problem!._id, code: 'sum' });
+    expect(result).toEqual({
+      problemId: problem!._id,
+      code: 'sum',
+      summary: {
+        polygonChecker: 'files/check.cpp',
+        checker: 'bridged',
+        interactive: false,
+        checkerIgnored: false,
+        tests: 3,
+        cases: 3,
+        batches: 1,
+        timeLimit: { polygon: 1, applied: 1 },
+        memoryLimit: { polygon: 262144, applied: 262144 },
+      },
+    });
     expect(problem).toMatchObject({
       name: 'Sum',
       timeLimit: 1,
@@ -820,22 +834,25 @@ describe('PolygonImportProcessor', () => {
     ['moving the data files into place', 'commitUpload'],
     ['writing init.yml', 'writeInit'],
   ] as const)(
-    'reports a failure after the commit (%s) as imported, naming the step and hiding the cause',
+    'completes a job whose step after the commit (%s) failed as imported but needing attention, naming the step and hiding the cause',
     async (step, method) => {
       const dataFiles = worker.module.get(ProblemDataFilesService);
       const failing = jest
         .spyOn(dataFiles, method)
         .mockRejectedValueOnce(new Error('EACCES: /data/problems/lost'));
-      const failure = await processor
-        .process(job({ code: 'tail' }))
-        .catch((error: Error) => error);
+      const result = await processor.process(job({ code: 'tail' }));
       failing.mockRestore();
       const imported = await worker.problems.countDocuments({ code: 'tail' });
       await worker.problems.deleteOne({ code: 'tail' });
       rmSync(dataDirectory('tail'), { recursive: true, force: true });
-      expect((failure as Error).message).toBe(
-        `${POLYGON_ERROR_PREFIX}the problem was imported, but ${step} failed`,
-      );
+      expect(result).toMatchObject({
+        code: 'tail',
+        attention: {
+          code: 'imported_needs_attention',
+          params: {},
+          message: `the problem was imported, but ${step} failed`,
+        },
+      });
       expect(imported).toBe(1);
     },
   );

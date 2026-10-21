@@ -1,8 +1,13 @@
 import type {
+  Checker,
   PolygonSyncStep,
   StatementLanguage,
   StatementLanguageChoice,
 } from '@libs/database';
+import type {
+  ImportErrorParams,
+  PolygonImportErrorCode,
+} from './polygon/polygon-import-errors';
 import type { PolygonSource } from './polygon/polygon-link';
 import type { SpentCharge } from './quota/quota.types';
 
@@ -17,6 +22,13 @@ export interface SourceCheckJob {
   /** The uploaded name; a later upload or removal makes the job a no-op. */
   file: string;
 }
+/** A Polygon import job runs twice at most: an outage it may outlast (`AUTO_RETRIED_IMPORT_ERRORS`) is retried once, two minutes later; every other failure is final. */
+export const POLYGON_JOB_RETRY = {
+  attempts: 2,
+  backoff: { type: 'fixed', delay: 2 * 60 * 1000 },
+};
+/** Automatic syncs wait behind every import and manual sync: BullMQ takes jobs without a priority first. */
+export const AUTO_SYNC_PRIORITY = 10;
 /** Largest Polygon package accepted, uploaded or downloaded from Polygon. */
 export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** Marks a job failure reason as written for the requester; any other reason (I/O errors with absolute paths, driver messages) stays in the logs and is never shown. */
@@ -64,11 +76,44 @@ export interface PolygonImportJob {
   expectedDataVersion?: number;
   /** Set when the worker downloads the package from Polygon instead of reading an uploaded one; the import then writes `polygonLink`. */
   polygon?: PolygonSource;
-  /** Written by the worker when the job fails: where it stopped. */
+  /** Written by the worker when the job fails: where it stopped, and why as a code with its parameters. */
   failedStep?: PolygonSyncStep;
+  errorCode?: PolygonImportErrorCode;
+  errorParams?: ImportErrorParams;
+}
+
+/** A limit as Polygon gives it and as QHHOJ stores it, clamped to the editor's range (seconds, or KiB). */
+export interface ClampedLimit {
+  polygon: number;
+  applied: number;
+}
+
+/** How the package was converted, for the setter to check against Polygon before a contest. */
+export interface ImportSummary {
+  /** The package's checker (`std::wcmp.cpp`, or the source path of a custom one); null for an interactive problem without one. */
+  polygonChecker: string | null;
+  /** What judges with it: `standard` (hcmp), `bridged` (the package's own testlib source) or, for an interactive problem, the interactor. */
+  checker: Checker;
+  interactive: boolean;
+  /** An interactive problem's checker that is not run (only the interactor decides). */
+  checkerIgnored: boolean;
+  /** Distinct tests, judged cases (dependency copies counted) and batches. */
+  tests: number;
+  cases: number;
+  batches: number;
+  timeLimit: ClampedLimit;
+  memoryLimit: ClampedLimit;
 }
 
 export interface PolygonImportResult {
   problemId: string;
   code: string;
+  /** Absent on jobs that ended before it was recorded, and on a sync another sync had already applied. */
+  summary?: ImportSummary;
+  /** Set when the import committed but a file step after it failed: the problem exists and needs a repair. */
+  attention?: {
+    code: 'imported_needs_attention';
+    params: ImportErrorParams;
+    message: string;
+  };
 }

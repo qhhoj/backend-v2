@@ -348,6 +348,8 @@ function pickMainLanguage(
   )
     throw new PolygonImportError(
       `invalid main statement language ${mainLanguage ?? '(none)'}`,
+      'statement_language_required',
+      { languages: sources.map((source) => source.language) },
     );
   return mainLanguage;
 }
@@ -393,6 +395,8 @@ function toTranslation(
   if (!siteLanguage)
     throw new PolygonImportError(
       `invalid site language for ${source.language}`,
+      'statement_language_unmapped',
+      { language: source.language },
     );
   if (
     earlierTranslations.some(
@@ -401,6 +405,8 @@ function toTranslation(
   )
     throw new PolygonImportError(
       `two statements map to the site language ${siteLanguage}`,
+      'statement_language_repeated',
+      { language: siteLanguage },
     );
   return { language: siteLanguage, name: source.name, ...rendered };
 }
@@ -422,6 +428,8 @@ async function pickAndSaveTutorial(
   if (tutorials.length > 1 && !tutorialSource)
     throw new PolygonImportError(
       `invalid main tutorial language ${job.tutorialLanguage ?? '(none)'}`,
+      'tutorial_language_required',
+      { languages: tutorials.map((source) => source.language) },
     );
   if (!tutorialSource) return '';
   return rehostImages(

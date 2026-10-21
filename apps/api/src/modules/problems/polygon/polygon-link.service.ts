@@ -1,17 +1,29 @@
 import { Injectable } from '@nestjs/common';
+import { isDeepStrictEqual } from 'node:util';
 import type { AuthContext } from '@libs/auth';
 import { AppError } from '@libs/common';
-import type { PolygonLink } from '@libs/database';
+import type { PolygonImportOptions, PolygonLink } from '@libs/database';
 import { latestPackageOf, PolygonClient } from '@libs/problems';
-import type { LinkedProblem } from '@libs/problems';
+import type {
+  ImportErrorParams,
+  LinkedProblem,
+  PolygonImportErrorCode,
+} from '@libs/problems';
 import type { ProblemDocument } from '../core/problems.repository';
 import { RevisionsRepository } from '../core/revisions.repository';
 import { ProblemImportsService } from '../imports/problem-imports.service';
 import {
+  languageMapOf,
+  languagePairsOf,
+} from '../imports/statement-language-pairs';
+import { UpdatePolygonLinkDto } from './dto/polygon-link.dto';
+import {
+  PolygonLinkOptionsResponse,
   PolygonLinkResponse,
   PolygonLinkStateResponse,
 } from './dto/polygon-link.response';
 import { PolygonLinksRepository } from './polygon-links.repository';
+import { assertOptionsFit } from './polygon-options-fit';
 
 /** The problem as a plain object with its link (a subdocument cannot be spread into a job), or 404 `polygon_not_linked`. */
 export function linkedProblem(problem: ProblemDocument): LinkedProblem {
@@ -54,32 +66,27 @@ export class PolygonLinkService {
     return { link: linkView(polygonLink), latestPackage, runningJobId };
   }
 
-  /** Switching auto-sync on makes the caller the user it runs as, so the worker re-checks their rights; a repeated switch changes nothing. */
-  async setAutoSync(
+  /** Saves the fields the body names; switching auto-sync on makes the caller the user it runs as, so the worker re-checks their rights. Changed statement or test options are checked against Polygon first, as a sync would check them. Nothing changed writes nothing. */
+  async update(
     auth: AuthContext,
     code: string,
-    autoSync: boolean,
+    body: UpdatePolygonLinkDto,
   ): Promise<PolygonLinkResponse> {
     const problem = await this.problemOf(auth, code);
     const { polygonLink } = linkedProblem(problem);
-    const runAs =
-      autoSync && !polygonLink.autoSync ? auth.principal.userId : undefined;
-    if (
-      !(await this.links.setAutoSync(
-        problem._id,
-        polygonLink.problemId,
-        autoSync,
-        runAs,
-      ))
-    )
+    const next = nextLinkOf(polygonLink, body, auth.principal.userId);
+    const changes = linkChangesOf(polygonLink, next);
+    const paths = Object.keys(changes);
+    if (paths.length === 0) return linkView(polygonLink);
+    if (paths.some((path) => path.startsWith(OPTIONS_PATH)))
+      await assertOptionsFit(this.polygon, polygonLink.problemId, next.options);
+    const fields = Object.fromEntries(
+      paths.map((path) => [path, changes[path].after]),
+    );
+    if (!(await this.links.update(problem._id, polygonLink.problemId, fields)))
       throw linkChanged();
-    await this.audit(auth, problem, {
-      'polygonLink.autoSync': { before: polygonLink.autoSync, after: autoSync },
-      ...(runAs && {
-        'polygonLink.linkedBy': { before: polygonLink.linkedBy, after: runAs },
-      }),
-    });
-    return linkView({ ...polygonLink, autoSync });
+    await this.audit(auth, problem, changes);
+    return linkView(next);
   }
 
   /** Removes the link only: statement, tests and every other field stay as the last sync left them. */
@@ -107,7 +114,7 @@ export class PolygonLinkService {
   private async audit(
     auth: AuthContext,
     problem: ProblemDocument,
-    changes: Record<string, { before: unknown; after: unknown }>,
+    changes: Changes,
   ): Promise<void> {
     await this.revisions.append({
       entity: 'problem',
@@ -119,6 +126,65 @@ export class PolygonLinkService {
     });
   }
 }
+
+type Changes = Record<string, { before: unknown; after: unknown }>;
+const OPTIONS_PATH = 'polygonLink.options.';
+
+/** The link as the body leaves it; an omitted (undefined) field keeps its value. */
+function nextLinkOf(
+  link: PolygonLink,
+  body: UpdatePolygonLinkDto,
+  userId: string,
+): PolygonLink {
+  const { autoSync, statementLanguages, ...options } = body;
+  const given = Object.fromEntries(
+    Object.entries(options).filter(([, value]) => value !== undefined),
+  );
+  return {
+    ...link,
+    autoSync: autoSync ?? link.autoSync,
+    linkedBy: autoSync && !link.autoSync ? userId : link.linkedBy,
+    options: {
+      ...link.options,
+      ...given,
+      ...(statementLanguages && {
+        statementLanguages: languageMapOf(statementLanguages),
+      }),
+    },
+  };
+}
+
+/** The `polygonLink.*` paths whose value differs, with both values, for the update and its revision. */
+function linkChangesOf(before: PolygonLink, after: PolygonLink): Changes {
+  const options = Object.keys(after.options) as (keyof PolygonImportOptions)[];
+  const compared: [string, unknown, unknown][] = [
+    ['polygonLink.autoSync', before.autoSync, after.autoSync],
+    ['polygonLink.linkedBy', before.linkedBy, after.linkedBy],
+    ...options.map((key): [string, unknown, unknown] => [
+      `${OPTIONS_PATH}${key}`,
+      before.options[key],
+      after.options[key],
+    ]),
+  ];
+  return Object.fromEntries(
+    compared
+      .filter(([, old, value]) => !isDeepStrictEqual(old, value))
+      .map(([path, old, value]) => [path, { before: old, after: value }]),
+  );
+}
+
+const optionsView = ({
+  statementLanguages,
+  ...options
+}: PolygonImportOptions): PolygonLinkOptionsResponse => ({
+  mainStatementLanguage: options.mainStatementLanguage ?? null,
+  statementLanguages: languagePairsOf(statementLanguages ?? {}),
+  tutorialLanguage: options.tutorialLanguage ?? null,
+  ignoreZeroPointBatches: options.ignoreZeroPointBatches,
+  ignoreZeroPointCases: options.ignoreZeroPointCases,
+  appendMainSolution: options.appendMainSolution,
+  maxCases: options.maxCases,
+});
 
 const linkView = (link: PolygonLink): PolygonLinkResponse => ({
   problemId: link.problemId,
@@ -132,5 +198,12 @@ const linkView = (link: PolygonLink): PolygonLinkResponse => ({
   lastSyncAt: link.lastSyncAt,
   lastSyncResult: link.lastSyncResult,
   lastSyncError: link.lastSyncError,
+  lastSyncErrorCode: (link.lastSyncErrorCode ??
+    null) as PolygonImportErrorCode | null,
+  // An empty object is not stored (Mongoose minimizes it).
+  lastSyncErrorParams: link.lastSyncErrorCode
+    ? ((link.lastSyncErrorParams ?? {}) as ImportErrorParams)
+    : null,
   autoSync: link.autoSync,
+  options: optionsView(link.options),
 });

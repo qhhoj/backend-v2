@@ -15,6 +15,7 @@ import { ProblemImportsService } from '../imports/problem-imports.service';
 import { PolygonLinkImportDto } from './dto/polygon-problems.dto';
 import { askPolygon } from './polygon-errors';
 import { linkedProblem } from './polygon-link.service';
+import { assertOptionsFit } from './polygon-options-fit';
 import {
   PolygonLinkResolver,
   readyPackage,
@@ -41,6 +42,7 @@ export class PolygonLinkImportService {
       link,
       body.code,
     );
+    await assertOptionsFit(this.polygon, problem.id, job);
     await this.imports.reserveImport(auth);
     const jobId = newId();
     await this.imports.enqueue(auth, jobId, {
@@ -71,6 +73,11 @@ export class PolygonLinkImportService {
     const latest = await this.latestReadyOf(problem.polygonLink.problemId);
     const jobId = syncJobId(document._id, latest.id);
     if (await this.imports.isUnfinished(jobId)) return { jobId };
+    await assertOptionsFit(
+      this.polygon,
+      problem.polygonLink.problemId,
+      problem.polygonLink.options,
+    );
     await this.imports.reserveImport(auth);
     await this.imports.enqueue(
       auth,
