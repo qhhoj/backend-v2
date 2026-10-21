@@ -15,7 +15,11 @@ const state = (
   timeLimit: 3,
   memoryLimit: 262144,
   partial: true,
-  sourceHashes: { customChecker: 'polygon-check', customGrader: null },
+  sourceHashes: {
+    customChecker: 'polygon-check',
+    customGrader: null,
+    helperHeaders: {},
+  },
   ...overrides,
   data: {
     ...emptyProblemData(),
@@ -26,7 +30,13 @@ const state = (
   },
 });
 const themis = state(
-  { sourceHashes: { customChecker: 'setter-check', customGrader: null } },
+  {
+    sourceHashes: {
+      customChecker: 'setter-check',
+      customGrader: null,
+      helperHeaders: {},
+    },
+  },
   {
     checker: 'bridged',
     checkerArgs: { type: 'themis' },
@@ -42,7 +52,11 @@ describe('local edits', () => {
       'timeLimit',
     ]);
     const reuploaded = state({
-      sourceHashes: { customChecker: 'fixed', customGrader: null },
+      sourceHashes: {
+        customChecker: 'fixed',
+        customGrader: null,
+        helperHeaders: {},
+      },
     });
     expect(editedSince(imported, reuploaded)).toEqual(['checker']);
   });
@@ -96,16 +110,23 @@ describe('local edits', () => {
     expect(values.data.cases).toBe(incoming.data.cases);
   });
 
-  it('treats whether an interactive problem runs its checker as part of the grader', () => {
-    const interactive = (interactiveChecker: boolean) =>
-      state(
-        { sourceHashes: { customChecker: 'polygon-check', customGrader: 'i' } },
-        {
-          grader: 'interactive',
-          customGrader: 'interactor.cpp',
-          interactiveChecker,
+  const interactive = (interactiveChecker: boolean) =>
+    state(
+      {
+        sourceHashes: {
+          customChecker: 'polygon-check',
+          customGrader: 'i',
+          helperHeaders: {},
         },
-      );
+      },
+      {
+        grader: 'interactive',
+        customGrader: 'interactor.cpp',
+        interactiveChecker,
+      },
+    );
+
+  it('treats whether an interactive problem runs its checker as part of the grader', () => {
     expect(
       editedSince(fingerprintsOf(interactive(true)), interactive(false)),
     ).toEqual(['grader']);
@@ -117,6 +138,101 @@ describe('local edits', () => {
     );
     expect(localEdits.kept).toEqual(['grader']);
     expect(values.data.interactiveChecker).toBe(false);
+  });
+
+  it('moves an interactor-only problem the setter left alone to running its checker, keeping nothing', () => {
+    // A problem imported before `interactiveChecker`, whose record was written then: the flag is false on both sides.
+    const legacy = interactive(false);
+    const { values, localEdits } = mergeLocalEdits(
+      interactive(true),
+      { state: legacy, edited: editedSince(fingerprintsOf(legacy), legacy) },
+      false,
+    );
+    expect(localEdits).toEqual({ kept: [], updated: ['grader'] });
+    expect(values.data.interactiveChecker).toBe(true);
+  });
+
+  describe('helper headers', () => {
+    /** An interactive problem whose checker and interactor compile with `headers` (name -> content hash). */
+    const withHeaders = (
+      headers: Record<string, string>,
+      hashes: { customChecker?: string; customGrader?: string } = {},
+    ) =>
+      state(
+        {
+          sourceHashes: {
+            customChecker: hashes.customChecker ?? 'polygon-check',
+            customGrader: hashes.customGrader ?? 'polygon-interactor',
+            helperHeaders: headers,
+          },
+        },
+        {
+          grader: 'interactive',
+          customGrader: 'interactor.cpp',
+          interactiveChecker: true,
+          helperHeaders: Object.keys(headers),
+        },
+      );
+
+    it('counts a header change as a change of the checker and the interactor', () => {
+      const imported = fingerprintsOf(withHeaders({ 'testlib.h': 'v1' }));
+      expect(editedSince(imported, withHeaders({ 'testlib.h': 'v1' }))).toEqual(
+        [],
+      );
+      expect(editedSince(imported, withHeaders({ 'testlib.h': 'v2' }))).toEqual(
+        ['checker', 'grader'],
+      );
+      expect(settingsNamedIn(['helperHeaders'])).toEqual(['checker', 'grader']);
+    });
+
+    it('matches a record written before the headers counted', () => {
+      const unedited = withHeaders({ 'testlib.h': 'v1' });
+      const old = fingerprintsOf(unedited, { withHeaders: false });
+      expect(editedSince(old, unedited)).toEqual([]);
+      expect(
+        editedSince(
+          old,
+          withHeaders({ 'testlib.h': 'v1' }, { customGrader: 'setter' }),
+        ),
+      ).toEqual(['grader']);
+    });
+
+    it('keeps the headers a kept interactor names beside the package ones, and records them so the checker stays unedited', () => {
+      const local = withHeaders(
+        { 'testlib.h': 'v1', 'old.h': 'o' },
+        { customGrader: 'setter' },
+      );
+      const incoming = withHeaders(
+        { 'testlib.h': 'v2', 'new.h': 'n' },
+        { customChecker: 'polygon-check-2' },
+      );
+      const { values, localEdits, recorded } = mergeLocalEdits(
+        incoming,
+        { state: local, edited: ['grader'] },
+        false,
+      );
+      expect(localEdits).toEqual({ kept: ['grader'], updated: ['checker'] });
+      expect(values.data.helperHeaders).toEqual([
+        'testlib.h',
+        'old.h',
+        'new.h',
+      ]);
+      // On disk after the sync: the package's testlib.h and new.h, the kept old.h.
+      const written = withHeaders(
+        { 'testlib.h': 'v2', 'old.h': 'o', 'new.h': 'n' },
+        { customChecker: 'polygon-check-2', customGrader: 'setter' },
+      );
+      expect(editedSince(recorded, written)).toEqual(['grader']);
+    });
+
+    it('drops the local headers when nothing that compiles with them is kept', () => {
+      const { values } = mergeLocalEdits(
+        withHeaders({ 'testlib.h': 'v2' }),
+        { state: withHeaders({ 'old.h': 'o' }), edited: [] },
+        false,
+      );
+      expect(values.data.helperHeaders).toEqual(['testlib.h']);
+    });
   });
 
   it('reports nothing for an edit the package now agrees with', () => {
