@@ -1,30 +1,14 @@
 import { posix } from 'node:path';
 import type { Readable } from 'node:stream';
-import {
-  childrenOf,
-  descendant,
-  POLYGON_PACKAGE_MAX_BYTES,
-} from '@libs/problems';
+import { POLYGON_PACKAGE_MAX_BYTES } from '@libs/problems';
 import type { GenerationPlan } from '@libs/judging';
 import type { XmlElement } from '@libs/problems';
+import { headerPathsOf } from './polygon-headers';
 import { PolygonImportError } from './polygon-import.error';
-import { repackMembers, resolveMemberPath, shown } from './polygon-package';
+import { repackMembers, shown } from './polygon-package';
 import type { PolygonPackage, RepackMember } from './polygon-package';
 
-const HEADER_NAME = /\.(h|hpp|hh)$/i;
-const HEADER_TYPE = /^h\./;
 const BYTES_PER_MIB = 1024 * 1024;
-
-/** `<resources>` a program can `#include`: the `h.*` types, and anything named like a header. */
-function headerPathsOf(root: XmlElement, pkg: PolygonPackage): string[] {
-  const resources = descendant(root, 'resources');
-  return childrenOf(resources ?? root, 'file').flatMap(({ attributes }) => {
-    const { path, type } = attributes;
-    const isHeader =
-      path && (HEADER_TYPE.test(type ?? '') || HEADER_NAME.test(path));
-    return isHeader && pkg.has(path) ? [resolveMemberPath(path)] : [];
-  });
-}
 
 /**
  * Where every file goes in the bundle: the program sources and manual inputs at their package paths, and each header

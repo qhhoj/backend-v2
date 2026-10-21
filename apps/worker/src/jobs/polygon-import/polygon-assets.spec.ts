@@ -13,42 +13,52 @@ const assets = (fixture: Parameters<typeof buildProblemXml>[0]) =>
   parseAssets(parseXml(buildProblemXml(fixture)));
 const oneTest = { tests: [{ input: '1', answer: '1' }] };
 
+const bridged = (checkerArgs = { type: 'testlib', lang: 'CPP17' }) => ({
+  grader: 'standard',
+  checker: 'bridged',
+  checkerArgs,
+  checkerSource: 'files/check.cpp',
+  interactorSource: null,
+});
+
 describe('parseAssets', () => {
   it.each([
-    ['std::wcmp.cpp', 'standard', null],
-    ['std::hcmp.cpp', 'standard', null],
-    ['std::ncmp.cpp', 'standard', null],
-    ['std::rcmp4.cpp', 'floats', { precision: 4 }],
-    ['std::rcmp6.cpp', 'floats', { precision: 6 }],
-    ['std::rcmp9.cpp', 'floats', { precision: 9 }],
-    ['std::fcmp.cpp', 'identical', null],
-    ['std::lcmp.cpp', 'linecount', null],
-  ])('maps %s to the %s checker', (name, checker, checkerArgs) =>
+    'std::wcmp.cpp',
+    'std::ncmp.cpp',
+    'std::lcmp.cpp',
+    'std::fcmp.cpp',
+    'std::rcmp4.cpp',
+    'std::rcmp6.cpp',
+    'std::rcmp9.cpp',
+    'std::yesno.cpp',
+  ])('runs %s from the package source as a bridged testlib checker', (name) =>
     expect(
       assets({ ...oneTest, checker: { name, path: 'files/check.cpp' } }),
+    ).toEqual(bridged()),
+  );
+
+  it('maps std::hcmp.cpp to the standard checker', () =>
+    expect(
+      assets({
+        ...oneTest,
+        checker: { name: 'std::hcmp.cpp', path: 'files/check.cpp' },
+      }),
     ).toEqual({
       grader: 'standard',
-      checker,
-      checkerArgs,
+      checker: 'standard',
+      checkerArgs: null,
       checkerSource: null,
       interactorSource: null,
-    }),
-  );
+    }));
 
   it('uses a custom C++ checker as bridged testlib, honouring percent points', () => {
     expect(
       assets({ ...oneTest, checker: { path: 'files/check.cpp' } }),
-    ).toEqual({
-      grader: 'standard',
-      checker: 'bridged',
-      checkerArgs: { type: 'testlib', lang: 'CPP17' },
-      checkerSource: 'files/check.cpp',
-      interactorSource: null,
-    });
+    ).toEqual(bridged());
     expect(
       assets({
         ...oneTest,
-        checker: { name: 'std::yesno.cpp', path: 'files/check.cpp' },
+        checker: { name: 'std::ncmp.cpp', path: 'files/check.cpp' },
         judging: { percent: true },
       }).checkerArgs,
     ).toEqual({
@@ -65,19 +75,30 @@ describe('parseAssets', () => {
   });
 
   it('prefers the interactor: interactive grader, checker ignored', () => {
-    expect(
-      assets({
-        ...oneTest,
-        interactor: 'files/interactor.cpp',
-        checker: { path: 'files/check.cpp' },
-      }),
-    ).toEqual({
+    const interactive = {
       grader: 'interactive',
       checker: 'standard',
       checkerArgs: null,
       checkerSource: null,
       interactorSource: 'files/interactor.cpp',
-    });
+    };
+    expect(
+      assets({
+        ...oneTest,
+        interactor: 'files/interactor.cpp',
+        checker: { name: 'std::wcmp.cpp', path: 'files/check.cpp' },
+      }),
+    ).toEqual(interactive);
+    expect(
+      assets({
+        ...oneTest,
+        interactor: 'files/interactor.cpp',
+        checker: { path: 'files/Check.java' },
+      }),
+    ).toEqual(interactive);
+    expect(
+      assets({ ...oneTest, interactor: 'files/interactor.cpp', checker: null }),
+    ).toEqual(interactive);
     expect(() =>
       assets({ ...oneTest, interactor: 'files/interactor.java' }),
     ).toThrow(new PolygonImportError('interactor must use C++'));

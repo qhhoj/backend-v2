@@ -87,6 +87,8 @@ export class ProblemData {
   @Prop({ type: String, default: null }) customChecker!: string | null;
   @Prop({ type: String, default: null }) customGrader!: string | null;
   @Prop({ type: String, default: null }) customHeader!: string | null;
+  /** Headers a Polygon package ships (its own testlib.h included), stored beside its interactor, which compiles with them. */
+  @Prop({ type: [String], default: [] }) helperHeaders!: string[];
   @Prop({ type: String, default: 'standard', enum: CHECKERS })
   checker!: Checker;
   @Prop({ type: Mixed, default: null }) checkerArgs!: JsonObject | null;
@@ -156,6 +158,7 @@ export const emptyProblemData = (): ProblemData => ({
   customChecker: null,
   customGrader: null,
   customHeader: null,
+  helperHeaders: [],
   checker: 'standard',
   checkerArgs: null,
   grader: 'standard',

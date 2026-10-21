@@ -127,6 +127,21 @@ function plainBoxFileName(name: string): string {
   return name;
 }
 
+/** The judge compiles the listed headers beside the interactor, so its `#include "testlib.h"` finds the package's own copy first. */
+function interactiveSpec(data: ProblemData): InitCase {
+  const interactor = requireSource(
+    data.customGrader,
+    'cpp',
+    'Only accept `.cpp` interactor',
+  );
+  const headers = data.helperHeaders ?? [];
+  return {
+    files: headers.length ? [interactor, ...headers] : interactor,
+    type: 'testlib',
+    lang: 'CPP17',
+  };
+}
+
 /** Legacy `make_grader`. */
 function applyGrader(init: InitCase, data: ProblemData): void {
   assertBoundedArgs(data.graderArgs);
@@ -152,15 +167,7 @@ function applyGrader(init: InitCase, data: ProblemData): void {
     return;
   }
   if (data.grader === 'interactive') {
-    init.interactive = {
-      files: requireSource(
-        data.customGrader,
-        'cpp',
-        'Only accept `.cpp` interactor',
-      ),
-      type: 'testlib',
-      lang: 'CPP17',
-    };
+    init.interactive = interactiveSpec(data);
     return;
   }
   init.signature_grader = {
