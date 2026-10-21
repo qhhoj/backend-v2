@@ -33,12 +33,27 @@ const stored = (
     timeLimit = 1,
     memoryLimit = 262144,
     checker = 'bridged',
-  }: { timeLimit?: number; memoryLimit?: number; checker?: Checker } = {},
+    interactive = false,
+  }: {
+    timeLimit?: number;
+    memoryLimit?: number;
+    checker?: Checker;
+    /** The interactive grader, its checker run or not (`interactiveChecker`). */
+    interactive?: false | 'checker run' | 'interactor alone';
+  } = {},
 ) => ({
   timeLimit,
   memoryLimit,
   partial: false,
-  data: { ...emptyProblemData(), checker, cases },
+  data: {
+    ...emptyProblemData(),
+    checker,
+    cases,
+    ...(interactive && {
+      grader: 'interactive' as const,
+      interactiveChecker: interactive === 'checker run',
+    }),
+  },
 });
 
 describe('importSummaryOf', () => {
@@ -76,24 +91,31 @@ describe('importSummaryOf', () => {
     expect(summary.memoryLimit).toEqual({ polygon: 2097152, applied: 1048576 });
   });
 
-  it('marks the checker of an interactive problem as not run', () => {
+  it('marks the checker of an interactive problem as not run only when the interactor alone decides', () => {
+    const interactiveAssets = assets({
+      grader: 'interactive',
+      interactorSource: 'files/interactor.cpp',
+    });
     expect(
       importSummaryOf(
-        assets({
-          grader: 'interactive',
-          checker: 'standard',
-          checkerSource: null,
-          interactorSource: 'files/interactor.cpp',
-        }),
+        interactiveAssets,
         plan(),
-        stored(rows('C'), { checker: 'standard' }),
+        stored(rows('C'), { interactive: 'checker run' }),
       ),
     ).toMatchObject({
       interactive: true,
-      checker: 'standard',
+      checker: 'bridged',
       polygonChecker: 'std::wcmp.cpp',
-      checkerIgnored: true,
+      checkerIgnored: false,
     });
+    // A sync that kept a legacy interactor-only grader.
+    expect(
+      importSummaryOf(
+        interactiveAssets,
+        plan(),
+        stored(rows('C'), { interactive: 'interactor alone' }),
+      ),
+    ).toMatchObject({ interactive: true, checkerIgnored: true });
   });
 
   it('shows the limit and checker a sync kept, beside what Polygon gave', () => {

@@ -209,15 +209,6 @@ const unchangedSinceQueued = (
   }),
 });
 
-/** The compile check of a checker or interactor the import replaced was of the old file, so it is dropped; a source a sync kept keeps its check. */
-const replacedSourceChecks = (imported: ImportedProblem) => {
-  const kept = imported.localEdits?.kept ?? [];
-  return {
-    ...(!kept.includes('checker') && { 'sourceChecks.customChecker': null }),
-    ...(!kept.includes('grader') && { 'sourceChecks.customGrader': null }),
-  };
-};
-
 /** The code of the other problem is not told: the requester may not be allowed to see it. */
 const alreadyLinkedElsewhere = (job: PolygonImportJob) =>
   new PolygonImportError(
@@ -496,10 +487,7 @@ export class PolygonImportRepository {
         { statement, synced },
         session,
       );
-    const otherPaths = {
-      ...linkChanges(job, synced),
-      ...replacedSourceChecks(imported),
-    };
+    const otherPaths = linkChanges(job, synced);
     return this.updateIfDataVersionUnchanged(
       job,
       { problemId, before, statement, otherPaths, target },

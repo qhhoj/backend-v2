@@ -30,6 +30,10 @@ export const POLYGON_JOB_RETRY = {
 };
 /** Automatic syncs wait behind every import and manual sync: BullMQ takes jobs without a priority first. */
 export const AUTO_SYNC_PRIORITY = 10;
+export const SOURCE_CHECK_JOB_OPTIONS = {
+  removeOnComplete: true,
+  removeOnFail: 100,
+} as const;
 /** Largest Polygon package accepted, uploaded or downloaded from Polygon. */
 export const POLYGON_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 /** Marks a job failure reason as written for the requester; any other reason (I/O errors with absolute paths, driver messages) stays in the logs and is never shown. */
@@ -95,10 +99,10 @@ export interface ClampedLimit {
 export interface ImportSummary {
   /** The package's checker (`std::wcmp.cpp`, or the source path of a custom one); null for an interactive problem without one. */
   polygonChecker: string | null;
-  /** What judges with it: `standard` (hcmp), `bridged` (the package's own testlib source) or, for an interactive problem, the interactor; a sync that kept the local checker shows that one. */
+  /** What judges with it: `standard` (hcmp) or `bridged` (the package's own testlib source), for an interactive problem on what the interactor wrote; a sync that kept the local checker shows that one. */
   checker: Checker;
   interactive: boolean;
-  /** An interactive problem's checker that is not run (only the interactor decides). */
+  /** An interactive problem whose checker is not run: a sync kept a local grader without `interactiveChecker`, so the interactor alone decides. */
   checkerIgnored: boolean;
   /** Distinct tests, judged cases (dependency copies counted) and batches. */
   tests: number;

@@ -1,5 +1,9 @@
 import { newId } from '@libs/database';
-import { COMPILE_FEATURE, GENERATE_FEATURE } from '@libs/judging';
+import {
+  COMPILE_FEATURE,
+  GENERATE_FEATURE,
+  INTERACTIVE_CHECKER_FEATURE,
+} from '@libs/judging';
 import {
   canJudge,
   freeSlots,
@@ -35,6 +39,7 @@ const queued = (extra: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   judgeName: null,
   bannedJudges: [],
   retryBannedJudges: [],
+  requiredFeatures: [],
   ...extra,
 });
 
@@ -81,6 +86,17 @@ describe('canJudge', () => {
     ).toBe(true);
     expect(canJudge(judge('a'), queued({ judgeName: 'b' }))).toBe(false);
   });
+  it('needs every feature the problem asks for, even from the judge it is pinned to', () => {
+    const needs = queued({ requiredFeatures: [INTERACTIVE_CHECKER_FEATURE] });
+    const capable = judge('new', {
+      features: new Set(['interactive', INTERACTIVE_CHECKER_FEATURE]),
+    });
+    const older = judge('old', { features: new Set(['interactive']) });
+    expect(canJudge(capable, needs)).toBe(true);
+    expect(canJudge(older, needs)).toBe(false);
+    expect(canJudge(older, { ...needs, judgeName: 'old' })).toBe(false);
+    expect(canJudge(older, queued())).toBe(true);
+  });
 });
 
 describe('pickJudge', () => {
@@ -93,6 +109,18 @@ describe('pickJudge', () => {
       judge('draining', { slots: 8, isDraining: true }),
     ];
     expect(pickJudge(judges, queued())?.name).toBe('quarter');
+  });
+  it('sends a problem that needs a feature only to a judge advertising it, and keeps it queued without one', () => {
+    const needs = queued({ requiredFeatures: [INTERACTIVE_CHECKER_FEATURE] });
+    const idleOld = judge('old', { slots: 4 });
+    const busyNew = judge('new', {
+      slots: 4,
+      inFlight: busyWith(3),
+      features: new Set([INTERACTIVE_CHECKER_FEATURE]),
+    });
+    expect(pickJudge([idleOld, busyNew], needs)?.name).toBe('new');
+    expect(pickJudge([idleOld], needs)).toBeNull();
+    expect(nextFor(idleOld, [needs], [idleOld, busyNew])).toBeNull();
   });
   it('lets a rejudge take the last free slot only when the candidates have one slot in all', () => {
     const lastOfTwoJudges = [judge('a'), judge('b', { inFlight: busyWith(1) })];

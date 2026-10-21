@@ -6,9 +6,11 @@ import {
   PDF_QUEUE,
   POLYGON_QUEUE,
   ProblemFilesModule,
+  SOURCE_CHECK_QUEUE,
   QuotaLedgerModule,
 } from '@libs/problems';
 import { ImportQuota } from './import-quota.service';
+import { ImportSourceChecks } from './import-source-checks';
 import { PandocService } from './pandoc.service';
 import { PolygonImportProcessor } from './polygon-import.processor';
 import { PolygonImportRepository } from './polygon-import.repository';
@@ -28,11 +30,13 @@ import { TestGenerationService } from './test-generation.service';
       { name: POLYGON_QUEUE },
       { name: PDF_QUEUE },
       { name: PROBLEM_RESCORE_QUEUE },
+      { name: SOURCE_CHECK_QUEUE },
     ),
   ],
   providers: [
     PolygonImportProcessor,
     ImportQuota,
+    ImportSourceChecks,
     PolygonImportService,
     PolygonImportRepository,
     PolygonSyncRunsRepository,

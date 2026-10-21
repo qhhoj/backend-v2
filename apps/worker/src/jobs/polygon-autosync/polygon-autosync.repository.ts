@@ -13,12 +13,12 @@ export class PolygonAutoSyncRepository {
     @InjectModel(Contest.name) private readonly contests: Model<Contest>,
   ) {}
 
-  /** Live problems linked with auto-sync on, as plain objects with string ids (they go into job data). */
+  /** Live problems linked with auto-sync on, as plain objects with string ids (they go into job data). The `$type` filter matches the unique partial index on the link's problem id, so the scan uses it. */
   async autoSyncProblems(): Promise<AutoSyncProblem[]> {
     const rows = await this.problems
       .find(
         {
-          'polygonLink.problemId': { $exists: true },
+          'polygonLink.problemId': { $type: 'number' },
           'polygonLink.autoSync': true,
           deletedAt: null,
         },

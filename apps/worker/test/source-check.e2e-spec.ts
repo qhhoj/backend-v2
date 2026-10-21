@@ -1,10 +1,14 @@
-import { getModelToken } from '@nestjs/mongoose';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
-import type { Model } from 'mongoose';
+import type { Connection, Model } from 'mongoose';
 import { waitUntil } from '@libs/common/testing';
 import { emptyProblemData, Judge, newId, TestGeneration } from '@libs/database';
 import type { SourceCheck } from '@libs/database';
-import { ProblemDataFilesService } from '@libs/problems';
+import { generationBucket } from '@libs/judging';
+import { listZipEntries, ProblemDataFilesService } from '@libs/problems';
 import type { SourceCheckJob } from '@libs/problems';
 import { SourceCheckService } from '../src/jobs/source-check/source-check.service';
 import { setupWorkerTest } from './setup';
@@ -47,6 +51,23 @@ describe('compile check of an uploaded checker', () => {
     const row = await generations.findById(id).lean();
     await generations.updateOne({ _id: id as never }, { $set: outcome });
     return row!;
+  };
+
+  const bundleEntries = async (bundleFileId: unknown): Promise<string[]> => {
+    const connection = worker.module.get<Connection>(getConnectionToken());
+    const directory = mkdtempSync(join(tmpdir(), 'bundle-'));
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of generationBucket(connection).openDownloadStream(
+        bundleFileId as never,
+      ))
+        chunks.push(chunk as Buffer);
+      const path = join(directory, 'bundle.zip');
+      writeFileSync(path, Buffer.concat(chunks));
+      return (await listZipEntries(path)).sort();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   };
 
   beforeAll(async () => {
@@ -111,6 +132,28 @@ describe('compile check of an uploaded checker', () => {
       log: "chk.cpp:3: error: 'x' was not declared",
     });
     expect(await generations.countDocuments()).toBe(0);
+  });
+
+  it('compiles the checker beside the headers stored with it', async () => {
+    await worker.problems.updateOne(
+      { _id: problemId },
+      { $set: { 'data.helperHeaders': ['testlib.h', 'limits.h'] } },
+    );
+    const files = worker.module.get(ProblemDataFilesService);
+    await files.writeFile('chk', 'testlib.h', Buffer.from('// testlib'));
+    await files.writeFile('chk', 'limits.h', Buffer.from('// limits'));
+    await judgeOnline(['generate.compile']);
+    const running = service.check(job());
+    let queued: TestGeneration | null = null;
+    await waitUntil(async () => {
+      queued = await generations.findOne({ status: 'queued' }).lean();
+      return queued !== null;
+    });
+    const bundled = await bundleEntries(queued!.bundleFileId);
+    await judgeAnswers({ status: 'done', resultFileId: new Types.ObjectId() });
+    await running;
+    expect(bundled).toEqual(['chk.cpp', 'limits.h', 'testlib.h']);
+    expect(await checkNow()).toMatchObject({ status: 'ok' });
   });
 
   it('says no judge can check it when none online compiles checkers', async () => {

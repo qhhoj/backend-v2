@@ -454,7 +454,7 @@ describe('PolygonImportProcessor', () => {
     });
   });
 
-  it('stages the package headers beside the interactor and ignores the checker of an interactive problem', async () => {
+  it('stages the package headers beside the interactor and the checker, which interactive.checker names', async () => {
     await processor.process(
       bareUpdate(
         {},
@@ -473,6 +473,7 @@ describe('PolygonImportProcessor', () => {
     const directory = dataDirectory('sum');
     expect(readdirSync(directory).sort()).toEqual([
       '.data-version',
+      'checker.cpp',
       'constraints.h',
       'init.yml',
       'interactor.cpp',
@@ -488,6 +489,14 @@ describe('PolygonImportProcessor', () => {
       interactive: {
         files: ['interactor.cpp', 'testlib.h', 'constraints.h'],
         type: 'testlib',
+        checker: {
+          name: 'bridged',
+          args: {
+            files: ['checker.cpp', 'testlib.h', 'constraints.h'],
+            lang: 'CPP17',
+            type: 'testlib',
+          },
+        },
       },
     });
     const problem = await worker.problems
@@ -495,9 +504,25 @@ describe('PolygonImportProcessor', () => {
       .select('+data');
     expect(problem!.data).toMatchObject({
       grader: 'interactive',
-      checker: 'standard',
-      customChecker: null,
+      checker: 'bridged',
+      customChecker: 'checker.cpp',
       helperHeaders: ['testlib.h', 'constraints.h'],
+      interactiveChecker: true,
+    });
+    // No judge compiles here, so both checks the import queued end unavailable.
+    const sourceChecks = async () =>
+      (await worker.problems
+        .findOne({ code: 'sum' }, { sourceChecks: 1 })
+        .lean())!.sourceChecks;
+    await waitUntil(async () => {
+      const checks = await sourceChecks();
+      return [checks?.customChecker, checks?.customGrader].every(
+        (check) => check?.status === 'unavailable',
+      );
+    });
+    expect(await sourceChecks()).toMatchObject({
+      customChecker: { file: 'checker.cpp' },
+      customGrader: { file: 'interactor.cpp' },
     });
   });
 
@@ -521,8 +546,14 @@ describe('PolygonImportProcessor', () => {
       '.data-version',
       'checker.cpp',
       'init.yml',
+      'testlib.h',
       'tests.zip',
     ]);
+    expect(
+      parse(readFileSync(join(dataDirectory('sum'), 'init.yml'), 'utf8')),
+    ).toMatchObject({
+      checker: { args: { files: ['checker.cpp', 'testlib.h'] } },
+    });
   });
 
   it('refuses the wrong mode before writing anything', async () => {

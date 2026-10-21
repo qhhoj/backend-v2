@@ -433,12 +433,13 @@ describe('Polygon link, sync and auto-sync', () => {
         polygon: 2,
         applied: 4,
       });
-      expect(await problemOf('tl_edit')).toMatchObject({
-        name: 'Sum 11',
-        timeLimit: 4,
-        // The package's checker replaced the checked file.
-        sourceChecks: { customChecker: null },
+      const synced = await problemOf('tl_edit');
+      expect(synced).toMatchObject({ name: 'Sum 11', timeLimit: 4 });
+      // The package's checker replaced the checked file, so it is checked again.
+      expect(synced.sourceChecks?.customChecker).toMatchObject({
+        file: 'checker.cpp',
       });
+      expect(synced.sourceChecks?.customChecker?.status).not.toBe('ok');
       const [revision] = await revisions
         .find({ entityId: (await problemOf('tl_edit'))._id, action: 'import' })
         .sort({ createdAt: -1, _id: -1 })

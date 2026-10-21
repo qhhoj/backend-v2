@@ -52,6 +52,7 @@ import type { PolygonAssets } from './polygon-assets';
 import { helperHeadersOf } from './polygon-headers';
 import type { HelperHeader } from './polygon-headers';
 import { ImportQuota } from './import-quota.service';
+import { ImportSourceChecks } from './import-source-checks';
 import { PolygonImportError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
 import type {
@@ -132,13 +133,15 @@ const needsAttention = (
 const isStandard = (job: PolygonImportJob): boolean =>
   job.polygon?.packageType === 'standard';
 
-/** Headers go beside an interactor, whose `files` lists them; a bridged checker's `files` takes one name until every judge accepts a list (judge-v2#34), so a checker alone gets none. */
+/** Headers go beside the package's checker and interactor, whose init.yml `files` list them (a judge with `interactive.checker` reads a checker's list); a problem with neither, an hcmp one, gets none. */
 const helperHeaders = (
   root: XmlElement,
   pkg: PolygonPackage,
   assets: PolygonAssets,
 ): HelperHeader[] =>
-  assets.interactorSource ? helperHeadersOf(root, pkg) : [];
+  assets.checkerSource || assets.interactorSource
+    ? helperHeadersOf(root, pkg)
+    : [];
 
 const dataOf = (
   assets: PolygonAssets,
@@ -153,6 +156,7 @@ const dataOf = (
   grader: assets.grader,
   customGrader: assets.interactorSource ? INTERACTOR_FILE : null,
   helperHeaders: headers.map(({ name }) => name),
+  interactiveChecker: Boolean(assets.interactorSource),
   graderArgs: plan.graderArgs,
   cases: plan.cases,
 });
@@ -250,6 +254,7 @@ export class PolygonImportService {
     private readonly polygon: PolygonClient,
     private readonly standardTests: StandardPackageTests,
     private readonly quota: ImportQuota,
+    private readonly sourceChecks: ImportSourceChecks,
     @InjectQueue(PDF_QUEUE) private readonly pdfQueue: Queue<PdfRenderJob>,
     @InjectQueue(PROBLEM_RESCORE_QUEUE)
     private readonly rescoreQueue: Queue<ProblemRescoreJob>,
@@ -492,7 +497,7 @@ export class PolygonImportService {
     }
   }
 
-  /** The data steps run under the judge's writing marker, ending with the stamp. */
+  /** The data steps run under the judge's writing marker, ending with the stamp; then the checker and interactor are compiled on a judge. */
   private async finish(
     code: string,
     applied: AppliedImport,
@@ -506,6 +511,7 @@ export class PolygonImportService {
     await this.runSteps(code, [
       ['dropping the cached PDFs', () => this.dropPdfs(code)],
     ]);
+    await this.sourceChecks.checkAfterImport(applied.problemId, read.imported);
   }
 
   /** Measured under the data lock, after the files are in place. The import stands when measuring fails: the backfill and the next data write fix the number. */

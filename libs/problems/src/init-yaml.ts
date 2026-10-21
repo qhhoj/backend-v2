@@ -1,5 +1,6 @@
 import type { JsonObject, ProblemData, ProblemTestCase } from '@libs/database';
 import { CUSTOM_CHECKER_TYPES } from '@libs/database';
+import { checkerHeadersOf, runsInteractiveChecker } from '@libs/judging';
 import { extensionOf } from './file-names';
 import { ProblemDataError } from './problem-data.error';
 import { emitYaml } from './yaml-emit';
@@ -61,7 +62,11 @@ function integerOrNull(value: number | null, label: string): number | null {
   return value;
 }
 
-/** Legacy `make_checker` for the problem-wide checker; the custom checker always carries `files` (its uploaded source) with a `type` the editor may choose (default testlib); `files` and `lang` always come from the uploaded source. */
+/** A source alone is one name; with headers it is a list, source first, which the judge compiles side by side. */
+const filesOf = (source: string, headers: string[]): string | string[] =>
+  headers.length ? [source, ...headers] : source;
+
+/** Legacy `make_checker` for the problem-wide checker; the custom checker always carries `files` (its uploaded source, then any Polygon headers) with a `type` the editor may choose (default testlib); `files` and `lang` always come from the uploaded source. */
 function problemChecker(
   data: ProblemData,
 ): string | { name: string; args: JsonObject } {
@@ -83,7 +88,7 @@ function problemChecker(
   return withArgs('bridged', {
     ...args,
     lang: language,
-    files: data.customChecker,
+    files: filesOf(data.customChecker, checkerHeadersOf(data)),
   });
 }
 
@@ -127,18 +132,18 @@ function plainBoxFileName(name: string): string {
   return name;
 }
 
-/** The judge compiles the listed headers beside the interactor, so its `#include "testlib.h"` finds the package's own copy first. */
+/** The judge compiles the listed headers beside the interactor, so its `#include "testlib.h"` finds the package's own copy first. A Polygon interactive problem also names the problem checker, which reads what the interactor wrote once it accepts. */
 function interactiveSpec(data: ProblemData): InitCase {
   const interactor = requireSource(
     data.customGrader,
     'cpp',
     'Only accept `.cpp` interactor',
   );
-  const headers = data.helperHeaders ?? [];
   return {
-    files: headers.length ? [interactor, ...headers] : interactor,
+    files: filesOf(interactor, data.helperHeaders ?? []),
     type: 'testlib',
     lang: 'CPP17',
+    ...(runsInteractiveChecker(data) ? { checker: problemChecker(data) } : {}),
   };
 }
 

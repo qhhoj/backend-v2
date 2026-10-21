@@ -8,7 +8,7 @@ import type {
   SourceCheck,
   SourceChecks,
 } from '@libs/database';
-import { SOURCE_CHECK_QUEUE } from '@libs/problems';
+import { SOURCE_CHECK_JOB_OPTIONS, SOURCE_CHECK_QUEUE } from '@libs/problems';
 import type { SourceCheckJob } from '@libs/problems';
 import { ProblemsRepository } from '../core/problems.repository';
 
@@ -48,7 +48,7 @@ export class SourceChecksService {
     await this.queue.add(
       SOURCE_CHECK_QUEUE,
       { problemId, kind, file },
-      { removeOnComplete: true, removeOnFail: 100 },
+      SOURCE_CHECK_JOB_OPTIONS,
     );
   }
 

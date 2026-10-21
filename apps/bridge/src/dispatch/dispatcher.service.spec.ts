@@ -69,6 +69,7 @@ const entry = (fields: Partial<QueuedSubmission> = {}): QueuedSubmission => ({
   judgeName: null,
   bannedJudges: [],
   retryBannedJudges: [],
+  requiredFeatures: [],
   ...fields,
 });
 const flush = () => new Promise((resolve) => setImmediate(resolve));

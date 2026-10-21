@@ -1,8 +1,8 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { newId, SUBMISSION_PRIORITY } from '@libs/database';
-import { requeueUpdate } from '@libs/judging';
+import { emptyProblemData, newId, SUBMISSION_PRIORITY } from '@libs/database';
+import { INTERACTIVE_CHECKER_FEATURE, requeueUpdate } from '@libs/judging';
 import type { Problem } from '@libs/database';
 import { SubmissionsRepository } from '../src/submissions/submissions.repository';
 import { seedCatalog, seedProblem, seedSubmission } from './fixtures';
@@ -167,6 +167,55 @@ describe('Runs (claims with generations, and the lifecycle writes of the new pro
       problemCode: root.code,
       dataVersion: 9,
     });
+  });
+
+  it("asks for the judge features its (root's) data needs: a Polygon interactive checker, or checker headers", async () => {
+    const interactive = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      data: {
+        ...emptyProblemData(),
+        grader: 'interactive',
+        customGrader: 'interactor.cpp',
+        interactiveChecker: true,
+      },
+    });
+    const mirror = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      mirrorOf: interactive._id,
+      mirrorRoot: interactive._id,
+    });
+    const headers = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      data: {
+        ...emptyProblemData(),
+        checker: 'bridged',
+        customChecker: 'checker.cpp',
+        helperHeaders: ['testlib.h'],
+      },
+    });
+    const legacy = await seedProblem(bridge, catalog, {
+      code: nextCode(),
+      data: {
+        ...emptyProblemData(),
+        grader: 'interactive',
+        customGrader: 'interactor.cpp',
+        checker: 'bridged',
+        customChecker: 'checker.cpp',
+      },
+    });
+    const featuresOf = async (problem: { _id: string }) => {
+      const submission = await seedSubmission(bridge, catalog, {
+        problem: problem._id,
+      });
+      const [queued] = await repository.loadQueued([submission._id]);
+      return queued.requiredFeatures;
+    };
+    expect(await featuresOf(interactive)).toEqual([
+      INTERACTIVE_CHECKER_FEATURE,
+    ]);
+    expect(await featuresOf(mirror)).toEqual([INTERACTIVE_CHECKER_FEATURE]);
+    expect(await featuresOf(headers)).toEqual([INTERACTIVE_CHECKER_FEATURE]);
+    expect(await featuresOf(legacy)).toEqual([]);
   });
 
   it('raises a memory limit under 1 MiB to 1024 KiB, so isolate never gets --cg-mem=0', async () => {

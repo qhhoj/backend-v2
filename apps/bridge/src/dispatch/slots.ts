@@ -17,6 +17,8 @@ export interface QueuedSubmission {
   bannedJudges: string[];
   /** Judges that answered `Final{RETRY}` for it; cleared on every resync tick. */
   retryBannedJudges: string[];
+  /** Hello features its problem's init.yml needs (`requiredJudgeFeatures`); a judge without one of them would answer with an internal error. */
+  requiredFeatures: string[];
 }
 
 export interface JudgeState {
@@ -84,12 +86,13 @@ export const mayStartGeneration = (
   );
 };
 
-/** Runs the language, is not banned, and is enabled (or asked for by name). */
+/** Runs the language, has the features the problem needs, is not banned, and is enabled (or asked for by name). A submission pinned to a judge without a needed feature waits until that judge upgrades or the pin is dropped (resync of an absent judge, rejudge). */
 export const canJudge = (
   judge: JudgeState,
   submission: QueuedSubmission,
 ): boolean =>
   judge.executors.has(submission.languageKey) &&
+  submission.requiredFeatures.every((feature) => judge.features.has(feature)) &&
   !submission.bannedJudges.includes(judge.name) &&
   !submission.retryBannedJudges.includes(judge.name) &&
   (submission.judgeName === null
@@ -159,6 +162,7 @@ const candidateKey = (submission: QueuedSubmission): string =>
     submission.judgeName,
     submission.bannedJudges,
     submission.retryBannedJudges,
+    submission.requiredFeatures,
   ]);
 
 /**
