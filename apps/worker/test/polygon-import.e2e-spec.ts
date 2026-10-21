@@ -440,7 +440,7 @@ describe('PolygonImportProcessor', () => {
     });
   });
 
-  it('stages the checker of an interactive problem and the package headers beside the interactor', async () => {
+  it('stages the package headers beside the interactor and ignores the checker of an interactive problem', async () => {
     await processor.process(
       bareUpdate(
         {},
@@ -459,7 +459,6 @@ describe('PolygonImportProcessor', () => {
     const directory = dataDirectory('sum');
     expect(readdirSync(directory).sort()).toEqual([
       '.data-version',
-      'checker.cpp',
       'constraints.h',
       'init.yml',
       'interactor.cpp',
@@ -472,10 +471,6 @@ describe('PolygonImportProcessor', () => {
     expect(
       parse(readFileSync(join(directory, 'init.yml'), 'utf8')),
     ).toMatchObject({
-      checker: {
-        name: 'bridged',
-        args: { files: 'checker.cpp', lang: 'CPP17', type: 'testlib' },
-      },
       interactive: {
         files: ['interactor.cpp', 'testlib.h', 'constraints.h'],
         type: 'testlib',
@@ -486,6 +481,8 @@ describe('PolygonImportProcessor', () => {
       .select('+data');
     expect(problem!.data).toMatchObject({
       grader: 'interactive',
+      checker: 'standard',
+      customChecker: null,
       helperHeaders: ['testlib.h', 'constraints.h'],
     });
   });
@@ -501,13 +498,14 @@ describe('PolygonImportProcessor', () => {
         {},
         buildPolygonPackage({
           ...fixture,
-          checker: { name: 'std::hcmp.cpp', path: 'files/check.cpp' },
+          checker: { name: 'std::ncmp.cpp', path: 'files/check.cpp' },
           resources: [{ path: 'files/testlib.h', type: 'h.g++' }],
         }),
       ),
     );
     expect(readdirSync(dataDirectory('sum')).sort()).toEqual([
       '.data-version',
+      'checker.cpp',
       'init.yml',
       'tests.zip',
     ]);

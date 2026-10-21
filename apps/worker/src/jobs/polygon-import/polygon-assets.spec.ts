@@ -74,21 +74,31 @@ describe('parseAssets', () => {
     );
   });
 
-  it('keeps the checker of an interactive problem beside its interactor', () => {
+  it('prefers the interactor: interactive grader, checker ignored', () => {
+    const interactive = {
+      grader: 'interactive',
+      checker: 'standard',
+      checkerArgs: null,
+      checkerSource: null,
+      interactorSource: 'files/interactor.cpp',
+    };
     expect(
       assets({
         ...oneTest,
         interactor: 'files/interactor.cpp',
         checker: { name: 'std::wcmp.cpp', path: 'files/check.cpp' },
       }),
-    ).toEqual({
-      ...bridged(),
-      grader: 'interactive',
-      interactorSource: 'files/interactor.cpp',
-    });
+    ).toEqual(interactive);
+    expect(
+      assets({
+        ...oneTest,
+        interactor: 'files/interactor.cpp',
+        checker: { path: 'files/Check.java' },
+      }),
+    ).toEqual(interactive);
     expect(
       assets({ ...oneTest, interactor: 'files/interactor.cpp', checker: null }),
-    ).toMatchObject({ checker: 'standard', checkerSource: null });
+    ).toEqual(interactive);
     expect(() =>
       assets({ ...oneTest, interactor: 'files/interactor.java' }),
     ).toThrow(new PolygonImportError('interactor must use C++'));

@@ -87,7 +87,7 @@ export class ProblemData {
   @Prop({ type: String, default: null }) customChecker!: string | null;
   @Prop({ type: String, default: null }) customGrader!: string | null;
   @Prop({ type: String, default: null }) customHeader!: string | null;
-  /** Headers a Polygon package ships for its checker and interactor (its own testlib.h included), stored beside them; the interactor compiles with them. */
+  /** Headers a Polygon package ships (its own testlib.h included), stored beside its interactor, which compiles with them. */
   @Prop({ type: [String], default: [] }) helperHeaders!: string[];
   @Prop({ type: String, default: 'standard', enum: CHECKERS })
   checker!: Checker;

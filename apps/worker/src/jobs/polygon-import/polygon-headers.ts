@@ -20,7 +20,7 @@ const RESERVED_NAMES: ReadonlySet<string> = new Set([
   INIT_FILE,
 ]);
 
-/** A header staged beside the checker and interactor: `path` in the package, `name` in the data directory. */
+/** A header staged beside the interactor: `path` in the package, `name` in the data directory. */
 export interface HelperHeader {
   path: string;
   name: string;

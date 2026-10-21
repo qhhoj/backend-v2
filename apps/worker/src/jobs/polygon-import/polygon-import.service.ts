@@ -84,15 +84,13 @@ interface ReadPackage {
 const isStandard = (job: PolygonImportJob): boolean =>
   job.polygon?.packageType === 'standard';
 
-/** Headers go beside a checker or interactor the judge compiles, and nowhere else. */
+/** Headers go beside an interactor, whose `files` lists them; a bridged checker's `files` takes one name until every judge accepts a list (judge-v2#34), so a checker alone gets none. */
 const helperHeaders = (
   root: XmlElement,
   pkg: PolygonPackage,
   assets: PolygonAssets,
 ): HelperHeader[] =>
-  assets.checkerSource || assets.interactorSource
-    ? helperHeadersOf(root, pkg)
-    : [];
+  assets.interactorSource ? helperHeadersOf(root, pkg) : [];
 
 const dataOf = (
   assets: PolygonAssets,
