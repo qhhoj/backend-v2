@@ -32,4 +32,6 @@ export class PolygonLinkStateResponse {
   link!: PolygonLinkResponse;
   /** The newest package on Polygon now; null when Polygon could not be asked (not connected, unreachable, access revoked). */
   latestPackage!: PolygonLatestPackageResponse | null;
+  /** The queued or running sync (or update import) of the problem, to poll at `GET /problems/imports/{jobId}`; null when none. */
+  runningJobId!: string | null;
 }

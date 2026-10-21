@@ -488,14 +488,32 @@ describe('Polygon routes', () => {
       failedStep: null,
     });
     await job!.updateProgress({ step: 'downloading', done: 5, total: 10 });
+    // A waiting job's progress is stale (a stalled job put back): only a running job shows it.
     expect(
       dataOf(
         await get(`/api/internal/problems/imports/${job!.id}`).expect(200),
       ),
-    ).toMatchObject({
-      step: 'downloading',
-      progress: { step: 'downloading', done: 5, total: 10 },
-    });
+    ).toMatchObject({ step: 'queued', progress: null });
+    let release = () => undefined as void;
+    const worker = new Worker<PolygonImportJob>(
+      POLYGON_QUEUE,
+      () => new Promise<void>((resolve) => (release = resolve)),
+      { connection: queue.opts.connection },
+    );
+    try {
+      await waitUntil(async () => (await job!.getState()) === 'active', 15_000);
+      expect(
+        dataOf(
+          await get(`/api/internal/problems/imports/${job!.id}`).expect(200),
+        ),
+      ).toMatchObject({
+        step: 'downloading',
+        progress: { step: 'downloading', done: 5, total: 10 },
+      });
+    } finally {
+      release();
+      await worker.close();
+    }
   });
 
   it('queues no authors, curators or types of an update that sends empty lists', async () => {
@@ -687,6 +705,63 @@ describe('Polygon routes', () => {
         'curators',
       ])
         expect(job?.data).not.toHaveProperty(field);
+    });
+
+    it('joins a sync of the same package that is still queued, shows it to the problem editors, and replaces it once finished', async () => {
+      await api.problems.updateOne(
+        { code },
+        { $set: { 'polygonLink.options.maxCases': 9999 } },
+      );
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      const { jobId } = dataOf<{ jobId: string }>(
+        await post(`${links()}/sync`).expect(202),
+      );
+      expect(
+        dataOf<{ jobId: string }>(await post(`${links()}/sync`).expect(202))
+          .jobId,
+      ).toBe(jobId);
+      expect(await queue.count()).toBe(1);
+      expect((await queue.getJob(jobId))?.data.maxCases).toBe(9999);
+      expect(dataOf(await get(links()).expect(200))).toMatchObject({
+        runningJobId: jobId,
+      });
+      const editorId = (
+        await createUserWith(api, `follower_${counter}`, {
+          permissions: ['judge.edit_own_problem'],
+        })
+      )._id;
+      await api.problems.updateOne(
+        { code },
+        { $set: { curators: [editorId] } },
+      );
+      expect(
+        dataOf(
+          await get(
+            `/api/internal/problems/imports/${jobId}`,
+            await loginAs(api, editorId),
+          ).expect(200),
+        ),
+      ).toMatchObject({ id: jobId, state: 'waiting', step: 'queued' });
+      await get(`/api/internal/problems/imports/${jobId}`, plain).expect(404);
+
+      const worker = new Worker<PolygonImportJob>(
+        POLYGON_QUEUE,
+        (job) => Promise.resolve({ problemId: 'done', code: job.data.code }),
+        { connection: queue.opts.connection },
+      );
+      try {
+        await waitUntil(
+          async () => (await queue.getJob(jobId))?.finishedOn !== undefined,
+          15_000,
+        );
+      } finally {
+        await worker.close();
+      }
+      expect(dataOf(await get(links()).expect(200))).toMatchObject({
+        runningJobId: null,
+      });
+      await post(`${links()}/sync`).expect(202);
+      expect(await (await queue.getJob(jobId))?.getState()).toBe('waiting');
     });
 
     it('refuses a sync while the newest package is still building', async () => {

@@ -38,17 +38,20 @@ export class PolygonLinkService {
     private readonly polygon: PolygonClient,
   ) {}
 
-  /** The link and Polygon's newest package; a Polygon failure only blanks the package, the panel still shows the link. */
+  /** The link, Polygon's newest package and the import or sync running on the problem; a Polygon failure only blanks the package, the panel still shows the link. */
   async state(
     auth: AuthContext,
     code: string,
   ): Promise<PolygonLinkStateResponse> {
     const { polygonLink } = linkedProblem(await this.problemOf(auth, code));
-    const latestPackage = await this.polygon
-      .packages(polygonLink.problemId)
-      .then(latestPackageOf)
-      .catch(() => null);
-    return { link: linkView(polygonLink), latestPackage };
+    const [latestPackage, runningJobId] = await Promise.all([
+      this.polygon
+        .packages(polygonLink.problemId)
+        .then(latestPackageOf)
+        .catch(() => null),
+      this.imports.unfinishedJobIdOf(code),
+    ]);
+    return { link: linkView(polygonLink), latestPackage, runningJobId };
   }
 
   /** Switching auto-sync on makes the caller the user it runs as, so the worker re-checks their rights; a repeated switch changes nothing. */

@@ -127,12 +127,14 @@ export class PolygonImportService {
     private readonly rescoreQueue: Queue<ProblemRescoreJob>,
   ) {}
 
-  /** Pre-checks that cost nothing come first; the package (uploaded, or downloaded here from Polygon) is removed however the job ends. */
+  /** A sync another sync of the same package already applied ends at once; then pre-checks that cost nothing come first; the package (uploaded, or downloaded here from Polygon) is removed however the job ends. */
   async import(
     jobId: string,
     job: PolygonImportJob,
     tracker = new ImportTracker(),
   ): Promise<PolygonImportResult> {
+    const synced = await this.repository.syncedMeanwhile(job);
+    if (synced) return { problemId: synced, code: job.code };
     const packagePath = this.dataFiles.importPackagePathOf(jobId);
     try {
       await this.pandoc.assertAvailable();

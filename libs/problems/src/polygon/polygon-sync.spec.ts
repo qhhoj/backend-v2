@@ -58,7 +58,7 @@ describe('hasNewReadyPackage', () => {
 });
 
 describe('syncJobOf', () => {
-  it('is an update naming no catalog field, with the link options and the given package', () => {
+  it('is an update naming no catalog field, with the link options (its testcase limit too) and the given package', () => {
     const job = syncJobOf(
       { code: 'sum', isFullMarkup: false, dataVersion: 7, polygonLink: link },
       {
@@ -67,7 +67,7 @@ describe('syncJobOf', () => {
         type: 'standard',
         createdAt: '2026-10-01T00:00:00.000Z',
       },
-      { userId: 'requester', maxCases: 9999, trigger: 'auto' },
+      { userId: 'requester', trigger: 'auto' },
     );
     expect(job).toEqual({
       requesterId: 'requester',
@@ -80,7 +80,7 @@ describe('syncJobOf', () => {
       ignoreZeroPointBatches: true,
       ignoreZeroPointCases: false,
       appendMainSolution: true,
-      maxCases: 9999,
+      maxCases: 300,
       expectedDataVersion: 7,
       polygon: {
         problemId: 42,

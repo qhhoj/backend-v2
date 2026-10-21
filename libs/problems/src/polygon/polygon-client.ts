@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SettingsService } from '@libs/settings';
 import { failureOf, PolygonApiError } from './polygon-api.error';
 import type { PolygonErrorCode } from './polygon-api.error';
-import { writeCappedBody } from './polygon-download';
+import { failureTextOf, IdleWatch, writeCappedBody } from './polygon-download';
 import type { DownloadProgress } from './polygon-download';
 import { randomSalt, signPolygonParams } from './polygon-signature';
 import type { PolygonCredentials } from './polygon-signature';
@@ -19,7 +19,8 @@ export const POLYGON_FETCH = Symbol('POLYGON_FETCH');
 export type PolygonFetch = typeof fetch;
 
 const CALL_TIMEOUT_MS = 30_000;
-const DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
+/** A download fails after this long without a byte (headers or body); a slow one that keeps moving runs to the end. */
+const DOWNLOAD_IDLE_MS = 60_000;
 /** How much of an error page the log keeps: enough to tell a Cloudflare page from a Polygon one. */
 const LOGGED_BODY_CHARS = 160;
 
@@ -85,7 +86,7 @@ export class PolygonClient {
   /**
    * A package streamed to `destination`: by default the full package with tests generated for Linux (`type=linux`);
    * `standard` exists for every package. A failure answers JSON instead of a zip, or HTTP 500 when the package has
-   * no Linux variant (a standard package).
+   * no Linux variant (a standard package). A download idle for `idleMs` (default a minute) is `polygon_unavailable`.
    */
   async downloadPackage(
     { problemId, packageId }: { problemId: number; packageId: number },
@@ -94,19 +95,28 @@ export class PolygonClient {
       maxBytes: number;
       onProgress?: DownloadProgress;
       type?: 'linux' | 'standard';
+      idleMs?: number;
     },
   ): Promise<void> {
     const method = 'problem.package';
     const type = options.type ?? IMPORT_PACKAGE_TYPE;
-    const response = await this.post(
-      method,
-      { problemId: String(problemId), packageId: String(packageId), type },
-      DOWNLOAD_TIMEOUT_MS,
-    );
-    const label = `${method} for package ${packageId} of problem ${problemId} (type ${type})`;
-    if (!response.ok || !isArchive(response))
-      await this.unwrap(label, response, 'polygon_package_unavailable');
-    await writeCappedBody(response, destination, options);
+    const watch = new IdleWatch(options.idleMs ?? DOWNLOAD_IDLE_MS);
+    try {
+      const response = await this.post(
+        method,
+        { problemId: String(problemId), packageId: String(packageId), type },
+        watch.signal,
+      );
+      const label = `${method} for package ${packageId} of problem ${problemId} (type ${type})`;
+      if (!response.ok || !isArchive(response))
+        await this.unwrap(label, response, 'polygon_package_unavailable');
+      await writeCappedBody(response, destination, {
+        ...options,
+        onData: () => watch.touch(),
+      });
+    } finally {
+      watch.stop();
+    }
   }
 
   private async call<Result>(
@@ -115,7 +125,7 @@ export class PolygonClient {
   ): Promise<Result> {
     return this.unwrap<Result>(
       method,
-      await this.post(method, params, CALL_TIMEOUT_MS),
+      await this.post(method, params, AbortSignal.timeout(CALL_TIMEOUT_MS)),
     );
   }
 
@@ -123,7 +133,7 @@ export class PolygonClient {
   private async post(
     method: string,
     params: Record<string, string>,
-    timeoutMs: number,
+    signal: AbortSignal,
   ): Promise<Response> {
     const credentials = this.credentials();
     if (!credentials)
@@ -139,10 +149,10 @@ export class PolygonClient {
         method: 'POST',
         body,
         redirect: 'error',
-        signal: AbortSignal.timeout(timeoutMs),
+        signal,
       });
     } catch (error) {
-      const message = `Polygon did not answer ${method}: ${fetchFailureOf(error)}`;
+      const message = `Polygon did not answer ${method}: ${failureTextOf(error)}`;
       this.logger.warn(message);
       throw new PolygonApiError('polygon_unavailable', message);
     }
@@ -191,17 +201,4 @@ function envelopeOf<Result>(
   } catch {
     return null;
   }
-}
-
-/** Why `fetch` threw: a timeout (a DOMException, not always an `Error` here), or the network error code (ENOTFOUND, ECONNRESET, a TLS code...). */
-function fetchFailureOf(error: unknown): string {
-  const { name, message, cause } = (error ?? {}) as {
-    name?: unknown;
-    message?: unknown;
-    cause?: { code?: unknown; message?: unknown };
-  };
-  if (name === 'TimeoutError') return 'timed out';
-  if (typeof cause?.code === 'string') return cause.code;
-  if (typeof cause?.message === 'string') return cause.message;
-  return typeof message === 'string' ? message : 'unknown error';
 }

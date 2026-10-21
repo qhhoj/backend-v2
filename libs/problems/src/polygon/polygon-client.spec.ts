@@ -203,6 +203,69 @@ describe('PolygonClient', () => {
     jest.restoreAllMocks();
   });
 
+  describe('when the package body breaks off', () => {
+    const zipResponse = (body: ReadableStream<Uint8Array>) =>
+      Promise.resolve(
+        new Response(body, {
+          headers: { 'content-type': 'application/zip' },
+        }),
+      );
+    const download = (fetchFn: typeof fetch, idleMs?: number) =>
+      new PolygonClient(fakeSettings(CONNECTED), fetchFn)
+        .downloadPackage(
+          { problemId: 1, packageId: 1 },
+          join(directory, 'package.zip'),
+          { maxBytes: 4 * 1024 * 1024, idleMs },
+        )
+        .catch((error: PolygonApiError) => error);
+
+    it('reports a connection reset in mid-body as Polygon being unavailable, with the bytes received', async () => {
+      const failure = await download(() =>
+        zipResponse(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array(1024 * 1024));
+              setTimeout(
+                () =>
+                  controller.error(
+                    Object.assign(new Error('socket hang up'), {
+                      code: 'ECONNRESET',
+                    }),
+                  ),
+                20,
+              );
+            },
+          }),
+        ),
+      );
+      expect(failure).toMatchObject({
+        code: 'polygon_unavailable',
+        message: 'the download stopped after 1.0 MiB: ECONNRESET',
+      });
+    });
+
+    it('gives up on a body that sends nothing for the idle time', async () => {
+      const failure = await download(
+        (_url, init) =>
+          zipResponse(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(new Uint8Array(10));
+                init?.signal?.addEventListener('abort', () =>
+                  controller.error(init.signal?.reason),
+                );
+              },
+            }),
+          ),
+        50,
+      );
+      expect(failure).toMatchObject({
+        code: 'polygon_unavailable',
+        message: 'the download stopped after 0.0 MiB: timed out',
+      });
+    });
+  });
+
   it('reads a FAILED envelope Polygon sends as text/html with HTTP 200 instead of saving it as the package', async () => {
     polygon.reply('problem.package', {
       failed: 'apiKey: Incorrect API key',

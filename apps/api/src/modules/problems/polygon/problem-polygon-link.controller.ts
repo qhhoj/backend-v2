@@ -42,8 +42,10 @@ export class ProblemPolygonLinkController {
    *
    * @remarks
    * Needs write access to the problem's test data. Returns the link (Polygon id, synced revision and package, last sync
-   * time, result and error, auto-sync switch) and Polygon's newest package,
-   * which is null when Polygon cannot be asked. Errors: 404 `not_found`, 404
+   * time, result and error, auto-sync switch), Polygon's newest package,
+   * which is null when Polygon cannot be asked, and `runningJobId`, the queued
+   * or running sync (or update import) of the problem to poll at
+   * `GET /problems/imports/{jobId}`. Errors: 404 `not_found`, 404
    * `polygon_not_linked`, 403 `forbidden`.
    */
   @Get()
@@ -63,7 +65,10 @@ export class ProblemPolygonLinkController {
    * statement, tutorial, tests, checker and limits are overwritten; code,
    * points, group, types, authors, curators and allowed languages are kept.
    * The result is recorded on the link. Answers 202 with a `jobId` to poll at
-   * `GET /problems/imports/{jobId}`. The worker checks the package against the
+   * `GET /problems/imports/{jobId}`; the id is one per problem and package, so
+   * while a sync of that package (manual or automatic) is queued or running
+   * the answer is that job, and nothing is spent. Every sync takes the link's
+   * testcase limit, whoever starts it. The worker checks the package against the
    * storage of the organization an organization-private problem is charged to
    * (the package size minus the test data it replaces). Counts towards the 10 imports an hour per
    * user. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409

@@ -7,7 +7,7 @@ import { REDIS } from '@libs/common';
 import { DiscordWebhooksService } from '@libs/community';
 import { newId, OrganizationUsage, PolygonSyncRun } from '@libs/database';
 import {
-  autoSyncJobId,
+  syncJobId,
   POLYGON_ERROR_PREFIX,
   POLYGON_FETCH,
   POLYGON_QUEUE,
@@ -360,6 +360,41 @@ describe('Polygon link, sync and auto-sync', () => {
     });
   });
 
+  it('ends a second sync of a package another sync already applied as ok, without downloading, and still repairs on a re-sync', async () => {
+    const before = await linked('twice');
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
+    });
+    const queued = syncJob(
+      'twice',
+      { packageId: 11, revision: 4 },
+      before.dataVersion,
+    );
+    expect((await runJob(queued)).error).toBeNull();
+    polygon.reset();
+    const second = await runJob(queued);
+    expect(second.error).toBeNull();
+    expect(second.result).toEqual({
+      problemId: String(before._id),
+      code: 'twice',
+    });
+    expect(polygon.callsOf('problem.package')).toHaveLength(0);
+    const after = (await worker.problems.findOne({ code: 'twice' }))!;
+    expect(after.dataVersion).toBe(before.dataVersion + 1);
+    expect(after.polygonLink).toMatchObject({
+      packageId: 11,
+      lastSyncResult: 'ok',
+    });
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
+    });
+    const repair = await runJob(
+      syncJob('twice', { packageId: 11, revision: 4 }, after.dataVersion),
+    );
+    expect(repair.error).toBeNull();
+    expect(polygon.callsOf('problem.package')).toHaveLength(1);
+  });
+
   it('keeps the catalog of an update that names empty authors, curators and types', async () => {
     const before = await linked('empty_update');
     await worker.problems.updateOne(
@@ -504,7 +539,7 @@ describe('Polygon link, sync and auto-sync', () => {
       });
       const summary = await autoSync.run();
       expect(summary.queued).toBeGreaterThanOrEqual(1);
-      const job = await imports.getJob(autoSyncJobId(problem._id, 20));
+      const job = await imports.getJob(syncJobId(problem._id, 20));
       expect(job?.data).toMatchObject({
         code: 'auto_new',
         mode: 'update',
@@ -546,7 +581,7 @@ describe('Polygon link, sync and auto-sync', () => {
       expect(summary.deferred).toBe(1);
       for (const problem of [inContest, failed, off])
         expect(
-          await imports.getJob(autoSyncJobId(problem._id, 30)),
+          await imports.getJob(syncJobId(problem._id, 30)),
         ).toBeUndefined();
     });
 
