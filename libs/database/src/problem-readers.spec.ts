@@ -88,6 +88,10 @@ const PROBLEM_READERS: Record<string, readonly [Treatment, string]> = {
     'S',
     'the code-collision check must see deleted and tombstoned codes',
   ],
+  'apps/worker/src/jobs/polygon-import/import-source-checks.ts': [
+    'S',
+    'writes the pending compile checks by _id of the problem the import just wrote, with no deleted filter: a problem deleted meanwhile keeps its checks for a restore',
+  ],
   'apps/worker/src/jobs/polygon-import/polygon-sync-runs.repository.ts': [
     'S',
     'a failed sync of a problem deleted meanwhile still belongs to its history',
