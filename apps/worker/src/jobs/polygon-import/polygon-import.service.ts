@@ -44,7 +44,12 @@ import {
   settingsNamedIn,
   sourceHashOf,
 } from './local-edits';
-import type { LocalSettings, SettingsState, SyncedValues } from './local-edits';
+import type {
+  LocalSettings,
+  SettingsState,
+  SourceHashes,
+  SyncedValues,
+} from './local-edits';
 import { ImportTracker } from './import-tracker';
 import { PandocService } from './pandoc.service';
 import { parseAssets } from './polygon-assets';
@@ -88,10 +93,12 @@ interface StagedFile {
   stagedPath: string;
 }
 
-/** The checker and interactor sources a package ships, read once. */
+/** The checker, interactor and header sources a package ships, read once. */
 interface PackageSources {
   customChecker: Buffer | null;
   customGrader: Buffer | null;
+  /** Each header's content by its name in the data directory. */
+  helperHeaders: Map<string, Buffer>;
 }
 
 interface ReadPackage {
@@ -100,7 +107,6 @@ interface ReadPackage {
   plan: TestPlan;
   tests: PlannedTest[];
   assets: PolygonAssets;
-  headers: HelperHeader[];
   sources: PackageSources;
   yaml: string | null;
   imported: ImportedProblem;
@@ -146,7 +152,7 @@ const helperHeaders = (
 const dataOf = (
   assets: PolygonAssets,
   plan: TestPlan,
-  headers: HelperHeader[],
+  sources: PackageSources,
 ): ProblemData => ({
   ...emptyProblemData(),
   archive: TESTS_ARCHIVE,
@@ -155,34 +161,45 @@ const dataOf = (
   customChecker: assets.checkerSource ? CHECKER_FILE : null,
   grader: assets.grader,
   customGrader: assets.interactorSource ? INTERACTOR_FILE : null,
-  helperHeaders: headers.map(({ name }) => name),
+  helperHeaders: [...sources.helperHeaders.keys()],
   interactiveChecker: Boolean(assets.interactorSource),
   graderArgs: plan.graderArgs,
   cases: plan.cases,
 });
 
-/** The checker and interactor sources the package ships. */
+/** The checker, interactor and header sources the package ships. */
 async function readSources(
   pkg: PolygonPackage,
   assets: PolygonAssets,
+  headers: HelperHeader[],
 ): Promise<PackageSources> {
   const read = (path: string | null) =>
     path ? pkg.read(path, SOURCE_MAX_BYTES) : Promise.resolve(null);
+  const helperHeaders = new Map<string, Buffer>();
+  for (const { path, name } of headers)
+    helperHeaders.set(name, await pkg.read(path, SOURCE_MAX_BYTES));
   return {
     customChecker: await read(assets.checkerSource),
     customGrader: await read(assets.interactorSource),
+    helperHeaders,
   };
 }
+
+const packageSourceHashes = (sources: PackageSources): SourceHashes => ({
+  customChecker: sourceHashOf(sources.customChecker),
+  customGrader: sourceHashOf(sources.customGrader),
+  helperHeaders: Object.fromEntries(
+    [...sources.helperHeaders].map(([name, content]) => [
+      name,
+      sourceHashOf(content),
+    ]),
+  ),
+});
 
 /** The package's settings with a sync's local edits kept (see `mergeLocalEdits`); the link records the package's own. */
 function settingsOf(
   job: PolygonImportJob,
-  {
-    assets,
-    plan,
-    headers,
-    sources,
-  }: Omit<ReadPackage, 'root' | 'tests' | 'yaml' | 'imported'>,
+  { assets, plan, sources }: Pick<ReadPackage, 'assets' | 'plan' | 'sources'>,
   local: LocalSettings | null,
 ): {
   values: SyncedValues;
@@ -193,19 +210,15 @@ function settingsOf(
     timeLimit: plan.timeLimit,
     memoryLimit: plan.memoryLimit,
     partial: plan.partial,
-    data: dataOf(assets, plan, headers),
+    data: dataOf(assets, plan, sources),
   };
   const incoming: SettingsState = {
     ...values,
-    sourceHashes: {
-      customChecker: sourceHashOf(sources.customChecker),
-      customGrader: sourceHashOf(sources.customGrader),
-    },
+    sourceHashes: packageSourceHashes(sources),
   };
-  const merged = local
+  return local
     ? mergeLocalEdits(incoming, local, job.overwriteLocalEdits === true)
-    : { values, localEdits: null };
-  return { ...merged, recorded: fingerprintsOf(incoming) };
+    : { values, localEdits: null, recorded: fingerprintsOf(incoming) };
 }
 
 /** The job's result: the problem, the conversion summary, what a sync kept, and whether it needs a repair. */
@@ -334,9 +347,7 @@ export class PolygonImportService {
       const testsArchive = generated
         ? createReadStream(generated)
         : repackTests(pkg, read.tests);
-      staged.push(
-        ...(await this.stageFiles(job.code, pkg, testsArchive, read)),
-      );
+      staged.push(...(await this.stageFiles(job.code, testsArchive, read)));
       tracker.enter('saving');
       const applied = await this.repository.apply(job, read.imported, target);
       committed = true;
@@ -371,15 +382,14 @@ export class PolygonImportService {
       savedImages,
     );
     const headers = helperHeaders(root, pkg, assets);
-    const sources = await readSources(pkg, assets);
-    const settings = settingsOf(job, { assets, plan, headers, sources }, local);
+    const sources = await readSources(pkg, assets, headers);
+    const settings = settingsOf(job, { assets, plan, sources }, local);
     const compiled = this.compile(settings.values.data, plan.tests);
     return {
       root,
       plan,
       tests: plan.tests,
       assets,
-      headers,
       sources,
       yaml: compiled.yaml,
       imported: {
@@ -393,7 +403,7 @@ export class PolygonImportService {
     };
   }
 
-  /** A sync's view of the problem: its settings with the checker and interactor read from disk, and which of them the setter edited since the last import (by the link's record, else by the revisions). Null for other imports. */
+  /** A sync's view of the problem: its settings with the checker, interactor and headers read from disk, and which of them the setter edited since the last import (by the link's record, else by the revisions). Null for other imports. */
   private async localSettingsOf(
     code: string,
     settings: TargetSettings | null | undefined,
@@ -402,22 +412,27 @@ export class PolygonImportService {
     const { values, imported, revisedFields } = settings;
     const state: SettingsState = {
       ...values,
-      sourceHashes: {
-        customChecker: await this.storedSourceHash(
-          code,
-          values.data.customChecker,
-        ),
-        customGrader: await this.storedSourceHash(
-          code,
-          values.data.customGrader,
-        ),
-      },
+      sourceHashes: await this.storedSourceHashes(code, values.data),
     };
     return {
       state,
       edited: imported
         ? editedSince(imported, state)
         : settingsNamedIn(revisedFields),
+    };
+  }
+
+  private async storedSourceHashes(
+    code: string,
+    data: ProblemData,
+  ): Promise<SourceHashes> {
+    const helperHeaders: SourceHashes['helperHeaders'] = {};
+    for (const name of data.helperHeaders ?? [])
+      helperHeaders[name] = await this.storedSourceHash(code, name);
+    return {
+      customChecker: await this.storedSourceHash(code, data.customChecker),
+      customGrader: await this.storedSourceHash(code, data.customGrader),
+      helperHeaders,
     };
   }
 
@@ -637,16 +652,11 @@ export class PolygonImportService {
       : null;
   }
 
-  /** The package's checker and interactor are staged only where the problem takes them: a sync that keeps the local one leaves its file alone, whatever its name. */
+  /** The package's checker and interactor are staged only where the problem takes them: a sync that keeps the local one leaves its file alone, whatever its name. Every package header is staged; the headers only a kept source names stay as they are. */
   private async stageFiles(
     code: string,
-    pkg: PolygonPackage,
     testsArchive: Readable,
-    {
-      sources,
-      headers,
-      imported,
-    }: Pick<ReadPackage, 'sources' | 'headers' | 'imported'>,
+    { sources, imported }: Pick<ReadPackage, 'sources' | 'imported'>,
   ): Promise<StagedFile[]> {
     const kept = imported.localEdits?.kept ?? [];
     const staged: StagedFile[] = [];
@@ -662,8 +672,8 @@ export class PolygonImportService {
         await stage(CHECKER_FILE, sources.customChecker);
       if (!kept.includes('grader'))
         await stage(INTERACTOR_FILE, sources.customGrader);
-      for (const { path, name } of headers)
-        await stage(name, await pkg.read(path, SOURCE_MAX_BYTES));
+      for (const [name, content] of sources.helperHeaders)
+        await stage(name, content);
     } catch (error) {
       await Promise.all(
         staged.map(({ stagedPath }) => rm(stagedPath, { force: true })),

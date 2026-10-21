@@ -56,7 +56,7 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.judges.setAllOffline();
   }
 
-  /** Mongo is the truth: queued submissions no command announced (Redis failure, trimmed stream) still reach a judge, P/G rows nobody holds go back to the queue, and RETRY bans end. A tick still running when the next fires is skipped; a failure waits for the next tick. */
+  /** Mongo is the truth: queued submissions no command announced (Redis failure, trimmed stream) still reach a judge, P/G rows nobody holds go back to the queue, RETRY bans end, and queued entries take the judge features their problem needs now. A tick still running when the next fires is skipped; a failure waits for the next tick. */
   private async resync(): Promise<void> {
     if (this.resyncing) return;
     this.resyncing = true;
@@ -67,10 +67,11 @@ export class BridgeService implements OnApplicationBootstrap, OnModuleDestroy {
       await this.dispatch.resyncGenerations();
       await this.dispatch.clearRetryBans();
       const rows = await this.submissions.loadQueued();
-      // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it
+      // a queued entry may hold constraints (judge, banned judges) only a command carries: the tick never replaces it, it only refreshes the features its problem needs
       await this.dispatch.enqueue(
         rows.filter((row) => !this.dispatch.hasQueued(row.id)),
       );
+      await this.dispatch.refreshRequiredFeatures(rows);
     } catch (error) {
       this.logger.error(`Queue resync failed: ${(error as Error).message}`);
     } finally {

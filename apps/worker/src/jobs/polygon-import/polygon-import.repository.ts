@@ -35,6 +35,7 @@ import type { LocalEdits, PolygonImportJob } from '@libs/problems';
 import type { ClientSession, Connection, Model } from 'mongoose';
 import { PolygonImportError } from './polygon-import.error';
 import type { ImportFailure } from './import-failure';
+import { importedSourceChecks } from './import-source-checks';
 import type { SyncedValues } from './local-edits';
 import {
   importComment,
@@ -137,7 +138,7 @@ const summaryOf = (problem: Partial<Problem>) => ({
   curators: problem.curators?.map(uuidStr),
 });
 
-/** An update of an existing problem: the problem before, the imported fields, and the other `$set` paths (the link, dropped compile checks). */
+/** An update of an existing problem: the problem before, the imported fields, and the other `$set` paths (the link, the compile checks of the sources it wrote). */
 interface ProblemUpdate {
   problemId: string;
   before: Problem;
@@ -208,6 +209,15 @@ const unchangedSinceQueued = (
     partial: target.settings.values.partial,
   }),
 });
+
+/** `$set` paths of the compile checks the import resets (see `importedSourceChecks`). */
+const sourceCheckPaths = (imported: ImportedProblem) =>
+  Object.fromEntries(
+    Object.entries(importedSourceChecks(imported)).map(([kind, check]) => [
+      `sourceChecks.${kind}`,
+      check,
+    ]),
+  );
 
 /** The code of the other problem is not told: the requester may not be allowed to see it. */
 const alreadyLinkedElsewhere = (job: PolygonImportJob) =>
@@ -484,10 +494,13 @@ export class PolygonImportRepository {
     if (!problemId || !before)
       return this.insertWithCatalogDefaults(
         job,
-        { statement, synced },
+        { statement, synced, imported },
         session,
       );
-    const otherPaths = linkChanges(job, synced);
+    const otherPaths = {
+      ...linkChanges(job, synced),
+      ...sourceCheckPaths(imported),
+    };
     return this.updateIfDataVersionUnchanged(
       job,
       { problemId, before, statement, otherPaths, target },
@@ -530,11 +543,21 @@ export class PolygonImportRepository {
     {
       statement,
       synced,
-    }: { statement: StatementFields; synced: SyncedPackage },
+      imported,
+    }: {
+      statement: StatementFields;
+      synced: SyncedPackage;
+      imported: ImportedProblem;
+    },
     session: ClientSession,
   ): Promise<WrittenProblem> {
     const created = {
       ...definedOnly(statement),
+      sourceChecks: {
+        customChecker: null,
+        customGrader: null,
+        ...importedSourceChecks(imported),
+      },
       code: job.code,
       isFullMarkup: job.isFullMarkup,
       date: new Date(),

@@ -785,6 +785,37 @@ describe('DispatcherService', () => {
     expect(dispatcher.queuedIds()).toEqual([submission.id]);
   });
 
+  it('gives a queued entry the features its problem needs now, keeping its pin and bans', async () => {
+    // j2 comes first: it would take the entry if the refresh dropped the pin.
+    const free = await online(new Target('j2'));
+    const judge = await online(new Target('j1', 2));
+    const pinned = entry({
+      judgeName: 'j1',
+      bannedJudges: ['j9'],
+      requiredFeatures: ['interactive.checker'],
+    });
+    await queue(pinned);
+    expect(judge.assigned).toEqual([]);
+    // The problem was re-imported without the feature; the resync reads the row again.
+    await dispatcher.refreshRequiredFeatures([
+      { ...pinned, judgeName: null, bannedJudges: [], requiredFeatures: [] },
+    ]);
+    expect(judge.assigned.map(({ ref }) => ref.submissionId)).toEqual([
+      pinned.id,
+    ]);
+    expect(free.assigned).toEqual([]);
+
+    await dispatcher.setDisabled('j2', true);
+    const other = entry();
+    await dispatcher.setDisabled('j1', true);
+    await queue(other);
+    await dispatcher.refreshRequiredFeatures([
+      { ...other, requiredFeatures: ['interactive.checker'] },
+    ]);
+    await dispatcher.setDisabled('j1', false);
+    expect(dispatcher.queuedIds()).toEqual([other.id]);
+  });
+
   it('releases an unaccepted Assign alone and hands it to a free slot', async () => {
     const judge = await online(new Target('j1', 2));
     const [slow, fine] = [entry(), entry()];

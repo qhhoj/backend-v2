@@ -3,9 +3,11 @@ import { getModelToken } from '@nestjs/mongoose';
 import { UnrecoverableError } from 'bullmq';
 import type { Job, Queue } from 'bullmq';
 import { readFile, writeFile } from 'node:fs/promises';
+import { parse } from 'yaml';
 import type { Model } from 'mongoose';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
+import { waitUntil } from '@libs/common/testing';
 import { DiscordWebhooksService } from '@libs/community';
 import {
   newId,
@@ -30,6 +32,10 @@ import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportError } from '../src/jobs/polygon-import/polygon-import.error';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
 import { PolygonImportService } from '../src/jobs/polygon-import/polygon-import.service';
+import {
+  fingerprintsOf,
+  sourceHashOf,
+} from '../src/jobs/polygon-import/local-edits';
 import { ProblemPurgeService } from '../src/jobs/problem-purge/problem-purge.service';
 import { PolygonAutoSyncService } from '../src/jobs/polygon-autosync/polygon-autosync.service';
 import { seedContest } from './effects-fixtures';
@@ -44,7 +50,12 @@ const fakePandoc = {
   texToMarkdown: (tex: string) => Promise.resolve(tex),
 };
 const POLYGON_ID = 4242;
-const fixtureNamed = (name: string, timeLimitMs = 1000): PolygonFixture => ({
+const fixtureNamed = (
+  name: string,
+  timeLimitMs = 1000,
+  extra: Partial<PolygonFixture> = {},
+): PolygonFixture => ({
+  ...extra,
   tests: [{ input: '1 2', answer: '3', points: 100 }],
   timeLimitMs,
   statements: [
@@ -513,6 +524,136 @@ describe('Polygon link, sync and auto-sync', () => {
       });
     });
 
+    it('moves an interactor-only problem with a record from before the interactive checker to running it, without an overwrite', async () => {
+      const interactive = fixtureNamed('Sum', 1000, {
+        interactor: 'files/interactor.cpp',
+        resources: [{ path: 'files/testlib.h' }],
+      });
+      polygon.reply('problem.package', {
+        zip: buildPolygonPackage(interactive),
+      });
+      expect((await runJob(linkJob('ic_legacy', 10))).error).toBeNull();
+      // What an import before the interactive checker wrote (its checker ignored), and the record a later sync took of it.
+      const linkedNow = await problemOf('ic_legacy');
+      const dataFiles = worker.module.get(ProblemDataFilesService);
+      const hashOf = async (name: string) =>
+        sourceHashOf(await readFile(dataFiles.pathOf('ic_legacy', name)));
+      const legacy = {
+        timeLimit: linkedNow.timeLimit,
+        memoryLimit: linkedNow.memoryLimit,
+        partial: linkedNow.partial,
+        data: {
+          ...linkedNow.data!,
+          checker: 'standard' as const,
+          customChecker: null,
+          interactiveChecker: false,
+        },
+      };
+      const record = fingerprintsOf(
+        {
+          ...legacy,
+          sourceHashes: {
+            customChecker: null,
+            customGrader: await hashOf('interactor.cpp'),
+            helperHeaders: { 'testlib.h': await hashOf('testlib.h') },
+          },
+        },
+        { withHeaders: false },
+      );
+      await worker.problems.updateOne(
+        { code: 'ic_legacy' },
+        {
+          $set: {
+            data: legacy.data,
+            'polygonLink.importedSettings': record,
+          },
+          $inc: { dataVersion: 1 },
+        },
+      );
+      polygon.reply('problem.package', {
+        zip: buildPolygonPackage(interactive),
+      });
+      const { error, result } = await runJob(
+        syncJob(
+          'ic_legacy',
+          { packageId: 11, revision: 11 },
+          linkedNow.dataVersion + 1,
+        ),
+        once,
+      );
+      expect(error).toBeNull();
+      expect(result?.localEdits).toEqual({
+        kept: [],
+        updated: ['checker', 'grader'],
+      });
+      expect((await problemOf('ic_legacy')).data).toMatchObject({
+        interactiveChecker: true,
+        customChecker: 'checker.cpp',
+        helperHeaders: ['testlib.h'],
+      });
+      const init = parse(
+        await readFile(dataFiles.pathOf('ic_legacy', 'init.yml'), 'utf8'),
+      ) as { interactive?: { checker?: { name: string } } };
+      expect(init.interactive?.checker).toMatchObject({ name: 'bridged' });
+    });
+
+    it('keeps the headers a kept interactor compiles with when the package drops one, and leaves the checker unedited', async () => {
+      const withHeaders = (...names: string[]) =>
+        buildPolygonPackage(
+          fixtureNamed('Sum', 1000, {
+            interactor: 'files/interactor.cpp',
+            resources: names.map((name) => ({ path: `files/${name}` })),
+          }),
+        );
+      polygon.reply('problem.package', {
+        zip: withHeaders('testlib.h', 'constraints.h'),
+      });
+      expect((await runJob(linkJob('hdr_kept', 10))).error).toBeNull();
+      const dataFiles = worker.module.get(ProblemDataFilesService);
+      await writeFile(
+        dataFiles.pathOf('hdr_kept', 'interactor.cpp'),
+        "// the setter's interactor",
+      );
+      const sync = async (packageId: number) => {
+        const { dataVersion } = (await worker.problems.findOne({
+          code: 'hdr_kept',
+        }))!;
+        polygon.reply('problem.package', { zip: withHeaders('testlib.h') });
+        return runJob(
+          syncJob('hdr_kept', { packageId, revision: packageId }, dataVersion),
+          once,
+        );
+      };
+      const first = await sync(11);
+      expect(first.error).toBeNull();
+      // The checker compiles with the same headers as before: nothing about it changed.
+      expect(first.result?.localEdits).toEqual({
+        kept: ['grader'],
+        updated: [],
+      });
+      expect((await problemOf('hdr_kept')).data?.helperHeaders).toEqual([
+        'testlib.h',
+        'constraints.h',
+      ]);
+      expect(
+        await readFile(dataFiles.pathOf('hdr_kept', 'constraints.h'), 'utf8'),
+      ).toBe('// files/constraints.h');
+      const init = parse(
+        await readFile(dataFiles.pathOf('hdr_kept', 'init.yml'), 'utf8'),
+      ) as { interactive?: { files?: string[] } };
+      expect(init.interactive?.files).toEqual([
+        'interactor.cpp',
+        'testlib.h',
+        'constraints.h',
+      ]);
+      // The link recorded the checker with the header set written: it does not read as edited (it would be kept with the grader).
+      const again = await sync(12);
+      expect(again.result?.localEdits).toEqual({
+        kept: ['grader'],
+        updated: [],
+      });
+    });
+
     it('reads the revisions since the last import for a link from before the record, then records it', async () => {
       const before = await linked('legacy');
       await worker.problems.updateOne(
@@ -736,6 +877,25 @@ describe('Polygon link, sync and auto-sync', () => {
 
   it('records on the link a sync that imported but needs a repair, while the job completes', async () => {
     const before = await linked('repair');
+    const checkerCheck = async () =>
+      (await worker.problems
+        .findOne({ code: 'repair' }, { sourceChecks: 1 })
+        .lean())!.sourceChecks?.customChecker;
+    // The link's own check (no judge here: unavailable) lands first, so it cannot answer the sync's.
+    await waitUntil(async () => (await checkerCheck())?.status !== 'pending');
+    await worker.problems.updateOne(
+      { code: 'repair' },
+      {
+        $set: {
+          'sourceChecks.customChecker': {
+            file: 'checker.cpp',
+            status: 'ok',
+            log: '',
+            checkedAt: new Date(0),
+          },
+        },
+      },
+    );
     polygon.reply('problem.package', {
       zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
     });
@@ -764,6 +924,11 @@ describe('Polygon link, sync and auto-sync', () => {
       result: 'failed',
       failedStep: 'finishing',
       errorCode: 'imported_needs_attention',
+    });
+    // The commit replaced the checker: the old file's ok is gone with it, though nothing was compiled.
+    expect(await checkerCheck()).toMatchObject({
+      file: 'checker.cpp',
+      status: 'pending',
     });
   });
 

@@ -58,8 +58,12 @@ export interface PackageManifest {
     outputLimit: number | null;
     unicode: boolean;
     nobigmath: boolean;
+    /** An interactive problem also runs its checker on what the interactor wrote. */
+    interactiveChecker: boolean;
     /** Stored names; the files sit in `data/` (archive) and `sources/` (the rest). */
     files: Record<DataFileKind, string | null>;
+    /** Headers the checker and interactor compile with, in `sources/`. */
+    helperHeaders: string[];
     cases: ProblemTestCase[];
   };
   /** Name inside `material/`. */
@@ -131,9 +135,11 @@ function dataSection(problem: Problem): PackageManifest['data'] {
     outputLimit: data.outputLimit,
     unicode: data.unicode,
     nobigmath: data.nobigmath,
+    interactiveChecker: data.interactiveChecker ?? false,
     files: Object.fromEntries(
       DATA_FILE_KINDS.map((kind) => [kind, data[kind]]),
     ) as Record<DataFileKind, string | null>,
+    helperHeaders: [...(data.helperHeaders ?? [])],
     cases: plain(data.cases),
   };
 }

@@ -139,11 +139,19 @@ describe('problem package build', () => {
     const manifest = JSON.parse(files['package.json']) as {
       format: string;
       problem: { code: string };
-      data: { cases: Array<{ input: string }> };
+      data: {
+        cases: Array<{ input: string }>;
+        interactiveChecker: boolean;
+        helperHeaders: string[];
+      };
     };
     expect(manifest.format).toBe('qhhoj-package');
     expect(manifest.problem.code).toBe('pkg_sum');
     expect(manifest.data.cases.map((row) => row.input)).toEqual(['1.in']);
+    expect(manifest.data).toMatchObject({
+      interactiveChecker: false,
+      helperHeaders: ['testlib.h'],
+    });
   });
 
   it('refuses a data file that is a symlink out of the data root, and builds no zip', async () => {
