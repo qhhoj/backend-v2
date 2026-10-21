@@ -195,6 +195,8 @@ describe('Polygon standard package import', () => {
     await worker.setSetting('polygon.apiKey', 'KEY');
     await worker.setSetting('polygon.apiSecret', 'SECRET');
     await worker.problemGroups.create({ name: 'Uncategorized', fullName: 'U' });
+    // A create that names no type takes the oldest one.
+    await worker.problemTypes.create({ name: 'misc', fullName: 'Misc' });
     await worker.languages.create({
       key: 'CPP17',
       name: 'C++17',

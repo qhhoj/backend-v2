@@ -374,6 +374,11 @@ async function renderSourceAndSaveImages(
   };
 }
 
+/** A statement the job leaves out: not rendered, no images saved, its tutorial never the editorial. */
+const isSkipped = (source: StatementSource, job: PolygonImportJob): boolean =>
+  Object.hasOwn(job.statementLanguages, source.language) &&
+  job.statementLanguages[source.language] === 'skip';
+
 function toTranslation(
   source: StatementSource,
   rendered: RenderedStatement,
@@ -381,9 +386,10 @@ function toTranslation(
   earlierTranslations: Translation[],
 ): Translation {
   /** Languages come from problem.xml: `constructor` or `__proto__` must not resolve through the prototype. */
-  const siteLanguage = Object.hasOwn(job.statementLanguages, source.language)
+  const choice = Object.hasOwn(job.statementLanguages, source.language)
     ? job.statementLanguages[source.language]
     : undefined;
+  const siteLanguage = choice === 'skip' ? undefined : choice;
   if (!siteLanguage)
     throw new PolygonImportError(
       `invalid site language for ${source.language}`,
@@ -446,7 +452,11 @@ export async function parseStatements(
     translations: [],
     tutorial: '',
   };
-  for (const source of sources) {
+  const kept = sources.filter(
+    (source) =>
+      source.language === mainLanguage || !isSkipped(source, context.job),
+  );
+  for (const source of kept) {
     const rendered = await renderSourceAndSaveImages(source, style, context);
     if (source.language === mainLanguage)
       Object.assign(imported, { name: source.name, ...rendered });
@@ -455,7 +465,7 @@ export async function parseStatements(
         toTranslation(source, rendered, context.job, imported.translations),
       );
   }
-  imported.tutorial = await pickAndSaveTutorial(sources, context);
+  imported.tutorial = await pickAndSaveTutorial(kept, context);
   return imported;
 }
 

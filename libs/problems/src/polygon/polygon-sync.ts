@@ -30,12 +30,13 @@ export function hasNewReadyPackage(
 
 /**
  * A sync is an update import that names no catalog field, so code, points, group, types, authors, curators and
- * allowed languages stay; statement, tests, checker and limits come from the package with the link's options.
+ * allowed languages stay; statement, tests, checker and limits come from the package with the link's options, its
+ * testcase limit included (whoever starts the sync).
  */
 export function syncJobOf(
   problem: LinkedProblem,
   latest: Pick<ReadyPackage, 'id' | 'revision' | 'type' | 'createdAt'>,
-  requester: { userId: string; maxCases: number; trigger: PolygonSyncTrigger },
+  requester: { userId: string; trigger: PolygonSyncTrigger },
 ): PolygonImportJob {
   const link = problem.polygonLink;
   return {
@@ -44,7 +45,6 @@ export function syncJobOf(
     mode: 'update',
     isFullMarkup: problem.isFullMarkup,
     ...link.options,
-    maxCases: requester.maxCases,
     expectedDataVersion: problem.dataVersion ?? 0,
     polygon: {
       problemId: link.problemId,

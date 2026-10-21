@@ -15,12 +15,13 @@ import {
 } from 'class-validator';
 import { IsProblemCode } from '../../core/dto/problem-code.decorator';
 import { toArray } from '@libs/common';
+import { SYNC_JOB_ID } from '@libs/problems';
 import { toBoolean } from '../../core/dto/transforms';
 
 export const IMPORT_MODES = ['create', 'update'] as const;
 export type ImportMode = (typeof IMPORT_MODES)[number];
-/** `english=en`: a Polygon statement language and the site language its translation is stored under. */
-const LANGUAGE_PAIR = /^[a-z]+=(en|vi)$/;
+/** `english=en`: a Polygon statement language and the site language its translation is stored under, or `russian=skip` to leave that statement out. */
+const LANGUAGE_PAIR = /^[a-z]+=(en|vi|skip)$/;
 
 /** Options travel in the query string: the multipart body carries only the package. */
 export class PolygonImportQueryDto {
@@ -60,7 +61,7 @@ export class PolygonImportQueryDto {
   points?: number;
   /** Polygon language of the statement stored as the base statement. */
   @IsOptional() @IsString() @MaxLength(30) mainStatementLanguage?: string;
-  /** Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter. */
+  /** Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations, or `<polygon language>=skip` to leave a statement out; repeat the parameter. Every statement but the main one needs an entry. */
   @IsOptional()
   @Transform(toArray)
   @Matches(LANGUAGE_PAIR, { each: true })
@@ -87,7 +88,12 @@ export class PolygonImportQueryDto {
   appendMainSolution: boolean = false;
 }
 
+/** A UUIDv7, or the `polygon-sync-<problem id>-<package id>` id of a Polygon sync. */
+const IMPORT_JOB_ID = new RegExp(
+  `^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|${SYNC_JOB_ID.source}`,
+);
+
 export class ImportJobParamDto {
-  /** Job id from the start response. */
-  @IsUUID('7') jobId!: string;
+  /** Job id from the start response (a UUIDv7, or `polygon-sync-…` for a Polygon sync). */
+  @Matches(IMPORT_JOB_ID) jobId!: string;
 }

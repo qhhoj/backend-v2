@@ -1,6 +1,10 @@
 import { AppError } from '@libs/common';
-import { PolygonApiError } from '@libs/problems';
-import type { PolygonErrorCode } from '@libs/problems';
+import {
+  newestPackageOf,
+  packageNotReadyReason,
+  PolygonApiError,
+} from '@libs/problems';
+import type { PolygonErrorCode, PolygonPackageInfo } from '@libs/problems';
 
 /** Polygon is the upstream: its refusals are gateway errors, not the caller's. */
 const STATUS: Record<PolygonErrorCode, number> = {
@@ -26,12 +30,28 @@ export async function askPolygon<Result>(
   }
 }
 
-/** `reason` names Polygon's newest package and its state (see `packageNotReadyReason`). */
-export const packageNotReady = (polygonId: number, reason: string) =>
+/** Names Polygon's newest package, also as `newestPackage` (id, revision, state RUNNING or FAILED, and Polygon's comment on it), so the setter sees why a build failed. */
+export const packageNotReady = (
+  polygonId: number,
+  packages: PolygonPackageInfo[],
+) =>
   new AppError(
     'polygon_package_not_ready',
     409,
-    `Polygon problem ${polygonId} has no READY package: ${reason}. Build a package on Polygon first`,
+    `Polygon problem ${polygonId} has no READY package: ${packageNotReadyReason(packages)}. Build a package on Polygon first`,
+    undefined,
+    undefined,
+    { newestPackage: newestPackageOf(packages) },
+  );
+
+/** Another request is reading this problem's package for its first link check; the first check of a large package can take minutes. */
+export const linkBeingChecked = () =>
+  new AppError(
+    'polygon_link_checking',
+    409,
+    'This Polygon problem is being checked for the first time, which can take a few minutes for a large package: check again in a minute',
+    undefined,
+    { 'Retry-After': '60' },
   );
 
 export const linkInvalid = () =>

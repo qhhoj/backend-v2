@@ -45,6 +45,8 @@ export interface PolygonSource {
   trigger?: PolygonSyncTrigger;
 }
 
-/** BullMQ ignores an `add` whose id is still kept, so one package is synced at most once per kept job. */
-export const autoSyncJobId = (problemId: string, packageId: number): string =>
+/** One job id per problem and package, manual or automatic: BullMQ ignores an `add` whose id is still kept, so a second sync of one package joins the first instead of racing it. */
+export const syncJobId = (problemId: string, packageId: number): string =>
   `polygon-sync-${problemId}-${packageId}`;
+/** The ids `syncJobId` makes; every other import job has a UUIDv7 id. */
+export const SYNC_JOB_ID = /^polygon-sync-[0-9a-f-]{36}-\d+$/;

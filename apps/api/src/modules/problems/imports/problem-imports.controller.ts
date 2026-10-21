@@ -66,9 +66,12 @@ export class ProblemImportsController {
    * @remarks
    * Returns the job state (`waiting`,
    * `active`, `completed`, `failed`, ...), the imported problem when completed,
-   * and the error written for the requester when it failed. Only the user who
-   * started the job, or a superuser, can read it; anyone else gets the same 404
-   * `not_found` as for an unknown id. Finished jobs stay readable for a day.
+   * and the error written for the requester when it failed. The user who
+   * started the job and a superuser can read it, and so can anyone with write
+   * access to the test data of the problem an update (a sync too) imports
+   * into; anyone else gets the same 404 `not_found` as for an unknown id. The
+   * step and progress are shown only while the job runs. Finished jobs stay
+   * readable for a day.
    */
   @Get(':jobId')
   status(

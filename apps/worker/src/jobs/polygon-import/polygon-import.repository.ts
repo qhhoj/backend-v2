@@ -227,6 +227,25 @@ export class PolygonImportRepository {
     };
   }
 
+  /** A sync queued while another sync of the same package was pending finds the problem already at that package with a newer data version: that sync landed, so this one has nothing to do. The problem's id then, else null. A repair (same package, data version unchanged) runs normally. */
+  async syncedMeanwhile(job: PolygonImportJob): Promise<string | null> {
+    if (job.polygon?.purpose !== 'sync') return null;
+    const problem = await this.problems
+      .findOne(
+        {
+          code: job.code,
+          deletedAt: null,
+          'polygonLink.problemId': job.polygon.problemId,
+          'polygonLink.packageId': job.polygon.packageId,
+          dataVersion: { $gt: job.expectedDataVersion ?? 0 },
+        },
+        { _id: 1 },
+      )
+      .lean()
+      .exec();
+    return problem ? uuidStr(problem._id) : null;
+  }
+
   /** The requester as the api would see them now; null when gone or deactivated. */
   private async activePrincipal(userId: string): Promise<Principal | null> {
     const user = await this.users.findById(userId).exec();

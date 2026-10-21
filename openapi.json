@@ -8450,7 +8450,7 @@
             "type": "number"
           },
           "statementLanguages": {
-            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter.",
+            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations, or `<polygon language>=skip` to leave a statement out; repeat the parameter. Every statement but the main one needs an entry.",
             "items": {
               "type": "string"
             },
@@ -8562,11 +8562,17 @@
           },
           "link": {
             "$ref": "#/components/schemas/PolygonLinkResponse"
+          },
+          "runningJobId": {
+            "description": "The queued or running sync (or update import) of the problem, to poll at `GET /problems/imports/{jobId}`; null when none.",
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
           "link",
-          "latestPackage"
+          "latestPackage",
+          "runningJobId"
         ],
         "type": "object"
       },
@@ -8634,6 +8640,13 @@
             "description": "Current revision of the problem on Polygon.",
             "type": "number"
           },
+          "statements": {
+            "description": "Every statement language, sorted by name: with two or more, an import names the main one and maps or skips the others (`statementLanguages`); with two or more tutorials it names `tutorialLanguage`.",
+            "items": {
+              "$ref": "#/components/schemas/PolygonStatementLanguageResponse"
+            },
+            "type": "array"
+          },
           "title": {
             "description": "Statement name (Vietnamese, else English, else any language); null when no statement is named.",
             "nullable": true,
@@ -8644,10 +8657,34 @@
           "id",
           "name",
           "title",
+          "statements",
           "owner",
           "revision",
           "modified",
           "latestPackage"
+        ],
+        "type": "object"
+      },
+      "PolygonStatementLanguageResponse": {
+        "properties": {
+          "hasTutorial": {
+            "description": "It has a tutorial, which an import can take as the editorial.",
+            "type": "boolean"
+          },
+          "language": {
+            "description": "Polygon's language name, such as `vietnamese` or `english`.",
+            "type": "string"
+          },
+          "title": {
+            "description": "The statement's title in that language; null when unnamed.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "language",
+          "title",
+          "hasTutorial"
         ],
         "type": "object"
       },
@@ -32363,7 +32400,7 @@
     },
     "/api/internal/polygon/resolve": {
       "post": {
-        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not READY),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it; the optional `code`\nis the problem being re-linked, which may hold the link itself),\n`polygon_linked_deleted` (the holder is deleted but not yet purged: restore\nit and unlink; `linkedProblemCode` as above) or\n`polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon\nanswered the package download with an HTTP error), other 502/503 Polygon\nerrors, 429 `rate_limited`.",
+        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title, its statement\nlanguages (with title and whether each has a tutorial; the import's\nlanguage options name them) and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (Polygon has no\npackage at all), `polygon_package_not_ready` (newest package not READY;\n`newestPackage` gives its id, revision, state RUNNING or FAILED and\nPolygon's comment on it), `polygon_link_checking` (another request is\ndownloading the package for this problem's first check; `Retry-After`),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it; the optional `code`\nis the problem being re-linked, which may hold the link itself),\n`polygon_linked_deleted` (the holder is deleted but not yet purged: restore\nit and unlink; `linkedProblemCode` as above) or\n`polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon\nanswered the package download with an HTTP error), other 502/503 Polygon\nerrors, 429 `rate_limited`.",
         "operationId": "PolygonController_resolve",
         "parameters": [],
         "requestBody": {
@@ -33669,7 +33706,7 @@
             }
           },
           {
-            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter.",
+            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations, or `<polygon language>=skip` to leave a statement out; repeat the parameter. Every statement but the main one needs an entry.",
             "in": "query",
             "name": "statementLanguages",
             "required": false,
@@ -33757,16 +33794,15 @@
     },
     "/api/internal/problems/imports/{jobId}": {
       "get": {
-        "description": "Returns the job state (`waiting`,\n`active`, `completed`, `failed`, ...), the imported problem when completed,\nand the error written for the requester when it failed. Only the user who\nstarted the job, or a superuser, can read it; anyone else gets the same 404\n`not_found` as for an unknown id. Finished jobs stay readable for a day.",
+        "description": "Returns the job state (`waiting`,\n`active`, `completed`, `failed`, ...), the imported problem when completed,\nand the error written for the requester when it failed. The user who\nstarted the job and a superuser can read it, and so can anyone with write\naccess to the test data of the problem an update (a sync too) imports\ninto; anyone else gets the same 404 `not_found` as for an unknown id. The\nstep and progress are shown only while the job runs. Finished jobs stay\nreadable for a day.",
         "operationId": "ProblemImportsController_status",
         "parameters": [
           {
-            "description": "Job id from the start response.",
+            "description": "Job id from the start response (a UUIDv7, or `polygon-sync-…` for a Polygon sync).",
             "in": "path",
             "name": "jobId",
             "required": true,
             "schema": {
-              "format": "uuid",
               "type": "string"
             }
           }
@@ -35998,7 +36034,7 @@
         ]
       },
       "get": {
-        "description": "Needs write access to the problem's test data. Returns the link (Polygon id, synced revision and package, last sync\ntime, result and error, auto-sync switch) and Polygon's newest package,\nwhich is null when Polygon cannot be asked. Errors: 404 `not_found`, 404\n`polygon_not_linked`, 403 `forbidden`.",
+        "description": "Needs write access to the problem's test data. Returns the link (Polygon id, synced revision and package, last sync\ntime, result and error, auto-sync switch), Polygon's newest package,\nwhich is null when Polygon cannot be asked, and `runningJobId`, the queued\nor running sync (or update import) of the problem to poll at\n`GET /problems/imports/{jobId}`. Errors: 404 `not_found`, 404\n`polygon_not_linked`, 403 `forbidden`.",
         "operationId": "ProblemPolygonLinkController_state",
         "parameters": [
           {
@@ -36126,7 +36162,7 @@
     },
     "/api/internal/problems/{code}/polygon/sync": {
       "post": {
-        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial, tests, checker and limits are overwritten; code,\npoints, group, types, authors, curators and allowed languages are kept.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`. The worker checks the package against the\nstorage of the organization an organization-private problem is charged to\n(the package size minus the test data it replaces). Counts towards the 10 imports an hour per\nuser. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409\n`polygon_package_not_ready`,\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial, tests, checker and limits are overwritten; code,\npoints, group, types, authors, curators and allowed languages are kept.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`; the id is one per problem and package, so\nwhile a sync of that package (manual or automatic) is queued or running\nthe answer is that job, and nothing is spent. Every sync takes the link's\ntestcase limit, whoever starts it. The worker checks the package against the\nstorage of the organization an organization-private problem is charged to\n(the package size minus the test data it replaces). Counts towards the 10 imports an hour per\nuser. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409\n`polygon_package_not_ready`,\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
         "operationId": "ProblemPolygonLinkController_sync",
         "parameters": [
           {

@@ -2,11 +2,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import {
-  autoSyncJobId,
   hasNewReadyPackage,
   latestPackageOf,
   POLYGON_QUEUE,
   PolygonClient,
+  syncJobId,
   syncJobOf,
 } from '@libs/problems';
 import type { PolygonImportJob } from '@libs/problems';
@@ -56,13 +56,9 @@ export class PolygonAutoSyncService {
       if (!hasNewReadyPackage(link, latest)) return false;
       await this.imports.add(
         'sync',
-        syncJobOf(problem, latest, {
-          userId: link.linkedBy,
-          maxCases: link.options.maxCases,
-          trigger: 'auto',
-        }),
+        syncJobOf(problem, latest, { userId: link.linkedBy, trigger: 'auto' }),
         {
-          jobId: autoSyncJobId(problem._id, latest.id),
+          jobId: syncJobId(problem._id, latest.id),
           removeOnComplete: KEEP,
           removeOnFail: KEEP,
         },

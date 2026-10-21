@@ -1,6 +1,8 @@
 import {
   latestPackageOf,
+  newestPackageOf,
   packageNotReadyReason,
+  statementLanguagesOf,
   statementTitleOf,
   variantOf,
 } from './polygon-types';
@@ -140,5 +142,41 @@ describe('statementTitleOf', () => {
       }),
     ).toBe('Sum');
     expect(statementTitleOf({})).toBeNull();
+  });
+
+  it('gives the newest package with its state and Polygon comment, PENDING as RUNNING', () => {
+    expect(
+      newestPackageOf([
+        ...rows(11, 4, 'READY'),
+        {
+          ...standard(12, 5, 'FAILED')[0],
+          comment: '  Solution wa.cpp passed all tests ',
+        },
+      ]),
+    ).toEqual({
+      id: 12,
+      revision: 5,
+      state: 'FAILED',
+      comment: 'Solution wa.cpp passed all tests',
+    });
+    expect(newestPackageOf(standard(13, 6, 'PENDING'))).toMatchObject({
+      state: 'RUNNING',
+      comment: null,
+    });
+    expect(newestPackageOf([])).toBeNull();
+  });
+
+  it('lists the statement languages with their title and tutorial, by name', () => {
+    expect(
+      statementLanguagesOf({
+        vietnamese: { name: ' Tổng ', tutorial: 'Dùng tổng.' },
+        english: { name: 'Sum', tutorial: '  ' },
+        russian: {},
+      }),
+    ).toEqual([
+      { language: 'english', title: 'Sum', hasTutorial: false },
+      { language: 'russian', title: null, hasTutorial: false },
+      { language: 'vietnamese', title: 'Tổng', hasTutorial: true },
+    ]);
   });
 });

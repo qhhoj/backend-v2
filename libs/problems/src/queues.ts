@@ -1,4 +1,8 @@
-import type { PolygonSyncStep, StatementLanguage } from '@libs/database';
+import type {
+  PolygonSyncStep,
+  StatementLanguage,
+  StatementLanguageChoice,
+} from '@libs/database';
 import type { PolygonSource } from './polygon/polygon-link';
 import type { SpentCharge } from './quota/quota.types';
 
@@ -48,8 +52,8 @@ export interface PolygonImportJob {
   isFullMarkup: boolean;
   /** Polygon statement language of the main statement; null = the only one. */
   mainStatementLanguage: string | null;
-  /** Polygon language → site language for the remaining statements. */
-  statementLanguages: Record<string, StatementLanguage>;
+  /** Polygon language → site language for the remaining statements, or `skip` to leave one out. */
+  statementLanguages: Record<string, StatementLanguageChoice>;
   tutorialLanguage: string | null;
   ignoreZeroPointBatches: boolean;
   ignoreZeroPointCases: boolean;

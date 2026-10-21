@@ -6,10 +6,10 @@ import { newId } from '@libs/database';
 import {
   POLYGON_SYNC_PERMISSION,
   PolygonClient,
+  syncJobId,
   syncJobOf,
 } from '@libs/problems';
 import type { ReadyPackage } from '@libs/problems';
-import { maxTestcasesFor } from '../core/dto/limits';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
 import { ProblemImportsService } from '../imports/problem-imports.service';
 import { PolygonLinkImportDto } from './dto/polygon-problems.dto';
@@ -61,23 +61,22 @@ export class PolygonLinkImportService {
     return { jobId };
   }
 
-  /** Re-applies the newest READY package (full or standard; even the one already synced: a manual sync is also a repair) with the link's options. */
+  /** Re-applies the newest READY package (full or standard; even the one already synced: a manual sync is also a repair) with the link's options. A sync of that package already queued or running (manual or automatic) is answered with its job instead of a second one, and spends nothing. */
   async sync(
     auth: AuthContext,
     code: string,
   ): Promise<ImportJobStartedResponse> {
-    const problem = linkedProblem(
-      await this.imports.importableProblem(auth.principal, code),
-    );
+    const document = await this.imports.importableProblem(auth.principal, code);
+    const problem = linkedProblem(document);
     const latest = await this.latestReadyOf(problem.polygonLink.problemId);
+    const jobId = syncJobId(document._id, latest.id);
+    if (await this.imports.isUnfinished(jobId)) return { jobId };
     await this.imports.reserveImport(auth);
-    const jobId = newId();
     await this.imports.enqueue(
       auth,
       jobId,
       syncJobOf(problem, latest, {
         userId: auth.principal.userId,
-        maxCases: maxTestcasesFor(auth.principal),
         trigger: 'manual',
       }),
     );

@@ -1,13 +1,12 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { FastifyRequest } from 'fastify';
 import { rm, stat } from 'node:fs/promises';
 import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, RateLimitService, unique } from '@libs/common';
 import { newId } from '@libs/database';
-import type { StatementLanguage } from '@libs/database';
+import type { StatementLanguageChoice } from '@libs/database';
 import {
   IMPORT_STEPS,
   listZipEntries,
@@ -22,13 +21,14 @@ import type {
   ImportProgress,
   ImportStep,
   PolygonImportJob,
-  PolygonImportResult,
 } from '@libs/problems';
 import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 import { QuotaService } from '../../organizations/quota/quota.service';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { assertOrganizationCodePrefix } from '../editing/organization-code-prefix';
 import { ImportJobResponse } from './dto/import-job.response';
+import { isUnfinished, removeFinished, unfinishedJobOf } from './import-queue';
+import type { ImportJob, ImportQueue } from './import-queue';
 import { meteredOrganizationOf } from './import-charge';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
 import { codeTakenError } from '../editing/problem-edit-fields';
@@ -59,7 +59,7 @@ export class ProblemImportsService {
     private readonly quota: QuotaService,
     private readonly rights: OrganizationCreationRights,
     @InjectQueue(POLYGON_QUEUE)
-    private readonly queue: Queue<PolygonImportJob, PolygonImportResult>,
+    private readonly queue: ImportQueue,
   ) {}
 
   /** Authorises and resolves everything the worker needs, streams the package to the data volume, checks it is a zip with problem.xml, then enqueues. The worker removes the package when the job ends; here any failure before that does. */
@@ -116,12 +116,13 @@ export class ProblemImportsService {
     );
   }
 
-  /** A create for an organization spends the problem's credits here: refunded here when queueing fails, by the worker (`charge` in the job) when the import fails before it committed. */
+  /** A create for an organization spends the problem's credits here: refunded here when queueing fails, by the worker (`charge` in the job) when the import fails before it committed. A finished job kept under the same id (a sync of the same package) is replaced. */
   async enqueue(
     auth: AuthContext,
     jobId: string,
     job: PolygonImportJob,
   ): Promise<void> {
+    await removeFinished(this.queue, jobId);
     await this.quota.charged(
       job.meteredOrganizationId ?? null,
       { kind: 'problem', userId: auth.principal.userId, ref: job.code },
@@ -134,17 +135,24 @@ export class ProblemImportsService {
     );
   }
 
-  /** Only the requester (or a superuser) can see a job; anyone else gets the same 404 as an unknown id. */
+  /** True while the job is queued or running. */
+  isUnfinished(jobId: string): Promise<boolean> {
+    return isUnfinished(this.queue, jobId);
+  }
+
+  /** The id of the queued or running import (a sync too) into `code`; null when none. */
+  async unfinishedJobIdOf(code: string): Promise<string | null> {
+    return (await unfinishedJobOf(this.queue, code))?.id ?? null;
+  }
+
+  /** A job the caller may not read gets the same 404 as an unknown id. */
   async status(auth: AuthContext, jobId: string): Promise<ImportJobResponse> {
     const job = await this.queue.getJob(jobId);
-    const { principal } = auth;
-    if (
-      !job ||
-      (job.data.requesterId !== principal.userId && !principal.isSuperuser)
-    )
+    if (!job || !(await this.mayRead(auth.principal, job)))
       throw new AppError('not_found', 404, 'No such import');
     const state = await job.getState();
-    const progress = progressOf(job.progress);
+    // A job waiting again (a stalled job put back) still holds its old progress: only a running job shows one.
+    const progress = state === 'active' ? progressOf(job.progress) : null;
     return {
       id: jobId,
       state,
@@ -154,6 +162,20 @@ export class ProblemImportsService {
       error: job.failedReason ? shownReason(job.failedReason) : null,
       failedStep: state === 'failed' ? (job.data.failedStep ?? null) : null,
     };
+  }
+
+  /** The requester or a superuser; an update (a sync too) also anyone who may import into its problem, so the problem's page can follow a sync someone else started. */
+  private async mayRead(
+    principal: AuthContext['principal'],
+    job: ImportJob,
+  ): Promise<boolean> {
+    if (job.data.requesterId === principal.userId || principal.isSuperuser)
+      return true;
+    if (job.data.mode !== 'update') return false;
+    return this.importableProblem(principal, job.data.code).then(
+      () => true,
+      () => false,
+    );
   }
 
   /** Only the options the user gave are forwarded; the worker applies the defaults of a create and keeps the current value of an update. */
@@ -286,7 +308,7 @@ const requestedOptions = (
   mainStatementLanguage: query.mainStatementLanguage ?? null,
   statementLanguages: Object.fromEntries(
     (query.statementLanguages ?? []).map(
-      (pair) => pair.split('=') as [string, StatementLanguage],
+      (pair) => pair.split('=') as [string, StatementLanguageChoice],
     ),
   ),
   tutorialLanguage: query.tutorialLanguage ?? null,

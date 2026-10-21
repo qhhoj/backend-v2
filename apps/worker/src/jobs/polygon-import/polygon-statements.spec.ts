@@ -171,6 +171,37 @@ describe('polygon statements', () => {
     ).rejects.toThrow('invalid main tutorial language');
     await pkg.close();
   });
+  it('leaves out a statement mapped to skip, with its tutorial', async () => {
+    const pkg = await openPackage({
+      tests: [{ input: '1', answer: '1' }],
+      statements: [
+        {
+          language: 'english',
+          name: 'Sum',
+          properties: properties({ tutorial: '' }),
+        },
+        {
+          language: 'russian',
+          name: 'Сумма',
+          properties: properties({ legend: 'Сложить.', tutorial: 'Сложить.' }),
+        },
+      ],
+    });
+    const result = await parseStatements(await pkg.problemXml(), {
+      pkg,
+      job: job({
+        mainStatementLanguage: 'english',
+        statementLanguages: { russian: 'skip' },
+      }),
+      texToMarkdown: identity,
+      saveImage: () => Promise.resolve('/media/images/x.png'),
+    });
+    expect(result.name).toBe('Sum');
+    expect(result.translations).toEqual([]);
+    expect(result.tutorial).toBe('');
+    await pkg.close();
+  });
+
   it('sanitizes imported statements even for a full-markup problem', async () => {
     // TeX math may hold `$` (`\\text{$a$}`), which splits the Markdown formula and leaves raw HTML outside it.
     const legend = '$\\text{$a$ $b$}<b onmouseover=alert(1)>x</b>$';
