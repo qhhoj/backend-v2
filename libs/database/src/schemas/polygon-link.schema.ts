@@ -45,6 +45,10 @@ export class PolygonLink {
   @Prop({ type: String, default: null, enum: [...POLYGON_SYNC_RESULTS, null] })
   lastSyncResult!: PolygonSyncResult | null;
   @Prop({ type: String, default: null }) lastSyncError!: string | null;
+  /** The last failure as a code (`PolygonImportErrorCode`) and the parameters its text needs; null after a success and on failures recorded before codes. */
+  @Prop({ type: String, default: null }) lastSyncErrorCode!: string | null;
+  @Prop({ type: MongooseSchema.Types.Mixed, default: null })
+  lastSyncErrorParams!: Record<string, unknown> | null;
   /** Package of the last attempt, ok or failed: auto-sync does not retry a package that failed. */
   @Prop({ type: Number, default: null }) lastSyncPackageId!: number | null;
   @Prop({ default: false }) autoSync!: boolean;

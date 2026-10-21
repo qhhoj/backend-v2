@@ -1,5 +1,6 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
+import { UnrecoverableError } from 'bullmq';
 import type { Job, Queue } from 'bullmq';
 import type { Model } from 'mongoose';
 import type Redis from 'ioredis';
@@ -12,13 +13,16 @@ import {
   POLYGON_FETCH,
   POLYGON_QUEUE,
   QUOTA_BACKFILL_DONE_KEY,
+  ProblemDataFilesService,
   QuotaLedger,
 } from '@libs/problems';
 import type { ImportProgress, PolygonImportJob } from '@libs/problems';
 import { FakePolygon } from '@libs/problems/testing';
 import { ImportQuota } from '../src/jobs/polygon-import/import-quota.service';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
+import { PolygonImportError } from '../src/jobs/polygon-import/polygon-import.error';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
+import { PolygonImportService } from '../src/jobs/polygon-import/polygon-import.service';
 import { ProblemPurgeService } from '../src/jobs/problem-purge/problem-purge.service';
 import { PolygonAutoSyncService } from '../src/jobs/polygon-autosync/polygon-autosync.service';
 import { seedContest } from './effects-fixtures';
@@ -66,11 +70,15 @@ describe('Polygon link, sync and auto-sync', () => {
   let typeId: string, otherLanguageId: string;
 
   /** A job as BullMQ hands it to the processor, recording the progress it reports. */
-  const runJob = async (data: PolygonImportJob) => {
+  const runJob = async (
+    data: PolygonImportJob,
+    attempts = { attemptsMade: 0, opts: { attempts: 1 } },
+  ) => {
     const progress: ImportProgress[] = [];
     const job = {
       id: newId(),
       data,
+      ...attempts,
       updateProgress: (value: ImportProgress) => {
         progress.push(value);
         return Promise.resolve();
@@ -81,8 +89,12 @@ describe('Polygon link, sync and auto-sync', () => {
       },
     } as unknown as Job<PolygonImportJob>;
     const outcome = await processor.process(job).then(
-      (result) => ({ result, error: null }),
-      (error: Error) => ({ result: null, error: error.message }),
+      (result) => ({ result, error: null, final: true }),
+      (error: Error) => ({
+        result: null,
+        error: error.message,
+        final: error instanceof UnrecoverableError,
+      }),
     );
     return {
       ...outcome,
@@ -452,6 +464,7 @@ describe('Polygon link, sync and auto-sync', () => {
       packageId: 12,
       result: 'failed',
       failedStep: 'downloading',
+      errorCode: 'polygon_failed',
       error:
         'Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full',
     });
@@ -466,9 +479,88 @@ describe('Polygon link, sync and auto-sync', () => {
     expect(after.polygonLink).toMatchObject({
       packageId: 10,
       lastSyncResult: 'failed',
+      lastSyncErrorCode: 'polygon_failed',
       lastSyncError:
         'Polygon: problem.package for package 12 of problem 4242 (type linux): packageId: Package is not full',
       lastSyncPackageId: 12,
+    });
+  });
+
+  it('leaves an outage to the queue retry while attempts are left, then records it with its code', async () => {
+    const before = await linked('outage');
+    const imports = worker.module.get(PolygonImportService);
+    const outage = () =>
+      jest
+        .spyOn(imports, 'import')
+        .mockRejectedValueOnce(
+          new PolygonImportError(
+            'Polygon: Polygon did not answer problem.package: ECONNRESET',
+            'polygon_unavailable',
+          ),
+        );
+    const queued = syncJob(
+      'outage',
+      { packageId: 11, revision: 4 },
+      before.dataVersion,
+    );
+    outage();
+    const first = await runJob(queued, {
+      attemptsMade: 0,
+      opts: { attempts: 2 },
+    });
+    expect(first).toMatchObject({ final: false, failedStep: undefined });
+    expect(await runs.countDocuments({ jobId: first.jobId })).toBe(0);
+    expect(
+      (await worker.problems.findOne({ code: 'outage' }))!.polygonLink,
+    ).toMatchObject({ lastSyncResult: 'ok' });
+    outage();
+    const last = await runJob(queued, {
+      attemptsMade: 1,
+      opts: { attempts: 2 },
+    });
+    expect(last).toMatchObject({
+      final: true,
+      error: `${POLYGON_ERROR_PREFIX}Polygon: Polygon did not answer problem.package: ECONNRESET`,
+    });
+    expect(
+      (await worker.problems.findOne({ code: 'outage' }))!.polygonLink,
+    ).toMatchObject({
+      lastSyncResult: 'failed',
+      lastSyncErrorCode: 'polygon_unavailable',
+    });
+    jest.restoreAllMocks();
+  });
+
+  it('records on the link a sync that imported but needs a repair, while the job completes', async () => {
+    const before = await linked('repair');
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
+    });
+    const failing = jest
+      .spyOn(worker.module.get(ProblemDataFilesService), 'writeInit')
+      .mockRejectedValueOnce(new Error('EACCES'));
+    const { result, error, jobId } = await runJob(
+      syncJob('repair', { packageId: 11, revision: 4 }, before.dataVersion),
+    );
+    failing.mockRestore();
+    expect(error).toBeNull();
+    expect(result?.attention?.code).toBe('imported_needs_attention');
+    expect(
+      (await worker.problems.findOne({ code: 'repair' }))!.toObject({
+        getters: true,
+      }),
+    ).toMatchObject({
+      name: 'Sum v2',
+      polygonLink: {
+        packageId: 11,
+        lastSyncResult: 'failed',
+        lastSyncErrorCode: 'imported_needs_attention',
+      },
+    });
+    expect(await runs.findOne({ jobId }).lean()).toMatchObject({
+      result: 'failed',
+      failedStep: 'finishing',
+      errorCode: 'imported_needs_attention',
     });
   });
 

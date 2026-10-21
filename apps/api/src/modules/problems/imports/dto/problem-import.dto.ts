@@ -2,6 +2,7 @@ import { PROBLEM_LIMITS } from '@libs/database';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  Equals,
   IsBoolean,
   IsIn,
   IsInt,
@@ -96,4 +97,12 @@ const IMPORT_JOB_ID = new RegExp(
 export class ImportJobParamDto {
   /** Job id from the start response (a UUIDv7, or `polygon-sync-…` for a Polygon sync). */
   @Matches(IMPORT_JOB_ID) jobId!: string;
+}
+
+export class ImportJobsQueryDto {
+  /** `1`: the caller's own jobs, the only list there is. */
+  @Transform(toBoolean)
+  @IsBoolean()
+  @Equals(true)
+  mine!: boolean;
 }

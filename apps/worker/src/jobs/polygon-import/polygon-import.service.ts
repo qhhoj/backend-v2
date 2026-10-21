@@ -29,6 +29,7 @@ import type {
   PolygonSource,
 } from '@libs/problems';
 import type { Readable } from 'node:stream';
+import { importSummaryOf } from './import-summary';
 import { ImportTracker } from './import-tracker';
 import { PandocService } from './pandoc.service';
 import { parseAssets } from './polygon-assets';
@@ -80,6 +81,12 @@ interface ReadPackage {
   yaml: string | null;
   imported: ImportedProblem;
 }
+
+const needsAttention = (message: string): PolygonImportResult['attention'] => ({
+  code: 'imported_needs_attention',
+  params: {},
+  message,
+});
 
 const isStandard = (job: PolygonImportJob): boolean =>
   job.polygon?.packageType === 'standard';
@@ -168,7 +175,7 @@ export class PolygonImportService {
       });
     } catch (error) {
       if (error instanceof PolygonApiError)
-        throw new PolygonImportError(`Polygon: ${error.message}`);
+        throw new PolygonImportError(`Polygon: ${error.message}`, error.code);
       throw error;
     }
   }
@@ -204,11 +211,13 @@ export class PolygonImportService {
       const applied = await this.repository.apply(job, read.imported, target);
       committed = true;
       tracker.enter('finishing');
-      // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
-      if (job.mode === 'update')
-        await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);
-      await this.finish(job.code, applied, staged, read.yaml);
-      return { problemId: applied.problemId, code: job.code };
+      const attention = await this.afterCommit(job, applied, staged, read);
+      return {
+        problemId: applied.problemId,
+        code: job.code,
+        summary: importSummaryOf(read.assets, read.plan, read.imported.data),
+        ...(attention && { attention }),
+      };
     } catch (error) {
       if (!committed) await this.undo(job, savedImages, staged);
       throw error;
@@ -232,7 +241,7 @@ export class PolygonImportService {
         (test) => pkg.has(test.inputPath) && pkg.has(test.answerPath),
       )
     )
-      throw new PolygonImportError('not full package');
+      throw new PolygonImportError('not full package', 'package_incomplete');
     const { tutorial, ...statement } = await this.readStatements(
       root,
       pkg,
@@ -296,7 +305,34 @@ export class PolygonImportService {
     return statements;
   }
 
-  /** Everything after the commit: a failure here leaves the problem imported, so it is logged with its cause and reported to the requester as an import that needs attention, never as "Import failed". The data steps run under the judge's writing marker, ending with the stamp. */
+  /** Rescore, then the file steps; a failure here leaves the problem imported, so it is logged with its cause and comes back as `attention` (the job completes: an import that needs a repair, never "Import failed"). */
+  private async afterCommit(
+    job: PolygonImportJob,
+    applied: AppliedImport,
+    staged: StagedFile[],
+    read: ReadPackage,
+  ): Promise<PolygonImportResult['attention']> {
+    // Points, partial and the cases may all have changed; a create has no submissions yet. Never throws: the import stands.
+    if (job.mode === 'update')
+      await notifyRescore(this.rescoreQueue, applied.problemId, this.logger);
+    try {
+      await this.finish(job.code, applied, staged, read.yaml);
+      return undefined;
+    } catch (error) {
+      // `runSteps` logged its own failures with their cause.
+      if (error instanceof PolygonImportError)
+        return needsAttention(error.message);
+      this.logger.error(
+        `Polygon import of ${job.code}: committed, but the data write failed`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return needsAttention(
+        'the problem was imported, but writing its data files failed',
+      );
+    }
+  }
+
+  /** The data steps run under the judge's writing marker, ending with the stamp. */
   private async finish(
     code: string,
     applied: AppliedImport,
@@ -379,6 +415,7 @@ export class PolygonImportService {
         );
         throw new PolygonImportError(
           `the problem was imported, but ${step} failed`,
+          'imported_needs_attention',
         );
       }
   }

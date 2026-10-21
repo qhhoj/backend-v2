@@ -12,7 +12,12 @@ import type {
   PolygonSyncStep,
   PolygonSyncTrigger,
 } from '@libs/database';
+import type { ImportErrorParams, PolygonImportErrorCode } from '@libs/problems';
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  ApiImportErrorCode,
+  ApiImportErrorParams,
+} from '../../imports/dto/import-error.decorators';
 import { UserSummaryResponse } from '../../core/dto/user-summary.response';
 
 /** One finished Polygon import or sync job. */
@@ -50,6 +55,10 @@ export class PolygonSyncRunResponse {
   failedStep!: PolygonSyncStep | null;
   /** Why it failed, as shown to the requester; null when it succeeded. */
   error!: string | null;
+  @ApiImportErrorCode()
+  errorCode!: PolygonImportErrorCode | null;
+  @ApiImportErrorParams()
+  errorParams!: ImportErrorParams | null;
   /** When the job ended. */
   finishedAt!: Date;
 }

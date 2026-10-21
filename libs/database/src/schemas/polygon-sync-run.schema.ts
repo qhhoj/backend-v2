@@ -54,6 +54,10 @@ export class PolygonSyncRun {
   failedStep!: PolygonSyncStep | null;
   /** The error as shown to the requester ("Import failed" when it was not written for them). */
   @Prop({ type: String, default: null }) error!: string | null;
+  /** The failure as a code (`PolygonImportErrorCode`) and the parameters its text needs; null when it succeeded or was recorded before codes. */
+  @Prop({ type: String, default: null }) errorCode!: string | null;
+  @Prop({ type: MongooseSchema.Types.Mixed, default: null })
+  errorParams!: Record<string, unknown> | null;
   createdAt!: Date;
 }
 export const PolygonSyncRunSchema =

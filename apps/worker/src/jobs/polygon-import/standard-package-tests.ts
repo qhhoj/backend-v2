@@ -25,6 +25,7 @@ async function assertGeneratedTests(
     if (error instanceof ZipError)
       throw new PolygonImportError(
         `the generated tests are not a valid zip: ${error.message}`,
+        'generation_failed',
       );
     throw error;
   }
@@ -35,6 +36,7 @@ async function assertGeneratedTests(
     if (missing)
       throw new PolygonImportError(
         `the generated tests lack ${shown(missing)}`,
+        'generation_failed',
       );
   } finally {
     await zip.close();

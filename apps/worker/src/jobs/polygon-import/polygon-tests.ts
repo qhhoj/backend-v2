@@ -15,6 +15,8 @@ export interface PlannedTest {
 export interface TestPlan {
   timeLimit: number;
   memoryLimit: number;
+  /** The limits as Polygon gives them (seconds, KiB) before the editor's clamp. */
+  givenLimits: { timeLimit: number; memoryLimit: number };
   partial: boolean;
   tests: PlannedTest[];
   cases: ProblemTestCase[];
@@ -135,7 +137,11 @@ function readTestNodes(testset: XmlElement, maxCases: number): XmlElement[] {
   const testNodes = testElementsOf(testset);
   if (!testNodes.length) throw new PolygonImportError('no testcases found');
   if (testNodes.length > maxCases)
-    throw new PolygonImportError('too many testcases');
+    throw new PolygonImportError(
+      `too many testcases: ${testNodes.length}, the limit is ${maxCases}`,
+      'too_many_testcases',
+      { count: testNodes.length, limit: maxCases },
+    );
   return testNodes;
 }
 
@@ -409,7 +415,7 @@ const fileIoArgs = ({
 function readLimitsAndGraderArgs(
   root: XmlElement,
   testset: XmlElement,
-): Pick<TestPlan, 'timeLimit' | 'memoryLimit' | 'graderArgs'> {
+): Pick<TestPlan, 'timeLimit' | 'memoryLimit' | 'givenLimits' | 'graderArgs'> {
   const timeLimitMs = finiteNumber(
     childText(testset, 'time-limit'),
     'time limit',
@@ -420,12 +426,14 @@ function readLimitsAndGraderArgs(
     'memory limit',
     Number.MAX_SAFE_INTEGER,
   );
+  const given = {
+    timeLimit: timeLimitMs / MS_PER_SECOND,
+    memoryLimit: Math.floor(memoryLimitBytes / BYTES_PER_KIB),
+  };
   return {
-    timeLimit: clamp(timeLimitMs / MS_PER_SECOND, PROBLEM_LIMITS.timeLimit),
-    memoryLimit: clamp(
-      Math.floor(memoryLimitBytes / BYTES_PER_KIB),
-      PROBLEM_LIMITS.memoryLimit,
-    ),
+    timeLimit: clamp(given.timeLimit, PROBLEM_LIMITS.timeLimit),
+    memoryLimit: clamp(given.memoryLimit, PROBLEM_LIMITS.memoryLimit),
+    givenLimits: given,
     graderArgs: fileIoArgs(fileIoNamesOf(root)),
   };
 }

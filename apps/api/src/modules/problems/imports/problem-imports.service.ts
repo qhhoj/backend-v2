@@ -8,26 +8,28 @@ import { AppError, RateLimitService, unique } from '@libs/common';
 import { newId } from '@libs/database';
 import type { StatementLanguageChoice } from '@libs/database';
 import {
-  IMPORT_STEPS,
   listZipEntries,
-  POLYGON_ERROR_PREFIX,
+  POLYGON_JOB_RETRY,
   POLYGON_PACKAGE_MAX_BYTES,
   POLYGON_SYNC_PERMISSION,
   POLYGON_QUEUE,
   ProblemDataFilesService,
   ZipError,
 } from '@libs/problems';
-import type {
-  ImportProgress,
-  ImportStep,
-  PolygonImportJob,
-} from '@libs/problems';
+import type { PolygonImportJob } from '@libs/problems';
 import { OrganizationCreationRights } from '../../organizations/creation/organization-creation-rights.service';
 import { QuotaService } from '../../organizations/quota/quota.service';
 import { maxTestcasesFor } from '../core/dto/limits';
 import { assertOrganizationCodePrefix } from '../editing/organization-code-prefix';
 import { ImportJobResponse } from './dto/import-job.response';
-import { isUnfinished, removeFinished, unfinishedJobOf } from './import-queue';
+import { importJobView } from './import-job-view';
+import {
+  isUnfinished,
+  jobsOf,
+  queuePositionsOf,
+  removeFinished,
+  unfinishedJobOf,
+} from './import-queue';
 import type { ImportJob, ImportQueue } from './import-queue';
 import { meteredOrganizationOf } from './import-charge';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
@@ -43,9 +45,6 @@ import { IMPORT_LIMIT, IMPORT_WINDOW_SECONDS } from '../core/rate-limits';
 /** A finished import job stays readable for a day, so the staff member can see its outcome. */
 const IMPORT_JOB_KEEP_SECONDS = 24 * 60 * 60;
 const IMPORT_JOB_KEEP = { age: IMPORT_JOB_KEEP_SECONDS };
-/** Longest import error shown; worker messages can echo problem.xml text. */
-const MAX_SHOWN_REASON = 1000;
-const GENERIC_FAILURE = 'Import failed';
 
 @Injectable()
 export class ProblemImportsService {
@@ -128,6 +127,7 @@ export class ProblemImportsService {
       { kind: 'problem', userId: auth.principal.userId, ref: job.code },
       (spent) =>
         this.queue.add('import', spent ? { ...job, charge: spent } : job, {
+          ...POLYGON_JOB_RETRY,
           jobId,
           removeOnComplete: IMPORT_JOB_KEEP,
           removeOnFail: IMPORT_JOB_KEEP,
@@ -150,18 +150,28 @@ export class ProblemImportsService {
     const job = await this.queue.getJob(jobId);
     if (!job || !(await this.mayRead(auth.principal, job)))
       throw new AppError('not_found', 404, 'No such import');
-    const state = await job.getState();
-    // A job waiting again (a stalled job put back) still holds its old progress: only a running job shows one.
-    const progress = state === 'active' ? progressOf(job.progress) : null;
-    return {
-      id: jobId,
-      state,
-      step: stepOf(state, progress),
-      progress,
-      result: job.returnvalue ?? null,
-      error: job.failedReason ? shownReason(job.failedReason) : null,
-      failedStep: state === 'failed' ? (job.data.failedStep ?? null) : null,
-    };
+    const [state, positions] = await Promise.all([
+      job.getState(),
+      queuePositionsOf(this.queue),
+    ]);
+    return importJobView(job, state, positions.get(jobId) ?? null);
+  }
+
+  /** The caller's imports and syncs of the last day, running and finished, newest first. */
+  async mine(auth: AuthContext): Promise<ImportJobResponse[]> {
+    const [jobs, positions] = await Promise.all([
+      jobsOf(this.queue, auth.principal.userId),
+      queuePositionsOf(this.queue),
+    ]);
+    return Promise.all(
+      jobs.map(async (job) =>
+        importJobView(
+          job,
+          await job.getState(),
+          positions.get(job.id ?? '') ?? null,
+        ),
+      ),
+    );
   }
 
   /** The requester or a superuser; an update (a sync too) also anyone who may import into its problem, so the problem's page can follow a sync someone else started. */
@@ -317,26 +327,3 @@ const requestedOptions = (
   appendMainSolution: query.appendMainSolution,
   maxCases: maxTestcasesFor(principal),
 });
-
-/** The worker reports `{step, done, total}`; anything else (a job queued before progress existed) reads as none. */
-const progressOf = (progress: unknown): ImportProgress | null =>
-  typeof progress === 'object' &&
-  progress !== null &&
-  IMPORT_STEPS.includes((progress as ImportProgress).step)
-    ? (progress as ImportProgress)
-    : null;
-
-const stepOf = (state: string, progress: ImportProgress | null): ImportStep => {
-  if (state === 'completed') return 'done';
-  if (state === 'failed') return 'failed';
-  return progress?.step ?? 'queued';
-};
-
-/** Only a failure the worker wrote for the requester is shown; the rest may carry paths and driver details. */
-const shownReason = (reason: string): string =>
-  reason.startsWith(POLYGON_ERROR_PREFIX)
-    ? reason.slice(
-        POLYGON_ERROR_PREFIX.length,
-        POLYGON_ERROR_PREFIX.length + MAX_SHOWN_REASON,
-      )
-    : GENERIC_FAILURE;

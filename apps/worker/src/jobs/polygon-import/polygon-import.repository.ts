@@ -29,6 +29,7 @@ import {
 import type { PolygonImportJob } from '@libs/problems';
 import type { ClientSession, Connection, Model } from 'mongoose';
 import { PolygonImportError } from './polygon-import.error';
+import type { ImportFailure } from './import-failure';
 import {
   importComment,
   linkChanges,
@@ -77,6 +78,7 @@ function assertSyncRequester(
   )
     throw new PolygonImportError(
       'the requesting user may no longer sync this problem',
+      'requester_forbidden',
     );
 }
 
@@ -175,6 +177,16 @@ const unchangedSinceQueued = (
 const alreadyLinkedElsewhere = (job: PolygonImportJob) =>
   new PolygonImportError(
     `Polygon problem ${job.polygon?.problemId} is already linked to another QHHOJ problem`,
+    'polygon_already_linked',
+  );
+
+const notImportable = (message: string) =>
+  new PolygonImportError(message, 'problem_not_importable');
+
+const codeTaken = (job: PolygonImportJob) =>
+  new PolygonImportError(
+    `problem with code ${job.code} already exists`,
+    'problem_code_taken',
   );
 
 @Injectable()
@@ -216,6 +228,7 @@ export class PolygonImportRepository {
     )
       throw new PolygonImportError(
         'Test data changed since the import was queued',
+        'problem_changed',
       );
     return {
       dataVersion: existing.dataVersion,
@@ -287,6 +300,7 @@ export class PolygonImportRepository {
     )
       throw new PolygonImportError(
         `Full markup requires ${FULL_MARKUP_PERMISSION}`,
+        'requester_forbidden',
       );
   }
 
@@ -301,10 +315,7 @@ export class PolygonImportRepository {
         this.writeImportedProblem(job, imported, target, session),
       );
     } catch (error) {
-      if (isDuplicateKey(error, 'code'))
-        throw new PolygonImportError(
-          `problem with code ${job.code} already exists`,
-        );
+      if (isDuplicateKey(error, 'code')) throw codeTaken(job);
       if (isDuplicateKey(error, 'polygonLink.problemId'))
         throw alreadyLinkedElsewhere(job);
       if (isDocumentTooLarge(error))
@@ -390,6 +401,7 @@ export class PolygonImportRepository {
     if (matchedCount !== 1)
       throw new PolygonImportError(
         'the problem changed while the package was importing, try again',
+        'problem_changed',
       );
     return {
       problemId,
@@ -477,7 +489,11 @@ export class PolygonImportRepository {
         .sort({ _id: 1 })
         .session(session)
         .exec();
-      if (!row) throw new PolygonImportError(`no problem ${what} exists`);
+      if (!row)
+        throw new PolygonImportError(
+          `no problem ${what} exists`,
+          'import_failed',
+        );
       return row._id;
     };
     return {
@@ -508,6 +524,7 @@ export class PolygonImportRepository {
     )
       throw new PolygonImportError(
         `the problem is no longer linked to Polygon problem ${job.polygon.problemId}`,
+        'problem_unlinked',
       );
   }
 
@@ -531,7 +548,7 @@ export class PolygonImportRepository {
   /** A failed sync is recorded on the link it was for; nothing happens when the link is gone or changed meanwhile. */
   async recordSyncFailure(
     job: PolygonImportJob,
-    reason: string,
+    failure: ImportFailure,
   ): Promise<void> {
     if (job.polygon?.purpose !== 'sync') return;
     await this.problems
@@ -541,7 +558,9 @@ export class PolygonImportRepository {
           $set: {
             'polygonLink.lastSyncAt': new Date(),
             'polygonLink.lastSyncResult': 'failed',
-            'polygonLink.lastSyncError': reason,
+            'polygonLink.lastSyncError': failure.message,
+            'polygonLink.lastSyncErrorCode': failure.code,
+            'polygonLink.lastSyncErrorParams': failure.params,
             'polygonLink.lastSyncPackageId': job.polygon.packageId,
           },
         },
@@ -559,22 +578,22 @@ export class PolygonImportRepository {
     } | null,
   ): void {
     if (existing?.deletedAt)
-      throw new PolygonImportError(`problem with code ${job.code} is deleted`);
-    if (job.mode === 'create' && existing)
-      throw new PolygonImportError(
-        `problem with code ${job.code} already exists`,
-      );
+      throw notImportable(`problem with code ${job.code} is deleted`);
+    if (job.mode === 'create' && existing) throw codeTaken(job);
     if (job.mode === 'update' && !existing)
-      throw new PolygonImportError(`problem with code ${job.code} not found`);
+      throw new PolygonImportError(
+        `problem with code ${job.code} not found`,
+        'problem_not_found',
+      );
     if (!existing) return;
     if (existing.mirrorOf !== null)
-      throw new PolygonImportError(
+      throw notImportable(
         'a mirror problem takes its test data from the source problem',
       );
     if (existing.isManuallyManaged)
-      throw new PolygonImportError('the problem is manually managed');
+      throw notImportable('the problem is manually managed');
     if (existing.isFullMarkup !== job.isFullMarkup)
-      throw new PolygonImportError(
+      throw notImportable(
         'the problem markup mode changed since the import was queued',
       );
   }

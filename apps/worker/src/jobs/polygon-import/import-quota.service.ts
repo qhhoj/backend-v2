@@ -30,6 +30,12 @@ export class ImportQuota {
       if (!refusal) throw error;
       throw new PolygonImportError(
         `the organization's storage is full: ${refusal.used} of ${refusal.limit} bytes used, the package needs ${refusal.needed} more`,
+        'storage_full',
+        {
+          usedBytes: refusal.used,
+          limitBytes: refusal.limit,
+          neededBytes: refusal.needed,
+        },
       );
     }
   }
