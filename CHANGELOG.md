@@ -1,5 +1,15 @@
 # qhhoj-backend
 
+## 2.34.5
+
+### Patch Changes
+
+- fb192d1: Polygon import jobs: a failed job, link and sync run carry `errorCode` and `errorParams` (`PolygonImportErrorCode`) besides the English message, and a job says whether it is `retryable`; a waiting job shows its `queuePosition`; a completed job's `result.summary` lists the checker mapping, tests, cases, batches and clamped limits, and `result.attention` (code `imported_needs_attention`) a problem imported whose finishing steps failed; `GET /problems/imports?mine=1` lists the caller's jobs; an outage or a missing judge is retried once after 2 min; automatic syncs queue behind manual imports; an import or sync whose statement languages or testcase count would fail is refused before queueing.
+- fb192d1: `PATCH /problems/{code}/polygon` edits the link's import options (main and mapped statement languages, tutorial language, zero-point batches and cases, main solution) besides `autoSync`, every field optional; changed options are checked against Polygon like a sync and apply from the next sync. The link response shows `options`.
+- d159b01: Polygon link check: a running or failed newest package answers `polygon_package_not_ready` with its state and Polygon's comment (`newestPackage`), also on a problem's first check; the first check downloads the package once at a time (`polygon_link_checking` otherwise) under a 600 s proxy timeout; the preview lists the statement languages and their tutorials; `statementLanguages` takes `<language>=skip` to leave a statement out.
+- d159b01: Polygon sync: one job per problem and package for manual syncs too (a second sync joins the one in flight, and a sync of a package another sync already applied ends as ok); every sync uses the link's testcase limit; `GET /problems/{code}/polygon` returns the running job id, which the problem's editors may poll; a package download fails after a minute without data instead of a fixed 10 minutes, and a broken-off body is `polygon_unavailable`.
+- 9087a52: A Polygon sync keeps the time and memory limits, partial scoring, checker (type, arguments, source) and grader settings edited on QHHOJ since the last import instead of overwriting them; `POST /problems/{code}/polygon/sync` takes `{overwriteLocalEdits: true}` to restore the package's values (409 `polygon_sync_queued` while a sync keeping them is queued), and the job's `result.localEdits` lists the kept and updated settings. A sync also keeps `unicode`, `nobigmath`, `outputPrefix` and `outputLimit`. `imported_needs_attention` sends `{step}`, a missing problem group or type fails with `catalog_missing`, the link check hides Polygon's build comment until the link token is checked, and a sync rerun after a worker restart fails visibly instead of reporting ok.
+
 ## 2.34.4
 
 ### Patch Changes
