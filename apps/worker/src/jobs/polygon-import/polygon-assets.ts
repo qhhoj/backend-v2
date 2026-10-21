@@ -12,17 +12,23 @@ export interface PolygonAssets {
   grader: Grader;
   checker: Checker;
   checkerArgs: JsonObject | null;
-  /** Package path of the custom checker source (bridged only). */
+  /** Package path of the checker source (bridged only). */
   checkerSource: string | null;
   interactorSource: string | null;
 }
 
-const STANDARD_CHECKERS = new Set([
-  'std::hcmp.cpp',
-  'std::ncmp.cpp',
-  'std::wcmp.cpp',
-]);
-const FLOATS_CHECKER = /^std::rcmp([469])\.cpp$/;
+type CheckerAssets = Pick<
+  PolygonAssets,
+  'checker' | 'checkerArgs' | 'checkerSource'
+>;
+
+/** testlib's hcmp reads one integer token, which the judge's `standard` compares the same way. Every other `std::*` checker compares token streams across lines (or, lcmp, all-or-nothing per line), which no built-in matches, so it runs from the package's own testlib source like a custom one. */
+const STANDARD_EQUIVALENT = 'std::hcmp.cpp';
+const STANDARD_CHECKER: CheckerAssets = {
+  checker: 'standard',
+  checkerArgs: null,
+  checkerSource: null,
+};
 /** Polygon checkers are testlib programs; typed so a rename of the known custom checker types fails to compile. */
 const POLYGON_CHECKER_TYPE: CustomCheckerType = 'testlib';
 
@@ -38,50 +44,16 @@ const sourcePath = (
   return path;
 };
 
-/** Legacy `parse_assets`: an interactor wins (its checker is ignored); otherwise testlib's standard checkers map to DMOJ ones and anything else is a problem-wide bridged C++ checker (per-case rows never carry `bridged`). The returned paths come from problem.xml and are resolved by `PolygonPackage`, never used directly. */
-export function parseAssets(root: XmlElement): PolygonAssets {
-  const interactor = descendant(root, 'interactor');
-  if (interactor)
-    return {
-      grader: 'interactive',
-      checker: 'standard',
-      checkerArgs: null,
-      checkerSource: null,
-      interactorSource: sourcePath(
-        interactor,
-        'interactor',
-        'interactor must use C++',
-      ),
-    };
-  const checker = descendant(root, 'checker');
-  if (!checker) throw new PolygonImportError('checker not found');
+/** hcmp maps to `standard`; any other testlib checker is a problem-wide bridged C++ checker (per-case rows never carry `bridged`). */
+function parseChecker(root: XmlElement, checker: XmlElement): CheckerAssets {
   if (checker.attributes.type !== 'testlib')
     throw new PolygonImportError('not a testlib checker');
-  const standard = {
-    grader: 'standard' as const,
-    checkerSource: null,
-    interactorSource: null,
-  };
-  const name = checker.attributes.name;
-  if (name && STANDARD_CHECKERS.has(name))
-    return { ...standard, checker: 'standard', checkerArgs: null };
-  const floats = name && FLOATS_CHECKER.exec(name);
-  if (floats)
-    return {
-      ...standard,
-      checker: 'floats',
-      checkerArgs: { precision: Number(floats[1]) },
-    };
-  if (name === 'std::fcmp.cpp')
-    return { ...standard, checker: 'identical', checkerArgs: null };
-  if (name === 'std::lcmp.cpp')
-    return { ...standard, checker: 'linecount', checkerArgs: null };
+  if (checker.attributes.name === STANDARD_EQUIVALENT) return STANDARD_CHECKER;
   const percent =
     descendant(root, 'judging')?.attributes[
       'treat-points-from-checker-as-percent'
     ] === 'true';
   return {
-    ...standard,
     checker: 'bridged',
     checkerArgs: {
       type: POLYGON_CHECKER_TYPE,
@@ -89,5 +61,27 @@ export function parseAssets(root: XmlElement): PolygonAssets {
       ...(percent ? { treat_checker_points_as_percentage: true } : {}),
     },
     checkerSource: sourcePath(checker, 'checker', 'checker must use C++'),
+  };
+}
+
+/** Legacy `parse_assets`, with the checker kept beside an interactor: Polygon runs it on the interactor's output, judges that do not simply ignore it. The returned paths come from problem.xml and are resolved by `PolygonPackage`, never used directly. */
+export function parseAssets(root: XmlElement): PolygonAssets {
+  const checker = descendant(root, 'checker');
+  const interactor = descendant(root, 'interactor');
+  if (interactor)
+    return {
+      grader: 'interactive',
+      ...(checker ? parseChecker(root, checker) : STANDARD_CHECKER),
+      interactorSource: sourcePath(
+        interactor,
+        'interactor',
+        'interactor must use C++',
+      ),
+    };
+  if (!checker) throw new PolygonImportError('checker not found');
+  return {
+    grader: 'standard',
+    ...parseChecker(root, checker),
+    interactorSource: null,
   };
 }

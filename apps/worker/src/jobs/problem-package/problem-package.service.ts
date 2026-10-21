@@ -82,15 +82,16 @@ export class ProblemPackageService {
     ];
   }
 
-  /** The test archive and `init.yml` under `data/`, the other named files under `sources/`; a name the data row lists but the directory lacks is left out. */
+  /** The test archive and `init.yml` under `data/`, the other named files and the helper headers under `sources/`; a name the data row lists but the directory lacks is left out. */
   private async dataEntries(problem: Problem): Promise<PackageEntry[]> {
     const named: Array<[string, string]> = [['data/init.yml', 'init.yml']];
     const data = problem.data;
     if (data?.archive) named.push([`data/${data.archive}`, data.archive]);
-    for (const kind of SOURCE_KINDS) {
-      const file = data?.[kind];
-      if (file) named.push([`sources/${file}`, file]);
-    }
+    const sources = [
+      ...SOURCE_KINDS.map((kind) => data?.[kind]),
+      ...(data?.helperHeaders ?? []),
+    ];
+    for (const file of sources) if (file) named.push([`sources/${file}`, file]);
     const entries: PackageEntry[] = [];
     for (const [name, file] of named) {
       const path = this.dataFiles.pathOf(problem.code, file);

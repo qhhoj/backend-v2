@@ -33,6 +33,8 @@ import { ImportTracker } from './import-tracker';
 import { PandocService } from './pandoc.service';
 import { parseAssets } from './polygon-assets';
 import type { PolygonAssets } from './polygon-assets';
+import { helperHeadersOf } from './polygon-headers';
+import type { HelperHeader } from './polygon-headers';
 import { ImportQuota } from './import-quota.service';
 import { PolygonImportError } from './polygon-import.error';
 import { PolygonImportRepository } from './polygon-import.repository';
@@ -74,6 +76,7 @@ interface ReadPackage {
   plan: TestPlan;
   tests: PlannedTest[];
   assets: PolygonAssets;
+  headers: HelperHeader[];
   yaml: string | null;
   imported: ImportedProblem;
 }
@@ -81,7 +84,21 @@ interface ReadPackage {
 const isStandard = (job: PolygonImportJob): boolean =>
   job.polygon?.packageType === 'standard';
 
-const dataOf = (assets: PolygonAssets, plan: TestPlan): ProblemData => ({
+/** Headers go beside a checker or interactor the judge compiles, and nowhere else. */
+const helperHeaders = (
+  root: XmlElement,
+  pkg: PolygonPackage,
+  assets: PolygonAssets,
+): HelperHeader[] =>
+  assets.checkerSource || assets.interactorSource
+    ? helperHeadersOf(root, pkg)
+    : [];
+
+const dataOf = (
+  assets: PolygonAssets,
+  plan: TestPlan,
+  headers: HelperHeader[],
+): ProblemData => ({
   ...emptyProblemData(),
   archive: TESTS_ARCHIVE,
   checker: assets.checker,
@@ -89,6 +106,7 @@ const dataOf = (assets: PolygonAssets, plan: TestPlan): ProblemData => ({
   customChecker: assets.checkerSource ? CHECKER_FILE : null,
   grader: assets.grader,
   customGrader: assets.interactorSource ? INTERACTOR_FILE : null,
+  helperHeaders: headers.map(({ name }) => name),
   graderArgs: plan.graderArgs,
   cases: plan.cases,
 });
@@ -180,7 +198,7 @@ export class PolygonImportService {
         ? createReadStream(generated)
         : repackTests(pkg, read.tests);
       staged.push(
-        ...(await this.stageFiles(job.code, pkg, testsArchive, read.assets)),
+        ...(await this.stageFiles(job.code, pkg, testsArchive, read)),
       );
       tracker.enter('saving');
       const applied = await this.repository.apply(job, read.imported, target);
@@ -221,13 +239,15 @@ export class PolygonImportService {
       job,
       savedImages,
     );
-    const data = dataOf(assets, plan);
+    const headers = helperHeaders(root, pkg, assets);
+    const data = dataOf(assets, plan, headers);
     const compiled = this.compile(data, plan.tests);
     return {
       root,
       plan,
       tests: plan.tests,
       assets,
+      headers,
       yaml: compiled.yaml,
       imported: {
         ...statement,
@@ -416,7 +436,7 @@ export class PolygonImportService {
     code: string,
     pkg: PolygonPackage,
     testsArchive: Readable,
-    assets: PolygonAssets,
+    { assets, headers }: Pick<ReadPackage, 'assets' | 'headers'>,
   ): Promise<StagedFile[]> {
     const staged: StagedFile[] = [];
     const stage = async (name: string, content: Buffer | Readable) => {
@@ -436,6 +456,8 @@ export class PolygonImportService {
           INTERACTOR_FILE,
           await pkg.read(assets.interactorSource, SOURCE_MAX_BYTES),
         );
+      for (const { path, name } of headers)
+        await stage(name, await pkg.read(path, SOURCE_MAX_BYTES));
     } catch (error) {
       await Promise.all(
         staged.map(({ stagedPath }) => rm(stagedPath, { force: true })),

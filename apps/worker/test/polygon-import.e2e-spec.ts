@@ -440,6 +440,56 @@ describe('PolygonImportProcessor', () => {
     });
   });
 
+  it('stages the checker of an interactive problem and the package headers beside the interactor', async () => {
+    await processor.process(
+      bareUpdate(
+        {},
+        buildPolygonPackage({
+          ...fixture,
+          checker: { name: 'std::ncmp.cpp', path: 'files/check.cpp' },
+          interactor: 'files/interactor.cpp',
+          resources: [
+            { path: 'files/testlib.h', type: 'h.g++', content: '// testlib' },
+            { path: 'files/constraints.h', type: 'h.g++' },
+            { path: 'files/olymp.sty' },
+          ],
+        }),
+      ),
+    );
+    const directory = dataDirectory('sum');
+    expect(readdirSync(directory).sort()).toEqual([
+      '.data-version',
+      'checker.cpp',
+      'constraints.h',
+      'init.yml',
+      'interactor.cpp',
+      'testlib.h',
+      'tests.zip',
+    ]);
+    expect(readFileSync(join(directory, 'testlib.h'), 'utf8')).toBe(
+      '// testlib',
+    );
+    expect(
+      parse(readFileSync(join(directory, 'init.yml'), 'utf8')),
+    ).toMatchObject({
+      checker: {
+        name: 'bridged',
+        args: { files: 'checker.cpp', lang: 'CPP17', type: 'testlib' },
+      },
+      interactive: {
+        files: ['interactor.cpp', 'testlib.h', 'constraints.h'],
+        type: 'testlib',
+      },
+    });
+    const problem = await worker.problems
+      .findOne({ code: 'sum' })
+      .select('+data');
+    expect(problem!.data).toMatchObject({
+      grader: 'interactive',
+      helperHeaders: ['testlib.h', 'constraints.h'],
+    });
+  });
+
   it('drops data files the new configuration no longer uses', async () => {
     writeFileSync(join(dataDirectory('sum'), 'old-generator.cpp'), '//');
     await worker.problems.updateOne(
@@ -451,7 +501,8 @@ describe('PolygonImportProcessor', () => {
         {},
         buildPolygonPackage({
           ...fixture,
-          checker: { name: 'std::wcmp.cpp', path: 'files/check.cpp' },
+          checker: { name: 'std::hcmp.cpp', path: 'files/check.cpp' },
+          resources: [{ path: 'files/testlib.h', type: 'h.g++' }],
         }),
       ),
     );

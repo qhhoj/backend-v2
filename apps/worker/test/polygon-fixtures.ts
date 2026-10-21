@@ -17,6 +17,8 @@ export interface PolygonFixture {
   /** Omitted = `std::wcmp.cpp`; `{ path }` without a name = a custom checker; `null` = no checker element. */
   checker?: { name?: string; path: string } | null;
   interactor?: string | null;
+  /** `<resources>` files, each also put in the package unless `omitEntries` drops it. */
+  resources?: Array<{ path: string; type?: string; content?: string }>;
   judging?: { inputFile?: string; outputFile?: string; percent?: boolean };
   timeLimitMs?: number;
   memoryLimitBytes?: number;
@@ -50,6 +52,10 @@ const checkerXml = (fixture: PolygonFixture): string => {
 const interactorXml = (fixture: PolygonFixture): string =>
   fixture.interactor
     ? `<interactor><source path="${fixture.interactor}" type="cpp.g++17"/></interactor>`
+    : '';
+const resourcesXml = ({ resources }: PolygonFixture): string =>
+  resources
+    ? `<files><resources>${resources.map((file) => `<file path="${file.path}"${attribute('type', file.type)}/>`).join('')}</resources></files>`
     : '';
 const solutionXml = (fixture: PolygonFixture): string =>
   fixture.solution === null
@@ -101,6 +107,7 @@ export function buildProblemXml(fixture: PolygonFixture): string {
 <input-path-pattern>tests/%02d</input-path-pattern><answer-path-pattern>tests/%02d.a</answer-path-pattern>
 <tests>${testsXml(fixture)}</tests>${groups ? `<groups>${groups}</groups>` : ''}</testset>
 </judging>
+${resourcesXml(fixture)}
 <assets>${checkerXml(fixture)}${interactorXml(fixture)}${solutionXml(fixture)}</assets>
 </problem>`;
 }
@@ -171,6 +178,10 @@ export function buildPolygonPackage(fixture: PolygonFixture): Buffer {
         ]),
     ...testEntries(fixture),
     ...checkerAndInteractorEntries(fixture),
+    ...(fixture.resources ?? []).map(({ path, content }) => ({
+      name: path,
+      content: content ?? `// ${path}`,
+    })),
     ...statementEntries(fixture),
     ...solutionEntries(fixture),
     ...Object.entries(fixture.files ?? {}).map(([name, content]) => ({

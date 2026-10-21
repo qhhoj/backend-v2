@@ -58,6 +58,7 @@ describe('problem package build', () => {
         customChecker: 'checker.cpp',
         customGrader: null,
         customHeader: null,
+        helperHeaders: ['testlib.h'],
         checker: 'standard',
         checkerArgs: null,
         grader: 'standard',
@@ -86,6 +87,7 @@ describe('problem package build', () => {
     mkdirSync(dataDirectory(code), { recursive: true });
     writeFileSync(join(dataDirectory(code), 'tests.zip'), 'ARCHIVE-BYTES');
     writeFileSync(join(dataDirectory(code), 'checker.cpp'), '// checker');
+    writeFileSync(join(dataDirectory(code), 'testlib.h'), '// testlib');
     writeFileSync(join(dataDirectory(code), 'init.yml'), 'cases: []');
     mkdirSync(worker.pdfCacheRoot, { recursive: true });
     writeFileSync(join(worker.pdfCacheRoot, `${code}.en.pdf`), '%PDF-1.4');
@@ -122,6 +124,7 @@ describe('problem package build', () => {
         'data/tests.zip',
         'data/init.yml',
         'sources/checker.cpp',
+        'sources/testlib.h',
         'material/notes.txt',
         'statement.en.pdf',
       ].sort(),
@@ -130,6 +133,7 @@ describe('problem package build', () => {
     expect(files['statements/vi.md']).toBe('Cong hai so.');
     expect(files['data/tests.zip']).toBe('ARCHIVE-BYTES');
     expect(files['sources/checker.cpp']).toBe('// checker');
+    expect(files['sources/testlib.h']).toBe('// testlib');
     expect(files['material/notes.txt']).toBe('NOTES');
     const manifest = JSON.parse(files['package.json']) as {
       format: string;

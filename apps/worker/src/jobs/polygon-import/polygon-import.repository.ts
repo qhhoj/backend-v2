@@ -331,9 +331,10 @@ export class PolygonImportRepository {
     return {
       problemId: written.problemId,
       dataVersion: written.dataVersion,
-      previousFiles: DATA_FILE_KINDS.flatMap(
-        (kind) => before?.data?.[kind] ?? [],
-      ),
+      previousFiles: [
+        ...DATA_FILE_KINDS.flatMap((kind) => before?.data?.[kind] ?? []),
+        ...(before?.data?.helperHeaders ?? []),
+      ],
     };
   }
 

@@ -257,6 +257,18 @@ describe('compileInitYaml', () => {
         cases: [plain(1)],
       }).interactive,
     ).toEqual({ files: 'inter.cpp', type: 'testlib', lang: 'CPP17' });
+    expect(
+      init({
+        grader: 'interactive',
+        customGrader: 'inter.cpp',
+        helperHeaders: ['testlib.h', 'constraints.h'],
+        cases: [plain(1)],
+      }).interactive,
+    ).toEqual({
+      files: ['inter.cpp', 'testlib.h', 'constraints.h'],
+      type: 'testlib',
+      lang: 'CPP17',
+    });
     failsWith(
       { grader: 'interactive', customGrader: 'inter.py', cases: [plain(1)] },
       'Only accept `.cpp` interactor',
