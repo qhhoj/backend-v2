@@ -8,6 +8,19 @@ import {
 } from '../../imports/dto/import-error.decorators';
 import { PolygonLatestPackageResponse } from './polygon-problem.response';
 
+/** The statement and test options every sync re-applies (`PATCH /problems/{code}/polygon` edits them). */
+export class PolygonLinkOptionsResponse {
+  mainStatementLanguage!: string | null;
+  /** `<polygon language>=<en|vi|skip>`, sorted, in the form the import and the PATCH take. */
+  statementLanguages!: string[];
+  tutorialLanguage!: string | null;
+  ignoreZeroPointBatches!: boolean;
+  ignoreZeroPointCases!: boolean;
+  appendMainSolution!: boolean;
+  /** Testcase limit of the user who linked the problem; a sync of more tests fails with `too_many_testcases`. Not editable. */
+  maxCases!: number;
+}
+
 export class PolygonLinkResponse {
   /** Polygon problem id. */
   problemId!: number;
@@ -36,6 +49,7 @@ export class PolygonLinkResponse {
   @ApiImportErrorParams()
   lastSyncErrorParams!: ImportErrorParams | null;
   autoSync!: boolean;
+  options!: PolygonLinkOptionsResponse;
 }
 
 export class PolygonLinkStateResponse {

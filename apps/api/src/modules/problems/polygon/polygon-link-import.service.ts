@@ -6,18 +6,16 @@ import { newId } from '@libs/database';
 import {
   POLYGON_SYNC_PERMISSION,
   PolygonClient,
-  statementLanguagesOf,
-  statementOptionsRefusal,
   syncJobId,
   syncJobOf,
-  testCountRefusal,
 } from '@libs/problems';
-import type { ReadyPackage, StatementOptions } from '@libs/problems';
+import type { ReadyPackage } from '@libs/problems';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
 import { ProblemImportsService } from '../imports/problem-imports.service';
 import { PolygonLinkImportDto } from './dto/polygon-problems.dto';
 import { askPolygon } from './polygon-errors';
 import { linkedProblem } from './polygon-link.service';
+import { assertOptionsFit } from './polygon-options-fit';
 import {
   PolygonLinkResolver,
   readyPackage,
@@ -44,7 +42,7 @@ export class PolygonLinkImportService {
       link,
       body.code,
     );
-    await this.assertOptionsFit(problem.id, job);
+    await assertOptionsFit(this.polygon, problem.id, job);
     await this.imports.reserveImport(auth);
     const jobId = newId();
     await this.imports.enqueue(auth, jobId, {
@@ -75,7 +73,8 @@ export class PolygonLinkImportService {
     const latest = await this.latestReadyOf(problem.polygonLink.problemId);
     const jobId = syncJobId(document._id, latest.id);
     if (await this.imports.isUnfinished(jobId)) return { jobId };
-    await this.assertOptionsFit(
+    await assertOptionsFit(
+      this.polygon,
       problem.polygonLink.problemId,
       problem.polygonLink.options,
     );
@@ -89,32 +88,6 @@ export class PolygonLinkImportService {
       }),
     );
     return { jobId };
-  }
-
-  /** The language options and the test count against what Polygon lists, so a choice the worker would refuse after the download fails now, with the worker's code (400, `params` as the job's `errorParams`). Polygon not answering skips the check: the worker checks the package anyway. */
-  private async assertOptionsFit(
-    polygonId: number,
-    options: StatementOptions & { maxCases: number },
-  ): Promise<void> {
-    const [statements, tests] = await Promise.all([
-      this.polygon.statements(polygonId).catch(() => null),
-      this.polygon.tests(polygonId).catch(() => null),
-    ]);
-    const refusal =
-      (statements &&
-        statementOptionsRefusal(statementLanguagesOf(statements), options)) ??
-      (tests && testCountRefusal(tests.length, options.maxCases));
-    if (refusal)
-      throw new AppError(
-        refusal.code,
-        400,
-        refusal.message,
-        undefined,
-        undefined,
-        {
-          params: refusal.params,
-        },
-      );
   }
 
   private async latestReadyOf(polygonId: number): Promise<ReadyPackage> {
