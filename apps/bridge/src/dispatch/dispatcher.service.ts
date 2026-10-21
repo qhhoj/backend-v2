@@ -358,12 +358,30 @@ export class DispatcherService {
 
   /** Resync tick: judges that answered RETRY may take those rows again. */
   async clearRetryBans(): Promise<void> {
-    for (const [index, entry] of this.queue.entries())
-      if (entry.retryBannedJudges.length) {
-        const cleared = { ...entry, retryBannedJudges: [] };
-        this.queue[index] = cleared;
-        this.queued.set(entry.id, cleared);
-      }
+    for (const entry of this.queue)
+      if (entry.retryBannedJudges.length)
+        this.replaceQueued({ ...entry, retryBannedJudges: [] });
+    for (const judge of this.connected()) await this.offerWork(judge);
+  }
+
+  /** Swaps a queued entry for a copy with other constraints, keeping its place in the queue. */
+  private replaceQueued(entry: QueuedSubmission): void {
+    const index = this.queue.findIndex(({ id }) => id === entry.id);
+    this.queue[index] = entry;
+    this.queued.set(entry.id, entry);
+  }
+
+  /** Resync tick: a queued entry takes the judge features its problem needs now (a sync or a data edit may have changed them since the row was read); its other fields stay, as some come only from a command. */
+  async refreshRequiredFeatures(rows: QueuedSubmission[]): Promise<void> {
+    const changed = rows.flatMap((row) => {
+      const queued = this.queued.get(row.id);
+      return queued &&
+        queued.requiredFeatures.join() !== row.requiredFeatures.join()
+        ? [{ ...queued, requiredFeatures: row.requiredFeatures }]
+        : [];
+    });
+    if (!changed.length) return;
+    for (const entry of changed) this.replaceQueued(entry);
     for (const judge of this.connected()) await this.offerWork(judge);
   }
 
