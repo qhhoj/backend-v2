@@ -8589,6 +8589,11 @@
       },
       "PolygonProblemLinkDto": {
         "properties": {
+          "code": {
+            "description": "The problem the link is for, when re-linking an existing one: it may already hold this link.",
+            "pattern": "^[a-z0-9_]{1,32}$",
+            "type": "string"
+          },
           "link": {
             "description": "The problem page address, `https://polygon.codeforces.com/p…/owner/name`.",
             "maxLength": 300,
@@ -32358,7 +32363,7 @@
     },
     "/api/internal/polygon/resolve": {
       "post": {
-        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not READY),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it) or\n`polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon\nanswered the package download with an HTTP error), other 502/503 Polygon\nerrors, 429 `rate_limited`.",
+        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not READY),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it; the optional `code`\nis the problem being re-linked, which may hold the link itself),\n`polygon_linked_deleted` (the holder is deleted but not yet purged: restore\nit and unlink; `linkedProblemCode` as above) or\n`polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon\nanswered the package download with an HTTP error), other 502/503 Polygon\nerrors, 429 `rate_limited`.",
         "operationId": "PolygonController_resolve",
         "parameters": [],
         "requestBody": {

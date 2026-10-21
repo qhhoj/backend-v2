@@ -73,3 +73,20 @@ export const alreadyLinked = (polygonId: number, code: string | null) =>
         undefined,
         { linkedProblemCode: code },
       );
+
+/** The holder is in its deletion grace period: only a restore (then an unlink) frees the Polygon problem before the purge does. `code` is shown only to a user who may edit that QHHOJ problem. */
+export const linkedToDeleted = (polygonId: number, code: string | null) =>
+  code === null
+    ? new AppError(
+        'polygon_linked_deleted',
+        409,
+        `Polygon problem ${polygonId} is linked to a deleted QHHOJ problem; its owner can restore it and unlink it, or it is freed when the problem is purged`,
+      )
+    : new AppError(
+        'polygon_linked_deleted',
+        409,
+        `Polygon problem ${polygonId} is linked to the deleted problem ${code}: restore ${code} and unlink it from Polygon, or wait for its purge`,
+        undefined,
+        undefined,
+        { linkedProblemCode: code },
+      );

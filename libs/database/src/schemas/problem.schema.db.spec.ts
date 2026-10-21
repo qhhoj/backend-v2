@@ -56,6 +56,22 @@ describe('Problem schema', () => {
       Problems.create({ ...base, code: 'Bad-Code' }),
     ).rejects.toThrow(/validation failed/);
   });
+  it('lets only one problem hold a Polygon problem, while unlinked problems repeat freely', async () => {
+    const link = (problemId: number | null) =>
+      problemId === null ? null : { problemId };
+    const make = (code: string, problemId: number | null) =>
+      Problems.collection.insertOne({
+        ...base,
+        _id: newId() as never,
+        code,
+        polygonLink: link(problemId),
+      });
+    await make('link_a', 7);
+    await make('unlinked_a', null);
+    await make('unlinked_b', null);
+    await expect(make('link_b', 7)).rejects.toThrow(/duplicate key/);
+    await make('link_c', 8);
+  });
   it('refuses a per-case bridged checker', async () => {
     await expect(
       Problems.create({
