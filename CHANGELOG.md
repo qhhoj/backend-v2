@@ -1,5 +1,14 @@
 # qhhoj-backend
 
+## 2.34.4
+
+### Patch Changes
+
+- b42cec7: Polygon import: run every `std::*` checker except hcmp from the package's own `check.cpp` (bridged), and stage the package's headers (its `testlib.h` included) beside the interactor.
+- 9d65c4e: Polygon link import treats empty authors, curators and types as not given: an update keeps the problem's catalog and a create gets the default type.
+- db2961b: Free a Polygon problem for a new import when the problem linked to it is purged (the purge clears the link); a link held by a problem still in its deletion grace period answers 409 `polygon_linked_deleted` with `linkedProblemCode`. One problem per Polygon problem is now enforced by a unique index and re-checked in the import transaction, and `POST /internal/polygon/resolve` takes an optional `code` so a problem may re-check its own link.
+- 82aff3a: Polygon import: emit 0-point rows after all scoring rows, count only distinct tests against the testcase limit, refuse one-sided file I/O, and refuse rescaled fractional points with a custom checker unless its points are percentages.
+
 ## 2.34.3
 
 ### Patch Changes
