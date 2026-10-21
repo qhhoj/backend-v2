@@ -8747,6 +8747,48 @@
         ],
         "type": "object"
       },
+      "PolygonLinkOptionsResponse": {
+        "properties": {
+          "appendMainSolution": {
+            "type": "boolean"
+          },
+          "ignoreZeroPointBatches": {
+            "type": "boolean"
+          },
+          "ignoreZeroPointCases": {
+            "type": "boolean"
+          },
+          "mainStatementLanguage": {
+            "nullable": true,
+            "type": "string"
+          },
+          "maxCases": {
+            "description": "Testcase limit of the user who linked the problem; a sync of more tests fails with `too_many_testcases`. Not editable.",
+            "type": "number"
+          },
+          "statementLanguages": {
+            "description": "`<polygon language>=<en|vi|skip>`, sorted, in the form the import and the PATCH take.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tutorialLanguage": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "mainStatementLanguage",
+          "statementLanguages",
+          "tutorialLanguage",
+          "ignoreZeroPointBatches",
+          "ignoreZeroPointCases",
+          "appendMainSolution",
+          "maxCases"
+        ],
+        "type": "object"
+      },
       "PolygonLinkResponse": {
         "properties": {
           "autoSync": {
@@ -8806,6 +8848,9 @@
           "name": {
             "type": "string"
           },
+          "options": {
+            "$ref": "#/components/schemas/PolygonLinkOptionsResponse"
+          },
           "owner": {
             "type": "string"
           },
@@ -8846,7 +8891,8 @@
           "linkedAt",
           "lastSyncAt",
           "lastSyncError",
-          "autoSync"
+          "autoSync",
+          "options"
         ],
         "type": "object"
       },
@@ -16125,13 +16171,40 @@
       },
       "UpdatePolygonLinkDto": {
         "properties": {
-          "autoSync": {
+          "appendMainSolution": {
             "type": "boolean"
+          },
+          "autoSync": {
+            "description": "Check Polygon every 10 minutes and sync a newer READY package.",
+            "type": "boolean"
+          },
+          "ignoreZeroPointBatches": {
+            "type": "boolean"
+          },
+          "ignoreZeroPointCases": {
+            "type": "boolean"
+          },
+          "mainStatementLanguage": {
+            "description": "Polygon language of the statement stored as the base statement; null lets a single-statement package decide.",
+            "maxLength": 30,
+            "nullable": true,
+            "type": "string"
+          },
+          "statementLanguages": {
+            "description": "The whole mapping `<polygon language>=<en|vi|skip>`, as the import takes it; replaces the saved one.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "tutorialLanguage": {
+            "description": "Polygon language of the tutorial imported as the editorial; null for none or a single tutorial.",
+            "maxLength": 30,
+            "nullable": true,
+            "type": "string"
           }
         },
-        "required": [
-          "autoSync"
-        ],
         "type": "object"
       },
       "UpdatePostDto": {
@@ -36486,7 +36559,7 @@
         ]
       },
       "patch": {
-        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. With `autoSync` on, the worker checks Polygon every 10 minutes and\nsyncs a newer READY package as the user who switched it on, except while a\ncontest using the problem is running; each run needs that user to still\nhold the permission and the write access, else it fails and is recorded on\nthe link. Writes a problem revision. Errors: 404 `polygon_not_linked`, 409\n`conflict` when the link changed meanwhile.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Every field is optional; an omitted one keeps its value. With\n`autoSync` on, the worker checks Polygon every 10 minutes and syncs a newer\nREADY package as the user who switched it on, except while a contest using\nthe problem is running; each run needs that user to still hold the\npermission and the write access, else it fails and is recorded on the\nlink. The statement and test options apply from the next sync (manual or\nautomatic; one already queued keeps its own) and are checked against\nPolygon's statements and tests first, with the codes a sync fails with\n(400 `statement_language_required`, `statement_language_unmapped`,\n`statement_language_repeated`, `tutorial_language_required`,\n`too_many_testcases`, `params` as the job's `errorParams`); Polygon not\nanswering skips that check. The testcase limit (`options.maxCases`) is the\nlinking user's and is not editable. Writes a problem revision of the fields\nthat changed. Errors: 404 `polygon_not_linked`, 409 `conflict` when the\nlink changed meanwhile.",
         "operationId": "ProblemPolygonLinkController_update",
         "parameters": [
           {
@@ -36548,7 +36621,7 @@
             }
           }
         },
-        "summary": "Switch a problem's Polygon auto-sync",
+        "summary": "Change a problem's Polygon auto-sync and import options",
         "tags": [
           "Problem editing"
         ]

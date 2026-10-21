@@ -6,7 +6,6 @@ import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, RateLimitService, unique } from '@libs/common';
 import { newId } from '@libs/database';
-import type { StatementLanguageChoice } from '@libs/database';
 import {
   listZipEntries,
   POLYGON_JOB_RETRY,
@@ -33,6 +32,7 @@ import {
 import type { ImportJob, ImportQueue } from './import-queue';
 import { meteredOrganizationOf } from './import-charge';
 import { PolygonImportQueryDto } from './dto/problem-import.dto';
+import { languageMapOf } from './statement-language-pairs';
 import { codeTakenError } from '../editing/problem-edit-fields';
 import { rejectFile, saveMultipartFile } from '../core/multipart';
 import { ProblemDataStore } from '../data/problem-data.store';
@@ -316,11 +316,7 @@ const requestedOptions = (
   typeIds: uniqueIfAny(query.typeIds),
   points: query.points,
   mainStatementLanguage: query.mainStatementLanguage ?? null,
-  statementLanguages: Object.fromEntries(
-    (query.statementLanguages ?? []).map(
-      (pair) => pair.split('=') as [string, StatementLanguageChoice],
-    ),
-  ),
+  statementLanguages: languageMapOf(query.statementLanguages ?? []),
   tutorialLanguage: query.tutorialLanguage ?? null,
   ignoreZeroPointBatches: query.ignoreZeroPointBatches,
   ignoreZeroPointCases: query.ignoreZeroPointCases,

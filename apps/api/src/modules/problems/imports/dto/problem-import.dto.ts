@@ -18,11 +18,10 @@ import { IsProblemCode } from '../../core/dto/problem-code.decorator';
 import { toArray } from '@libs/common';
 import { SYNC_JOB_ID } from '@libs/problems';
 import { toBoolean } from '../../core/dto/transforms';
+import { LANGUAGE_PAIR } from '../statement-language-pairs';
 
 export const IMPORT_MODES = ['create', 'update'] as const;
 export type ImportMode = (typeof IMPORT_MODES)[number];
-/** `english=en`: a Polygon statement language and the site language its translation is stored under, or `russian=skip` to leave that statement out. */
-const LANGUAGE_PAIR = /^[a-z]+=(en|vi|skip)$/;
 
 /** Options travel in the query string: the multipart body carries only the package. */
 export class PolygonImportQueryDto {

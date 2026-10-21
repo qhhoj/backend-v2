@@ -1007,6 +1007,99 @@ describe('Polygon routes', () => {
       await get(links()).expect(404).expect(errorCode('polygon_not_linked'));
     });
 
+    it('edits the saved options, which the next sync uses, writing a revision of the changed fields only', async () => {
+      const patch = (body: object) =>
+        authed(api.http().patch(links()), importer).send(body);
+      polygon.reply('problem.statements', {
+        result: {
+          english: { name: 'Sum' },
+          russian: { name: 'Сумма' },
+          vietnamese: { name: 'Tổng' },
+        },
+      });
+      expect(
+        dataOf(
+          await patch({
+            statementLanguages: ['vietnamese=vi', 'russian=skip'],
+            appendMainSolution: false,
+            ignoreZeroPointCases: true,
+            mainStatementLanguage: 'english',
+          }).expect(200),
+        ),
+      ).toMatchObject({
+        autoSync: false,
+        options: {
+          mainStatementLanguage: 'english',
+          statementLanguages: ['russian=skip', 'vietnamese=vi'],
+          appendMainSolution: false,
+          ignoreZeroPointCases: true,
+          ignoreZeroPointBatches: false,
+          maxCases: 300,
+        },
+      });
+      await patch({ appendMainSolution: false }).expect(200);
+      const problem = await api.problems.findOne({ code });
+      const revisions = await api.revisions.find({
+        entityId: problem!._id,
+        action: 'polygon_link',
+      });
+      expect(revisions.map((revision) => revision.changes)).toEqual([
+        {
+          'polygonLink.options.statementLanguages': {
+            before: { vietnamese: 'vi' },
+            after: { vietnamese: 'vi', russian: 'skip' },
+          },
+          'polygonLink.options.ignoreZeroPointCases': {
+            before: false,
+            after: true,
+          },
+          'polygonLink.options.appendMainSolution': {
+            before: true,
+            after: false,
+          },
+        },
+      ]);
+
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      const { jobId } = dataOf<{ jobId: string }>(
+        await post(`${links()}/sync`).expect(202),
+      );
+      expect((await queue.getJob(jobId))?.data).toMatchObject({
+        statementLanguages: { vietnamese: 'vi', russian: 'skip' },
+        ignoreZeroPointCases: true,
+        appendMainSolution: false,
+        maxCases: 300,
+      });
+    });
+
+    it('refuses options the package would fail with the sync code, and malformed ones, keeping the saved options', async () => {
+      const patch = (body: object) =>
+        authed(api.http().patch(links()), importer).send(body);
+      polygon.reply('problem.statements', {
+        result: {
+          english: { name: 'Sum' },
+          russian: { name: 'Сумма' },
+          vietnamese: { name: 'Tổng' },
+        },
+      });
+      expect(
+        (await patch({ statementLanguages: ['vietnamese=en'] }).expect(400))
+          .body,
+      ).toMatchObject({
+        error: {
+          code: 'statement_language_unmapped',
+          params: { language: 'russian' },
+        },
+      });
+      await patch({ statementLanguages: ['vietnamese=fr'] }).expect(400);
+      await patch({ maxCases: 9999 }).expect(400);
+      const { polygonLink } = (await api.problems.findOne({ code }))!;
+      expect(polygonLink!.options).toMatchObject({
+        statementLanguages: { vietnamese: 'vi' },
+        maxCases: 300,
+      });
+    });
+
     it('shows the title and build time of the synced package and the build time of the newest one', async () => {
       await api.problems.updateOne(
         { code },

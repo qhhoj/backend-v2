@@ -106,25 +106,34 @@ export class ProblemPolygonLinkController {
   }
 
   /**
-   * Switch a problem's Polygon auto-sync
+   * Change a problem's Polygon auto-sync and import options
    *
    * @remarks
    * Needs `judge.sync_polygon_problem` and write access to the problem's test
-   * data. With `autoSync` on, the worker checks Polygon every 10 minutes and
-   * syncs a newer READY package as the user who switched it on, except while a
-   * contest using the problem is running; each run needs that user to still
-   * hold the permission and the write access, else it fails and is recorded on
-   * the link. Writes a problem revision. Errors: 404 `polygon_not_linked`, 409
-   * `conflict` when the link changed meanwhile.
+   * data. Every field is optional; an omitted one keeps its value. With
+   * `autoSync` on, the worker checks Polygon every 10 minutes and syncs a newer
+   * READY package as the user who switched it on, except while a contest using
+   * the problem is running; each run needs that user to still hold the
+   * permission and the write access, else it fails and is recorded on the
+   * link. The statement and test options apply from the next sync (manual or
+   * automatic; one already queued keeps its own) and are checked against
+   * Polygon's statements and tests first, with the codes a sync fails with
+   * (400 `statement_language_required`, `statement_language_unmapped`,
+   * `statement_language_repeated`, `tutorial_language_required`,
+   * `too_many_testcases`, `params` as the job's `errorParams`); Polygon not
+   * answering skips that check. The testcase limit (`options.maxCases`) is the
+   * linking user's and is not editable. Writes a problem revision of the fields
+   * that changed. Errors: 404 `polygon_not_linked`, 409 `conflict` when the
+   * link changed meanwhile.
    */
   @RequirePermission(POLYGON_SYNC_PERMISSION)
   @Patch()
   update(
     @CurrentAuth() auth: AuthContext,
     @Param() { code }: ProblemCodeParamDto,
-    @Body() { autoSync }: UpdatePolygonLinkDto,
+    @Body() body: UpdatePolygonLinkDto,
   ): Promise<PolygonLinkResponse> {
-    return this.links.setAutoSync(auth, code, autoSync);
+    return this.links.update(auth, code, body);
   }
 
   /**
