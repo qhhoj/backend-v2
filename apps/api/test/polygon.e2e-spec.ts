@@ -465,6 +465,27 @@ describe('Polygon routes', () => {
     });
   });
 
+  it('queues no authors, curators or types of an update that sends empty lists', async () => {
+    await createProblem(api, catalog, {
+      code: 'empty_lists',
+      authors: [importerId],
+      curators: [importerId],
+    });
+    sharedProblems();
+    const response = await post(`${POLYGON}/import`, {
+      link: SUM_LINK,
+      code: 'empty_lists',
+      mode: 'update',
+      authors: [],
+      curators: [],
+      typeIds: [],
+    }).expect(202);
+    const job = await queue.getJob(dataOf<{ jobId: string }>(response).jobId);
+    expect(job?.data).toMatchObject({ mode: 'update', code: 'empty_lists' });
+    for (const field of ['authors', 'curators', 'typeIds'])
+      expect(job?.data[field as keyof typeof job.data]).toBeUndefined();
+  });
+
   it('checks the link again on import and queues nothing for a wrong token', async () => {
     sharedProblems();
     await post(`${POLYGON}/import`, {

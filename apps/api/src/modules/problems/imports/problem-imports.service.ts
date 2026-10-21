@@ -167,7 +167,7 @@ export class ProblemImportsService {
       const problem = await this.importableProblem(principal, query.code);
       return {
         ...options,
-        curators: query.curators && unique(query.curators),
+        curators: uniqueIfAny(query.curators),
         isFullMarkup: problem.isFullMarkup,
         expectedDataVersion: problem.dataVersion ?? 0,
       };
@@ -268,6 +268,9 @@ export class ProblemImportsService {
   }
 }
 
+/** An empty list means "not given" (the link import sends `[]` for untouched pickers), so an update keeps the current value. */
+const uniqueIfAny = (ids?: string[]) => (ids?.length ? unique(ids) : undefined);
+
 /** The options every import job carries, as the user gave them. */
 const requestedOptions = (
   principal: AuthContext['principal'],
@@ -276,9 +279,9 @@ const requestedOptions = (
   requesterId: principal.userId,
   code: query.code,
   mode: query.mode,
-  authors: query.authors && unique(query.authors),
+  authors: uniqueIfAny(query.authors),
   groupId: query.groupId,
-  typeIds: query.typeIds && unique(query.typeIds),
+  typeIds: uniqueIfAny(query.typeIds),
   points: query.points,
   mainStatementLanguage: query.mainStatementLanguage ?? null,
   statementLanguages: Object.fromEntries(

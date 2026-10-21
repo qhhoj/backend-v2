@@ -144,14 +144,17 @@ function statementFields(
 }
 type StatementFields = ReturnType<typeof statementFields>;
 
+/** An empty list means "not given", like an absent one. */
+const nonEmpty = <Item>(list?: Item[]) => (list?.length ? list : undefined);
+
 /** The catalog fields the job names; an update keeps the rest. */
 const requestedCatalog = (job: PolygonImportJob) =>
   definedOnly({
     groupId: job.groupId,
-    typeIds: job.typeIds,
+    typeIds: nonEmpty(job.typeIds),
     points: job.points,
-    authors: job.authors,
-    curators: job.curators,
+    authors: nonEmpty(job.authors),
+    curators: nonEmpty(job.curators),
   });
 
 /** The editor's compare-and-set on `dataVersion`; a sync also needs the link it was queued for. */
@@ -450,7 +453,9 @@ export class PolygonImportRepository {
     };
     return {
       groupId: job.groupId ?? (await oldest(this.problemGroups, 'group')),
-      typeIds: job.typeIds ?? [await oldest(this.problemTypes, 'type')],
+      typeIds: nonEmpty(job.typeIds) ?? [
+        await oldest(this.problemTypes, 'type'),
+      ],
       allowedLanguages: (
         await this.languages
           .find({ includeInProblem: true }, { _id: 1 })
