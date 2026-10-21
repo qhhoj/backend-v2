@@ -20,8 +20,8 @@ import { toBoolean } from '../../core/dto/transforms';
 
 export const IMPORT_MODES = ['create', 'update'] as const;
 export type ImportMode = (typeof IMPORT_MODES)[number];
-/** `english=en`: a Polygon statement language and the site language its translation is stored under. */
-const LANGUAGE_PAIR = /^[a-z]+=(en|vi)$/;
+/** `english=en`: a Polygon statement language and the site language its translation is stored under, or `russian=skip` to leave that statement out. */
+const LANGUAGE_PAIR = /^[a-z]+=(en|vi|skip)$/;
 
 /** Options travel in the query string: the multipart body carries only the package. */
 export class PolygonImportQueryDto {
@@ -61,7 +61,7 @@ export class PolygonImportQueryDto {
   points?: number;
   /** Polygon language of the statement stored as the base statement. */
   @IsOptional() @IsString() @MaxLength(30) mainStatementLanguage?: string;
-  /** Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter. */
+  /** Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations, or `<polygon language>=skip` to leave a statement out; repeat the parameter. Every statement but the main one needs an entry. */
   @IsOptional()
   @Transform(toArray)
   @Matches(LANGUAGE_PAIR, { each: true })

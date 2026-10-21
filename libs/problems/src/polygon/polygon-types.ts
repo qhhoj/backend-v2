@@ -25,9 +25,10 @@ export interface PolygonPackageInfo {
   type?: string;
 }
 
-/** One language of `problem.statements`; only the name is read. */
+/** One language of `problem.statements`; only the name and whether it has a tutorial are read. */
 export interface PolygonStatement {
   name?: string;
+  tutorial?: string;
 }
 
 /** What QHHOJ shows of a problem's newest package: PENDING reads as RUNNING, no package as NONE. */
@@ -127,11 +128,48 @@ export function newestReadyPackageId(
   );
 }
 
+/** Longest Polygon build comment passed on; a FAILED build's comment names the failing solution or test. */
+const MAX_PACKAGE_COMMENT = 500;
+
+/** Polygon's newest package as a setter sees it on Polygon: its state (PENDING reads as RUNNING) and Polygon's comment (why a build FAILED); null without a package. */
+export interface NewestPackage {
+  id: number;
+  revision: number;
+  state: Exclude<PackageState, 'NONE'>;
+  comment: string | null;
+}
+
+export function newestPackageOf(
+  packages: PolygonPackageInfo[],
+): NewestPackage | null {
+  const newest = [...packages].sort(newestFirst)[0];
+  if (!newest) return null;
+  return {
+    id: newest.id,
+    revision: newest.revision,
+    state: newest.state === 'PENDING' ? 'RUNNING' : newest.state,
+    comment: newest.comment?.trim().slice(0, MAX_PACKAGE_COMMENT) || null,
+  };
+}
+
 /** Why `latestPackageOf` offers nothing READY, naming Polygon's newest package and its state. */
 export function packageNotReadyReason(packages: PolygonPackageInfo[]): string {
   const newest = [...packages].sort(newestFirst)[0];
   if (!newest) return 'it has no package';
   return `its newest package ${newest.id} (revision ${newest.revision}) is ${newest.state}`;
+}
+
+/** The statement languages of a problem as `problem.statements` lists them, with their title and whether a tutorial (the editorial) comes with them; sorted by language name. */
+export function statementLanguagesOf(
+  statements: Record<string, PolygonStatement>,
+): Array<{ language: string; title: string | null; hasTutorial: boolean }> {
+  return Object.entries(statements)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([language, statement]) => ({
+      language,
+      title: statement.name?.trim() || null,
+      hasTutorial: Boolean(statement.tutorial?.trim()),
+    }));
 }
 /** Vietnamese first, then English, then any language; null when no statement has a name. */
 export function statementTitleOf(

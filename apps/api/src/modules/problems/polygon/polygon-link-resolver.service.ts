@@ -9,11 +9,11 @@ import {
   latestPackageOf,
   linkTokenOfPackage,
   newestReadyPackageId,
-  packageNotReadyReason,
   parsePolygonLink,
   POLYGON_PACKAGE_MAX_BYTES,
   PolygonClient,
   ProblemDataFilesService,
+  statementLanguagesOf,
   statementTitleOf,
   XmlError,
   ZipError,
@@ -32,6 +32,7 @@ import { PolygonProblemResponse } from './dto/polygon-problem.response';
 import {
   alreadyLinked,
   askPolygon,
+  linkBeingChecked,
   linkedToDeleted,
   linkInvalid,
   linkRefused,
@@ -49,6 +50,10 @@ export interface ResolvedLink {
 /** The token of a problem never changes, so the one read from its package is kept a week (as a digest, never the token). */
 const TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 const tokenKey = (polygonId: number) => `polygon:link-token:${polygonId}`;
+/** One download per problem at a time for its first check: impatient clicks never start parallel downloads of up to 512 MiB. The lock outlives the client's idle timeout. */
+const CHECK_LOCK_SECONDS = 15 * 60;
+const checkLockKey = (polygonId: number) =>
+  `polygon:link-token-check:${polygonId}`;
 const digestOf = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 
@@ -66,21 +71,22 @@ export class PolygonLinkResolver {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** The import wizard's preview: the checks of `resolve` plus the statement title. `code` is the problem being re-linked, which may already hold this link. */
+  /** The import wizard's preview: the checks of `resolve` plus the statement title and languages. `code` is the problem being re-linked, which may already hold this link. */
   async preview(
     auth: AuthContext,
     text: string,
     code: string | null = null,
   ): Promise<PolygonProblemResponse> {
     const { problem, latest } = await this.resolve(auth, text, code);
-    const title = statementTitleOf(
-      await askPolygon(() => this.polygon.statements(problem.id)),
+    const statements = await askPolygon(() =>
+      this.polygon.statements(problem.id),
     );
     return {
       id: problem.id,
       name: problem.name,
       owner: problem.owner,
-      title,
+      title: statementTitleOf(statements),
+      statements: statementLanguagesOf(statements),
       revision: problem.revision,
       modified: Boolean(problem.modified),
       latestPackage: latest,
@@ -119,16 +125,39 @@ export class PolygonLinkResolver {
     token: string,
     packages: PolygonPackageInfo[],
   ): Promise<void> {
-    let known = await this.redis.get(tokenKey(polygonId));
-    if (known === null) {
-      const packageId = newestReadyPackageId(packages);
-      if (packageId === null) throw noPackage();
+    const known =
+      (await this.redis.get(tokenKey(polygonId))) ??
+      (await this.readTokenDigest(polygonId, packages));
+    if (known !== digestOf(token)) throw linkRefused();
+  }
+
+  /** Reads the token from the newest READY package and caches its digest, one download per problem at a time. Without a READY package: `polygon_no_package` when Polygon has none, else `polygon_package_not_ready` naming the build running or failed. */
+  private async readTokenDigest(
+    polygonId: number,
+    packages: PolygonPackageInfo[],
+  ): Promise<string> {
+    const packageId = newestReadyPackageId(packages);
+    if (packageId === null)
+      throw packages.length
+        ? packageNotReady(polygonId, packages)
+        : noPackage();
+    const lock = checkLockKey(polygonId);
+    if (!(await this.redis.set(lock, '1', 'EX', CHECK_LOCK_SECONDS, 'NX')))
+      throw linkBeingChecked();
+    try {
       const actual = await this.tokenInPackage(polygonId, packageId);
       if (actual === null) throw linkRefused();
-      known = digestOf(actual);
-      await this.redis.set(tokenKey(polygonId), known, 'EX', TOKEN_TTL_SECONDS);
+      const digest = digestOf(actual);
+      await this.redis.set(
+        tokenKey(polygonId),
+        digest,
+        'EX',
+        TOKEN_TTL_SECONDS,
+      );
+      return digest;
+    } finally {
+      await this.redis.del(lock);
     }
-    if (known !== digestOf(token)) throw linkRefused();
   }
 
   /** The standard variant exists for every package; only problem.xml is read, and the zip is removed at once. */
@@ -179,6 +208,6 @@ export function readyPackage(
 ): ReadyPackage {
   const latest = latestPackageOf(packages);
   if (latest.state !== 'READY' || latest.id === null || latest.type === null)
-    throw packageNotReady(polygonId, packageNotReadyReason(packages));
+    throw packageNotReady(polygonId, packages);
   return latest as ReadyPackage;
 }

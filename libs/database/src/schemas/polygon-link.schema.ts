@@ -5,14 +5,18 @@ import { PLAIN_OBJECT } from '../schema';
 const UUID = MongooseSchema.Types.UUID;
 export const POLYGON_SYNC_RESULTS = ['ok', 'failed'] as const;
 export type PolygonSyncResult = (typeof POLYGON_SYNC_RESULTS)[number];
+/** What an import does with a Polygon statement other than the main one: store it as the `en` or `vi` translation, or leave it out. */
+export const STATEMENT_LANGUAGE_CHOICES = ['en', 'vi', 'skip'] as const;
+export type StatementLanguageChoice =
+  (typeof STATEMENT_LANGUAGE_CHOICES)[number];
 
 /** The statement and test options of the first import; every sync re-applies them. */
 @Schema({ _id: false })
 export class PolygonImportOptions {
   @Prop({ type: String, default: null }) mainStatementLanguage!: string | null;
-  /** Polygon language → site language (`en`|`vi`). */
+  /** Polygon language → site language (`en`|`vi`), or `skip` to leave that statement out. */
   @Prop({ type: Object, default: {}, validate: PLAIN_OBJECT })
-  statementLanguages!: Record<string, 'en' | 'vi'>;
+  statementLanguages!: Record<string, StatementLanguageChoice>;
   @Prop({ type: String, default: null }) tutorialLanguage!: string | null;
   @Prop({ default: false }) ignoreZeroPointBatches!: boolean;
   @Prop({ default: false }) ignoreZeroPointCases!: boolean;

@@ -123,7 +123,10 @@ describe('Polygon routes', () => {
       .reply('problem.statements', ({ problemId }) => ({
         result:
           problemId === '1'
-            ? { english: { name: 'Sum' }, vietnamese: { name: 'Tổng' } }
+            ? {
+                english: { name: 'Sum' },
+                vietnamese: { name: 'Tổng', tutorial: 'Cộng lại.' },
+              }
             : {},
       }));
   const get = (path: string, session = importer) =>
@@ -255,6 +258,10 @@ describe('Polygon routes', () => {
         name: 'sum',
         owner: 'alice',
         title: 'Tổng',
+        statements: [
+          { language: 'english', title: 'Sum', hasTutorial: false },
+          { language: 'vietnamese', title: 'Tổng', hasTutorial: true },
+        ],
         revision: 3,
         modified: false,
         latestPackage: {
@@ -356,6 +363,51 @@ describe('Polygon routes', () => {
         message:
           'Polygon problem 1 has no READY package: its newest package 31 (revision 3) is FAILED. Build a package on Polygon first',
       });
+    });
+
+    it('names a first build that is running or failed, with Polygon comment, instead of asking for a package', async () => {
+      sharedProblems();
+      polygon.reply('problem.packages', {
+        result: [
+          {
+            ...pkg(30, 3, 'FAILED', 'standard'),
+            comment: 'Solution tle.cpp passed all tests',
+          },
+        ],
+      });
+      expect(refusalOf(await resolve(SUM_LINK).expect(409))).toMatchObject({
+        code: 'polygon_package_not_ready',
+        newestPackage: {
+          id: 30,
+          revision: 3,
+          state: 'FAILED',
+          comment: 'Solution tle.cpp passed all tests',
+        },
+      });
+      polygon.reply('problem.packages', {
+        result: [pkg(31, 4, 'PENDING', 'standard')],
+      });
+      expect(refusalOf(await resolve(SUM_LINK).expect(409))).toMatchObject({
+        code: 'polygon_package_not_ready',
+        newestPackage: { id: 31, state: 'RUNNING', comment: null },
+      });
+      expect(polygon.callsOf('problem.package')).toHaveLength(0);
+    });
+
+    it('downloads a package for its first check once at a time, answering a parallel check to come back', async () => {
+      sharedProblems();
+      await redis.set('polygon:link-token-check:1', '1', 'EX', 60);
+      try {
+        await resolve(SUM_LINK)
+          .expect(409)
+          .expect('Retry-After', '60')
+          .expect(errorCode('polygon_link_checking'));
+        expect(polygon.callsOf('problem.package')).toHaveLength(0);
+      } finally {
+        await redis.del('polygon:link-token-check:1');
+      }
+      await resolve(SUM_LINK).expect(200);
+      expect(await redis.exists('polygon:link-token-check:1')).toBe(0);
     });
 
     it('names the QHHOJ problem it is already linked to only to a user who may edit that problem', async () => {

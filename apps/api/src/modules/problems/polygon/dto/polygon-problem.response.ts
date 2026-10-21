@@ -22,6 +22,16 @@ export class PolygonLatestPackageResponse {
   createdAt!: string | null;
 }
 
+/** One statement of the Polygon problem: the language names an import's language options take. */
+export class PolygonStatementLanguageResponse {
+  /** Polygon's language name, such as `vietnamese` or `english`. */
+  language!: string;
+  /** The statement's title in that language; null when unnamed. */
+  title!: string | null;
+  /** It has a tutorial, which an import can take as the editorial. */
+  hasTutorial!: boolean;
+}
+
 /** A pasted link that passed every check: shared with the account, token verified, not linked, a package READY. */
 export class PolygonProblemResponse {
   /** Polygon problem id. */
@@ -30,6 +40,8 @@ export class PolygonProblemResponse {
   name!: string;
   /** Statement name (Vietnamese, else English, else any language); null when no statement is named. */
   title!: string | null;
+  /** Every statement language, sorted by name: with two or more, an import names the main one and maps or skips the others (`statementLanguages`); with two or more tutorials it names `tutorialLanguage`. */
+  statements!: PolygonStatementLanguageResponse[];
   owner!: string;
   /** Current revision of the problem on Polygon. */
   revision!: number;

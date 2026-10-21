@@ -8450,7 +8450,7 @@
             "type": "number"
           },
           "statementLanguages": {
-            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter.",
+            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations, or `<polygon language>=skip` to leave a statement out; repeat the parameter. Every statement but the main one needs an entry.",
             "items": {
               "type": "string"
             },
@@ -8640,6 +8640,13 @@
             "description": "Current revision of the problem on Polygon.",
             "type": "number"
           },
+          "statements": {
+            "description": "Every statement language, sorted by name: with two or more, an import names the main one and maps or skips the others (`statementLanguages`); with two or more tutorials it names `tutorialLanguage`.",
+            "items": {
+              "$ref": "#/components/schemas/PolygonStatementLanguageResponse"
+            },
+            "type": "array"
+          },
           "title": {
             "description": "Statement name (Vietnamese, else English, else any language); null when no statement is named.",
             "nullable": true,
@@ -8650,10 +8657,34 @@
           "id",
           "name",
           "title",
+          "statements",
           "owner",
           "revision",
           "modified",
           "latestPackage"
+        ],
+        "type": "object"
+      },
+      "PolygonStatementLanguageResponse": {
+        "properties": {
+          "hasTutorial": {
+            "description": "It has a tutorial, which an import can take as the editorial.",
+            "type": "boolean"
+          },
+          "language": {
+            "description": "Polygon's language name, such as `vietnamese` or `english`.",
+            "type": "string"
+          },
+          "title": {
+            "description": "The statement's title in that language; null when unnamed.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "language",
+          "title",
+          "hasTutorial"
         ],
         "type": "object"
       },
@@ -32369,7 +32400,7 @@
     },
     "/api/internal/polygon/resolve": {
       "post": {
-        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (no READY package to\ncheck against), `polygon_package_not_ready` (newest package not READY),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it; the optional `code`\nis the problem being re-linked, which may hold the link itself),\n`polygon_linked_deleted` (the holder is deleted but not yet purged: restore\nit and unlink; `linkedProblemCode` as above) or\n`polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon\nanswered the package download with an HTTP error), other 502/503 Polygon\nerrors, 429 `rate_limited`.",
+        "description": "Needs the right to create a problem on the site (`judge.add_problem`) or for an organization (`judge.create_organization_problem` and an administered organization), or `judge.sync_polygon_problem`. The body takes the problem page\naddress, `https://polygon.codeforces.com/p…/owner/name`; its `p…` part is\nthe permission: the server finds `owner/name` among the problems shared\nwith the QHHOJ account and compares the token with the `<problem url>` of\nthe newest READY package's problem.xml (read once per problem, then\ncached). Answers the problem, its statement title, its statement\nlanguages (with title and whether each has a tutorial; the import's\nlanguage options name them) and the newest READY\npackage (`type` full or standard). Each check, here or on import, counts\ntowards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`\n(not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not\nmatch: one answer for both), 409 `polygon_no_package` (Polygon has no\npackage at all), `polygon_package_not_ready` (newest package not READY;\n`newestPackage` gives its id, revision, state RUNNING or FAILED and\nPolygon's comment on it), `polygon_link_checking` (another request is\ndownloading the package for this problem's first check; `Retry-After`),\n`polygon_already_linked` (names the QHHOJ problem, also as\n`linkedProblemCode`, only to a user who may edit it; the optional `code`\nis the problem being re-linked, which may hold the link itself),\n`polygon_linked_deleted` (the holder is deleted but not yet purged: restore\nit and unlink; `linkedProblemCode` as above) or\n`polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon\nanswered the package download with an HTTP error), other 502/503 Polygon\nerrors, 429 `rate_limited`.",
         "operationId": "PolygonController_resolve",
         "parameters": [],
         "requestBody": {
@@ -33675,7 +33706,7 @@
             }
           },
           {
-            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations; repeat the parameter.",
+            "description": "Mapping `<polygon language>=<site language>` (`en` or `vi`) for translations, or `<polygon language>=skip` to leave a statement out; repeat the parameter. Every statement but the main one needs an entry.",
             "in": "query",
             "name": "statementLanguages",
             "required": false,

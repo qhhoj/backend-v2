@@ -59,12 +59,17 @@ export class PolygonController {
    * the permission: the server finds `owner/name` among the problems shared
    * with the QHHOJ account and compares the token with the `<problem url>` of
    * the newest READY package's problem.xml (read once per problem, then
-   * cached). Answers the problem, its statement title and the newest READY
+   * cached). Answers the problem, its statement title, its statement
+   * languages (with title and whether each has a tutorial; the import's
+   * language options name them) and the newest READY
    * package (`type` full or standard). Each check, here or on import, counts
    * towards 20 per 10 minutes per user. Errors: 400 `polygon_link_invalid`
    * (not a problem link), 404 `polygon_link_refused` (not shared with the account, or the token does not
-   * match: one answer for both), 409 `polygon_no_package` (no READY package to
-   * check against), `polygon_package_not_ready` (newest package not READY),
+   * match: one answer for both), 409 `polygon_no_package` (Polygon has no
+   * package at all), `polygon_package_not_ready` (newest package not READY;
+   * `newestPackage` gives its id, revision, state RUNNING or FAILED and
+   * Polygon's comment on it), `polygon_link_checking` (another request is
+   * downloading the package for this problem's first check; `Retry-After`),
    * `polygon_already_linked` (names the QHHOJ problem, also as
    * `linkedProblemCode`, only to a user who may edit it; the optional `code`
    * is the problem being re-linked, which may hold the link itself),

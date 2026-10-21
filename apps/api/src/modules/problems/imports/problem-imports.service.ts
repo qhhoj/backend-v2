@@ -6,7 +6,7 @@ import { hasPermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { AppError, RateLimitService, unique } from '@libs/common';
 import { newId } from '@libs/database';
-import type { StatementLanguage } from '@libs/database';
+import type { StatementLanguageChoice } from '@libs/database';
 import {
   IMPORT_STEPS,
   listZipEntries,
@@ -308,7 +308,7 @@ const requestedOptions = (
   mainStatementLanguage: query.mainStatementLanguage ?? null,
   statementLanguages: Object.fromEntries(
     (query.statementLanguages ?? []).map(
-      (pair) => pair.split('=') as [string, StatementLanguage],
+      (pair) => pair.split('=') as [string, StatementLanguageChoice],
     ),
   ),
   tutorialLanguage: query.tutorialLanguage ?? null,
