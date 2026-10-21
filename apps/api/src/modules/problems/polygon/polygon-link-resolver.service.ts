@@ -32,6 +32,7 @@ import { PolygonProblemResponse } from './dto/polygon-problem.response';
 import {
   alreadyLinked,
   askPolygon,
+  linkedToDeleted,
   linkInvalid,
   linkRefused,
   noPackage,
@@ -65,12 +66,13 @@ export class PolygonLinkResolver {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** The import wizard's preview: the checks of `resolve` plus the statement title. */
+  /** The import wizard's preview: the checks of `resolve` plus the statement title. `code` is the problem being re-linked, which may already hold this link. */
   async preview(
     auth: AuthContext,
     text: string,
+    code: string | null = null,
   ): Promise<PolygonProblemResponse> {
-    const { problem, latest } = await this.resolve(auth, text, null);
+    const { problem, latest } = await this.resolve(auth, text, code);
     const title = statementTitleOf(
       await askPolygon(() => this.polygon.statements(problem.id)),
     );
@@ -163,7 +165,10 @@ export class PolygonLinkResolver {
       auth.principal,
       ProblemAccess.accessView(linked),
     );
-    throw alreadyLinked(polygonId, canEdit ? linked.code : null);
+    const shownCode = canEdit ? linked.code : null;
+    throw linked.deletedAt
+      ? linkedToDeleted(polygonId, shownCode)
+      : alreadyLinked(polygonId, shownCode);
   }
 }
 

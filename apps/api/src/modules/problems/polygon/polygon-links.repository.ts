@@ -9,10 +9,10 @@ export class PolygonLinksRepository {
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
   ) {}
 
-  /** The problem linked to a Polygon problem (deleted problems included: their code and link come back on restore), or null. */
+  /** The problem linked to a Polygon problem, or null. A problem in its deletion grace period still holds its link (a restore brings it back) and `deletedAt` tells the caller; a purged tombstone never does. At most one exists: the index on the link is unique. */
   linkedTo(polygonId: number): Promise<Problem | null> {
     return this.problems
-      .findOne({ 'polygonLink.problemId': polygonId })
+      .findOne({ 'polygonLink.problemId': polygonId, purgedAt: null })
       .lean<Problem>()
       .exec();
   }

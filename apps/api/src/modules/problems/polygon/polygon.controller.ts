@@ -66,7 +66,10 @@ export class PolygonController {
    * match: one answer for both), 409 `polygon_no_package` (no READY package to
    * check against), `polygon_package_not_ready` (newest package not READY),
    * `polygon_already_linked` (names the QHHOJ problem, also as
-   * `linkedProblemCode`, only to a user who may edit it) or
+   * `linkedProblemCode`, only to a user who may edit it; the optional `code`
+   * is the problem being re-linked, which may hold the link itself),
+   * `polygon_linked_deleted` (the holder is deleted but not yet purged: restore
+   * it and unlink; `linkedProblemCode` as above) or
    * `polygon_not_connected`, 502 `polygon_package_unavailable` (Polygon
    * answered the package download with an HTTP error), other 502/503 Polygon
    * errors, 429 `rate_limited`.
@@ -75,10 +78,10 @@ export class PolygonController {
   @HttpCode(200)
   async resolve(
     @CurrentAuth() auth: AuthContext,
-    @Body() { link }: PolygonProblemLinkDto,
+    @Body() { link, code }: PolygonProblemLinkDto,
   ): Promise<PolygonProblemResponse> {
     await this.imports.assertMayUsePolygon(auth.principal);
-    return this.resolver.preview(auth, link);
+    return this.resolver.preview(auth, link, code);
   }
 
   /**

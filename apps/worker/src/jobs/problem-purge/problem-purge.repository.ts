@@ -122,7 +122,7 @@ export class ProblemPurgeRepository {
     return deletedCount;
   }
 
-  /** Statement fields and test data emptied and `purgedAt` set, last; `code`, `name`, `deletedAt`, `purgeStartedAt` and the counters stay. */
+  /** Statement fields, test data and the Polygon link (freeing that Polygon problem for a new import) emptied and `purgedAt` set, last; `code`, `name`, `deletedAt`, `purgeStartedAt` and the counters stay. */
   async emptyToTombstone(problemId: string, now: Date): Promise<void> {
     await this.problems
       .updateOne(
@@ -140,6 +140,7 @@ export class ProblemPurgeRepository {
             pdfStatementUrl: null,
             materialUrl: null,
             ogImage: '',
+            polygonLink: null,
           },
         },
       )

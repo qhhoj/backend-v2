@@ -171,6 +171,12 @@ const unchangedSinceQueued = (
   }),
 });
 
+/** The code of the other problem is not told: the requester may not be allowed to see it. */
+const alreadyLinkedElsewhere = (job: PolygonImportJob) =>
+  new PolygonImportError(
+    `Polygon problem ${job.polygon?.problemId} is already linked to another QHHOJ problem`,
+  );
+
 @Injectable()
 export class PolygonImportRepository {
   constructor(
@@ -280,6 +286,8 @@ export class PolygonImportRepository {
         throw new PolygonImportError(
           `problem with code ${job.code} already exists`,
         );
+      if (isDuplicateKey(error, 'polygonLink.problemId'))
+        throw alreadyLinkedElsewhere(job);
       if (isDocumentTooLarge(error))
         throw new PolygonImportError('the test data is too large');
       throw error;
@@ -299,6 +307,7 @@ export class PolygonImportRepository {
       .exec();
     this.checkTarget(job, existing);
     this.checkLink(job, existing);
+    await this.assertLinkFree(job, session);
     if (existing && job.polygon?.purpose === 'sync')
       assertSyncRequester(
         await this.activePrincipal(job.requesterId),
@@ -480,6 +489,23 @@ export class PolygonImportRepository {
       throw new PolygonImportError(
         `the problem is no longer linked to Polygon problem ${job.polygon.problemId}`,
       );
+  }
+
+  /** Inside the transaction, so two first imports of one Polygon problem cannot both link it (the unique index is the last guard): no other problem, live or in its grace period, may hold the link. */
+  private async assertLinkFree(
+    job: PolygonImportJob,
+    session: ClientSession,
+  ): Promise<void> {
+    if (job.polygon?.purpose !== 'link') return;
+    const holder = await this.problems
+      .exists({
+        'polygonLink.problemId': job.polygon.problemId,
+        code: { $ne: job.code },
+        purgedAt: null,
+      })
+      .session(session)
+      .exec();
+    if (holder) throw alreadyLinkedElsewhere(job);
   }
 
   /** A failed sync is recorded on the link it was for; nothing happens when the link is gone or changed meanwhile. */

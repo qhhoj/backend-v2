@@ -179,10 +179,16 @@ ProblemSchema.index(
   { 'externalJudge.isActive': 1 },
   { partialFilterExpression: { 'externalJudge.isActive': true } },
 );
-// Linked problems only: the Polygon list marks linked problems and auto-sync scans them.
+// Linked problems only: the Polygon list marks linked problems and auto-sync scans them. Unique: one problem per Polygon
+// problem (a deleted one holds its link until the purge clears it). A new name and filter, so the old non-unique index
+// is not in the way; drop `polygonLink.problemId_1` once this one is built.
 ProblemSchema.index(
   { 'polygonLink.problemId': 1 },
-  { partialFilterExpression: { 'polygonLink.problemId': { $exists: true } } },
+  {
+    name: 'polygon_link_problem_unique',
+    unique: true,
+    partialFilterExpression: { 'polygonLink.problemId': { $type: 'number' } },
+  },
 );
 // `translations[].language` holds en|vi; a text index reads a field named `language` as the per-document
 // text language and rejects `vi`, so the override points at an unused field. No stemming: statements are Vietnamese.

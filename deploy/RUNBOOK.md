@@ -76,6 +76,10 @@ Per judge machine, against the review stack (`qhhoj.target` running, bridge on 9
 - CD: a release tag builds the image, pushes it to GHCR and deploys after CI passes (SSH as `deploy`, `sudo qhhoj-deploy`); Actions -> deploy -> Run workflow deploys any ref (`force` for a running contest). Exit 75 = deferred (a contest ending within 24 h is running, or another deploy holds the lock; a long-running practice contest does not block): retry later; `qhhoj-deploy backend <tag> [--force]`, `qhhoj-deploy frontend <version>`, `qhhoj-deploy rollback backend|frontend` (previous history entry), `qhhoj-deploy status` (live versions and history). `frontend` copies the assets of the kept releases (last 5 history entries) that are younger than 14 days into the new release without overwriting (open tabs on the previous build still fetch their old hashed chunks); a rollback switches to the older release as it was. This helper changes only after `install-host.sh` is re-run on the server. A failed health check rolls back by itself. The helper scripts themselves (`qhhoj-deploy`, quadlets, sudoers) update only by re-running `install-host.sh` from a fresh copy of `deploy/`.
 - Request bodies over a route's limit answer 413 with error code `payload_too_large` (it was `http_error`).
 
+### Polygon link index (once, before the deploy that adds `polygon_link_problem_unique`)
+
+Purged tombstones keep their old `polygonLink`; clear them so the unique index is not blocked by them: `db.problems.updateMany({ purgedAt: { $exists: true }, 'polygonLink.problemId': { $exists: true } }, { $set: { polygonLink: null } })`. The index build fails (and is logged) if two live problems share a `polygonLink.problemId`: find them with an aggregation on that field and unlink one. After the new index exists, drop the old one: `db.problems.dropIndex('polygonLink.problemId_1')`.
+
 ## Backup
 
 - Secrets: keep `/etc/qhhoj/env` (at least `ENCRYPTION_KEY`, `TOKEN_SECRET`) in an offline secret store, separate from the dumps; encrypted settings and 2FA secrets in a dump are useless without the same `ENCRYPTION_KEY`.

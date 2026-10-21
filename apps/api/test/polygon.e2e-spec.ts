@@ -16,6 +16,7 @@ import {
 import type { PolygonImportJob } from '@libs/problems';
 import { buildZip, FakePolygon } from '@libs/problems/testing';
 import { POLYGON_LINK_LIMIT } from '../src/modules/problems/core/rate-limits';
+import { softDelete, tombstone } from './deleted-problem-fixtures';
 import {
   authed,
   createProblem,
@@ -241,8 +242,8 @@ describe('Polygon routes', () => {
   });
 
   describe('a pasted link', () => {
-    const resolve = (link: string, session = importer) =>
-      post(`${POLYGON}/resolve`, { link }, session);
+    const resolve = (link: string, session = importer, code?: string) =>
+      post(`${POLYGON}/resolve`, { link, code }, session);
     const refusalOf = ({ body }: { body: unknown }) =>
       (body as { error: Record<string, unknown> }).error;
 
@@ -383,6 +384,38 @@ describe('Polygon routes', () => {
         message: 'Polygon problem 1 is already linked to a QHHOJ problem',
       });
       expect(JSON.stringify(hidden.body)).not.toContain('taken_link');
+    });
+
+    it('lets the linked problem check its own link again, but not another problem', async () => {
+      sharedProblems();
+      await createProblem(api, catalog, {
+        code: 'holder',
+        authors: [importerId],
+        polygonLink: linkOf(1) as never,
+      });
+      await resolve(SUM_LINK, importer, 'holder').expect(200);
+      await resolve(SUM_LINK, importer, 'other')
+        .expect(409)
+        .expect(errorCode('polygon_already_linked'));
+    });
+
+    it('answers a link held by a problem in its grace period with polygon_linked_deleted, and frees it once purged', async () => {
+      sharedProblems();
+      const holder = await createProblem(api, catalog, {
+        code: 'gone_holder',
+        authors: [importerId],
+        polygonLink: linkOf(1) as never,
+      });
+      await softDelete(api, holder._id);
+      expect(refusalOf(await resolve(SUM_LINK).expect(409))).toMatchObject({
+        code: 'polygon_linked_deleted',
+        linkedProblemCode: 'gone_holder',
+      });
+      await post(`${POLYGON}/import`, { link: SUM_LINK, code: 'again' })
+        .expect(409)
+        .expect(errorCode('polygon_linked_deleted'));
+      await tombstone(api, holder._id);
+      await resolve(SUM_LINK).expect(200);
     });
 
     it('limits link checks per user', async () => {

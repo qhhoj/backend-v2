@@ -19,10 +19,12 @@ import { FakePolygon } from '@libs/problems/testing';
 import { ImportQuota } from '../src/jobs/polygon-import/import-quota.service';
 import { PandocService } from '../src/jobs/polygon-import/pandoc.service';
 import { PolygonImportProcessor } from '../src/jobs/polygon-import/polygon-import.processor';
+import { ProblemPurgeService } from '../src/jobs/problem-purge/problem-purge.service';
 import { PolygonAutoSyncService } from '../src/jobs/polygon-autosync/polygon-autosync.service';
 import { seedContest } from './effects-fixtures';
 import { buildPolygonPackage, properties } from './polygon-fixtures';
 import type { PolygonFixture } from './polygon-fixtures';
+import { softDeleteWorker } from './deleted-problem-fixtures';
 import { setupWorkerTest } from './setup';
 import type { WorkerTest } from './setup';
 
@@ -89,7 +91,11 @@ describe('Polygon link, sync and auto-sync', () => {
       steps: progress.map(({ step }) => step),
     };
   };
-  const linkJob = (code: string, packageId: number): PolygonImportJob => ({
+  const linkJob = (
+    code: string,
+    packageId: number,
+    polygonId = POLYGON_ID,
+  ): PolygonImportJob => ({
     requesterId,
     code,
     mode: 'create',
@@ -106,7 +112,7 @@ describe('Polygon link, sync and auto-sync', () => {
     appendMainSolution: false,
     maxCases: 300,
     polygon: {
-      problemId: POLYGON_ID,
+      problemId: polygonId,
       name: 'sum-polygon',
       owner: 'setter',
       revision: 3,
@@ -134,11 +140,15 @@ describe('Polygon link, sync and auto-sync', () => {
       purpose: 'sync',
     },
   });
-  const linked = async (code: string, packageId = 10) => {
+  const linked = async (
+    code: string,
+    packageId = 10,
+    polygonId = POLYGON_ID,
+  ) => {
     polygon.reply('problem.package', {
       zip: buildPolygonPackage(fixtureNamed('Sum')),
     });
-    const { error } = await runJob(linkJob(code, packageId));
+    const { error } = await runJob(linkJob(code, packageId, polygonId));
     expect(error).toBeNull();
     return (await worker.problems.findOne({ code }))!.toObject({
       getters: true,
@@ -190,7 +200,11 @@ describe('Polygon link, sync and auto-sync', () => {
       })
     )._id;
   });
-  beforeEach(() => polygon.reset());
+  beforeEach(async () => {
+    polygon.reset();
+    // One QHHOJ problem per Polygon problem: every test links POLYGON_ID afresh.
+    await worker.problems.updateMany({}, { $set: { polygonLink: null } });
+  });
   afterAll(() => worker.teardown());
 
   it('downloads the package from Polygon, imports it and links the problem, reporting each step', async () => {
@@ -243,6 +257,39 @@ describe('Polygon link, sync and auto-sync', () => {
     ]);
     expect(String((await runs.findOne({ jobId }).lean())!.problem)).toBe(
       String(problem._id),
+    );
+  });
+
+  it('imports the same Polygon problem again once the problem that held it is deleted and purged', async () => {
+    const first = await linked('before_purge');
+    await softDeleteWorker(worker, first._id, {
+      deletedAt: new Date(Date.now() - 40 * 86_400_000),
+    });
+    await worker.module.get(ProblemPurgeService).purge(first._id);
+    const tomb = await worker.problems.findOne({ code: 'before_purge' });
+    expect(tomb).toMatchObject({ polygonLink: null });
+    expect(tomb!.purgedAt).toBeInstanceOf(Date);
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum')),
+    });
+    const again = await runJob(linkJob('after_purge', 11));
+    expect(again.error).toBeNull();
+    expect(
+      (await worker.problems.findOne({ code: 'after_purge' }))!.polygonLink,
+    ).toMatchObject({ problemId: POLYGON_ID, packageId: 11 });
+  });
+
+  it('refuses a second problem linked to the same Polygon problem and creates nothing', async () => {
+    await linked('first_link');
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum')),
+    });
+    const { error } = await runJob(linkJob('second_link', 10));
+    expect(error).toBe(
+      `${POLYGON_ERROR_PREFIX}Polygon problem ${POLYGON_ID} is already linked to another QHHOJ problem`,
+    );
+    expect(await worker.problems.countDocuments({ code: 'second_link' })).toBe(
+      0,
     );
   });
 
@@ -479,7 +526,7 @@ describe('Polygon link, sync and auto-sync', () => {
       await seedContest(worker, {
         problems: [{ problem: inContest._id, points: 100, order: 0 }],
       } as never);
-      const failed = await linked('auto_failed');
+      const failed = await linked('auto_failed', 10, POLYGON_ID + 1);
       await worker.problems.updateOne(
         { code: 'auto_failed' },
         {
@@ -489,7 +536,7 @@ describe('Polygon link, sync and auto-sync', () => {
           },
         },
       );
-      const off = await linked('auto_off');
+      const off = await linked('auto_off', 10, POLYGON_ID + 2);
       await worker.problems.updateOne(
         { code: 'auto_off' },
         { $set: { 'polygonLink.autoSync': false } },
