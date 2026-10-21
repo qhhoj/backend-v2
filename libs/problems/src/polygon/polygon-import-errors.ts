@@ -29,6 +29,8 @@ export const POLYGON_IMPORT_ERROR_CODES = [
   'generation_timeout',
   /** `{usedBytes, limitBytes, neededBytes}`: the organization's storage cannot take the package. */
   'storage_full',
+  /** `{what}` (`group` or `type`): the site has none to file a new problem under; an administrator adds one. */
+  'catalog_missing',
   'problem_code_taken',
   'problem_not_found',
   /** Deleted, a mirror, manually managed, or its markup mode changed since the job was queued. */

@@ -9,14 +9,17 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, RequirePermission } from '@libs/auth';
 import type { AuthContext } from '@libs/auth';
 import { ApiPaginatedResponse, Paginated } from '@libs/common';
 import { POLYGON_SYNC_PERMISSION } from '@libs/problems';
 import { ProblemCodeParamDto } from '../core/dto/problem-params.dto';
 import { ImportJobStartedResponse } from '../imports/dto/import-job-started.response';
-import { UpdatePolygonLinkDto } from './dto/polygon-link.dto';
+import {
+  SyncPolygonProblemDto,
+  UpdatePolygonLinkDto,
+} from './dto/polygon-link.dto';
 import {
   PolygonLinkResponse,
   PolygonLinkStateResponse,
@@ -62,8 +65,15 @@ export class ProblemPolygonLinkController {
    * @remarks
    * Needs `judge.sync_polygon_problem` and write access to the problem's test
    * data. Queues the import job in sync mode on the newest READY package:
-   * statement, tutorial, tests, checker and limits are overwritten; code,
-   * points, group, types, authors, curators and allowed languages are kept.
+   * statement, tutorial and tests are overwritten; code, points, group, types,
+   * authors, curators and allowed languages are kept. The time and memory
+   * limits, partial scoring, checker (type, arguments, source) and grader
+   * settings come from the package too, except each one edited on QHHOJ since
+   * the last import, which is kept unless the body sets
+   * `overwriteLocalEdits`; the job's `result.localEdits` lists what was kept
+   * and what was updated. The link's statement options are checked against
+   * Polygon's working copy, which may be newer than the package synced: a
+   * language not in the package yet can be set to `skip`.
    * The result is recorded on the link. Answers 202 with a `jobId` to poll at
    * `GET /problems/imports/{jobId}`; the id is one per problem and package, so
    * while a sync of that package (manual or automatic) is queued or running
@@ -72,17 +82,20 @@ export class ProblemPolygonLinkController {
    * storage of the organization an organization-private problem is charged to
    * (the package size minus the test data it replaces). Counts towards the 10 imports an hour per
    * user. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409
-   * `polygon_package_not_ready`,
+   * `polygon_package_not_ready`, 409 `polygon_sync_queued` (an
+   * `overwriteLocalEdits` sync while one keeping them is queued or running),
    * 409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.
    */
   @RequirePermission(POLYGON_SYNC_PERMISSION)
   @Post('sync')
   @HttpCode(202)
+  @ApiBody({ type: SyncPolygonProblemDto, required: false })
   sync(
     @CurrentAuth() auth: AuthContext,
     @Param() { code }: ProblemCodeParamDto,
+    @Body() body: SyncPolygonProblemDto,
   ): Promise<ImportJobStartedResponse> {
-    return this.linkImports.sync(auth, code);
+    return this.linkImports.sync(auth, code, body);
   }
 
   /**
@@ -117,7 +130,8 @@ export class ProblemPolygonLinkController {
    * permission and the write access, else it fails and is recorded on the
    * link. The statement and test options apply from the next sync (manual or
    * automatic; one already queued keeps its own) and are checked against
-   * Polygon's statements and tests first, with the codes a sync fails with
+   * Polygon's statements and tests (its working copy, which may be newer than
+   * the newest package) first, with the codes a sync fails with
    * (400 `statement_language_required`, `statement_language_unmapped`,
    * `statement_language_repeated`, `tutorial_language_required`,
    * `too_many_testcases`, `params` as the job's `errorParams`); Polygon not

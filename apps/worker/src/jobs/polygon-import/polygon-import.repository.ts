@@ -5,12 +5,13 @@ import { buildPrincipal, hasPermission, permissionsOf } from '@libs/auth';
 import type { Permission, Principal } from '@libs/auth';
 import { isDocumentTooLarge, isDuplicateKey } from '@libs/common';
 import {
-  DATA_FILE_KINDS,
+  dataFileNamesOf,
   dataVersionIs,
   emptyProblemData,
   Group,
   Language,
   Problem,
+  PolygonSyncRun,
   ProblemGroup,
   ProblemType,
   PROBLEM_LIMITS,
@@ -18,7 +19,11 @@ import {
   User,
   uuidStr,
 } from '@libs/database';
-import type { ProblemData, ProblemTranslation } from '@libs/database';
+import type {
+  ProblemData,
+  ProblemTranslation,
+  SyncedSettingFingerprints,
+} from '@libs/database';
 import {
   chargedOrganization,
   dataChanges,
@@ -26,16 +31,18 @@ import {
   POLYGON_SYNC_PERMISSION,
   ProblemAccess,
 } from '@libs/problems';
-import type { PolygonImportJob } from '@libs/problems';
+import type { LocalEdits, PolygonImportJob } from '@libs/problems';
 import type { ClientSession, Connection, Model } from 'mongoose';
 import { PolygonImportError } from './polygon-import.error';
 import type { ImportFailure } from './import-failure';
+import type { SyncedValues } from './local-edits';
 import {
   importComment,
   linkChanges,
   linkSummary,
   newLink,
 } from './polygon-link-fields';
+import type { SyncedPackage } from './polygon-link-fields';
 
 export interface ImportedProblem {
   name: string;
@@ -47,6 +54,19 @@ export interface ImportedProblem {
   memoryLimit: number;
   partial: boolean;
   data: ProblemData;
+  /** The package's own editable settings, recorded on the link (kept local values never are). */
+  settings: SyncedSettingFingerprints;
+  /** A sync's report of the settings it kept and updated; null on other imports. */
+  localEdits: LocalEdits | null;
+}
+
+/** A sync's view of the settings a setter may edit: the problem's values, and what the last import recorded to compare them with. */
+export interface TargetSettings {
+  values: SyncedValues;
+  /** The link's record; null on links written before it existed. */
+  imported: SyncedSettingFingerprints | null;
+  /** Fields the revisions since the last import changed; read only when `imported` is null. */
+  revisedFields: string[];
 }
 
 /** What the job found when it started, `null` when the problem does not exist yet: its data version for the compare-and-set, the test data bytes a package replaces and the organization whose storage meters a download into it (`chargedOrganization`, null when unmetered). */
@@ -54,6 +74,8 @@ export type ImportTarget = {
   dataVersion: number;
   dataBytes: number;
   storageOrganizationId: string | null;
+  /** Syncs only: the local settings it may keep (see `TargetSettings`). */
+  settings: TargetSettings | null;
 } | null;
 
 export interface AppliedImport {
@@ -115,6 +137,15 @@ const summaryOf = (problem: Partial<Problem>) => ({
   curators: problem.curators?.map(uuidStr),
 });
 
+/** An update of an existing problem: the problem before, the imported fields, and the other `$set` paths (the link, dropped compile checks). */
+interface ProblemUpdate {
+  problemId: string;
+  before: Problem;
+  statement: StatementFields;
+  otherPaths: Record<string, unknown>;
+  target: ImportTarget;
+}
+
 interface WrittenProblem {
   problemId: string;
   after: Partial<Problem>;
@@ -159,7 +190,7 @@ const requestedCatalog = (job: PolygonImportJob) =>
     curators: nonEmpty(job.curators),
   });
 
-/** The editor's compare-and-set on `dataVersion`; a sync also needs the link it was queued for. */
+/** The editor's compare-and-set on `dataVersion`; a sync also needs the link it was queued for, and the limits it decided to keep or replace (the editor saves them without a data version). */
 const unchangedSinceQueued = (
   job: PolygonImportJob,
   problemId: string,
@@ -171,7 +202,21 @@ const unchangedSinceQueued = (
   ...(job.polygon?.purpose === 'sync' && {
     'polygonLink.problemId': job.polygon.problemId,
   }),
+  ...(target?.settings && {
+    timeLimit: target.settings.values.timeLimit,
+    memoryLimit: target.settings.values.memoryLimit,
+    partial: target.settings.values.partial,
+  }),
 });
+
+/** The compile check of a checker or interactor the import replaced was of the old file, so it is dropped; a source a sync kept keeps its check. */
+const replacedSourceChecks = (imported: ImportedProblem) => {
+  const kept = imported.localEdits?.kept ?? [];
+  return {
+    ...(!kept.includes('checker') && { 'sourceChecks.customChecker': null }),
+    ...(!kept.includes('grader') && { 'sourceChecks.customGrader': null }),
+  };
+};
 
 /** The code of the other problem is not told: the requester may not be allowed to see it. */
 const alreadyLinkedElsewhere = (job: PolygonImportJob) =>
@@ -194,6 +239,8 @@ export class PolygonImportRepository {
   constructor(
     @InjectModel(Problem.name) private readonly problems: Model<Problem>,
     @InjectModel(Revision.name) private readonly revisions: Model<Revision>,
+    @InjectModel(PolygonSyncRun.name)
+    private readonly runs: Model<PolygonSyncRun>,
     @InjectModel(User.name) private readonly users: Model<User>,
     @InjectModel(Group.name) private readonly groups: Model<Group>,
     @InjectModel(ProblemGroup.name)
@@ -213,7 +260,10 @@ export class PolygonImportRepository {
 
   /** Cheap pre-check so a wrong mode fails before any file is written; `apply` checks again inside the transaction. Deliberately S: `findOne({ code })` sees deleted and tombstoned problems, so their codes stay taken. */
   async resolveTarget(job: PolygonImportJob): Promise<ImportTarget> {
-    const existing = await this.problems.findOne({ code: job.code }).exec();
+    const existing = await this.problems
+      .findOne({ code: job.code })
+      .select('+data')
+      .exec();
     this.checkTarget(job, existing);
     this.checkLink(job, existing);
     if (!existing) return null;
@@ -237,11 +287,60 @@ export class PolygonImportRepository {
         { isSuperuser: requester?.isSuperuser ?? false },
         ProblemAccess.accessView(existing),
       ),
+      settings:
+        job.polygon?.purpose === 'sync'
+          ? await this.settingsOf(existing._id, existing.toObject())
+          : null,
     };
   }
 
-  /** A sync queued while another sync of the same package was pending finds the problem already at that package with a newer data version: that sync landed, so this one has nothing to do. The problem's id then, else null. A repair (same package, data version unchanged) runs normally. */
-  async syncedMeanwhile(job: PolygonImportJob): Promise<string | null> {
+  /** The values come from the problem as loaded; the revisions are read only for a link without the record. */
+  private async settingsOf(
+    problemId: string,
+    problem: Problem,
+  ): Promise<TargetSettings> {
+    const imported = problem.polygonLink?.importedSettings ?? null;
+    return {
+      values: {
+        timeLimit: problem.timeLimit,
+        memoryLimit: problem.memoryLimit,
+        partial: problem.partial,
+        data: problem.data ?? emptyProblemData(),
+      },
+      imported,
+      revisedFields: imported
+        ? []
+        : await this.fieldsRevisedSinceImport(problemId),
+    };
+  }
+
+  /** Every field a revision after the problem's newest `import` revision changed (any revision at all when it has none). */
+  private async fieldsRevisedSinceImport(problemId: string): Promise<string[]> {
+    const scope = { entity: 'problem', entityId: problemId };
+    const lastImport = await this.revisions
+      .findOne({ ...scope, action: 'import' }, { createdAt: 1 })
+      .sort({ createdAt: -1, _id: -1 })
+      .lean()
+      .exec();
+    const later = await this.revisions
+      .find(
+        {
+          ...scope,
+          action: { $ne: 'import' },
+          ...(lastImport && { createdAt: { $gt: lastImport.createdAt } }),
+        },
+        { changes: 1 },
+      )
+      .lean()
+      .exec();
+    return later.flatMap(({ changes }) => Object.keys(changes ?? {}));
+  }
+
+  /** A sync queued while another sync of the same package was pending finds that one finished ok after it was queued (its history row): it has nothing to do. The problem's id then, else null. A rerun of a sync that stopped before it finished (a worker restart) finds no such row and runs, failing visibly on the moved data version instead of reporting ok. */
+  async syncedMeanwhile(
+    job: PolygonImportJob,
+    queuedAt: Date,
+  ): Promise<string | null> {
     if (job.polygon?.purpose !== 'sync') return null;
     const problem = await this.problems
       .findOne(
@@ -250,13 +349,21 @@ export class PolygonImportRepository {
           deletedAt: null,
           'polygonLink.problemId': job.polygon.problemId,
           'polygonLink.packageId': job.polygon.packageId,
-          dataVersion: { $gt: job.expectedDataVersion ?? 0 },
         },
         { _id: 1 },
       )
       .lean()
       .exec();
-    return problem ? uuidStr(problem._id) : null;
+    if (!problem) return null;
+    const landed = await this.runs
+      .exists({
+        problem: problem._id,
+        packageId: job.polygon.packageId,
+        result: 'ok',
+        createdAt: { $gt: queuedAt },
+      })
+      .exec();
+    return landed ? uuidStr(problem._id) : null;
   }
 
   /** The requester as the api would see them now; null when gone or deactivated. */
@@ -344,15 +451,11 @@ export class PolygonImportRepository {
         existing,
       );
     const before = existing?.toObject();
-    const statement = statementFields(imported, before);
-    const written =
-      existing && before
-        ? await this.updateIfDataVersionUnchanged(
-            job,
-            { problemId: existing._id, before, statement, target },
-            session,
-          )
-        : await this.insertWithCatalogDefaults(job, statement, session);
+    const written = await this.writeProblem(
+      job,
+      { problemId: existing?._id, before, imported, target },
+      session,
+    );
     await this.appendImportRevision(
       job,
       { before, written, imported },
@@ -361,38 +464,62 @@ export class PolygonImportRepository {
     return {
       problemId: written.problemId,
       dataVersion: written.dataVersion,
-      previousFiles: [
-        ...DATA_FILE_KINDS.flatMap((kind) => before?.data?.[kind] ?? []),
-        ...(before?.data?.helperHeaders ?? []),
-      ],
+      previousFiles: before?.data ? dataFileNamesOf(before.data) : [],
     };
+  }
+
+  /** Updates the problem as found (`before`), or creates it; the link records the package's own settings. */
+  private writeProblem(
+    job: PolygonImportJob,
+    {
+      problemId,
+      before,
+      imported,
+      target,
+    }: {
+      problemId: string | undefined;
+      before: Problem | undefined;
+      imported: ImportedProblem;
+      target: ImportTarget;
+    },
+    session: ClientSession,
+  ): Promise<WrittenProblem> {
+    const statement = statementFields(imported, before);
+    const synced: SyncedPackage = {
+      title: imported.name,
+      settings: imported.settings,
+      now: new Date(),
+    };
+    if (!problemId || !before)
+      return this.insertWithCatalogDefaults(
+        job,
+        { statement, synced },
+        session,
+      );
+    const otherPaths = {
+      ...linkChanges(job, synced),
+      ...replacedSourceChecks(imported),
+    };
+    return this.updateIfDataVersionUnchanged(
+      job,
+      { problemId, before, statement, otherPaths, target },
+      session,
+    );
   }
 
   /** Compare-and-set on the editor's `dataVersion`: an edit that landed meanwhile fails the import instead of being overwritten. */
   private async updateIfDataVersionUnchanged(
     job: PolygonImportJob,
-    {
-      problemId,
-      before,
-      statement,
-      target,
-    }: {
-      problemId: string;
-      before: Problem;
-      statement: StatementFields;
-      target: ImportTarget;
-    },
+    update: ProblemUpdate,
     session: ClientSession,
   ): Promise<WrittenProblem> {
+    const { problemId, before, statement, otherPaths, target } = update;
     const changes = definedOnly({ ...statement, ...requestedCatalog(job) });
     const { matchedCount } = await this.problems
       .updateOne(
         unchangedSinceQueued(job, problemId, target),
         {
-          $set: {
-            ...changes,
-            ...linkChanges(job, { title: statement.name, now: new Date() }),
-          },
+          $set: { ...changes, ...otherPaths },
           $inc: { dataVersion: 1 },
         },
         { session },
@@ -412,7 +539,10 @@ export class PolygonImportRepository {
 
   private async insertWithCatalogDefaults(
     job: PolygonImportJob,
-    statement: StatementFields,
+    {
+      statement,
+      synced,
+    }: { statement: StatementFields; synced: SyncedPackage },
     session: ClientSession,
   ): Promise<WrittenProblem> {
     const created = {
@@ -421,9 +551,7 @@ export class PolygonImportRepository {
       isFullMarkup: job.isFullMarkup,
       date: new Date(),
       dataVersion: 1,
-      polygonLink: job.polygon
-        ? newLink(job, job.polygon, { title: statement.name, now: new Date() })
-        : null,
+      polygonLink: job.polygon ? newLink(job, job.polygon, synced) : null,
       ...(await this.createCatalog(job, session)),
       ...(job.organizationId && {
         organizations: [job.organizationId],
@@ -471,7 +599,7 @@ export class PolygonImportRepository {
               },
             }),
           },
-          comment: importComment(job),
+          comment: importComment(job, imported.localEdits?.kept),
         },
       ],
       { session },
@@ -492,7 +620,8 @@ export class PolygonImportRepository {
       if (!row)
         throw new PolygonImportError(
           `no problem ${what} exists`,
-          'import_failed',
+          'catalog_missing',
+          { what },
         );
       return row._id;
     };

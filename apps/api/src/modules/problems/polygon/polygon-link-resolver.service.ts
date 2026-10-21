@@ -131,7 +131,7 @@ export class PolygonLinkResolver {
     if (known !== digestOf(token)) throw linkRefused();
   }
 
-  /** Reads the token from the newest READY package and caches its digest, one download per problem at a time. Without a READY package: `polygon_no_package` when Polygon has none, else `polygon_package_not_ready` naming the build running or failed. */
+  /** Reads the token from the newest READY package and caches its digest, one download per problem at a time. Without a READY package: `polygon_no_package` when Polygon has none, else `polygon_package_not_ready` naming the build running or failed (without its comment: the token is not checked yet). */
   private async readTokenDigest(
     polygonId: number,
     packages: PolygonPackageInfo[],
@@ -139,7 +139,7 @@ export class PolygonLinkResolver {
     const packageId = newestReadyPackageId(packages);
     if (packageId === null)
       throw packages.length
-        ? packageNotReady(polygonId, packages)
+        ? packageNotReady(polygonId, packages, { tokenChecked: false })
         : noPackage();
     const lock = checkLockKey(polygonId);
     if (!(await this.redis.set(lock, '1', 'EX', CHECK_LOCK_SECONDS, 'NX')))
@@ -201,13 +201,13 @@ export class PolygonLinkResolver {
   }
 }
 
-/** The newest package must be READY, full or standard (be#47): a newer build still running or failed is never skipped. */
+/** The newest package must be READY, full or standard (be#47): a newer build still running or failed is never skipped. Called once the link is known good (its token checked, or the problem already linked). */
 export function readyPackage(
   polygonId: number,
   packages: PolygonPackageInfo[],
 ): ReadyPackage {
   const latest = latestPackageOf(packages);
   if (latest.state !== 'READY' || latest.id === null || latest.type === null)
-    throw packageNotReady(polygonId, packages);
+    throw packageNotReady(polygonId, packages, { tokenChecked: true });
   return latest as ReadyPackage;
 }

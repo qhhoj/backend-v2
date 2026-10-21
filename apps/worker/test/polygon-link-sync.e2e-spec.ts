@@ -2,11 +2,18 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { getModelToken } from '@nestjs/mongoose';
 import { UnrecoverableError } from 'bullmq';
 import type { Job, Queue } from 'bullmq';
+import { readFile, writeFile } from 'node:fs/promises';
 import type { Model } from 'mongoose';
 import type Redis from 'ioredis';
 import { REDIS } from '@libs/common';
 import { DiscordWebhooksService } from '@libs/community';
-import { newId, OrganizationUsage, PolygonSyncRun } from '@libs/database';
+import {
+  newId,
+  OrganizationUsage,
+  PolygonSyncRun,
+  Revision,
+  SYNCED_SETTINGS,
+} from '@libs/database';
 import {
   syncJobId,
   POLYGON_ERROR_PREFIX,
@@ -65,18 +72,21 @@ describe('Polygon link, sync and auto-sync', () => {
   let autoSync: PolygonAutoSyncService;
   let imports: Queue<PolygonImportJob>;
   let runs: Model<PolygonSyncRun>;
+  let revisions: Model<Revision>;
   const polygon = new FakePolygon();
   let requesterId: string, groupId: string, otherGroupId: string;
   let typeId: string, otherLanguageId: string;
 
-  /** A job as BullMQ hands it to the processor, recording the progress it reports. */
+  /** A job as BullMQ hands it to the processor, recording the progress it reports; `timestamp` is when it was queued. */
   const runJob = async (
     data: PolygonImportJob,
     attempts = { attemptsMade: 0, opts: { attempts: 1 } },
+    timestamp = Date.now(),
   ) => {
     const progress: ImportProgress[] = [];
     const job = {
       id: newId(),
+      timestamp,
       data,
       ...attempts,
       updateProgress: (value: ImportProgress) => {
@@ -178,6 +188,7 @@ describe('Polygon link, sync and auto-sync', () => {
     autoSync = worker.module.get(PolygonAutoSyncService);
     imports = worker.module.get(getQueueToken(POLYGON_QUEUE));
     runs = worker.module.get(getModelToken(PolygonSyncRun.name));
+    revisions = worker.module.get(getModelToken(Revision.name));
     await worker.setSetting('polygon.apiKey', 'KEY');
     await worker.setSetting('polygon.apiSecret', 'SECRET');
     groupId = (await worker.problemGroups.create({ name: 'A', fullName: 'A' }))
@@ -372,6 +383,167 @@ describe('Polygon link, sync and auto-sync', () => {
     });
   });
 
+  describe('settings edited on QHHOJ after the import', () => {
+    const once = { attemptsMade: 0, opts: { attempts: 1 } };
+    const syncTo = async (
+      code: string,
+      packageId: number,
+      { timeLimitMs = 2000, overwriteLocalEdits = false } = {},
+    ) => {
+      const { dataVersion } = (await worker.problems.findOne({ code }))!;
+      polygon.reply('problem.package', {
+        zip: buildPolygonPackage(fixtureNamed(`Sum ${packageId}`, timeLimitMs)),
+      });
+      const job = syncJob(
+        code,
+        { packageId, revision: packageId },
+        dataVersion,
+      );
+      return runJob(
+        overwriteLocalEdits ? { ...job, overwriteLocalEdits } : job,
+        once,
+      );
+    };
+    const checkedOk = {
+      file: 'checker.cpp',
+      status: 'ok',
+      log: '',
+      checkedAt: new Date(0),
+    };
+    const problemOf = async (code: string) =>
+      (await worker.problems
+        .findOne({ code })
+        .select('+data +sourceChecks'))!.toObject({
+        getters: true,
+      });
+
+    it('keeps an edited time limit and reports it, takes the rest from the package, and restores it on request', async () => {
+      await linked('tl_edit');
+      await worker.problems.updateOne(
+        { code: 'tl_edit' },
+        { $set: { timeLimit: 4, 'sourceChecks.customChecker': checkedOk } },
+      );
+      const kept = await syncTo('tl_edit', 11);
+      expect(kept.error).toBeNull();
+      expect(kept.result?.localEdits).toEqual({
+        kept: ['timeLimit'],
+        updated: [],
+      });
+      expect(kept.result?.summary?.timeLimit).toEqual({
+        polygon: 2,
+        applied: 4,
+      });
+      expect(await problemOf('tl_edit')).toMatchObject({
+        name: 'Sum 11',
+        timeLimit: 4,
+        // The package's checker replaced the checked file.
+        sourceChecks: { customChecker: null },
+      });
+      const [revision] = await revisions
+        .find({ entityId: (await problemOf('tl_edit'))._id, action: 'import' })
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(1);
+      expect(revision.comment).toMatch(/kept local timeLimit$/);
+
+      const again = await syncTo('tl_edit', 12, { timeLimitMs: 3000 });
+      expect(again.result?.localEdits).toEqual({
+        kept: ['timeLimit'],
+        updated: [],
+      });
+      expect((await problemOf('tl_edit')).timeLimit).toBe(4);
+
+      const restored = await syncTo('tl_edit', 13, {
+        timeLimitMs: 3000,
+        overwriteLocalEdits: true,
+      });
+      expect(restored.result?.localEdits).toEqual({
+        kept: [],
+        updated: ['timeLimit'],
+      });
+      expect((await problemOf('tl_edit')).timeLimit).toBe(3);
+      const next = await syncTo('tl_edit', 14, { timeLimitMs: 2000 });
+      expect(next.result?.localEdits).toEqual({
+        kept: [],
+        updated: ['timeLimit'],
+      });
+      expect((await problemOf('tl_edit')).timeLimit).toBe(2);
+    });
+
+    it('keeps a checker uploaded under the imported name with its type and the local judging options, never overwriting the file', async () => {
+      const before = await linked('chk_edit');
+      const dataFiles = worker.module.get(ProblemDataFilesService);
+      const checkerPath = dataFiles.pathOf('chk_edit', 'checker.cpp');
+      await writeFile(checkerPath, "// the setter's themis checker");
+      await worker.problems.updateOne(
+        { code: 'chk_edit' },
+        {
+          $set: {
+            'data.checkerArgs': { type: 'themis' },
+            'data.unicode': true,
+            'sourceChecks.customChecker': checkedOk,
+          },
+          $inc: { dataVersion: 1 },
+        },
+      );
+      const { error, result } = await syncTo('chk_edit', 11);
+      expect(error).toBeNull();
+      expect(result?.localEdits).toEqual({
+        kept: ['checker'],
+        updated: ['timeLimit'],
+      });
+      const after = await problemOf('chk_edit');
+      expect(after.data).toMatchObject({
+        checker: 'bridged',
+        checkerArgs: { type: 'themis' },
+        customChecker: 'checker.cpp',
+        unicode: true,
+      });
+      expect(after.sourceChecks?.customChecker).toMatchObject({
+        status: 'ok',
+      });
+      expect(after.timeLimit).toBe(2);
+      expect(after.dataVersion).toBe(before.dataVersion + 2);
+      expect(await readFile(checkerPath, 'utf8')).toBe(
+        "// the setter's themis checker",
+      );
+      expect(after.polygonLink).toMatchObject({
+        packageId: 11,
+        lastSyncResult: 'ok',
+      });
+    });
+
+    it('reads the revisions since the last import for a link from before the record, then records it', async () => {
+      const before = await linked('legacy');
+      await worker.problems.updateOne(
+        { code: 'legacy' },
+        {
+          $set: {
+            'polygonLink.importedSettings': null,
+            timeLimit: 4,
+            memoryLimit: 131072,
+          },
+        },
+      );
+      await revisions.create({
+        entity: 'problem',
+        entityId: before._id,
+        action: 'edit',
+        userId: requesterId,
+        changes: { timeLimit: { before: 1, after: 4 } },
+      });
+      const { result } = await syncTo('legacy', 11);
+      expect(result?.localEdits).toEqual({
+        kept: ['timeLimit'],
+        updated: ['memoryLimit'],
+      });
+      const after = await problemOf('legacy');
+      expect(after).toMatchObject({ timeLimit: 4, memoryLimit: 262144 });
+      expect(
+        Object.keys(after.polygonLink?.importedSettings ?? {}).sort(),
+      ).toEqual([...SYNCED_SETTINGS].sort());
+    });
+  });
+
   it('ends a second sync of a package another sync already applied as ok, without downloading, and still repairs on a re-sync', async () => {
     const before = await linked('twice');
     polygon.reply('problem.package', {
@@ -382,9 +554,11 @@ describe('Polygon link, sync and auto-sync', () => {
       { packageId: 11, revision: 4 },
       before.dataVersion,
     );
-    expect((await runJob(queued)).error).toBeNull();
+    const queuedAt = Date.now() - 1000;
+    const once = { attemptsMade: 0, opts: { attempts: 1 } };
+    expect((await runJob(queued, once, queuedAt)).error).toBeNull();
     polygon.reset();
-    const second = await runJob(queued);
+    const second = await runJob(queued, once, queuedAt);
     expect(second.error).toBeNull();
     expect(second.result).toEqual({
       problemId: String(before._id),
@@ -405,6 +579,34 @@ describe('Polygon link, sync and auto-sync', () => {
     );
     expect(repair.error).toBeNull();
     expect(polygon.callsOf('problem.package')).toHaveLength(1);
+  });
+
+  it('runs again, and fails visibly, a sync whose first run applied the package but never finished', async () => {
+    const before = await linked('crashed');
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
+    });
+    const queued = syncJob(
+      'crashed',
+      { packageId: 11, revision: 4 },
+      before.dataVersion,
+    );
+    const queuedAt = Date.now() - 1000;
+    const once = { attemptsMade: 0, opts: { attempts: 1 } };
+    expect((await runJob(queued, once, queuedAt)).error).toBeNull();
+    // The worker stopped after the write, before the run was recorded.
+    await runs.deleteMany({ code: 'crashed', packageId: 11 });
+    polygon.reply('problem.package', {
+      zip: buildPolygonPackage(fixtureNamed('Sum v2', 2000)),
+    });
+    const rerun = await runJob(queued, once, queuedAt);
+    expect(rerun.result).toBeNull();
+    expect(
+      (await worker.problems.findOne({ code: 'crashed' }))!.polygonLink,
+    ).toMatchObject({
+      lastSyncResult: 'failed',
+      lastSyncErrorCode: 'problem_changed',
+    });
   });
 
   it('keeps the catalog of an update that names empty authors, curators and types', async () => {

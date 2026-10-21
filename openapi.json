@@ -1510,7 +1510,7 @@
         "type": "object"
       },
       "Checker": {
-        "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker); an interactive problem's interactor decides alone.",
+        "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem's interactor decides alone.",
         "enum": [
           "bridged",
           "easy",
@@ -6420,6 +6420,16 @@
             "description": "Its code.",
             "type": "string"
           },
+          "localEdits": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocalEditsResponse"
+              }
+            ],
+            "description": "Syncs only; null for a first import and for jobs from before it was recorded.",
+            "nullable": true,
+            "type": "object"
+          },
           "problemId": {
             "description": "Id of the created or updated problem.",
             "type": "string"
@@ -6439,6 +6449,7 @@
           "problemId",
           "code",
           "summary",
+          "localEdits",
           "attention"
         ],
         "type": "object"
@@ -6458,7 +6469,7 @@
                 "$ref": "#/components/schemas/Checker"
               }
             ],
-            "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker); an interactive problem's interactor decides alone."
+            "description": "What judges answers: `standard` (hcmp) or `bridged` (the package's own testlib checker), or the checker a sync kept; an interactive problem's interactor decides alone."
           },
           "checkerIgnored": {
             "description": "An interactive problem's checker that is not run.",
@@ -7295,6 +7306,29 @@
         "required": [
           "user",
           "lastSeenAt"
+        ],
+        "type": "object"
+      },
+      "LocalEditsResponse": {
+        "properties": {
+          "kept": {
+            "description": "Edited on QHHOJ since the last import: the problem keeps its value.",
+            "items": {
+              "$ref": "#/components/schemas/SyncedSetting"
+            },
+            "type": "array"
+          },
+          "updated": {
+            "description": "Took the package's value: changed on Polygon, or a local edit overwritten on request.",
+            "items": {
+              "$ref": "#/components/schemas/SyncedSetting"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kept",
+          "updated"
         ],
         "type": "object"
       },
@@ -8570,6 +8604,7 @@
       },
       "PolygonImportErrorCode": {
         "enum": [
+          "catalog_missing",
           "checker_unsupported",
           "generation_failed",
           "generation_no_judge",
@@ -14566,6 +14601,15 @@
         ],
         "type": "object"
       },
+      "SyncPolygonProblemDto": {
+        "properties": {
+          "overwriteLocalEdits": {
+            "description": "Replace the time and memory limits, partial scoring, checker and grader settings edited on QHHOJ since the last import with the package's values; by default they are kept.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "SyncProblemDto": {
         "properties": {
           "code": {
@@ -14650,6 +14694,17 @@
           "participantCount"
         ],
         "type": "object"
+      },
+      "SyncedSetting": {
+        "description": "Edited on QHHOJ since the last import: the problem keeps its value.",
+        "enum": [
+          "checker",
+          "grader",
+          "memoryLimit",
+          "partial",
+          "timeLimit"
+        ],
+        "type": "string"
       },
       "TagAssignmentResponse": {
         "properties": {
@@ -36559,7 +36614,7 @@
         ]
       },
       "patch": {
-        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Every field is optional; an omitted one keeps its value. With\n`autoSync` on, the worker checks Polygon every 10 minutes and syncs a newer\nREADY package as the user who switched it on, except while a contest using\nthe problem is running; each run needs that user to still hold the\npermission and the write access, else it fails and is recorded on the\nlink. The statement and test options apply from the next sync (manual or\nautomatic; one already queued keeps its own) and are checked against\nPolygon's statements and tests first, with the codes a sync fails with\n(400 `statement_language_required`, `statement_language_unmapped`,\n`statement_language_repeated`, `tutorial_language_required`,\n`too_many_testcases`, `params` as the job's `errorParams`); Polygon not\nanswering skips that check. The testcase limit (`options.maxCases`) is the\nlinking user's and is not editable. Writes a problem revision of the fields\nthat changed. Errors: 404 `polygon_not_linked`, 409 `conflict` when the\nlink changed meanwhile.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Every field is optional; an omitted one keeps its value. With\n`autoSync` on, the worker checks Polygon every 10 minutes and syncs a newer\nREADY package as the user who switched it on, except while a contest using\nthe problem is running; each run needs that user to still hold the\npermission and the write access, else it fails and is recorded on the\nlink. The statement and test options apply from the next sync (manual or\nautomatic; one already queued keeps its own) and are checked against\nPolygon's statements and tests (its working copy, which may be newer than\nthe newest package) first, with the codes a sync fails with\n(400 `statement_language_required`, `statement_language_unmapped`,\n`statement_language_repeated`, `tutorial_language_required`,\n`too_many_testcases`, `params` as the job's `errorParams`); Polygon not\nanswering skips that check. The testcase limit (`options.maxCases`) is the\nlinking user's and is not editable. Writes a problem revision of the fields\nthat changed. Errors: 404 `polygon_not_linked`, 409 `conflict` when the\nlink changed meanwhile.",
         "operationId": "ProblemPolygonLinkController_update",
         "parameters": [
           {
@@ -36629,7 +36684,7 @@
     },
     "/api/internal/problems/{code}/polygon/sync": {
       "post": {
-        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial, tests, checker and limits are overwritten; code,\npoints, group, types, authors, curators and allowed languages are kept.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`; the id is one per problem and package, so\nwhile a sync of that package (manual or automatic) is queued or running\nthe answer is that job, and nothing is spent. Every sync takes the link's\ntestcase limit, whoever starts it. The worker checks the package against the\nstorage of the organization an organization-private problem is charged to\n(the package size minus the test data it replaces). Counts towards the 10 imports an hour per\nuser. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409\n`polygon_package_not_ready`,\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
+        "description": "Needs `judge.sync_polygon_problem` and write access to the problem's test\ndata. Queues the import job in sync mode on the newest READY package:\nstatement, tutorial and tests are overwritten; code, points, group, types,\nauthors, curators and allowed languages are kept. The time and memory\nlimits, partial scoring, checker (type, arguments, source) and grader\nsettings come from the package too, except each one edited on QHHOJ since\nthe last import, which is kept unless the body sets\n`overwriteLocalEdits`; the job's `result.localEdits` lists what was kept\nand what was updated. The link's statement options are checked against\nPolygon's working copy, which may be newer than the package synced: a\nlanguage not in the package yet can be set to `skip`.\nThe result is recorded on the link. Answers 202 with a `jobId` to poll at\n`GET /problems/imports/{jobId}`; the id is one per problem and package, so\nwhile a sync of that package (manual or automatic) is queued or running\nthe answer is that job, and nothing is spent. Every sync takes the link's\ntestcase limit, whoever starts it. The worker checks the package against the\nstorage of the organization an organization-private problem is charged to\n(the package size minus the test data it replaces). Counts towards the 10 imports an hour per\nuser. Errors: 403 `forbidden`, 404 `polygon_not_linked`, 409\n`polygon_package_not_ready`, 409 `polygon_sync_queued` (an\n`overwriteLocalEdits` sync while one keeping them is queued or running),\n409 `polygon_not_connected`, 502/503 Polygon errors, 429 `rate_limited`.",
         "operationId": "ProblemPolygonLinkController_sync",
         "parameters": [
           {
@@ -36642,6 +36697,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncPolygonProblemDto"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "202": {
             "content": {

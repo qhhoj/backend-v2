@@ -10,6 +10,18 @@ export const STATEMENT_LANGUAGE_CHOICES = ['en', 'vi', 'skip'] as const;
 export type StatementLanguageChoice =
   (typeof STATEMENT_LANGUAGE_CHOICES)[number];
 
+/** Settings a setter may change on QHHOJ after an import: a sync keeps each one edited since the last import (unless told to overwrite it). `checker` is the checker, its arguments and source; `grader` the grader, its arguments, interactor or grader source and header. */
+export const SYNCED_SETTINGS = [
+  'timeLimit',
+  'memoryLimit',
+  'partial',
+  'checker',
+  'grader',
+] as const;
+export type SyncedSetting = (typeof SYNCED_SETTINGS)[number];
+/** A digest of each setting's values as one import wrote them (sources by content). */
+export type SyncedSettingFingerprints = Record<SyncedSetting, string>;
+
 /** The statement and test options of the first import; every sync re-applies them. */
 @Schema({ _id: false })
 export class PolygonImportOptions {
@@ -36,6 +48,9 @@ export class PolygonLink {
   @Prop({ required: true }) packageId!: number;
   /** Polygon's build time of that package; null for links written before it was recorded. */
   @Prop({ type: Date, default: null }) packageCreatedAt!: Date | null;
+  /** The settings as the last successful import took them from the package, kept ones included; a sync compares the problem with them to find local edits. Null on links written before it was recorded (a sync then reads the revisions since the last import). */
+  @Prop({ type: Object, default: null })
+  importedSettings!: SyncedSettingFingerprints | null;
   /** Statement title the last successful import took from the package; null for links written before it was recorded. */
   @Prop({ type: String, default: null }) title!: string | null;
   @Prop({ type: Date, required: true }) linkedAt!: Date;

@@ -138,6 +138,8 @@ describe('Polygon routes', () => {
     authed(api.http().get(path), session);
   const post = (path: string, body: object = {}, session = importer) =>
     authed(api.http().post(path), session).send(body);
+  const refusalOf = ({ body }: { body: unknown }) =>
+    (body as { error: Record<string, unknown> }).error;
 
   beforeAll(async () => {
     api = await setupApiTest({
@@ -252,9 +254,6 @@ describe('Polygon routes', () => {
   describe('a pasted link', () => {
     const resolve = (link: string, session = importer, code?: string) =>
       post(`${POLYGON}/resolve`, { link, code }, session);
-    const refusalOf = ({ body }: { body: unknown }) =>
-      (body as { error: Record<string, unknown> }).error;
-
     it('previews the problem when the token matches its newest package, reading the package once', async () => {
       sharedProblems();
       const preview = dataOf(await resolve(SUM_LINK).expect(200));
@@ -370,7 +369,7 @@ describe('Polygon routes', () => {
       });
     });
 
-    it('names a first build that is running or failed, with Polygon comment, instead of asking for a package', async () => {
+    it('names a first build that is running or failed, without Polygon comment before the token is checked, instead of asking for a package', async () => {
       sharedProblems();
       polygon.reply('problem.packages', {
         result: [
@@ -386,7 +385,7 @@ describe('Polygon routes', () => {
           id: 30,
           revision: 3,
           state: 'FAILED',
-          comment: 'Solution tle.cpp passed all tests',
+          comment: null,
         },
       });
       polygon.reply('problem.packages', {
@@ -745,9 +744,10 @@ describe('Polygon routes', () => {
     };
     const attention = {
       code: 'imported_needs_attention',
-      params: {},
+      params: { step: 'writing init.yml' },
       message: 'the problem was imported, but writing init.yml failed',
     };
+    const localEdits = { kept: ['timeLimit'], updated: ['checker'] };
     const worker = new Worker<PolygonImportJob>(
       POLYGON_QUEUE,
       (job) =>
@@ -755,6 +755,7 @@ describe('Polygon routes', () => {
           problemId: 'p',
           code: job.data.code,
           summary,
+          localEdits,
           attention,
         }),
       { connection: queue.opts.connection },
@@ -780,7 +781,7 @@ describe('Polygon routes', () => {
       step: 'done',
       error: null,
       errorCode: null,
-      result: { code: 'repair', summary, attention },
+      result: { code: 'repair', summary, localEdits, attention },
     });
   });
 
@@ -964,13 +965,24 @@ describe('Polygon routes', () => {
       expect(await (await queue.getJob(jobId))?.getState()).toBe('waiting');
     });
 
-    it('refuses a sync while the newest package is still building', async () => {
+    it('refuses a sync while the newest package is still building or failed, with Polygon comment on a linked problem', async () => {
       polygon.reply('problem.packages', {
         result: [pkg(10, 3, 'READY'), pkg(11, 4, 'RUNNING')],
       });
       await post(`${links()}/sync`)
         .expect(409)
         .expect(errorCode('polygon_package_not_ready'));
+      polygon.reply('problem.packages', {
+        result: [
+          pkg(10, 3, 'READY'),
+          { ...pkg(11, 4, 'FAILED'), comment: 'Solution tle.cpp passed' },
+        ],
+      });
+      expect(
+        refusalOf(await post(`${links()}/sync`).expect(409)),
+      ).toMatchObject({
+        newestPackage: { id: 11, comment: 'Solution tle.cpp passed' },
+      });
     });
 
     it('shows the link with the newest package, switches auto-sync and unlinks, writing revisions', async () => {
@@ -1181,11 +1193,60 @@ describe('Polygon routes', () => {
       await authed(api.http().patch(links()), editor)
         .send({ autoSync: true })
         .expect(403);
+      await authed(api.http().patch(links()), editor)
+        .send({ ignoreZeroPointCases: true })
+        .expect(403);
       await authed(api.http().delete(links()), editor).expect(403);
       expect((await queue.getJobCounts('waiting')).waiting).toBe(0);
+      const { polygonLink } = (await api.problems.findOne({ code }))!;
+      expect(polygonLink?.options.ignoreZeroPointCases).toBe(false);
+    });
+
+    it('refuses option changes from a holder of the sync permission who may not edit the problem', async () => {
+      const outsider = await loginAs(
+        api,
+        (
+          await createUserWith(api, `outsider_${counter}`, {
+            permissions: [
+              'judge.sync_polygon_problem',
+              'judge.edit_own_problem',
+            ],
+          })
+        )._id,
+      );
+      const response = await authed(api.http().patch(links()), outsider).send({
+        ignoreZeroPointCases: true,
+      });
+      expect([403, 404]).toContain(response.status);
+      const { polygonLink } = (await api.problems.findOne({ code }))!;
+      expect(polygonLink?.options.ignoreZeroPointCases).toBe(false);
+    });
+
+    it('queues a sync that overwrites the local edits only on request, and never joins one that keeps them', async () => {
+      polygon.reply('problem.packages', { result: [pkg(11, 4, 'READY')] });
+      const { jobId } = dataOf<{ jobId: string }>(
+        await authed(api.http().post(`${links()}/sync`), importer).expect(202),
+      );
+      expect((await queue.getJob(jobId))?.data).not.toHaveProperty(
+        'overwriteLocalEdits',
+      );
+      await post(`${links()}/sync`, { overwriteLocalEdits: true })
+        .expect(409)
+        .expect(errorCode('polygon_sync_queued'));
+      await queue.drain(true);
+      const overwriting = dataOf<{ jobId: string }>(
+        await post(`${links()}/sync`, { overwriteLocalEdits: true }).expect(
+          202,
+        ),
+      ).jobId;
+      expect((await queue.getJob(overwriting))?.data).toMatchObject({
+        overwriteLocalEdits: true,
+      });
       expect(
-        (await api.problems.findOne({ code }))!.polygonLink,
-      ).not.toBeNull();
+        dataOf<{ jobId: string }>(await post(`${links()}/sync`).expect(202))
+          .jobId,
+      ).toBe(overwriting);
+      await post(`${links()}/sync`, { overwriteLocalEdits: 'yes' }).expect(400);
     });
 
     it('runs auto-sync as the user who switched it on', async () => {
